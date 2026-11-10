@@ -745,12 +745,11 @@ describe("startServer, against a migrated venue directory", () => {
       const health = await fetch(`https://127.0.0.1:${httpPort()}/health`, via);
       expect(health.status).toBeLessThan(600);
 
-      // The trading routes are not mounted: /api/staff falls to the setup catch-all's HTML, not the
-      // trading roster's JSON.
+      // The trading routes are not mounted: /api/staff answers the reset refusal, not the trading
+      // roster's JSON.
       const staff = await fetch(`https://127.0.0.1:${httpPort()}/api/staff`, via);
-      expect(staff.status).toBe(200);
-      expect(staff.headers.get("content-type")).toContain("text/html");
-      expect(await staff.text()).toMatch(/set ?up/i);
+      expect(staff.status).toBe(404);
+      expect(await staff.json()).toEqual({ error: { code: "node.reset", params: {} } });
 
       const management = await fetch(
         `https://127.0.0.1:${httpPort()}/management-api/session/me`,

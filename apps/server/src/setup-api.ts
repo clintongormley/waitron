@@ -1588,6 +1588,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
   });
 
   app.all("/management-api/*", (c) => directError(c, log, "node.reset", 404));
+  app.all("/api/*", (c) => directError(c, log, "node.reset", 404));
 
   if (deps.setupAppDir !== undefined) {
     mountSetupSpa(app, deps.setupAppDir, log);
