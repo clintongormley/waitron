@@ -643,7 +643,7 @@ describe("a page printer is never a receipt printer", () => {
     const { id } = await onePrinter(app, "10.61.11.2");
     const patch = await send(app, "PATCH", `/management-api/printers/${id}`, {
       cookie: managerCookie,
-      body: { name: "Receipts", active: true },
+      body: { name: "Receipts" },
     });
     expect(patch.status).toBe(404);
     expect(await patch.json()).toMatchObject({ error: { code: "printer.not_found" } });

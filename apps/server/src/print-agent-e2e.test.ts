@@ -894,7 +894,7 @@ async function portsNoPrinterNames(): Promise<number[]> {
 }
 
 describe("a printer deleted over real HTTP", () => {
-  it("serves create, impact, delete, the late result, history, discovery and a replacement to a real agent and client", async () => {
+  it("serves create, impact, delete, the late result, history, discovery and Add to a real agent and client", async () => {
     const [httpPort, printerPort] = await portsNoPrinterNames();
     const base = `http://127.0.0.1:${httpPort}`;
     const app = new Hono();
@@ -1120,29 +1120,17 @@ describe("a printer deleted over real HTTP", () => {
       });
       expect(replaced.status).toBe(201);
       const newId = (replaced.body as { id: string }).id;
-      expect(newId).not.toBe(oldId);
+      expect(newId).toBe(oldId);
       expect(await discovered()).toMatchObject({ alreadyRegistered: true, printerId: newId });
-      const onReplacement = await enqueue(newId, "On the replacement");
+      const onReplacement = await enqueue(newId, "After Add");
       await agent.runOnce();
-      await within("the replacement's print", sink.received(sentAfterDelete + 1));
+      await within("the print after Add", sink.received(sentAfterDelete + 1));
       expect(sink.printed.at(-1)).toEqual(onReplacement.payload);
       expect(await jobStatus(onReplacement.jobId)).toBe("done");
 
-      // Disable is not Delete: a switched-off printer keeps its match and comes back as itself.
-      expect((await call("POST", `/management-api/printers/${newId}/deactivate`)).status).toBe(204);
-      expect(await discovered()).toMatchObject({ alreadyRegistered: true, printerId: newId });
-      expect(
-        (await call("PATCH", `/management-api/printers/${newId}`, { active: true })).status,
-      ).toBe(204);
-      const reEnabled = await enqueue(newId, "After Enable");
-      await agent.runOnce();
-      await within("the print after Enable", sink.received(sentAfterDelete + 2));
-      expect(sink.printed.at(-1)).toEqual(reEnabled.payload);
-      expect(await jobStatus(reEnabled.jobId)).toBe("done");
-
-      const [tombstone] = await suite.db.select().from(printers).where(eq(printers.id, oldId));
-      expect(tombstone).toMatchObject({ name: "Old kitchen", active: false });
-      expect(tombstone!.deletedAt).not.toBeNull();
+      const [restored] = await suite.db.select().from(printers).where(eq(printers.id, oldId));
+      expect(restored).toMatchObject({ name: "Old kitchen", active: true, deletedAt: null });
+      for (const { jobId } of [waiting, later]) expect(await jobStatus(jobId)).toBe("failed");
     } finally {
       release();
       agent?.stop();
