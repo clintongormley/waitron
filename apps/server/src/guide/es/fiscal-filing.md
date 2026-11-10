@@ -41,5 +41,5 @@ todos.
 
 ## Exporta los casos {#export}
 
-**Exportar estos casos** vuelve a leer el equipo y descarga un archivo con todos los casos
-abiertos, no solo los 200 de la pantalla, junto con el resto de la página.
+**Exportar estos casos para tu asesor fiscal** vuelve a leer el equipo y descarga un archivo con
+todos los casos abiertos, no solo los 200 de la pantalla, junto con el resto de la página.

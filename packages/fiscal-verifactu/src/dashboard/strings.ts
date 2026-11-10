@@ -152,7 +152,7 @@ const en = {
     "How this box's invoice records are being sent to AEAT, and which ones need a decision.",
   "fiscal_filing.read_at": "Read at {time}",
   "fiscal_filing.refresh": "Refresh",
-  "fiscal_filing.export": "Export these cases",
+  "fiscal_filing.export": "Export these cases for your tax adviser",
   "fiscal_filing.not_filing": "This box does not send invoice records to AEAT.",
   "fiscal_filing.awaiting_certificate":
     "Nothing can be sent until the tax agency's certificate is installed.",
@@ -384,7 +384,7 @@ const es: Record<AeatCertificateKey, string> = {
     "Cómo se envían a la AEAT los registros de facturación de este equipo y cuáles necesitan una decisión.",
   "fiscal_filing.read_at": "Leído: {time}",
   "fiscal_filing.refresh": "Actualizar",
-  "fiscal_filing.export": "Exportar estos casos",
+  "fiscal_filing.export": "Exportar estos casos para tu asesor fiscal",
   "fiscal_filing.not_filing": "Este equipo no envía registros de facturación a la AEAT.",
   "fiscal_filing.awaiting_certificate":
     "No se puede enviar nada hasta que se instale el certificado de la AEAT.",

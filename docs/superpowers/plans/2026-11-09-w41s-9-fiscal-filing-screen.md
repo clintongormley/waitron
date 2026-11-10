@@ -604,6 +604,7 @@ tool calls; 4a is the largest and can split again into "parts 1–3" and "cases,
    keeps doing, and that no correction can be made in Waitron yet; the **Export** button is labelled
    "Export these cases" and names nobody. If the owner says yes, the wording may add "for your tax
    adviser".
+   Answered 2026-11-10 16:39 by the owner: 'Export these cases for your tax adviser'.
 2. **Approve the exact assertion lines in Task 6** so the bell's fiscal alerts can open this screen.
    **Default if unanswered:** Task 6 is skipped; the screen lands without alert links.
 3. **Build now, or after A1308's fiscal slices?** Building now means fi1, fi5, fi6 and fi9 each also

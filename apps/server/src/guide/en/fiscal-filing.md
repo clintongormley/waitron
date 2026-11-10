@@ -39,5 +39,5 @@ every one.
 
 ## Export the cases {#export}
 
-**Export these cases** reads the box again and downloads one file with every open case, not only the
-200 on screen, together with the rest of the page.
+**Export these cases for your tax adviser** reads the box again and downloads one file with every
+open case, not only the 200 on screen, together with the rest of the page.
