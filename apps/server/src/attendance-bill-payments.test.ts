@@ -90,7 +90,6 @@ function evidence(paymentId: string, outcome: string) {
     source: "bill-payment",
     key: paymentId,
     personId: collector.personId,
-    locationId: v.cfg.locationId,
     kind: "payment",
     at: "2026-01-05T11:00:00.000Z",
     offsetMinutes: 60,

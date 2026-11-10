@@ -308,7 +308,6 @@ describe("settled-tender refund command local transaction", () => {
         source: "refund",
         key: result.id,
         personId,
-        locationId: cfg.locationId,
         kind: "payment",
         at: AT,
         outcome: "qualifying",

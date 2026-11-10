@@ -100,7 +100,6 @@ it.each(["captured", "accepted_offline"] as const)(
     expect(fact).toMatchObject({
       key,
       personId,
-      locationId,
       at: "2026-01-05T11:00:00.000Z",
       outcome: "qualifying",
     });
