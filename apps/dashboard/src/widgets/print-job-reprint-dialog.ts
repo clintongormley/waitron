@@ -40,15 +40,16 @@ export class PrintJobReprintDialog extends LitElement {
   /** Counts openings, so an answer for an earlier job never updates this one. */
   #opening = 0;
 
+  /** A new row for the same job is a refresh of what it offers, not a new opening. */
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("job")) {
+    if (changed.has("job") && changed.get("job")?.id !== this.job?.id) {
       this.#opening += 1;
       this.sending = false;
       this.errorKey = null;
       this.printerErrorKey = null;
       this.printerId = this.#original()?.id ?? "";
     } else if (
-      changed.has("printers") &&
+      (changed.has("printers") || changed.has("job")) &&
       this.printerId !== "" &&
       !this.#offers().some((printer) => printer.id === this.printerId)
     ) {
@@ -102,12 +103,17 @@ export class PrintJobReprintDialog extends LitElement {
   #renderChoice(job: PrintJobRow, offers: Printer[]) {
     if (offers.length === 0)
       return html`<p data-test="reprint-nowhere">
-        ${fill(
-          job.reprintRule === "own" ? "printers.reprint_original_off" : "printers.reprint_none",
-          {
-            printer: job.printerName,
-          },
-        )}
+        ${
+          // A job stuck on an active printer no agent sees is not offered it either.
+          this.printers.some((printer) => printer.id === job.printerId && printer.active)
+            ? t("printers.reprint_none_elsewhere")
+            : fill(
+                job.reprintRule === "own"
+                  ? "printers.reprint_original_off"
+                  : "printers.reprint_none",
+                { printer: job.printerName },
+              )
+        }
       </p>`;
     const rule =
       job.reprintRule === "wide_enough"

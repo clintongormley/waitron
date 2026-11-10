@@ -52,6 +52,7 @@ import {
 import { LiveData } from "@waitron/dashboard-kit";
 import { formatEquipmentCode, type DeleteImpact } from "@waitron/shared";
 import { decodeQrImage } from "../testing/decode-qr.js";
+import type { PrintJobReprintDialog } from "../widgets/print-job-reprint-dialog.js";
 
 useLocale("es-ES");
 
@@ -5097,8 +5098,174 @@ it("offers resend for eligible jobs and enqueues the selected document only once
   expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
   expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
   expect(text(el, "[data-test=reprint-sent]")).toBe(
-    fill("printers.reprint_sent", { printer: "Cocina" }),
+    fill("printers.reprint_sent", { printer: printers[0]!.name }),
   );
+});
+
+it("a reprint still being sent cannot be sent again by closing and reopening its dialog", async () => {
+  let resolve!: (value: { jobId: string }) => void;
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  const row = q(el, "[data-test=resend-job-j2]") as import("@waitron/ui").WtButton;
+  expect(row.disabled).toBe(true);
+  row.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")?.click();
+  await flush(el);
+  expect(api.resendPrintJob).toHaveBeenCalledOnce();
+  resolve({ jobId: "resent" });
+  await flush(el);
+  expect(row.disabled).toBe(false);
+  expect(text(el, "[data-test=reprint-sent]")).toBe(
+    fill("printers.reprint_sent", { printer: printers[0]!.name }),
+  );
+});
+
+it("shows a reprint's refusal on the screen when it arrives after the dialog closed", async () => {
+  let refuse!: (reason: unknown) => void;
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockReturnValue(
+      new Promise((_, fail) => {
+        refuse = fail;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  refuse({ code: "print_job.not_resendable" });
+  await flush(el);
+  expect(text(el, "p.error[role=alert]")).toBe(codeMessage("print_job.not_resendable"));
+});
+
+it("a closed dialog's late reprint answer leaves another job's open Reprint dialog open", async () => {
+  let resolve!: (value: { jobId: string }) => void;
+  const api = stubApi({
+    listRecentJobs: vi.fn().mockResolvedValue([...jobs, { ...jobs[1]!, id: "j3" }]),
+    resendPrintJob: vi.fn().mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=resend-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  q(el, "[data-test=resend-job-j3]")!.click();
+  await flush(el);
+  resolve({ jobId: "resent" });
+  await flush(el);
+  expect(
+    (q(el, "dashboard-print-job-reprint-dialog") as PrintJobReprintDialog | null)?.job?.id,
+  ).toBe("j3");
+});
+
+describe("the open Reprint dialog follows the job's live row", () => {
+  const active = printers.map((printer) => ({ ...printer, active: true }));
+  const row: PrintJobRow = {
+    ...jobs[1]!,
+    reprintRule: "wide_enough",
+    reprintPrinterIds: ["p2", "p3"],
+  };
+  const choice = (el: PrintersScreen) =>
+    q(el, "wt-combobox[name=printerId]") as import("@waitron/ui").WtCombobox;
+  const offered = (el: PrintersScreen) => choice(el).options.map((option) => option.value);
+  async function openOn(rows: PrintJobRow[]) {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue(active),
+        listRecentJobs: vi.fn().mockResolvedValue(rows),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=resend-job-j2]")!.click();
+    await flush(el);
+    return { el, api, liveData };
+  }
+  async function deliver(
+    el: PrintersScreen,
+    api: DashboardApi,
+    liveData: LiveData,
+    rows: PrintJobRow[],
+  ) {
+    vi.mocked(api.listRecentJobs).mockResolvedValue(rows);
+    liveData.invalidate([{ type: "print_jobs", id: "j2" }]);
+    await vi.waitFor(() => expect(api.listRecentJobs).toHaveBeenCalledTimes(2));
+    await flush(el);
+  }
+
+  it("drops a printer the server no longer offers, keeping a choice still offered", async () => {
+    const { el, api, liveData } = await openOn([row]);
+    expect(offered(el)).toEqual(["p1", "p3", "p2"]);
+    choice(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value: "p3" } }));
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, reprintPrinterIds: ["p3"] }]);
+    expect(offered(el)).toEqual(["p1", "p3"]);
+    expect(choice(el).value).toBe("p3");
+  });
+
+  it("falls back to the job's own printer when the chosen one is no longer offered", async () => {
+    const { el, api, liveData } = await openOn([row]);
+    choice(el).dispatchEvent(new CustomEvent("wt-change", { detail: { value: "p2" } }));
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, reprintPrinterIds: ["p3"] }]);
+    expect(offered(el)).toEqual(["p1", "p3"]);
+    expect(choice(el).value).toBe("p1");
+  });
+
+  it("keeps a send in flight when the row refreshes", async () => {
+    let resolve!: (value: { jobId: string }) => void;
+    const { el, api, liveData } = await openOn([row]);
+    vi.mocked(api.resendPrintJob).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    q(el, "[data-test=reprint-send]")!.click();
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, attempts: 2 }]);
+    const send = q(el, "[data-test=reprint-send]") as import("@waitron/ui").WtButton;
+    expect(send.loading).toBe(true);
+    send.click();
+    await flush(el);
+    expect(api.resendPrintJob).toHaveBeenCalledOnce();
+    resolve({ jobId: "resent" });
+    await flush(el);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+  });
+
+  it("keeps the last row it had when the job leaves the list", async () => {
+    const { el, api, liveData } = await openOn([row]);
+    await deliver(el, api, liveData, []);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).not.toBeNull();
+    expect(offered(el)).toEqual(["p1", "p3", "p2"]);
+  });
 });
 
 it("shows a localized resend failure and permits another attempt", async () => {

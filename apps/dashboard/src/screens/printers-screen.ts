@@ -902,8 +902,23 @@ export class PrintersScreen extends LitElement {
   @state() private preview: PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
-  /** The job the Reprint dialog is open on. */
+  /** The job the Reprint dialog is open on: its row in `jobs`, or the last one it had there. */
   @state() private reprintJob: PrintJobRow | null = null;
+  /** Jobs whose reprint has been sent and not answered, even after the dialog closed. */
+  @state() private reprintsSending: ReadonlySet<string> = new Set();
+  readonly #reprintApi: Pick<DashboardApi, "resendPrintJob"> = {
+    resendPrintJob: async (id, printerId) => {
+      this.reprintsSending = new Set([...this.reprintsSending, id]);
+      try {
+        return await this.api.resendPrintJob(id, printerId);
+      } catch (error) {
+        if (this.reprintJob?.id !== id) this.errorKey = codeOf(error);
+        throw error;
+      } finally {
+        this.reprintsSending = new Set([...this.reprintsSending].filter((job) => job !== id));
+      }
+    },
+  };
   /** The printer a reprint was last sent to, while its notice shows. */
   @state() private reprintSentTo: string | null = null;
   /** The last print the edit or calibration dialog sent. */
@@ -1061,6 +1076,10 @@ export class PrintersScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues): void {
     // A new A4 list supersedes a failed test-page read's message, as a fresh read of the rows.
     if (changed.has("pagePrinters")) this.#testPages.readError = null;
+    if (changed.has("jobs") && this.reprintJob !== null) {
+      const id = this.reprintJob.id;
+      this.reprintJob = this.jobs.find((job) => job.id === id) ?? this.reprintJob;
+    }
     if (
       changed.has("canManage") &&
       !this.canManage &&
@@ -1100,6 +1119,7 @@ export class PrintersScreen extends LitElement {
     this.#disposeAgentDraft();
     this.#disposePrinterNameDraft();
     this.#disposeAddressDraft();
+    this.#disposePairAgainDraft();
     this.editingAgent = null;
     this.#endScan();
     this.#stopRenewing();
@@ -2030,15 +2050,20 @@ export class PrintersScreen extends LitElement {
 
   #finishPairAgain(opening: number): void {
     if (opening !== this.#pairAgainOpening) return;
+    this.#disposePairAgainDraft();
+    if (!this.pairSubmitting) this.#resetPair();
+    this.#endScan();
+    this.#stopRenewing();
+    this.#dropDialogCommands();
+  }
+
+  /** Also invalidates the opening, so a late answer for it does nothing. */
+  #disposePairAgainDraft(): void {
     this.#pairAgainOpening++;
     this.pairAgain = null;
     this.#pairAgainScope?.dispose();
     this.#pairAgainScope = undefined;
     this.#pairAgainLeave = undefined;
-    if (!this.pairSubmitting) this.#resetPair();
-    this.#endScan();
-    this.#stopRenewing();
-    this.#dropDialogCommands();
   }
 
   #renderPairAgain(): TemplateResult | typeof nothing {
@@ -3797,8 +3822,9 @@ export class PrintersScreen extends LitElement {
               j.canResend
                 ? html`<wt-button
                     data-test=${`resend-job-${j.id}`}
+                    ?disabled=${this.reprintsSending.has(j.id)}
                     @click=${() => {
-                      this.reprintJob = j;
+                      if (!this.reprintsSending.has(j.id)) this.reprintJob = j;
                     }}
                     >${t("printers.resend_job")}</wt-button
                   >`
@@ -3840,17 +3866,19 @@ export class PrintersScreen extends LitElement {
 
   #renderReprint(): TemplateResult | typeof nothing {
     if (this.reprintJob === null) return nothing;
+    const id = this.reprintJob.id;
     return html`<dashboard-print-job-reprint-dialog
-      .api=${this.api}
+      .api=${this.#reprintApi}
       .job=${this.reprintJob}
       .printers=${this.printers}
       @reprint-close=${() => {
         this.reprintJob = null;
       }}
       @reprinted=${(event: CustomEvent<{ printerName: string }>) => {
-        this.reprintJob = null;
+        // Also sent by a dialog already closed, whose request was still being answered.
+        if (this.reprintJob?.id === id) this.reprintJob = null;
         this.reprintSentTo = event.detail.printerName;
-        void this.#load();
+        if (this.isConnected) void this.#load();
       }}
     ></dashboard-print-job-reprint-dialog>`;
   }

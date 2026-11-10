@@ -145,6 +145,31 @@ it.each([
   },
 );
 
+it.each([
+  ["any", ["p2", "p3"]],
+  ["wide_enough", ["p2", "p3"]],
+] as const)(
+  "does not call a job's own active printer disabled when its stuck %s printout has nowhere else to go",
+  async (reprintRule, reprintPrinterIds) => {
+    const { el } = await mount(
+      job({
+        status: "queued",
+        deliveredAt: null,
+        stuck: true,
+        reprintRule,
+        reprintPrinterIds: [...reprintPrinterIds],
+      }),
+    );
+    el.printers = printers.map((p) => (p.id === "p1" ? p : { ...p, active: false }));
+    await el.updateComplete;
+    expect(combobox(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=reprint-nowhere]")!.textContent!.trim()).toBe(
+      t("printers.reprint_none_elsewhere"),
+    );
+    expect(reprint(el).disabled).toBe(true);
+  },
+);
+
 it("offers a stuck printout only the other printers, chooses nothing and says it is cancelled where it waits", async () => {
   const { el } = await mount(job({ status: "queued", deliveredAt: null, stuck: true }));
   expect(offered(el)).toEqual(["Bar", "Terrace"]);

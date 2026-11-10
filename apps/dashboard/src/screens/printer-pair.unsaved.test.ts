@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons, type WtModal } from "@waitron/ui";
@@ -47,6 +47,7 @@ customElements.define("printer-pair-leave-test-app", PrinterPairLeaveApp);
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
+  vi.restoreAllMocks();
 });
 function q(screen: PrintersScreen, selector: string): HTMLElement | null {
   function find(root: ShadowRoot | HTMLElement): HTMLElement | null {
@@ -426,7 +427,7 @@ describe("Pair again", () => {
   } satisfies Printer;
   const found: DiscoveredPrinter = { ...device, alreadyRegistered: true, printerId: off.id };
 
-  async function mountPairAgain() {
+  async function mountPairAgain(beforeOpen: (app: PrinterPairLeaveApp) => void = () => {}) {
     const { el: app } = await mountWidget<PrinterPairLeaveApp>("printer-pair-leave-test-app", {
       api: {
         listAgents: async () => [],
@@ -447,6 +448,7 @@ describe("Pair again", () => {
         pairBluetooth: async () => ({ command }),
       } as unknown as DashboardApi,
     });
+    beforeOpen(app);
     const screen = app.shadowRoot!.querySelector("dashboard-printers-screen")!;
     await expect.poll(() => q(screen, "wt-tabs")).not.toBeNull();
     q(screen, "wt-tabs")!.shadowRoot!.querySelector<HTMLElement>('[data-key="printers"]')!.click();
@@ -469,12 +471,22 @@ describe("Pair again", () => {
     const { app, screen } = await mountPairAgain();
     change(screen, "8472");
     expect(unload()).toBe(true);
-    q(screen, "[data-test=cancel-pair]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
     expect(field(screen)?.value).toBe("8472");
-    q(screen, "[data-test=cancel-pair]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "discard");
     await expect.poll(() => modal(screen)).toBeNull();
+    expect(pairAgainModal(screen)).not.toBeNull();
+    expect(unload()).toBe(false);
+  });
+
+  it("Cancel on Pair again's PIN discards it without asking and keeps the Pair again window", async () => {
+    const { app, screen } = await mountPairAgain();
+    change(screen, "8472");
+    q(screen, "[data-test=cancel-pair]")!.click();
+    await expect.poll(() => modal(screen)).toBeNull();
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(pairAgainModal(screen)).not.toBeNull();
     expect(unload()).toBe(false);
   });
@@ -482,11 +494,42 @@ describe("Pair again", () => {
   it("closing the Pair again window with a typed PIN asks once, and Discard closes both", async () => {
     const { app, screen } = await mountPairAgain();
     change(screen, "8472");
-    q(screen, "[data-test=cancel-pair-again]")!.click();
+    void (pairAgainModal(screen) as WtModal).requestClose("escape");
+    await choose(app, "keep");
+    expect(pairAgainModal(screen)).not.toBeNull();
+    expect(field(screen)?.value).toBe("8472");
+    void (pairAgainModal(screen) as WtModal).requestClose("escape");
     await choose(app, "discard");
     await expect.poll(() => pairAgainModal(screen)).toBeNull();
     expect(modal(screen)).toBeNull();
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(unload()).toBe(false);
+  });
+
+  it("Cancel on the Pair again window with a typed PIN closes both without asking", async () => {
+    const { app, screen } = await mountPairAgain();
+    change(screen, "8472");
+    q(screen, "[data-test=cancel-pair-again]")!.click();
+    await expect.poll(() => pairAgainModal(screen)).toBeNull();
+    expect(modal(screen)).toBeNull();
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(unload()).toBe(false);
+  });
+
+  it("removing the screen releases Pair again's draft scope as well as its PIN's", async () => {
+    const disposals: ReturnType<typeof vi.fn>[] = [];
+    const { screen } = await mountPairAgain((app) => {
+      const coordinator = app.leave.coordinator;
+      const register = coordinator.register.bind(coordinator);
+      vi.spyOn(coordinator, "register").mockImplementation((owner) => {
+        const scope = register(owner);
+        const dispose = vi.fn(() => scope.dispose());
+        disposals.push(dispose);
+        return { ...scope, dispose };
+      });
+    });
+    expect(disposals).toHaveLength(2);
+    screen.remove();
+    expect(disposals.map((dispose) => dispose.mock.calls.length)).toEqual([1, 1]);
   });
 });
