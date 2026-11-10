@@ -2732,7 +2732,7 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
     expect(badge(entry(el, "results", "Beer"))!.textContent!.trim()).toBe("3");
   });
 
-  it("the badge keeps clear of the name and the photo, and the allergen mark keeps the other corner", async () => {
+  it("the badge never covers the name, and the allergen mark keeps the other corner", async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(390, 844);
     try {
@@ -2769,12 +2769,54 @@ describe("a tile's number in the New order (A797-10 D7)", () => {
         text.selectNodeContents(tile.querySelector(".name")!);
         for (const line of text.getClientRects())
           expect(overlaps(box, line), dish.name).toBe(false);
-        const photo = tile.querySelector(".thumb");
-        expect(photo !== null, dish.name).toBe(dish === pictured);
-        if (photo) expect(overlaps(box, photo.getBoundingClientRect()), dish.name).toBe(false);
+        expect(tile.querySelector(".thumb") !== null, dish.name).toBe(dish === pictured);
         expect(box.right).toBeLessThanOrEqual(
           tile.querySelector(".nutrition-mark")!.getBoundingClientRect().left,
         );
+        cleanupWidgets();
+      }
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+  it("adding a dish leaves its tile and its row the same height, on a photo tile and a colour tile", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const pictured = product("photo", "Grilled octopus with smoked paprika", {
+        image: mediaTestReference("cafe.webp"),
+      });
+      const painted = product("blue", "Mediterranean vegetables", {
+        image: null,
+        color: "#256bb1",
+      });
+      const neighbour = product("water", "Agua");
+      for (const dish of [pictured, painted]) {
+        const { el } = await mount({
+          menu: display(
+            "handheld",
+            { tiles: "thumbnails" },
+            lunch({
+              structure: { members: [member(dish.id.slice(2)), member("water")] },
+              ...withShortcuts([]),
+            }),
+          ),
+          handheld: true,
+          products: [dish, neighbour],
+          inOrder: new Map(),
+        });
+        const tile = entry(el, "structure", dish.name);
+        expect(tile.querySelector(".thumb") !== null, dish.name).toBe(dish === pictured);
+        const grid = tile.closest(".grid")!;
+        const heights = () => [
+          tile.getBoundingClientRect().height,
+          grid.getBoundingClientRect().height,
+        ];
+        const before = heights();
+        el.inOrder = new Map([[dish.id, 1]]);
+        await el.updateComplete;
+        expect(badge(tile), dish.name).not.toBeNull();
+        expect(heights(), dish.name).toEqual(before);
         cleanupWidgets();
       }
     } finally {

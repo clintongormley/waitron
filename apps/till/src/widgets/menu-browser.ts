@@ -247,11 +247,10 @@ export class TillMenuBrowser extends LitElement {
         line-height: var(--wt-space-5);
         text-align: center;
       }
-      .tile[data-in-order] .name {
+      /* Room for the badge is kept whether or not the dish is counted, so a tile never changes size
+         when its first dish is added. On a photo the badge covers the photo's corner instead. */
+      .tile[data-counted]:not(:has(.thumb)) .name {
         padding-inline-start: var(--wt-space-5);
-      }
-      .tile[data-in-order] .thumb {
-        margin-block-start: var(--wt-space-5);
       }
       .in-order-words {
         ${visuallyHiddenStyles}
@@ -674,6 +673,7 @@ export class TillMenuBrowser extends LitElement {
       ?data-sold-out=${!sellable}
       ?disabled=${!sellable}
       ?data-nutrition=${marked}
+      ?data-counted=${this.inOrder !== undefined}
       ?data-in-order=${inOrder > 0}
       @contextmenu=${(event: Event) => event.preventDefault()}
       @keydown=${(event: KeyboardEvent) => {
