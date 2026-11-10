@@ -362,7 +362,8 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
     taxpayer: { legalName: "Old venue", taxId: "89890001K" },
   });
   expect(await readRecoveryKeyName(suite.node, NODE)).toBe(liveName);
-  expect(await readdir(stateDir)).toEqual([]);
+  expect(await readdir(stateDir)).toEqual(["scratch"]);
+  expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
   const recoveryOperation = {
     binding: {
       module: "fiscal-verifactu",

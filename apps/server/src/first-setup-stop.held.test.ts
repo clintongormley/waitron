@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
+import { SCRATCH_DIR } from "@waitron/store";
 import { START_AGAIN_ROUTES } from "./setup-first-fiscal-api.js";
 import { mountSetup } from "./setup-api.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
@@ -179,7 +180,7 @@ it("a committed setup whose publication failed: then the repair entry serves Sta
   await expectRepairPageDeletes(f);
 });
 
-/** After the restart: the repair entry's summary and Start again answer 200, and only locks remain. */
+/** After the restart: the repair entry's summary and Start again answer 200, leaving no data. */
 async function expectRepairPageDeletes(f: Awaited<ReturnType<typeof heldSetup>>) {
   const admission = await resolveFirstSetupEntry(f.roots, {});
   if (admission.kind !== "resolution") throw new Error("Expected the repair entry");
@@ -212,5 +213,6 @@ async function expectRepairPageDeletes(f: Awaited<ReturnType<typeof heldSetup>>)
     expect(
       (await readdir(dir)).filter((name) => !name.endsWith(".lock")),
       dir,
-    ).toEqual([]);
+    ).toEqual(dir === f.roots.stateDir ? [SCRATCH_DIR] : []);
+  expect(await readdir(join(f.roots.stateDir, SCRATCH_DIR))).toEqual([]);
 }
