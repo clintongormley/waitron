@@ -6,6 +6,7 @@ export const GUIDE_LINKS = {
   "email.test-results": { page: "email", section: "test-results" },
   "venue.time-zone": { page: "time-zone", section: "confirm" },
   "products.selling-unit": { page: "products", section: "selling-unit" },
+  "products.vat": { page: "products", section: "vat" },
   "products.course": { page: "products", section: "course" },
   "products.variants": { page: "products", section: "variants" },
   "products.patch-live-menu": { page: "products", section: "patch-live-menu" },

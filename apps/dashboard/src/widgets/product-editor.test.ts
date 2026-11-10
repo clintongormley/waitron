@@ -6582,13 +6582,14 @@ describe("help mode", () => {
     }
   });
 
-  it("links the price, course and Variants badges to their guide sections", async () => {
+  it("links the price, VAT, course and Variants badges to their guide sections", async () => {
     const before = currentLocale();
     setLocale("en-GB");
     try {
       const el = await mountOpen();
       const linked = [
         { host: field(el, "unit-price"), href: "/help/en/products#selling-unit" },
+        { host: field(el, "tax"), href: "/help/en/products#vat" },
         { host: field(el, "product-course"), href: "/help/en/products#course" },
         { host: folded(el, "variants"), href: "/help/en/products#variants" },
       ];
@@ -6613,13 +6614,6 @@ describe("help mode", () => {
     } finally {
       setLocale(before);
     }
-  });
-
-  it("the VAT badge has no guide link", async () => {
-    const el = await mountOpen();
-    const badge = await badgeOf(field(el, "tax"));
-    expect(badge.hasAttribute("guide-href")).toBe(false);
-    expect(badge.guideHref).toBeFalsy();
   });
 
   it("turning help on moves nothing in the editor", async () => {

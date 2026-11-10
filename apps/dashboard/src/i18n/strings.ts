@@ -870,14 +870,12 @@ export const en = {
   "help.label": "Help",
   "help.badge_label": "Help: {part}",
   "help.guide_link": "Read more in the guide",
-  "help.account.settings":
-    "Your name, display name, email, phone and language; your password, PIN and passkeys; an authenticator app for an extra sign-in check; and, where available, signing in with Google.",
+  "help.account.settings": "Change your personal details and how you sign in.",
   "help.products.keep_variant":
     "Cancels archiving this variant. Archiving happens only when you save the product.",
   "help.products.price":
     "The price includes VAT, per unit. For a weight or a unit with decimals the till asks how much; otherwise each tap sells one.",
-  "help.products.vat":
-    "The VAT class. A sale uses the class's rate on the day it is invoiced. A change reaches the tills when the menu is published again.",
+  "help.products.vat": "The VAT class. Publish the menu again to use a changed class at the tills.",
   "help.products.course":
     "The course this dish goes out in, unless staff change it on a table's order. Picked as an extra, it goes out with its dish.",
   "help.products.variants":
@@ -1320,7 +1318,7 @@ export const en = {
   "profile.data_copy_busy": "Preparing…",
   "profile.data_copy_help_label": "What the copy holds",
   "profile.data_copy_holds":
-    "Your profile and sign-in details, and your work records if the venue keeps them in Waitron. The whole sales already recorded whose void you authorised. The refunds you asked for, authorised or recorded the outcome of. The cash-drawer openings you made or authorised. The voids, comps and discounts on a bill that you made giving a reason, or approved for someone else. A README.txt that explains each file and your rights.",
+    "Your profile, sign-in details and actions recorded in Waitron, plus any work records kept here. A README.txt explains the files and your rights.",
   "profile.data_copy_help_guide": "More about your data",
   "account.offer_passkey": "Set up a passkey?",
   "account.passkey_optional":
@@ -3696,7 +3694,7 @@ export const en = {
   "box_status.retry": "Retry now",
   "box_status.retry_help_label": "What Retry now does",
   "box_status.retry_help":
-    "Tries the records waiting after a failed send again, instead of waiting out their pause. The tax agency's wait between sends still applies, except that a full batch of 1,000 records may go at once. Records stopped after repeated refusals stay stopped. While the box has no certificate for the tax agency nothing is sent, so it can't be pressed.",
+    "Tries the waiting records again after a failed send. They may still have to wait before sending. It does not release stopped records.",
   "box_status.retry_help_guide": "More about trying again",
   "box_status.retried":
     "{count} records will be tried again as soon as the tax agency allows the next send.",
@@ -3794,7 +3792,7 @@ export const en = {
   "box_status.freed": "Freed {size}.",
   "box_status.free_help_label": "What Free deletes",
   "box_status.free_help":
-    "Free deletes only files the box no longer needs: crash reports older than a week, log files older than the two newest, and what a backup that was cut off left behind. Sales, settings and your backups are never touched.",
+    "Deletes old crash reports and logs, and files left by an interrupted backup. Your sales, settings and backups are kept.",
   "box_status.free_help_guide": "More about freeing space",
   "box_status.fillers":
     "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, recovery keys and saved backups.",
@@ -4100,7 +4098,7 @@ export const es: Record<StringKey, string> = {
   "orders.range_backwards": "Elige una fecha final igual o posterior a la inicial",
   "orders.col.opened": "Apertura",
   "orders.col.bill": "Cuenta",
-  "orders.col.table": "Mesa o barra",
+  "orders.col.table": "Mesa o mostrador",
   "orders.col.invoice": "Factura",
   "orders.invoice_full": "Factura completa",
   "orders.invoice_simplified": "Factura simplificada",
@@ -4109,7 +4107,7 @@ export const es: Record<StringKey, string> = {
   "orders.col.owed": "Pendiente",
   "orders.col.staff": "Personal",
   "orders.col.actions": "Acciones",
-  "orders.counter": "Barra",
+  "orders.counter": "Mostrador",
   "orders.order_number": "N.º {number}",
   "orders.credited_in_full": "Abonada por completo",
   "orders.credited_in_part": "Abonada en parte",
@@ -4721,14 +4719,13 @@ export const es: Record<StringKey, string> = {
   "help.label": "Ayuda",
   "help.badge_label": "Ayuda: {part}",
   "help.guide_link": "Más información en la guía",
-  "help.account.settings":
-    "Tu nombre, nombre visible, correo electrónico, teléfono e idioma; tu contraseña, PIN y passkeys; una aplicación de autenticación como comprobación adicional; y, si está disponible, el inicio de sesión con Google.",
+  "help.account.settings": "Cambia tus datos personales y cómo inicias sesión. |",
   "help.products.keep_variant":
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
   "help.products.vat":
-    "La clase de IVA. Una venta aplica el tipo de la clase el día de la factura. Un cambio llega a la caja al volver a publicar la carta.",
+    "La clase de IVA. Vuelve a publicar la carta para usar la nueva clase en las cajas. |",
   "help.products.course":
     "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
   "help.products.variants":
@@ -5184,7 +5181,7 @@ export const es: Record<StringKey, string> = {
   "profile.data_copy_busy": "Preparando…",
   "profile.data_copy_help_label": "Qué contiene la copia",
   "profile.data_copy_holds":
-    "Tus datos de perfil y de acceso, y tus datos de trabajo si el local los guarda en Waitron. Las ventas completas ya registradas cuya anulación autorizaste. Las devoluciones que pediste, autorizaste o cuyo resultado registraste. Las aperturas del cajón de efectivo que hiciste o autorizaste. Las cancelaciones y los descuentos en una cuenta que hiciste indicando un motivo, o que autorizaste a otra persona. Un README.txt que explica cada archivo y tus derechos.",
+    "Tus datos de perfil y de acceso, y tus acciones registradas en Waitron, además de los datos de trabajo que se guarden aquí. Un README.txt explica los archivos y tus derechos. |",
   "profile.data_copy_help_guide": "Más sobre tus datos",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
@@ -7595,7 +7592,7 @@ export const es: Record<StringKey, string> = {
   "box_status.retry": "Reintentar ahora",
   "box_status.retry_help_label": "Qué hace Reintentar ahora",
   "box_status.retry_help":
-    "Vuelve a intentar los registros que esperan tras un envío fallido, sin esperar a que acabe su pausa. La espera entre envíos que pide Hacienda sigue valiendo, salvo que un lote completo de 1.000 registros puede salir enseguida. Los registros parados tras varios rechazos siguen parados. Mientras el equipo no tenga el certificado de la AEAT no se envía nada, así que no se puede pulsar.",
+    "Vuelve a intentar los registros pendientes tras un envío fallido. Puede que aún tengan que esperar para enviarse. No libera los registros parados. |",
   "box_status.retry_help_guide": "Más sobre volver a intentar",
   "box_status.retried":
     "{count} registros se volverán a intentar en cuanto Hacienda permita el siguiente envío.",
@@ -7695,7 +7692,7 @@ export const es: Record<StringKey, string> = {
   "box_status.freed": "Se han liberado {size}.",
   "box_status.free_help_label": "Qué borra Liberar",
   "box_status.free_help":
-    "Liberar solo borra archivos que el equipo ya no necesita: informes de fallos de hace más de una semana, registros de actividad anteriores a los dos más recientes y lo que dejó una copia de seguridad interrumpida. Nunca toca las ventas, los ajustes ni tus copias.",
+    "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad. |",
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.fillers":
     "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",

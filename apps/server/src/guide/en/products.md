@@ -5,18 +5,22 @@ service, and at what price. Keeping those jobs separate lets you reuse one coffe
 without copying its kitchen name, dietary declarations or choices.
 
 Open **Products** in the management dashboard and choose **Add product**. Give the product a name
-and enter its price. Its VAT starts on the class chosen as **VAT class for new products**, on the
+and enter its price.
+
+The editor keeps the fields you change often on screen and folds the rest away behind a heading that
+summarises what is inside it, so you can see at a glance which sections you have filled in. Open one
+by clicking its heading. If a section contains something you need to fix, it opens itself and stays
+open until you have fixed it.
+
+## Choose the VAT class {#vat}
+
+Its VAT starts on the class chosen as **VAT class for new products**, on the
 **Venue details** tab of **Venue settings**; change it here when this product is taxed differently.
 For a product with no VAT, choose **No tax (0%)**. A change of VAT class reaches the tills when the
 menu is published again; until then they sell the product at the class the menu was published with.
 To correct the class on the live menu without publishing your other changes to the products, see
 [Patch the live menu in an emergency](products.md#patch-live-menu).
 A line already on an order keeps the class it was added with.
-
-The editor keeps the fields you change often on screen and folds the rest away behind a heading that
-summarises what is inside it, so you can see at a glance which sections you have filled in. Open one
-by clicking its heading. If a section contains something you need to fix, it opens itself and stays
-open until you have fixed it.
 
 ## Set how a product is sold {#selling}
 

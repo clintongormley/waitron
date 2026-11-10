@@ -288,9 +288,10 @@ describe("profile-screen copy of your data help", () => {
       expect(help.getAttribute("aria-label")).toBe(t("profile.data_copy_help_label"));
       expect(help.getAttribute("guide-label")).toBe(t("profile.data_copy_help_guide"));
       expect(help.textContent!.trim()).toBe(en["profile.data_copy_holds"]);
-      expect(help.textContent!.trim()).toContain(
-        "The voids, comps and discounts on a bill that you made giving a reason, or approved for someone else.",
-      );
+      expect(help.textContent).toContain("actions recorded in Waitron");
+      expect(help.textContent).toContain("work records kept here");
+      expect(help.textContent).toContain("README.txt");
+      expect(help.textContent).toContain("rights");
     } finally {
       setLocale(previous);
     }
