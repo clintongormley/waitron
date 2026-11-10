@@ -40,12 +40,11 @@ it("redraws connected hosts and resumes after a disconnected interval", async ()
 it("calls the supplied handler once per change across reconnects", async () => {
   const host = probe();
   const applied: string[] = [];
-  const observer = new ui.ChangeObserver(host, ui.subscribeThemeChoice, () => {
+  new ui.ChangeObserver(host, ui.subscribeThemeChoice, () => {
     applied.push(ui.currentThemeChoice());
   });
   document.body.append(host);
   await host.updateComplete;
-  observer.hostConnected();
   ui.chooseTheme("dark");
   expect(applied).toEqual(["dark"]);
   expect(host.shadowRoot!.textContent).toBe("device");

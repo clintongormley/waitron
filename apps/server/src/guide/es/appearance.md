@@ -39,8 +39,6 @@ muestra los temas del local.
 Cualquier persona con el rol **Supervisor** o superior puede abrir esta página y leer las dos tarjetas.
 Solo un **Encargado** o un **Administrador** puede cambiar el aspecto.
 
-Tu elección de **Tema** también se aplica a las instrucciones del certificado cuando las abres en la misma dirección.
-
 ## Edita un tema {#edit}
 
 La tarjeta Aspecto muestra **Editar** a un **Encargado** o a un **Administrador**, sea cual sea el

@@ -14,7 +14,6 @@ export class ChangeObserver implements ReactiveController {
   }
 
   hostConnected(): void {
-    this.#dispose?.();
     this.#dispose = this.subscribe(this.handler);
   }
 

@@ -32,4 +32,15 @@ describe("LocaleChangeController", () => {
     expect(el.shadowRoot!.textContent).toContain(t("action.logout", "en-GB"));
   });
 
+  it("invokes a custom handler instead of the default requestUpdate", async () => {
+    let calls = 0;
+    // Lit's addController calls hostConnected at once on an already-connected host, so this
+    // controller subscribes at construction.
+    const { el } = await mountWidget<LocaleProbe>("locale-probe", {});
+    new LocaleChangeController(el, () => {
+      calls += 1;
+    });
+    setLocale("en-GB");
+    expect(calls).toBe(1);
+  });
 });
