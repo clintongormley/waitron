@@ -100,13 +100,22 @@ whose author and committer times differ. Image smoke exercises the real Docker b
 cases do not establish Docker's network isolation. The original network stall's cause remains
 unverified; the image no longer invokes the generator's optional source-fetch mode.
 
-## Automatic private UI releases
+## Automatic private package releases
 
-`publish-ui.yml` runs on main pushes changing `packages/ui-core/**`. It checks
-package types, lint and coverage, prepares the numbered tarball from the event's
-full SHA and runs the independent browser consumer before publishing. Only the
+`publish-ui.yml` runs on main pushes changing either `packages/ui-core/**` or
+`packages/contract/**`. It checks types, lint and coverage for both packages, prepares
+numbered tarballs from the event’s full SHA and runs independent browser/Node
+consumers before publishing. Only the
 publish step receives `UI_PACKAGES_WRITE_TOKEN`. A failed upload fails the run;
 the next qualifying merge attempts a new `0.2.<run number>` version.
+
+The publisher uses a fixed UI/contract matrix, with UI-only Chromium setup and independent
+failures (`fail-fast: false`). Each row runs the same source/preparation/installed-consumer
+checks; contract runs in Node with no peers. The final step authenticates the write token,
+checks its package scope and existing private Cloud association,
+then repeats the private association check after upload and prints registry integrity/source
+metadata. New-contract metadata may be absent only before upload; first creation and Cloud’s
+own-token installation remain unverified until those operations run.
 
 The publisher uses its own concurrency group with `queue: max` and no cancellation
 of a running publication. This serializes uploads separately from `ci.yml`, whose
@@ -142,6 +151,14 @@ External provenance, read 2026-11-06:
 | --- | --- | --- |
 | Uploads can queue without replacing the one pending run | [Actions concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency): “Up to 100 jobs or workflow runs” | `queue: max` permits multiple pending publications in one group. |
 | Packages start private | [GitHub npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry): “default visibility is private” | The existing private package keeps its Cloud repository association; publication requests restricted access. |
+
+### Package credential checks: external provenance (2026-11-10)
+
+| Claim | Source’s words | Application here |
+| --- | --- | --- |
+| A classic token needs a package upload scope | [OAuth scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps): “Grants access to upload or publish a package” | Require `write:packages` from the authenticated response header. |
+| Package metadata needs authenticated package access | [Packages REST API](https://docs.github.com/en/rest/packages/packages): “your token must include the `read:packages` scope” | Read the actual package visibility and linked repository before and after upload; a missing first contract is not proof of creation rights. |
+| Cloud’s workflow access is separate | [Package access settings](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility): “Manage Actions access” | Require a real install with Cloud’s token after first publication; a writer-token download does not establish that access. |
 
 ## Disposable server-test runners
 

@@ -1,9 +1,9 @@
-name: Publish shared UI
+name: Publish shared packages
 
 on:
   push:
     branches: [main]
-    paths: ["packages/ui-core/**"]
+    paths: ["packages/ui-core/**", "packages/contract/**"]
 
 concurrency:
   group: ui-core-publication
@@ -17,6 +17,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [ui-core, contract]
+    env:
+      PACKAGE: ${{ matrix.package }}
     steps:
       # Bounded checkout attempts: docs/developers/ci-and-gates.md, "Every checkout is bounded".
       - id: checkout
@@ -65,9 +71,10 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium
+        if: matrix.package == 'ui-core'
         run: |
           for attempt in 1 2 3; do
-            timeout 180 pnpm --filter @waitron/ui-core exec playwright install chromium && break
+            timeout 180 pnpm --filter "@waitron/$PACKAGE" exec playwright install chromium && break
             [ "$attempt" -lt 3 ] || exit 1
             sleep 5
           done
@@ -76,32 +83,45 @@ jobs:
         run: |
           set -euo pipefail
           for check in typecheck lint test:coverage test:package; do
-            pnpm --filter @waitron/ui-core ls --depth -1 --json \
+            pnpm --filter "@waitron/$PACKAGE" ls --depth -1 --json \
               | node scripts/changed-packages.mjs runnable "$check"
           done
-          pnpm --filter @waitron/ui-core typecheck
-          pnpm --filter @waitron/ui-core lint
-          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter @waitron/ui-core test:coverage \
+          pnpm --filter "@waitron/$PACKAGE" typecheck
+          pnpm --filter "@waitron/$PACKAGE" lint
+          node scripts/run-with-deadline.mjs 360 --diagnostics -- pnpm --filter "@waitron/$PACKAGE" test:coverage \
             --reporter=default --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
       - id: prepare
         name: Prepare the numbered release
         run: |
-          mkdir "$RUNNER_TEMP/ui-release"
-          node scripts/release/prepare-ui.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/ui-release" \
-            --release-version "0.2.$GITHUB_RUN_NUMBER" --source-commit "$GITHUB_SHA"
+          mkdir "$RUNNER_TEMP/shared-release"
+          node scripts/release/prepare-ui.mjs "$GITHUB_WORKSPACE" "$RUNNER_TEMP/shared-release" \
+            --release-version "0.2.$GITHUB_RUN_NUMBER" --source-commit "$GITHUB_SHA" --package "$PACKAGE"
       - id: consumer
-        name: Check the prepared package in an independent browser consumer
+        name: Check the prepared package in an independent consumer
         env:
-          UI_PACKAGE_TARBALL: ${{ runner.temp }}/ui-release/waitron-io-ui-core-0.2.${{ github.run_number }}.tgz
+          UI_PACKAGE_TARBALL: ${{ runner.temp }}/shared-release/waitron-io-${{ matrix.package }}-0.2.${{ github.run_number }}.tgz
           UI_PACKAGE_RELEASE_VERSION: 0.2.${{ github.run_number }}
           UI_PACKAGE_SOURCE_COMMIT: ${{ github.sha }}
+          CONTRACT_PACKAGE_TARBALL: ${{ runner.temp }}/shared-release/waitron-io-${{ matrix.package }}-0.2.${{ github.run_number }}.tgz
+          CONTRACT_PACKAGE_RELEASE_VERSION: 0.2.${{ github.run_number }}
+          CONTRACT_PACKAGE_SOURCE_COMMIT: ${{ github.sha }}
         run: |
-          pnpm --filter @waitron/ui-core test:package
+          pnpm --filter "@waitron/$PACKAGE" test:package
       - id: publish
         name: Publish the private package
         timeout-minutes: 2
         env:
           NODE_AUTH_TOKEN: ${{ secrets.UI_PACKAGES_WRITE_TOKEN }}
         run: |
-          npm publish "$RUNNER_TEMP/ui-release/waitron-io-ui-core-0.2.$GITHUB_RUN_NUMBER.tgz" \
+          node --input-type=module -e '
+            import { checkPackageAccess } from "./scripts/release/package-access.mjs";
+            console.log(JSON.stringify(await checkPackageAccess(process.env.NODE_AUTH_TOKEN, process.env.PACKAGE)));
+          '
+          npm publish "$RUNNER_TEMP/shared-release/waitron-io-$PACKAGE-0.2.$GITHUB_RUN_NUMBER.tgz" \
             --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
+          node --input-type=module -e '
+            import { checkPackageAccess } from "./scripts/release/package-access.mjs";
+            console.log(JSON.stringify(await checkPackageAccess(process.env.NODE_AUTH_TOKEN, process.env.PACKAGE, { published: true })));
+          '
+          npm view "@waitron-io/$PACKAGE@0.2.$GITHUB_RUN_NUMBER" \
+            dist.integrity waitronSource.commit repository.url --json --registry=https://npm.pkg.github.com
