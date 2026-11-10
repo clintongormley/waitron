@@ -162,9 +162,9 @@ export async function serverRoute(options) {
     };
   if (unavailable.length)
     return {
-      route: "server",
+      route: "hosted",
       blind: true,
-      reason: `CI inventory could not be verified; using the server: ${unavailable.join("; ")}`,
+      reason: `CI inventory could not be verified; using GitHub: ${unavailable.join("; ")}`,
     };
   const capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
   assert.ok(
@@ -318,9 +318,9 @@ export async function healthCommand(command, options, { report, output }) {
         answer = await serverRoute(options);
       } catch (error) {
         answer = {
-          route: "server",
+          route: "hosted",
           blind: true,
-          reason: `CI routing inputs could not be verified; using the server: ${error.message}`,
+          reason: `CI routing inputs could not be verified; using GitHub: ${error.message}`,
         };
       }
       output(`server_route=${answer.route}`);

@@ -488,7 +488,7 @@ describe("server health recovery", () => {
     expect(calls).toBe(1);
   });
 
-  it("uses the server when the health read fails and never changes shared settings", async () => {
+  it("uses hosted when the health read fails and never changes shared settings", async () => {
     const outputs = [],
       reports = [];
     await health.healthCommand(
@@ -501,7 +501,7 @@ describe("server health recovery", () => {
       },
       { report: (line) => reports.push(line), output: (line) => outputs.push(line) },
     );
-    expect(outputs).toEqual(["server_route=server"]);
+    expect(outputs).toEqual(["server_route=hosted"]);
     expect(reports[0]).toContain("could not be verified");
   });
 

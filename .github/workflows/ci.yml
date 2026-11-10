@@ -311,8 +311,8 @@ jobs:
                -H "Accept: application/vnd.github.raw+json" > "$RUNNER_TEMP/ci-server-health.mjs"; }; then
             node "$RUNNER_TEMP/ci-server-health.mjs" route
           else
-            echo "server_route=server" >> "$GITHUB_OUTPUT"
-            echo "CI routing script could not be read; using the server." >> "$GITHUB_STEP_SUMMARY"
+            echo "server_route=hosted" >> "$GITHUB_OUTPUT"
+            echo "CI routing script could not be read; using GitHub." >> "$GITHUB_STEP_SUMMARY"
             echo "CI_ROUTE_BLIND run=${GITHUB_RUN_ID} attempt=${GITHUB_RUN_ATTEMPT}"
           fi
 

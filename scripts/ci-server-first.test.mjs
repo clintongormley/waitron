@@ -223,7 +223,7 @@ cat "$FIXTURE_ROUTER"
         refused === false ? 1 : 2,
       );
       if (refused === true)
-        expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=server\n");
+        expect(readFileSync(join(root, "outputs"), "utf8")).toBe("server_route=hosted\n");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
