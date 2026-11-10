@@ -173,7 +173,15 @@ it.each([
     if (field === "read-only receiver") throw new AppError("node.read_only", {});
   });
   const result = await send(async (url, init) => {
-    const changed = structuredClone(chart);
+    const changed = {
+      ...chart,
+      body: {
+        ...chart.body,
+        nodes: chart.body.nodes.map((row) => ({ ...row })),
+        revoked: [...(chart.body.revoked ?? [])],
+      },
+      endorsements: [...chart.endorsements],
+    };
     if (field === "pinned source") {
       await pinMainBoxKey(suite.node, receiver, {
         nodeId: receiver,
