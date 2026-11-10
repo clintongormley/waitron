@@ -78,7 +78,7 @@ describe("DashboardApi routes", () => {
         anyDate: false,
         credited: true,
         staff: "person-1",
-        table: "Mesa 5",
+        table: "Table 5",
         q: "A/12",
       },
       { after: "cursor" },
@@ -87,7 +87,7 @@ describe("DashboardApi routes", () => {
 
     expect(callsOf(fetchImpl)).toEqual([
       [
-        "/management-api/orders?status=unpaid&from=2026-09-01&to=2026-09-02&credited=true&staff=person-1&table=Mesa+5&q=A%2F12&after=cursor",
+        "/management-api/orders?status=unpaid&from=2026-09-01&to=2026-09-02&credited=true&staff=person-1&table=Table+5&q=A%2F12&after=cursor",
         "GET",
         undefined,
       ],
@@ -258,7 +258,7 @@ describe("DashboardApi routes", () => {
       { language: "es", gaps: [] },
       {
         language: "ca",
-        gaps: [{ kind: "product", id: "prod-1", name: "STAFF Pan", reason: "partial" }],
+        gaps: [{ kind: "product", id: "prod-1", name: "STAFF Bread", reason: "partial" }],
       },
     ];
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(report));
@@ -300,8 +300,8 @@ describe("DashboardApi routes", () => {
   });
 
   it("reads, creates and replaces a product through its editor routes", async () => {
-    const input = { name: "Patatas bravas" } as unknown as ProductEditorInput;
-    const stored = { id: "prod-9", name: "Patatas bravas" };
+    const input = { name: "Spicy potatoes" } as unknown as ProductEditorInput;
+    const stored = { id: "prod-9", name: "Spicy potatoes" };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored));
     const api = new DashboardApi("", fetchImpl);
 
@@ -320,7 +320,7 @@ describe("DashboardApi routes", () => {
     const usage = [
       {
         productId: "prod-9",
-        productName: "Jamón",
+        productName: "Ham",
         lists: [{ id: "list-1", name: "Toppings", menus: [{ id: "menu-1", name: "Lunch" }] }],
       },
     ];
@@ -775,7 +775,7 @@ describe("DashboardApi routes", () => {
     const holders = [
       {
         readerId: "r-1",
-        holder: { deviceId: "dev-1", deviceName: "Mano 1", personName: "Ana" },
+        holder: { deviceId: "dev-1", deviceName: "Handheld 1", personName: "Ana" },
         paymentInProgressDeviceIds: [],
       },
     ];
@@ -803,7 +803,7 @@ describe("DashboardApi routes", () => {
     const api = new DashboardApi("", fetchImpl);
 
     await api.updateDevice("dev-1", {
-      name: "Caja",
+      name: "Till",
       profileId: "p-1",
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
@@ -816,7 +816,7 @@ describe("DashboardApi routes", () => {
         "/management-api/devices/dev-1",
         "PATCH",
         {
-          name: "Caja",
+          name: "Till",
           profileId: "p-1",
           receiptPrinterId: null,
           paymentSlipPrinterId: null,
@@ -1007,7 +1007,7 @@ describe("DashboardApi routes", () => {
       locales: [{ code: "es", label: "Español" }],
       venueDefault: "es",
       loginDefault: "es",
-      venueName: "Bar Pepe SL",
+      venueName: "Parker Bar SL",
     };
     const fetchImpl = vi
       .fn()
@@ -1505,14 +1505,14 @@ it("renames the taxpayer with the new legal name and the one the page showed", a
   const answer = { model: venueDetailsFixture() };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
   const api = new DashboardApi("", fetchImpl);
-  await expect(
-    api.renameTaxpayer({ legalName: "Nuevo SL", expected: "Issuer SL" }),
-  ).resolves.toEqual(answer);
+  await expect(api.renameTaxpayer({ legalName: "New SL", expected: "Issuer SL" })).resolves.toEqual(
+    answer,
+  );
   expect(callsOf(fetchImpl)).toEqual([
     [
       "/management-api/venue-details/legal-name",
       "PUT",
-      { legalName: "Nuevo SL", expected: "Issuer SL" },
+      { legalName: "New SL", expected: "Issuer SL" },
     ],
   ]);
 });
