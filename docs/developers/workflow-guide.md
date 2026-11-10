@@ -288,9 +288,9 @@ the dashboard once it has committed. What decides delivery is therefore `withTra
 process serving the dashboard, not "the server": promotion and deployment stamping write in a bare
 `db.transaction`, and provisioning, the cold restore and the dev scripts write a venue database from
 their own process. A write outside `withTransaction` is late rather than lost, because the drain
-takes every row it finds — for an open dashboard, at worst the fifteen seconds between its event
-stream's session re-checks (`apps/server/src/live-api.test.ts`, "delivers a write made outside
-withTransaction"). A write through `withTransaction` in a DIFFERENT process is the one that is lost:
+takes every row it finds on the next `withTransaction` in the serving process
+(`apps/server/src/live-api.test.ts`, "delivers a write made outside withTransaction"). The event
+stream's session re-checks are read-only and do not drain those rows. A write through `withTransaction` in a DIFFERENT process is the one that is lost:
 it drains the rows into a process with no dashboard attached.
 
 What does NOT remove the first slot's directory is switching it between worktrees on the same
