@@ -8,6 +8,7 @@ import { AppError } from "@waitron/shared";
 import { retryWaitingRecords } from "./outbox.js";
 import { mountConflictRecovery } from "./conflict-recovery-routes.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
+import { mountFilingOverview } from "./filing-overview-routes.js";
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -24,6 +25,7 @@ export const FISCAL_ROUTES: ModuleRoutes = {
   mount(app, ctx, log): void {
     mountConflictRecovery(app, ctx, log);
     mountRecordRemedies(app, ctx, log);
+    mountFilingOverview(app, ctx, log);
     const drain = ctx.fiscalDrain;
     if (drain === undefined) return;
     app.post("/management-api/fiscal-outbox/retry", (c) =>
