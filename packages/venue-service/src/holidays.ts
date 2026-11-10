@@ -83,7 +83,6 @@ function matches(row: GeographyRow, address: Address): boolean {
  * resolving the venue's country through `findPack`.
  */
 export function createHolidayStore(findPack: PackLookup = getCountryPack) {
-  /** Reuse the caller's address and area from the same venue snapshot. */
   async function readAddress(tx: Transaction, place?: VenuePlace): Promise<Address> {
     const tenant = await readTenant(tx);
     const doc = place?.holidayArea === undefined ? (await readVenueSettings(tx)).doc : place;

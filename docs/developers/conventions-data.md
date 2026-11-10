@@ -6253,10 +6253,9 @@ into its clock query. The fields still travel in a configuration bundle's `venue
 **2026-11-10, A1308 slice 5b:** configuration format 13 keeps those venue keys while refusing
 older exports after the core reset.
 
-**2026-11-10, A1308 slice 5c:** receipt languages, content-language policy and the chosen holiday
-area also live in that document. `readVenue` exposes only setup fields. Format 15 carries
-`contentLanguages` and `holidayArea` at the bundle's top level; `invoiceLocales` stays in `venue`.
-A later address change leaves the saved area intact but reads it as unchosen at the new address.
+**2026-11-10, A1308 slice 5c:** receipt languages, content languages and holiday area share this document.
+Format 15 carries `contentLanguages` and `holidayArea` at the bundle’s top level;
+receipt languages remain in `venue.invoiceLocales`.
 
 Declare a document with `defineSettingsDocument`, read it with `readSettings`, and save it through
 `saveSettings`, the only writer (`packages/db/src/settings.ts`). The checker returns the normalised

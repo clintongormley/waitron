@@ -15,10 +15,9 @@ describe("fiscal fixture venue reuse", () => {
   ] as const)("%s keeps the existing venue when adding another node", async (_name, seed) => {
     await seed();
     await suite.db.update(locations).set({
-      invoiceLocales: ["en-GB"],
       operationDescription: "Existing service",
     });
-    await seedVenueSettings(suite.db, { name: "Existing venue" });
+    await seedVenueSettings(suite.db, { name: "Existing venue", invoiceLocales: ["en-GB"] });
     const before = await suite.db.select().from(locations);
     const documentBefore = await readVenueSettings(suite.db);
     expect(documentBefore.doc.name).toBe("Existing venue");
