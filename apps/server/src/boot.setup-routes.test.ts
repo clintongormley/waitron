@@ -552,8 +552,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         { WAITRON_HTTP_HOST: "0.0.0.0" },
         async () => {
           await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1));
+          // The ask failed, so the box cannot know nobody else holds the name.
           onQuery?.({ questions: [{ name: "waitron.local", type: "A" }] });
-          expect(answered).toContain("waitron.local");
+          expect(answered).toEqual([]);
         },
         {
           seams: {
@@ -593,7 +594,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             handlers.response?.({
               answers: [{ name: "waitron.local", type: "A", data: configured }],
             });
-            handlers.error?.(new Error("bind EADDRINUSE 0.0.0.0:5353"));
           });
         },
         destroy: (cb) => cb?.(),
@@ -614,7 +614,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         venue.directory,
         { WAITRON_HTTP_HOST: "0.0.0.0", WAITRON_BOX_ADDRESSES: configured },
         async () => {
-          await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1));
+          // The ask ends at its two-second limit.
+          await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1), { timeout: 10_000 });
           onQuery?.({ questions: [{ name: "waitron.local", type: "A" }] });
           expect(answered).toEqual([configured]);
         },
