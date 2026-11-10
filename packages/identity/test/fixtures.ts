@@ -5,6 +5,7 @@ import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { loginWithPin } from "../src/login.js";
 import { loginManager } from "../src/manager-login.js";
+import { hashSessionToken } from "../src/session-token.js";
 import { hashPin } from "../src/verify-pin.js";
 import { hashPassword } from "../src/verify-password.js";
 import type { PersonRoleValue } from "@waitron/shared";
@@ -94,6 +95,18 @@ export async function openManagementSession(
     loginManager(tx, { email, password: "correct horse", totpKeyRing: TOTP_KEY_RING }),
   );
   return { personId, token: session.token };
+}
+
+export async function openFreshManagementSession(
+  db: Database,
+  role: PersonRoleValue = "manager",
+): Promise<{ personId: string; token: string }> {
+  const session = await openManagementSession(db, role);
+  await withTransaction(db, (tx) =>
+    tx.execute(sql`update management_sessions
+    set proved_at = ${new Date().toISOString()} where token_hash = ${hashSessionToken(session.token)}`),
+  );
+  return session;
 }
 
 /** The AppError code a rejected call threw, or a describing string when it was not an AppError. */

@@ -25,7 +25,10 @@ On the password screen, **I’ve forgotten my password** requests an email with 
 a new password. The acknowledgement is the same for every address; it does not confirm that an
 account exists or can sign in. Resetting a password does not enable a disabled account.
 
-Waitron asks you to sign in again before you change backups, download recovery files, show the
+Waitron asks you to sign in again before you invite someone, resend an invitation, reset their
+login, disable or re-enable their account, or change an email, role or account status in **Users**.
+This includes changing your own email there. Names, telephone numbers and PIN resets do not need
+this confirmation. You also confirm before you change backups, download recovery files, show the
 backup recovery key, or export configuration or another staff member's data. Use your
 password or passkey, plus an authenticator or recovery code if your account uses one. The
 confirmation covers these actions in this browser for 15 minutes, or until your session ends.

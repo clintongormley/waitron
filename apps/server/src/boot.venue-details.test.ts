@@ -14,6 +14,7 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import type { VenueDetailsModel } from "./venue-detail-types.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -110,6 +111,7 @@ async function prepareBox(
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: admin!.id }),
   );
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
   return { env, cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
 }
 

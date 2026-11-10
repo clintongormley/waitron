@@ -245,6 +245,9 @@ describe("management account actions", () => {
     const outstanding = await run((tx) =>
       issueAccountAction(tx, { personId, purpose: "password_reset" }),
     );
+    await suite.db
+      .execute(sql`update management_sessions set proved_at = ${new Date().toISOString()}
+      where token_hash = ${hashSessionToken(session.token)}`);
     await run((tx) =>
       updatePersonDetails(tx, {
         managementSessionId: session.token,
