@@ -607,15 +607,6 @@ it("says a product that no longer exists needs a refresh, in English and Spanish
   );
 });
 
-it("says an ingredient that no longer exists needs a refresh, in English and Spanish", () => {
-  expect(codeMessage("ingredient.not_found", "en")).toBe(
-    "This ingredient no longer exists. Refresh the page and try again.",
-  );
-  expect(codeMessage("ingredient.not_found", "es")).toBe(
-    "Este ingrediente ya no existe. Actualiza la página y vuelve a intentarlo.",
-  );
-});
-
 it.each([
   "content.translation_stale",
   "content.translation_unavailable",

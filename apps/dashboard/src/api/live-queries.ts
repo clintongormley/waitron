@@ -344,8 +344,6 @@ export const QUERY_DEPENDENCIES = {
   listProducts: [
     "products",
     "categories",
-    "recipe_lines",
-    "ingredients",
     // A product's attached extras and options lists, read from `product_modifiers` alone
     // (`readProductModifiers`, packages/catalogue/src/product-modifiers.ts) — it names no list
     // table, so neither is named here.
@@ -518,8 +516,6 @@ export const QUERY_DEPENDENCIES = {
   getReceiptLanguage: ["locations"],
   getVenueDefaults: ["locations", "catalogue_settings"],
   getVenuePrivacy: ["tenants"],
-  getProductRecipe: ["recipe_lines", "ingredients", "products"],
-  listIngredients: ["ingredients"],
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.
   getLocales: ["tenants"],
