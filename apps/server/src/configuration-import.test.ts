@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 15,
+  version: 16,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -206,8 +206,8 @@ describe("staged configuration import", () => {
     ["A1308 4a-ii pre-menu-list-removal export", { version: 14 }],
     ["old version", { version: 1 }],
     ["A1308 pre-location-column export", { version: 11 }],
-    ["previous format before venue-language storage", { version: 14 }],
-    ["future version", { version: 16 }],
+    ["previous format before venue-language storage", { version: 15 }],
+    ["future version", { version: 17 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));

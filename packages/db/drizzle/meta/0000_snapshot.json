@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d82d8054-e9d4-4f26-a349-c4e4fa004bf6",
+  "id": "225c518c-7447-40fc-80fa-0f1763b735eb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -222,13 +222,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "invoice_locales": {
-          "name": "invoice_locales",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "operation_description": {
           "name": "operation_description",
           "type": "text",
@@ -303,10 +296,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "locations_invoice_locales_len": {
-          "name": "locations_invoice_locales_len",
-          "value": "json_array_length(\"locations\".\"invoice_locales\") between 1 and 2"
-        },
         "locations_bump_mode_ck": {
           "name": "locations_bump_mode_ck",
           "value": "\"locations\".\"bump_mode\" in ('line', 'ticket')"
@@ -12510,51 +12499,6 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "content_languages": {
-      "name": "content_languages",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "default_language": {
-          "name": "default_language",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "languages": {
-          "name": "languages",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "content_languages_singleton_ck": {
-          "name": "content_languages_singleton_ck",
-          "value": "\"content_languages\".\"id\" = 1"
-        },
-        "content_languages_default_ck": {
-          "name": "content_languages_default_ck",
-          "value": "instr(\"content_languages\".\"languages\", '\"' || \"content_languages\".\"default_language\" || '\"') > 0"
-        },
-        "content_languages_list_ck": {
-          "name": "content_languages_list_ck",
-          "value": "json_array_length(\"content_languages\".\"languages\") between 1 and 200"
-        }
-      }
-    },
     "menu_details": {
       "name": "menu_details",
       "columns": {
@@ -16533,95 +16477,6 @@
         "station_day_states_sends_to_not_self_ck": {
           "name": "station_day_states_sends_to_not_self_ck",
           "value": "\"station_day_states\".\"sends_to_station_id\" <> \"station_day_states\".\"station_id\""
-        }
-      }
-    },
-    "holiday_geographies": {
-      "name": "holiday_geographies",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "country": {
-          "name": "country",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "province_code": {
-          "name": "province_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "city": {
-          "name": "city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "city_key": {
-          "name": "city_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "area_key": {
-          "name": "area_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "holiday_geographies_location_place_key": {
-          "name": "holiday_geographies_location_place_key",
-          "columns": [
-            "location_id",
-            "country",
-            "province_code",
-            "city_key"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "holiday_geographies_location_fk": {
-          "name": "holiday_geographies_location_fk",
-          "tableFrom": "holiday_geographies",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "holiday_geographies_city_ck": {
-          "name": "holiday_geographies_city_ck",
-          "value": "trim(\"holiday_geographies\".\"city\") <> '' and \"holiday_geographies\".\"city_key\" <> ''"
         }
       }
     },
