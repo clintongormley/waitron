@@ -674,7 +674,7 @@ export const en = {
   "kitchen_screen.pass": "Pass screen",
   "kitchen_screen.pass_monitor": "Pass monitor",
   "kitchen_screen.none":
-    "This screen has nothing to show yet. Choose a screen for it in the dashboard, under Devices.",
+    "This screen has nothing to show yet. Choose a screen for this device in the dashboard, under Devices.",
   "kitchen_screen.unavailable": "This screen is no longer available: {screen}",
   "kitchen_screen.switched": "Now showing: {screen}",
   "kitchen_screen.choose_again":

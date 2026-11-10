@@ -647,7 +647,9 @@ export class TillPassScreen extends LitElement {
     return html`<section class="screen" aria-label=${t("expo.title")}>
         ${
           boardId === null || !this.#shows()
-            ? html`${this.#lead()}${this.#unavailable()}${emptiedScreenGuidance(this.passGone)}`
+            ? html`${this.#lead()}${this.#unavailable()}${
+                this.#shows() ? nothing : emptiedScreenGuidance(this.passGone)
+              }`
             : this.#board(boardId)
         }
       </section>

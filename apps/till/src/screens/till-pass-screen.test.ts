@@ -909,6 +909,17 @@ describe("A773 pass screen", () => {
       },
     );
 
+    it("at a till still reading the device's choice, says nothing about choosing screens again", async () => {
+      const choice = deferred<DeviceIdentity>();
+      const api = fakeApi({ getDeviceIdentity: vi.fn(() => choice.promise) });
+      const el = await mount({ api });
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+      choice.resolve(identity([chosen("pass")]));
+      await flush(el);
+      expect(cardKeys(el)).toEqual(["bill:a"]);
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+    });
+
     it("at a till whose pass screen a narrowing took, reads no board on a refresh either", () =>
       withFakeTimers(async () => {
         const api = fakeApi({

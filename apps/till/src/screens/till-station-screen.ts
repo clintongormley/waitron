@@ -948,7 +948,7 @@ export class TillStationScreen extends LitElement {
       return this.#renderQueueSurface({
         showBack: false,
         body: html`${this.deviceStations.map((station) => this.#unavailable(station.name))}
-          <p class="choose-again" data-choose-again>${t("kitchen_screen.choose_again")}</p>`,
+          ${emptiedScreenGuidance(false)}`,
       });
     const body =
       this.deviceStations.length === 1 && only?.available === true

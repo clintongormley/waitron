@@ -1059,7 +1059,7 @@ describe("till-app session activity", () => {
     {
       name: "a kitchen display with no kitchen screen says so",
       kitchenScreens: [],
-      en: "This screen has nothing to show yet. Choose a screen for it in the dashboard, under Devices.",
+      en: "This screen has nothing to show yet. Choose a screen for this device in the dashboard, under Devices.",
       es: "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla para este dispositivo en el panel, en Dispositivos.",
       guidance: { en: null, es: null },
     },
