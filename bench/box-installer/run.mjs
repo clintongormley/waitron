@@ -6,14 +6,18 @@ import { URL } from "node:url";
 import { setTimeout, clearTimeout } from "node:timers";
 import { createHash, X509Certificate } from "node:crypto";
 import { appendFileSync, createReadStream } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, copyFile, truncate, open } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { parseRigArgs } from "../../scripts/box/rig-contract.mjs";
-import { recipeFailures } from "../../scripts/box/recipe-setup.mjs";
+import { recipeFailures, installedFailures } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
 const started = Date.now();
+if (caseName === "installed-setup" || caseName === "installed-refusals") {
+  await installedRun();
+  process.exit(0);
+}
 if (caseName !== "recipe-setup") throw new Error("Only recipe-setup is implemented here");
 const imageArgument = process.env.B3_RECIPE_IMAGE;
 if (imageArgument === undefined || imageArgument === "")
@@ -224,6 +228,175 @@ try {
   await stopped;
   clearTimeout(force);
   await writeFile(join(runDir, "serial.log"), serial);
+  await writeFile(
+    join(runDir, "timing.json"),
+    JSON.stringify({ started, elapsedMs: Date.now() - started }),
+  );
+}
+
+async function installedRun() {
+  const argument = process.env.B3_INSTALLER_IMAGE;
+  if (!argument) throw new Error("B3_INSTALLER_IMAGE must be set");
+  const stick = resolve(argument);
+  const output = dirname(stick);
+  await mkdir(runDir, { mode: 0o700 });
+  const target = join(runDir, "target.img");
+  await writeFile(target, "");
+  await truncate(target, 16 * 1024 ** 3);
+  const diskHash = async (path) => {
+    const digest = createHash("sha256");
+    for await (const bytes of createReadStream(path)) digest.update(bytes);
+    return digest.digest("hex");
+  };
+  const sourceHash = await diskHash(stick);
+  const common = [
+    "-machine",
+    "q35,accel=tcg",
+    "-cpu",
+    "max",
+    "-m",
+    "4096",
+    "-smp",
+    "2",
+    "-nographic",
+    "-no-reboot",
+    "-monitor",
+    "none",
+    "-smbios",
+    "type=1,product=Waitron-B3-dev",
+  ];
+  async function boot(name, source, marker, deadline) {
+    const vars = join(runDir, `${name}-vars.fd`);
+    await copyFile("/usr/share/OVMF/OVMF_VARS_4M.fd", vars);
+    const args = [
+      ...common,
+      "-drive",
+      "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
+      "-drive",
+      `if=pflash,format=raw,file=${vars}`,
+    ];
+    if (source)
+      args.push(
+        "-drive",
+        `file=${stick},format=raw,if=none,id=stick,snapshot=on`,
+        "-device",
+        "virtio-blk-pci,drive=stick,serial=waitron-dev-stick,bootindex=1",
+      );
+    args.push(
+      "-drive",
+      `file=${target},format=raw,if=none,id=target`,
+      "-device",
+      `virtio-blk-pci,drive=target,serial=waitron-dev-target,bootindex=${source ? 2 : 1}`,
+      "-nic",
+      source ? "none" : "user,restrict=on,hostfwd=tcp:127.0.0.1:443-:443",
+    );
+    await writeFile(join(runDir, `${name}-args.json`), JSON.stringify(args));
+    const child = spawn("qemu-system-x86_64", args, { stdio: ["ignore", "pipe", "pipe"] });
+    await writeFile(join(runDir, `${name}-pid.json`), JSON.stringify({ pid: child.pid }));
+    let serial = "";
+    let failure;
+    const stopped = new Promise((done) =>
+      child.once("exit", (code, signal) => done({ code, signal })),
+    );
+    const stop = async () => {
+      child.kill("SIGTERM");
+      const force = setTimeout(() => child.kill("SIGKILL"), 3000);
+      await stopped;
+      clearTimeout(force);
+    };
+    const timer = setTimeout(() => {
+      failure = new Error(`${name} deadline`);
+      child.kill("SIGTERM");
+    }, deadline);
+    try {
+      await new Promise((done, reject) => {
+        for (const stream of [child.stdout, child.stderr])
+          stream.on("data", (bytes) => {
+            serial += bytes.toString();
+            appendFileSync(join(runDir, `${name}-serial.log`), bytes);
+            if (serial.split(/\r?\n/).some((line) => line.startsWith(marker))) done();
+          });
+        child.once("error", reject);
+        child.once("exit", (code, signal) =>
+          reject(failure ?? new Error(`${name} exited ${code}/${signal} before ${marker}`)),
+        );
+      });
+      return {
+        serial,
+        stop: async () => {
+          clearTimeout(timer);
+          await stop();
+        },
+      };
+    } catch (error) {
+      clearTimeout(timer);
+      await stop();
+      throw error;
+    }
+  }
+  if (caseName === "installed-refusals") {
+    const handle = await open(target, "r+");
+    try {
+      await handle.write("occupied");
+    } finally {
+      await handle.close();
+    }
+    const before = await diskHash(target);
+    const guest = await boot("refused", true, "install.refused:occupied", 300000);
+    await guest.stop();
+    const after = await diskHash(target);
+    if (before !== after) throw new Error("refused target changed");
+    await writeFile(join(runDir, "refusal.json"), JSON.stringify({ before, after }));
+  } else {
+    const install = await boot("install", true, "B3_INSTALL_OK:", 900000);
+    const installedUuid = install.serial.match(/(?:^|\n)B3_INSTALL_OK:([^\r\n]+)/)[1].trim();
+    await install.stop();
+    const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
+    const { chromium } = require("playwright");
+    async function inspect(name) {
+      const guest = await boot(name, false, "B3_INSTALLED:", 300000);
+      try {
+        const observed = JSON.parse(guest.serial.match(/(?:^|\n)B3_INSTALLED:([^\r\n]+)/)[1]);
+        const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+        try {
+          const context = await browser.newContext({ ignoreHTTPSErrors: true });
+          const ca = await context.request.get("https://127.0.0.1/ca.crt");
+          if (ca.status() !== 200) throw new Error(`CA HTTP ${ca.status()}`);
+          observed.ca = new X509Certificate(await ca.text()).fingerprint256;
+          const page = await context.newPage();
+          page.on("pageerror", (error) => console.error(error));
+          await page.goto("https://127.0.0.1/setup", { waitUntil: "domcontentloaded" });
+          await page.locator("setup-connection-screen [data-test=continue] button").click();
+          await page.locator("setup-mode-screen").waitFor();
+          const choices = await page
+            .locator("setup-mode-screen wt-choice-row")
+            .evaluateAll((rows) => rows.map((row) => row.getAttribute("data-test")));
+          if (JSON.stringify(choices) !== '["choose-prepare","choose-live","choose-existing"]')
+            throw new Error(`Unexpected setup choices: ${JSON.stringify(choices)}`);
+          await page.screenshot({ path: join(runDir, `${name}-setup.png`) });
+          await page.getByText("Prepare your restaurant", { exact: true }).click();
+          await page.locator("setup-admin-screen").waitFor();
+          await page.screenshot({ path: join(runDir, `${name}-prepare.png`) });
+          await writeFile(join(runDir, `${name}-observed.json`), JSON.stringify(observed, null, 2));
+        } finally {
+          await browser.close();
+        }
+        return observed;
+      } finally {
+        await guest.stop();
+      }
+    }
+    const first = await inspect("first");
+    const again = await inspect("again");
+    const failures = installedFailures(
+      JSON.parse(await readFile(join(output, "inventory.json"), "utf8")),
+      installedUuid,
+      first,
+      again,
+    );
+    if (failures.length) throw new Error(failures.join(", "));
+  }
+  if ((await diskHash(stick)) !== sourceHash) throw new Error("source image changed");
   await writeFile(
     join(runDir, "timing.json"),
     JSON.stringify({ started, elapsedMs: Date.now() - started }),

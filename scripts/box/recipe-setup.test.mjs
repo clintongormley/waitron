@@ -150,3 +150,47 @@ describe("recipe boot evidence", () => {
     ).resolves.toEqual(["setup-status"]);
   });
 });
+
+describe("installed boot evidence", () => {
+  const first = {
+    ...complete,
+    uuid: "installed-root",
+    machineId: "machine-a",
+    ca: "ca-a",
+    writerAbsent: true,
+    areas: ["@rootfs", "@images", "@volumes", "@logs", "@host-state"],
+  };
+  it("accepts the installed services and a second boot keeping identity", async () => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    expect(installedFailures(expected, "installed-root", first, first)).toEqual([]);
+  });
+  it.each([
+    ["uuid", { uuid: expected.uuid }, "root-uuid"],
+    ["writer", { writerAbsent: false }, "installer-present"],
+    ["areas", { areas: ["@rootfs"] }, "areas"],
+    ["identity", { machineId: "another" }, "machine-id"],
+    ["CA", { ca: "another" }, "ca"],
+    ["app", { images: { ...first.images, app: "another" } }, "image:app"],
+  ])("rejects a changed %s on the disk-only reboot", async (_name, patch, failure) => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    expect(installedFailures(expected, "installed-root", first, { ...first, ...patch })).toContain(
+      failure,
+    );
+  });
+});
+
+it.each(["installed-setup", "installed-refusals"])(
+  "names the missing installer image for %s",
+  (caseName) => {
+    const result = spawnSync(
+      process.execPath,
+      ["bench/box-installer/run.mjs", "--case", caseName, "--run-dir", "/tmp/not-created"],
+      {
+        env: { ...process.env, B3_INSTALLER_IMAGE: "" },
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
+    expect(result.stderr).toContain("B3_INSTALLER_IMAGE must be set");
+  },
+);

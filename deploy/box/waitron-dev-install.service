@@ -1,0 +1,11 @@
+[Unit]
+Description=Install the emulator-only Waitron development disk
+After=local-fs.target
+Requires=local-fs.target
+OnFailure=poweroff.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/waitron-dev-install
+StandardOutput=journal+console
+StandardError=journal+console

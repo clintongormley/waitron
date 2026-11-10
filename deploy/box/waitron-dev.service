@@ -1,0 +1,14 @@
+[Unit]
+Description=Start the installed emulator-only Waitron development box
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/waitron-dev-start
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

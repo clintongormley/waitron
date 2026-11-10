@@ -139,6 +139,8 @@ describe("parseRigArgs", () => {
       "preboot-two-boxes",
       "preboot-tamper",
       "recipe-setup",
+      "installed-setup",
+      "installed-refusals",
     ]);
     for (const caseName of RIG_CASES)
       expect(parseRigArgs(["--case", caseName, "--run-dir", "/tmp/r"]).caseName).toBe(caseName);
