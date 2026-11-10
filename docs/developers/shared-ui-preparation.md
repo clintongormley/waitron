@@ -17,16 +17,17 @@ repository association and records the full Waitron commit in `waitronSource.com
 Both packages carry built JavaScript, declarations, Elastic License 2.0 and
 `LICENSE-GRANTS.md`. UI also carries CSS and its Lit peer; the signing package has no peers.
 
-The final step checks the token's authenticated identity, `write:packages` scope,
-and any existing package’s private Cloud association.
-Only the contract may be absent before its first upload. After upload, the same
+For contract, the final step checks the token’s authenticated identity, `write:packages`
+scope and its private Cloud association. It may be absent before its first upload. After upload, the same
 check requires its private association; registry output records the numbered version's
 integrity, source commit and repository. A pre-upload pass alone does not establish
 permission to create a new package. Cloud must then install that exact version with
 its own workflow token; a refused install needs a package access grant for Cloud.
 
-Check the workflow result after a qualifying merge. A publication error fails the
-run; the next qualifying merge attempts a new numbered version. An older run can
+Check the workflow result after a qualifying merge. Read the final step’s log before
+retrying a failed run: the upload may have succeeded before a later metadata check
+failed. A retry uses the same version and cannot upload it again. The next qualifying
+merge attempts a new numbered version. An older run can
 be refused if a higher package version has already been published. There is no
 scheduled publisher or catch-up process.
 

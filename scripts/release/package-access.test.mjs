@@ -16,7 +16,6 @@ function api({
   status = 200,
   userStatus = 200,
   broken = false,
-  packagePath = "/orgs/waitron-io/packages/npm/contract",
 } = {}) {
   vi.stubGlobal("fetch", async (url, options) => {
     expect(options.headers.Authorization).toBe("Bearer test-secret");
@@ -26,7 +25,7 @@ function api({
         { login: "publisher", id: 17 },
         { status: userStatus, headers: scopes === null ? {} : { "X-OAuth-Scopes": scopes } },
       );
-    expect(url).toBe(`https://api.github.com${packagePath}`);
+    expect(url).toBe("https://api.github.com/orgs/waitron-io/packages/npm/contract");
     return globalThis.Response.json(metadata, { status });
   });
 }
@@ -34,7 +33,7 @@ function api({
 describe("the publishing token's package authority", () => {
   it("reports authenticated identity and the existing private Cloud association", async () => {
     api();
-    await expect(checkPackageAccess("test-secret", "contract")).resolves.toEqual({
+    await expect(checkPackageAccess("test-secret")).resolves.toEqual({
       login: "publisher",
       userId: 17,
       package: "@waitron-io/contract",
@@ -54,38 +53,23 @@ describe("the publishing token's package authority", () => {
     [{ broken: true }, /GitHub request failed/],
   ])("refuses unusable authority or association %j", async (input, message) => {
     api(input);
-    await expect(checkPackageAccess("test-secret", "contract")).rejects.toThrow(message);
-    await expect(checkPackageAccess("test-secret", "contract")).rejects.not.toThrow("test-secret");
+    await expect(checkPackageAccess("test-secret")).rejects.toThrow(message);
+    await expect(checkPackageAccess("test-secret")).rejects.not.toThrow("test-secret");
   });
 
   it("allows the new contract's absent metadata only before publication", async () => {
     api({ status: 404 });
-    await expect(checkPackageAccess("test-secret", "contract")).resolves.toMatchObject({
+    await expect(checkPackageAccess("test-secret")).resolves.toMatchObject({
       package: "@waitron-io/contract",
       visibility: "not published",
     });
-    await expect(
-      checkPackageAccess("test-secret", "contract", { published: true }),
-    ).rejects.toThrow(/404/);
+    await expect(checkPackageAccess("test-secret", { published: true })).rejects.toThrow(/404/);
   });
 
-  it("requires the existing UI package and reports its private association", async () => {
-    api({ packagePath: "/orgs/waitron-io/packages/npm/ui-core" });
-    await expect(
-      checkPackageAccess("test-secret", "ui-core", { published: true }),
-    ).resolves.toMatchObject({
-      package: "@waitron-io/ui-core",
-      visibility: "private",
-    });
-    api({ packagePath: "/orgs/waitron-io/packages/npm/ui-core", status: 404 });
-    await expect(checkPackageAccess("test-secret", "ui-core")).rejects.toThrow(/404/);
-  });
-
-  it("refuses a missing token or an unselected package before any request", async () => {
+  it("refuses a missing token before any request", async () => {
     vi.stubGlobal("fetch", () => {
       throw new Error("must not request");
     });
-    await expect(checkPackageAccess("", "contract")).rejects.toThrow(/token/);
-    await expect(checkPackageAccess("test-secret", "other")).rejects.toThrow(/package/);
+    await expect(checkPackageAccess("")).rejects.toThrow(/token/);
   });
 });

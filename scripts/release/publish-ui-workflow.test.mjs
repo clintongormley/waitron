@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { delimiter, join, resolve } from "node:path";
 
 vi.setConfig({ testTimeout: 30000 });
@@ -88,7 +89,7 @@ else if (args[2] === process.env.FAIL_CHECK) process.exit(19);
 }
 
 describe.each(["ui-core", "contract"])("automatic private %s publication", (packageName) => {
-  it("selects main UI changes and queues publications without cancelling earlier runs", () => {
+  it("selects main UI and contract changes and queues publications without cancelling earlier runs", () => {
     const text = workflow();
     expect(text.match(/^on:\n([\s\S]*?)(?=^\S)/m)?.[1]).toBe(
       '  push:\n    branches: [main]\n    paths: ["packages/ui-core/**", "packages/contract/**"]\n\n',
@@ -178,58 +179,83 @@ describe.each(["ui-core", "contract"])("automatic private %s publication", (pack
     }, packageName);
   });
 
-  it.each([
-    [0, 0],
-    [23, 0],
-    [0, 31],
-  ])("publishes or stops for npm status %i and access status %i", (status, accessStatus) => {
+  it.each(
+    packageName === "contract"
+      ? [
+          [0, "ok"],
+          [23, "ok"],
+          [0, "refused"],
+          [0, "post-missing"],
+        ]
+      : [
+          [0, "ok"],
+          [23, "ok"],
+        ],
+  )("publishes or stops for npm status %i and access mode %s", (status, accessMode) => {
     const dir = mkdtempSync(join(tmpdir(), "ui-publish-shell-"));
     try {
       const npm = join(dir, "npm");
       const record = join(dir, "invocation.json");
+      const marker = join(dir, "published");
+      const preload = join(dir, "fetch.mjs");
+      writeFileSync(
+        preload,
+        `
+import { appendFileSync, existsSync } from "node:fs";
+globalThis.fetch = async (url) => {
+  const api = new URL(url).pathname;
+  appendFileSync(process.env.PUBLISH_RECORD, JSON.stringify({ api }) + "\\n");
+  if (api === "/user") return Response.json({ login: "publisher", id: 17 }, { status: process.env.ACCESS_MODE === "refused" ? 401 : 200, headers: { "X-OAuth-Scopes": "write:packages" } });
+  if (api !== "/orgs/waitron-io/packages/npm/contract") throw new Error("unexpected API path");
+  const visible = existsSync(process.env.PUBLISH_MARKER) && process.env.ACCESS_MODE !== "post-missing";
+  return Response.json({ visibility: "private", repository: { full_name: "waitron-io/waitron-cloud" } }, { status: visible ? 200 : 404 });
+};
+`,
+      );
       writeFileSync(
         npm,
         `#!${process.execPath}
-import { appendFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 appendFileSync(process.env.PUBLISH_RECORD, JSON.stringify({ args: process.argv.slice(2), authenticated: Boolean(process.env.NODE_AUTH_TOKEN) }) + "\\n");
-if (process.argv[2] === "publish") process.exit(Number(process.env.PUBLISH_STATUS));
+if (process.argv[2] === "publish") {
+  if (Number(process.env.PUBLISH_STATUS)) process.exit(Number(process.env.PUBLISH_STATUS));
+  writeFileSync(process.env.PUBLISH_MARKER, "uploaded");
+}
 `,
       );
       chmodSync(npm, 0o755);
-      const node = join(dir, "node");
-      writeFileSync(
-        node,
-        `#!${process.execPath}\nprocess.exit(Number(process.env.ACCESS_STATUS));\n`,
-      );
-      chmodSync(node, 0o755);
       const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", command("publish")], {
+        cwd: resolve(import.meta.dirname, "../.."),
         encoding: "utf8",
         timeout: 10000,
         env: {
           ...process.env,
           PATH: `${dir}${delimiter}${process.env.PATH}`,
+          NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
           RUNNER_TEMP: join(dir, "runner temporary files"),
           GITHUB_RUN_NUMBER: "742",
           PACKAGE: packageName,
-          GITHUB_WORKSPACE: dir,
           NODE_AUTH_TOKEN: "test-publishing-credential",
           PUBLISH_RECORD: record,
+          PUBLISH_MARKER: marker,
           PUBLISH_STATUS: String(status),
-          ACCESS_STATUS: String(accessStatus),
+          ACCESS_MODE: accessMode,
         },
       });
-      expect(result.stderr).toBe("");
-      expect(result.stdout).toBe("");
-      expect(result.status).toBe(accessStatus || status);
-      if (accessStatus) {
-        expect(existsSync(record)).toBe(false);
-        return;
-      }
+      expect(result.stdout + result.stderr).not.toContain("test-publishing-credential");
+      expect(result.status).toBe(accessMode === "ok" ? status : 1);
       const calls = readFileSync(record, "utf8")
         .trim()
         .split("\n")
         .map((line) => JSON.parse(line));
-      expect(calls[0]).toEqual({
+      if (accessMode === "refused") {
+        expect(calls).toEqual([{ api: "/user" }]);
+        expect(existsSync(marker)).toBe(false);
+        expect(result.stderr).toContain("identity check returned 401");
+        return;
+      }
+      const uploads = calls.filter((call) => call.args);
+      expect(uploads[0]).toEqual({
         args: [
           "publish",
           join(dir, `runner temporary files/shared-release/waitron-io-${packageName}-0.2.742.tgz`),
@@ -239,8 +265,8 @@ if (process.argv[2] === "publish") process.exit(Number(process.env.PUBLISH_STATU
         ],
         authenticated: true,
       });
-      expect(calls.slice(1)).toEqual(
-        status
+      expect(uploads.slice(1)).toEqual(
+        packageName === "ui-core" || status || accessMode === "post-missing"
           ? []
           : [
               {
@@ -257,6 +283,23 @@ if (process.argv[2] === "publish") process.exit(Number(process.env.PUBLISH_STATU
               },
             ],
       );
+      const apiPair = ["/user", "/orgs/waitron-io/packages/npm/contract"];
+      expect(calls.map((call) => call.api ?? call.args[0])).toEqual(
+        packageName === "contract"
+          ? [
+              ...apiPair,
+              "publish",
+              ...(status ? [] : [...apiPair, ...(accessMode === "post-missing" ? [] : ["view"])]),
+            ]
+          : ["publish"],
+      );
+      if (accessMode === "post-missing") {
+        expect(existsSync(marker)).toBe(true);
+        expect(result.stderr).toContain("package check returned 404");
+      } else {
+        expect(result.stderr).toBe("");
+        if (packageName === "ui-core") expect(result.stdout).toBe("");
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

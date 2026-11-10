@@ -113,15 +113,19 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.UI_PACKAGES_WRITE_TOKEN }}
         run: |
-          node --input-type=module -e '
-            import { checkPackageAccess } from "./scripts/release/package-access.mjs";
-            console.log(JSON.stringify(await checkPackageAccess(process.env.NODE_AUTH_TOKEN, process.env.PACKAGE)));
-          '
+          if [ "$PACKAGE" = contract ]; then
+            node --input-type=module -e '
+              import { checkPackageAccess } from "./scripts/release/package-access.mjs";
+              console.log(JSON.stringify(await checkPackageAccess(process.env.NODE_AUTH_TOKEN)));
+            '
+          fi
           npm publish "$RUNNER_TEMP/shared-release/waitron-io-$PACKAGE-0.2.$GITHUB_RUN_NUMBER.tgz" \
             --registry=https://npm.pkg.github.com --access=restricted --ignore-scripts
-          node --input-type=module -e '
-            import { checkPackageAccess } from "./scripts/release/package-access.mjs";
-            console.log(JSON.stringify(await checkPackageAccess(process.env.NODE_AUTH_TOKEN, process.env.PACKAGE, { published: true })));
-          '
-          npm view "@waitron-io/$PACKAGE@0.2.$GITHUB_RUN_NUMBER" \
-            dist.integrity waitronSource.commit repository.url --json --registry=https://npm.pkg.github.com
+          if [ "$PACKAGE" = contract ]; then
+            node --input-type=module -e '
+              import { checkPackageAccess } from "./scripts/release/package-access.mjs";
+              console.log(JSON.stringify(await checkPackageAccess(process.env.NODE_AUTH_TOKEN, { published: true })));
+            '
+            npm view "@waitron-io/contract@0.2.$GITHUB_RUN_NUMBER" \
+              dist.integrity waitronSource.commit repository.url --json --registry=https://npm.pkg.github.com
+          fi
