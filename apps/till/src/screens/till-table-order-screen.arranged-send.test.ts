@@ -4,7 +4,7 @@ import type { OrderGroup } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, flan, mount, store } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, mount, showView, store } from "./till-table-order-screen.test-helpers.js";
 
 const main = { id: "main", name: "Mains", displayOrder: 2, heldUntilFired: true };
 const held: OrderGroup = {
@@ -23,11 +23,7 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 async function send(el: TillTableOrderScreen): Promise<SubmitDraftDetail> {
-  const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await el.updateComplete;
-  }
+  await showView(el, "order", { ifShown: true });
   const submitted = new Promise<SubmitDraftDetail>((resolve) =>
     el.addEventListener(
       "submit-draft",

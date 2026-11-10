@@ -829,8 +829,11 @@ may predate that branch:
   the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
   card's tab, and its collapsed column, carry a red bar) landed in #2144, from the plan's slice 9c; it
   builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
-  A773-2's pass reuses. What is left of A797: slices 10–11 and 12b
-  (slice 12 is A773-2's own). Build slices (design §8), in the owner's
+  A773-2's pass reuses. Slice 10 (on a phone, the table screen's Menu / Order switch in place of
+  Review, a number on each tile for the New order, a bar fixed at the bottom of Menu with Send all,
+  Order's total, Still to pay and Pay fixed at the bottom of a handheld, a table opening on Order
+  once anything is sent, and a handheld staying on its table after its last send) is delivered from
+  the plan's slice 10. What is left of A797: slices 11 and 12b (slice 12 is A773-2's own). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
@@ -1214,7 +1217,8 @@ in `~/waitron-campaign-c/a1386-shots/`), and none was investigated:
 - At phone width (390 px), the Downstairs bar's map draws its tables as three 10-pixel dots in a
   map 29 pixels tall (`e13-next-signin-390-light-en.png`).
 - Reloading the page while on a table's order lands on an empty order page reading "Review (0)",
-  with no table (`e3-order-390-light-en.png`).
+  with no table (`e3-order-390-light-en.png`). A797 slice 10 replaced that Review button with the
+  Menu / Order switch.
 - A slow first read at sign-in leaves the PIN pad on screen with nothing saying the till is waiting.
 
 
@@ -2218,10 +2222,8 @@ Printer identity is separate from the till route inventory.
 
 8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
-  button stops short of the right edge; the Schedule screen draws its own copy of
-  the card's border and padding.
-  [Detail](till.md#two-small-phone-width-points-a414-left-1495)
+- **The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495).**
+  [Detail](till.md#the-schedule-and-allergens-screens-draw-their-own-copy-of-the-cards-style-a414-1495)
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
   extras-and-options work.** Found while looking at the real screens for B1 Task 12.
   [Detail](till.md#five-measured-till-layout-defects-and-one-seen-in-a-screenshot-all-of-them-older-than-the-extras-and-options-work)
@@ -3165,22 +3167,12 @@ are saved to their existing bill rows. The 2026-10-19 documentation check ran th
 419 cases passed, including the €28.50-to-€32.50 added-extra example, invalid-choice refusals and
 submission replay. This is a check of those paths, not completion of the whole-branch prose audit.
 
-Phone Review counts the fixture's two Beers, one Flan with three Sauces, one weighed dish and
-two recalled portions as six dishes. The extras add no items to that count. The native Review
-and Back checks in `till-table-order-screen.review-acceptance.test.ts` retain the quantities,
-placement and selection without submitting, then show seven after the Beer quantity becomes three.
-They cover English and Spanish, both themes, at 360 and 390 px, with accessibility scans in both
-views. These component checks are complemented by the native app cases below; server persistence
-and physical trials remain separate.
-
 The native mixed-dish cases in `apps/till/src/till-app-drafts.test.ts` open the table through the
-floor's button, then use Review and Back. They retain the four saved dish families, their extras,
-recorded source details, placement and selection through a same-revision focus refresh. Review
-counts six dishes, including the weighed dish once and excluding extras. The checks cover English
-and Spanish in both themes at 360 and 390 px, measure the native Review and Back targets, and scan
-both views for accessibility. Review and Back send no save, submission or takeover request. The
-API replies and sign-in are controlled; these checks do not exercise server persistence or a
-physical till.
+floor's button, then switch to Menu and back to Order. They retain the four saved dish families,
+their extras, recorded source details, placement and selection through a same-revision focus
+refresh. The checks cover English and Spanish in both themes at 360 and 390 px and scan both views
+for accessibility. Switching views sends no save, submission or takeover request. The API replies
+and sign-in are controlled; these checks do not exercise server persistence or a physical till.
 
 The last-added strip follows a saved line's id when that order is refreshed, including weighed
 lines and lines kept separate. It clears when that id disappears or another order is loaded;
@@ -4125,11 +4117,9 @@ refuses it, as a delete is refused, or only warns.
 actions primitive while retaining the single correction sentence, keyboard submission and
 draft/save behavior. A551's focused validation and axe cases pass with the retained arrangement.
 
-## Two small phone-width points A414 left (#1495)
+## The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495)
 
-On the Order screen at 390 px the Review
-button stops short of the right edge (seen in a screenshot, not compared with before #1495); and
-the Schedule and Allergens screens now draw their own copy of the card's border and padding
+The Schedule and Allergens screens draw their own copy of the card's border and padding
 (`apps/till/src/widgets/screen-card-styles.ts`), so a later change to the card's look will not
 reach them.
 
@@ -4243,15 +4233,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 16. **The reason drop-down shows a search box** even with the five starter Void reasons.
 17. **The report's "Refunded €5.50" cell repeats its column heading.**
 18. **On a phone, the report's new columns sit mid-scroll.**
-
-## A1120. A handheld stays on the table after its last send, so its button shows highlighted without ✎
-
-For A797 slice 10. The design's worked example 1 (§4) and Q51 (b) describe Ana sending everything at
-T9 and staying on it, its bar button highlighted without ✎ until she taps Floor. Today a send that
-empties the New order returns a handheld to the Floor (`#returnToFloor` at the end of the send in
-`apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's ruling of 2026-10-26) because
-what the order screen does after a send is slice 10's, the handheld's order screen at phone width:
-[design](../superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
 
 ## A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`
 

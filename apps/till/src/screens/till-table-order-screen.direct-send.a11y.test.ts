@@ -4,7 +4,7 @@ import type { WtButton } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { beer, flan, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 
 const fill = (button: WtButton) =>
@@ -29,10 +29,7 @@ describe.each(["en", "es"] as const)("direct actions %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      if (width === 390) {
-        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-review-open]")!);
-        await el.updateComplete;
-      }
+      if (width === 390) await showView(el, "order");
       const fire = el.shadowRoot!.querySelector<WtButton>('[data-draft-action="fire-selected"]')!;
       const send = el.shadowRoot!.querySelector<WtButton>('[data-draft-action="send-all"]')!;
       const move = el.shadowRoot!.querySelector<WtButton>("[data-draft-move]")!;

@@ -2,7 +2,7 @@ import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { FinishTableResolution } from "./api/finish-table-types.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
-import { openDraftLine } from "./screens/till-table-order-screen.test-helpers.js";
+import { openDraftLine, showView } from "./screens/till-table-order-screen.test-helpers.js";
 import {
   openTableMenu,
   switchToBill,
@@ -462,11 +462,8 @@ const tableOrder = (el: TillApp) =>
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
 async function heldGroupsList(el: TillApp) {
   const order = tableOrder(el)!;
-  const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-  if (review?.checkVisibility()) {
-    await userEvent.click(review);
-    await flush(el);
-  }
+  await showView(order, "order", { ifShown: true });
+  await flush(el);
   const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
   for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
@@ -2890,13 +2887,14 @@ describe("A803 name bill", () => {
     },
   );
 
-  it("does not open Review when the screen is first drawn after such a refusal", async () => {
+  it("does not open Order when the screen is first drawn after such a refusal", async () => {
     const oldWidth = innerWidth;
     const oldHeight = innerHeight;
     await page.viewport(400, 800);
     try {
       const { el } = await mountApp({
         setBillName: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
+        getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       });
       const order = await openPartyTable(el);
       emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
@@ -2907,8 +2905,10 @@ describe("A803 name bill", () => {
       await flush(el, 6);
 
       expect(
-        tableOrder(el)!.shadowRoot!.querySelector("[data-review-back]")?.checkVisibility() ?? false,
-      ).toBe(false);
+        tableOrder(el)!
+          .shadowRoot!.querySelector("[data-view=order]")!
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
     } finally {
       await page.viewport(oldWidth, oldHeight);
     }
@@ -7393,11 +7393,8 @@ describe("till-app: the order's groups", () => {
 
     async function openSent(el: TillApp) {
       const order = tableOrder(el)!;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await flush(el);
-      }
+      await showView(order, "order", { ifShown: true });
+      await flush(el);
       const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
@@ -8426,6 +8423,8 @@ describe("till-app: submitting the draft", () => {
     const server = groupsServer();
     const { el } = await mountApp({ ...withCourses(), ...server, ...firstOrderHistory() });
     const order = await openPartyTable(el);
+    await showView(order, "menu");
+    await flush(el);
     await ring(el, order, beer, salad, croquettes, steak, flan);
 
     await toggle(el, order, "Beer");
@@ -8478,7 +8477,11 @@ describe("till-app: submitting the draft", () => {
 
   it("shows the notice over the floor without moving it, so a tap as it closes lands where it was aimed", async () => {
     const server = groupsServer();
-    const { el } = await mountApp({ ...withCourses(), ...server });
+    const { el } = await mountApp({
+      ...withCourses(),
+      ...server,
+      getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
+    });
     const order = await openPartyTable(el);
     await ring(el, order, beer, steak);
     await fireAll(el, order);
@@ -8727,7 +8730,7 @@ describe("till-app: submitting the draft", () => {
     expect(toast(el)!.message).toBe(t("table.submitted_joined"));
   });
 
-  it("returns a handheld to its floor tab after a complete submission, keeping the order it showed", async () => {
+  it("keeps a handheld on its table after a complete submission", async () => {
     const server = groupsServer();
     const { el } = await mountApp({
       ...server,
@@ -8746,10 +8749,8 @@ describe("till-app: submitting the draft", () => {
     await ring(el, card, beer);
     await fireAll(el, card);
 
-    expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("floor");
+    expect((shell(el) as HTMLElement & { activeScreen?: string }).activeScreen).toBe("order");
     expect(toast(el)!.message).toBe("Fired: 1 group.");
-    emit(shell(el), "screen-select", { screen: "order" });
-    await flush(el);
     expect(
       tabGrid(el)!.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!
         .orderId,
@@ -9757,7 +9758,7 @@ describe("till-app: Current orders", () => {
               .poll(
                 () =>
                   order
-                    .shadowRoot!.querySelector<HTMLElement>("[data-review-open]")
+                    .shadowRoot!.querySelector<HTMLElement>("[data-view=order]")
                     ?.checkVisibility() ?? false,
               )
               .toBe(width === 390);
@@ -9856,11 +9857,7 @@ describe("till-app: Current orders", () => {
 
     async function visiblePanel(order: TillTableOrderScreen): Promise<TillSentOrders> {
       await order.updateComplete;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await order.updateComplete;
-      }
+      await showView(order, "order", { ifShown: true });
       const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;

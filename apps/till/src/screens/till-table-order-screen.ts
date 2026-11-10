@@ -157,7 +157,8 @@ import type {
 } from "../api/client.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds, inHeldGroup } from "../state/held-groups.js";
-import { itemCount, type DraftEntry, type DraftGroup } from "../state/draft-groups.js";
+import type { DraftGroup } from "../state/draft-groups.js";
+import { newOrderByProduct, newOrderDishes, newOrderItems } from "../state/new-order-count.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import type { Place } from "../state/draft-place.js";
 import {
@@ -216,8 +217,8 @@ import {
 } from "../widgets/guest-count.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
 
-/** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
- * Narrower, the draft opens on its own Review view. */
+/** The screen's own width, in CSS pixels, from which browsing and the order show side by side.
+ * Narrower, a Menu / Order switch shows one at a time. */
 export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
 
 /** Group `lineIndexes` refer to `sent`, which may be only part of `store.lines`. */
@@ -278,11 +279,6 @@ function flagged(line: OrderLine): boolean {
   return (
     line.blocked !== undefined || line.unavailableOnServer === true || line.notOffered === true
   );
-}
-
-/** A dish no longer offered has no unit to read, so a whole quantity is counted as whole units. */
-function countsWholeUnits(line: OrderLine): boolean {
-  return takesExtras(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
 }
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
@@ -451,6 +447,10 @@ function composedParent(node: Element): Element | null {
 
 function barSize(bar: HTMLElement, height: number): void {
   bar.parentElement!.style.setProperty("--draft-bar-size", `${Math.ceil(height)}px`);
+}
+
+function dockSize(dock: HTMLElement, height: number): void {
+  dock.parentElement!.style.setProperty("--order-dock-size", `${Math.ceil(height)}px`);
 }
 
 /** `fire-group`: a held group the waiter confirmed firing. */
@@ -1209,6 +1209,38 @@ export class TillTableOrderScreen extends LitElement {
         background: var(--wt-color-bg);
       }
 
+      .new-order-bar {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-bg);
+      }
+
+      .new-order-bar [data-menu-send-all] {
+        flex: none;
+      }
+
+      .new-order-summary {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        border: none;
+        background: none;
+        color: var(--wt-color-text);
+        font: inherit;
+        text-align: start;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
       .other-draft {
         display: flex;
         flex-direction: column;
@@ -1240,8 +1272,13 @@ export class TillTableOrderScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .review-open {
-        align-self: stretch;
+      .view-switch {
+        display: flex;
+        gap: var(--wt-space-2);
+      }
+
+      .view-switch .option {
+        flex: 1 1 0;
       }
 
       /* A draft being sent takes no edit until the answer comes back; the status line says why.
@@ -1266,10 +1303,52 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
+      /* A child of the screen, not of the order pane: a sticky box cannot rise above the top of
+         its parent, and on a short phone the pane starts too low for the bar and the foot to fit
+         under it. */
+      .order-dock {
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        background: var(--wt-color-bg);
+      }
+
+      .order-dock[hidden] {
+        display: none;
+      }
+
+      .order-dock .draft-bar {
+        position: static;
+      }
+
+      .order-dock .draft-bar[inert] > * {
+        opacity: var(--wt-opacity-disabled);
+      }
+
+      .order-foot {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+
+      .order-foot > .total-row {
+        border-top: none;
+        padding-top: 0;
+      }
+
       /* A line revealed at the scroll area's foot stops above the stuck bar rather than under it.
          The bar's height depends on how its buttons lay out, so the screen measures it. */
       .round-bar till-basket::part(entry) {
-        scroll-margin-block-end: var(--draft-bar-size);
+        scroll-margin-block-end: calc(var(--draft-bar-size, 0px) + var(--order-dock-size, 0px));
+      }
+
+      .action-panel,
+      .action-panel wt-form-actions {
+        scroll-margin-block-end: var(--order-dock-size, 0px);
       }
     `,
     segmentedOptionStyles,
@@ -1415,13 +1494,16 @@ export class TillTableOrderScreen extends LitElement {
       ?.requestLeave(reason) ?? Promise.resolve(true);
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
-  /** Below that width, the draft is open on its Review view in place of browsing. */
-  @state() private reviewing = false;
+  /** Below that width, which of browsing and the order is shown. */
+  @state() private view: "menu" | "order" = "menu";
   #resizing?: ResizeObserver;
   #barSizing?: ResizeObserver;
   #sizedBar?: HTMLElement;
   #sizedBarShown = false;
-  /** Where browsing was scrolled when Review opened, put back on Back. */
+  #dockSizing?: ResizeObserver;
+  #sizedDock?: HTMLElement;
+  #sizedDockShown = false;
+  /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
 
   @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
@@ -1671,7 +1753,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
   /** Moved on by the app each time it refuses a bill's name because someone else's unsent dishes
-   * hold the bill (`draft.taken_over`): on a narrow screen Review opens, and the Take over button is
+   * hold the bill (`draft.taken_over`): on a narrow screen Order is shown, and the Take over button is
    * scrolled into view. */
   @property({ attribute: false }) revealOtherDrafts = 0;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
@@ -1821,13 +1903,16 @@ export class TillTableOrderScreen extends LitElement {
     this.#barSizing?.disconnect();
     this.#barSizing = undefined;
     this.#sizedBar = undefined;
+    this.#dockSizing?.disconnect();
+    this.#dockSizing = undefined;
+    this.#sizedDock = undefined;
   }
 
-  /** Side by side has no Review view, so one left open is closed rather than kept for a later
-   * narrowing. */
+  /** Side by side has no views, so Order left shown goes back to Menu rather than being kept for a
+   * later narrowing. */
   #measure(width: number): void {
     this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
-    if (this.wide && this.reviewing) void this.#closeReview();
+    if (this.wide && this.view === "order") void this.#showMenu();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
@@ -2254,8 +2339,14 @@ export class TillTableOrderScreen extends LitElement {
       this.#closeActions();
       this.fireGroupPending = null;
       this.servePending = null;
-      this.reviewing = false;
+      this.view = "menu";
       this.#browsingScroll = undefined;
+    }
+    // A bill switch is left on Menu: the app moves `orderId` before it reads the new bill's lines.
+    const opened = this.hasUpdated ? changed.get("loading") === true : true;
+    if (opened && !this.loading && !this.wide) {
+      this.view = this.lines.length > 0 ? "order" : "menu";
+      this.#clearTopDue = this.view === "order";
     }
     // The app re-points this screen at whichever party holds the table, so a window opened for the
     // old party would otherwise save to the new one. A screen drawn afresh counts its first party as
@@ -2340,6 +2431,11 @@ export class TillTableOrderScreen extends LitElement {
     if (changed.has("splitRead")) this.#returnToSplitFoot();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
+    this.#sizeOrderDock();
+    if (this.#clearTopDue) {
+      this.#clearTopDue = false;
+      void this.#clearOrderTopOnceDrawn();
+    }
     this.#observeSplit();
     this.#tellSplitDeclined();
   }
@@ -2433,9 +2529,9 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Finish table is tapped in the ⋮ at the top, and its refusal is drawn above the foot, which can
-   * be below the window, and on a narrow screen is in the Review view, hidden while browsing. */
+   * be below the window, and on a narrow screen is on Order, hidden on Menu. */
   async #revealFinishRefusal(): Promise<void> {
-    if (!this.wide && !this.reviewing && this.#draftStore !== null) await this.#openReview();
+    if (!this.wide && this.view !== "order" && this.#draftStore !== null) await this.#showOrder();
     await this.updateComplete;
     const refusal = this.renderRoot.querySelector<HTMLElement>("[data-finish-refusal]");
     if (refusal !== null) await this.#scrollIntoViewOnceDrawn(refusal);
@@ -2452,7 +2548,7 @@ export class TillTableOrderScreen extends LitElement {
    * follows later changes. */
   #sizeDraftBar(): void {
     const bar = this.renderRoot.querySelector<HTMLElement>(".draft-bar") ?? undefined;
-    const shown = this.wide || this.reviewing;
+    const shown = this.wide || this.view === "order";
     if (bar === this.#sizedBar && shown === this.#sizedBarShown) return;
     this.#sizedBarShown = shown;
     this.#barSizing ??= new ResizeObserver((entries) => {
@@ -2465,6 +2561,27 @@ export class TillTableOrderScreen extends LitElement {
       if (bar !== undefined) this.#barSizing.observe(bar);
     }
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
+  }
+
+  /** Copies the dock's height to `--order-dock-size` on the screen, so the order's lines and the
+   * action panel are scrolled clear of it; measured at once when drawn or shown, as
+   * `#sizeDraftBar` does. */
+  #sizeOrderDock(): void {
+    const dock = this.renderRoot.querySelector<HTMLElement>("[data-order-dock]") ?? undefined;
+    const shown = this.wide || this.view === "order";
+    if (dock === this.#sizedDock && shown === this.#sizedDockShown) return;
+    this.#sizedDockShown = shown;
+    this.#dockSizing ??= new ResizeObserver((entries) => {
+      const entry = entries.at(-1)!;
+      dockSize(entry.target as HTMLElement, entry.borderBoxSize[0]!.blockSize);
+    });
+    if (dock !== this.#sizedDock) {
+      if (this.#sizedDock !== undefined) this.#dockSizing.unobserve(this.#sizedDock);
+      this.#sizedDock?.parentElement?.style.removeProperty("--order-dock-size");
+      this.#sizedDock = dock;
+      if (dock !== undefined) this.#dockSizing.observe(dock);
+    }
+    if (dock !== undefined) dockSize(dock, dock.getBoundingClientRect().height);
   }
 
   #lineGross(line: TabLine): Decimal {
@@ -2491,13 +2608,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #displayQty(quantity: string): string {
     return trimQuantity(quantity);
-  }
-
-  #draftEntries(lines: readonly OrderLine[]): DraftEntry[] {
-    return lines.map((line) => ({
-      quantity: line.quantity,
-      wholeUnits: countsWholeUnits(line),
-    }));
   }
 
   #selectedIndexes(lines: readonly OrderLine[]): Set<number> {
@@ -2809,6 +2919,18 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The browser gets the products through the diet lens; a tab line's name still resolves against
    * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
+  #inOrderIndexed?: { store: WorkingOrderStore; epoch: number; counts: Map<string, number> };
+
+  /** The tiles' numbers, the same map until the draft changes, so the browser redraws only then. */
+  #inOrder(store: WorkingOrderStore): Map<string, number> {
+    const indexed = this.#inOrderIndexed;
+    if (indexed?.store === store && indexed.epoch === this.#draftEpoch) return indexed.counts;
+    const counts = newOrderByProduct(store.lines);
+    this.#inOrderIndexed =
+      this.#watchedDraft?.store === store ? { store, epoch: this.#draftEpoch, counts } : undefined;
+    return counts;
+  }
+
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
     store.canSelectProduct = (product) =>
       this.orderingAllowed &&
@@ -2840,6 +2962,7 @@ export class TillTableOrderScreen extends LitElement {
         EMPTY_MENU_FILTERS,
       )}
       .store=${store}
+      .inOrder=${this.wide ? undefined : this.#inOrder(store)}
       .handheld=${this.handheld}
       weighs
       ><till-diet-filter
@@ -2920,9 +3043,9 @@ export class TillTableOrderScreen extends LitElement {
           }
           ${this.#actionPanel()}
         </div>
-        ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
-        ${this.#takeOverDialog()} ${this.#nameDialog()} ${this.#billNameDialog()}
-        ${this.#guestsDialog()}
+        ${this.#orderDock(draft)} ${this.#sentLineDialog()} ${this.#fireGroupDialog()}
+        ${this.#serveDialog()} ${this.#takeOverDialog()} ${this.#nameDialog()}
+        ${this.#billNameDialog()} ${this.#guestsDialog()}
       </section>
     `;
   }
@@ -2956,37 +3079,26 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>`;
   }
 
-  /** Browsing and the draft: side by side when the screen is wide enough, otherwise browsing, with
-   * the draft on its own Review view. Browsing is hidden, never removed, while Review is open, so
-   * the menu keeps its open section. */
+  /** Browsing and the order: side by side when the screen is wide enough, otherwise one at a time
+   * under a Menu / Order switch. Browsing is hidden, never removed, on Order, so the menu keeps its
+   * open section. */
   #ordering(draft: WorkingOrderStore): TemplateResult {
     const separate = !this.wide;
-    const reviewing = separate && this.reviewing;
-    const entries = this.#draftEntries(draft.lines);
+    const onOrder = separate && this.view === "order";
     return html`<div class=${separate ? "ordering" : "ordering side-by-side"}>
-      <div class="browsing" data-browsing ?hidden=${reviewing}>
-        ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate, entries)}
+      ${separate ? this.#viewSwitch(draft, onOrder) : nothing}
+      <div class="browsing" data-browsing ?hidden=${onOrder}>
+        ${this.#gridRegion(draft)} ${this.#bottomBar(draft, separate)}
       </div>
       <section
         class="draft-pane"
         data-draft-pane
         aria-labelledby="draft-title"
-        ?hidden=${separate && !reviewing}
+        ?hidden=${separate && !onOrder}
       >
         ${this.#sentOrders()}
         <div class="draft-head">
           <h2 class="draft-title" id="draft-title" tabindex="-1">${t("table.draft_title")}</h2>
-          ${
-            separate
-              ? html`<wt-button
-                  variant="secondary"
-                  data-review-back
-                  @click=${() => void this.#closeReview()}
-                >
-                  ${t("action.back")}
-                </wt-button>`
-              : nothing
-          }
         </div>
         ${this.#roundControl(draft)} ${this.#otherDraftPanels(draft)} ${this.#retainedDraftPanel()}
         ${this.#orderSummary(draft)}
@@ -2994,9 +3106,109 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
+  /** The count's " · " is hidden from screen readers, so Order's name reads "Order 3". */
+  #viewSwitch(draft: WorkingOrderStore, onOrder: boolean): TemplateResult {
+    const items = newOrderItems(draft.lines);
+    return html`<div
+      class="view-switch"
+      data-view-switch
+      role="group"
+      aria-label=${t("table.view_switch")}
+    >
+      <button
+        type="button"
+        class="option"
+        data-view="menu"
+        aria-pressed=${String(!onOrder)}
+        @click=${() => void this.#showMenu()}
+      >
+        ${t("table.view_menu")}
+      </button>
+      <button
+        type="button"
+        class="option"
+        data-view="order"
+        aria-pressed=${String(onOrder)}
+        @click=${() => void this.#showOrder()}
+      >
+        ${t("table.view_order")}${
+          items > 0 ? html`<span aria-hidden="true"> ·</span> ${items}` : nothing
+        }
+      </button>
+    </div>`;
+  }
+
+  /** On a handheld below 720 px whose pay section is one Pay, or absent: Total, Still to pay and
+   * Pay are fixed at the order pane's foot. The whole tender, fixed there, would cover the order. */
+  #footFixed(): boolean {
+    if (!this.handheld || this.wide) return false;
+    return !(this.canSettle && this.#chargeable()) || this.#paysOnSheet(this.#shownBill);
+  }
+
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
+    if (!this.#footFixed())
+      return html`${this.#finishRefusal()} ${this.#totals(draft)}
+        <div data-bill-actions>
+          ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
+        </div>`;
+    const pays = this.canSettle && this.#chargeable();
     return html`${this.#finishRefusal()}
-      <div class="total-row" data-order-summary>
+      <div data-bill-actions>${pays ? this.#payHeadSection(this.#shownBill) : nothing}</div>`;
+  }
+
+  /** Where the foot is fixed: the draft bar, while the New order has a dish, over Total, Still to
+   * pay and Pay, held together at the window's foot while Order shows. */
+  #orderDock(draft: WorkingOrderStore | null): TemplateResult | typeof nothing {
+    if (!this.#footFixed()) return nothing;
+    const pays = this.canSettle && this.#chargeable();
+    return html`<div
+      class="order-dock"
+      data-order-dock
+      ?hidden=${draft !== null && this.view !== "order"}
+    >
+      ${draft === null || draft.lineCount === 0 ? nothing : this.#draftBar(draft)}
+      <div class="order-foot" data-order-foot>
+        ${this.#totals(draft)}
+        ${
+          pays
+            ? html`<div class="pay foot-pay">
+                ${this.#payUnsent()} ${this.#paySheetButton(this.#shownBill)}
+              </div>`
+            : nothing
+        }
+      </div>
+    </div>`;
+  }
+
+  /** The pay section's parts kept in the flow above a handheld's fixed foot. */
+  #payHeadSection(shown: PartyBill | undefined): TemplateResult {
+    const partlyPaid =
+      this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
+        ? shown
+        : undefined;
+    const choices = this.paymentConfirmation === undefined ? this.#billChoices(shown) : nothing;
+    if (partlyPaid === undefined)
+      return html`<section class="pay">
+        <h2>${t("table.pay_title")}</h2>
+        ${choices}
+      </section>`;
+    const received = this.#balanceShown()?.received;
+    return html`<section class="pay" data-bill-payments>
+      <h2>${t("table.pay_title")}</h2>
+      <p class="amount">
+        ${t("table.bill_to_pay").replace("{amount}", () => this.#money(partlyPaid.outstanding))}
+      </p>
+      ${
+        received === undefined
+          ? nothing
+          : html`<p data-bill-received>${t("bill_pay.received")}: ${this.#money(received)}</p>`
+      }
+      ${choices}
+    </section>`;
+  }
+
+  #totals(draft: WorkingOrderStore | null): TemplateResult {
+    return html`<div class="total-row" data-order-summary>
         <span class="label">${t("label.total")}</span>
         <span class="amount" data-order-total
           >${this.#money(
@@ -3018,10 +3230,7 @@ export class TillTableOrderScreen extends LitElement {
                 >${this.#money(this.party.outstanding)}</span
               >
             </div>`
-      }
-      <div data-bill-actions>
-        ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
-      </div>`;
+      }`;
   }
 
   /** The server reads lines only of an open bill (`tab.not_open`), so a presented or paid bill's
@@ -3900,32 +4109,42 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("take-over-draft", detail);
   }
 
-  /** Under browsing: the line the last tap added or grew and, when the draft has its own view, the
-   * way to it. */
-  #bottomBar(
-    draft: WorkingOrderStore,
-    separate: boolean,
-    entries: readonly DraftEntry[],
-  ): TemplateResult | typeof nothing {
+  /** Under browsing: the line the last tap added or grew and, below the width, the New order bar.
+   * The bar is a sibling of the strip, directly in `.browsing`, so it sticks to the window's foot
+   * rather than to the strip's box. */
+  #bottomBar(draft: WorkingOrderStore, separate: boolean): TemplateResult | typeof nothing {
     const lastAdded = this.#lastAdded(draft);
     if (lastAdded === nothing && !separate) return nothing;
-    return html`<div class="bottom-bar">
-      ${lastAdded}
-      ${
-        separate
-          ? html`<wt-button
-              class="review-open"
-              variant="primary"
-              data-review-open
-              @click=${() => void this.#openReview()}
-            >
-              ${t("table.review").replace(
-                "{n}",
-                String(entries.reduce((sum, entry) => sum + itemCount(entry), 0)),
-              )}
-            </wt-button>`
-          : nothing
-      }
+    return html`<div class="bottom-bar">${lastAdded}</div>
+      ${separate && draft.lineCount > 0 ? this.#newOrderBar(draft) : nothing}`;
+  }
+
+  #newOrderBar(store: WorkingOrderStore): TemplateResult {
+    const items = newOrderItems(store.lines);
+    const dishes = newOrderDishes(store.lines, (line) => shownName(line.product))
+      .map((dish) => fill(t("table.new_order_dish"), { n: String(dish.items), name: dish.name }))
+      .join(" · ");
+    const text = `${t("table.draft_title")} · ${countText(items, "order_counts.items", "order_counts.items_one")} — ${dishes}`;
+    const disabled = this.#sendAllDisabled(store);
+    return html`<div class="new-order-bar" data-new-order-bar>
+      <button
+        type="button"
+        class="new-order-summary"
+        data-new-order-summary
+        @click=${() => void this.#showOrder()}
+      >
+        ${text}
+      </button>
+      <wt-button
+        data-menu-send-all
+        variant=${disabled ? "secondary" : "primary"}
+        size="lg"
+        ?disabled=${disabled}
+        @click=${() => {
+          if (this.#submitArrangement(store, false)) void this.#showOrder();
+        }}
+        >${t("table.draft_send_all")}</wt-button
+      >
     </div>`;
   }
 
@@ -3947,7 +4166,7 @@ export class TillTableOrderScreen extends LitElement {
     )
       return;
     const generation = store.loadGeneration;
-    if (!this.wide && !this.reviewing) await this.#openReview();
+    if (!this.wide && this.view !== "order") await this.#showOrder();
     await this.updateComplete;
     if (
       store !== this.#draftStore ||
@@ -3998,32 +4217,61 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   async #revealTakeOver(): Promise<void> {
-    if (!this.wide && !this.reviewing) await this.#openReview();
+    if (!this.wide && this.view !== "order") await this.#showOrder();
     await this.updateComplete;
     this.renderRoot
       .querySelector<HTMLElement>("[data-take-over]")
       ?.scrollIntoView({ block: "nearest" });
   }
 
-  /** Focus follows the view: the control pressed is hidden by what it opens. */
-  async #openReview(): Promise<void> {
+  async #showOrder(): Promise<void> {
+    if (this.view === "order") return;
     const scroller = this.#scroller();
     this.#browsingScroll = { scroller, top: scroller.scrollTop };
-    this.reviewing = true;
+    const focused = (this.renderRoot as ShadowRoot).activeElement;
+    this.view = "order";
     scroller.scrollTop = 0;
     await this.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>("[data-review-back]")?.focus();
+    this.#clearOrderTopOfDock();
+    // The control that opened Order, such as the New order bar, can be hidden with Menu; focus
+    // would then fall to the page.
+    if (focused !== null && !focused.checkVisibility())
+      this.renderRoot
+        .querySelector<HTMLElement>("[data-view=order]")
+        ?.focus({ preventScroll: true });
   }
 
-  async #closeReview(): Promise<void> {
+  #clearTopDue = false;
+
+  /** The Sent box draws after the screen does, and only then has its height. */
+  async #clearOrderTopOnceDrawn(): Promise<void> {
+    await this.renderRoot.querySelector<LitElement>("till-sent-orders")?.updateComplete;
+    if (this.view === "order") this.#clearOrderTopOfDock();
+  }
+
+  /** Where the dock would cover the order's first row, Order opens with the switch at the top of
+   * the scroll area rather than at the screen's top. */
+  #clearOrderTopOfDock(): void {
+    const dock = this.renderRoot.querySelector("[data-order-dock]");
+    const first = this.renderRoot.querySelector("[data-draft-pane]")?.firstElementChild;
+    const toggle = this.renderRoot.querySelector("[data-view-switch]");
+    if (dock === null || first == null || toggle === null) return;
+    if (first.getBoundingClientRect().bottom <= dock.getBoundingClientRect().top) return;
+    const scroller = this.#scroller();
+    const areaTop =
+      scroller === document.scrollingElement
+        ? 0
+        : scroller.getBoundingClientRect().top + scroller.clientTop;
+    scroller.scrollTop += toggle.getBoundingClientRect().top - areaTop;
+  }
+
+  async #showMenu(): Promise<void> {
+    if (this.view === "menu") return;
     const saved = this.#browsingScroll;
     this.#browsingScroll = undefined;
-    this.reviewing = false;
+    this.view = "menu";
     await this.updateComplete;
     if (saved !== undefined) saved.scroller.scrollTop = saved.top;
-    this.renderRoot
-      .querySelector<HTMLElement>("[data-review-open]")
-      ?.focus({ preventScroll: true });
   }
 
   /** The nearest ancestor that scrolls, across shadow roots, else the page. */
@@ -4089,11 +4337,16 @@ export class TillTableOrderScreen extends LitElement {
               ? html`<till-basket
                   .hideKitchenNote=${true}
                   .store=${draft}
-                  .revealAdded=${this.wide || this.reviewing}
+                  .revealAdded=${this.wide || this.view === "order"}
                 ></till-basket>`
               : this.#draftSections(draft),
           )}
-          ${this.#draftBar(draft)} ${this.#draftMoveDialog(draft)}
+          ${
+            this.#footFixed() || (this.handheld && !this.wide && draft.lineCount === 0)
+              ? nothing
+              : this.#draftBar(draft)
+          }
+          ${this.#draftMoveDialog(draft)}
           <wt-button
             data-discard-draft
             variant="secondary"
@@ -4297,7 +4550,7 @@ export class TillTableOrderScreen extends LitElement {
                       .orderInFlight=${this.groupCommandBusy}
                       stacked
                       .store=${store}
-                      .revealAdded=${this.wide || this.reviewing}
+                      .revealAdded=${this.wide || this.view === "order"}
                       .lineIndexes=${section.indexes}
                     >
                       ${section.indexes.map((index) => this.#draftLine(store, store.lines[index]!, index))}
@@ -4563,7 +4816,8 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #submitArrangement(store: WorkingOrderStore, selectedOnly: boolean): void {
+  /** Whether it dispatched `submit-draft`. */
+  #submitArrangement(store: WorkingOrderStore, selectedOnly: boolean): boolean {
     if (
       !this.isConnected ||
       store !== this.#draftStore ||
@@ -4572,7 +4826,7 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy ||
       !(this.draftActionsAllowed ?? this.orderingAllowed)
     )
-      return;
+      return false;
     const lines = this.#draftLayout(store).flatMap((group) =>
       group.sections.flatMap((section) => section.indexes.map((index) => store.lines[index]!)),
     );
@@ -4581,7 +4835,7 @@ export class TillTableOrderScreen extends LitElement {
       ? fireGroups(lines, this.#selectedIndexes(lines), sendable)
       : sendAllGroups(lines, this.groups, sendable);
     const indexes = groups.flatMap((group) => group.indexes);
-    if (indexes.length === 0) return;
+    if (indexes.length === 0) return false;
     const sent = indexes.map((index) => lines[index]!);
     const positions = new Map(indexes.map((index, position) => [index, position]));
     const detail: SubmitDraftDetail = {
@@ -4607,14 +4861,24 @@ export class TillTableOrderScreen extends LitElement {
       draft: this.#draftOf(store),
     };
     this.#dispatch("submit-draft", detail);
+    return true;
   }
 
-  #draftBar(store: WorkingOrderStore): TemplateResult {
-    const busy =
+  #draftActionsBusy(store: WorkingOrderStore): boolean {
+    return (
       store.sending ||
       store.editsLocked ||
       this.groupCommandBusy ||
-      !(this.draftActionsAllowed ?? this.orderingAllowed);
+      !(this.draftActionsAllowed ?? this.orderingAllowed)
+    );
+  }
+
+  #sendAllDisabled(store: WorkingOrderStore): boolean {
+    return this.#draftActionsBusy(store) || !store.lines.some((line) => this.#draftSendable(line));
+  }
+
+  #draftBar(store: WorkingOrderStore): TemplateResult {
+    const busy = this.#draftActionsBusy(store);
     const sendable = store.lines.filter((line) => this.#draftSendable(line));
     const button = (selectedOnly: boolean, key: StringKey, name: string) => {
       const disabled = busy || !sendable.some((line) => !selectedOnly || this.#selected.has(line));
@@ -4628,7 +4892,7 @@ export class TillTableOrderScreen extends LitElement {
         >${t(key)}</wt-button
       >`;
     };
-    return html`<div class="draft-bar">
+    return html`<div class="draft-bar" ?inert=${store.sending}>
       ${this.#draftMoveButton(store)}
       <div class="draft-actions help-anchor" role="group" aria-label=${t("table.draft_actions")}>
         ${button(true, "table.group_fire", "fire-selected")}

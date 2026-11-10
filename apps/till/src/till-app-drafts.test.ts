@@ -34,7 +34,11 @@ import {
 import { WorkingOrderStore } from "./state/working-order.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
-import { openDraftLine, resized } from "./screens/till-table-order-screen.test-helpers.js";
+import {
+  openDraftLine,
+  resized,
+  showView,
+} from "./screens/till-table-order-screen.test-helpers.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
@@ -2827,7 +2831,7 @@ describe("till-app: sending the draft", () => {
     await expect.poll(() => tableOrder(el)!.billEdit?.draftRevision).toBe(1);
     await toggle(el, "Flan");
     const screen = tableOrder(el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
     await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
     await flush(el);
@@ -4453,46 +4457,12 @@ describe("till-app: Split quantity on a draft line", () => {
 // Vitest's own default frame, which every other case in this file runs in.
 const DEFAULT_FRAME = [414, 896] as const;
 
-describe("till-app: the draft beside browsing, or on its own Review view", () => {
+describe("till-app: the draft beside browsing, or on its own Order view", () => {
   const phoneFormFactor: FormFactor = "phone-portrait";
   const visible = (el: TillApp, selector: string) =>
     tableOrder(el)!.shadowRoot!.querySelector(selector)?.checkVisibility() ?? false;
 
-  it("on a 390 px phone, opens the whole draft on Review and comes Back to browsing with it kept", async () => {
-    await page.viewport(390, 844);
-    try {
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue(till(phoneFormFactor)),
-        getDeviceIdentity: vi.fn().mockResolvedValue({
-          deviceId: "phone-1",
-          name: "Phone",
-          formFactor: "phone-portrait",
-        }),
-      });
-      await openTable(el);
-      await tap(el, "Beer");
-      await tap(el, "Beer");
-      await tap(el, "Flan");
-      expect(visible(el, "[data-draft-pane]")).toBe(false);
-      const review = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!;
-      expect(review.textContent!.trim()).toBe("Review (3)");
-
-      review.click();
-      await flush(el);
-      expect(visible(el, "[data-draft-pane]")).toBe(true);
-      expect(visible(el, "[data-browsing]")).toBe(false);
-      expect(visible(el, '[data-draft-action="send-all"]')).toBe(true);
-
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!.click();
-      await flush(el);
-      expect(visible(el, "[data-browsing]")).toBe(true);
-      expect(rows(el)).toEqual(["Beer ×2", "Flan ×1"]);
-    } finally {
-      await page.viewport(...DEFAULT_FRAME);
-    }
-  });
-
-  it("on a 390 px phone, comes Back from Review to where the menu was scrolled", async () => {
+  it("on a 390 px phone, goes from Order to Menu, where the menu was scrolled", async () => {
     await page.viewport(390, 844);
     try {
       const long = catalogue("v1");
@@ -4526,9 +4496,9 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
       const menuTop = browser(el)!.getBoundingClientRect().top;
       expect(where - menuTop).toBeGreaterThan(844);
 
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      await showView(tableOrder(el)!, "order", { scripted: true });
       await flush(el);
-      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!.click();
+      await showView(tableOrder(el)!, "menu", { scripted: true });
       await flush(el);
 
       expect(Math.round(tile().getBoundingClientRect().top)).toBe(Math.round(where));
@@ -4537,7 +4507,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
     }
   });
 
-  it("on a 1280 px till, shows browsing and the draft together, with no Review", async () => {
+  it("on a 1280 px till, shows browsing and the draft together, with no Order", async () => {
     await page.viewport(1280, 720);
     try {
       const { el } = await mountApp();
@@ -4546,7 +4516,7 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
 
       expect(visible(el, "[data-browsing]")).toBe(true);
       expect(visible(el, "[data-draft-pane]")).toBe(true);
-      expect(tableOrder(el)!.shadowRoot!.querySelector("[data-review-open]")).toBeNull();
+      expect(tableOrder(el)!.shadowRoot!.querySelector("[data-view=order]")).toBeNull();
     } finally {
       await page.viewport(...DEFAULT_FRAME);
     }
@@ -4807,12 +4777,12 @@ describe("till-app: another device's save arriving while the draft is shown", ()
     ].map((line) => line.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim());
   const saveWait = () => new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
 
-  it("on Review, shows the server's draft there, says so, and sends nothing again", async () => {
+  it("on Order, shows the server's draft there, says so, and sends nothing again", async () => {
     const { el } = await mountBeforeSave();
     await openTable(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
     await tap(el, "Beer");
-    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
 
     await saveWait();
@@ -4894,17 +4864,17 @@ describe("till-app: other people's drafts and taking one over", () => {
   const panels = (el: TillApp) => [
     ...screen(el).querySelectorAll<HTMLElement>("[data-other-draft]"),
   ];
-  /** At the default frame the draft pane is the Review view, so it is opened to read a panel. */
-  async function reviewed(el: TillApp): Promise<void> {
+  /** At the default frame the draft pane is on the Order view, so Order is opened to read a panel. */
+  async function onOrder(el: TillApp): Promise<void> {
     if (screen(el).querySelector("[data-draft-pane]")!.checkVisibility()) return;
-    screen(el).querySelector<HTMLElement>("[data-review-open]")!.click();
+    await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
   }
 
-  /** Back from Review to browsing, where the dishes are tapped. */
+  /** Back from Order to Menu, where the dishes are tapped. */
   async function browsing(el: TillApp): Promise<void> {
     if (screen(el).querySelector("[data-browsing]")!.checkVisibility()) return;
-    screen(el).querySelector<HTMLElement>("[data-review-back]")!.click();
+    await showView(tableOrder(el)!, "menu", { scripted: true });
     await flush(el);
   }
 
@@ -4924,7 +4894,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     screen(el).querySelector<HTMLElement & { open: boolean }>("[data-take-over-dialog]")!.open;
 
   async function takeOver(el: TillApp): Promise<void> {
-    await reviewed(el);
+    await onOrder(el);
     panelOf(el).takeOver!.click();
     await flush(el);
     screen(el).querySelector<HTMLElement>("[data-take-over-confirm]")!.click();
@@ -4971,14 +4941,14 @@ describe("till-app: other people's drafts and taking one over", () => {
 
     expect(rows(el)).toEqual(["Beer ×1"]);
     expect(draft(el).editsLocked).toBe(true);
-    await reviewed(el);
+    await onOrder(el);
     expect(panelOf(el)).toMatchObject({
       heading: "Alex has an unsent order",
       lines: ["Beer ×1"],
       sends: false,
     });
 
-    await reviewed(el);
+    await onOrder(el);
     panelOf(el).takeOver!.click();
     await flush(el);
     expect(dialogOpen(el)).toBe(true);
@@ -5025,13 +4995,13 @@ describe("till-app: other people's drafts and taking one over", () => {
 
     expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
     expect(draft(el).editsLocked).toBe(true);
-    await reviewed(el);
+    await onOrder(el);
     expect(panelOf(el)).toMatchObject({
       heading: "Taken over by Sam",
       lines: ["Beer ×1", "Flan ×1"],
       sends: false,
     });
-    await reviewed(el);
+    await onOrder(el);
     expect(panelOf(el).takeOver).not.toBeNull();
   });
 
@@ -5102,7 +5072,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(rows(el)).toEqual(["Beer ×1"]);
     expect(draft(el).editsLocked).toBe(true);
     expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer", "Flan"]);
-    await reviewed(el);
+    await onOrder(el);
     expect(panelOf(el)).toMatchObject({ heading: "Taken over by Sam", lines: ["Beer ×1"] });
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
@@ -5348,7 +5318,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(banner(el)!.textContent).toBe(
       "Sam has taken over this order. Your last change was not saved.",
     );
-    await reviewed(el);
+    await onOrder(el);
     expect(panelOf(el).heading).toBe("Taken over by Sam");
   });
 
@@ -5359,7 +5329,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     emit(shell(el), "screen-select", { screen: "order" });
     await flush(el);
 
-    await reviewed(el);
+    await onOrder(el);
 
     expect(panelOf(el).heading).toBe("Alex has an unsent order");
     await takeOver(el);
@@ -5387,7 +5357,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
       savedBy(ALEX, "Alex", "offer-beer");
       await openAs(el, SAM, "Sam");
-      await reviewed(el);
+      await onOrder(el);
       expect(panelOf(el).lines).toEqual(["Beer ×1"]);
       const v2 = catalogue("v2");
       api.listZoneOffers.mockResolvedValue({
@@ -5401,7 +5371,7 @@ describe("till-app: other people's drafts and taking one over", () => {
       vi.advanceTimersByTime(15_000);
       await flush(el, 6);
 
-      await reviewed(el);
+      await onOrder(el);
 
       expect(panelOf(el).lines).toEqual(["Caña ×1"]);
     } finally {
@@ -5429,7 +5399,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(api.listDrafts.mock.calls.length).toBe(reads + 1);
     expect(banner(el)!.textContent).toContain(t("table.take_over_changed"));
     expect(dialogOpen(el)).toBe(false);
-    await reviewed(el);
+    await onOrder(el);
     expect(panelOf(el)).toMatchObject({ heading: "Alex has an unsent order", lines: ["Beer ×2"] });
     expect(rows(el)).toEqual(["Beer ×2"]);
     expect(draft(el).editsLocked).toBe(true);
@@ -5601,7 +5571,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refresh(el)).toBeNull();
     const screen = tableOrder(el)!.shadowRoot!;
     await toggle(el, "Beer");
-    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
     await userEvent.click(screen.querySelector<HTMLElement>("[data-draft-move]")!);
     await flush(el);
@@ -5652,7 +5622,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     await tap(el, "Beer");
     await saved(el);
     const screen = tableOrder(el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
     screen.querySelector<HTMLElement>("[data-take-over]")!.click();
     await flush(el);
@@ -5779,7 +5749,7 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
       return take(...args);
     });
     const screen = tableOrder(el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
     screen.querySelector<HTMLElement>("[data-take-over]")!.click();
     await flush(el);
@@ -7224,9 +7194,7 @@ describe("recalled draft source splitting", () => {
       ...overrides,
     });
     const order = await openTable(mounted.el);
-    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-    if (review?.checkVisibility()) await userEvent.click(review);
-    await order.updateComplete;
+    await showView(order, "order", { ifShown: true });
     return { ...mounted, order };
   }
 
@@ -7372,9 +7340,7 @@ describe("recalled draft source splitting", () => {
     });
     const order = await openTable(el);
     await tap(el, "Beer");
-    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-    if (review?.checkVisibility()) await userEvent.click(review);
-    await order.updateComplete;
+    await showView(order, "order", { ifShown: true });
     const button = order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]");
     expect(button).not.toBeNull();
     await userEvent.click(button!);
@@ -7415,9 +7381,7 @@ describe("recalled draft source splitting", () => {
       return saved(partyId, ask);
     });
     await tap(el, "Beer");
-    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-    if (review?.checkVisibility()) await userEvent.click(review);
-    await order.updateComplete;
+    await showView(order, "order", { ifShown: true });
     await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!);
     await expect.poll(() => api.saveDraft.mock.calls.length).toBe(1);
     expect(old.sending).toBe(true);
@@ -7732,9 +7696,7 @@ describe("recalled draft source splitting", () => {
       const { el } = await mountApp({ discardDraft });
       const order = await openTable(el);
       await tap(el, "Beer");
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review?.checkVisibility()) await userEvent.click(review);
-      await order.updateComplete;
+      await showView(order, "order", { ifShown: true });
       const press = async () => {
         await userEvent.click(
           order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!,
@@ -7770,9 +7732,7 @@ describe("recalled draft source splitting", () => {
     const { el } = await mountApp({ discardDraft, saveDraft });
     const order = await openTable(el);
     await tap(el, "Beer");
-    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-    if (review?.checkVisibility()) await userEvent.click(review);
-    await order.updateComplete;
+    await showView(order, "order", { ifShown: true });
     await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-discard-draft]")!);
     await expect.poll(() => saveDraft.mock.calls.length).toBe(1);
     refuse(new Error("Offline"));
@@ -8372,9 +8332,7 @@ describe("recalled draft source splitting", () => {
     seedSource();
     const mounted = await mountApp({ splitHeldLineIntoUnits: split });
     const order = await openTable(mounted.el);
-    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-    if (review?.checkVisibility()) await userEvent.click(review);
-    await order.updateComplete;
+    await showView(order, "order", { ifShown: true });
     const button = order.shadowRoot!.querySelector<HTMLButtonElement>(
       "[data-split-draft-line='0']",
     )!;
@@ -8703,8 +8661,7 @@ describe("recalled draft source splitting", () => {
     await tap(el, "Beer");
     await tap(el, "Beer");
     const order = tableOrder(el)!;
-    const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-    if (review?.checkVisibility()) await userEvent.click(review);
+    await showView(order, "order", { ifShown: true });
     await userEvent.click(
       order.shadowRoot!.querySelector<HTMLElement>("[data-split-draft-line='0']")!,
     );
@@ -9439,8 +9396,7 @@ describe("recalled draft source splitting", () => {
           return { revision: 4, draft: recordRecall() };
         }),
       });
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review?.checkVisibility()) await userEvent.click(review);
+      await showView(order, "order", { ifShown: true });
       emit(order, "recall-lines", { lineNos: [7] });
       await flush(el);
       try {
@@ -10374,10 +10330,10 @@ describe("A773 retained bill candidates in the app", () => {
             await flush(el, 6);
             const screen = tableOrder(el)!;
             await resized(screen);
-            const review = screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
+            const orderButton = screen.shadowRoot!.querySelector<HTMLElement>("[data-view=order]");
             if (width === 390) {
-              expect(review).not.toBeNull();
-              await userEvent.click(review!);
+              expect(orderButton).not.toBeNull();
+              await userEvent.click(orderButton!);
               await flush(el);
             }
             const panel = candidate(el)!;
@@ -10998,7 +10954,7 @@ describe("direct New order actions", () => {
         const before = [...outbox.lines];
         const saved = structuredClone(server.drafts);
         const root = order.shadowRoot!;
-        await userEvent.click(root.querySelector<HTMLElement>("[data-review-open]")!);
+        await showView(order, "order");
         await userEvent.click(
           [...root.querySelectorAll<HTMLElement>("[data-draft-select]")].find((row) =>
             row.textContent!.includes("Steak"),
@@ -11079,7 +11035,7 @@ describe("direct New order actions", () => {
     const [selected] = draft(el).lines;
     expect(selected!.place).toEqual({ kind: "new", slot: 1 });
     const screen = tableOrder(el)!.shadowRoot!;
-    await userEvent.click(screen.querySelector<HTMLElement>("[data-review-open]")!);
+    await showView(tableOrder(el)!, "order");
     const tick = screen.querySelector<HTMLElement>("[data-draft-select]")!;
     await userEvent.click(tick);
     expect(tick.getAttribute("aria-pressed")).toBe("true");
@@ -11205,11 +11161,11 @@ describe("direct New order actions", () => {
   });
 });
 
-describe("native app phone Review with mixed dish families", () => {
+describe("native app phone order view with mixed dish families", () => {
   for (const locale of ["en", "es"] as const)
     for (const theme of ["light", "dark"] as const)
       for (const width of [360, 390]) {
-        it(`${locale}, ${theme}, ${width}px retains saved sources, placement and selection across Back`, async () => {
+        it(`${locale}, ${theme}, ${width}px retains saved sources, placement and selection across Menu`, async () => {
           const oldWidth = innerWidth,
             oldHeight = innerHeight;
           await page.viewport(width, 900);
@@ -11372,29 +11328,15 @@ describe("native app phone Review with mixed dish families", () => {
             await expect.poll(() => tableOrder(el)?.draftStore?.lines.length).toBe(4);
             const order = tableOrder(el)!;
             const q = (selector: string) => order.shadowRoot!.querySelector<HTMLElement>(selector)!;
-            const expectTarget = (selector: string) => {
-              const target = q(selector).shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-              const box = target.getBoundingClientRect();
-              expect(target.checkVisibility()).toBe(true);
-              expect(box.width).toBeGreaterThanOrEqual(44);
-              expect(box.height).toBeGreaterThanOrEqual(44);
-              expect(box.left).toBeGreaterThanOrEqual(0);
-              expect(box.right).toBeLessThanOrEqual(width);
-            };
-            await expect.poll(() => q("[data-review-open]").checkVisibility()).toBe(true);
+            await expect.poll(() => q("[data-view=order]").checkVisibility()).toBe(true);
             const originalRows = [...draft(el).lines];
             const before = structuredClone(draft(el).lines);
-            const reviewText = locale === "es" ? "Revisar (6)" : "Review (6)";
             expect(innerWidth).toBe(width);
-            expect(q("[data-review-open]").textContent!.trim()).toBe(reviewText);
-            expectTarget("[data-review-open]");
             expect(rows(el)).toEqual(["Beer ×2", "Flan ×1", "Steak ×0.375", "Recorded dish ×2"]);
-            expect(q("[data-browsing]").checkVisibility()).toBe(true);
-            expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
-            await userEvent.click(q("[data-review-open]"));
+            expect(q("[data-browsing]").checkVisibility()).toBe(false);
+            expect(q("[data-draft-pane]").checkVisibility()).toBe(true);
+            await showView(order, "order");
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
-            expect(order.shadowRoot!.activeElement).toBe(q("[data-review-back]"));
-            expectTarget("[data-review-back]");
             expect(
               [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-group]")].map(
                 (group) => group.dataset.draftGroup,
@@ -11423,13 +11365,11 @@ describe("native app phone Review with mixed dish families", () => {
             expect(draft(el).lines).toEqual(before);
             await expectNoA11yViolations(host);
             await page.screenshot({
-              path: `__screenshots__/a773-app-review-${locale}-${theme}-${width}.png`,
+              path: `__screenshots__/a773-app-order-view-${locale}-${theme}-${width}.png`,
             });
-            await userEvent.click(q("[data-review-back]"));
+            await showView(order, "menu");
             await expect.poll(() => q("[data-browsing]").checkVisibility()).toBe(true);
             expect(q("[data-draft-pane]").checkVisibility()).toBe(false);
-            expect(order.shadowRoot!.activeElement).toBe(q("[data-review-open]"));
-            expect(q("[data-review-open]").textContent!.trim()).toBe(reviewText);
             expect(draft(el).lines).toEqual(before);
             expect(server.drafts).toEqual(savedBefore);
             expect(api.saveDraft).not.toHaveBeenCalled();
@@ -11440,7 +11380,7 @@ describe("native app phone Review with mixed dish families", () => {
             await page.screenshot({
               path: `__screenshots__/a773-app-back-${locale}-${theme}-${width}.png`,
             });
-            await userEvent.click(q("[data-review-open]"));
+            await showView(order, "order");
             await expect.poll(() => q("[data-draft-pane]").checkVisibility()).toBe(true);
             expect(q('[data-draft-select="0"]').getAttribute("aria-pressed")).toBe("true");
             expect(draft(el).lines).toEqual(before);

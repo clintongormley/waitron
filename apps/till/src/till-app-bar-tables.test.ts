@@ -1,3 +1,4 @@
+import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -5,6 +6,8 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  pageAt,
+  resetPage,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -399,6 +402,119 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(tableOrder(el)?.checkVisibility()).toBe(true);
     expect(tableOrder(el)?.party?.id).toBe("v1");
     expect(selected(el)).toEqual(["T4"]);
+  });
+
+  /** Opens T9 on a `formFactor` handheld at `width` px, adds Beer and taps `sendAll`, waiting for
+   * the Sent toast: drawn just before the send would leave the table. */
+  async function sendAllFromT9(
+    formFactor: FormFactor,
+    width: number,
+    height: number,
+    sendAll: string,
+    beforeSend: () => void = () => {},
+  ) {
+    await pageAt(width, height);
+    server = draftServer(() => ({ tabId: "wo-9", revision: 4, groups: [] }));
+    const { el } = await mountApp({}, formFactor);
+    Object.assign(api, answeredPartyAllergy(el));
+    await openTable(el, "t9");
+    await tap(el, "Beer");
+    await waitForSave();
+    beforeSend();
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>(sendAll)!.click();
+    const toast = () =>
+      el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-toast[data-submitted-toast]",
+      )!;
+    await vi.waitFor(() => expect(toast().open).toBe(true));
+    await flush(el);
+    return el;
+  }
+  const activeScreen = (el: TillApp) =>
+    (shell(el) as HTMLElement & { activeScreen?: string }).activeScreen;
+
+  it("stays on T9 after sending everything from the Menu bar, on Order, its button highlighted without ✎", async () => {
+    try {
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]");
+      expect(api.submitDraft).toHaveBeenCalledTimes(1);
+      expect(activeScreen(el)).toBe("order");
+      expect(tableOrder(el)?.checkVisibility()).toBe(true);
+      expect(
+        tableOrder(el)!
+          .shadowRoot!.querySelector("[data-view=order]")!
+          .getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(barButton(el, "t9").getAttribute("aria-selected")).toBe("true");
+      expect(bar(el)).toEqual(["Floor", "[T9]"]);
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("after sending everything, a phone's Still to pay at this table shows the floor's new figure", async () => {
+    try {
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]", () => {
+        const sent = { ...table9.party!, revision: 12, outstanding: "84.20" };
+        api.getTablesState!.mockResolvedValue([table4, table("t9", "T9", sent)]);
+      });
+      const outstanding = () =>
+        tableOrder(el)!.shadowRoot!.querySelector("[data-party-outstanding]")!.textContent!.trim();
+      await vi.waitFor(() => expect(outstanding()).toBe("€84.20"));
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("after sending everything, a phone whose floor read then fails stays on Order and says the amounts could not be read", async () => {
+    try {
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]", () => {
+        api.getTablesState!.mockRejectedValue(new Error("offline after send"));
+      });
+      await flush(el, 10);
+      expect(api.submitDraft).toHaveBeenCalledTimes(1);
+      expect(activeScreen(el)).toBe("order");
+      expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(
+        "The order was updated, but the table could not be read again. Open the table again to check its amounts.",
+      );
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("after sending everything, a phone whose floor read fails once the waiter has gone to the Floor says nothing there", async () => {
+    try {
+      let failRead: (error: Error) => void = () => {};
+      const held = new Promise<TableState[]>((_resolve, reject) => {
+        failRead = reject;
+      });
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]", () => {
+        api.getTablesState!.mockReturnValue(held);
+      });
+      await toFloor(el);
+      expect(activeScreen(el)).toBe("floor");
+      failRead(new Error("offline after send"));
+      await flush(el, 10);
+      expect(activeScreen(el)).toBe("floor");
+      expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim() ?? "").toBe("");
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("a tablet stays on its table, side by side", async () => {
+    try {
+      const el = await sendAllFromT9(
+        "tablet-landscape",
+        1024,
+        768,
+        '[data-draft-action="send-all"]',
+      );
+      expect(api.submitDraft).toHaveBeenCalledTimes(1);
+      expect(activeScreen(el)).toBe("order");
+      expect(tableOrder(el)?.checkVisibility()).toBe(true);
+    } finally {
+      await resetPage();
+    }
   });
 
   it("shows no button for another person's unsent order", async () => {

@@ -10,6 +10,7 @@ import {
   mount,
   resized,
   shown,
+  showView,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
 
@@ -176,14 +177,13 @@ describe("till-table-order-screen: other people's drafts", () => {
     expect(heading(panels(el)[0]!)).toBe(t("table.draft_taken_by_unnamed"));
   });
 
-  it("shows the panels on Review at phone width, not while browsing", async () => {
+  it("shows the panels on Order at phone width, not while browsing", async () => {
     const { el, host } = await mount({ otherDrafts: [alexs()] });
     host.style.width = "390px";
     await resized(el);
 
     expect(shown(panels(el)[0]!)).toBe(false);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
-    await el.updateComplete;
+    await showView(el, "order", { scripted: true });
     expect(shown(panels(el)[0]!)).toBe(true);
   });
 

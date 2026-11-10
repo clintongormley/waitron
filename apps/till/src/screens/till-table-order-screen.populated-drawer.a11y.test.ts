@@ -8,7 +8,7 @@ import {
   storedServed,
 } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { openSentMore } from "./till-table-order-screen.sent.test-helpers.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
@@ -108,10 +108,7 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,
         });
         await closeTableMenu(el);
-        if (q("[data-draft-pane]").hidden) {
-          await userEvent.click(q("[data-review-open]"));
-          await el.updateComplete;
-        }
+        if (q("[data-draft-pane]").hidden) await showView(el, "order");
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;
         const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;

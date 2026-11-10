@@ -48,6 +48,7 @@ import type {
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
+import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 
 const zone: FloorZone = {
   id: "z1",
@@ -2183,11 +2184,7 @@ describe("till-app: service cancellation consent", () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await order.updateComplete;
-      const review = order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await order.updateComplete;
-      }
+      await showView(order, "order", { ifShown: true });
       const sent = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await sent.updateComplete;
       await userEvent.click(sent.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
@@ -4785,10 +4782,7 @@ it.each([
       path: `__screenshots__/a773-comp-table-menu-${locale}-${theme}-${width}.png`,
     });
     await closeTableMenu(order);
-    if (width < 1280) {
-      await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
-      await order.updateComplete;
-    }
+    if (width < 1280) await showView(order, "order");
     const panel = order.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
     await panel.updateComplete;
     const toggle = panel.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!;

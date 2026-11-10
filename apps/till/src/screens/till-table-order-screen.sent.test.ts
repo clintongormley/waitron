@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { TabLine } from "../api/client.js";
@@ -83,7 +83,7 @@ it("the draft already counts 330 ml as one item while keeping its quantity", asy
   await resized(el);
   el.draftStore!.addProduct(drink, "330");
   await el.updateComplete;
-  expect(find(el, "[data-review-open]").textContent!.trim()).toBe("Review (1)");
+  expect(find(el, "[data-view=order]").textContent!.trim()).toBe(`${t("table.view_order")} · 1`);
   expect(el.draftStore!.lines[0]!.quantity).toBe("330");
 });
 

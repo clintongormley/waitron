@@ -21,6 +21,7 @@ import type {
   PartyBill,
   TableState,
   TableParty,
+  TabLine,
   TillApi,
   TillMenuOffer,
   ZoneOfferCatalogue,
@@ -30,6 +31,7 @@ import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { setLocale, t } from "./i18n/t.js";
 import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
+import { resized, shownView } from "./screens/till-table-order-screen.test-helpers.js";
 
 const unit = {
   id: "unit-each",
@@ -2229,5 +2231,58 @@ describe("A803 opening bill", () => {
     expect(order.orderId).toBeUndefined();
     expect(api.getTabLines).not.toHaveBeenCalledWith("wo-gone");
     expect(order.draftStore).toBeNull();
+  });
+});
+
+describe("A797 the view a handheld opens a table on", () => {
+  beforeEach(() => {
+    server = draftServer();
+  });
+  afterEach(cleanupWidgets);
+
+  const served: TabLine = {
+    changesAfterSending: null,
+    stationId: null,
+    movable: false,
+    id: "line-1",
+    groupId: null,
+    lineNo: 1,
+    productId: "cana",
+    quantity: "1.000",
+    unitPriceGross: "3.00",
+    servedAt: "2026-11-09T12:00:00.000Z",
+    courseId: null,
+    sentAt: "2026-11-09T11:50:00.000Z",
+    firedAt: "2026-11-09T11:50:00.000Z",
+    state: "ready",
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
+  };
+
+  it("a handheld opens a table with only served dishes on Order, and a newly seated one on Menu", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till("phone-portrait")),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", name: "Phone", formFactor: "phone-portrait" }),
+      getTabLines: vi.fn(async (billId: string) => ({
+        lines: billId === "wo-4" ? [served] : [],
+        revision: 0,
+      })),
+    });
+
+    const four = await openTable(el, "t4");
+    await resized(four);
+    expect(four.orderId).toBe("wo-4");
+    expect(shownView(four)).toBe("order");
+
+    emit(four, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    const seven = tableOrder(el)!;
+    await resized(seven);
+    expect(seven.orderId).toBe("wo-7");
+    expect(shownView(seven)).toBe("menu");
   });
 });

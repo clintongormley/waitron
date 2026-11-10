@@ -273,12 +273,13 @@ for (const width of [390, 1280])
   );
 
 it.each([390, 1280])(
-  "A738 adding a table dish reveals its order row even after opening Review at %s",
+  "A738 adding a table dish reveals its order row while the order is in view at %s",
   async (width) => {
     await page.viewport(width, 844);
     const {
       mount,
       resized,
+      showView,
       store: draftOf,
       beer,
     } = await import("./till-table-order-screen.test-helpers.js");
@@ -287,6 +288,7 @@ it.each([390, 1280])(
     host.style.height = "700px";
     host.style.overflow = "auto";
     await resized(el);
+    if (width === 390) await showView(el, "order");
     const draft = draftOf(el);
     for (let n = 0; n < 25; n++)
       draft.addProduct(
@@ -294,10 +296,6 @@ it.each([390, 1280])(
         "1",
       );
     await el.updateComplete;
-    if (width === 390) {
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
-      await el.updateComplete;
-    }
     const basket = [...el.shadowRoot!.querySelectorAll<LitElement>("till-basket")].at(-1)!;
     await basket.updateComplete;
     const last = basket.shadowRoot!.querySelector<HTMLElement>('[data-line-detail="24"]')!;

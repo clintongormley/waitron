@@ -236,9 +236,9 @@ On a busy shift it is easy to start an order at one table, get called to another
 dishes you never sent. So on a phone or tablet the bar at the top shows **Floor**, then a button
 such as **✎ T4**, by the table's short name, for each table where you have dishes not yet sent;
 however many of your bills there hold unsent dishes, a table gets one button. Tap a button to go
-back to that table. The table you are at is highlighted, and once nothing of yours is unsent there
-its button loses the ✎ and goes when you leave, while a table you leave with dishes still unsent
-keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
+back to that table. The table you are at is highlighted. Once nothing of yours is unsent there, for
+example after you send everything, its button stays highlighted without the ✎ until you leave, and
+then goes, while a table you leave with dishes still unsent keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
 table you are at, and at any other table when the Floor next updates its tables. When there are
 more buttons than fit, **Floor** stays where it is and the table buttons slide sideways beside it;
 a faded edge shows there are more that way.
@@ -251,6 +251,21 @@ in **More** (☰): your name, with your clock actions if you clock in on this de
 has no room for it, which on a phone is always; the screens your profile allows; **Zones on this
 device**, **Equipment**, **Language** and **Theme** under a **Settings** heading; **Log out**; and,
 while the venue has a logo, **Powered by Waitron** under it.
+
+## Take an order on a phone {#phone-order}
+
+On a phone, or any table screen narrower than 720 px, **Menu** and **Order** at the top show one or
+the other, and **Order** says how many dishes are in your **New order**, such as **Order · 3**. A
+table opens on **Menu** until something has been sent on the bill on screen, then on **Order**.
+
+On **Menu**, a number on a dish says how many of it are in your **New order**. While it holds
+anything, a bar at the bottom says what, such as **New order · 3 items — 2 × Croquettes · 1 × Pork
+shoulder**: tap **Send all** to send it and see **Order**, or tap the words to see it on **Order**.
+
+On a handheld, **Order** keeps **Total**, **Still to pay at this table** and **Pay** at the bottom,
+with **Send all** above them while you have dishes to send. After you send everything, a handheld
+stays on the table until you tap **Floor**. On a screen 720 px wide or more, such as a tablet's, the
+menu and the order sit side by side.
 
 ## Give a table a short name {#short-names}
 
@@ -318,7 +333,7 @@ when a bill is paid with a simplified invoice and others are not, the screen lis
 to pay and **Back to the table** opens the first of them.
 
 Waitron takes no payment for a bill with dishes not yet sent. While the bill on screen has dishes in
-your **Unsent order**, or another person's unsent dishes for it are shown with their **Take over
+your **New order**, or another person's unsent dishes for it are shown with their **Take over
 draft** button, the buttons that start a payment look quiet. They still respond: a tap starts no
 payment and says why, such as **Bill 1. Send or remove the unsent dishes before paying.** Send or
 remove your own dishes. For someone else's, tap **Take over draft** first, then send or remove them.

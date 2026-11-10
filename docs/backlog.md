@@ -807,12 +807,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
   the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
-- **A1120. A handheld stays on the table after its last send, so its button shows highlighted
-  without ✎** (for A797 slice 10). The design's worked example 1 (§4) and Q51 (b) have Ana stay
-  on T9 after sending everything; today a send that empties the New order returns a handheld to the
-  Floor, which slice 3 kept because what the order screen does after a send is slice 10's.
-  [Detail](backlog/till.md#a1120-a-handheld-stays-on-the-table-after-its-last-send-so-its-button-shows-highlighted-without-)
-
 - **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle of 39, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020, A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A909, A292, A575, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 
 
@@ -1127,8 +1121,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#malformed-sale-and-cancellation-bodies)
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).** Counter
-  custom items (A738 residual) and the payment window (A739) remain. What is left of A797: slices
-  10–11 and 12b: [build
+  custom items (A738 residual) and the payment window (A739) remain. What is left of A797:
+  slices 11 and 12b: [build
   plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md).
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)

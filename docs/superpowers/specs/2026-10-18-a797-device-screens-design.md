@@ -216,7 +216,8 @@ screen is drawn highlighted, like a selected tab. The owner's rules (Q42 (a)):
   "?" and ☰. 2026-10-26, slice 3: a send that empties the New order still returns the handheld to
   the Floor, so the highlighted button without ✎ shows after removing the last unsent dish, after a
   takeover, or on a table opened with nothing unsent, not after a send; staying on the table after
-  a send is slice 10's (the build plan's slice 3, D13; backlog A1120).
+  a send is slice 10's (the build plan's slice 3, D13; backlog A1120). (2026-11-09: built in slice
+  10, D10.)
 - **"✎ T4" rather than "‹ T4"** (the owner asked whether a plain "T4" reads as "back to T4"):
   recommended, because the button is there *because* something is unsent, and ✎ says that with the
   same mark the map draws on the same table; the highlighted button says "you are here". A "‹"
@@ -289,6 +290,12 @@ A757 built them (whole-table colour and a cue; A669's red "!" for an allergy). C
   paying." (`strings.ts:1451`); another bill's unsent dishes do not quiet it. Pay shows only where
   the profile allows a payment.
 - **Which view a table opens on:** Menu when nothing has been sent yet; Order once anything has.
+- _2026-11-09, slice 10: the switch, numbers and opening view follow the screen's width below 720
+  px; the fixed foot is a handheld's and holds the total, the table's remaining total and Pay, the
+  rest of the pay section scrolling above it; Send all on the Menu bar opens Order as it sends; a
+  table's opening view is judged on the bill on screen and a bill switch opens Menu; A1125's Move
+  to…, Fire and Send all ride above the foot; the order box is titled New order; see the build
+  plan's slice 10, D1–D11._
 - A line's ⓘ opens A738's line window; allergy marks (A669) and "Lunch ended" (A789) show in the New
   order exactly as on the counter.
 
@@ -615,6 +622,7 @@ Each point is (read); the plan confirms it before relying on it.
   tab named after it (replaced by the table buttons); below 720 px the order screen's "Review (n)"
   (`strings.ts:1313`) and its separate review view (replaced by the Menu / Order switch and the fixed
   bars); the Ready summary above the floor at phone width (replaced by the Ready bar).
+  (2026-11-09: slice 10.)
 - **Table screen (A803's, drawn here):** **Hold**; the **Bill ⋯ and Table ⋯** pair (one ⋮ menu); the
   Full invoice button beside the pay ways (to the payment step).
 - **Kitchen screen:** the Tickets view and its switch; the per-dish cells of today's Board; "New" as
@@ -716,7 +724,7 @@ edits the same files)
 **3 — The phone's order screen** (A773-1 has landed, #1897)
 10. **Handheld order at phone width.** Menu / Order switch, the fixed bottom bar with Send all, the
     fixed foot (A803 builds its contents and quiet Pay; this slice fixes it on a phone), tile counts,
-    the opening view. LIGHT. Waits for A803's slice 3.
+    the opening view. LIGHT. Waits for A803's slice 3. (2026-11-09: slice 10.)
 11. **The switcher's unsent marks** ("✎ Bill 2 unsent", closed and open) and the bar button's choice
     of bill. LIGHT. After 3 and A803's slice 3.
 
@@ -741,7 +749,7 @@ edits the same files)
   floor; whether a dish leaves a station's Ready column on its own; the venue's bump mode once a dish
   tap and a heading tap both exist (`station-queue.ts`; the plan traces where it is set and read) (2026-10-24, A756 PR 7: the mode is each station's, carried on every queue order). (2026-10-26, slice 8: traced and settled in the build plan's slice 8, D8.)
 - The wording of the fixed bottom bar and the opening rule's edge cases (a table with only served
-  dishes opens on Order).
+  dishes opens on Order). (2026-11-09: settled in the build plan's slice 10, D5–D8.)
 
 ## 10. The owner's answer to Q42, and Q51
 
@@ -809,7 +817,11 @@ the pass, and Overview first when it is shown (§3.5).
   6. A773's planned pass label "New order" (a table's first send, or a counter order) and the
      till's New order (unsent dishes): **"First order" on the pass**; a counter order's card already
      says "Counter #12", so "First order" reads true there too (lane G's A773-2, its tests and the
-     kitchen guide).
+     kitchen guide). _2026-11-09: not built. On 2026-11-02 the owner chose to keep «Nuevo pedido» /
+     "New order" on the pass card for a table's first send: the recommended option (a), "the same
+     name as the waiter's unsent list, because the card is that same order, now sent" (lane C's
+     questions file, A773-2 B3 question 7, answer (a)); so (g)'s «Primer pedido» is not used either. See the build plan's
+     slice 10, D11._
   7. "Warm" in the dashboard's kitchen settings and the till's "Waiting" for the same limit, and
      three Spanish words each for Warm and Overdue: **"Waiting after" and the till's words** (A797
      slice 6 edits those fields).

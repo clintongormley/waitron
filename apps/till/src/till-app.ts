@@ -12926,7 +12926,21 @@ export class TillApp extends LitElement {
     if (followUp === "find-tab" || this.activeTableId !== tableId) return;
     this.submittedNotice = submittedText(draft.tally);
     this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
-    this.#returnToFloor();
+    // Leaving re-read the floor, where the table's still-to-pay figure comes from; staying reads
+    // it here.
+    if (!this.handheldMode) {
+      this.#returnToFloor();
+      return;
+    }
+    const floorRead = await this.#retakePartyFromFloor();
+    if (
+      !floorRead &&
+      live() &&
+      onSentTable() &&
+      !this.#hasLeftOrder(tabId, visit) &&
+      this.errorKey === undefined
+    )
+      this.errorKey = "table.reread_failed";
   }
 
   #onLateSendAgreed(open: NonNullable<TillApp["lateSendWindow"]>): Promise<void> {

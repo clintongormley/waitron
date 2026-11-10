@@ -6347,7 +6347,10 @@ describe("till-app: Finish table refused from the ⋮ on a handheld opened from 
       );
       const order = await openTable(el);
       await resized(order);
-      expect(order.shadowRoot!.querySelector("[data-draft-pane]")!.checkVisibility()).toBe(false);
+      expect(order.shadowRoot!.querySelector("[data-draft-pane]")!.checkVisibility()).toBe(true);
+      expect(
+        order.shadowRoot!.querySelector("[data-view=order]")!.getAttribute("aria-pressed"),
+      ).toBe("true");
 
       await openTableMenu(order);
       await userEvent.click(inOrder(order, "[data-table-menu] [data-finish-table]")!);

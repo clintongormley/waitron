@@ -11,7 +11,7 @@ import {
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
-import { beer, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import {
@@ -82,10 +82,7 @@ describe.each(["en", "es"] as const)("retired held placement %s", (locale) => {
         path: `__screenshots__/a773-retired-placement-${locale}-${theme}-${width}.png`,
       });
       await closeTableMenu(el);
-      if (width < 1280) {
-        await userEvent.click(q("[data-review-open]"));
-        await el.updateComplete;
-      }
+      if (width < 1280) await showView(el, "order");
       const panel = q("till-sent-orders") as TillSentOrders;
       await panel.updateComplete;
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {

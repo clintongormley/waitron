@@ -4,7 +4,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
-import { beer, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import {
   footerBalance,
   footerBill,
@@ -45,10 +45,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           );
           host.style.width = "100%";
           await resized(el);
-          if (width < 1280) {
-            await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
-            await el.updateComplete;
-          }
+          if (width < 1280) await showView(el, "order");
           const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector);
           expect(q("[data-bill-actions]")).not.toBeNull();
           expect(q("[data-drawer]")).toBeNull();

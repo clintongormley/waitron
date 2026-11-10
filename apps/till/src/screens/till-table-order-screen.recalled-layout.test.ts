@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import type { RecalledDraftLine } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -8,7 +8,7 @@ import { fromDraftLine, toDraftLineInput } from "../state/draft-lines.js";
 import type { TillBasket } from "../widgets/basket.js";
 import { cleanupWidgets, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
-import { mount, resized } from "./till-table-order-screen.test-helpers.js";
+import { mount, resized, showView } from "./till-table-order-screen.test-helpers.js";
 
 afterEach(() => cleanupWidgets());
 
@@ -60,11 +60,7 @@ describe("recalled extras on the table screen", () => {
               host.style.width = "100%";
               el.style.width = "100%";
               await resized(el);
-              const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-              if (review?.checkVisibility()) {
-                await userEvent.click(review);
-                await el.updateComplete;
-              }
+              await showView(el, "order", { ifShown: true });
               const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find(
                 (each) => each.lineIndexes?.includes(0),
               )!;

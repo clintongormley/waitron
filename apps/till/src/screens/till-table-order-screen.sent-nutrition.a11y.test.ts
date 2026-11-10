@@ -10,7 +10,7 @@ import {
   now,
   row,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { beer, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -64,11 +64,7 @@ describe.each(["en", "es"] as const)("stored nutrition on the table in %s", (loc
       );
       host.style.width = "100%";
       await resized(el);
-      const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review?.checkVisibility()) {
-        await userEvent.click(review);
-        await el.updateComplete;
-      }
+      await showView(el, "order", { ifShown: true });
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const kind of ["served", "held"]) {

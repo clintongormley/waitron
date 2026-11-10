@@ -4,7 +4,14 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { SubmitDraftDetail } from "./till-table-order-screen.js";
-import { ham, menuOf, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  ham,
+  menuOf,
+  mount,
+  resized,
+  showView,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -28,11 +35,7 @@ describe("New order quantities keep display separate from submission", () => {
           if (locked) draft.lockEdits();
           el.requestUpdate();
           await el.updateComplete;
-          const review = el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-          if (review?.checkVisibility()) {
-            await userEvent.click(review);
-            await el.updateComplete;
-          }
+          await showView(el, "order", { ifShown: true });
           const basket = el.shadowRoot!.querySelector<TillBasket>(
             "[data-draft-sections] till-basket",
           )!;

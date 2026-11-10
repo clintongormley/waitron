@@ -5,7 +5,12 @@ import {
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { grossOf } from "@waitron/shared";
 import { DraftStore } from "../state/draft-sync.js";
-import { openDraftLine, resized } from "./till-table-order-screen.test-helpers.js";
+import {
+  openDraftLine,
+  resized,
+  showView,
+  shownView,
+} from "./till-table-order-screen.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -163,12 +168,6 @@ const partyBills: PartyBill[] = [
 
 afterEach(cleanupWidgets);
 
-/** Below the side-by-side width, as in Vitest's default frame, the draft is on its Review view. */
-async function openReview(el: TillTableOrderScreen): Promise<void> {
-  el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
-  await el.updateComplete;
-}
-
 describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s theme)", (theme) => {
   it("has no violations with the round grid, the per-line course picker and the open table menu", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
@@ -182,7 +181,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       .click();
     // Open the ⋮ so its list is included in the scan, not just the grid.
     await openTableMenu(el);
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     // The reused basket re-renders on its OWN store subscription (a separate Lit update cycle), and its
     // freshly-created remove `wt-button`s render their inner focusable `<button>` on a following tick — so
     // let the nested widgets fully settle before axe runs, or it scans a half-upgraded control.
@@ -446,11 +445,11 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
 
     it("has no violations in the action bar, with nothing and with a line checked", async () => {
       const { el, host } = await withDraft({}, false);
-      await openReview(el);
+      await showView(el, "order", { scripted: true });
       await expectNoA11yViolations(host);
       cleanupWidgets();
       const selected = await withDraft({}, true);
-      await openReview(selected.el);
+      await showView(selected.el, "order", { scripted: true });
       await expectNoA11yViolations(selected.host);
     });
 
@@ -460,7 +459,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       el.addEventListener("submit-draft", (event) =>
         submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
       );
-      await openReview(el);
+      await showView(el, "order", { scripted: true });
       await userEvent.click(
         el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-selected"]')!,
       );
@@ -494,7 +493,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       el.addEventListener("submit-draft", (event) =>
         submitted.push((event as CustomEvent<SubmitDraftDetail>).detail),
       );
-      await openReview(el);
+      await showView(el, "order", { scripted: true });
       await userEvent.click(
         el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!,
       );
@@ -529,7 +528,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         { groups: [group("g1", 1, "fired"), group("g2", 2, "held"), group("g3", 3, "held")] },
         true,
       );
-      await openReview(el);
+      await showView(el, "order", { scripted: true });
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-draft-move]")!);
       await el.updateComplete;
       expect(
@@ -1076,7 +1075,7 @@ describe.each(["light", "dark"] as const)(
       await el.updateComplete;
     }
 
-    it("has no violations while browsing, with the last-added bar and Review", async () => {
+    it("has no violations while browsing, with the last-added bar and Order", async () => {
       const { el, host } = await phoneDraft();
       await settled(el);
       if (
@@ -1089,13 +1088,32 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations on the Review view, with Split quantity offered", async () => {
+    it("the switch has no violations, Menu and Order each pressed", async () => {
       const { el, host } = await phoneDraft();
-      el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
-      await el.updateComplete;
+      await settled(el);
+      if (shownView(el) !== "menu") throw new Error("the scan must see Menu pressed");
+      await expectNoA11yViolations(host);
+
+      await showView(el, "order");
+      await settled(el);
+      if (shownView(el) !== "order") throw new Error("the scan must see Order pressed");
+      await expectNoA11yViolations(host);
+    });
+
+    it("the bar has no violations", async () => {
+      const { el, host } = await phoneDraft();
+      await settled(el);
+      if (!el.shadowRoot!.querySelector("[data-new-order-bar]")?.checkVisibility())
+        throw new Error("the scan must include the Menu's New order bar");
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations on the Order view, with Split quantity offered", async () => {
+      const { el, host } = await phoneDraft();
+      await showView(el, "order", { scripted: true });
       await settled(el);
       if (!el.shadowRoot!.querySelector("[data-split-draft-line]")?.checkVisibility())
-        throw new Error("the scan must include the Review view's lines");
+        throw new Error("the scan must include the Order view's lines");
       await expectNoA11yViolations(host);
     });
   },

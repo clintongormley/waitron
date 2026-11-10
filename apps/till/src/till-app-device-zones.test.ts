@@ -27,6 +27,7 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import { ServerRouter } from "./api/server-router.js";
 import { SessionActivity } from "./session-activity.js";
 import { TillApp } from "./till-app.js";
+import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -1403,6 +1404,14 @@ describe("a handheld's zones", () => {
     );
   }
   const floor = (el: TillApp) => el.shadowRoot!.querySelector("till-floor-screen")!;
+  async function tapFloor(el: TillApp) {
+    await userEvent.click(
+      [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+        (tab) => tab.textContent!.trim() === "Floor",
+      )!,
+    );
+    await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+  }
   async function floorZoneIds(el: TillApp) {
     await vi.waitFor(() => expect(floor(el)).not.toBeNull());
     await vi.waitFor(() => expect(floor(el).zones.length).toBeGreaterThan(0));
@@ -1934,14 +1943,6 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(orderScreen(el)?.draftStore).toBeTruthy());
       await el.updateComplete;
     }
-    async function tapFloor(el: TillApp) {
-      await userEvent.click(
-        [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].find(
-          (tab) => tab.textContent!.trim() === "Floor",
-        )!,
-      );
-      await vi.waitFor(() => expect(floor(el)).not.toBeNull());
-    }
     async function signIn(el: TillApp, personId: string, displayName: string) {
       el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
         new CustomEvent("logged-in", {
@@ -2069,8 +2070,7 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(sendAll().disabled).toBe(false));
       sendAll().click();
       await vi.waitFor(() => expect(drafts.submitDraft.mock.calls.length).toBe(sent + 1));
-      await vi.waitFor(() => expect(orderScreen(el)).toBeNull());
-      await vi.waitFor(() => expect(floor(el)).not.toBeNull());
+      await tapFloor(el);
     }
 
     it("a send after signing in again comes back to the zone of the same table", async () => {
@@ -2402,7 +2402,7 @@ describe("a handheld's zones", () => {
     const tableWaiting = "Send or remove this table's unsent dishes to hide its zone.";
 
     it.each(["phone-portrait", "till"])(
-      "the table holding back a waiting narrowing can send its dishes, and sending applies it with no poll and returns to the Floor (%s)",
+      "the table holding back a waiting narrowing can send its dishes, and sending applies it with no poll, and a till returns to the Floor (%s)",
       async (formFactor) => {
         const { el, screen, drafts } = await openRoomTable(formFactor);
         await narrowToGarden(el);
@@ -2417,7 +2417,9 @@ describe("a handheld's zones", () => {
         await vi.waitFor(() => expect(drafts.submitDraft).toHaveBeenCalledOnce());
         await vi.waitFor(() => expect(waiting(el)).toBeUndefined());
         await el.updateComplete;
-        expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
+        if (formFactor === "till")
+          expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
+        else await backToFloor(el, formFactor);
         await vi.waitFor(() => expect(floor(el)?.zones.map((zone) => zone.id)).toEqual(["garden"]));
       },
     );
@@ -2985,8 +2987,9 @@ describe("a handheld's zones", () => {
       return el;
     }
 
-    /** Opens table t-room from the Floor, adds a coffee, sends it, and waits for the Sent toast. */
-    async function sendCoffee(el: TillApp): Promise<HTMLElement> {
+    /** Opens table t-room from the Floor, adds a coffee, sends it, and waits for the Sent toast; a
+     * handheld, which stays on the table, then taps Floor while the toast is up. */
+    async function sendCoffee(el: TillApp, handheld: boolean): Promise<HTMLElement> {
       floor(el).dispatchEvent(
         new CustomEvent("open-table", {
           detail: { tableId: "t-room", seated: true },
@@ -3014,9 +3017,7 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(order()!.billEdit?.draftRevision).toBe(1));
       await el.updateComplete;
       await order()!.updateComplete;
-      // A handheld sends from its Review sheet; a till from the order screen itself.
-      const review = order()!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]");
-      if (review !== null) await userEvent.click(review);
+      await showView(order()!, "order", { ifShown: true });
       const sendAll = () =>
         order()!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
           '[data-draft-action="send-all"]',
@@ -3029,6 +3030,14 @@ describe("a handheld's zones", () => {
           "wt-toast[data-submitted-toast]",
         )!;
       await vi.waitFor(() => expect(toast().open).toBe(true));
+      if (handheld) {
+        // The table's ready-dishes notice lies over the bar's Floor tab until closed.
+        const status = order()!.shadowRoot!.querySelector("till-table-status")!.shadowRoot!;
+        await userEvent.click(
+          status.querySelector("wt-toast")!.shadowRoot!.querySelector("button.close")!,
+        );
+        await tapFloor(el);
+      }
       await onReadyFloor(el);
       await el.updateComplete;
       return toast();
@@ -3041,7 +3050,7 @@ describe("a handheld's zones", () => {
       "after a send the Sent toast sits above the Ready bar, never over it (%s, %i px)",
       async (formFactor, width, height) => {
         const el = await mountSending(width, height, formFactor);
-        const toast = await sendCoffee(el);
+        const toast = await sendCoffee(el, true);
         await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
         const bar = readyBar(el)!.getBoundingClientRect();
         const box = toast.getBoundingClientRect();
@@ -3058,7 +3067,7 @@ describe("a handheld's zones", () => {
       "on a till, which draws no bar, the Sent toast keeps its place (%i px)",
       async (width, height) => {
         const el = await mountSending(width, height, "till");
-        const toast = await sendCoffee(el);
+        const toast = await sendCoffee(el, false);
         expect(readyBar(el)).toBeNull();
         expect(toast.getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight - oneLine(), 0);
       },

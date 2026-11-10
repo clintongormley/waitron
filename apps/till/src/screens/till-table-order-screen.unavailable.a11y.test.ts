@@ -10,6 +10,7 @@ import {
   openDraftLine,
   products,
   resized,
+  showView,
 } from "./till-table-order-screen.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
@@ -69,9 +70,9 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations on Review at phone width, once a line is kept", async () => {
+    it("has no violations on Order at phone width, once a line is kept", async () => {
       const { el, host } = await flaggedDraft("390px");
-      el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      await showView(el, "order", { scripted: true });
       await settled(el);
       const picker = await openDraftLine(el, 0);
       el.shadowRoot!.querySelector<HTMLElement>('[data-flag-keep="0"]')!.click();

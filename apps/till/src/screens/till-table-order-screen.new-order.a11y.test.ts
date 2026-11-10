@@ -5,7 +5,7 @@ import type { OrderGroup } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { beer, flan, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 afterEach(async () => {
@@ -71,10 +71,7 @@ describe.each(["en", "es"] as const)("New order %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      if (width < 1280) {
-        await userEvent.click(el.shadowRoot!.querySelector<WtButton>("[data-review-open]")!);
-        await el.updateComplete;
-      }
+      if (width < 1280) await showView(el, "order");
       expect(window.innerWidth).toBe(width);
       const pane = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-pane]")!;
       expect(pane.checkVisibility()).toBe(true);

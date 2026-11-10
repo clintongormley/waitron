@@ -5,7 +5,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, menuOf, resized } from "./till-table-order-screen.test-helpers.js";
+import { beer, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
 import {
   current,
   currentGroup,
@@ -81,10 +81,7 @@ describe.each(["en", "es"] as const)("bill panel total in %s", (locale) => {
         );
         host.style.width = "100%";
         await resized(el);
-        if (width < 1280) {
-          await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
-          await el.updateComplete;
-        }
+        if (width < 1280) await showView(el, "order");
         const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
         await panel.updateComplete;
         for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {

@@ -5,7 +5,7 @@ import type { WtButton, WtDialog } from "@waitron/ui";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { beer, flan, mount, store } from "./till-table-order-screen.test-helpers.js";
+import { beer, flan, mount, showView, store } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 const held = (id: string, position: number, displayNumber: number): OrderGroup => ({
@@ -31,10 +31,6 @@ const dish = (name: string, courseId: string | null = null) => ({
   name,
   courseId,
 });
-async function openReview(el: TillTableOrderScreen) {
-  root(el).querySelector<HTMLElement>("[data-review-open]")!.click();
-  await el.updateComplete;
-}
 const root = (el: TillTableOrderScreen) => el.shadowRoot!;
 const group = (el: TillTableOrderScreen, key: string) =>
   root(el).querySelector<HTMLElement>(`[data-draft-group="${key}"]`);
@@ -59,7 +55,7 @@ describe("New order: stored placement and selection", () => {
       const draft = store(el);
       draft.addProduct(beer, "1");
       await el.updateComplete;
-      await openReview(el);
+      await showView(el, "order", { scripted: true });
       const retained = tick(el, "fire")!;
       let release: (() => void) | undefined;
       if (state === "locked") release = draft.lockEdits();
@@ -151,7 +147,7 @@ describe("New order: stored placement and selection", () => {
     await el.updateComplete;
 
     expect(tick(el, "new:1")).not.toBeNull();
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "new:1")!);
     await el.updateComplete;
     expect(tick(el, "new:1")!.getAttribute("aria-checked")).toBe("true");
@@ -179,7 +175,7 @@ describe("New order: stored placement and selection", () => {
     draft.addProduct(beer, "1");
     await el.updateComplete;
     expect(tick(el, "fire")).not.toBeNull();
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     draft.lockEdits();
     await el.updateComplete;
@@ -200,7 +196,7 @@ describe("New order: stored placement and selection", () => {
     expect(move(el)).not.toBeNull();
     expect(move(el)!.disabled).toBe(true);
     expect(move(el)!.variant).toBe("secondary");
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await el.updateComplete;
     expect(move(el)!.disabled).toBe(false);
@@ -228,7 +224,7 @@ describe("New order: stored placement and selection", () => {
     draft.setLinePlaces([1], { kind: "new", slot: 2, afterGroupId: "held" });
     draft.setLinePlaces([2], { kind: "join", groupId: "held" });
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await chooseMove(el, "new:2");
     expect(draft.lines.map((line) => line.place)).toEqual([
@@ -247,7 +243,7 @@ describe("New order: stored placement and selection", () => {
     draft.setLinePlaces([1, 2], { kind: "new", slot: 3 });
     draft.setLinePlaces([3], { kind: "new", slot: 4 });
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(root(el).querySelector<HTMLButtonElement>('[data-draft-select="0"]')!);
     await userEvent.click(root(el).querySelector<HTMLButtonElement>('[data-draft-select="1"]')!);
     await chooseMove(el, "new");
@@ -267,7 +263,7 @@ describe("New order: stored placement and selection", () => {
     draft.setLinePlaces([1], { kind: "join", groupId: "first" });
     draft.setLinePlaces([2], { kind: "new", slot: 4 });
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "new:3")!);
     await userEvent.click(tick(el, "join:first")!);
     await chooseMove(el, "new");
@@ -284,7 +280,7 @@ describe("New order: stored placement and selection", () => {
     draft.addProduct(beer, "1");
     await el.updateComplete;
     expect(move(el)).not.toBeNull();
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await userEvent.click(move(el)!);
     await el.updateComplete;
@@ -317,7 +313,7 @@ describe("New order: stored placement and selection", () => {
     draft.addProduct(flan, "1");
     draft.setLinePlaces([1], { kind: "new", slot: 2 });
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await chooseMove(el, "join:held");
     expect(draft.lines.map((line) => line.place)).toEqual([
@@ -339,7 +335,7 @@ describe("New order: stored placement and selection", () => {
     draft.setLinePlaces([0], { kind: "join", groupId: "held" });
     draft.setLinePlaces([1], { kind: "new", slot: 2, afterGroupId: "held" });
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "join:held")!);
     await chooseMove(el, "new");
     expect(draft.lines.map((line) => line.place)).toEqual([
@@ -353,7 +349,7 @@ describe("New order: stored placement and selection", () => {
     const draft = store(el);
     draft.addProduct(beer, "1");
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await userEvent.click(move(el)!);
     await el.updateComplete;
@@ -370,7 +366,7 @@ describe("New order: stored placement and selection", () => {
     const draft = store(el);
     draft.addProduct(beer, "1");
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await userEvent.click(move(el)!);
     await el.updateComplete;
@@ -398,7 +394,7 @@ describe("New order: stored placement and selection", () => {
     draft.addProduct(flan, "1");
     draft.setLinePlaces([1], { kind: "new", slot: 2 });
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await userEvent.click(move(el)!);
     await el.updateComplete;
@@ -416,7 +412,7 @@ describe("New order: stored placement and selection", () => {
     const draft = store(el);
     draft.addProduct(beer, "1");
     await el.updateComplete;
-    await openReview(el);
+    await showView(el, "order", { scripted: true });
     await userEvent.click(tick(el, "fire")!);
     await userEvent.click(move(el)!);
     await el.updateComplete;

@@ -37,7 +37,7 @@ import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
 import { productName, unitName } from "./product-name.js";
@@ -232,6 +232,31 @@ export class TillMenuBrowser extends LitElement {
         padding-inline-end: var(--wt-space-5);
       }
 
+      .in-order {
+        position: absolute;
+        inset-block-start: var(--wt-space-1);
+        inset-inline-start: var(--wt-space-1);
+        min-inline-size: var(--wt-space-5);
+        block-size: var(--wt-space-5);
+        padding-inline: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        line-height: var(--wt-space-5);
+        text-align: center;
+      }
+      /* Room for the badge is kept above the name whether or not the dish is counted, so a tile
+         never changes size when its first dish is added and its name stays centred. On a photo the
+         badge covers the photo's corner instead. */
+      .tile[data-counted]:not(:has(.thumb))::part(button) {
+        padding-block-start: calc(var(--wt-space-1) + var(--wt-space-5));
+      }
+      .in-order-words {
+        ${visuallyHiddenStyles}
+      }
+
       .label {
         display: flex;
         flex-direction: column;
@@ -376,6 +401,9 @@ export class TillMenuBrowser extends LitElement {
   @property({ attribute: false }) unfilteredServedProducts?: TillProduct[];
 
   @property({ attribute: false }) store!: WorkingOrderStore;
+
+  /** Product id → items of that dish in the New order; a tile with a number above 0 shows it. */
+  @property({ attribute: false }) inOrder?: ReadonlyMap<string, number>;
 
   /** Whether it shows the menu's Handheld display rather than its Till one. */
   @property({ type: Boolean }) handheld = false;
@@ -637,6 +665,7 @@ export class TillMenuBrowser extends LitElement {
     const marked =
       Object.keys(product.allergens ?? {}).length > 0 ||
       nutritionDietLabels(product.diet, product.dietaryDeclarations).length > 0;
+    const inOrder = this.inOrder?.get(product.id) ?? 0;
     return html`<wt-button
       class="tile"
       data-kind="product"
@@ -645,6 +674,8 @@ export class TillMenuBrowser extends LitElement {
       ?data-sold-out=${!sellable}
       ?disabled=${!sellable}
       ?data-nutrition=${marked}
+      ?data-counted=${this.inOrder !== undefined}
+      ?data-in-order=${inOrder > 0}
       @contextmenu=${(event: Event) => event.preventDefault()}
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
@@ -662,6 +693,11 @@ export class TillMenuBrowser extends LitElement {
       }}
     >
       ${marked ? html`<wt-icon class="nutrition-mark" name="allergies"></wt-icon>` : nothing}
+      ${
+        inOrder > 0
+          ? html`<span class="in-order" data-in-order-count aria-hidden="true">${inOrder}</span>`
+          : nothing
+      }
       <span class="label">
         ${fill.kind === "image" ? thumb(fill.image) : nothing}
         <span class="name" lang=${currentContentLanguages().defaultLanguage}
@@ -669,6 +705,13 @@ export class TillMenuBrowser extends LitElement {
         >
         <span class="price">${price}</span>
         ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}
+        ${
+          inOrder > 0
+            ? html`<span class="in-order-words"
+                >, ${countText(inOrder, "order_counts.unsent", "order_counts.unsent_one")}</span
+              >`
+            : nothing
+        }
       </span>
     </wt-button>`;
   }

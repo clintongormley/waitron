@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { resized } from "./till-table-order-screen.test-helpers.js";
+import { resized, showView } from "./till-table-order-screen.test-helpers.js";
 import {
   current,
   currentGroup,
@@ -65,11 +65,7 @@ describe.each(["en", "es"] as const)("Sent paid facts %s", (locale) => {
         host.style.width = "100%";
         await resized(el);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        const review = q("[data-review-open]");
-        if (review?.checkVisibility()) {
-          await userEvent.click(review);
-          await el.updateComplete;
-        }
+        await showView(el, "order", { ifShown: true });
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;
         for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {
