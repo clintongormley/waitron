@@ -26,7 +26,7 @@ for name in app print-agent mailpit; do
 done | jq -s 'from_entries' >/run/waitron-images.json
 services="$(docker inspect $(docker compose ps -q) | jq -c 'map({key:.Config.Labels["com.docker.compose.service"],value:.State.Status})|from_entries')"
 areas="$(findmnt -rn -t btrfs -o FSROOT | sed 's|^/||;s|/.*||' | sort -u | jq -Rsc 'split("\n") | map(select(length > 0))')"
-layout="$(sfdisk --json "/dev/$(lsblk -nro PKNAME "$backing")")"
+layout="$(sfdisk --json "/dev/$(lsblk -dnro PKNAME "$backing")")"
 partitions="$(jq -c '.partitiontable | .sectorsize as $sector | [.partitions[].size * $sector]' <<< "$layout")"
 data_partition="$(jq -c '.partitiontable.partitions[2] | {type,name}' <<< "$layout")"
 header="$(LC_ALL=C cryptsetup luksDump "$backing")"

@@ -18,14 +18,19 @@ case "$name" in
   */product_name) echo "\${DMI:-Waitron-B3-dev}" ;;
   */waitron-dev-root) echo installed-root ;;
   */waitron-dev-luks) echo installed-luks ;;
+  */waitron-status.json|*/waitron-images.json) /bin/cat "$@" ;;
   *) echo machine-a ;; esac ;;
  findmnt)
   if [[ "$*" == *SOURCE* ]]; then echo '/dev/mapper/luks-installed-luks[/@rootfs]'
+  elif [[ "$*" == *FSROOT* ]]; then printf '/@rootfs\n/@images\n/@volumes\n/@logs\n/@host-state\n'
   else echo "\${ROOT_UUID:-wrong-root}"; fi ;;
  readlink) [ "$*" = "-f /run/systemd/volatile-root" ] || exit 99; echo "\${SOURCE_ROOT:-/dev/vda2}" ;;
  lsblk)
   if [[ "$*" == *MOUNTPOINTS* ]]; then echo "\${MOUNTED:-}"
-  elif [[ "$*" == *PKNAME* ]]; then [[ "\${!#}" == "\${SOURCE_ROOT:-/dev/vda2}" ]] || exit 99; echo "\${SOURCE_PARENT:-vda}"
+  elif [[ "$*" == *PKNAME* ]]; then
+   if [ "\${!#}" = /dev/vda3 ]; then
+    if [[ "$*" == *-d* ]]; then echo vda; else printf 'vda\nvda3\n'; fi
+   else [[ "\${!#}" == "\${SOURCE_ROOT:-/dev/vda2}" ]] || exit 99; echo "\${SOURCE_PARENT:-vda}"; fi
   elif [[ "$*" == *SERIAL* && "$*" != *json* ]]; then echo "\${SERIAL:-waitron-dev-target}"
   else printf '%s\n' "$DISKS"; fi ;;
  ls) echo "\${HOLDERS:-}" ;;
@@ -38,12 +43,29 @@ case "$name" in
   echo "curl $*" >> "$WRITES"
   if [[ "$*" == */health ]]; then exit 0; fi
   code="\${SETUP_HTTP:-404}"
+  if [ "$code" = 200 ]; then
+   for ((i=1; i<=$#; i++)); do
+    if [ "\${!i}" = -o ]; then ((i+=1)); printf '%s' "$API_STATUS" > "\${!i}"; fi
+   done
+  fi
   if [[ "$*" == *http_code* ]]; then printf '%s' "$code"; fi
   if [[ "$1" == *f* && "$code" != 200 ]]; then exit 22; fi ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
- docker) echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"; exit "\${DOCKER_EXIT:-43}" ;;
+ docker)
+  echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"
+  [ "\${DOCKER_EXIT:-43}" = 0 ] || exit "\${DOCKER_EXIT:-43}"
+  case "$*" in
+   'compose config --format json') echo '{"services":{"app":{"image":"app"},"print-agent":{"image":"agent"},"mailpit":{"image":"mailpit"}}}' ;;
+   'image inspect '*) echo "sha256:$3" ;;
+   'compose ps -q') echo containers ;;
+   'inspect '*) echo '[{"Config":{"Labels":{"com.docker.compose.service":"app"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"print-agent"}},"State":{"Status":"running"}},{"Config":{"Labels":{"com.docker.compose.service":"mailpit"}},"State":{"Status":"running"}}]' ;;
+  esac ;;
  sfdisk)
+  if [ "$1" = --json ]; then
+   [ "$2" = /dev/vda ] || { printf 'sfdisk parent: <%s>\n' "$2" >&2; exit 17; }
+   printf '%s\n' "$PARTITION_JSON"; exit 0
+  fi
   echo "$*" >> "$WRITES"
   if [ "\${PARTITION_EXIT:-42}" = 0 ]; then /bin/cat > "$LAYOUT_FILE"; fi
   exit "\${PARTITION_EXIT:-42}" ;;
@@ -55,12 +77,14 @@ case "$name" in
    echo '  device: /dev/vda3'; exit "\${CRYPT_STATUS:-0}"
   fi
   if [ "$1" = luksUUID ]; then echo "\${LUKS_UUID:-installed-luks}"; exit 0; fi
+  if [ "$1" = luksDump ]; then printf 'Version: 2\nSubsystem: waitron-box-1\n'; exit 0; fi
   echo "cryptsetup $*" >> "$WRITES"
   for ((i=1; i<=$#; i++)); do
    if [ "\${!i}" = --key-file ]; then ((i+=1)); [ -f "\${!i}" ] && [ ! -s "\${!i}" ] || exit 95; fi
   done
   if [[ "$*" == *luksFormat* ]]; then exit "\${FORMAT_EXIT:-0}"; fi ;;
  mkfs.btrfs) echo "btrfs $*" >> "$WRITES"; exit 44 ;;
+ sync) : ;;
  *) echo "unexpected $name $*" >&2; exit 99 ;;
 esac
 `,
@@ -86,6 +110,7 @@ for (const name of [
   "umount",
   "cryptsetup",
   "mkfs.btrfs",
+  "sync",
 ])
   symlinkSync(stub, join(scratch, name));
 const disk = (path = "/dev/vdb", serial = "waitron-dev-target") => ({
@@ -275,4 +300,56 @@ describe("installed startup", () => {
       expect(readFileSync(writes, "utf8")).toBe("");
     },
   );
+  it("reports the direct backing disk when the opened mapper is its child", () => {
+    const script = join(scratch, "full-start.sh");
+    writeFileSync(
+      script,
+      readFileSync(resolve("deploy/box/start-dev.sh"), "utf8").replaceAll(
+        "/run/waitron-",
+        `${scratch}/waitron-`,
+      ),
+    );
+    const writes = join(scratch, "evidence-calls");
+    writeFileSync(writes, "");
+    const result = spawnSync("bash", [script], {
+      env: {
+        ...process.env,
+        PATH: `${scratch}:${process.env.PATH}`,
+        ROOT_UUID: "installed-root",
+        BASH_ENV: bashEnv,
+        B3_TEST_CWD: scratch,
+        WRITES: writes,
+        DOCKER_EXIT: "0",
+        SETUP_HTTP: "200",
+        API_STATUS: JSON.stringify({
+          provisioned: false,
+          environment: "preproduction",
+          installationOrigin: "usb",
+          needs: ["venue"],
+        }),
+        PARTITION_JSON: JSON.stringify({
+          partitiontable: {
+            sectorsize: 512,
+            partitions: [
+              { size: 1048576 },
+              { size: 2097152 },
+              { size: 22016000, type: "A8AAEA61-BAEF-47F4-9CFF-C4C967EE12C7", name: "waitron-box" },
+            ],
+          },
+        }),
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    const evidence = JSON.parse(result.stdout.trim().slice("B3_INSTALLED:".length));
+    expect(evidence).toMatchObject({
+      luksUuid: "installed-luks",
+      luksVersion: "2",
+      luksSubsystem: "waitron-box-1",
+      dataPartition: { type: "A8AAEA61-BAEF-47F4-9CFF-C4C967EE12C7", name: "waitron-box" },
+      partitionBytes: [536870912, 1073741824, 11272192000],
+    });
+  });
 });
