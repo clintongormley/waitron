@@ -692,7 +692,7 @@ describe("POST /management-api/session (email login)", () => {
     await seedManager(suspendedEmail, "suspended");
     const twoStepEmail = `${unique("two-step")}@x.com`;
     const twoStepId = await seedManager(twoStepEmail, "active");
-    const secret = await enrolAuthenticator(suite.db, twoStepId, PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(suite.db, twoStepId, TOTP_KEY_RING);
 
     const causes: Record<string, Record<string, unknown>> = {
       unknown: { email: `${unique("ghost")}@x.com`, password: PASSWORD },

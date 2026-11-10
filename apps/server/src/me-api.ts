@@ -310,7 +310,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           keyRing: credentialKeyRing,
         }),
         finishOwnTotpEnrollment,
-        false,
       );
       return c.json(result);
     }),

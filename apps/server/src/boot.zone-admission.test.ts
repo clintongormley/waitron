@@ -469,7 +469,7 @@ describe("startup zone admission", () => {
   );
   it("retains MFA before issuing a new session in repair mode", async () => {
     await rawZone("Invalid/Zone");
-    const secret = await enrolAuthenticator(suite.db, manager, PASSWORD, {
+    const secret = await enrolAuthenticator(suite.db, manager, {
       current: { version: 1, key: accountPurposeKey(Buffer.alloc(32, 11), "totp") },
     });
     const before = (await suite.db.select().from(managementSessions)).length;

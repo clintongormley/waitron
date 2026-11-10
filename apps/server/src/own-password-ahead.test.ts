@@ -52,6 +52,35 @@ async function lastSeenAt(token: string): Promise<string | undefined> {
 }
 
 describe("ownPasswordChanges", () => {
+  it("counts refused authenticator codes when the action checks no password", async () => {
+    const { token } = await openManagementSession(suite.db);
+    const { throttle, outcomes } = recordingThrottle();
+    const change = ownPasswordChanges(suite.db, throttle);
+    const codes: string[] = [];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      codes.push(
+        await codeOf(() =>
+          change(
+            token,
+            () => ({}),
+            async () => {
+              throw new AppError("totp.invalid", {});
+            },
+            false,
+          ),
+        ),
+      );
+    }
+    expect(codes).toEqual([
+      "totp.invalid",
+      "totp.invalid",
+      "totp.invalid",
+      "totp.invalid",
+      "password.throttled",
+    ]);
+    expect(outcomes).toEqual(["invalid", "invalid", "invalid", "invalid"]);
+  });
+
   it("leaves the session's last-seen time alone when the change it checked the password for is refused", async () => {
     const { personId, token } = await openManagementSession(suite.db);
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();

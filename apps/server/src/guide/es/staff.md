@@ -49,8 +49,8 @@ dos pasos.
 
 Estos cambios usan la misma confirmación de 15 minutos que las otras acciones protegidas. Si usas
 un autenticador, introduce su código actual para cada cambio de acceso; un código de recuperación
-no lo sustituye. Puedes crear una contraseña con **Añadir** aunque normalmente accedas con una
-passkey o Google.
+no lo sustituye. Puedes crear una contraseña con **Añadir** si normalmente accedes con una
+passkey.
 
 También puedes cambiar tu nombre, nombre visible, teléfono e idioma, y vincular Google en **Seguridad** si está disponible.
 

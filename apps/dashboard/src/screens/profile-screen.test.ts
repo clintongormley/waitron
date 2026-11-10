@@ -296,21 +296,23 @@ describe("your profile", () => {
     expect(modal.open).toBe(true);
     expect(modal.heading).toBe(t("profile.remove_passkey"));
   });
-  it("lets a passwordless account set a password through confirmation", async () => {
-    const { el, api, host } = await mount({
+  it("keeps the reset-password hint for a Google-only account that cannot confirm", async () => {
+    const { el } = await mount({
       getProfile: vi.fn().mockResolvedValue({
-        displayName: "Alex",
-        firstNames: "Alex",
-        lastNames: "Rivera",
-        telephone: null,
-        email: "alex@example.com",
-        pendingEmail: null,
-        locale: "en-GB",
+        ...(await apiStub().getProfile()),
         hasPassword: false,
-        hasTotp: false,
-        hasGoogle: false,
+        hasGoogle: true,
         passkeys: [],
       }),
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=change-password]")).toBeNull();
+    expect(el.shadowRoot!.textContent).toContain(t("profile.password_recovery"));
+  });
+  it("lets a passwordless account set a password through confirmation", async () => {
+    const { el, api, host } = await mount({
+      getProfile: vi
+        .fn()
+        .mockResolvedValue({ ...(await apiStub().getProfile()), hasPassword: false }),
     });
     expect(el.shadowRoot!.querySelector('[data-test="change-password"]')).not.toBeNull();
 

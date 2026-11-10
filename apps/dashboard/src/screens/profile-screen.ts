@@ -911,15 +911,20 @@ export class ProfileScreen extends LitElement {
           <div class="action-row">
             <div class="text">
               <span class="field-value">${t("login.password")}</span>
+              ${!p.hasPassword && p.passkeys.length === 0 ? html`<span class="field-meta">${t("profile.password_recovery")}</span>` : nothing}
             </div>
-            <wt-button
-              data-test="change-password"
-              class="card-action accent-primary"
-              aria-label=${t(p.hasPassword ? "profile.change_password" : "profile.add_password")}
-              ?disabled=${this.busy}
-              @click=${() => this.#edit("password")}
-              >${t(p.hasPassword ? "action.change" : "action.add")}</wt-button
-            >
+            ${
+              p.hasPassword || p.passkeys.length > 0
+                ? html`<wt-button
+                    data-test="change-password"
+                    class="card-action accent-primary"
+                    aria-label=${t(p.hasPassword ? "profile.change_password" : "profile.add_password")}
+                    ?disabled=${this.busy}
+                    @click=${() => this.#edit("password")}
+                    >${t(p.hasPassword ? "action.change" : "action.add")}</wt-button
+                  >`
+                : nothing
+            }
           </div>
           <div class="action-row">
             <span class="field-value">${t("person.pin")}</span>

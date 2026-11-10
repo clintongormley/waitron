@@ -12,7 +12,6 @@ import { generateSync } from "otplib";
 export async function enrolAuthenticator(
   db: Database,
   personId: string,
-  _password: string,
   keyRing: TotpKeyRing,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {

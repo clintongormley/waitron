@@ -14,6 +14,7 @@ import {
   hashSessionToken,
   persons,
   verifyPin,
+  verifyPassword,
   webauthnCredentials,
 } from "@waitron/identity";
 import {
@@ -1155,11 +1156,14 @@ describe("mountMeApi — own credentials and second factor", () => {
     },
   );
 
-  it("reuses one confirmation for a passwordless person's PIN and Google changes", async () => {
+  it("reuses one confirmation for a passwordless person's PIN and password changes", async () => {
     const personId = await personWithPassword({
       passwordHash: null,
-      googleSubject: "passwordless-window",
     });
+    const keyId = crypto.randomUUID();
+    await suite.db
+      .insert(webauthnCredentials)
+      .values({ id: keyId, personId, credentialId: keyId, publicKey: "public" });
     const cookie = await cookieFor(personId);
     const app = mountApp();
     const pin = await send(app, "PUT", "/management-api/session/me/pin", {
@@ -1168,12 +1172,14 @@ describe("mountMeApi — own credentials and second factor", () => {
     });
     expect(pin.status).toBe(204);
     expect(await verifyPin("8642", (await personRow(personId)).pinHash!)).toBe(true);
-    const google = await send(app, "DELETE", "/management-api/session/me/google", {
+    const password = await send(app, "PUT", "/management-api/session/me/password", {
       cookie,
-      body: {},
+      body: { password: "replacement password" },
     });
-    expect(google.status).toBe(204);
-    expect((await personRow(personId)).googleSubject).toBeNull();
+    expect(password.status).toBe(204);
+    expect(
+      await verifyPassword("replacement password", (await personRow(personId)).passwordHash!),
+    ).toBe(true);
   });
 
   it("refuses an email change on a spare but still saves other profile details", async () => {

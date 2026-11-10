@@ -141,12 +141,12 @@ printer keys.
     show that, and when, an unknown-address request happened — not for which address, since the
     row's values are taken from no part of the address (read from the code, not measured).
 
-## The profile's "Current password" fills the signed-in person's saved password (C98, #934) — still open:
+## Password-manager autofill in the confirmation window (C98, #934) — still open:
 
 The sign-in page keeps its three inline copies of the hidden username field
   (`apps/dashboard/src/screens/login-screen.ts`); moving them onto the `autofillUsername` helper
   (`apps/dashboard/src/widgets/autofill-username.ts`) needs at least a `name` parameter (the
-  sign-in page's tests pin `email`; the profile's field is named `username`), the
+  sign-in page's tests pin `email`; the confirmation window's field is named `username`), the
   `data-autofill-username` hook those tests find the field by, and a decision about an empty email,
   for which the helper renders nothing while the sign-in copies always render. Also unknown: which
   browser and address the owner saw the empty field in. The payments screen's manager-PIN prompt
@@ -393,9 +393,8 @@ plans to retire the editor.
   in screenshots on a desktop browser; nobody has walked it on the real box or a phone, so the
   narrow-viewport banner and drawer are unverified. That walk belongs with the display walkthrough
   in [ui-review.md](../ui-review.md).
-- **The profile's "Current password" fills the signed-in person's saved password (C98, #934) — still
-  open:**
-  [Detail](dashboard.md#the-profiles-current-password-fills-the-signed-in-persons-saved-password-c98-934--still-open)
+- **Password-manager autofill in the confirmation window (C98, #934) — still open:**
+  [Detail](dashboard.md#password-manager-autofill-in-the-confirmation-window-c98-934--still-open)
 - **A new passkey is listed under the person's email, with their name as its display name (C99,
   #939) — still open:** the result has not yet been seen in a password manager.
   [Detail](dashboard.md#a-new-passkey-is-listed-under-the-persons-email-with-their-name-as-its-display-name-c99-939--still-open)

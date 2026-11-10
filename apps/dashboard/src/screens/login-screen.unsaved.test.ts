@@ -74,6 +74,7 @@ async function mount(
       return { personId: "p1", authenticated: false };
     },
     requestPasswordReset: async () => undefined,
+    confirmFreshSignIn: async () => undefined,
     passkeyOfferSeen: async () => undefined,
     beginGoogleLogin: async () => ({ authorizationUrl: "https://accounts.example.test/login" }),
     ...overrides,

@@ -96,7 +96,7 @@ describe("POST /management-api/promote — an admin's right password while a han
 describe("POST /management-api/promote — an admin with an authenticator", () => {
   it("signs in with a correct current code and promotes", async () => {
     const personId = await seedAdmin();
-    const secret = await enrolAuthenticator(suite.db, personId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(suite.db, personId, TOTP_KEY_RING);
     const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
 
     const res = await post(appWith(run), {
@@ -110,7 +110,7 @@ describe("POST /management-api/promote — an admin with an authenticator", () =
 
   it("refuses a wrong code with 401 password.invalid and never promotes", async () => {
     const personId = await seedAdmin();
-    const secret = await enrolAuthenticator(suite.db, personId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(suite.db, personId, TOTP_KEY_RING);
     const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
 
     const res = await post(appWith(run), {
@@ -125,7 +125,7 @@ describe("POST /management-api/promote — an admin with an authenticator", () =
 
   it("answers every login that fails identically, whatever the cause, and never promotes", async () => {
     const personId = await seedAdmin();
-    const secret = await enrolAuthenticator(suite.db, personId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(suite.db, personId, TOTP_KEY_RING);
     const suspendedId = await seedAdmin("suspended");
     const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
     const app = appWith(run);

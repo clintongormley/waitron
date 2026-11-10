@@ -538,7 +538,7 @@ describe("the waiting start", () => {
     });
 
     it("an account with an authenticator is asked for its code, then carries on", async () => {
-      const secret = await enrolAuthenticator(suite.db, adminId, ADMIN.password, TOTP_KEY_RING);
+      const secret = await enrolAuthenticator(suite.db, adminId, TOTP_KEY_RING);
       const asked = await post({ ...ADMIN, ...BOTH });
       expect(asked.status).toBe(401);
       const askedPage = await asked.text();

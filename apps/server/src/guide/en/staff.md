@@ -42,7 +42,7 @@ email, password, PIN, passkeys and two-factor settings remain yours to manage.
 
 These changes use the same 15-minute confirmation as other protected actions. If you use an
 authenticator, enter its current code for each sign-in change; a recovery code cannot replace it.
-You can set a password with **Add** even if you normally sign in with a passkey or Google.
+You can set a password with **Add** if you normally sign in with a passkey.
 
 You can also change your name, display name, phone and language, and link Google in **Security** where it is available.
 

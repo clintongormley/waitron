@@ -4,27 +4,12 @@ import { isAppError } from "@waitron/shared";
 import { inTurn } from "./attempt-turns.js";
 import type { PasswordThrottle, PasswordThrottleProbe } from "./password-throttle.js";
 
-/** Whether a change checks the current password at all, given the session's person. */
-export type ChecksPassword = boolean | ((person: { email: string | null }) => boolean);
-
 type Change<I, T> = (
   tx: Transaction,
   input: I & { managementSessionId: string; checked?: SecretCheck },
 ) => Promise<T>;
 
-/**
- * Changes to the signed-in person's own account, each confirmed by their current password under
- * `throttle`, which brackets the change inside its transaction. The password's key is derived before
- * the transaction opens, so not under the write lock, and the change is handed that check with its
- * input. One person's changes take turns from the check until their transaction settles, so each is
- * checked only once the outcomes before it are counted.
- *
- * `input` is built again inside the transaction, after the session is resolved and the throttle has
- * begun, so a request it refuses is refused there in the same order as without a check. There is no
- * check, and no turn, when the change would not reach one: `input` or the session refuses, the
- * throttle would refuse, or `checksPassword` says no. A check that fails hands the change none,
- * still in turn: it refuses what it would refuse first, and otherwise derives the key itself.
- */
+/** Derive a requested password before the write lock so other writers can commit during scrypt. */
 export function ownPasswordChanges(
   db: Database,
   throttle: PasswordThrottle & PasswordThrottleProbe,
@@ -60,14 +45,13 @@ export function ownPasswordChanges(
   const toCheck = async (
     managementSessionId: string,
     input: () => object,
-    checksPassword: ChecksPassword,
+    checksPassword: boolean,
   ): Promise<{ personId: string; currentPassword?: string } | undefined> => {
     if (checksPassword === false) return undefined;
     try {
       const { currentPassword }: { currentPassword?: string } = input();
       const person = await resolveManagementSession(db, managementSessionId, { touch: false });
       if (throttle.wouldRefuse(person.personId)) return undefined;
-      if (typeof checksPassword === "function" && !checksPassword(person)) return undefined;
       return { personId: person.personId, currentPassword };
     } catch {
       return undefined;
@@ -78,7 +62,7 @@ export function ownPasswordChanges(
     managementSessionId: string,
     input: () => I,
     change: Change<I, T>,
-    checksPassword: ChecksPassword = true,
+    checksPassword: boolean = true,
   ): Promise<T> => {
     const credential = await toCheck(managementSessionId, input, checksPassword);
     if (credential === undefined) {
