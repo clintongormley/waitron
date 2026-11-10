@@ -264,16 +264,6 @@ it("a missing-database Start again, once confirmed, deletes first-setup.json and
   });
   expect(shown).toEqual({ reached: "named" });
   await startAgain({ nothingFiledOrSold: true, shown });
-  const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
-  expect(confirmations).toHaveLength(1);
-  expect(
-    JSON.parse(
-      await readFile(
-        join(f.stateDir, "first-setup-start-again-confirmations", confirmations[0]!),
-        "utf8",
-      ),
-    ),
-  ).toMatchObject({ database: "missing", shown });
   await expect(readFile(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });

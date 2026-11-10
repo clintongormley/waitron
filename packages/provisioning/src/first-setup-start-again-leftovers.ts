@@ -1,3 +1,5 @@
+import { RECOVERY_LOCK_FILE } from "@waitron/store";
+import { FIRST_SETUP_FILE } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -46,7 +48,7 @@ type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
 
 const RECORDS = "first-setup-resolutions";
-const SETUP_RECORD = "first-setup.json";
+const SETUP_RECORD = FIRST_SETUP_FILE;
 const DATABASES = ["venue.db", "node.db"] as const;
 const SIDE_PIECES = ["-wal", "-shm", "-journal"] as const;
 const LOCKS = new Set([
@@ -54,7 +56,7 @@ const LOCKS = new Set([
   "venue.lock-journal",
   "venue.holder.json",
   "migrations.lock",
-  "recovery.lock",
+  RECOVERY_LOCK_FILE,
 ]);
 const STEP = /^step-\d{6}$/;
 

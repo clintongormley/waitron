@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { MODULES_FILE } from "@waitron/store";
 import { once } from "node:events";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -95,7 +96,7 @@ function writeModuleConfigTo(
   if (stateDir === undefined || stateDir === "") return undefined;
   return async (config: ModuleConfig) => {
     const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
-    await writeFile(join(stateDir, "modules.json"), body, { mode: 0o600 });
+    await writeFile(join(stateDir, MODULES_FILE), body, { mode: 0o600 });
   };
 }
 

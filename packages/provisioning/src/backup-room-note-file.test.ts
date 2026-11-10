@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
-import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
 
 vi.mock("node:fs/promises", { spy: true });
 

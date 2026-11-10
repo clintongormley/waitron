@@ -1,13 +1,12 @@
+import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR, STREAM_RESTORE_PREFIX } from "@waitron/store";
 import { lstat, readdir, rm } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 
-export const RESTORE_STAGING_DIR = "restore-staging";
 /** Inside `RESTORE_STAGING_DIR`; each copy in it is a decrypted venue database. */
 export const STAGED_RECOVERY_DIR = "staged-recovery";
-export const STREAM_RESTORE_PREFIX = "stream-restore-";
-export const RESTORE_ENTRY_PREFIX = "restore-entry-";
+
 export const ARCHIVE_DOWNLOAD_PREFIX = "archive-download-";
 export const ARCHIVE_VALIDATE_PREFIX = "archive-validate-";
 export const RESTORE_ADMISSION_PREFIX = "restore-admission-";
@@ -70,3 +69,5 @@ async function foldersIn(dir: string, wanted: (name: string) => boolean): Promis
     return [];
   }
 }
+
+export { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR, STREAM_RESTORE_PREFIX } from "@waitron/store";

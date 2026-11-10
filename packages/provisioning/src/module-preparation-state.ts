@@ -1,3 +1,4 @@
+import { MODULE_PREPARATION_STATE_FILE } from "@waitron/store";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
@@ -25,7 +26,7 @@ type Options = GrantChecks & {
   authorize(binding: OperationBinding): Promise<void>;
   withVenueExclusion<T>(run: () => Promise<T>): Promise<T>;
 };
-const FILE_NAME = "module-preparation-state.json";
+const FILE_NAME = MODULE_PREPARATION_STATE_FILE;
 const LIMIT = 1024 * 1024;
 const MERGE_ROOM_FLOOR = 8 * 1024;
 function invalid(): never {

@@ -1,3 +1,14 @@
+import { TRADING_ENV_FILE } from "@waitron/store";
+import {
+  FIRST_SETUP_FILE,
+  FIRST_SETUP_NODE_KEY_FILE,
+  MODULES_FILE,
+  MODULE_OPERATION_PUBLIC_FILE,
+  RESET_REQUEST_FILE,
+  RESTORE_REQUEST_FILE,
+  SETUP_OPERATION_FILE,
+} from "@waitron/store";
+import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import "./errors.js";
 import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
@@ -215,9 +226,9 @@ export function createFirstSetupResolutionInspection(
         }
       };
       await directory(
-        join(options.stateDir, "first-fiscal-documents"),
+        join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR),
         "directory:state/first-fiscal-documents",
-        "first-fiscal-documents",
+        FIRST_FISCAL_DOCUMENTS_DIR,
         (name) => `state/first-fiscal-documents/${name}`,
         (name) => `first-fiscal-documents/${name}`,
       );
@@ -273,21 +284,21 @@ export function createFirstSetupResolutionInspection(
       const artifacts: FirstSetupArtifact[] = [];
       const physicalSources: (string | null)[] = [];
       for (const name of [
-        "first-setup.json",
-        "module-operation-public.json",
-        "first-setup-node-key.json",
-        "setup-operation.json",
-        "restore-request.json",
-        "reset-request.json",
-        "modules.json",
+        FIRST_SETUP_FILE,
+        MODULE_OPERATION_PUBLIC_FILE,
+        FIRST_SETUP_NODE_KEY_FILE,
+        SETUP_OPERATION_FILE,
+        RESTORE_REQUEST_FILE,
+        RESET_REQUEST_FILE,
+        MODULES_FILE,
         "cloud-replacement.json",
       ])
         artifacts.push(await artifact(options.stateDir, name));
-      artifacts.push(await artifact(options.stateDir, "trading.env", 65536, false));
+      artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
       artifacts.push(await artifact(options.venueDir, "first-setup-claim.json", 16384));
       for (const name of ["venue.db", "venue.db-wal"])
         artifacts.push(await artifact(options.venueDir, name, 128 * 1024 * 1024, false));
-      const documents = join(options.stateDir, "first-fiscal-documents");
+      const documents = join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR);
       try {
         const directory = await lstat(documents);
         if (!directory.isDirectory() || directory.isSymbolicLink())

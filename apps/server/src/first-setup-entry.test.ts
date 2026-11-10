@@ -445,7 +445,7 @@ it.each([
   "first-setup-retirement.json",
   "first-setup-workspace.json",
   "first-setup-deleting.json",
-  "first-setup-start-again-confirmations/x.json",
+  "records/choices/x.json",
 ])("cannot import retirement or current setup authority through %s", async (name) => {
   const f = await fixture();
   const { unpackBundleToDir } = await import("./state-secrets.js");

@@ -1,3 +1,8 @@
+import {
+  CONFIGURATION_IMPORT_ARTIFACT,
+  CONFIGURATION_IMPORT_FILE,
+  CONFIGURATION_IMPORT_KEY,
+} from "@waitron/store";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -5,9 +10,9 @@ import type { KeyRing } from "@waitron/credentials";
 import { writeFileAtomic } from "./fs-atomic.js";
 import { decodeConfigurationBundle, type ConfigurationBundle } from "./configuration-transfer.js";
 
-const ARTIFACT = "configuration-import.artifact";
-const KEY = "configuration-import.key";
-const MARKER = "configuration-import.json";
+const ARTIFACT = CONFIGURATION_IMPORT_ARTIFACT;
+const KEY = CONFIGURATION_IMPORT_KEY;
+const MARKER = CONFIGURATION_IMPORT_FILE;
 const KEY_AAD = Buffer.from("waitron:configuration-import:passphrase:v1", "utf8");
 
 interface WrappedPassphrase {

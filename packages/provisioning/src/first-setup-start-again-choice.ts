@@ -1,8 +1,10 @@
+import { RECORDS_DIR } from "@waitron/store";
+import { mkdirDurable } from "./fs-atomic.js";
 import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError, isUuid } from "@waitron/shared";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
-import { isCanonicalInstant } from "./first-setup-start-again-confirmation.js";
+import { isCanonicalInstant } from "./first-setup-start-again-summary.js";
 import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainEntry, StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import {
@@ -141,7 +143,10 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
       ? setAside !== null
       : !exactKeys(setAside, ["state", "venue"]) ||
         !setAsidePath(setAside.state) ||
-        !setAsidePath(setAside.venue))
+        !(
+          setAsidePath(setAside.venue) ||
+          (relative(setAside.venue) && setAside.venue.startsWith("first-setup-set-aside/"))
+        ))
   )
     return damaged();
   return {
@@ -191,6 +196,17 @@ export async function writeStartAgainChoice(
     throw new AppError("setup.attempt_invalid", {});
   }
   const stem = startAgainChoiceStem(value);
+  const records = join(stateDir, RECORDS_DIR);
+  try {
+    const parent = await lstat(records).catch((error: unknown) => {
+      if (object(error) && error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (parent !== null && !parent.isDirectory()) throw new AppError("setup.attempt_invalid", {});
+    await mkdirDurable(records, 0o700);
+  } catch {
+    throw new AppError("setup.attempt_invalid", {});
+  }
   const path = join(stateDir, START_AGAIN_CHOICES_DIR, `${stem}.json`);
   const existing = await lstat(path).then(
     () => true,

@@ -519,7 +519,11 @@ called weaker than its name, the topic file lists what it does not see.
   `<state>/backup-room-note.json` first; `waitron.sh reset` removes both together.**
   Guard: `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
   [Cost and detail](docs/developers/conventions-data.md#the-backup-room-note).
-- **Start again's confirmation and choice records and the set-aside folder are removed only by
+- **State-folder names live in `packages/store/src/state-layout.ts`, except Cloud and legacy setup
+  names awaiting their layout slices; a plain reset keeps exactly its `kept` entries.** Guard: `scripts/state-layout.test.ts`, weaker than its name: reads
+  text, and sees only a constant or a join from the state folder.
+  [Detail](docs/developers/conventions-data.md#one-state-folder-layout).
+- **Start again's choice records and the set-aside folder, in `<state>/records/`, are removed only by
   `waitron.sh reset --all`** (A1042, A1098). Guard: `scripts/start-again-records-writers.test.ts`,
   weaker than its name: reads text, never what a listed file does.
   [Cost and detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
@@ -535,7 +539,8 @@ called weaker than its name, the topic file lists what it does not see.
   checks that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
 - **A restore working folder is made only by a process that holds the venue folder from before it
-  makes it, under a name or prefix listed in `apps/server/src/restore-staging-dirs.ts`; `bootServer`
+  makes it, under a top-level name declared in `packages/store/src/state-layout.ts` or a prefix
+  listed in `apps/server/src/restore-staging-dirs.ts`; `bootServer`
   removes what that list names once it holds the venue folder.** Nothing guards it.
   [Detail](docs/developers/conventions-data.md#one-process-per-venue-folder).
 - **An open `FileHandle` ends the process when it is collected, so one a route streams also closes

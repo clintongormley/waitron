@@ -1,3 +1,4 @@
+import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
@@ -84,7 +85,7 @@ export async function needsConnectionBootstrap(
 ): Promise<boolean> {
   if (!isUnset(env.WAITRON_TLS_CERT_FILE) || !isUnset(env.WAITRON_TLS_KEY_FILE)) return false;
   let retained = false;
-  for (const path of [join(opts.stateDir, "tls"), join(opts.stateDir, "secrets.env")]) {
+  for (const path of [join(opts.stateDir, TLS_DIR), join(opts.stateDir, SECRETS_ENV_FILE)]) {
     try {
       await lstat(path);
       retained = true;

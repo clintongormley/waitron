@@ -60,7 +60,7 @@ const STATE_FILES: Record<string, string> = {
   "first-setup.json": "state",
 };
 const KEPT_STATE: Record<string, string> = {
-  "first-setup-start-again-confirmations/1-x.json": "confirmation",
+  "records/choices/1-x.json": "confirmation",
   "tls/cert.pem": "certificate",
 };
 const LOCK = /^venue\.(lock|holder)/;
@@ -110,8 +110,9 @@ const snapshot = async (roots: { venueDir: string; stateDir: string }) => ({
 async function expectOnlyKept(roots: { venueDir: string; stateDir: string }) {
   expect(Object.keys(await tree(roots.venueDir))).toEqual([]);
   expect(await tree(roots.stateDir)).toEqual({
-    "first-setup-start-again-confirmations/": "",
-    "first-setup-start-again-confirmations/1-x.json": sha("confirmation"),
+    "records/": "",
+    "records/choices/": "",
+    "records/choices/1-x.json": sha("confirmation"),
     "tls/": "",
     "tls/cert.pem": sha("certificate"),
   });
@@ -431,7 +432,7 @@ it("a marker over 1 MiB is refused setup.not_ready before anything is written", 
 });
 
 it.each([
-  ["state", "first-setup-start-again-confirmations/1-x.json"],
+  ["state", "records/choices/1-x.json"],
   ["state", "tls/cert.pem"],
   ["state", "../venue/venue.db"],
   ["venue", "venue.lock"],

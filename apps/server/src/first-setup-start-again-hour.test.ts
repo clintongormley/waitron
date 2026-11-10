@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { Hono } from "hono";
 import { Agent } from "undici";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
@@ -439,7 +439,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   }
 });
 
-it("a missing hour database starts again only once confirmed, and records the confirmation", async () => {
+it("a missing hour database starts again only once confirmed", async () => {
   const f = await fixture();
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
   const actions = createFirstSetupResolutionActions({
@@ -457,36 +457,11 @@ it("a missing hour database starts again only once confirmed, and records the co
   });
   const shown = await actions.startAgainSummary(input);
   expect(shown).toEqual(HOUR_SHOWN);
-  const at = new Date().toISOString();
-  const state = (await f.host.store.read())!;
   const pending = actions.startAgainFirstSetup({
     ...input,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
   await expect(pending).resolves.toBeUndefined();
-  const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
-  expect(confirmations).toEqual([`${Date.parse(at)}-${state.frozen.attemptId}.json`]);
-  expect(
-    JSON.parse(
-      await readFile(
-        join(f.stateDir, "first-setup-start-again-confirmations", confirmations[0]!),
-        "utf8",
-      ),
-    ),
-  ).toEqual({
-    version: 2,
-    at,
-    attemptId: state.frozen.attemptId,
-    database: "missing",
-    setupAdministrator: {
-      displayName: state.frozen.request.admin.displayName,
-      email: state.frozen.request.admin.email,
-    },
-    confirmedOn: "repair-page",
-    signedIn: false,
-    ownerGeneration: f.owner().ownerGeneration,
-    shown,
-  });
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
@@ -509,7 +484,6 @@ it("a missing hour database: a confirmed Start again with no owner goes ahead", 
       confirmMissingDatabase: { nothingFiledOrSold: true, shown: HOUR_SHOWN },
     }),
   ).resolves.toBeUndefined();
-  expect(await readdir(join(f.stateDir, "first-setup-start-again-confirmations"))).toHaveLength(1);
   await expectStartAgainDeleted(f);
 });
 

@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME } from "@waitron/store";
 import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
 import {
@@ -85,7 +86,7 @@ export async function runBreakGlassReset(deps: {
 
   const stateDir = resolveConfigDir(deps.env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   // The same resolution `config.ts` does for `venueDir`.
-  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const venueDir = resolveConfigDir(deps.env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
 
   const opened = await (deps.openDb ?? openBreakGlassVenue)(venueDir);
   try {

@@ -17,7 +17,7 @@ import { mountFirstSetupResolutionApi } from "../src/setup-first-fiscal-api.js";
 import {
   expectStartAgainDeleted,
   snapshot,
-  heldConfirmationRecords as confirmations,
+  noConfirmations,
   expectStartAgainRefused,
 } from "./start-again-deleted.js";
 import { agreeInternet, archiveForm, restoreApp } from "./hour-recovery-host.js";
@@ -144,7 +144,6 @@ async function askStartAgain(f: Held, host: Held["host"] = f.host) {
   };
 }
 
-// What Start again leaves: the anchor's lock files and the confirmation record.
 const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holder\.json$/;
 
 /** Leaves the fiscal module's recovery-key record unreadable, as a damaged disk would. */
@@ -248,10 +247,7 @@ async function expectUnreadableDeleted(
     actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
   ).resolves.toBeUndefined();
   await expectStartAgainDeleted(f.roots);
-  const records = await confirmations(f.roots.stateDir);
-  expect(records).toHaveLength(1);
-  expect(records[0]!.database).toBe("unreadable");
-  expect(records[0]!.shown).toEqual(shown);
+  await noConfirmations(f);
 }
 
 async function expectHeldRefused(f: Held, refusal: object, host: Held["host"] = f.host) {

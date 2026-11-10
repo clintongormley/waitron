@@ -1,9 +1,15 @@
+import { chooseStartAgainLeftovers } from "./first-setup-start-again-choose.js";
+import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { START_AGAIN_ADMIN, startAgainAttempt } from "../test/start-again-attempt.js";
+import {
+  START_AGAIN_ADMIN,
+  START_AGAIN_ADMIN_PASSWORD,
+  startAgainAttempt,
+} from "../test/start-again-attempt.js";
 import {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,
@@ -21,6 +27,7 @@ const dirs: string[] = [];
 async function scratch() {
   const dir = await mkdtemp(join(tmpdir(), "start-again-choice-"));
   dirs.push(dir);
+  await mkdir(join(dir, "records"));
   return dir;
 }
 afterEach(async () => {
@@ -56,7 +63,7 @@ function choice(
         },
       ],
     },
-    setAside: { state: "first-setup-set-aside/1", venue: "first-setup-set-aside/1" },
+    setAside: { state: "records/set-aside/1", venue: "records/set-aside/1" },
     ...overrides,
   };
 }
@@ -142,7 +149,7 @@ it("a damaged record for the marker refuses setup.start_again_incomplete", async
 
   const other = await scratch();
   const renamed = `1800000000000-${attemptId}.json`;
-  await mkdir(join(other, START_AGAIN_CHOICES_DIR));
+  await mkdir(join(other, START_AGAIN_CHOICES_DIR), { recursive: true });
   await writeFile(
     join(other, START_AGAIN_CHOICES_DIR, renamed),
     JSON.stringify({ version: 1, ...choice({ at: "2027-01-15T08:00:00.000Z" }) }),
@@ -206,13 +213,9 @@ it("a marker naming the choices folder, the set-aside folder or the counter is r
   }
 });
 
-it("isFirstSetupHostPath names all three", () => {
-  expect(START_AGAIN_SET_ASIDE_DIR).toBe("first-setup-set-aside");
-  for (const name of [
-    START_AGAIN_CHOICES_DIR,
-    START_AGAIN_SET_ASIDE_DIR,
-    START_AGAIN_GUESSES_FILE,
-  ]) {
+it("isFirstSetupHostPath names the records parent and the counter", () => {
+  expect(START_AGAIN_SET_ASIDE_DIR).toBe("records/set-aside");
+  for (const name of ["records", START_AGAIN_GUESSES_FILE]) {
     expect(isFirstSetupHostPath(name), name).toBe(true);
     expect(isFirstSetupHostPath(`${name}/retained/entry.json`), name).toBe(true);
     expect(isFirstSetupHostPath(`${name}-venue-copy`), name).toBe(false);
@@ -320,11 +323,11 @@ it("paths in a record stay inside their folders", async () => {
   const [unit] = choice().listed.units;
   const [entry] = unit!.entries;
   const bad: Partial<Omit<StartAgainChoiceRecord, "version">>[] = [
-    { setAside: { state: "../../etc", venue: "first-setup-set-aside/1" } },
-    { setAside: { state: "first-setup-set-aside/1", venue: "/abs" } },
-    { setAside: { state: "first-setup-set-aside/../x", venue: "first-setup-set-aside/1" } },
-    { setAside: { state: "first-setup-set-aside", venue: "first-setup-set-aside/1" } },
-    { setAside: { state: "first-setup-set-aside/1", venue: "elsewhere/1" } },
+    { setAside: { state: "../../etc", venue: "records/set-aside/1" } },
+    { setAside: { state: "records/set-aside/1", venue: "/abs" } },
+    { setAside: { state: "records/set-aside/../x", venue: "records/set-aside/1" } },
+    { setAside: { state: "records/set-aside", venue: "records/set-aside/1" } },
+    { setAside: { state: "records/set-aside/1", venue: "elsewhere/1" } },
     ...[
       { ...unit!, path: "../x" },
       { ...unit!, path: "/abs" },
@@ -340,4 +343,19 @@ it("paths in a record stay inside their folders", async () => {
       JSON.stringify(overrides),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   await expect(writeStartAgainChoice(stateDir, choice())).resolves.toBeTypeOf("string");
+});
+
+it("a Move writes its choice under records/choices and its files under records/set-aside", async () => {
+  const { roots } = await startAgainAttempt(await scratch());
+  await writeFile(join(roots.venueDir, "venue.db"), "found database");
+  const survey = await surveyStartAgainLeftovers(roots);
+  if (survey?.kind !== "choice") throw new Error("expected a choice");
+  await chooseStartAgainLeftovers({
+    roots,
+    password: START_AGAIN_ADMIN_PASSWORD,
+    choice: "move",
+    listed: survey.digest,
+    now: () => new Date("2026-10-26T10:00:00.000Z"),
+  });
+  expect((await readdir(join(roots.stateDir, "records"))).sort()).toEqual(["choices", "set-aside"]);
 });

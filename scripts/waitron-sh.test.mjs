@@ -1690,19 +1690,19 @@ describe("waitron.sh reset", () => {
 
   // Weaker than its name: under the stubbed docker it can only match the command's text. The next
   // case runs the command itself.
-  it("a plain reset's state clean-up spares the confirmation records, the choice records and the set-aside folder", () => {
+  it("a plain reset's state clean-up spares the choice records and the set-aside folder", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
     expect(composeCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
+        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name records /,
       ),
     );
   });
 
-  it("the reset's state clean-up keeps tls/ and the confirmation records and removes the rest, a leftover start-again note included", () => {
+  it("the reset's state clean-up keeps tls/ and records/ and removes the rest", () => {
     const match = readFileSync(SCRIPT, "utf8").match(
       /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
     );
@@ -1714,6 +1714,11 @@ describe("waitron.sh reset", () => {
     writeFileSync(join(state, "first-setup-start-again.json"), "{}");
     mkdirSync(join(state, "first-setup-start-again-confirmations"));
     writeFileSync(join(state, "first-setup-start-again-confirmations", "one.json"), "{}");
+    mkdirSync(join(state, "records/choices"), { recursive: true });
+    writeFileSync(join(state, "records/choices/one.json"), "{}");
+    mkdirSync(join(state, "records/set-aside/x"), { recursive: true });
+    mkdirSync(join(state, "first-setup-start-again-choices"));
+    writeFileSync(join(state, "first-setup-start-again-choices/old.json"), "{}");
     writeFileSync(join(state, "first-setup.json"), "{}");
     writeFileSync(join(state, "trading.env"), "WAITRON_ENV=preproduction\n");
     writeFileSync(join(state, ".leftover"), "x");
@@ -1723,8 +1728,8 @@ describe("waitron.sh reset", () => {
       timeout: 10_000,
     });
     expect(r.status).toBe(0);
-    expect(readdirSync(state).sort()).toEqual(["first-setup-start-again-confirmations", "tls"]);
-    expect(readdirSync(join(state, "first-setup-start-again-confirmations"))).toEqual(["one.json"]);
+    expect(readdirSync(state).sort()).toEqual(["records", "tls"]);
+    expect(readdirSync(join(state, "records/choices"))).toEqual(["one.json"]);
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
 
@@ -1737,10 +1742,10 @@ describe("waitron.sh reset", () => {
     dirs.push(state);
     mkdirSync(join(state, "tls"));
     writeFileSync(join(state, "tls", "ca.pem"), "ca");
-    mkdirSync(join(state, "first-setup-start-again-choices"));
-    writeFileSync(join(state, "first-setup-start-again-choices", "choice.json"), "{}");
-    mkdirSync(join(state, "first-setup-set-aside"));
-    writeFileSync(join(state, "first-setup-set-aside", "venue.db"), "db");
+    mkdirSync(join(state, "records/choices"), { recursive: true });
+    writeFileSync(join(state, "records/choices", "choice.json"), "{}");
+    mkdirSync(join(state, "records/set-aside"));
+    writeFileSync(join(state, "records/set-aside", "venue.db"), "db");
     writeFileSync(join(state, "first-setup-start-again-guesses.json"), "{}");
     writeFileSync(join(state, "first-setup.json"), "{}");
     const r = spawnSync("sh", ["-c", match[1]], {
@@ -1749,13 +1754,9 @@ describe("waitron.sh reset", () => {
       timeout: 10_000,
     });
     expect(r.status).toBe(0);
-    expect(readdirSync(state).sort()).toEqual([
-      "first-setup-set-aside",
-      "first-setup-start-again-choices",
-      "tls",
-    ]);
-    expect(readdirSync(join(state, "first-setup-start-again-choices"))).toEqual(["choice.json"]);
-    expect(readdirSync(join(state, "first-setup-set-aside"))).toEqual(["venue.db"]);
+    expect(readdirSync(state).sort()).toEqual(["records", "tls"]);
+    expect(readdirSync(join(state, "records/choices"))).toEqual(["choice.json"]);
+    expect(readdirSync(join(state, "records/set-aside"))).toEqual(["venue.db"]);
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
 
@@ -1921,14 +1922,14 @@ describe("waitron.sh --reset install", () => {
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
   });
 
-  it("--reset install keeps the confirmation records, the choice records and the set-aside folder too", () => {
+  it("--reset install keeps the choice records and the set-aside folder too", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
     expect(r.status).toBe(0);
     expect(loggedCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
+        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name records /,
       ),
     );
   });

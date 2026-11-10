@@ -1,3 +1,4 @@
+import { VENUE_DIR_NAME } from "@waitron/store";
 import { join, resolve } from "node:path";
 import { deploymentEnvironmentFor, resolveLogDir } from "@waitron/db";
 import type { DeploymentEnvironment } from "@waitron/db";
@@ -484,7 +485,7 @@ export function loadConfig(
     ...(isUnset(env.WAITRON_TUNNEL_CONTROL_DIR)
       ? {}
       : { tunnelControlDir: resolve(env.WAITRON_TUNNEL_CONTROL_DIR) }),
-    venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, "venue")),
+    venueDir: resolveConfigDir(env.WAITRON_VENUE_DIR, join(resolvedStateDir, VENUE_DIR_NAME)),
     // Validated at load so a typo fails boot rather than minting a certificate for it.
     boxAddresses: parseBoxAddresses(env.WAITRON_BOX_ADDRESSES),
     logDir: resolveLogDir(env, resolvedStateDir),

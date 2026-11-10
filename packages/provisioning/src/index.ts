@@ -175,13 +175,10 @@ export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
 export {
-  START_AGAIN_CONFIRMATIONS_DIR,
   isCanonicalInstant,
   startAgainSummary,
-  writeStartAgainConfirmation,
-  type StartAgainConfirmation,
   type StartAgainSummary,
-} from "./first-setup-start-again-confirmation.js";
+} from "./first-setup-start-again-summary.js";
 export {
   START_AGAIN_MARKER_FILE,
   START_AGAIN_MARKER_LIMIT,
@@ -202,9 +199,8 @@ export {
   BACKUP_ROOM_START_DELETED_FILE,
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
-  backupRoomNoteTemporaryName,
-  isBackupRoomFileName,
-} from "./spare-space-name.js";
+} from "@waitron/store";
+export { backupRoomNoteTemporaryName, isBackupRoomFileName } from "./backup-room-note-file.js";
 export { deleteBackupRoomNote } from "./backup-room-note-file.js";
 export {
   START_AGAIN_CHOICES_DIR,

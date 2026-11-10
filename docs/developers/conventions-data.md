@@ -5276,14 +5276,32 @@ trusting the installation start the [backup room note](#the-backup-room-note) ho
 full disk the database may not open: on HFS+ the store's open failed at 0 B and 4 KiB free, and a
 read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
+## One state-folder layout
+
+`packages/store/src/state-layout.ts` declares the box's top-level state names and each entry's
+plain-reset fate. Only `tls/` and `records/` are kept. The root guard reads definitions as text:
+a constant holding a complete distinctive name, or a `join` whose first argument ends in
+`stateDir`. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
+report a spare-file declaration and a TLS join, while accepting comments and format-item literals.
+
+The guard skips tests, declaration files, test fixtures, the print-agent programs and plain-Node
+`.mjs` scripts. The fl1 plan records a failed plain-Node import probe on 8 November 2026. Backup archive
+entries and handover manifest items keep their own literals because they describe a transfer
+format, not the box's current paths. A name assembled from pieces, an array or object entry, a
+join from a differently named root, or a shell path escapes this guard. The scanner can mistake
+comment-like text in a regular expression or template for a comment and hide a later definition. The fl1 review compared it with TypeScript’s parser over 2,661 files
+and found no hidden definition on candidate `bf13077098`. Cloud files remain with their owners
+until fl4; legacy setup names remain with the code that reads or refuses them until their slices.
+The separate reset case compares the shell command's retained names with the layout's kept entries.
+
 ## Start again's records and the set-aside folder
 
-Start again's confirmation and choice records and the set-aside folder survive a plain
+Start again's choice records and set-aside files, under `<state>/records/`, survive a plain
 `waitron.sh reset` and are removed only by `reset --all` (A1042, A1098; `deploy/waitron.sh`,
 `wipe_box`). Guard: `scripts/start-again-records-writers.test.ts`, weaker than its name — it reads
-which files name the confirmation folder, the choice folder or the set-aside folder as text, so a
+which files name the choice folder or the set-aside folder as text, so a
 path built from pieces escapes it, and it never sees code that empties the whole state folder
-without naming the file.
+without naming the file. A file naming only `RECORDS_DIR` or plain `records` is not seen.
 
 ## The backup room note
 
@@ -5884,8 +5902,8 @@ _2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page
 
 ### Start again records retention
 
-- **Start again's confirmation and choice records and the set-aside folder are removed only by
-  `waitron.sh reset --all`** (A1042, A1098). Cost if not: the box forgets what a person confirmed,
+- **Start again's choice records and set-aside files, under `<state>/records/`, are removed only by
+  `waitron.sh reset --all`** (A1042, A1098). Cost if not: the box forgets a Keep or Move choice,
   or deletes files a Move set aside. Guard: `scripts/start-again-records-writers.test.ts`, weaker
   than its name: reads text, never what a listed file does.
   [Detail](conventions-data.md#start-agains-records-and-the-set-aside-folder).

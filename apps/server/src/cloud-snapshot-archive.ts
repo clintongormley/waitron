@@ -1,3 +1,4 @@
+import { CLOUD_SNAPSHOTS_DIR } from "@waitron/store";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database, NodeDatabase } from "@waitron/db";
@@ -26,7 +27,7 @@ export async function createCloudSnapshotArchive(
   signal: AbortSignal,
 ): Promise<{ bytes: Uint8Array; modules: Record<string, number> }> {
   signal.throwIfAborted();
-  const staging = join(deps.stateDir, "cloud-snapshots", "staging"),
+  const staging = join(deps.stateDir, CLOUD_SNAPSHOTS_DIR, "staging"),
     path = join(staging, "venue.db");
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true, mode: 0o700 });

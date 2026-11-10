@@ -1,4 +1,4 @@
-import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { Agent } from "undici";
@@ -136,9 +136,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       origin = `https://127.0.0.1:${child.port}`;
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
-      expect(await readdir(join(f.stateDir, "first-setup-start-again-confirmations"))).toHaveLength(
-        1,
-      );
       await expect(stat(join(f.stateDir, "first-setup.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });

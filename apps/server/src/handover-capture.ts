@@ -1,3 +1,4 @@
+import { HANDOVER_DIR } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
@@ -59,7 +60,7 @@ export function journalDigest(hashes: readonly string[]): string {
 
 /** Where a stepped-down box keeps the final copy of venue.db its indicator describes. */
 export function finalCopyPath(stateDir: string, operationId: string): string {
-  return join(stateDir, "handover", operationId, "venue.db");
+  return join(stateDir, HANDOVER_DIR, operationId, "venue.db");
 }
 
 const JOURNAL_TABLE = /^__drizzle_migrations_[a-z_]+$/;

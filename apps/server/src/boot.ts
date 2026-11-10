@@ -1,3 +1,4 @@
+import { SECRETS_ENV_FILE } from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -1360,7 +1361,7 @@ async function bootServer(
     // `ensureBoxSecrets` wrote the vault key into `secrets.env` but did not load it into this
     // process's env, so the setup ring is read back off disk.
     const ring = loadKeyRing(
-      parseEnvFile(readFileSync(join(config.stateDir, "secrets.env"), "utf8")),
+      parseEnvFile(readFileSync(join(config.stateDir, SECRETS_ENV_FILE), "utf8")),
     );
     setupKeyRing = ring;
     const accountKey = resolveAccountKey({}, ring);

@@ -1,3 +1,4 @@
+import { TRADING_ENV_FILE } from "@waitron/store";
 import { rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
@@ -9,7 +10,6 @@ import { unpackBundleToDir } from "./state-secrets.js";
 import "./errors.js";
 
 const SECRETS_PREFIX = "secrets/";
-const TRADING_ENV_FILE = "trading.env";
 
 export const STAGED_SECRET_SUFFIX = ".incoming";
 /** Not `.previous`: the certificate reissue keeps its own `tls/server.crt.previous`

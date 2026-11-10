@@ -1,10 +1,10 @@
+import { FIRST_SETUP_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { isDeepStrictEqual } from "node:util";
 import {
   assertNoLegacyFirstSetupWorkspace,
   readFirstSetupRecoveryDeliverySnapshot,
   startAgainSummary,
-  writeStartAgainConfirmation,
   assertStartAgainAllowedOnDisk,
   clearStartAgainMarker,
   deleteMarkedAttempt,
@@ -151,7 +151,7 @@ async function presentAttemptEligibility(
 ) {
   const noOtherHistory = inspection.artifacts.every(
     (artifact) =>
-      ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
+      [FIRST_SETUP_FILE, "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
         artifact.name,
       ) ||
       (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
@@ -430,19 +430,6 @@ export function createFirstSetupResolutionActions(
             !isDeepStrictEqual(request.confirmUnreadableDatabase?.shown, shown)
           )
             conflict();
-          // A damaged database's confirmation is recorded every time: an earlier record may
-          // describe the database before it was damaged.
-          if (missing || databaseUnreadable) {
-            const { displayName, email } = state.frozen.request.admin;
-            await writeStartAgainConfirmation(box.stateDir, {
-              at: new Date().toISOString(),
-              attemptId: state.frozen.attemptId,
-              database: missing ? "missing" : "unreadable",
-              setupAdministrator: { displayName, email },
-              ownerGeneration: state.ownerGeneration,
-              shown: shown!,
-            });
-          }
           await writeStartAgainMarker(box, marker);
           try {
             await deleteMarkedAttempt(box, marker, options.remove);

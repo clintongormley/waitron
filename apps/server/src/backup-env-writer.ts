@@ -1,3 +1,4 @@
+import { BACKUP_ENV_FILE } from "@waitron/store";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
@@ -32,7 +33,7 @@ export async function writeRecoveryKey(
   stateDir: string,
   input: { recoveryKey: string; keyRotatedAt: string | undefined },
 ): Promise<void> {
-  const path = join(stateDir, "backup.env");
+  const path = join(stateDir, BACKUP_ENV_FILE);
   let existing: Record<string, string> = {};
   try {
     existing = parseEnvFile(await readFile(path, "utf8"));

@@ -752,7 +752,7 @@ it.each(MODES)(
     });
     expect(answer.status).toBe(200);
     const [movedLead] = START_AGAIN_PAGE_TEXT["en-GB"].moved("\0").split("\0");
-    expect(answer.body).toContain(`${escapeHtml(movedLead!)}state/first-setup-set-aside/`);
+    expect(answer.body).toContain(`${escapeHtml(movedLead!)}state/records/set-aside/`);
     await vi.waitFor(() => expect(started.restart).toHaveBeenCalledOnce());
     if (mode === "supervised") expect(started.restart).toHaveBeenCalledWith(0);
     await gone(join(f.venueDir, "venue.db"));
@@ -861,7 +861,7 @@ it.each(MODES)(
 );
 
 it.each(MODES)(
-  "Move: the answer, one restart, the next start serves setup, venue.db is at state/first-setup-set-aside/<stem>/venue/venue.db with its original bytes (%s)",
+  "Move: the answer, one restart, the next start serves setup, venue.db is at state/records/set-aside/<stem>/venue/venue.db with its original bytes (%s)",
   async (mode) => {
     const f = await foundFilesBox();
     const started = await startIn(mode, f);

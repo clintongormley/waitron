@@ -1,3 +1,4 @@
+import { LOGS_DIR, VENUE_DIR_NAME } from "@waitron/store";
 import {
   httpPortFrom,
   landingConfigFrom,
@@ -337,7 +338,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     ...cleanUp,
     stateDir: deps.stateDir,
     venueDir: deps.venueDir,
-    logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+    logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
   });
 
   await deleteOldBackupsAtStart({
@@ -364,7 +365,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     {
       stateDir: deps.stateDir,
       venueDir: deps.venueDir,
-      logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+      logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
       statfs: deps.statfs,
     },
   );
@@ -413,7 +414,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       recoveryApp({
         state: fullDiskAtStart(await deps.readRecoveryState(rooted.stateDir), now()),
         uncounted: true,
-        logDir: deps.logDir ?? join(rooted.stateDir, "logs"),
+        logDir: deps.logDir ?? join(rooted.stateDir, LOGS_DIR),
         onRetry: async () => {
           await persistState(rooted, cleared);
           exit(0);
@@ -441,7 +442,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   if (admission.kind === "refused") {
-    const logDir = deps.logDir ?? join(rooted.stateDir, "logs");
+    const logDir = deps.logDir ?? join(rooted.stateDir, LOGS_DIR);
     const exit = deps.exit ?? DEFAULT_EXIT;
     const reason = admission.error.reason ?? null;
     deps.log("warn", "recovery.serving_refused_start", { errorCode: admission.code, reason });
@@ -542,7 +543,7 @@ async function runAdmittedEntry(
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
   const state = await deps.readRecoveryState(deps.stateDir);
-  const logDir = deps.logDir ?? join(deps.stateDir, "logs");
+  const logDir = deps.logDir ?? join(deps.stateDir, LOGS_DIR);
   const exit = deps.exit ?? DEFAULT_EXIT;
   const now = deps.now ?? (() => new Date());
 
@@ -729,7 +730,7 @@ function bootThisProcess(): Promise<void> {
   setVenueHolderIdentity("server", env, stateDir);
   // `loadConfig`'s own expressions for `venueDir` and `migrationsRoot`, repeated rather than read
   // through `loadConfig`, because a broken config is what lands a box here.
-  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
+  const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, VENUE_DIR_NAME));
   const migrationsRoot = isUnset(env.WAITRON_MIGRATIONS_DIR)
     ? DEFAULT_MIGRATIONS_ROOT
     : env.WAITRON_MIGRATIONS_DIR;

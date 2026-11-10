@@ -1,3 +1,4 @@
+import { FIRST_FISCAL_DOCUMENTS_DIR, FIRST_SETUP_NODE_KEY_FILE } from "@waitron/store";
 import "./errors.js";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -191,7 +192,7 @@ export async function readFirstFiscalDeliverySnapshot(
 }
 
 export function createFirstFiscalDelivery(options: Options) {
-  const root = join(options.stateDir, "first-fiscal-documents");
+  const root = join(options.stateDir, FIRST_FISCAL_DOCUMENTS_DIR);
   const grants = new Map<string, { manifest: Manifest; expires: number; bootId: string }>();
   const invalidate = (attemptId: string) => {
     for (const [key, g] of grants) if (g.manifest.attemptId === attemptId) grants.delete(key);
@@ -393,7 +394,7 @@ export function createFirstFiscalDelivery(options: Options) {
       )
         refuse();
       const stage = await readDurableHostJson(
-        join(options.stateDir, "first-setup-node-key.json"),
+        join(options.stateDir, FIRST_SETUP_NODE_KEY_FILE),
         4096,
       );
       if (!equal(stage, manifest.stage)) refuse();

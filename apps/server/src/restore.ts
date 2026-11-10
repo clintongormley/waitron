@@ -1,3 +1,5 @@
+import { TRADING_ENV_REPLACED_SUFFIX } from "@waitron/store";
+import { TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
@@ -97,9 +99,9 @@ const DB_DUMP_NAME = "db.dump";
 const NODE_DUMP_NAME = "node.dump";
 const SECRETS_PREFIX = "secrets/";
 const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
-const TRADING_ENV_FILE = "trading.env";
+
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
-const REPLACED_SUFFIX = ".replaced";
+const REPLACED_SUFFIX = TRADING_ENV_REPLACED_SUFFIX;
 const IDENTITY_KEYS = ["WAITRON_NODE_ID"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 export const INCOMING_SUFFIX = ".incoming";

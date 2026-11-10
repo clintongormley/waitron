@@ -25,7 +25,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     allowed: [
       "apps/server/src/spare-space.ts",
       "packages/provisioning/src/index.ts",
-      "packages/provisioning/src/spare-space-name.ts",
+      "packages/store/src/state-layout.ts",
     ],
   },
   {
@@ -37,7 +37,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     allowed: [
       "apps/server/src/spare-space.ts",
       "packages/provisioning/src/index.ts",
-      "packages/provisioning/src/spare-space-name.ts",
+      "packages/store/src/state-layout.ts",
     ],
   },
   {
@@ -125,7 +125,7 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
         { path: "apps/server/src/node-entry.ts", text: releases },
         { path: "apps/server/src/node-entry.ts", text: tops },
         {
-          path: "packages/provisioning/src/spare-space-name.ts",
+          path: "packages/store/src/state-layout.ts",
           text: 'export const SPARE_SPACE_FILE = "spare-space";',
         },
       ]),

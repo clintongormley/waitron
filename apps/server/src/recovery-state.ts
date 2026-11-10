@@ -1,3 +1,4 @@
+import { RECOVERY_STATE_FILE } from "@waitron/store";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { VENUE_HOLDER_KINDS, type VenueHolderKind } from "@waitron/db";
@@ -83,7 +84,7 @@ export function afterFailure(state: RecoveryState, errorCode: string, at: Date):
 export async function readRecoveryState(stateDir: string): Promise<RecoveryState> {
   let text: string;
   try {
-    text = await readFile(join(stateDir, "recovery.json"), "utf8");
+    text = await readFile(join(stateDir, RECOVERY_STATE_FILE), "utf8");
   } catch {
     return FRESH;
   }
@@ -132,7 +133,7 @@ function triggersIn(value: unknown): RefusedTriggers | undefined {
 /** 0600: it sits beside the vault key in the state volume. */
 export async function writeRecoveryState(stateDir: string, state: RecoveryState): Promise<void> {
   await writeFileAtomic(
-    join(stateDir, "recovery.json"),
+    join(stateDir, RECOVERY_STATE_FILE),
     `${JSON.stringify(state, null, 2)}\n`,
     0o600,
   );
