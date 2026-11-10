@@ -46,6 +46,8 @@ export const RESTORE_REQUEST_NODE_KEY = "restore-request.node-key";
 export const STREAM_DIR = "stream";
 export const HANDOVER_DIR = "handover";
 export const TLS_DIR = "tls";
+export const TLS_JOINED_FILE = "tls/joined.json";
+export const TLS_INSTALL_FILE = "tls/install.json";
 export const VENUE_DIR_NAME = "venue";
 export const RECORDS_DIR = "records";
 export const CLOUD_SNAPSHOTS_DIR = "cloud-snapshots";
@@ -278,7 +280,7 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     name: TLS_DIR,
     kind: "folder",
     reset: "kept",
-    why: "The box certificate survives a plain reset.",
+    why: "The box certificate survives a plain reset; on a box that joined another, the reset empties it.",
   },
   { name: VENUE_DIR_NAME, kind: "folder", reset: "deleted", why: "Holds the venue databases." },
   {

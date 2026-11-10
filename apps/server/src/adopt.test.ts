@@ -1,5 +1,7 @@
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
@@ -35,6 +37,7 @@ import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -82,7 +85,13 @@ const RESERVED: ReservedIdentity = {
 // The main box's ring, distinct from the spare's own `RING`.
 // Same version as `RING`, so opening under the wrong one fails on the key, not the version.
 const BUNDLE_RING = { key: Buffer.alloc(32, 0x6b).toString("base64"), version: 1 };
-const CA_KEY_PEM = "-----BEGIN PRIVATE KEY-----\nfake-authority\n-----END PRIVATE KEY-----\n";
+// Real, because adopt issues this box's leaf from it.
+const MAIN_AUTHORITY = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: [],
+  now: new Date(),
+});
+const CA_KEY_PEM = MAIN_AUTHORITY.caKeyPem;
 
 function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
   return {
@@ -91,7 +100,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",
     boxHostname: "waitron.local",
-    boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+    boxCaPem: MAIN_AUTHORITY.caCertPem,
     relayUrl: "https://relay.test:9000/",
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
@@ -160,6 +169,8 @@ function deps(
       extra.persistCredentialsRing ?? ((ring) => writeCredentialsRing(stateDir, ring)),
     stateDir,
     database: "mirror_db",
+    listIpv4: () => [],
+    now: () => new Date(),
   };
 }
 
@@ -575,14 +586,61 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     });
   });
 
-  it("keeps the main box's authority certificate and key as venue-ca files, 0600", async () => {
+  it("installs the main box's authority as this box's own, 0600, with a leaf it signed", async () => {
     await adoptFromPrimary(deps(), REQ, NO_HOOKS);
-    const crt = join(stateDir, "tls", "venue-ca.crt");
-    const key = join(stateDir, "tls", "venue-ca.key");
-    expect(await readFile(crt, "utf8")).toBe(makeBundle().boxCaPem);
-    expect(await readFile(key, "utf8")).toBe(CA_KEY_PEM);
-    expect((await stat(crt)).mode & 0o777).toBe(0o600);
-    expect((await stat(key)).mode & 0o777).toBe(0o600);
+    const tls = join(stateDir, "tls");
+    expect(await readFile(join(tls, "ca.crt"), "utf8")).toBe(makeBundle().boxCaPem);
+    expect(await readFile(join(tls, "ca.key"), "utf8")).toBe(CA_KEY_PEM);
+    for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
+      expect((await stat(join(tls, name))).mode & 0o777).toBe(0o600);
+    }
+    const leaf = new X509Certificate(await readFile(join(tls, "server.crt"), "utf8"));
+    expect(leaf.verify(new X509Certificate(MAIN_AUTHORITY.caCertPem).publicKey)).toBe(true);
+    expect(leaf.subjectAltName).toContain("DNS:box-aaaa.waitron.local");
+    expect(
+      leaf.checkPrivateKey(createPrivateKey(await readFile(join(tls, "server.key"), "utf8"))),
+    ).toBe(true);
+  });
+
+  it("the joined marker is written before the main box's key ring", async () => {
+    let markedWhenRingWritten: boolean | undefined;
+    await adoptFromPrimary(
+      deps({
+        persistCredentialsRing: async (ring) => {
+          markedWhenRingWritten = existsSync(join(stateDir, "tls", "joined.json"));
+          await writeCredentialsRing(stateDir, ring);
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(markedWhenRingWritten).toBe(true);
+    expect(JSON.parse(await readFile(join(stateDir, "tls", "joined.json"), "utf8"))).toEqual({
+      originNodeId: DESIGNATED.nodeId,
+    });
+  });
+
+  it("a join stopped just after the key ring was written leaves the marker", async () => {
+    // An authority key that cannot be read stops the install after the ring is written.
+    const stopped = await adoptFromPrimary(
+      deps({ fetchBundle: async () => makeBundle({ boxCaKeyPem: "not a key" }) }),
+      REQ,
+      NO_HOOKS,
+    ).catch((e: unknown) => e);
+    expect(stopped).toBeInstanceOf(Error);
+    expect(parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8"))).toMatchObject({
+      WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
+    });
+    expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(true);
+
+    // Control: a join stopped before its first write leaves no marker.
+    await rm(join(stateDir, "tls"), { recursive: true });
+    await adoptFromPrimary(deps(), REQ, {
+      beforeFirstWrite: async () => {
+        throw new Error("stopped");
+      },
+    }).catch(() => {});
+    expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(false);
   });
 
   it("pins the main box's public key", async () => {

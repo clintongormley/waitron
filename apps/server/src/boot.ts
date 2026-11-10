@@ -394,6 +394,7 @@ import {
 } from "./recovery-document-evidence.js";
 import { invoiceFontBytes } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
+import { finishTlsInstall } from "./box-tls-install.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
@@ -1177,6 +1178,7 @@ async function bootServer(
     // Only once this process holds the venue folder: a second process must not delete a running
     // process's restore working folders.
     await clearRestoreLeftovers(config.stateDir, log);
+    await finishTlsInstall(config.stateDir);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,
@@ -1616,6 +1618,8 @@ async function bootServer(
               },
               stateDir: config.stateDir,
               database: ownerDatabaseName,
+              listIpv4: boxAddresses,
+              now,
             },
             req,
             hooks,

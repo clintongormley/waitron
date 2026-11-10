@@ -39,6 +39,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 
 // No module reserves anything for the standby, so A's bundle needs no module operation.
 vi.mock("./modules.js", () => ({ ALL_MODULES: [] }));
@@ -97,14 +98,21 @@ function chartBody(term: number, nodes: MembershipDocumentBody["nodes"]): Member
   return { term, nodes };
 }
 
+// Real, because adopt issues the joining box's leaf from it.
+const MAIN_AUTHORITY = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: [],
+  now: new Date(),
+});
+
 beforeAll(async () => {
   // Box A: a stamped primary with its signing key, a recovery key and a chart naming it main box.
   const aDir = await migratedFolder("waitron-copy-a-");
   const aState = await mkdtemp(join(tmpdir(), "waitron-copy-a-state-"));
   scratch.push(aState);
   await mkdir(join(aState, "tls"));
-  await writeFile(join(aState, "tls", "ca.crt"), "public-test-ca");
-  await writeFile(join(aState, "tls", "ca.key"), "public-test-ca-key");
+  await writeFile(join(aState, "tls", "ca.crt"), MAIN_AUTHORITY.caCertPem);
+  await writeFile(join(aState, "tls", "ca.key"), MAIN_AUTHORITY.caKeyPem);
   const aStore = await openStore(aDir);
   await stampDeployment(aStore.venue, "preproduction");
   await seedVenue(aStore.venue, {
@@ -134,6 +142,8 @@ beforeAll(async () => {
       advertisedOrigin: "https://spare.test",
       environment: "preproduction",
       database: "spare",
+      listIpv4: () => [],
+      now: () => new Date(),
       stateDir: bState,
       persistTrading: async (args) => {
         bId = args.nodeId;

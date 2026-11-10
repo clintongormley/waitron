@@ -106,7 +106,7 @@ export async function writeVenueAuthority(
   await writeFileDurable(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
 }
 
-function leafIpv4s(listIpv4: () => string[]): string[] {
+export function leafIpv4s(listIpv4: () => string[]): string[] {
   return Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
 }
 

@@ -23,13 +23,14 @@ import { enabledModules, parseModuleOverrides, type ModuleConfig } from "@waitro
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
-import { keyRingEnv, writeVenueAuthority, type EncodedKeyRing } from "./box-secrets.js";
+import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
+import { installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { assertAdoptionModules, writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
-import { ownContactUrl } from "./box-name.js";
+import { BOX_HOSTNAME, boxHostnameFor, ownContactUrl } from "./box-name.js";
 import "./errors.js";
 
 export type PersistTradingArgs = TradingConfig;
@@ -51,8 +52,7 @@ export interface AdoptRequest {
 }
 
 export interface AdoptHooks {
-  /** Awaited after `adoptFromPrimary`'s own checks, immediately before `stampDeployment`, its first
-   * writing step. */
+  /** Awaited after `adoptFromPrimary`'s own checks, immediately before its first writing step. */
   beforeFirstWrite: () => Promise<void>;
 }
 
@@ -88,6 +88,9 @@ export interface AdoptDeps {
   stateDir: string;
   /** The mirror's database NAME, echoed by `provisioning.foreign_tenant`. */
   database: string;
+  /** The addresses this box's leaf names beyond 127.0.0.1, as at a setup start. */
+  listIpv4: () => string[];
+  now: () => Date;
 }
 
 /**
@@ -169,11 +172,17 @@ export async function adoptFromPrimary(
   const recovery = makeBreakGlassSecret();
 
   await hooks.beforeFirstWrite();
+  // Before the main box's ring replaces this box's, so a join stopped at any later point leaves
+  // the marker.
+  await markJoined(deps.stateDir, designated.nodeId);
   await stampDeployment(deps.ownerDb, bundle.environment);
   await deps.persistCredentialsRing(bundle.credentialsRing);
-  await writeVenueAuthority(deps.stateDir, {
-    certPem: bundle.boxCaPem,
-    keyPem: bundle.boxCaKeyPem,
+  await installVenueAuthority({
+    stateDir: deps.stateDir,
+    authority: { certPem: bundle.boxCaPem, keyPem: bundle.boxCaKeyPem },
+    hostnames: [boxHostnameFor(standby.nodeId), BOX_HOSTNAME, "localhost"],
+    listIpv4: deps.listIpv4,
+    now: deps.now,
   });
   // One transaction, so node.db never holds a mirror with no link, key or pin. The key is sealed
   // here, before finishing adoption puts its public half in venue.db, as everywhere a signing key

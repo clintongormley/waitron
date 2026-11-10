@@ -447,6 +447,8 @@ it("a refused public adoption retains its independently signed reservation witho
         advertisedOrigin: "https://spare.test",
         environment: "preproduction",
         database: "synthetic-empty-spare",
+        listIpv4: () => [],
+        now: () => new Date(),
         stateDir: adoptionDir,
         persistTrading: async () => {},
         persistModuleConfig: async () => {},

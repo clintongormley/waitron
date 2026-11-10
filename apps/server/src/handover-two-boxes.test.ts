@@ -188,6 +188,8 @@ async function joined() {
       },
       stateDir: spareState,
       database: "spare",
+      listIpv4: () => [],
+      now: () => new Date(),
     },
     {
       primaryUrl: MAIN_URL,
