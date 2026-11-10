@@ -83,11 +83,10 @@ it.each(["name", "fiscalTerritory"] as const)(
   "refuses recovery after the retained venue's %s changes",
   async (field) => {
     await fixture();
-    await withTransaction(suite.db, (tx) =>
-      field === "name"
-        ? seedVenueSettings(tx, { name: "Renamed venue" })
-        : tx.execute(sql`update locations set fiscal_territory = 'ES-common'`),
-    );
+    await withTransaction(suite.db, async (tx) => {
+      if (field === "name") await seedVenueSettings(tx, { name: "Renamed venue" });
+      else await tx.execute(sql`update locations set fiscal_territory = 'ES-common'`);
+    });
     const before = {
       venue: (await suite.db.execute(sql`select * from locations`)).rows,
       document: (await suite.db.execute(sql`select * from settings where module = 'venue'`)).rows,
