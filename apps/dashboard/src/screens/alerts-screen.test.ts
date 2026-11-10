@@ -22,7 +22,7 @@ const handled: AlertView = {
   ...open,
   key: "incident:i2",
   handledAt: "2026-09-14T13:00:00.000Z",
-  handledBy: "Marta",
+  handledBy: "Martha",
 };
 const ongoing: AlertView = {
   key: "backup.disabled:local",
@@ -131,7 +131,7 @@ describe("dashboard-alerts-screen", () => {
       params: {
         confirmationId: "c1",
         confirmedBy: "admin",
-        person: "Ana",
+        person: "Anna",
         clockAt: "2026-10-19T09:14:00.000Z",
         lastRecordAt: "2026-10-19T23:40:00.000Z",
       },
@@ -206,7 +206,7 @@ describe("dashboard-alerts-screen", () => {
       ...open,
       source: "device",
       deviceId: "d1",
-      deviceName: "Caja 1",
+      deviceName: "Till 1",
     };
     const fromFiling: AlertView = {
       ...open,
@@ -227,7 +227,7 @@ describe("dashboard-alerts-screen", () => {
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
     const [deviceRow, jobRow] = rows(el, "open-alerts-table");
-    expect(deviceRow!.textContent).toContain("Caja 1");
+    expect(deviceRow!.textContent).toContain("Till 1");
     // The area column also reads "Tax filing", so only the alert cell shows the source.
     expect(jobRow!.querySelector('[part="alert-message"]')!.textContent).toContain("· Tax filing");
     expect(jobRow!.textContent).not.toContain("fiscal_filing");
@@ -298,14 +298,14 @@ describe("dashboard-alerts-screen", () => {
     await flush(el);
     expect(location.pathname).toBe("/manage/alerts/view/handled");
     const text = rows(el, "handled-alerts-table")[0]!.textContent!;
-    expect(text).toContain("Marta");
+    expect(text).toContain("Martha");
   });
 
   it("names who handled an alert as written when the name holds a replacement pattern", async () => {
     const api = stubApi({
       listHandledAlerts: vi
         .fn()
-        .mockResolvedValue({ visible: true, alerts: [{ ...handled, handledBy: "Marta $&" }] }),
+        .mockResolvedValue({ visible: true, alerts: [{ ...handled, handledBy: "Martha $&" }] }),
     });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
@@ -315,11 +315,11 @@ describe("dashboard-alerts-screen", () => {
     )!;
     await userEvent.click(handledTab);
     await flush(el);
-    expect(rows(el, "handled-alerts-table")[0]!.textContent!).toContain("Marta $&");
+    expect(rows(el, "handled-alerts-table")[0]!.textContent!).toContain("Martha $&");
   });
 
   it("refreshes who handled an alert when a person changes", async () => {
-    const renamed: AlertView = { ...handled, handledBy: "Marta Ruiz" };
+    const renamed: AlertView = { ...handled, handledBy: "Martha Reed" };
     const api = stubApi({
       listHandledAlerts: vi
         .fn()
@@ -328,10 +328,10 @@ describe("dashboard-alerts-screen", () => {
     });
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
-    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Marta");
+    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Martha");
     api.liveData.invalidate([{ type: "persons", id: "p1" }]);
     await vi.waitFor(() =>
-      expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Marta Ruiz"),
+      expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Martha Reed"),
     );
   });
 
@@ -346,7 +346,7 @@ describe("dashboard-alerts-screen", () => {
     const nowHandled: AlertView = {
       ...open,
       handledAt: "2026-09-14T14:00:00.000Z",
-      handledBy: "Ana",
+      handledBy: "Anna",
     };
     const api = stubApi({
       listAlerts: vi
@@ -367,7 +367,7 @@ describe("dashboard-alerts-screen", () => {
     expect(api.markIncidentHandled).toHaveBeenCalledWith("i1");
     await vi.waitFor(() => expect(rows(el, "open-alerts-table")).toHaveLength(1));
     await vi.waitFor(() => expect(rows(el, "handled-alerts-table")).toHaveLength(2));
-    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Ana");
+    expect(rows(el, "handled-alerts-table")[0]!.textContent).toContain("Anna");
   });
 
   it("shows the error when marking handled fails and keeps the alert listed", async () => {

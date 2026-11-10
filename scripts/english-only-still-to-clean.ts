@@ -93,8 +93,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/widgets/allergen-choices.test.ts",
   "apps/dashboard/src/widgets/allergen-dietary-picker.test.ts",
   "apps/dashboard/src/widgets/allergen-picker.test.ts",
-  "apps/dashboard/src/widgets/attendance-export-dialog.a11y.test.ts",
-  "apps/dashboard/src/widgets/attendance-export-dialog.test.ts",
   "apps/dashboard/src/widgets/catalogue-browser.test.ts",
   "apps/dashboard/src/widgets/category-form.test.ts",
   "apps/dashboard/src/widgets/content-suggestions-bar.test.ts",

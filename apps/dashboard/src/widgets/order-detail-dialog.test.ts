@@ -17,7 +17,7 @@ const detail: OrderDetailDto = {
     orderNumber: 12,
     label: null,
     partyId: "party-1",
-    partyName: "Rosa",
+    partyName: "Rose",
     tables: ["Table 5"],
     counter: false,
     saleId: "sale-1",
@@ -39,7 +39,7 @@ const detail: OrderDetailDto = {
       quantity: "1.000",
       total: "10.00",
       listUnitPrice: "12.00",
-      creditedTo: "Ana",
+      creditedTo: "Anna",
     },
   ],
   invoices: [
@@ -48,14 +48,14 @@ const detail: OrderDetailDto = {
       number: "A/12",
       issuedAt: "2026-09-30T12:30:00Z",
       total: "30.00",
-      rungBy: "Luis",
+      rungBy: "Lewis",
     },
     {
       kind: "credit_note",
       number: "R/2",
       issuedAt: "2026-09-30T13:30:00Z",
       total: "-15.00",
-      rungBy: "Luis",
+      rungBy: "Lewis",
     },
   ],
   tenders: [{ method: "cash", amount: "10.00", tip: "1.00" }],
@@ -78,19 +78,19 @@ const detail: OrderDetailDto = {
     },
   ],
   party: {
-    name: "Rosa",
+    name: "Rose",
     guestCount: 2,
     openedAt: "2026-09-30T12:00:00Z",
     closedAt: "2026-09-30T14:00:00Z",
-    openedBy: "Ana",
-    closedBy: "Luis",
+    openedBy: "Anna",
+    closedBy: "Lewis",
     tables: ["Table 5"],
   },
   departure: {
     recordedAt: "2026-09-30T13:00:00Z",
     reason: "Forgot wallet",
-    recordedBy: "Ana",
-    authorizedBy: "Luis",
+    recordedBy: "Anna",
+    authorizedBy: "Lewis",
     amount: "30.00",
   },
   reprints: [
@@ -125,15 +125,15 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   const words = el.shadowRoot!.textContent!;
   for (const value of [
     "Soup (Large)",
-    "Ana",
+    "Anna",
     "A/12",
     "R/2",
     "Cash",
     "Wrong card",
-    "Rosa",
+    "Rose",
     "Table 5",
     "Forgot wallet",
-    "Luis",
+    "Lewis",
     "Laura",
     "Bar printer",
   ])
@@ -154,7 +154,7 @@ it.each([
         invoiceType: "F1",
         recipient: {
           taxId: "12345678Z",
-          legalName: "María Ejemplo",
+          legalName: "Mary Sample",
           countryCode: "ES",
           address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
         },
@@ -174,7 +174,7 @@ it.each([
   for (const value of [
     label,
     customer,
-    "María Ejemplo",
+    "Mary Sample",
     "12345678Z",
     "Calle Mayor 2, 28013 Madrid, Madrid, España",
   ])
@@ -265,7 +265,7 @@ it("explains payment states and an unnamed party in Spanish", async () => {
     "Devolución completada",
     "Grupo sin nombre",
     "Comensales: 2",
-    "por Luis",
+    "por Lewis",
   ])
     expect(words).toContain(value);
   expect(words).not.toContain(" · received");
@@ -385,7 +385,7 @@ it("shows a departure reason holding a later placeholder or a replacement patter
   });
   await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
   expect(el.shadowRoot!.textContent).toContain(
-    ": {recorder} $& $1. Recorded by Ana, authorised by Luis.",
+    ": {recorder} $& $1. Recorded by Anna, authorised by Lewis.",
   );
 });
 
