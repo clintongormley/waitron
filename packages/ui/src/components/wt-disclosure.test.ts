@@ -333,9 +333,9 @@ test("a validation error interrupts closing and exposes its fields immediately",
   expect(header.getAttribute("aria-expanded")).toBe("true");
   expect(body.hidden).toBe(false);
   expect(body.inert).toBe(false);
-  await settled;
   expect(body.classList.contains("animating")).toBe(false);
   expect(body.style.height).toBe("");
+  await settled;
   expect(body.getBoundingClientRect().height).toBe(200);
 });
 

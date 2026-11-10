@@ -828,7 +828,7 @@ test("the label is inset --wt-space-2 from both edges of the box, spanning above
 
 test("an intrinsic-width stepper gives a long error the available line width", async () => {
   const el = await mount('<wt-number-stepper label="Quantity" value="0"></wt-number-stepper>');
-  host.style.width = "400px";
+  host.style.width = "600px";
   const stepper = el as HTMLElementTagNameMap["wt-number-stepper"];
   stepper.error = "Choose a whole quantity between 1 and the quantity ordered";
   await stepper.updateComplete;
