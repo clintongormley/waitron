@@ -3513,7 +3513,8 @@ pnpm bench compare --before <file> --after <file>
 It prints the Node and SQLite both results were made by, then the table. For each case it takes the median of the after result's round medians. It prints `slower` if that is
 more than 10% above the before result's highest round median, `faster` if more than 10% below the
 lowest, and `same` otherwise. Two measurements of the same small build, 3 samples and 2 rounds each,
-printed in part:
+printed in part, by a compare from before results recorded Node and SQLite (today's compare prints a
+Node and SQLite line above the table):
 
 ```text
 case                 before (round medians)  after (median)  verdict
@@ -3535,13 +3536,24 @@ read what it prints, never its exit status:
 not compared: bench: the two results differ in seed: 1 against 2
 ```
 
-**Which Node and SQLite made a result.** Every result the bench writes records Node's version
-(`node`), SQLite's version (`sqlite`) and whether SQLite was built with STAT4 (`sqliteStat4`), read
-from `node:sqlite` itself, and `bench compare` refuses two results that differ in any of them. The
-same Node version can carry a different SQLite. Measured on 10 November 2026: the bench server and
-the box image's base (`node:26-slim`) both ran Node v26.13.0 with SQLite 3.54.0, built without STAT4,
-while a Homebrew Node v26.13.0 on macOS ran SQLite 3.54.1 with STAT4. So bench figures are taken on
-the bench server.
+**Which Node and SQLite made a result.** `volume.json`, every `request-timings.jsonl` line and every
+`measure` result record Node's version (`node`), SQLite's version (`sqlite`) and whether SQLite was
+built with STAT4 (`sqliteStat4`), read from `node:sqlite` itself. A resumed build's `volume.json` names the run that finished it;
+each timing line names its own day's. `bench compare` reads only `measure` results and checks them
+as above; nothing checks the build files' stamps, so read them yourself before setting two builds'
+day timings side by side.
+
+The same Node version can carry a different SQLite, so a claim about how SQLite plans a query, or
+what it was built with, is measured where `node:sqlite` reports the same SQLite and STAT4 as the box
+image's base, `node:26-slim`, not with a Mac's Homebrew Node, which links its own SQLite. This prints Node's version, SQLite's version and `1` when
+SQLite was built with STAT4:
+
+```sh
+docker run --rm --pull always node:26-slim node -e 'const {DatabaseSync}=require("node:sqlite");const d=new DatabaseSync(":memory:");console.log(process.version,d.prepare("select sqlite_version() v").get().v,d.prepare("select count(*) n from pragma_compile_options where compile_options = '"'"'ENABLE_STAT4'"'"'").get().n)'
+```
+
+On 10 November 2026 it printed `v26.13.0 3.54.0 0` (image digest `sha256:5adad64f9a1f…`), and the same script under Homebrew's Node on
+macOS printed `v26.13.0 3.54.1 1`. The bench server matched the box image's base that day.
 
 ### How a slice uses it
 

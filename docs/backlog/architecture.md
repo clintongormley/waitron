@@ -1591,8 +1591,15 @@ waiting records still took 29 s each. Instead of statistics, a read that picks a
 without them names its index with `indexed by`: the two reads of `payments` by working order
 (A1469), and the four filed-record reads of A1471 (#2711). Commands and result files: #2704 (with
 and without statistics) and the A1469 payments PR (the partial indexes). Those figures were taken on
-the bench server, whose Node and SQLite match the box image's (Node v26.13.0, SQLite 3.54.0, built
-without STAT4, so `ANALYZE` there gathers only `sqlite_stat1`); the decision stands as measured.
+the bench server. On 10 November 2026 it and the box image's base, `node:26-slim` (a floating tag),
+both ran Node v26.13.0 with SQLite 3.54.0 built without `ENABLE_STAT4`, so `ANALYZE` gathers only
+`sqlite_stat1` there and the figures compare like with like (the command is in
+[testing-guide.md](../developers/testing-guide.md#the-bench), under "Which Node and SQLite made a
+result"). On a build with STAT4 (Homebrew's Node on macOS), the watcher's scratch test that day,
+not kept, read a synthetic 360,000-row order-lines table by
+`order_id = ? or parent_line_id in (select id … where order_id = ?)`: with no statistics it used
+both indexes, and with `sqlite_stat1`, alone or with `sqlite_stat4`, it read the whole table.
+Neither the reads named above nor a read filtering on a fixed value was tested.
 
 - **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
 

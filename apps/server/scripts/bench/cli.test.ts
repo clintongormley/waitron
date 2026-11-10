@@ -10,6 +10,23 @@ import { describeRuntime, runtime } from "./runtime.js";
 
 const run = promisify(execFile);
 
+function compareResult(seed: number) {
+  return {
+    node: "v26.13.0",
+    sqlite: "3.54.0",
+    sqliteStat4: false,
+    load: "idle",
+    machine: { hostname: "bench", cpu: "M-test", cores: 8, memoryBytes: 1, platform: "darwin" },
+    commit: "0".repeat(40),
+    seed,
+    profile: { days: 2 },
+    totalRows: 1,
+    samples: 1,
+    rounds: 1,
+    cases: [],
+  };
+}
+
 const BILLS = 2;
 const STEP_TIMEOUT_MS = 90_000;
 const CASE_TIMEOUT_MS = 2 * STEP_TIMEOUT_MS + 10_000;
@@ -169,21 +186,7 @@ describe("the bench command, in a process of its own", () => {
   it("names the Node and SQLite both results were made by above the table", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wt-bench-cli-"));
     made.push(dir);
-    const result = {
-      node: "v26.13.0",
-      sqlite: "3.54.0",
-      sqliteStat4: false,
-      load: "idle",
-      machine: { hostname: "bench", cpu: "M-test", cores: 8, memoryBytes: 1, platform: "linux" },
-      commit: null,
-      seed: 1,
-      profile: { days: 2 },
-      totalRows: 1,
-      samples: 1,
-      rounds: 1,
-      cases: [],
-    };
-    writeFileSync(join(dir, "result.json"), JSON.stringify(result));
+    writeFileSync(join(dir, "result.json"), JSON.stringify(compareResult(1)));
 
     const compared = await bench(
       "compare",
@@ -202,22 +205,8 @@ describe("the bench command, in a process of its own", () => {
   it("prints why two results were not compared, and still answers 0", async () => {
     const dir = mkdtempSync(join(tmpdir(), "wt-bench-cli-"));
     made.push(dir);
-    const result = (seed: number) => ({
-      load: "idle",
-      machine: { hostname: "bench", cpu: "M-test", cores: 8, memoryBytes: 1, platform: "darwin" },
-      node: "v24.0.0",
-      sqlite: "3.54.0",
-      sqliteStat4: false,
-      commit: "0".repeat(40),
-      seed,
-      profile: { days: 2 },
-      totalRows: 1,
-      samples: 1,
-      rounds: 1,
-      cases: [],
-    });
-    writeFileSync(join(dir, "before.json"), JSON.stringify(result(1)));
-    writeFileSync(join(dir, "after.json"), JSON.stringify(result(2)));
+    writeFileSync(join(dir, "before.json"), JSON.stringify(compareResult(1)));
+    writeFileSync(join(dir, "after.json"), JSON.stringify(compareResult(2)));
 
     const compared = await benchExit(
       "compare",

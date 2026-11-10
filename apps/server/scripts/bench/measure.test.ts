@@ -122,7 +122,6 @@ describe("measureVenue", () => {
       rounds: ROUNDS,
       totalRows: volume.totalRows,
       profile: volume.profile,
-      node: process.version,
     });
     expect(result.machine.cpu).not.toBe("");
     expect(result.commit).toMatch(/^[0-9a-f]{40}$/);
