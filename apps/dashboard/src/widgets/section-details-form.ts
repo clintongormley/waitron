@@ -318,9 +318,9 @@ export class SectionDetailsForm extends LitElement {
         })}
         <dashboard-image-upload
           .draftParent=${this}
-          aria-describedby="section-image-error"
           .api=${this.api}
           .invalid=${Boolean(errors.image)}
+          .error=${errors.image ?? ""}
           .image=${this.image}
           @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
             event.stopPropagation();
@@ -333,7 +333,6 @@ export class SectionDetailsForm extends LitElement {
             this.#dismiss("image");
           }}
         ></dashboard-image-upload>
-        <span class="field-error" id="section-image-error">${errors.image ?? nothing}</span>
       </div>
       <wt-form-actions slot="footer" .error=${this.open ? bottom : ""}
         ><wt-button

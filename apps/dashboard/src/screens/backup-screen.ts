@@ -689,6 +689,7 @@ export class BackupScreen extends LitElement {
     return (
       this.submitting ||
       this.#policyHeld ||
+      this.#pastedKeyInvalid ||
       !this.savedIt ||
       this.#destinationHeld ||
       this.#effectiveKey === ""
@@ -702,7 +703,7 @@ export class BackupScreen extends LitElement {
   }
 
   get #rotateDisabled(): boolean {
-    return this.submitting || this.#rotateWaiting;
+    return this.submitting || this.#rotateWaiting || this.#pastedKeyInvalid;
   }
 
   get #saveSettingsDisabled(): boolean {
@@ -762,7 +763,7 @@ export class BackupScreen extends LitElement {
     } else if (FORM_REFUSALS.has(code)) {
       const reason = (error as { params?: { reason?: unknown } }).params?.reason;
       this.formRefusal = { code, reason: typeof reason === "string" ? reason : null };
-    } else this.errorKey = code;
+    } else this.formRefusal = { code, reason: null };
   }
 
   #buildSchedule(): BackupSchedule {
@@ -777,9 +778,14 @@ export class BackupScreen extends LitElement {
     return { kind: "wall-clock", days, at };
   }
 
+  get #pastedKeyInvalid(): boolean {
+    return this.attempted && this.advancedPaste && this.#effectiveKey.length < MIN_KEY_LENGTH;
+  }
+
   #pastedKeyTooShort(): boolean {
     if (this.advancedPaste && this.#effectiveKey.length < MIN_KEY_LENGTH) {
-      this.errorKey = "backup.recovery_key_too_short";
+      this.attempted = true;
+      this.#focusFirstInvalidBox();
       return true;
     }
     return false;
@@ -1159,7 +1165,11 @@ export class BackupScreen extends LitElement {
   }
 
   #submitOnEnter(event: KeyboardEvent): void {
-    const action = this.editSettings ? "save-settings" : "apply";
+    const action = this.editSettings
+      ? "save-settings"
+      : this.status?.enabled
+        ? "rotate-confirm"
+        : "apply";
     submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`));
   }
 
@@ -1771,6 +1781,8 @@ export class BackupScreen extends LitElement {
                 name="recovery-key"
                 label=${t("backup.key.paste_label")}
                 .value=${this.pastedKey}
+                .error=${this.#pastedKeyInvalid ? codeMessage("backup.recovery_key_too_short") : ""}
+                @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPaste(e)}
               ></wt-input>
               <p class="hint">${t("backup.key.paste_hint")}</p>`
@@ -1807,6 +1819,7 @@ export class BackupScreen extends LitElement {
         <input
           type="checkbox"
           data-test="saved-it"
+          name="saved-recovery-key"
           .checked=${this.savedIt}
           @change=${(e: Event) => (this.savedIt = (e.target as HTMLInputElement).checked)}
         />
@@ -1839,6 +1852,7 @@ export class BackupScreen extends LitElement {
                     <input
                       type="checkbox"
                       data-test="weekday-${d.n}"
+                      name="backup-weekday-${d.n}"
                       .checked=${this.weekdays.includes(d.n)}
                       @change=${() => this.#toggleWeekday(d.n)}
                     />
@@ -1870,6 +1884,7 @@ export class BackupScreen extends LitElement {
               name="at-time"
               label=${t("backup.schedule.at")}
               .value=${this.atTime}
+              @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
               @wt-change=${(e: CustomEvent<{ value: string }>) => (this.atTime = e.detail.value)}
             ></wt-input>`
           : nothing
@@ -1886,6 +1901,7 @@ export class BackupScreen extends LitElement {
   #policyBottom(): string {
     const marked =
       this.#policyHeld ||
+      this.#pastedKeyInvalid ||
       this.retentionRefused ||
       this.#destinationHeld ||
       this.folderRefused ||
@@ -1915,6 +1931,7 @@ export class BackupScreen extends LitElement {
         .increaseLabel=${increaseLabel}
         .value=${text}
         .error=${message ?? ""}
+        @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           if (box === "count") this.retainCount = e.detail.value;
           else this.retainDays = e.detail.value;
@@ -1996,13 +2013,15 @@ export class BackupScreen extends LitElement {
       <h2>${t("backup.rotate.new_title")}</h2>
       ${this.#renderKeyStep()}
 
-      <wt-button
-        variant=${this.submitting || !this.#rotateWaiting ? "primary" : "secondary"}
-        data-test="rotate-confirm"
-        ?disabled=${this.#rotateDisabled}
-        @click=${() => void this.#rotate()}
-        >${t("backup.rotate.confirm")}</wt-button
-      >
+      <wt-form-actions .error=${this.#pastedKeyInvalid ? t("form.fix_fields") : ""}>
+        <wt-button
+          variant=${this.submitting || !this.#rotateWaiting ? "primary" : "secondary"}
+          data-test="rotate-confirm"
+          ?disabled=${this.#rotateDisabled}
+          @click=${() => void this.#rotate()}
+          >${t("backup.rotate.confirm")}</wt-button
+        >
+      </wt-form-actions>
     `;
   }
 }

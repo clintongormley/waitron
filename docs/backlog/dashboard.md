@@ -85,12 +85,6 @@ The Devices table still uses `viewKey="devices"`
 preference key before go-live, following the prefixed table keys. This is separate from A988's
 printer keys.
 
-## A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left open
-
-The booking form still puts bare buttons in the footer and keeps its refusal in the body
-(`packages/bookings/src/dashboard/booking-form.ts`). Add products now passes its request refusal
-into its sticky `wt-form-actions` row; supervisor approval hands its refusal to the dialog's footer
-row. The booking row remains part of the Forms refusal placement bundle.
 
 ## The form plumbing is hand-written per form
 
@@ -104,24 +98,9 @@ row. The booking row remains part of the Forms refusal placement bundle.
   and the image library too would have to live in a package they can all reach, such as
   `@waitron/ui`;
 
-## The image picker's error message is not read to a screen reader
-
-  (5) the image picker's error message is not read to a screen reader:
-  `apps/dashboard/src/widgets/section-details-form.ts` puts `aria-describedby="section-image-error"`
-  on the `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
-  (`docs/developers/design-system.md` → Forms); the Choose image button inside it carries
-  `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason. Since A200 the
-  product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`) has the same
-  defect: it carries `aria-invalid` and takes focus, while the reason is a `data-test="image-error"`
-  line in the editor's own shadow root that nothing points to;
-
 ## What C47 part 2 found and did not fix
 
-  Found during C47 part 2 and not fixed: (a) `wt-switch` cannot be marked invalid, so a server refusal of an adjustment reason's
-  note-required switch would show its message but move focus nowhere — though the server refuses
-  `noteRequired` only when it is not a true/false value (`requireFlag`,
-  `packages/adjustments/src/routes.ts`) and the screen always sends one from its switch, so the
-  refusal is not expected from this screen; (b) in a screenshot of a `wt-modal` editor after a
+  In a screenshot of a `wt-modal` editor after a
   refusal that names no field, a blue line runs along the top of the footer, which looks like the
   modal's scrolling body showing a focus ring — not traced, and not checked against `main`; an
   observation from the implementer's session. On 2026-11-10, a fresh Chromium modal opened by a
@@ -129,64 +108,6 @@ row. The booking row remains part of the Forms refusal placement bundle.
   opening gave the body a 2 px blue focus ring. A plain native dialog matched the two
   `:focus-visible` states. The earlier observation is still open; that focused probe did not
   establish a focus-contract defect to fix.
-
-## Request refusals that still land in the bottom message, or under a field in generic words — OPEN (left by C54, #853).
-
-In the forms C54 surveyed (the dashboard, the setup wizard, and the
-  adjustments, venue-service and media module screens) it kept the action working after a request's
-  refusal and put a refusal naming a shown field under that field. What it left:
-  (1) the product editor and the venue operations editors put a refused field's message under it in
-  their generic words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts`
-  `#rejectedField`; `venue.field_refused` in
-  `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not the refusal's own
-  sentence;
-  (2) controls with no place for an error keep their refusal in the bottom message — `wt-switch`
-  (`active` on the ingredient, extras and options forms; `available` on the product
-  editor), the allergen and dietary-origin pickers on the ingredient form, and the purchase form's
-  VAT regime select;
-  (3) refusals naming two fields or a row the refusal does not number stay at the bottom:
-  `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate, base, tax or
-  type,
-  `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
-  (4) on the backup screen, read and not run: a refusal other than `backup.request_invalid` that
-  `#onApplyRefused` (`apps/dashboard/src/screens/backup-screen.ts`) neither puts under a field nor
-  lists in `FORM_REFUSALS` still shows in the page banner; Turn on backups stays disabled before the first
-  press until the key is saved — the same shape as (7) (seen by running, in the Codex run-it review
-  of C63); the saved-it tick and the weekday ticks carry no `name`; Enter submits from the folder and
-  bucket fields but not from the pasted key, the backup time or the retention boxes
-  (`submitOnEnter`, which design-system.md → "Submit ordinary forms with Enter" asks for and
-  `stream-settings-panel.ts` binds on its whole form); and no test covers only the second box being invalid, or where
-  focus lands after a failed check on the Save form;
-  (6) the setup live-source screen's refusals go through a catch-all in
-  `#onConfigurationRequested` that drops the code, so a wrong passphrase cannot be placed under its
-  field;
-  (7) the profile screen opens with Save disabled when required details are missing — the form's
-  own check, before any press (also point (3) of the entry above);
-  (8) on the add-person and edit-person forms `profile.invalid` reads "Check your profile details",
-  which is about someone else's details there;
-  (9) after a refusal under a field the bottom message still reads "Correct the highlighted fields to
-  continue" while the action works — kept as it was;
-  (10) the bookings form was not in C54's survey (read, not run): a save refusal becomes the
-  screen's `errorKey` (`packages/bookings/src/dashboard/bookings-screen.ts` `#onCreate`/`#onUpdate`)
-  and shows as a paragraph on the screen outside the dialog, never under a field — including those
-  naming one, `management.request_invalid` with a `field`, `booking.invalid` with `partySize`, and
-  `table.not_found` with `tableId` for an inactive table (`table.inactive` comes only from
-  seating); the form's Save is disabled only while a save is in flight (`busy`), so no refusal
-  disables it, and its own check shows one paragraph in the dialog rather than a message under the
-  field; and the payment-provider forms were not in C54's survey either (read, not run): the
-  connect and add-reader forms in `packages/payments-stripe` and `packages/payments-sumup`
-  (`stripe-connect-form.ts`, `stripe-add-reader.ts`, `sumup-connect-form.ts`, `sumup-add-reader.ts`)
-  put a refused request's message in the bottom message, except that Stripe's add-reader dialog
-  puts `reader.reference_unknown` under its Reader ID field (A519) and SumUp's connect form answers
-  a key spanning several merchants by showing a merchant picker; none of them disables its action
-  on a refusal;
-  (11) the backup screen's configuration export drops the refusal's code in a catch-all
-  (`apps/dashboard/src/screens/backup-screen.ts` `#exportConfiguration`), so a
-  `management.request_invalid` naming `passphrase` would read only "The configuration export could
-  not be created." at the bottom — read, not run, as unreachable from this form, because the client
-  refuses a passphrase shorter than 12 (`MIN_KEY_LENGTH`) before sending and the server's check is
-  the same `length < 12` (`apps/server/src/configuration-export-api.ts`).
-  **Next action:** the owner says which of these are worth doing.
 
 ## Every login failure is one answer (C95, #930, owner decision 2026-09-30)
 
@@ -577,17 +498,10 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Bundle: Forms refusal placement
 
-3 entries remain after shared button spacing and the Add products/supervisor rows. The image,
-profile, purchase, import, backup and booking work is the second approved slice.
+1 entry remains, size M.
 
-- **A form's refusal message sits at the bottom of the form, above the buttons (C97, #961) — left
-  open:** the booking form still needs its footer row.
-  [Detail](dashboard.md#a-forms-refusal-message-sits-at-the-bottom-of-the-form-above-the-buttons-c97-961--left-open)
 - **Loose ends left by C47 (#838/#839/#840/#841).**
   [Detail](dashboard.md#loose-ends-left-by-c47-838839840841)
-- **Request refusals that still land in the bottom message, or under a field in generic words — OPEN
-  (left by C54, #853).**
-  [Detail](dashboard.md#request-refusals-that-still-land-in-the-bottom-message-or-under-a-field-in-generic-words--open-left-by-c54-853)
 
 ## Bundle: Contrast pass
 
@@ -710,6 +624,20 @@ profile, purchase, import, backup and booking work is the second approved slice.
   [Detail](dashboard.md#empty-state-text-shows-beside-a-failed-read-on-payments-and-cloud-services-a252-seen-2026-10-03-while-checking-lane-as-w18--open)
 
 ## Decisions and deliberate limits
+
+### Forms refusal placement exclusions (watcher, 2026-11-10)
+
+The backup saved-key acknowledgement stays a prerequisite. Request refusals keep retry available;
+a marked field still uses the shared bottom correction sentence. Purchase-line refusals carry no
+line number, so they stay at the bottom. No generic wording is replaced without a more specific
+existing sentence.
+
+The smaller Forms plan accepts the malformed-value exclusions: Boolean and enum controls, setup's
+matching series pairs and derived geography, and configuration export's matching passphrase
+minimum. Their source references are [in the approved plan](../superpowers/plans/2026-11-10-forms-refusal-placement.md), read, not run. Provider forms keep their existing credential,
+merchant and Reader ID handling. Hand-written form plumbing and the blue-line observation remain
+open above.
+
 
 - **A1400 save/read limit (watcher, 2026-11-07 23:12; retained 2026-11-10).** A venue-model or
   theme-list read after a save commits but before its reply can be replaced by that reply if the
@@ -1108,20 +1036,10 @@ Left as they were, from #827's review: unlike the two staff
     also uses it (`waitron-cloud/apps/portal/src/screens.ts:14,68`, `app.ts:227`; watcher checked
     2026-11-10, read, not run), pinned at ui-core 0.2.1. Keep its published export while that
     consumer remains.
-  - The profile screen, opened with required details missing, marks those fields at once, before
-    any press (two existing tests pin it), unlike every other form.
   - The form plumbing is hand-written per form: assembling the bottom message, waiting for the
     render and then calling `focusFirstInvalid`, and the state that remembers the first press and
     which refusals the person has since changed, in several different shapes.
     [Detail](dashboard.md#the-form-plumbing-is-hand-written-per-form)
-  - The image picker's error message is not read to a screen reader. The Choose image button inside
-    it carries `aria-invalid` and takes focus, so a screen reader hears "invalid" with no reason.
-    Since A200 the product editor's photo button (`apps/dashboard/src/widgets/product-editor.ts`)
-    has the same defect.
-    [Detail](dashboard.md#the-image-pickers-error-message-is-not-read-to-a-screen-reader)
-  - Found during C47 part 2 and not fixed: `wt-switch` cannot be marked invalid — a server refusal
-    of an adjustment reason's note-required switch would show its message but move focus nowhere.
-    [Detail](dashboard.md#what-c47-part-2-found-and-did-not-fix)
   - Found during C47 part 2 and not fixed: a blue line along the top of a `wt-modal` editor's
     footer, in a screenshot after a refusal that names no field, which looks like the modal's
     scrolling body showing a focus ring — not traced, and not checked against `main`. A502 part 2

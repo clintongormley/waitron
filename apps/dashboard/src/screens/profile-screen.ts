@@ -232,8 +232,6 @@ export class ProfileScreen extends LitElement {
   @state() private mode: Mode = "view";
   @state() private fields = emptyFields();
   @state() private attempted = false;
-  /** Required fields an incomplete profile is opened to complete, until the operator changes them. */
-  @state() private refused: Partial<Record<Field, string>> = {};
   /** A request refusal naming a shown field, until the operator changes that field. */
   @state() private requestRefused: Partial<Record<Field, string>> = {};
   /** The message above the action that names no field this form shows. */
@@ -367,7 +365,6 @@ export class ProfileScreen extends LitElement {
           ].some((value) => !value?.trim())
         ) {
           this.#edit("details");
-          this.refused = this.#detailsErrors();
         }
       }
     } catch (error) {
@@ -389,7 +386,6 @@ export class ProfileScreen extends LitElement {
     if (mode === "details") this.emailStatus = null;
     this.removingId = id;
     this.attempted = false;
-    this.refused = {};
     this.requestRefused = {};
     this.#showError("");
     this.saved = false;
@@ -468,10 +464,6 @@ export class ProfileScreen extends LitElement {
         const prev = this.fields;
         const value = event.detail.value;
         this.fields = { ...this.fields, [field]: value };
-        if (field in this.refused)
-          this.refused = Object.fromEntries(
-            Object.entries(this.refused).filter(([key]) => key !== field),
-          );
         if (field in this.requestRefused) this.requestRefused = {};
         // deriveDisplayName leaves a customised display name alone, judged from the previous values.
         if (field === "firstNames" || field === "lastNames") {
@@ -573,7 +565,7 @@ export class ProfileScreen extends LitElement {
   /** Each shown field's message, the one message above the action, and whether the action waits
    * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Partial<Record<Field, string>>; bottom: string; blocked: boolean } {
-    const own = { ...(this.attempted ? this.#validate() : {}), ...this.refused };
+    const own = this.attempted ? this.#validate() : {};
     const errors = { ...own, ...this.requestRefused };
     const shown = this.#shownFields();
     const fields: Partial<Record<Field, string>> = {};
@@ -606,7 +598,6 @@ export class ProfileScreen extends LitElement {
     const submitted = this.#draftValue(f);
     const active = () => this.isConnected && this.#operation === operation && this.#scope === scope;
     this.attempted = true;
-    this.refused = {};
     this.requestRefused = {};
     this.#showError("");
     if (Object.keys(this.#validate()).length) {

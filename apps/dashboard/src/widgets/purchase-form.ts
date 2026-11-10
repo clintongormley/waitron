@@ -116,6 +116,8 @@ export type PurchaseFormErrors = Record<string, string>;
 export function purchaseRefusalErrors(error: unknown): PurchaseFormErrors {
   const code = codeOf(error);
   const message = codeMessage(code);
+  if (code === "purchase.duplicate")
+    return { "supplier-tax-id": message, "supplier-invoice-number": message };
   const params = (error as { params?: { field?: unknown; reason?: unknown } }).params ?? {};
   if (code === "management.request_invalid" && typeof params.field === "string") {
     const key = (HEADER_KEYS as Record<string, string>)[params.field];

@@ -1215,6 +1215,7 @@ export class ProductEditor extends LitElement {
         .color=${this.draft.color ?? fromCategory ?? this.defaultColor}
         .disabled=${this.busy || this.childOpen || this.variantOpen}
         .invalid=${!!this.error("image") || !!this.error("product-color")}
+        .error=${[this.error("image"), this.error("product-color")].filter(Boolean).join(" ")}
       >
         ${name}
         <div slot="controls" class="group">
@@ -1227,6 +1228,7 @@ export class ProductEditor extends LitElement {
                   .inheritedImage=${this.inherited?.image ?? null}
                   .disabled=${this.busy || this.childOpen || this.variantOpen}
                   .invalid=${!!this.error("image")}
+                  .error=${this.error("image")}
                   @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
                     event.stopPropagation();
                     this.change("image", event.detail.image);

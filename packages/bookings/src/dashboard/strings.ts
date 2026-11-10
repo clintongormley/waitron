@@ -97,6 +97,10 @@ export const BOOKINGS_CODE_MESSAGES: Record<string, { en: string; es: string }> 
     en: "Party size must be a whole number of 1 or more",
     es: "Los comensales deben ser un número entero de 1 o más",
   },
+  "table.not_found": {
+    en: "That table no longer exists",
+    es: "Esa mesa ya no existe",
+  },
   "table.booked": {
     en: "This table has an upcoming booking. Move the booking first",
     es: "Esta mesa tiene una reserva próxima. Mueve primero la reserva",

@@ -36,6 +36,7 @@ export class SetupLiveSourceScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  @property() errorCode?: string;
   @property({ attribute: false }) beforeEmpty?: (proceed: () => void, signal: AbortSignal) => void;
 
   #baseline?: { artifact?: File; passphrase: string };
@@ -93,6 +94,17 @@ export class SetupLiveSourceScreen extends LitElement {
     }
   }
 
+  get #passphraseRefused(): boolean {
+    return this.errorCode === "recovery.passphrase_invalid" && !this.refusalDismissed;
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("errorMessage") && this.#passphraseRefused)
+      void focusFirstInvalid(
+        this.shadowRoot!.querySelector<HTMLElement>("[data-test=import-form]")!,
+      );
+  }
+
   get #artifactMissing(): boolean {
     return this.attempted && this.artifact === undefined;
   }
@@ -137,8 +149,10 @@ export class SetupLiveSourceScreen extends LitElement {
   override render(): TemplateResult {
     const fieldsInvalid = this.#artifactMissing || this.#passphraseShort;
     const bottom = [
-      ...(this.errorMessage && !this.refusalDismissed ? [this.errorMessage] : []),
-      ...(fieldsInvalid ? [t("live_source.fix_fields")] : []),
+      ...(this.errorMessage && !this.refusalDismissed && !this.#passphraseRefused
+        ? [this.errorMessage]
+        : []),
+      ...(fieldsInvalid || this.#passphraseRefused ? [t("live_source.fix_fields")] : []),
     ].join(" ");
     return html`<div class="choices">
       <wt-card raised data-test="import-form">
@@ -177,13 +191,14 @@ export class SetupLiveSourceScreen extends LitElement {
           type=${this.passphraseVisible ? "text" : "password"}
           autocomplete="off"
           required
-          error=${this.#passphraseShort ? t("live_source.passphrase_short") : ""}
+          error=${this.#passphraseShort ? t("live_source.passphrase_short") : this.#passphraseRefused ? this.errorMessage : ""}
           ?invalid=${this.#passphraseShort}
           .value=${this.passphrase}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             if (!this.isConnected) return;
             this.passphrase = event.detail.value;
+            if (this.#passphraseRefused) this.refusalDismissed = true;
             this.#scope?.changed();
           }}
         >

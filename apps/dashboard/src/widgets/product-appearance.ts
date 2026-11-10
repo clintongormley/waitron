@@ -94,6 +94,7 @@ export class ProductAppearance extends LitElement {
   @property() color: string | null = null;
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) invalid = false;
+  @property() error = "";
   readonly #captionId = uniqueId("product-appearance-caption");
 
   override updated(changed: PropertyValues<this>): void {
@@ -144,6 +145,7 @@ export class ProductAppearance extends LitElement {
         aria-label=${`${t("image.label")} · ${t("editor.color")}`}
         aria-describedby=${!this.image && this.inheritedImage ? this.#captionId : nothing}
         aria-invalid=${this.invalid ? "true" : nothing}
+        aria-description=${this.error || nothing}
         aria-haspopup="dialog"
         ?disabled=${this.disabled}
         @click=${(event: Event) => {

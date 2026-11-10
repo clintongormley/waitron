@@ -183,6 +183,10 @@ function holdMints(api: DashboardApi): Array<(key: string) => void> {
 
 const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 const alertText = (el: BackupScreen) => q(el, "[role=alert]:not([data-test])")?.textContent;
+const archiveAlertText = (el: BackupScreen) =>
+  el
+    .shadowRoot!.querySelector("[data-test=apply-actions], [data-test=settings-actions]")
+    ?.shadowRoot?.querySelector("[role=alert]")?.textContent;
 const errorKey = (el: BackupScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
@@ -332,7 +336,7 @@ describe("backup-screen", () => {
     await el.updateComplete;
     q(el, "[data-test=apply]")!.click();
     await flush(el);
-    expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("backup.recovery_key_exists"));
+    expect(archiveAlertText(el)).toContain(codeMessage("backup.recovery_key_exists"));
   });
 
   it("shows the bucket copy panel, handing it the screen's api", async () => {
@@ -664,8 +668,7 @@ describe("backup-screen", () => {
     await el.updateComplete;
     q(el, "[data-test=apply]")!.click();
     await flush(el);
-    expect(errorKey(el)).toBe("backup.not_primary");
-    const banner = q(el, "[role=alert]")?.textContent;
+    const banner = archiveAlertText(el);
     expect(banner).toContain(codeMessage("backup.not_primary", "es-ES"));
     expect(banner).not.toContain("backup.not_primary");
   });
@@ -736,7 +739,13 @@ describe("backup-screen", () => {
     await el.updateComplete;
     q(el, "[data-test=apply]")!.click();
     await flush(el);
-    expect(errorKey(el)).toBe("backup.recovery_key_too_short");
+    const key = q(el, "[data-test=paste-key]") as WtInput;
+    expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
+    expect(key.shadowRoot!.activeElement).toBe(key.shadowRoot!.querySelector("input"));
+    expect(q(el, "[data-test=apply-actions]")!.shadowRoot!.textContent).toContain(
+      t("form.fix_fields"),
+    );
+    expect(alertText(el)).toBeUndefined();
     expect(api.applyBackup).not.toHaveBeenCalled();
   });
 
@@ -1179,7 +1188,11 @@ describe("the status watcher's key requests and read alerts", () => {
     api.liveData.invalidate([{ type: "backup_status" }]);
     await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(alertText(el)?.trim()).toBe(codeMessage("backup.recovery_key_exists"));
+    expect(q(el, "[data-test=apply-actions]")!.shadowRoot!.textContent).toContain(
+      codeMessage("backup.recovery_key_exists"),
+    );
+    expect(alertText(el)).toBeUndefined();
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
   });
 
   async function mountThenFailARead(api: DashboardApi): Promise<BackupScreen> {
@@ -1406,7 +1419,9 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await el.updateComplete;
 
     expect(api.rotateBackupKey).not.toHaveBeenCalled();
-    expect(alertText(el)).toBe(codeMessage("backup.recovery_key_too_short"));
+    const key = q(el, "[data-test=paste-key]") as WtInput;
+    await key.updateComplete;
+    expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
   });
 
   it("refuses to edit settings when the box reports no current key", async () => {
@@ -1443,7 +1458,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
 
     q(el, "[data-test=save-settings]")!.click();
 
-    await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("connection.failed")));
+    await vi.waitFor(() => expect(archiveAlertText(el)).toBe(codeMessage("connection.failed")));
     expect(q(el, "[data-test=edit-title]")).not.toBeNull();
   });
 
@@ -1465,7 +1480,7 @@ describe("backup-screen failures and edit-mode prefill", () => {
     vi.mocked(api.applyBackup).mockRejectedValueOnce({ code: "connection.failed" });
     await editDestination(el);
     q(el, "[data-test=save-settings]")!.click();
-    await vi.waitFor(() => expect(alertText(el)).toBe(codeMessage("connection.failed")));
+    await vi.waitFor(() => expect(archiveAlertText(el)).toBe(codeMessage("connection.failed")));
 
     q(el, "[data-test=cancel-edit]")!.click();
     await el.updateComplete;
@@ -1718,6 +1733,9 @@ describe("backup-screen retention boxes", () => {
       await flush(el);
       expect(api.applyBackup, value).not.toHaveBeenCalled();
       expect(boxError(el, "days"), value).toBe(t("backup.retention_invalid"));
+      expect(q(el, "[data-test=retain-days]")!.shadowRoot!.activeElement).toBe(
+        q(el, "[data-test=retain-days]")!.shadowRoot!.querySelector("input"),
+      );
       cleanupWidgets();
     }
   });
@@ -2008,9 +2026,13 @@ describe("backup-key configuration refusal", () => {
           const action = q(el, selector) as HTMLElementTagNameMap["wt-button"];
           expect(action.disabled).toBe(false);
           action.click();
-          await vi.waitFor(() => expect(alertText(el)?.trim()).toBe(codeMessage(refusal.code)));
+          await vi.waitFor(() =>
+            expect((operation === "apply" ? archiveAlertText(el) : alertText(el))?.trim()).toBe(
+              codeMessage(refusal.code),
+            ),
+          );
           if (locale === "en-GB") {
-            expect(alertText(el)).toContain(
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
               "Keep both the previous key and the key you just saved.",
             );
           }
@@ -2026,7 +2048,7 @@ describe("backup-key configuration refusal", () => {
           action.click();
           await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
           await flush(el);
-          expect(alertText(el)).toBeUndefined();
+          expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toBeUndefined();
           expect(el.shadowRoot!.textContent).toContain(ENABLED.keyFingerprint);
         } finally {
           setLocale(before);
@@ -2065,24 +2087,40 @@ describe("keeping recovery keys after an unconfirmed change", () => {
             operation === "apply" ? "[data-test=apply]" : "[data-test=rotate-confirm]",
           )!.click();
           await vi.waitFor(() =>
-            expect(alertText(el)?.trim()).toBe(codeMessage("backup.effective_mismatch")),
+            expect((operation === "apply" ? archiveAlertText(el) : alertText(el))?.trim()).toBe(
+              codeMessage("backup.effective_mismatch"),
+            ),
           );
           if (locale === "en-GB") {
-            expect(alertText(el)).toContain(
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
               "Keep both the previous key and the key you just saved.",
             );
-            expect(alertText(el)).toContain("Stop changing keys here");
-            expect(alertText(el)).toContain("cannot diagnose the conflicting backup-key settings");
-            expect(alertText(el)).not.toMatch(/ask|administrator|try again/i);
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
+              "Stop changing keys here",
+            );
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
+              "cannot diagnose the conflicting backup-key settings",
+            );
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).not.toMatch(
+              /ask|administrator|try again/i,
+            );
           } else {
-            expect(alertText(el)).toContain("No se pudo confirmar la clave guardada");
-            expect(alertText(el)).toContain(
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
+              "No se pudo confirmar la clave guardada",
+            );
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
               "Conserva tanto la clave anterior como la que acabas de guardar.",
             );
-            expect(alertText(el)).toContain("No sigas cambiando claves aquí");
-            expect(alertText(el)).toContain("no puede diagnosticar el conflicto de configuración");
-            expect(alertText(el)).toContain("ni confirmar qué clave abre una copia");
-            expect(alertText(el)).not.toMatch(
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
+              "No sigas cambiando claves aquí",
+            );
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
+              "no puede diagnosticar el conflicto de configuración",
+            );
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).toContain(
+              "ni confirmar qué clave abre una copia",
+            );
+            expect(operation === "apply" ? archiveAlertText(el) : alertText(el)).not.toMatch(
               /pide|administrador|contacta|soporte|inténtalo de nuevo|vuelve a intentarlo/i,
             );
           }
@@ -2426,3 +2464,29 @@ describe("the recovery pack card after the screen's own writes", () => {
     await vi.waitFor(() => expect(reads(api)).toBeGreaterThan(1), { timeout: 2_000 });
   });
 });
+
+it.each(["paste-key", "at-time", "retain-count", "retain-days"])(
+  "submits backup choices with Enter from %s",
+  async (id) => {
+    const api = stubApi();
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    q(el, "[data-test=advanced-toggle]")!.click();
+    await el.updateComplete;
+    setInput(el, "[data-test=paste-key]", "correct-horse-battery-staple");
+    await chooseOption(q(el, "[data-test=time-mode]")!, "fixed");
+    await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    expect(q(el, "[data-test=saved-it]")!.getAttribute("name")).toBe("saved-recovery-key");
+    expect(q(el, "[data-test=weekday-1]")!.getAttribute("name")).toBe("backup-weekday-1");
+    const control = q(el, `[data-test=${id}]`)!;
+    await (control as WtInput).updateComplete;
+    control
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledOnce();
+  },
+);

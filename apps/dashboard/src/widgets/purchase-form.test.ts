@@ -811,7 +811,10 @@ describe("purchase-form — a server refusal", () => {
         code: "purchase.duplicate",
         params: { supplierTaxId: "B1", supplierInvoiceNumber: "N-1" },
       }),
-    ).toEqual({ _form: codeMessage("purchase.duplicate") });
+    ).toEqual({
+      "supplier-tax-id": codeMessage("purchase.duplicate"),
+      "supplier-invoice-number": codeMessage("purchase.duplicate"),
+    });
     expect(purchaseRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
   });
 
