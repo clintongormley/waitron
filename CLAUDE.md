@@ -356,7 +356,7 @@ called weaker than its name, the topic file lists what it does not see.
   `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the
   consumer observes the change twice. App screens and app-owned components may name their own
   events plainly.
-- **A deleted receipt or kitchen printer comes back under its existing id when discovery or a manual Add finds the same USB or Bluetooth key, network host and port, or cloud-poll id; it keeps its name, settings and history but none of its assignments. Discovery still finds disabled card readers, a disabled device's browser asks to rejoin, and Enable brings each back under its existing id; a deleted card reader or device returns with a new id** (owner, 2026-11-10, A1484, "1"). Later A1484 slices replace the reader and device half.
+- **A deleted receipt or kitchen printer comes back under its existing id when discovery or a manual receipt/kitchen Add finds the same USB or Bluetooth key, network host and port, or cloud-poll id and no active printer already holds it; it keeps its name, settings and history but none of its assignments. An office (A4) printer never takes over a deleted receipt printer's registration. Discovery still finds disabled card readers, a disabled device's browser asks to rejoin, and Enable brings each back under its existing id; a deleted card reader or device returns with a new id** (owner, 2026-11-10, A1484, "1"). Later A1484 slices replace the reader and device half.
 - **A narrower roll in a wider receipt printer needs an explicit print area before native
   centring.** Guard: `apps/server/src/receipt-ticket.test.ts`.
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
