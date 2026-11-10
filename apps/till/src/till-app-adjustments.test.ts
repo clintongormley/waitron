@@ -1,3 +1,4 @@
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -571,7 +572,10 @@ describe("till-app: an adjustment someone must approve", () => {
 
     expect(approval(el)).not.toBeNull();
     expect(approval(el)!.error).toBe("pin.invalid");
-    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.invalid"));
+    expect(
+      (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
+        .textContent,
+    ).toBe(t("pin.invalid"));
     expect(dialog(el)).not.toBeNull();
   });
 
@@ -592,7 +596,10 @@ describe("till-app: an adjustment someone must approve", () => {
 
     expect(approval(el)).not.toBeNull();
     expect(approval(el)!.error).toBe("pin.throttled");
-    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.throttled"));
+    expect(
+      (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
+        .textContent,
+    ).toBe(t("pin.throttled"));
     expect(dialog(el)).not.toBeNull();
   });
 

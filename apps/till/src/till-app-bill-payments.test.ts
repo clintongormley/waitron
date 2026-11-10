@@ -1,3 +1,4 @@
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
@@ -6905,7 +6906,10 @@ describe("till-app: giving back a bill payment", () => {
     await pinPad(el, "0000");
 
     expect(approval(el)!.error).toBe("pin.invalid");
-    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.invalid"));
+    expect(
+      (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
+        .textContent,
+    ).toBe(t("pin.invalid"));
     expect(refundDialog(el)).not.toBeNull();
     expect(getBillBalance.mock.calls.length).toBeGreaterThan(readsBefore);
   });
@@ -6960,7 +6964,10 @@ describe("till-app: giving back a bill payment", () => {
     await pinPad(el, "7777");
 
     expect(approval(el)!.error).toBe("pin.throttled");
-    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.throttled"));
+    expect(
+      (await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!))!
+        .textContent,
+    ).toBe(t("pin.throttled"));
     expect(refundDialog(el)).not.toBeNull();
     expect(refundDialog(el)!.busy).toBe(false);
   });

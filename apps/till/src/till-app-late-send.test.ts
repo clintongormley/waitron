@@ -1,3 +1,4 @@
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
@@ -957,7 +958,11 @@ describe("a manager's PIN", () => {
     await authorize(el, "0123");
 
     expect(approval(el)).not.toBeNull();
-    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe("Wrong PIN, try again");
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();
     await authorize(el, "4567");
 
@@ -1029,7 +1034,11 @@ describe("a manager's PIN", () => {
     const el = await managerAsked({ code: "pin.throttled", status: 429 });
     await authorize(el, "0123");
 
-    expect(approvalText(el, ".error")).toBe(t("pin.throttled"));
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe(t("pin.throttled"));
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();
     expect(submissions()).toHaveLength(2);
   });
@@ -1039,7 +1048,11 @@ describe("a manager's PIN", () => {
     await authorize(el, "0123");
 
     expect(approval(el)!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
-    expect(approvalText(el, ".error")).toBe(codeMessage("authorization.not_permitted"));
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe(codeMessage("authorization.not_permitted"));
     expect(api.serviceDayAuthorizers).toHaveBeenCalledTimes(1);
     expect(submissions()).toHaveLength(2);
   });
@@ -1124,7 +1137,13 @@ describe("an allergy party's send that needs a manager's PIN", () => {
     expect(submitDraft.mock.calls[1]![2].lateSend).toEqual({ menuIds: ["lunch"] });
     await authorize(el, "0123");
 
-    await vi.waitFor(() => expect(approvalText(el, ".error")).toBe("Wrong PIN, try again"));
+    await vi.waitFor(async () =>
+      expect(
+        (
+          await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+        )?.textContent?.trim(),
+      ).toBe("Wrong PIN, try again"),
+    );
     expect(allergyDialog(el)).toBeNull();
     expect(submitDraft.mock.calls[2]![2].lateSend).toEqual({
       menuIds: ["lunch"],
@@ -1186,7 +1205,13 @@ describe("an allergy party's PIN rerun", () => {
 
     await authorize(el, "0123");
 
-    await vi.waitFor(() => expect(approvalText(el, ".error")).toBe("Wrong PIN, try again"));
+    await vi.waitFor(async () =>
+      expect(
+        (
+          await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+        )?.textContent?.trim(),
+      ).toBe("Wrong PIN, try again"),
+    );
     expect(allergyDialog(el)).toBeNull();
     expect(submitDraft).toHaveBeenCalledTimes(4);
     const packets = submitDraft.mock.calls.map((call) => call[2]);
@@ -2003,7 +2028,11 @@ describe("counter pay of a partly paid order", () => {
     await authorize(el, "0123");
 
     expect(approval(el)).not.toBeNull();
-    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe("Wrong PIN, try again");
     expect(billPayDialog(el)).toBeNull();
     await authorize(el, "4567");
 
@@ -2061,7 +2090,11 @@ describe("counter pay with a manager's PIN", () => {
     await authorize(el, "0123");
 
     expect(approval(el)).not.toBeNull();
-    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe("Wrong PIN, try again");
     expect(el.shadowRoot!.querySelector(".error")).toBeNull();
     await authorize(el, "4567");
 
@@ -2121,7 +2154,11 @@ describe("counter pay with a manager's PIN", () => {
     await authorize(el, "0123");
 
     expect(approval(el)).not.toBeNull();
-    expect(approvalText(el, ".error")).toBe(codeMessage("authorization.not_permitted"));
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe(codeMessage("authorization.not_permitted"));
     expect(recordSale).toHaveBeenCalledTimes(2);
   });
 
@@ -2166,7 +2203,11 @@ describe("counter pay with a manager's PIN", () => {
     await authorize(el, "0123");
 
     expect(approval(el)).not.toBeNull();
-    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe("Wrong PIN, try again");
     await authorize(el, "4567");
 
     expect(pay.mock.calls.map(([request]) => request.lateSend)).toEqual([
@@ -2427,7 +2468,11 @@ describe("counter place and park", () => {
     await authorize(el, "0123");
 
     expect(approval(el)).not.toBeNull();
-    expect(approvalText(el, ".error")).toBe("Wrong PIN, try again");
+    expect(
+      (
+        await formMessageOf(approval(el)!.shadowRoot!.querySelector("wt-form-actions")!)
+      )?.textContent?.trim(),
+    ).toBe("Wrong PIN, try again");
     expect(parkOrder).toHaveBeenCalledTimes(2);
   });
 });
