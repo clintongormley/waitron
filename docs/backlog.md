@@ -1464,9 +1464,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, server
   pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
-  Done: setup (#2435) and the till's counter, floor, menu, order, More menu, person and kitchen
+  Done: dashboard, setup (#2435) and the till's counter, floor, menu, order, More menu, person and kitchen
   notices/merge help (#2437, #2439), but for an owner choice on the Transfers help. Left: the
-  dashboard and server pages; A773-2 B4b (#2440) rewrote the kitchen card, columns, pass and More
+  server pages; A773-2 B4b (#2440) rewrote the kitchen card, columns, pass and More
   menu Pass help.
   [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 

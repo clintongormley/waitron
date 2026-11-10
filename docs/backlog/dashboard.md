@@ -723,7 +723,7 @@ probes do not settle it. This stays inside the existing bundle rather than becom
   its inner button. Decide whether it should delegate focus, then add it to the set.
 - **A1247. Help badges that cannot link to the guide (left open by A582 slice 3, #1871).** A
   `wt-data-table` column badge, a `wt-tabs` item's badge and a `wt-menu-row` badge cannot carry a
-  guide link, and Products' VAT and Availability badges have none.
+  guide link, and Products' Availability badge has none.
 
 ## Bundle: Box reset tab
 
@@ -1280,13 +1280,11 @@ Dashboard, till and server pages, in English and Spanish. The rule is in
 describes first, move each dropped fact into its linked guide section, and list every changed text
 before and after.
 
-Left: the dashboard and server pages. A773-2 B4b (#2440) rewrote the kitchen card, columns, pass
+Left: the server pages. A773-2 B4b (#2440) rewrote the kitchen card, columns, pass
 and More menu Pass help, so this work leaves those alone.
 
 - **The till's Transfers help** (`help.more.transfers`): its last sentence, on the order counts, is
   more than orientation, but `apps/till/src/i18n/help-strings.test.ts` (A757 slice 6) pins it word
   for word, so shortening it is a choice for the owner.
-- **For the dashboard PR:** the dashboard's Spanish says «Barra» for the counter, the till
-  «Mostrador».
 - **No guide section to link yet:** the guide has no section on a device's profile, equipment,
   department transfers or Fix my hours, nor on a zone's Reset.

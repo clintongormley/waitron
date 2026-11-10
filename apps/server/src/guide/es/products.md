@@ -5,18 +5,22 @@ y a qué precio. Al mantener separadas las dos tareas, puedes usar el mismo caf�
 copiar su nombre de cocina, sus declaraciones dietéticas ni sus opciones.
 
 Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
-introduce su precio. Su IVA empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
+introduce su precio.
+
+El editor deja a la vista los campos que cambias a menudo y pliega el resto bajo un encabezado que
+resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abre una haciendo clic en su
+encabezado. Si una sección contiene algo que tienes que corregir, se abre sola y sigue abierta hasta
+que lo corriges.
+
+## Elige la clase de IVA {#vat}
+
+El IVA de un producto empieza en la clase elegida en **Clase de IVA para productos nuevos**, en
 la pestaña **Datos del local** de **Ajustes del local**; cámbiala aquí si este producto tributa de otra
 forma. Para un producto sin IVA, elige **Sin impuestos (0%)**. Un cambio de clase de IVA llega a las
 cajas cuando vuelves a publicar la carta; hasta entonces venden el producto con la clase con la que se
 publicó la carta. Para corregir la clase en la carta publicada sin volver a publicar desde los productos, consulta
 [Corrige la carta publicada en una emergencia](products.md#patch-live-menu). Una línea que ya
 está en un pedido conserva la clase con la que se añadió.
-
-El editor deja a la vista los campos que cambias a menudo y pliega el resto bajo un encabezado que
-resume lo que contiene, así ves de un vistazo qué secciones has rellenado. Abre una haciendo clic en su
-encabezado. Si una sección contiene algo que tienes que corregir, se abre sola y sigue abierta hasta
-que lo corriges.
 
 ## Decide cómo se vende un producto {#selling}
 

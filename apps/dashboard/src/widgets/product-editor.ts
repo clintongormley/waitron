@@ -1450,7 +1450,7 @@ export class ProductEditor extends LitElement {
           parent && value === "" ? null : (value as NonNullable<ProductEditorDraft["vatClass"]>),
         );
       }}
-      >${this.help(t("product.vat"), "help.products.vat")}</wt-combobox
+      >${this.help(t("product.vat"), "help.products.vat", "products.vat")}</wt-combobox
     >`;
   }
 

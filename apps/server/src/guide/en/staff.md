@@ -37,6 +37,8 @@ Choose **Cancel** to leave the action undone. If the disk is full, open **Box st
 Open **Account settings** from the account menu to change your own sign-in details. Your own
 email, password, PIN, passkeys and two-factor settings remain yours to manage.
 
+You can also change your name, display name, phone and language, and link Google in **Security** where it is available.
+
 To confirm a new email address, enter the code sent there. If email is not set up, use the email status’s settings link or **Sign in as an administrator** action; then return to your own account, re-enter the new address in **Your details** and save. If the code does not arrive within a few minutes, re-enter the new address and save: only the newest code works.
 
 In **Security**, choose **Add passkey** beside **Passkeys**.
