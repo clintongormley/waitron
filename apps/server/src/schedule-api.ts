@@ -41,7 +41,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management.request_invalid": 400,
   "shared.invalid_id": 400,
   "absence.invalid": 400,
-  "shift.not_found": 404,
+  // Raised here only by requestSwap, for a shift id the request body names.
+  "shift.not_found": 400,
   "swap.not_found": 404,
   "swap.not_permitted": 403,
   "swap.not_acceptable": 409,
