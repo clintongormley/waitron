@@ -83,7 +83,7 @@ function startSessionDashboard(): void {
   );
   const liveUpdates = new LiveConnection(api.liveData, {
     sessionGeneration,
-    onSessionInvalid: (code, generation) => signals.reportError(code, undefined, generation),
+    onSessionInvalid: (code, generation) => signals.reportError(code, generation),
   });
   render(
     html`<dashboard-app

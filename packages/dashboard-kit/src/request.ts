@@ -57,7 +57,7 @@ export function createRequest(
   opts: {
     baseUrl?: string;
     fetchImpl?: FetchLike;
-    onError?: (code: string, status?: number, generation?: number) => void;
+    onError?: (code: string, generation?: number) => void;
     onSuccess?: (path: string, generation?: number) => void;
     passive?: boolean;
     sessionGeneration?: () => number;
@@ -73,7 +73,7 @@ export function createRequest(
   ): Promise<T> => {
     const generation = opts.sessionGeneration?.();
     const current = () => generation === opts.sessionGeneration?.();
-    const reportError = (code: string, status?: number): void => {
+    const reportError = (code: string): void => {
       if (code !== "node.reset" && !current()) return;
       if (
         options?.sessionErrors === "caller" &&
@@ -82,10 +82,8 @@ export function createRequest(
         )
       )
         return;
-      if (generation === undefined) {
-        if (status === undefined) opts.onError?.(code);
-        else opts.onError?.(code, status);
-      } else opts.onError?.(code, status, generation);
+      if (generation === undefined) opts.onError?.(code);
+      else opts.onError?.(code, generation);
     };
     const init: RequestInit =
       body === undefined
@@ -158,7 +156,7 @@ export function createRequest(
         if (typeof rawCode !== "string" && options?.refusals === "envelope")
           throw fail("connection.failed");
         const code = typeof rawCode === "string" ? rawCode : "server.internal";
-        reportError(code, res.status);
+        reportError(code);
         // Carry the envelope's `params` through so a caller that needs a code's structured detail can
         // read it. Attached ONLY when present, so a code-only rejection stays a bare `{ code, status }`.
         const rawParams = envelope?.params;
