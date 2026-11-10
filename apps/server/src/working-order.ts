@@ -7867,7 +7867,7 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
 /** Advance one fired ticket item one step. A `to` outside the transition table is refused
  *  `management.request_invalid` on `to`, an unknown item `ticket_item.not_found`, and an item not
  *  released yet (`fired_at` is null: held, or Requested and waiting for the pass)
- *  `ticket.item_held`. */
+ *  `ticket.item_held`, and a skip, repeat or backwards move `ticket.invalid_transition`. */
 export async function advanceTicketItem(
   tx: Transaction,
   cfg: TradingContext,

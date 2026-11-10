@@ -4691,7 +4691,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     });
   });
 
-  it("advanceTicketItem refuses a garbage or missing `to` with the same code, not a raw TypeError", async () => {
+  it("advanceTicketItem refuses a garbage or missing `to` as management.request_invalid on `to`, not a raw TypeError", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });

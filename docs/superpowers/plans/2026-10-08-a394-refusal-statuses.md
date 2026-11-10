@@ -535,8 +535,9 @@ Status changes:
   stays `ticket.invalid_transition` 409. `device.pairing_hold_lapsed` keeps its code and answers
   404 on `/pairing-mode/holds/:holdId/renew` (path) and 400 on `/device-join-requests/:id/check`
   (body `holdId`), each under its own boundary. The till and dashboard read these codes, not the
-  status; the till station screen shows its generic advance message for any refusal but a full
-  disk, so the new code needs no wording. The `watcher.not_found` rows no longer exist: the
+  status; the till's station screen shows no message for any refusal but a full disk, and the
+  counter's station queue (`till-app.ts`) shows its generic `station.advance_error` message, so
+  the new code needs no wording. The `watcher.not_found` rows no longer exist: the
   watcher routes were removed by #1502.
 - **A394-14 — Printing, orders and reports: a body printer or watcher answers 400.** Files:
   `apps/server/src/print-api.ts`, `orders-api.ts`, `report-api.ts`. Changes `printer.not_found` (4
@@ -1053,6 +1054,11 @@ below has 5 rows on 4 codes, not 6._ _Merge reader, read not run: confirmed the 
 | same | `station.not_found` | 404 (`:138`) | 400 | Body `stationId` → `device.ts:368` → `kitchen.ts:61` (`requireLiveStation`); body `madeHereStationIds` → `made-here.ts:255` → `kitchen.ts:61`. | `apps/dashboard/src/screens/devices-screen.test.ts:1808,2131` (`under: "edit-binding"`) | `device-api.test.ts:1584,1767` (proximity) |
 | same | `watcher.not_found` | 404 (`:139`) | 400 | Body `watcherId` → `device.ts:374-376`. | `apps/dashboard/src/screens/devices-screen.ts:112` maps the code to the binding field | `device-api.test.ts:1620` (proximity) |
 
+**2026-11-10 (A394-13):** the rows above now answer as the Rule column says: an unknown or
+malformed ticket item `ticket_item.not_found` 404, a bad `to` `management.request_invalid` 400,
+the edit's body profile and made-here stations 400; the `watcher.not_found` row no longer exists
+(#1502).
+
 Out of rule but noted (not counted): `watcher.not_found` 404 on GET /api/device/watcher and POST
 /api/device/watcher/done is the CALLER DEVICE's own bound watcher gone (`watcher-board.ts:129`) —
 neither path nor body; the till branches on it (`apps/till/src/screens/till-expo-screen.ts:590`).
@@ -1091,6 +1097,10 @@ read still answers 500 `server.internal` (A394-6).
 | same | `watcher.not_found` | 404 (`:65`) | 400 | Body `watcherId` → `device.ts:376`. | as above | `join-api.db.test.ts:656` (proximity) |
 | POST /management-api/device-join-requests/:id/check | `device.pairing_hold_lapsed` | 409 (`:72`) | 400 | Body `holdId` names no live hold (`join-api.ts:297`). | Dashboard branches on the CODE: `apps/dashboard/src/api/pairing-hold.ts:9,92`, `apps/dashboard/src/screens/devices-screen.ts:835` | `join-api.db.test.ts:245,259,272,1453,1468`, `join-e2e.test.ts:1263` (proximity; which route each covers not established) |
 | POST /management-api/pairing-mode/holds/:holdId/renew | `device.pairing_hold_lapsed` | 409 | 404 | Path `:holdId` names no live hold: `renew` returns null (`join-api.ts:193-194`). | same as above (`renewPairingHold` in `devices-screen.a11y.test.ts:763`, `printers-screen.test.ts:6267`) | same |
+
+**2026-11-10 (A394-13):** the accept route's body profile answers 400, `/check` 400 and `/renew`
+404; the `station.not_found` and `watcher.not_found` rows are no longer raised from these bodies
+(see A394-13 above).
 
 Borderline, left as match: on `/deny` and `/check`, a body `createdAt` that differs from the stored
 ask answers `join_request.not_found` 404 (`join-api.ts:267-268,299-300`). `createdAt` acts as a
