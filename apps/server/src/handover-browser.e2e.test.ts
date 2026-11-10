@@ -220,7 +220,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     );
   const [bootPort] = await freePorts(1);
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
-  const secret = await enrolAuthenticator(mainBox.db, ADMIN, PASSWORD, TOTP_KEY_RING);
+  const secret = await enrolAuthenticator(mainBox.db, ADMIN, TOTP_KEY_RING);
   const session = await withTransaction(mainBox.db, (tx) =>
     startManagementSession(tx, { personId: ADMIN }),
   );
