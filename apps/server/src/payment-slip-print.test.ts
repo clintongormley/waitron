@@ -299,9 +299,6 @@ it.each([null, "true", 1])(
 it.each(["whole", "short", "presented", "issued"])(
   "prints the %s card slip once and rejects an invalid choice",
   async (kind) => {
-    await withTransaction(venue.db, (tx) =>
-      tx.update(cardReaders).set({ printsOwnSlipAutomatically: false }),
-    );
     const id = await tabWith(venue, "Botella tinto");
     if (kind === "issued") await issueOrderInvoice({ ...venue, admission: testTradingAdmission() }, venue.cfg, id, venue.operatorId);
     if (kind === "presented" || kind === "issued")
@@ -357,7 +354,7 @@ it.each(["whole", "short", "presented", "issued"])(
 
 it.each(["before", "during"])("keeps money received and warns when the selected slip printer disappears %s collect", async (when) => {
   const [device] = await venue.db.select().from(devices).where(eq(devices.id, venue.deviceId));
-  onTestFinished(() => withTransaction(venue.db, tx => tx.update(devices).set({ paymentSlipPrinterId: device!.paymentSlipPrinterId }).where(eq(devices.id, venue.deviceId))));
+  onTestFinished(async () => { await withTransaction(venue.db, tx => tx.update(devices).set({ paymentSlipPrinterId: device!.paymentSlipPrinterId }).where(eq(devices.id, venue.deviceId))); });
   if (when === "before") await withTransaction(venue.db, tx => tx.update(devices).set({ paymentSlipPrinterId: null }).where(eq(devices.id, venue.deviceId)));
   const billId = await tabWith(venue, "Botella tinto");
   const before = (await venue.db.select().from(printJobs)).length;
@@ -495,7 +492,7 @@ it("keeps a received payment when enqueueing its requested slip fails", async ()
       },
     );
     expect(answer.status).toBe(200);
-    expect(log).toHaveBeenCalledWith("warn", "payment.slip_print_failed", expect.objectContaining({ workingOrderId: id }));
+    expect(log).toHaveBeenCalledWith("warn", "payment.slip_print_failed", { workingOrderId: id, reason: "enqueue_failed" });
     expect(answer.json).toMatchObject({
       outcome: "received",
       slipPrintFailed: true,
@@ -509,6 +506,8 @@ it("keeps a received payment when enqueueing its requested slip fails", async ()
 
 it("uses the explicitly selected reader's own-slip setting", async () => {
   const readers = await venue.db.select().from(cardReaders);
+  const [holder] = await venue.db.select().from(cardReaderHolders).where(eq(cardReaderHolders.readerId, readers[1]!.id));
+  onTestFinished(async () => { await withTransaction(venue.db, tx => tx.update(cardReaderHolders).set({ deviceId: holder!.deviceId, heldAt: holder!.heldAt }).where(eq(cardReaderHolders.readerId, readers[1]!.id))); });
   await withTransaction(venue.db, async (tx) => {
     await tx
       .update(cardReaderHolders)

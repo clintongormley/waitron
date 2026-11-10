@@ -1,5 +1,4 @@
 import "./errors.js";
-import { codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
@@ -76,18 +75,25 @@ export async function printCapturedCardSlip(
 ): Promise<{ slipPrintFailed?: true }> {
   if (requested === undefined) return {};
   if (requested === null) return { slipPrintFailed: true };
+  let reason = "enqueue_failed";
   try {
     // Money has committed; a printer refusal must not roll back or retry the charge.
     await withTransaction(db, async (tx) => {
       const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
-      if (printer?.id !== requested.printerId) throw new Error("Payment slip printer changed");
+      if (printer?.id !== requested.printerId) {
+        reason = "printer_changed";
+        throw new Error("Payment slip printer changed");
+      }
       const [payment] = await tx
         .select()
         .from(payments)
         .where(
           and(eq(payments.provider, result.provider), eq(payments.paymentRef, result.paymentRef)),
         );
-      if (payment === undefined) throw new Error("Captured payment missing");
+      if (payment === undefined) {
+        reason = "capture_missing";
+        throw new Error("Captured payment missing");
+      }
       const [bill] =
         payment.billPaymentId === null
           ? []
@@ -116,8 +122,8 @@ export async function printCapturedCardSlip(
       );
     });
     return {};
-  } catch (error) {
-    log?.("warn", "payment.slip_print_failed", { workingOrderId, errorCode: codeOf(error) });
+  } catch {
+    log?.("warn", "payment.slip_print_failed", { workingOrderId, reason });
     return { slipPrintFailed: true };
   }
 }
