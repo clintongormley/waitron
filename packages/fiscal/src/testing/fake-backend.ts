@@ -4,6 +4,7 @@ import type { Decimal, NodeId, SaleId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   ClockBehindLatestRecord,
+  CorrectionAdmission,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
@@ -55,6 +56,11 @@ export class FakeFiscalBackend implements FiscalBackend {
   }
 
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
+  private admission: CorrectionAdmission = {
+    eligible: true,
+    filing: "accepted",
+    original: { number: "T1-1", issuedAt: "2027-03-14" },
+  };
 
   constructor(
     private readonly db: Database,
@@ -277,6 +283,10 @@ export class FakeFiscalBackend implements FiscalBackend {
     return { ok: issues.length === 0, checked, issues };
   }
 
+  correctionAdmissionFor(): Promise<CorrectionAdmission> {
+    return Promise.resolve(this.admission);
+  }
+
   async pendingCount(nodeId: NodeId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
       select cast(count(*) as text) as count
@@ -292,6 +302,11 @@ export class FakeFiscalBackend implements FiscalBackend {
    * be tested. */
   breakIntegrity(nodeId: NodeId, issue: IntegrityIssue): void {
     this.injectedIssues.set(nodeId, [...(this.injectedIssues.get(nodeId) ?? []), issue]);
+  }
+
+  /** What `correctionAdmissionFor` answers for every sale from now on. */
+  setCorrectionAdmission(admission: CorrectionAdmission): void {
+    this.admission = admission;
   }
 
   restoreIntegrity(nodeId: NodeId): void {

@@ -41,6 +41,25 @@ export interface FiledReceipt {
   issuer?: { legalName: string; taxId: string };
 }
 
+/** Whether a regime's filing of an invoice allows a correction of it; read-only. */
+export type CorrectionAdmission =
+  | {
+      eligible: true;
+      filing: "queued" | "sending" | "accepted" | "accepted_with_issues";
+      original: { number: string; issuedAt: string };
+    }
+  | {
+      eligible: false;
+      reason:
+        | "unsupported"
+        | "missing"
+        | "wrong_node"
+        | "voided"
+        | "not_simplified"
+        | "filing_refused"
+        | "history_unusable";
+    };
+
 /** The words a regime prints above and under its verification QR, in the regime's own wording. */
 export interface ReceiptQrText {
   caption: string;
@@ -500,6 +519,13 @@ export interface FiscalBackend {
   filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined>;
   /** Optional receipt observation, independent of allocation and the original receipt result. */
   invoiceEvidenceFor?(tx: Transaction, saleId: SaleId): Promise<FiledInvoiceEvidence | undefined>;
+
+  /** Optional: a backend without it admits no correction (`unsupported`). */
+  correctionAdmissionFor?(
+    tx: Transaction,
+    saleId: SaleId,
+    nodeId: NodeId,
+  ): Promise<CorrectionAdmission>;
 
   /**
    * Cancels a sale. The cancellation is issued by `issuingNodeId`, the box running now, and goes on

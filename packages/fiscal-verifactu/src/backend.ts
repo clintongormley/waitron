@@ -1,3 +1,4 @@
+import { correctionAdmissionFor } from "./correction-admission.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
 import "./errors.js";
@@ -20,6 +21,7 @@ import type {
   ClockProvedWrong,
   ClockStopState,
   ClockWitness,
+  CorrectionAdmission,
   Counterparty,
   FiscalBackend,
   FiledReceipt,
@@ -425,6 +427,14 @@ export class VerifactuBackend implements FiscalBackend {
     saleId: SaleId,
   ): Promise<FiledInvoiceEvidence | undefined> {
     return readDeviceReceiptEvidence(tx, saleId);
+  }
+
+  correctionAdmissionFor(
+    tx: Transaction,
+    saleId: SaleId,
+    nodeId: NodeId,
+  ): Promise<CorrectionAdmission> {
+    return correctionAdmissionFor(tx, saleId, nodeId);
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */

@@ -46,6 +46,7 @@ export type {
   ClockProvedWrong,
   ClockStopProof,
   ClockStopState,
+  CorrectionAdmission,
   Counterparty,
   DrainResult,
   FiscalBackend,

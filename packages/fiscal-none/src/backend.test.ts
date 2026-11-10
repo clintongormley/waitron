@@ -166,4 +166,11 @@ describe("NoneBackend records nothing", () => {
     });
     expect(await b.filedReceiptFor(tx, SALE)).toBeUndefined();
   });
+
+  it("admits no correction: with no regime there is no filing to correct", async () => {
+    expect(await make().correctionAdmissionFor?.(tx, SALE, NODE)).toEqual({
+      eligible: false,
+      reason: "unsupported",
+    });
+  });
 });
