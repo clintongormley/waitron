@@ -1175,8 +1175,8 @@ product failures.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-19 entries, size M. The first 15 are unchanged from the index they came from (backlog review,
-2026-11-06); the 16th was added on 2026-11-07, and the last three are slow reads A1308 slice 0's
+18 entries, size M. The first 15 are unchanged from the index they came from (backlog review,
+2026-11-06); the 16th was added on 2026-11-07, and the last two are slow reads A1308 slice 0's
 bench found on a year of trading.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
@@ -1229,12 +1229,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   sat in another migration set) ended when A760 moved
   it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
   every foreign key).
-- **A1345. Choosing the next kitchen round number reads every round ever sent.**
-  `nextGroupNumber` in `apps/server/src/order-groups.ts` filters
-  `party_id = ? or number_party_id = ?`, and `number_party_id` has no index, so the query plan is a
-  scan of `order_groups`. It runs on the round submit, move and merge paths, several times a bill.
-  Measured in the bench: 21 µs a call on day 1, 443 µs on day 9. The fix is an index or two indexed
-  lookups.
 - **A1346. Two invoice-record lookups by sale walk every original record.** `filedReceiptFor` in
   `packages/fiscal-verifactu/src/backend.ts` and `readDeviceReceiptEvidence` in
   `packages/fiscal-verifactu/src/device-receipt-evidence.ts` filter
@@ -1333,7 +1327,7 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 
 ## Bundle: Query plans and indexes, measured on a year of data
 
-5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06), except the planner-statistics entry, rewritten with A1469's measurements on 2026-11-10.
 
 - **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
   (left open by A773-2 PR C's review).** This needs a migration.
@@ -1345,14 +1339,14 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   reads across the server and venue-service, including `listOrderGroups`, `working-order`,
   `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
 - **Decide whether a box gathers SQLite's planner statistics (A1370 follow-up).** Nothing
-  gathers them today. Measured on the A1308-S0 bench year (A1469, 2026-11-10, days 361–362,
-  `order_groups(number_party_id)` index in place in both runs): `PRAGMA optimize=0x10002` took
-  taking a payment from 160 to 54 ms, but sending a round from 19.7 to 309 ms, firing from 10 to
-  375 ms, marking served from 3.1 to 71 ms and finishing a party from 6.9 to 49 ms; a whole day went
-  from 0.35 to 1.63 s a bill (0.49 before the index). The first run took 53 s with a cold cache and
-  holds the write lock throughout. Lane A is finding which reads the statistics slow, then
-  proposing either no statistics with the four reads that pick the wrong index naming it in the
-  query, or statistics plus fixes to the reads they slow.
+  gathers them today. On the bench's year of trading (A1469, 2026-11-10, days 361–362, with the
+  `order_groups(number_party_id)` index in both runs), gathering them with
+  `PRAGMA optimize=0x10002` made taking a payment faster (160 to 54 ms) but sending a round,
+  firing, marking served and finishing a party slower (19.7 to 309 ms, 10 to 375, 3.1 to 71, 6.9
+  to 49). A whole day went from 0.35 to 1.63 s a bill. Next: find which reads the statistics slow
+  and which pick a worse index without them (taking a payment is one), then choose between no
+  statistics, with the second group naming their index, and statistics, with fixes to the first
+  group. Commands and result files: the A1469 PR thread.
 - **Decide how kitchen queues order bills tied on time (A1370 follow-up).** The queue sorts by
   ticket `queued_at` and line number; different query plans can reorder bills tied on both.
   Check whether a product path produces those ties before choosing a stable tie-breaker.
