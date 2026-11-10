@@ -48,7 +48,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   departmentSalePolicies,
   departments,
-  zoneSalePolicies,
   zoneServicePolicies,
   saleReceiptHeaders,
   departmentReceipts,

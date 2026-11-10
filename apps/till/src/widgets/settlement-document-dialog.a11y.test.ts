@@ -24,6 +24,7 @@ for (const language of ["en-GB", "es-ES"])
           const { el, host } = await mountWidget<TillSettlementDocumentDialog>(
             "till-settlement-document-dialog",
             {
+              cashChange: "30.00",
               result: {
                 ...invoiceOf("120.00"),
                 invoiceType: "F2",
@@ -61,6 +62,7 @@ for (const language of ["en-GB", "es-ES"])
           await page.screenshot({
             path: `../../__screenshots__/a739-documents/${language}-${theme}-${width}-f2.png`,
           });
+          el.cashChange = null;
           el.result = {
             ...invoiceOf("30.00"),
             invoiceType: "F1",

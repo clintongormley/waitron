@@ -29,7 +29,20 @@ it("offers documents to the active editor when changing a line settles its bill"
     updateOrderLine: vi.fn().mockResolvedValue({
       revision: 1,
       party: { id: "v1", revision: 4 },
-      invoice: invoiceOf("120.00"),
+      invoice: {
+        ...invoiceOf("120.00"),
+        tender: { method: "cash", change: "30.00" },
+        payments: [
+          {
+            method: "cash",
+            amount: "120.00",
+            tip: "0.00",
+            tendered: "150.00",
+            change: "30.00",
+            refunds: [],
+          },
+        ],
+      },
     }),
     getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
   });
@@ -44,6 +57,11 @@ it("offers documents to the active editor when changing a line settles its bill"
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+  expect(
+    el
+      .shadowRoot!.querySelector("till-settlement-document-dialog")!
+      .shadowRoot!.querySelector("[data-settlement-change]"),
+  ).toBeNull();
 });
 
 it("offers documents after the retained whole-payment handler completes", async () => {
@@ -79,4 +97,37 @@ it("reads an unprinted F2 original when it is opened later from Find bill", asyn
   await flush(el);
   expect(ticket.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
   expect(ticket.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+});
+
+it("clears another sale's print status before opening an orderless correction", async () => {
+  const api = stubApi({
+    getTransactionReceipt: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), invoiceType: "F2" }),
+    getReceiptPrintStatus: vi
+      .fn()
+      .mockResolvedValue({ status: "failed", jobId: "earlier-original", canRetry: true }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openTable(el);
+  emit(shell(el), "find-bill");
+  await flush(el);
+  const find = el.shadowRoot!.querySelector("till-find-bill-screen")!;
+  emit(find, "find-transaction-open", { row: transactionRow({ workingOrderId: "wo-4" }) });
+  await flush(el);
+  let ticket = el.shadowRoot!.querySelector("till-ticket-view")!;
+  expect(ticket.originalReceiptPrint).toMatchObject({ jobId: "earlier-original" });
+  emit(ticket, "back-to-find-bill");
+  await flush(el);
+  vi.mocked(api.getTransactionReceipt).mockResolvedValue({
+    ...invoiceOf("120.00"),
+    invoiceType: "F2",
+    invoiceNumber: "CORR/1",
+  });
+  emit(find, "find-transaction-open", {
+    row: transactionRow({ saleId: "correction", workingOrderId: null }),
+  });
+  await flush(el);
+  ticket = el.shadowRoot!.querySelector("till-ticket-view")!;
+  expect(ticket.originalReceiptPrint).toBeUndefined();
+  expect(ticket.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+  expect(api.getReceiptPrintStatus).toHaveBeenCalledOnce();
 });

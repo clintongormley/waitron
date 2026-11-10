@@ -164,7 +164,6 @@ import "./widgets/attendance-day-dialog.js";
 import type { FixEntryDetail } from "./widgets/attendance-day-dialog.js";
 import "./screens/till-counter-screen.js";
 import "./screens/till-ticket-view.js";
-import "./screens/till-paid-view.js";
 import "./widgets/settlement-document-dialog.js";
 import "./screens/till-refund-acknowledgment.js";
 import "./screens/till-schedule-screen.js";
@@ -471,7 +470,9 @@ export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
 type Screen = "lock" | "counter" | "floor" | "station";
 
-type Drill = { kind: "table-order" | "ticket" | "paid" | TillDestination };
+type SettlementDocument = { surface: "counter" | "table"; cashChange: string | null };
+
+type Drill = { kind: "table-order" | "ticket" | TillDestination };
 
 /** A till draws no table buttons; one shared list, so the shell never sees a new one. */
 const NO_BAR_TABLES: readonly BarTable[] = Object.freeze([]);
@@ -3204,7 +3205,7 @@ export class TillApp extends LitElement {
    * it is dropped and a read that ends without an answer drops nothing. */
   #printProblemsRead = 0;
   #printProblemsShown = 0;
-  /** Identifies the latest {@link #rereadAmounts} or {@link #readBillsForPaidScreen}, so once a
+  /** Identifies the latest {@link #rereadAmounts} or {@link #readSettlementBills}, so once a
    * newer one has started, an older one works out no "Still to pay" from its bills and says nothing. */
   #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
@@ -3463,8 +3464,6 @@ export class TillApp extends LitElement {
   @state() private originalReceiptPrint?: OriginalReceiptPrint;
   @state() private originalReceiptBusy = false;
   @state() private originalReceiptReadFailed = false;
-  /** The settled bill's payments the paid screen lists; empty on the presented path. */
-  @state() private paidPayments: BillPaymentView[] = [];
   @state() private invoiceDeliveries?: InvoiceDeliveryStatus | null;
   @state() private invoiceDeliveriesReadFailed = false;
   @state() private invoiceEquipment?: RoleEquipment;
@@ -3701,7 +3700,7 @@ export class TillApp extends LitElement {
   #billBalanceRead = 0;
   /** The open bill payment dialog, with what the server last answered it. */
   @state() private billPaying: BillPaying | null = null;
-  @state() private settlementDocument: "counter" | "table" | null = null;
+  @state() private settlementDocument: SettlementDocument | null = null;
   #billPays = 0;
   #unansweredPayments = new Map<string, PendingBillPayment>();
   #paymentSends = new Map<string, number>();
@@ -6821,7 +6820,10 @@ export class TillApp extends LitElement {
       if (session !== this.#operatorSession) return;
       this.result = result;
       if (this.#store.id === id) this.#commitBasket(payload);
-      this.#showTicket(id, true, null, true);
+      this.#showTicket(id, true, {
+        surface: "counter",
+        cashChange: result.tender.method === "cash" ? result.tender.change : null,
+      });
       paid = true;
     } catch (error) {
       // The basket stays intact. `sale.refused` is permanent, and its message covers refunding a manual
@@ -6998,7 +7000,7 @@ export class TillApp extends LitElement {
       if (out.outcome === "captured") {
         this.result = out.ticket;
         if (this.#store.id === id) this.#commitBasket(payload);
-        this.#showTicket(id, true, null, true);
+        this.#showTicket(id, true, { surface: "counter", cashChange: null });
         paid = true;
       } else {
         if (
@@ -7732,7 +7734,7 @@ export class TillApp extends LitElement {
       this.#commitBasket(payload);
       if (saved.invoice !== undefined) {
         this.result = saved.invoice;
-        this.#showTicket(id, true, null, true);
+        this.#showTicket(id, true, { surface: "counter", cashChange: null });
         return false;
       }
     } catch (error) {
@@ -7989,7 +7991,10 @@ export class TillApp extends LitElement {
       const result = await this.api.collectOrder(id, tender, language, guestCount, null);
       if (session !== this.#operatorSession) return;
       this.result = result;
-      this.#showTicket(id, true, null, true);
+      this.#showTicket(id, true, {
+        surface: "counter",
+        cashChange: result.tender.method === "cash" ? result.tender.change : null,
+      });
       collected = true;
     } catch (error) {
       // No preliminary save, so any network failure may have filed. Collect carries a tender, so a
@@ -8219,6 +8224,9 @@ export class TillApp extends LitElement {
         else {
           this.ticketWorkingOrderId = undefined;
           this.originalReceiptAvailable = false;
+          this.originalReceiptPrint = undefined;
+          this.originalReceiptReadFailed = false;
+          this.originalReceiptBusy = false;
           this.#receiptPrintVisit++;
           this.#stopDeliveryReread();
         }
@@ -8774,7 +8782,10 @@ export class TillApp extends LitElement {
       this.shadowRoot!.querySelector("till-find-bill-dialog")?.closeSaved();
       this.result = result;
       this.findingBill = false;
-      this.#showTicket(workingOrderId, !payment.invoiced, null, true);
+      this.#showTicket(workingOrderId, !payment.invoiced, {
+        surface: "counter",
+        cashChange: result.tender.method === "cash" ? result.tender.change : null,
+      });
       collected = true;
     } catch (error) {
       if (
@@ -9662,9 +9673,7 @@ export class TillApp extends LitElement {
       this.#receiptPrintVisit === visit &&
       this.ticketWorkingOrderId === id &&
       this.#operatorSession === session &&
-      (this.settlementDocument !== null ||
-        this.drill?.kind === "ticket" ||
-        this.drill?.kind === "paid")
+      (this.settlementDocument !== null || this.drill?.kind === "ticket")
     );
   }
 
@@ -12030,7 +12039,7 @@ export class TillApp extends LitElement {
         if (sync !== this.#draftSync || !this.isConnected) return;
         if (snapshot.invoice !== undefined) {
           this.result = snapshot.invoice;
-          this.#showTicket(billId, true, [], true);
+          this.#showTicket(billId, true, { surface: "table", cashChange: null });
         }
         this.requestUpdate();
       },
@@ -13325,7 +13334,7 @@ export class TillApp extends LitElement {
     sync.submitted(submitted.draft, sent, submitted.edit);
     if (submitted.invoice !== undefined) {
       this.result = submitted.invoice;
-      this.#showTicket(submitted.tabId, true, [], true);
+      this.#showTicket(submitted.tabId, true, { surface: "table", cashChange: null });
     }
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
   }
@@ -13637,7 +13646,7 @@ export class TillApp extends LitElement {
         this.#noteBillParty(outcome.applied.party);
         if (outcome.applied.invoice !== undefined) {
           this.result = outcome.applied.invoice;
-          this.#showTicket(sync.billId, true, [], true);
+          this.#showTicket(sync.billId, true, { surface: "table", cashChange: null });
         }
         if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
       } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
@@ -14638,7 +14647,7 @@ export class TillApp extends LitElement {
       this.#closeCancelItem();
       if (answer.invoice !== undefined) {
         this.result = answer.invoice;
-        this.#showTicket(open.billId, true, [], true);
+        this.#showTicket(open.billId, true, { surface: "table", cashChange: null });
       }
       await this.#rereadAmounts(open.billId, open.visit);
       if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
@@ -15131,7 +15140,7 @@ export class TillApp extends LitElement {
       if (this.#hasLeftAdjusted(open)) return;
       if (answer.invoice !== undefined) {
         this.result = answer.invoice;
-        this.#showTicket(open.orderId, true, open.surface === "table" ? [] : null, true);
+        this.#showTicket(open.orderId, true, { surface: open.surface, cashChange: null });
       }
       await this.#rereadAdjusted(open);
     } catch (error) {
@@ -15215,7 +15224,7 @@ export class TillApp extends LitElement {
         this.#noteBillParty(outcome.applied.party);
         if (outcome.applied.invoice !== undefined) {
           this.result = outcome.applied.invoice;
-          this.#showTicket(sync.billId, true, [], true);
+          this.#showTicket(sync.billId, true, { surface: "table", cashChange: null });
         }
         this.shadowRoot!.querySelector<HTMLElementTagNameMap["till-adjustment-dialog"]>(
           "till-adjustment-dialog",
@@ -15422,7 +15431,7 @@ export class TillApp extends LitElement {
       this.tabRevision = outcome.saved.revision;
       if (outcome.saved.invoice !== undefined) {
         this.result = outcome.saved.invoice;
-        this.#showTicket(orderId, true, [], true);
+        this.#showTicket(orderId, true, { surface: "table", cashChange: null });
       }
       await this.#rereadAmounts(orderId, visit);
       return;
@@ -17252,7 +17261,7 @@ export class TillApp extends LitElement {
       if (toBillId === null) this.#chooseBill(moved.billId);
       if (moved.invoice !== undefined) {
         this.result = moved.invoice;
-        this.#showTicket(asked.billId, true, [], true);
+        this.#showTicket(asked.billId, true, { surface: "table", cashChange: null });
       }
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
@@ -17369,7 +17378,6 @@ export class TillApp extends LitElement {
   }
 
   async #readAfterFinishRefused(visit: number): Promise<void> {
-    this.#leavePaidScreen();
     if (this.activeTabId !== undefined) await this.#rereadAmounts(this.activeTabId, visit);
     else await this.#loadPartyBills();
   }
@@ -18870,7 +18878,10 @@ export class TillApp extends LitElement {
       )
         return false;
       this.result = result;
-      this.#showTicket(id, !payment.invoiced, [], true);
+      this.#showTicket(id, !payment.invoiced, {
+        surface: "table",
+        cashChange: result.tender.method === "cash" ? result.tender.change : null,
+      });
       paid = true;
     } catch (error) {
       if (
@@ -19092,7 +19103,10 @@ export class TillApp extends LitElement {
       if (out.outcome === "captured") {
         this.#closePresented(id);
         this.result = out.ticket;
-        this.#showTicket(billId, bill.receiptAvailable !== true, [], true);
+        this.#showTicket(billId, bill.receiptAvailable !== true, {
+          surface: "table",
+          cashChange: null,
+        });
         return;
       }
       this.#showPresentedRefusal(id, { code: PRESENTED_CARD_REFUSALS[out.outcome] });
@@ -19472,7 +19486,7 @@ export class TillApp extends LitElement {
       const now = own();
       if (now !== null) {
         dialog()?.paymentAccepted();
-        await this.#showPaidTicket(now, ticket, balance.payments);
+        await this.#showPaidTicket(now, ticket, payment.change);
         return true;
       }
     }
@@ -19545,7 +19559,7 @@ export class TillApp extends LitElement {
           : !this.#hasLeftOrder(billId, open.visit));
       try {
         const ticket = await api.getFiledTicket(billId);
-        if (current()) await this.#showPaidTicket(open, ticket, balance.payments);
+        if (current()) await this.#showPaidTicket(open, ticket, payment.change);
       } catch {
         if (current()) this.errorKey = "bill_pay.ticket_unread";
       }
@@ -19860,7 +19874,7 @@ export class TillApp extends LitElement {
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
     if (result.invoice !== undefined) {
       this.captureWarning = result.balance.captureWarning ?? null;
-      await this.#showPaidTicket(open, result.invoice, result.balance.payments);
+      await this.#showPaidTicket(open, result.invoice, result.payment.change);
       return;
     }
     const taken: PayTaken =
@@ -19889,17 +19903,16 @@ export class TillApp extends LitElement {
     await this.#rereadPayingOrder(open, result.balance);
   }
 
-  /** A payment that issued the bill's invoice: the dialog closes and the ticket shows. */
   async #showPaidTicket(
     open: BillPaying,
     invoice: TillSaleResult,
-    payments: BillPaymentView[],
+    cashChange: string | null,
   ): Promise<void> {
     this.#closeBillPaying();
     this.#releaseFoundCounterBill(open);
     this.result = invoice;
     // A counter order is no bill of the party a handheld may still hold.
-    this.#showTicket(open.billId, true, open.surface === "table" ? payments : null, true);
+    this.#showTicket(open.billId, true, { surface: open.surface, cashChange });
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
@@ -20288,18 +20301,10 @@ export class TillApp extends LitElement {
     this.drill = undefined;
   }
 
-  /**
-   * `settled` is non-null only for a table's bill this payment settled; it holds the bill's
-   * payments, or none for a whole-bill payment. On a handheld a simplified invoice then shows the
-   * paid screen, which offers Finish table (`table.finish`) unless other bills are still to pay. The
-   * bills held predate this payment, so the screen draws from them without the paid bill, and the
-   * read here corrects them.
-   */
   #showTicket(
     workingOrderId: string,
     invoiceIssuedNow = true,
-    settled: BillPaymentView[] | null = null,
-    showChoice = false,
+    settlement: SettlementDocument | null = null,
   ): void {
     this.historicalReceipt = null;
     this.ticketWorkingOrderId = workingOrderId;
@@ -20324,58 +20329,44 @@ export class TillApp extends LitElement {
     this.invoiceEmailRefusal = undefined;
     this.#stopDeliveryReread();
     this.originalReceiptAvailable = invoiceIssuedNow;
-    const paid = settled !== null && this.handheldMode && this.result?.invoiceType === "F2";
-    this.paidPayments = paid ? settled : [];
-    if (showChoice) {
-      this.settlementDocument = settled === null ? "counter" : "table";
+    if (settlement !== null) {
+      this.settlementDocument = settlement;
       void this.#readInvoicePrinters("receipt");
-    } else this.#pushDrill({ kind: paid ? "paid" : "ticket" });
+    } else this.#pushDrill({ kind: "ticket" });
     void this.#refreshReceiptPrint();
-    if (paid) void this.#readBillsForPaidScreen();
+    if (settlement?.surface === "table" && this.handheldMode && this.result?.invoiceType === "F2")
+      void this.#readSettlementBills();
   }
 
-  /** Stops any {@link #rereadAmounts} still out from before the payment, and reads the bills, not the
-   * floor. Its success ends a read's failure said earlier, unless the waiter has left the paid screen
-   * or a newer bills read has started, where the message may be that read's. */
-  async #readBillsForPaidScreen(): Promise<void> {
+  async #readSettlementBills(): Promise<void> {
     this.#amountsReread++;
     const { read, bills } = await this.#loadPartyBills(undefined, true, true);
     if (
       bills !== null &&
       read === this.#partyBillsRead &&
-      (this.drill?.kind === "paid" || this.settlementDocument === "table") &&
+      this.settlementDocument?.surface === "table" &&
       this.errorKey === "table.reread_failed"
     )
       this.errorKey = undefined;
   }
 
-  #paidBill(): PartyBill | undefined {
+  #settledBill(): PartyBill | undefined {
     return this.partyBills.find((bill) => bill.workingOrderId === this.ticketWorkingOrderId);
   }
 
-  #paidOtherBills(): PartyBill[] {
-    const paid = this.#paidBill();
+  #otherBillsToPay(): PartyBill[] {
+    const paid = this.#settledBill();
     if (paid === undefined) return [];
     return shownBills(this.partyBills).filter((bill) => bill !== paid && stillToPay(bill));
   }
 
-  #paidTitle(): string {
-    const table = this.#activeTableTitle();
-    const paid = this.#paidBill();
-    return paid !== undefined && this.#paidOtherBills().length > 0 ? billName(table, paid) : table;
-  }
-
-  /** A handheld's order screen is a tab (`builtInScreensFor`), which the paid screen covers. With
-   * other bills to pay it moves to the first of them, and only then reads: a bills read loads the
-   * balance of whichever bill is on screen when it answers. The lines are read beside the floor,
-   * not after it, or the paid bill's lines stay drawn under the next bill's name until it answers. */
+  /** Move to the next bill before reading its balance, and read its lines beside the floor. */
   async #onBackToTable(): Promise<void> {
-    if (this.drill?.kind !== "paid" && this.settlementDocument !== "table") return;
+    if (this.settlementDocument?.surface !== "table") return;
     this.settlementDocument = null;
-    const next = this.#paidOtherBills()[0];
+    const next = this.#otherBillsToPay()[0];
     const visit = this.#orderVisit;
     this.errorKey = undefined;
-    this.#leavePaidScreen();
     const moved = next !== undefined && (await this.#switchToBill(next.workingOrderId));
     if (this.activeTabId === undefined) await this.#loadPartyBills();
     else if (moved)
@@ -20384,11 +20375,6 @@ export class TillApp extends LitElement {
         this.#rereadAmounts(this.activeTabId, visit, undefined, false),
       ]);
     else await this.#rereadAmounts(this.activeTabId, visit);
-  }
-
-  /** A refused Finish table (`table.finish`) is acted on from the order screen beneath. */
-  #leavePaidScreen(): void {
-    if (this.drill?.kind === "paid") this.#popDrill();
   }
 
   #onBackToCounter(): void {
@@ -20984,22 +20970,6 @@ export class TillApp extends LitElement {
           .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
-      case "paid":
-        return html`<till-paid-view
-          slot="drill"
-          .tableName=${this.#paidTitle()}
-          .billsLeft=${this.#paidOtherBills().map(billLabel)}
-          .total=${this.result!.total}
-          .payments=${this.paidPayments}
-          .change=${this.paidPayments.length === 0 && this.result!.tender.method === "cash" ? this.result!.tender.change : null}
-          .receipt=${this.originalReceiptPrint ?? null}
-          .receiptReadFailed=${this.originalReceiptReadFailed}
-          .originalAvailable=${this.originalReceiptAvailable}
-          .canPrint=${this.deviceId === undefined || this.capabilities.includes("print-receipt")}
-          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
-          .busy=${this.originalReceiptBusy}
-          @back-to-table=${() => void this.#onBackToTable()}
-        ></till-paid-view>`;
       case "hours":
         return html`<till-hours-screen
           slot="drill"
@@ -21569,6 +21539,7 @@ export class TillApp extends LitElement {
             ? nothing
             : html`<till-settlement-document-dialog
                 .result=${this.result!}
+                .cashChange=${this.settlementDocument.cashChange}
                 .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
                 .issuer=${this.issuer}
                 .invoiceLocale=${this.invoiceLocale}
@@ -21602,7 +21573,7 @@ export class TillApp extends LitElement {
                     void this.#chooseInvoicePrinter(this.#invoicePrinterChoice);
                 }}
                 @settlement-close=${() => {
-                  if (this.settlementDocument === "table") void this.#onBackToTable();
+                  if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
                   else {
                     this.settlementDocument = null;
                     this.#onNewSale();

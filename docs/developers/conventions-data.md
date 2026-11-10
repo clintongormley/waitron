@@ -5151,8 +5151,9 @@ they did not test every migration caller.
 You choose how orders start separately from when a counter order is paid.
 `department_sale_policies.order_start` holds `table` or `counter`;
 `zone_sale_policies.order_start` is nullable, with null following the department.
-The same zone-first resolution applies to paid-when, collection tickets and receipt printing.
-Receipt printing holds `auto` or `on_request`; the old `never` value is retired.
+The same zone-first resolution applies to paid-when and collection tickets.
+The stored receipt-print field still holds `auto` or `on_request`, but no longer controls
+order-linked receipt delivery. A739 cut 7(c) removes the stored field; 7(b) removes its controls.
 
 `resolveZoneContext` and the order-context writers in
 `packages/venue-service/src/operations.ts` work out an order's flow as `table_tab` for table

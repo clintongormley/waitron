@@ -496,7 +496,7 @@ describe("the loop's own edges", () => {
 });
 
 describe("the invoice a finished card payment issues", () => {
-  it("prints its receipt on the receipt printer of the device that started the payment", async () => {
+  it("leaves both completed cards without automatic receipts", async () => {
     const [r1, r2] = await inTx(venue, async (tx) => [
       await createPrinter(tx, receiptPrinter("R1")),
       await createPrinter(tx, receiptPrinter("R2")),
@@ -521,13 +521,7 @@ describe("the invoice a finished card payment issues", () => {
             from print_jobs join sales on sales.id = print_jobs.sale_id
             where sales.working_order_id in (${onA}, ${onB})`,
       );
-      expect(printed).toEqual(
-        expect.arrayContaining([
-          { printer_id: r1!.id, kind: "document", bill_id: onA },
-          { printer_id: r2!.id, kind: "document", bill_id: onB },
-        ]),
-      );
-      expect(printed).toHaveLength(2);
+      expect(printed).toEqual([]);
     } finally {
       for (const row of held) {
         venue.db.run(
@@ -575,6 +569,7 @@ describe("the guests a finished card payment's receipt prints", () => {
       );
       expect(stored).toEqual([{ saleId: expect.any(String), guests: 4 }]);
 
+      await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
       await countGuests(billId, 6);
       await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, true);
       const copies = await inTx(venue, (tx) =>

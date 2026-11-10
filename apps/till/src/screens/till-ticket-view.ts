@@ -664,10 +664,10 @@ export class TillTicketView extends LitElement {
 
   protected receiptDesignation(): "original" | "duplicate" | null {
     if (this.result.invoiceType !== "F1") {
+      if (this.historical && !this.historicalDelivery) return "duplicate";
       if (this.originalReceiptReadFailed) return null;
       const status = this.originalReceiptPrint?.status;
-      if (status !== undefined)
-        return status === "not_queued" ? "original" : status === "done" ? "duplicate" : null;
+      if (status !== undefined) return status === "not_queued" ? "original" : "duplicate";
       return this.historical ? null : this.originalReceiptAvailable ? "original" : "duplicate";
     }
     const status = this.originalReceiptPrint?.status;
@@ -1055,7 +1055,7 @@ export class TillTicketView extends LitElement {
       ${
         (this.result.invoiceType === "F1" && (!this.historical || this.historicalDelivery)) ||
         (this.result.invoiceType !== "F1" &&
-          (includeRetry || this.historicalDelivery) &&
+          (includeRetry || this.historical || this.historicalDelivery) &&
           (this.originalReceiptReadFailed ||
             (this.originalReceiptPrint !== undefined && !notQueued)))
           ? html`<section class="original-delivery" data-test="original-delivery">

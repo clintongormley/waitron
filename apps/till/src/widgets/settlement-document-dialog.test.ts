@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import type { TillTicketView } from "../screens/till-ticket-view.js";
+import type { TillSettlementDocumentDialog } from "./settlement-document-dialog.js";
 import { invoiceOf } from "../../test/bill-pay-app.js";
 import "./settlement-document-dialog.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -14,11 +14,14 @@ afterEach(() => {
 });
 
 it("selects Receipt without sending a print command, and None closes the choice", async () => {
-  const { el } = await mountWidget<TillTicketView>("till-settlement-document-dialog", {
-    result: invoiceOf("30.00"),
-    originalReceiptAvailable: true,
-    originalReceiptPrint: { status: "not_queued" },
-  });
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      result: invoiceOf("30.00"),
+      originalReceiptAvailable: true,
+      originalReceiptPrint: { status: "not_queued" },
+    },
+  );
   const printed = vi.fn();
   const closed = vi.fn();
   el.addEventListener("print-receipt", printed);
@@ -37,13 +40,16 @@ it("selects Receipt without sending a print command, and None closes the choice"
 
 it("explains F2 replacement is unavailable and prints its receipt only on the named Print action", async () => {
   const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
-  const { el } = await mountWidget<TillTicketView>("till-settlement-document-dialog", {
-    result: { ...invoiceOf("30.00"), invoiceType: "F2" },
-    invoicePrintersEnabled: true,
-    originalReceiptAvailable: true,
-    originalReceiptPrint: { status: "not_queued" },
-    receiptEquipment: { ...roleOf("receipt", bar, [bar]), default: bar },
-  });
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      result: { ...invoiceOf("30.00"), invoiceType: "F2" },
+      invoicePrintersEnabled: true,
+      originalReceiptAvailable: true,
+      originalReceiptPrint: { status: "not_queued" },
+      receiptEquipment: { ...roleOf("receipt", bar, [bar]), default: bar },
+    },
+  );
   const printed = vi.fn();
   el.addEventListener("print-receipt", printed);
   el.shadowRoot!.querySelector<HTMLElement>("[data-settlement-choice=invoice]")!.click();
@@ -58,32 +64,35 @@ it("explains F2 replacement is unavailable and prints its receipt only on the na
 });
 
 it("keeps the recorded F1 recipient and offers Email as a separate explicit action", async () => {
-  const { el } = await mountWidget<TillTicketView>("till-settlement-document-dialog", {
-    result: {
-      ...invoiceOf("30.00"),
-      invoiceType: "F1",
-      recipient: {
-        legalName: "Harbour Ltd",
-        taxId: "B12345678",
-        address: "1 Harbour Road",
-        countryCode: "ES",
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      result: {
+        ...invoiceOf("30.00"),
+        invoiceType: "F1",
+        recipient: {
+          legalName: "Harbour Ltd",
+          taxId: "B12345678",
+          address: "1 Harbour Road",
+          countryCode: "ES",
+        },
+      },
+      invoicePrintersEnabled: true,
+      originalReceiptPrint: { status: "not_queued" },
+      deliveries: {
+        current: null,
+        originalCompleted: false,
+        originalPrinterId: null,
+        history: [],
+        actions: {
+          print: null,
+          retryOriginal: null,
+          receiptInstead: null,
+          email: { designation: "original" },
+        },
       },
     },
-    invoicePrintersEnabled: true,
-    originalReceiptPrint: { status: "not_queued" },
-    deliveries: {
-      current: null,
-      originalCompleted: false,
-      originalPrinterId: null,
-      history: [],
-      actions: {
-        print: null,
-        retryOriginal: null,
-        receiptInstead: null,
-        email: { designation: "original" },
-      },
-    },
-  });
+  );
   const email = vi.fn();
   const print = vi.fn();
   el.addEventListener("email-invoice", email);
@@ -105,20 +114,23 @@ it.each([
   ["failed", "retry-receipt"],
   ["done", "confirm-handover"],
 ] as const)("keeps F1 receipt recovery after printing is %s", async (status, action) => {
-  const { el } = await mountWidget<TillTicketView>("till-settlement-document-dialog", {
-    result: {
-      ...invoiceOf("30.00"),
-      invoiceType: "F1",
-      recipient: {
-        legalName: "Harbour Ltd",
-        taxId: "B12345678",
-        countryCode: "ES",
-        address: "1 Harbour Road",
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      result: {
+        ...invoiceOf("30.00"),
+        invoiceType: "F1",
+        recipient: {
+          legalName: "Harbour Ltd",
+          taxId: "B12345678",
+          countryCode: "ES",
+          address: "1 Harbour Road",
+        },
       },
+      invoicePrintersEnabled: true,
+      originalReceiptPrint: { status, jobId: "original", canRetry: status === "failed" },
     },
-    invoicePrintersEnabled: true,
-    originalReceiptPrint: { status, jobId: "original", canRetry: status === "failed" },
-  });
+  );
   const heard = vi.fn();
   el.addEventListener(action, heard);
   const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`);
@@ -129,17 +141,24 @@ it.each([
 });
 
 it("keeps the final cash change beside the document choice", async () => {
-  const { el } = await mountWidget<TillTicketView>("till-settlement-document-dialog", {
-    result: { ...invoiceOf("120.00"), tender: { method: "cash", change: "30.00" } },
-  });
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      cashChange: "30.00",
+      result: { ...invoiceOf("120.00"), payments: [], tender: { method: "cash", change: "30.00" } },
+    },
+  );
   expect(el.shadowRoot!.querySelector("[data-settlement-change]")?.textContent).toContain("30.00");
 });
 
 it("keeps failed F2 original recovery in the document choice", async () => {
-  const { el } = await mountWidget<TillTicketView>("till-settlement-document-dialog", {
-    result: { ...invoiceOf("30.00"), invoiceType: "F2" },
-    originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
-  });
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      result: { ...invoiceOf("30.00"), invoiceType: "F2" },
+      originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+    },
+  );
   const heard = vi.fn();
   el.addEventListener("retry-receipt", heard);
   const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-receipt]");
@@ -147,3 +166,44 @@ it("keeps failed F2 original recovery in the document choice", async () => {
   button!.click();
   expect(heard).toHaveBeenCalledOnce();
 });
+
+it.each(["cash", "card"] as const)(
+  "uses the last %s payment for final cash change",
+  async (method) => {
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      {
+        cashChange: method === "cash" ? "10.00" : null,
+        result: {
+          ...invoiceOf("120.00"),
+          tender: { method: "cash", change: "20.00" },
+          payments: [
+            {
+              method: "cash",
+              amount: "60.00",
+              tip: "0.00",
+              tendered: "80.00",
+              change: "20.00",
+              refunds: [],
+            },
+            method === "cash"
+              ? {
+                  method,
+                  amount: "60.00",
+                  tip: "0.00",
+                  tendered: "70.00",
+                  change: "10.00",
+                  refunds: [],
+                }
+              : { method, amount: "60.00", tip: "0.00", reference: null, refunds: [] },
+          ],
+        },
+      },
+    );
+    const change = el.shadowRoot!.querySelector("[data-settlement-change]");
+    if (method === "cash") {
+      expect(change?.textContent).toContain("10.00");
+      expect(change?.textContent).not.toContain("20.00");
+    } else expect(change).toBeNull();
+  },
+);

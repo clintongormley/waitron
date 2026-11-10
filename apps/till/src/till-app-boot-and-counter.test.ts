@@ -1702,6 +1702,8 @@ describe("till-app receipt issuance", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     const workingOrderId = vi.mocked(api.recordSale).mock.calls[0]![2];
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
 
     emit(ticket(el)!, "print-receipt");
     await flush(el);

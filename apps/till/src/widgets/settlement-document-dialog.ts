@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { TillTicketView } from "../screens/till-ticket-view.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { formatMoney } from "@waitron/shared";
@@ -9,6 +9,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 
 @customElement("till-settlement-document-dialog")
 export class TillSettlementDocumentDialog extends TillTicketView {
+  @property({ attribute: false }) cashChange: string | null = null;
+
   @state() private choice: "receipt" | "invoice" = "receipt";
 
   constructor() {
@@ -34,9 +36,9 @@ export class TillSettlementDocumentDialog extends TillTicketView {
       }}
     >
       ${
-        this.result.tender.method === "cash" && this.result.tender.change !== "0.00"
+        this.cashChange !== null && this.cashChange !== "0.00"
           ? html`<p data-settlement-change>
-              ${t("label.change")} ${formatMoney(this.result.tender.change, currentLocale())}
+              ${t("label.change")} ${formatMoney(this.cashChange, currentLocale())}
             </p>`
           : nothing
       }

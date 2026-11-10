@@ -49,7 +49,6 @@ import {
   lock,
   mesa,
   money,
-  offers,
   paymentOf,
   roleOf,
   shell,
@@ -3311,23 +3310,13 @@ describe("the document choice on a handheld", () => {
       invoice,
     );
   const printed = { status: "done" as const, jobId: "job-1", canRetry: false };
-  const onRequest = {
-    listZoneOffers: vi.fn().mockResolvedValue({
-      ...offers,
-      context: { ...offers.context, receiptPrintMode: "on_request" },
-    }),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue({
-      ...offers,
-      context: { ...offers.context, receiptPrintMode: "on_request" },
-    }),
-  };
 
   /** Three equal shares paid in turn from the phone, the third answered with `invoice`. */
   async function threeShares(
     invoice: TillSaleResult,
     overrides: Record<string, unknown> = {},
     tillOver: Record<string, unknown> = {},
-    theme?: "light" | "dark",
+    cashTendered?: string,
   ) {
     const stubs = onPhone(
       {
@@ -3347,7 +3336,7 @@ describe("the document choice on a handheld", () => {
       tillOver,
     );
     api = stubApi(stubs);
-    const { el } = await mountWidget<TillApp>("till-app", { api }, theme);
+    const { el } = await mountWidget<TillApp>("till-app", { api });
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await press(el, 'input[name="way"][value="share"]');
@@ -3362,6 +3351,10 @@ describe("the document choice on a handheld", () => {
         ),
       );
       await press(el, "[data-pay-next]");
+    }
+    if (cashTendered !== undefined) {
+      await press(el, 'input[name="method"][value="cash"]');
+      await type(el, "tendered", cashTendered);
     }
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -3384,7 +3377,7 @@ describe("the document choice on a handheld", () => {
     expect(vi.mocked(api.finishTable)).not.toHaveBeenCalled();
   });
 
-  it("a last share paid in cash shows its change in the document choice's list, and no second change line", async () => {
+  it("a final cash share shows only its own change beside the document choice", async () => {
     const cashShare = paymentOf({
       id: "pay-3",
       submissionId: "sub-3",
@@ -3394,25 +3387,48 @@ describe("the document choice on a handheld", () => {
       tendered: "50.00",
       change: "10.00",
     });
-    const { el } = await threeShares(simplified(), {
-      takeBillPayment: vi
-        .fn()
-        .mockResolvedValueOnce(shareOf("80.00"))
-        .mockResolvedValueOnce(shareOf("40.00"))
-        .mockResolvedValueOnce(
-          takenOf(
-            { method: "cash", entry: null, applied: "40.00", tendered: "50.00", change: "10.00" },
-            {
-              total: "120.00",
-              received: "120.00",
-              outstanding: "0.00",
-              status: "settled",
-              payments: [sharePaid(1), sharePaid(2), cashShare],
-            },
-            { ...simplified(), tender: { method: "cash", change: "10.00" } },
-          ),
+    const { el } = await threeShares(
+      simplified(),
+      {
+        previewBillPayment: vi.fn<TillApi["previewBillPayment"]>(async (_id, request) =>
+          request.method === "cash" ? cash("40.00", "10.00") : share,
         ),
-    });
+        takeBillPayment: vi
+          .fn()
+          .mockResolvedValueOnce(shareOf("80.00"))
+          .mockResolvedValueOnce(shareOf("40.00"))
+          .mockResolvedValueOnce(
+            takenOf(
+              { method: "cash", entry: null, applied: "40.00", tendered: "50.00", change: "10.00" },
+              {
+                total: "120.00",
+                received: "120.00",
+                outstanding: "0.00",
+                status: "settled",
+                payments: [sharePaid(1), sharePaid(2), cashShare],
+              },
+              {
+                ...simplified(),
+                tender: { method: "card", charged: "40.00", tip: "0.00", reference: null },
+                payments: [
+                  { method: "card", amount: "40.00", tip: "0.00", reference: null, refunds: [] },
+                  { method: "card", amount: "40.00", tip: "0.00", reference: null, refunds: [] },
+                  {
+                    method: "cash",
+                    amount: "40.00",
+                    tip: "0.00",
+                    tendered: "50.00",
+                    change: "10.00",
+                    refunds: [],
+                  },
+                ],
+              },
+            ),
+          ),
+      },
+      {},
+      "50",
+    );
 
     await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     await documentChoice(el)!.updateComplete;
@@ -3421,9 +3437,8 @@ describe("the document choice on a handheld", () => {
     );
   });
 
-  it("where receipts print on request, the original-print action prints it once and reads the ticket again", async () => {
+  it("the explicit original-print action prints once and reads its status again", async () => {
     const { el } = await threeShares(simplified(), {
-      ...onRequest,
       getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
     });
     await vi.waitFor(() => expect(inChoice(el, '[data-test="print-receipt"]')).not.toBeNull());
@@ -3453,30 +3468,22 @@ describe("the document choice on a handheld", () => {
     expect(vi.mocked(api.printReceipt)).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["where receipts print on request", true],
-    ["where receipts print by themselves", false],
-  ] as const)(
-    "%s, a device that may not print is offered neither the original print nor a retry",
-    async (_, requested) => {
-      const { el } = await threeShares(
-        simplified(),
-        {
-          ...(requested ? onRequest : {}),
-          getReceiptPrintStatus: vi
-            .fn()
-            .mockResolvedValue({ status: "failed", jobId: "job-1", canRetry: true }),
-        },
-        { capabilities: phoneCapabilities.filter((flag) => flag !== "print-receipt") },
-      );
-      await vi.waitFor(() => expect(documentChoice(el)?.originalReceiptPrint).not.toBeNull());
-      expect(documentChoice(el)!.canPrintReceipt).toBe(false);
-      expect(documentChoice(el)!.canPrintReceipt).toBe(false);
-      expect(inChoice(el, '[data-test="print-receipt"]')).toBeNull();
-      expect(inChoice(el, '[data-test="retry-receipt"]')).toBeNull();
-      expect(inChoice(el, '[data-test="reprint"]')).toBeNull();
-    },
-  );
+  it("a device that may not print is offered neither an original, retry nor copy", async () => {
+    const { el } = await threeShares(
+      simplified(),
+      {
+        getReceiptPrintStatus: vi
+          .fn()
+          .mockResolvedValue({ status: "failed", jobId: "job-1", canRetry: true }),
+      },
+      { capabilities: phoneCapabilities.filter((flag) => flag !== "print-receipt") },
+    );
+    await vi.waitFor(() => expect(documentChoice(el)?.originalReceiptPrint).not.toBeNull());
+    expect(documentChoice(el)!.canPrintReceipt).toBe(false);
+    expect(inChoice(el, '[data-test="print-receipt"]')).toBeNull();
+    expect(inChoice(el, '[data-test="retry-receipt"]')).toBeNull();
+    expect(inChoice(el, '[data-test="reprint"]')).toBeNull();
+  });
 
   it("a failed ticket read is checked again from the document choice", async () => {
     const getReceiptPrintStatus = vi
@@ -3520,7 +3527,7 @@ describe("the document choice on a handheld", () => {
     expect(vi.mocked(api.finishTable).mock.calls[0]![0]).toBe("v1");
   });
 
-  it("Back to the table returns to the table's order without a new history entry", async () => {
+  it("None returns to the table's order without a new history entry", async () => {
     const { el } = await threeShares(simplified());
     await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
@@ -3543,7 +3550,7 @@ describe("the document choice on a handheld", () => {
     }
   });
 
-  it("Finish table refused because another bill still owes leaves the document choice for the table's refusal", async () => {
+  it("after None, Finish table refused because another bill still owes shows the table's refusal", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
@@ -3569,7 +3576,7 @@ describe("the document choice on a handheld", () => {
     ["not permitted", { code: "authorization.not_permitted" }],
     ["unanswered", new TypeError("Failed to fetch")],
   ] as const)(
-    "Finish table refused (%s) on the document choice says so where it can be seen",
+    "after None, Finish table refused (%s) says so where it can be seen",
     async (_, refusal) => {
       const { el } = await threeShares(simplified(), {
         finishTable: vi.fn().mockRejectedValue(refusal),
@@ -3611,7 +3618,7 @@ describe("the document choice on a handheld", () => {
     },
   };
 
-  /** The document choice's Finish table answered that a paid dish is not served yet, then the
+  /** Finish table answered that a paid dish is not served yet, then the
    * confirmation's send answered `refusal`. */
   async function refusedAfterUnserved(
     refusal: { code: string },
@@ -3665,7 +3672,7 @@ describe("the document choice on a handheld", () => {
     expect(text(alert)).toBe(t("table.finish_bill_holds_money"));
   }
 
-  it("Finish table with paid dishes not yet served opens the confirmation over the document choice; refused there because a bill owes, it leaves for the table's refusal", async () => {
+  it("after None, Finish table with unserved paid dishes opens confirmation; refusing it because a bill owes shows the table's refusal", async () => {
     const el = await refusedAfterUnserved({ code: "party.bill_outstanding" });
 
     expect(documentChoice(el)).toBeNull();
@@ -3693,7 +3700,7 @@ describe("the document choice on a handheld", () => {
     },
   );
 
-  it("Finish table refused because a bill holds money leaves the document choice, and the order screen keeps the instruction", async () => {
+  it("after None, Finish table refused because a bill holds money keeps the instruction on the table", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     });
@@ -3711,7 +3718,7 @@ describe("the document choice on a handheld", () => {
     holdsMoneyOnOrder(el);
   });
 
-  it("a ticket read that never answers leaves Finish table and Back to the table pressable; Finish table sends once", async () => {
+  it("an unanswered print-status read leaves None usable, then Finish table sends once", async () => {
     const { el } = await threeShares(simplified(), {
       getReceiptPrintStatus: vi.fn(() => new Promise(() => {})),
       finishTable: vi.fn(() => new Promise(() => {})),
@@ -3748,7 +3755,7 @@ describe("the document choice on a handheld", () => {
     expect(ticketView(el)).toBeNull();
   });
 
-  it("a full invoice still shows the document choice", async () => {
+  it("a full invoice opens the document choice", async () => {
     const { el } = await threeShares(full());
 
     await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
@@ -3798,7 +3805,7 @@ describe("the document choice on a handheld", () => {
     expect(ticketView(el)).toBeNull();
   });
 
-  it("a counter till paying a bill with a simplified invoice still shows the document choice and reads no ticket", async () => {
+  it("a counter till paying a simplified bill opens the document choice and reads its print status", async () => {
     const getReceiptPrintStatus = vi.fn();
     const { el } = await mountApp({
       getReceiptPrintStatus,
@@ -3825,7 +3832,7 @@ describe("the document choice on a handheld", () => {
   });
 
   describe("on the presented path", () => {
-    it("a simplified invoice shows the document choice, with no list of payments", async () => {
+    it("a simplified invoice opens the document choice with its total", async () => {
       const { el } = await payPresented(simplified());
 
       await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
@@ -3838,7 +3845,7 @@ describe("the document choice on a handheld", () => {
       ["cash", { method: "cash", tendered: "150.00", guestCount: 4 }],
       ["another card machine", { method: "manual", externalRef: "OP-7", guestCount: 4 }],
     ] as const)(
-      "%s with a simplified invoice shows the document choice, with no list of payments",
+      "%s with a simplified invoice opens the document choice with its total",
       async (_, detail) => {
         const { el } = await payPresented(simplified(), undefined, detail);
 
@@ -3877,7 +3884,7 @@ describe("the document choice on a handheld", () => {
       expect(inChoice(el, '[data-test="open-drawer"]')).toBeNull();
     });
 
-    it("a full invoice still shows the document choice", async () => {
+    it("a full invoice opens the document choice", async () => {
       const { el } = await payPresented(full());
 
       await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
@@ -3995,7 +4002,7 @@ describe("the document choice on a handheld", () => {
     ["while the last table's party is still held", true],
     ["with no table held", false],
   ])(
-    "a counter order paid %s shows its own ticket, and New sale goes home",
+    "a counter order paid %s shows its own invoice number, and None goes home",
     async (_, tableHeld) => {
       const { el } = await payCounterOrder({ tableHeld });
 
@@ -4160,7 +4167,7 @@ describe("the document choice on a handheld", () => {
       );
     });
 
-    describe("Finish table refused from the document choice", () => {
+    describe("Finish table refused after None", () => {
       const billOnePaidAndRest = threeBills.map((bill) =>
         bill === billOne ? settled(bill) : bill,
       );
@@ -4291,7 +4298,7 @@ describe("the document choice on a handheld", () => {
       expect(text(inOrder(tableOrder(el), "[data-bill-received]"))).toContain(money("20.00"));
     });
 
-    it("when the read after the payment says another till paid the rest, the title goes back to the table and Finish table returns", async () => {
+    it("when another till paid the remaining bills, the read after payment refreshes their settled states", async () => {
       const { el } = await payBillOne(threeBills, async () => threeBills.map(settled));
       await firstDrawn(el);
       await vi.waitFor(() =>
@@ -4608,7 +4615,7 @@ describe("the document choice on a handheld", () => {
       ]);
     });
 
-    it("a table of one bill is as it was: its name, no list, Finish table first, Back staying on the bill", async () => {
+    it("None on a table of one bill keeps that bill and refreshes the table balance", async () => {
       const { el } = await payBillOne([billOne]);
       await firstDrawn(el);
 
@@ -4624,7 +4631,7 @@ describe("the document choice on a handheld", () => {
       expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("0.00"));
     });
 
-    it("with a draft save refused at Back, the screen stays on the paid bill and says why", async () => {
+    it("with a draft save refused at None, the table keeps its bill and says why", async () => {
       const { el } = await payBillOne(threeBills, () => new Promise<PartyBill[]>(() => {}));
       await firstDrawn(el);
       vi.mocked(api.saveDraft).mockRejectedValue(new TypeError("Failed to fetch"));
