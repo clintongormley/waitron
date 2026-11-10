@@ -107,6 +107,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "me.failed");
+// This route names no passkey, so a person holding none clashes with their stored record: 409.
+// The shared 404 stays for DELETE /passkeys/:id, whose path names one.
+const runPasskeyOptions = createErrorBoundary(
+  { ...STATUS, "passkey.not_registered": 409 },
+  "me.failed",
+);
 
 /**
  * Staff self-service routes. Every route acts as the person its management session names, never
@@ -156,7 +162,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     }),
   );
   app.post("/management-api/session/me/fresh-sign-in/passkey-options", (c) =>
-    run(c, log, async () => {
+    runPasskeyOptions(c, log, async () => {
       const token = requireManagementSession(c);
       const result = await asStaff((tx) =>
         beginOwnPasskeyCheck(tx, {

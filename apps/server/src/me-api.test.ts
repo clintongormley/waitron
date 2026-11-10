@@ -1298,6 +1298,18 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "account_action.invalid", params: {} } });
   });
+
+  it("404s (passkey.not_registered) removing a passkey id the person does not hold", async () => {
+    const personId = await personWithPassword();
+    const res = await send(
+      mountApp(),
+      "DELETE",
+      `/management-api/session/me/passkeys/${crypto.randomUUID()}`,
+      { cookie: await cookieFor(personId), body: { currentPassword: PASSWORD } },
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: { code: "passkey.not_registered", params: {} } });
+  });
 });
 
 describe("mountMeApi — the current password is checked before the write lock is taken", () => {
@@ -1642,5 +1654,19 @@ describe("session proof routes", () => {
         error: { code: "management_session.required" },
       });
     }
+  });
+  it("answers 409 when the signed-in person asks for passkey options with none registered", async () => {
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName: "No Passkey", pinHash: hashPin("6666"), role: "staff" })
+      .returning({ id: persons.id });
+    const response = await send(
+      mountApp(),
+      "POST",
+      "/management-api/session/me/fresh-sign-in/passkey-options",
+      { cookie: await cookieFor(row!.id), body: {} },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
   });
 });

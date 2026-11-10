@@ -1397,6 +1397,16 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     expect((await response.json()).error.code).toBe("management.request_invalid");
   });
 
+  it("refuses an order the body names that does not exist with 400", async () => {
+    const response = await app.request("/api/dead-ends/order", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ workingOrderId: randomUUID() }),
+    });
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.code).toBe("working_order.not_found");
+  });
+
   it.each(["prepay", "ticket_then_pay", "ticket_then_pay"] as const)(
     "asks about an open counter order on pay in %s",
     async (mode) => {

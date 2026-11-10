@@ -679,6 +679,10 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 export const run = createErrorBoundary(STATUS, "till.failed");
 const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 const runSaveDraft = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
+const runDeadEndsOrder = createErrorBoundary(
+  { ...STATUS, "working_order.not_found": 400 },
+  "till.failed",
+);
 const runFinishParty = createErrorBoundary(
   { ...STATUS, "adjustment_reason.not_found": 400 },
   "till.failed",
@@ -3919,7 +3923,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   // A tab does not re-price: the stored locked gross rides back verbatim. The revision is read in
   // the same transaction, so it is the one these lines are at.
   app.post("/api/dead-ends/order", (c) =>
-    run(c, log, async () => {
+    runDeadEndsOrder(c, log, async () => {
       const session = await requireSession(deps, c);
       const body = await readJsonBody<{ workingOrderId: string; toZoneId?: string }>(c);
       const id = requireUuidParam(body.workingOrderId, "WorkingOrderId");
