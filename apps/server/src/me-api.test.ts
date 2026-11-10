@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -1299,6 +1298,18 @@ describe("mountMeApi — own credentials and second factor", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "account_action.invalid", params: {} } });
   });
+
+  it("404s (passkey.not_registered) removing a passkey id the person does not hold", async () => {
+    const personId = await personWithPassword();
+    const res = await send(
+      mountApp(),
+      "DELETE",
+      `/management-api/session/me/passkeys/${crypto.randomUUID()}`,
+      { cookie: await cookieFor(personId), body: { currentPassword: PASSWORD } },
+    );
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: { code: "passkey.not_registered", params: {} } });
+  });
 });
 
 describe("mountMeApi — the current password is checked before the write lock is taken", () => {
@@ -1656,26 +1667,6 @@ describe("session proof routes", () => {
       { cookie: await cookieFor(row!.id), body: {} },
     );
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
-  });
-  it("answers 404 when the passkey the path names does not exist", async () => {
-    const [row] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Unknown Passkey",
-        email: "unknown-passkey@example.com",
-        pinHash: hashPin("7777"),
-        role: "staff",
-        passwordHash: hashPassword("current password"),
-      })
-      .returning({ id: persons.id });
-    const response = await send(
-      mountApp(),
-      "DELETE",
-      `/management-api/session/me/passkeys/${randomUUID()}`,
-      { cookie: await cookieFor(row!.id), body: { currentPassword: "current password" } },
-    );
-    expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
   });
 });

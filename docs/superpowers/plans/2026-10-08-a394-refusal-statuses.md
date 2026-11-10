@@ -431,12 +431,14 @@ Status changes:
   `till-api.table-actions.test.ts:427-429`, `till-api.move-bill.test.ts:909-911`,
   `till-api.status.test.ts:222-232`, `till-api.test.ts:3927-3929`. Size M. Depends on: question 8
   for the query rows.
-  **2026-11-10 (lane B):** done for `working_order.not_found` on `/api/dead-ends/order` (400), and
+  **2026-11-10 (A394-9):** done for `working_order.not_found` on `/api/dead-ends/order` (400), and
   me-api's fresh-sign-in passkey options now answer `passkey.not_registered` 409 (the person holds
-  no passkey; the DELETE path keeps 404). Re-traced on main: `service_zone.not_found`,
+  no passkey; the DELETE path keeps 404). Re-traced on main: on the till, `zone.not_found` names a zone
+  in the path (its stored-zone throws were judged unreachable by reading), so 404 stands; `status.not_found` is gone (A757). `service_zone.not_found`,
   `table.not_found`/`table.inactive` and `reader.not_found` each come from more than one of the path, the body and
-  stored rows, so following the rule needs new codes (and till wording for the table ones); no
-  client reads these statuses. That choice is with the owner.
+  stored rows, so following the rule needs new codes (and till wording for the table ones); the
+  client grep above, re-run unchanged on 2026-11-10, finds no status comparison on these routes. That choice is
+  with the owner.
 - **A394-10 — Till, lines, groups, drafts and courses: body ids answer 400.** Same files plus
   `adjustments-api.ts` and the doc comment at `apps/till/src/api/client.ts:2723`. Changes
   `tab.line_not_found`, `group.not_found`, `draft.not_found`, `course.not_found`, `station.not_found`,
@@ -1057,6 +1059,8 @@ verbs answer their own `*.not_found` 404 — match.
 24 codes checked / 21 match / 2 mismatch rows (2 codes). `passkey.not_registered` 404 here is the
 path `:id` (`me-api.ts:219`) — match; management-api's 401 for the same code is a sign-in refusal
 (an auth answer, out of the rule, and the owner-approved exception in CLAUDE.md §3).
+**2026-11-10:** the fresh-sign-in passkey options route, added after this audit (#2666), answered
+this code with 404 when the signed-in person holds no passkey; it now answers 409 (A394-9).
 
 | Route | Code | Current | Rule | Why | Clients | Tests pinning |
 | --- | --- | --- | --- | --- | --- | --- |
