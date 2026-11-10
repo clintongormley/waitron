@@ -226,3 +226,54 @@ it.each([
   const { installSucceeded } = await import("./recipe-setup.mjs");
   expect(installSucceeded(serial)).toBe(expected);
 });
+
+it("stops the rig when the installer unit fails after printing its marker", () => {
+  const root = mkdtempSync(join(tmpdir(), "b3-unit-failure-"));
+  try {
+    const qemu = join(root, "qemu-system-x86_64");
+    writeFileSync(
+      qemu,
+      `#!/bin/sh
+sleep 0.1
+printf "%s\\n" "B3_INSTALL_OK:installed-root" "unit=waitron-dev-install comm=systemd res=failed'"
+sleep 0.1
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(join(root, "vars.fd"), "private firmware fixture");
+    writeFileSync(
+      join(root, "firmware.mjs"),
+      `import fs from "node:fs/promises";
+import {syncBuiltinESMExports} from "node:module";
+const copy = fs.copyFile;
+fs.copyFile = (source, ...rest) => copy(source === "/usr/share/OVMF/OVMF_VARS_4M.fd" ? new URL("./vars.fd", import.meta.url) : source, ...rest);
+syncBuiltinESMExports();
+`,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        join(root, "firmware.mjs"),
+        "bench/box-installer/run.mjs",
+        "--case",
+        "installed-setup",
+        "--run-dir",
+        join(root, "check"),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${root}:${process.env.PATH}`,
+          B3_INSTALLER_IMAGE: join(root, "image"),
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("install service did not report success");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

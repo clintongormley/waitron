@@ -313,6 +313,7 @@ async function installedRun() {
       }),
     );
     const stop = async () => {
+      clearTimeout(deadlineKill);
       await writeFile(
         join(runDir, `${name}-timing.json`),
         JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
@@ -341,9 +342,11 @@ async function installedRun() {
       clearTimeout(polite);
       clearTimeout(force);
     };
+    let deadlineKill;
     const timer = setTimeout(() => {
       failure = new Error(`${name} deadline`);
       child.kill("SIGTERM");
+      deadlineKill = setTimeout(() => child.kill("SIGKILL"), 3000);
     }, deadline);
     try {
       await new Promise((done, reject) => {
@@ -361,6 +364,17 @@ async function installedRun() {
       return {
         get serial() {
           return serial;
+        },
+        finish: async () => {
+          const result = await stopped;
+          clearTimeout(timer);
+          clearTimeout(deadlineKill);
+          await writeFile(
+            join(runDir, `${name}-timing.json`),
+            JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
+          );
+          if (failure) throw failure;
+          if (result.code !== 0) throw new Error(`${name} exit ${result.code}/${result.signal}`);
         },
         stop: async () => {
           clearTimeout(timer);
@@ -395,7 +409,7 @@ async function installedRun() {
   } else {
     const install = await boot("install", true, "B3_INSTALL_OK:", 900000);
     const installedUuid = rigLine(install.serial, "B3_INSTALL_OK:").trim();
-    await install.stop();
+    await install.finish();
     if (!installSucceeded(install.serial))
       throw new Error("install service did not report success");
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));

@@ -20,7 +20,7 @@ case "$name" in
  readlink) [ "$*" = "-f /run/systemd/volatile-root" ] || exit 99; echo "\${SOURCE_ROOT:-/dev/vda2}" ;;
  lsblk)
   if [[ "$*" == *MOUNTPOINTS* ]]; then echo "\${MOUNTED:-}"
-  elif [[ "$*" == *PKNAME* ]]; then echo "\${SOURCE_PARENT:-vda}"
+  elif [[ "$*" == *PKNAME* ]]; then [[ "\${!#}" == "\${SOURCE_ROOT:-/dev/vda2}" ]] || exit 99; echo "\${SOURCE_PARENT:-vda}"
   elif [[ "$*" == *SERIAL* && "$*" != *json* ]]; then echo "\${SERIAL:-waitron-dev-target}"
   else printf '%s\n' "$DISKS"; fi ;;
  ls) echo "\${HOLDERS:-}" ;;
@@ -29,7 +29,12 @@ case "$name" in
   printf '%s\n' "$((count + 1))" > "$SIZE_CALLS"
   if [ "$count" = 0 ]; then echo "\${DISK_SIZE:-12884901888}"; else echo "\${FINAL_SIZE:-12884901888}"; fi ;;
  sleep) : ;;
- curl) echo "curl $*" >> "$WRITES"; if [[ "$*" == */health ]]; then exit 0; else exit 22; fi ;;
+ curl)
+  echo "curl $*" >> "$WRITES"
+  if [[ "$*" == */health ]]; then exit 0; fi
+  code="\${SETUP_HTTP:-404}"
+  if [[ "$*" == *http_code* ]]; then printf '%s' "$code"; fi
+  if [[ "$1" == *f* && "$code" != 200 ]]; then exit 22; fi ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
  docker) echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"; exit "\${DOCKER_EXIT:-43}" ;;
@@ -166,6 +171,26 @@ describe("installed startup", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).not.toContain("B3_INSTALLED:");
     expect(readFileSync(writes, "utf8")).toContain("https://127.0.0.1/health");
+  });
+  it("does not call a setup server's HTTP 500 an already set-up server", () => {
+    const writes = join(scratch, "failed-start-calls");
+    writeFileSync(writes, "");
+    const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
+      env: {
+        ...process.env,
+        PATH: `${scratch}:${process.env.PATH}`,
+        ROOT_UUID: "installed-root",
+        BASH_ENV: bashEnv,
+        B3_TEST_CWD: scratch,
+        WRITES: writes,
+        DOCKER_EXIT: "0",
+        SETUP_HTTP: "500",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toContain("B3_INSTALLED:");
   });
   it("refuses the wrong mounted root before Docker starts", () => {
     const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
