@@ -13,7 +13,6 @@ export interface LiveStreamOptions {
   invalidCodes: ReadonlySet<string>;
   sendIds: boolean;
   log: Logger;
-  keepaliveMs?: number;
   /** Transfer invalidation retains no identities and carries an empty object. */
   invalidationOnly?: boolean;
 }

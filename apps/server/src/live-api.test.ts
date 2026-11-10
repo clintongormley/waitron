@@ -304,6 +304,41 @@ describe("the change subscriber", () => {
   });
 });
 
+it("writes a keepalive while another caller holds the write lock", async () => {
+  const { app, path, cookie } = await fixture();
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const response = await app.request(path, { headers: { cookie } });
+  const reader = response.body!.getReader();
+  await reader.read();
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const lock = suite.db.withWriteLock(async () => {
+    entered();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  });
+  await held;
+  let message: string | undefined;
+  try {
+    const next = reader.read().then((chunk) => {
+      message = new TextDecoder().decode(chunk.value);
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect.poll(() => message, { timeout: 250 }).toBe("event: keepalive\ndata: []\n\n");
+    await next;
+  } finally {
+    release();
+    await lock;
+    await reader.cancel();
+    vi.useRealTimers();
+  }
+});
+
+// Installing change-feed triggers changes the suite's database; keep this case last.
 it("delivers a write made outside withTransaction on the next transaction the process runs", async () => {
   const { cookie, bus } = await fixture();
   const app = new Hono();
@@ -343,40 +378,6 @@ it("delivers a write made outside withTransaction on the next transaction the pr
     await reader.cancel();
     unsubscribe();
     bus.close();
-    vi.useRealTimers();
-  }
-});
-
-it("writes a keepalive while another caller holds the write lock", async () => {
-  const { app, path, cookie } = await fixture();
-  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  const response = await app.request(path, { headers: { cookie } });
-  const reader = response.body!.getReader();
-  await reader.read();
-  let release!: () => void;
-  let entered!: () => void;
-  const held = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
-  const lock = suite.db.withWriteLock(async () => {
-    entered();
-    await new Promise<void>((resolve) => {
-      release = resolve;
-    });
-  });
-  await held;
-  let message: string | undefined;
-  try {
-    const next = reader.read().then((chunk) => {
-      message = new TextDecoder().decode(chunk.value);
-    });
-    await vi.advanceTimersByTimeAsync(15_000);
-    await expect.poll(() => message, { timeout: 250 }).toBe("event: keepalive\ndata: []\n\n");
-    await next;
-  } finally {
-    release();
-    await lock;
-    await reader.cancel();
     vi.useRealTimers();
   }
 });

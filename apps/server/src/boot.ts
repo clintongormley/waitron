@@ -2299,17 +2299,6 @@ async function bootServer(
     log,
   );
 
-  mountDeviceLiveApi(
-    app,
-    {
-      db,
-      bus: liveEvents,
-      resourceTypes: liveResourceTypesForModules(setsToMigrate),
-      devMode: config.devMode,
-    },
-    log,
-  );
-
   const reconciler = new StripeReconciler({
     db,
     resolveAccount: stripeAccountResolver({
@@ -2326,6 +2315,17 @@ async function bootServer(
   app.use("/api/*", corsForVenue(allowOrigin));
   // A rerouted till fetches menu photos cross-origin.
   app.use("/media/*", corsForVenue(allowOrigin));
+
+  mountDeviceLiveApi(
+    app,
+    {
+      db,
+      bus: liveEvents,
+      resourceTypes: liveResourceTypesForModules(setsToMigrate),
+      devMode: config.devMode,
+    },
+    log,
+  );
 
   mountWebhook(
     app,
