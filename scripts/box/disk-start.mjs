@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -135,6 +137,7 @@ export async function runDiskCommand(
 
 export async function startDisk({
   checkOnly = false,
+  report = () => {},
   hostRoot = HOST_ROOT,
   ownerUid = 0,
   inspect = () => inspectEncryptedHostState({ hostRoot }),
@@ -148,6 +151,7 @@ export async function startDisk({
   const checked = async (name, args, secret) => {
     try {
       const result = await command(name, args, secret);
+      report({ command: name, operation: args[0], status: result.status });
       if (result.status !== 0) throw refused();
       return result.stdout;
     } finally {
@@ -200,6 +204,7 @@ export async function startDisk({
     } finally {
       key.fill(0);
     }
+    report({ action: "restart", diskUuid });
     await checked("systemctl", ["reboot", "--no-block"]);
     return { action: "restart", diskUuid };
   }
@@ -234,5 +239,29 @@ export async function readDiskOpening({ path = "/run/waitron-disk-opened", owner
     return text === "chip\n" ? "chip" : text === "bootstrap\n" ? "bootstrap" : null;
   } finally {
     await handle.close();
+  }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const mode = process.argv[2];
+  try {
+    if (process.getuid() !== 0 || !["prepare", "check"].includes(mode))
+      throw Object.assign(new Error("disk_start.refused"), { code: "disk_start.refused" });
+    const result = await startDisk({
+      checkOnly: mode === "check",
+      report:
+        mode === "prepare"
+          ? (value) => console.log(`B3_DISK_START:${JSON.stringify(value)}`)
+          : undefined,
+    });
+    if (mode === "check") console.log(JSON.stringify(result));
+    else if (result.action === "ready") console.log(`B3_DISK_START:${JSON.stringify(result)}`);
+  } catch (error) {
+    console.error("disk_start.refused", {
+      code: error.code,
+      reason: error.reason,
+      kind: error.name,
+    });
+    process.exitCode = 1;
   }
 }

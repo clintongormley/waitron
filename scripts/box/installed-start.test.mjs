@@ -52,6 +52,10 @@ case "$name" in
   if [[ "$1" == *f* && "$code" != 200 ]]; then exit 22; fi ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
+ node)
+  [ "$1" = /opt/waitron-host/box/disk-start.mjs ] || exit 99
+  [ "\${DISK_CHECK_EXIT:-0}" = 0 ] || exit 1
+  echo '{"action":"ready","openedBy":"chip","emptyPassword":false,"keySlots":2,"tpmSlots":1}' ;;
  docker)
   echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"
   [ "\${DOCKER_EXIT:-43}" = 0 ] || exit "\${DOCKER_EXIT:-43}"
@@ -102,6 +106,7 @@ for (const name of [
   "sfdisk",
   "apparmor_parser",
   "docker",
+  "node",
   "ls",
   "mktemp",
   "mkfs.vfat",
@@ -267,6 +272,26 @@ describe("installed startup", () => {
     });
     expect(result.status).toBe(1);
     expect(result.stdout).not.toContain("B3_INSTALLED:");
+  });
+  it("refuses an unconfirmed disk key before Compose can start", () => {
+    const writes = join(scratch, "disk-key-refusal-calls");
+    writeFileSync(writes, "");
+    const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
+      env: {
+        ...process.env,
+        PATH: `${scratch}:${process.env.PATH}`,
+        ROOT_UUID: "installed-root",
+        BASH_ENV: bashEnv,
+        B3_TEST_CWD: scratch,
+        WRITES: writes,
+        DISK_CHECK_EXIT: "1",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("start.refused:disk-key");
+    expect(readFileSync(writes, "utf8")).toBe("");
   });
   it("refuses the wrong mounted root before Docker starts", () => {
     const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
