@@ -1939,7 +1939,7 @@ describe("waitron.sh reset", () => {
       "ca.key",
       "server.crt",
       "server.key",
-      "server.key.install",
+      "server.key.tmp",
       "install.json",
       "joined.json",
     ]);

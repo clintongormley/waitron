@@ -281,7 +281,7 @@ describe("runStagedReset", () => {
   it("a staged reset of a box that joined leaves no authority, leaf, client certificate or key ring", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
     const tls = join(stateDir, "tls");
-    for (const name of ["ca.key", "server.crt", "server.key", "client.crt", "server.key.install"]) {
+    for (const name of ["ca.key", "server.crt", "server.key", "client.crt", "server.key.tmp"]) {
       await writeFile(join(tls, name), name);
     }
     await stageResetRequest(stateDir, operationId);

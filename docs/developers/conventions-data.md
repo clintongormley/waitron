@@ -3574,8 +3574,10 @@ the main box's node id, before `stampDeployment` and before the main box's key r
 signs for this box's names, as this box's own `tls/ca.*` and `tls/server.*`
 (`installVenueAuthority`, `apps/server/src/box-tls-install.ts`): four working files (each
 `<name>.tmp`, `stagedPath`), then a durable `tls/install.json` (`TLS_INSTALL_FILE`) naming them,
-then the renames, then the list is removed. It refuses an authority certificate whose key is not
-the one given (`mirror.bundle_fetch_failed`) before it writes anything. A leaf reissue
+then the renames, then the list is removed. `adoptFromPrimary` refuses a bundle whose authority
+certificate's key is not the one it carries (`mirror.bundle_fetch_failed`) before it writes
+anything, and `installVenueAuthority` refuses such a pair through the same check
+(`assertAuthorityKeyMatches`). A leaf reissue
 (`reissueBoxLeaf`, `apps/server/src/box-secrets.ts`) writes `server.crt` and `server.key` the same
 way. `finishTlsInstall` finishes a listed install and deletes every other working file of the set
 and of the list, before `tls/` is first read: in `node-entry.ts` (the image's entry point) and in

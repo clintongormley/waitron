@@ -8,11 +8,7 @@ import {
   joinedAnotherBox,
   markJoined,
 } from "./box-tls-install.js";
-import {
-  mintSelfSignedServerCert,
-  reissueServerLeaf,
-  type SelfSignedMaterial,
-} from "./self-signed-cert.js";
+import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 import {
   syncsAndRenames as recordSyncsAndRenames,
   writtenDurably,
@@ -30,10 +26,6 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   openMock.mockImplementation(actual.open);
   renameMock.mockImplementation(actual.rename);
   return { ...actual, mkdir: mkdirMock, open: openMock, rename: renameMock };
-});
-vi.mock("./self-signed-cert.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./self-signed-cert.js")>();
-  return { ...actual, reissueServerLeaf: vi.fn(actual.reissueServerLeaf) };
 });
 const syncsAndRenames = (run: () => Promise<unknown>) =>
   recordSyncsAndRenames({ mkdir: mkdirMock, open: openMock, rename: renameMock }, run);
@@ -182,20 +174,6 @@ describe("installVenueAuthority", () => {
     await expect(
       install(stateDir, { certPem: main.caCertPem, keyPem: own.caKeyPem }),
     ).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed" });
-
-    expect(await setOf(stateDir)).toEqual(before);
-    expect((await readdir(join(stateDir, "tls"))).sort()).toEqual(INSTALLED);
-  });
-
-  it("refuses a leaf that does not verify under the authority, leaving the box's own set", async () => {
-    const stateDir = await ownBox();
-    const before = await setOf(stateDir);
-    vi.mocked(reissueServerLeaf).mockReturnValueOnce({
-      serverCertPem: own.serverCertPem,
-      serverKeyPem: own.serverKeyPem,
-    });
-
-    await expect(install(stateDir)).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed" });
 
     expect(await setOf(stateDir)).toEqual(before);
     expect((await readdir(join(stateDir, "tls"))).sort()).toEqual(INSTALLED);

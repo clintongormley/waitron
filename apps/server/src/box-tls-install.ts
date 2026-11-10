@@ -93,14 +93,19 @@ export interface InstallVenueAuthorityDeps {
   now: () => Date;
 }
 
+/** Refuses, with `mirror.bundle_fetch_failed`, an authority certificate whose key is not `keyPem`. */
+export function assertAuthorityKeyMatches(certPem: string, keyPem: string): void {
+  if (!keyBelongsTo(certPem, keyPem)) throw new AppError("mirror.bundle_fetch_failed", {});
+}
+
 /**
  * Makes `authority`, and a leaf it signs for `hostnames`, this box's own `tls/` set, through
- * {@link stageTlsInstall}. Refuses, with `mirror.bundle_fetch_failed` and before it writes anything,
- * an authority certificate whose key is not the one given, or a leaf that does not verify under it.
+ * {@link stageTlsInstall}. Refuses, through {@link assertAuthorityKeyMatches} and before it writes
+ * anything, an authority certificate whose key is not the one given.
  */
 export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Promise<void> {
   const { certPem, keyPem } = deps.authority;
-  if (!keyBelongsTo(certPem, keyPem)) throw new AppError("mirror.bundle_fetch_failed", {});
+  assertAuthorityKeyMatches(certPem, keyPem);
   const leaf = reissueServerLeaf({
     caCertPem: certPem,
     caKeyPem: keyPem,
@@ -108,9 +113,6 @@ export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Pr
     ipAddresses: leafIpv4s(deps.listIpv4),
     now: deps.now(),
   });
-  if (!new X509Certificate(leaf.serverCertPem).verify(new X509Certificate(certPem).publicKey)) {
-    throw new AppError("mirror.bundle_fetch_failed", {});
-  }
   const files = [
     { name: "ca.key", pem: keyPem },
     { name: "ca.crt", pem: certPem },

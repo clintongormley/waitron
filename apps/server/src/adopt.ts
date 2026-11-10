@@ -24,7 +24,7 @@ import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { makeBreakGlassSecret, mintBreakGlassKeyTx } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
-import { installVenueAuthority, markJoined } from "./box-tls-install.js";
+import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -167,6 +167,7 @@ export async function adoptFromPrimary(
   ) {
     throw new AppError("mirror.bundle_fetch_failed", {});
   }
+  assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
   const ring = loadKeyRing(keyRingEnv(bundle.credentialsRing));
   const recovery = makeBreakGlassSecret();
 
