@@ -71,7 +71,6 @@ const ADDED_TABLES = [
   "transfer_closures",
   "working_line_portions",
 ];
-// Dropped by A1308 4a-ii; the seed wrote its rows.
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
 const REMOVED_TABLES = [
   "tenant_receipts",
@@ -333,6 +332,7 @@ for (const locale of ["en", "es"] as const) {
         phases[phase]![name] = 0;
       }
       for (const name of REMOVED_TABLES_WITH_ROWS) {
+        expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeDefined();
         delete expected[phase].tables[name];
         delete phases[phase]![name];
       }

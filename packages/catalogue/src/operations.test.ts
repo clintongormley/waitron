@@ -1268,7 +1268,6 @@ describe("catalogue operations", () => {
     });
   });
 
-  // No prior default (a freshly-provisioned venue) → just set it, nothing to demote.
   it("setVenueDefaultCatalogue sets the default when the venue had none", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
