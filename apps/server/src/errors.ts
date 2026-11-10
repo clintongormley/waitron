@@ -1305,6 +1305,8 @@ declare module "@waitron/shared" {
      * error's `.message`, which can embed a URL or connection detail.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
+    /** No box but this one answered for another box's `.local` name within the time limit. */
+    "mirror.peer_unresolved": { hostname: string };
     /**
      * A box joining as a spare already holds a sealed vault row. Joining replaces its key ring with
      * the main box's, so that row would never open again; nothing has been written.
