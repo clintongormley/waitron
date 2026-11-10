@@ -2341,12 +2341,7 @@ it("returns focus to the Modifiers control after every nested form it can open",
   }
 });
 
-type Combobox = HTMLElement & {
-  value: string;
-  values: string[];
-  placeholder: string;
-  options: { value: string; label: string }[];
-};
+type Combobox = HTMLElementTagNameMap["wt-combobox"];
 function combobox(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector<Combobox>(`wt-combobox[name="${name}"]`);
 }
