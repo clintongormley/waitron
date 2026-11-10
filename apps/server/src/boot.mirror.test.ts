@@ -30,6 +30,7 @@ import {
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -38,7 +39,6 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
 import { get } from "node:https";
-import type { MdnsAnswer, MdnsSocket } from "./mdns.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -47,23 +47,6 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
   ephemeralServerFixture();
-
-function fakeMdnsSocket() {
-  let onQuery: ((query: { questions: { name: string; type: string }[] }) => void) | undefined;
-  const responses: { answers: MdnsAnswer[] }[] = [];
-  const socket: MdnsSocket = {
-    on: ((event: string, handler: never) => {
-      if (event === "query") onQuery = handler;
-    }) as MdnsSocket["on"],
-    respond: (response) => responses.push(response),
-    destroy: (cb) => cb?.(),
-  };
-  return {
-    socket,
-    query: (name: string) => onQuery?.({ questions: [{ name, type: "A" }] }),
-    answered: () => [...new Set(responses.flatMap((r) => r.answers.map((a) => a.name)))],
-  };
-}
 
 // Mirror-mode server boot. A mirror reads its origin, relay and CA from node.db's
 // `node_mirror_link`. Four venue directories: `mirror` (read-only, refuses writes); `primary`, the

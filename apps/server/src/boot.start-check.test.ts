@@ -46,11 +46,11 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeHandoverEvents, readHandoverRestriction } from "@waitron/node-db";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { boxHostnameFor } from "./box-name.js";
-import type { MdnsAnswer, MdnsSocket } from "./mdns.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { freePorts } from "./testing/free-ports.js";
 import { listener } from "./testing/ephemeral-listener.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
@@ -319,24 +319,6 @@ const WAIT_ON_SPARE: StartPeerCheckOutcome = {
   successorNodeId: null,
   waitingOn: [SPARE.nodeId],
 };
-
-function fakeMdnsSocket() {
-  let onQuery: ((query: { questions: { name: string; type: string }[] }) => void) | undefined;
-  const responses: { answers: MdnsAnswer[] }[] = [];
-  const socket: MdnsSocket = {
-    on: ((event: string, handler: never) => {
-      if (event === "query") onQuery = handler;
-    }) as MdnsSocket["on"],
-    respond: (response) => responses.push(response),
-    destroy: (cb) => cb?.(),
-  };
-  return {
-    socket,
-    query: (name: string) => onQuery?.({ questions: [{ name, type: "A" }] }),
-    answered: () => [...new Set(responses.flatMap((r) => r.answers.map((a) => a.name)))],
-    clear: () => responses.splice(0),
-  };
-}
 
 function startChecks(lines: Record<string, unknown>[]) {
   return lines
