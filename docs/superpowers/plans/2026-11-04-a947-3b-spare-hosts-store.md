@@ -819,7 +819,7 @@ the A1018 plan, not run.
       have saved this key somewhere safe" tick, presses Connect again, and the join goes through.
       Cost: one refusal in the joining route, passed on by Task 5.6b's relay, with setup-app words
       (Tasks 6.3b and 6.3c; the code `backup.recovery_key_missing` exists already, `errors.ts:1370`);
-      and a venue turns backups on before it adds a spare.
+      and a venue turns backups on before it adds a spare, which means choosing where archives go: Turn on backups refuses a Save with no folder and no bucket (`checkArchiveChoiceList`, `apps/server/src/archive-settings.ts:498-511`, read, not run; added 2026-11-10).
     - **(ii) The main box makes a key at the join, and the spare's Connect screen shows it once.**
       The owner presses Connect; the screen shows the new key, with copy and download, and finishes
       only after the "I have saved this key somewhere safe" tick, as the Backups page does for a key
