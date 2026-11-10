@@ -29,6 +29,7 @@ import type { PersonRoleValue } from "@waitron/shared";
 import {
   codeOf,
   openFreshManagementSession as openManagementSession,
+  openManagementSession as openUnprovedManagementSession,
   openSession,
   seedPerson,
   seedSessionDevice,
@@ -452,6 +453,36 @@ function details(
 const MISSING_ID = "00000000-0000-4000-8000-000000000000";
 
 describe("updatePersonDetails refusals and side effects", () => {
+  it.each(["email", "role", "status"] as const)(
+    "requires proof for a changed %s but permits contact edits",
+    async (field) => {
+      const { token } = await openUnprovedManagementSession(suite.db, "admin");
+      const target = await seedPerson(suite.db, "staff");
+      await suite.db.execute(
+        sql`update persons set email = 'kept@example.com' where id = ${target}`,
+      );
+      const before = (await suite.db.execute(sql`select * from persons where id = ${target}`)).rows;
+      const input = details(token, target, {
+        email: field === "email" ? "new@example.com" : "kept@example.com",
+        role: field === "role" ? "supervisor" : "staff",
+        status: field === "status" ? "suspended" : "active",
+      });
+      await expect(run((tx) => updatePersonDetails(tx, input))).rejects.toMatchObject({
+        code: "management_session.proof_required",
+      });
+      expect(
+        (await suite.db.execute(sql`select * from persons where id = ${target}`)).rows,
+      ).toEqual(before);
+      await run((tx) =>
+        updatePersonDetails(tx, details(token, target, { email: " KEPT@example.com " })),
+      );
+      const saved = (
+        await suite.db.execute(sql`select display_name, email from persons where id = ${target}`)
+      ).rows;
+      expect(saved).toEqual([{ display_name: "Edited", email: "kept@example.com" }]);
+    },
+  );
+
   it("refuses an edit to a person who does not exist", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     await expect(

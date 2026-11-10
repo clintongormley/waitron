@@ -29,8 +29,9 @@ no confirma que exista una cuenta ni que pueda acceder. Restablecer la contrase�
 cuenta deshabilitada.
 
 Waitron te pide que vuelvas a identificarte antes de invitar a alguien, reenviar una invitación,
-restablecer su acceso, deshabilitar o volver a habilitar su cuenta, o cambiar su correo, rol o
-estado. Los nombres, el teléfono y el restablecimiento del PIN no necesitan esta confirmación.
+restablecer su acceso, deshabilitar o volver a habilitar su cuenta, o cambiar un correo, rol o
+estado en **Usuarios**, incluido tu propio correo. Los nombres, el teléfono y el restablecimiento
+del PIN no necesitan esta confirmación.
 También confirmas antes de cambiar las copias de seguridad, descargar archivos de recuperación,
 mostrar la clave de recuperación de las copias o exportar la configuración o los datos de otro
 miembro del personal. Usa tu contraseña o passkey y, si tienes

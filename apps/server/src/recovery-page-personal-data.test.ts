@@ -24,6 +24,7 @@ import { AppError, nodeId as brandNodeId } from "@waitron/shared";
 import { createErrorBoundary, MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import "./errors.js";
 import { flushAccountMail } from "./testing/account-mail.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { sql } from "drizzle-orm";
 import { attendanceReminderMessage } from "./attendance-email.js";
 import { PERSONAL_LOG_KEYS } from "./log-personal-data.js";
@@ -200,6 +201,7 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
 
 async function cookieFor(personId: string): Promise<string> {
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
   return `${MANAGEMENT_COOKIE}=${session.token}`;
 }
 

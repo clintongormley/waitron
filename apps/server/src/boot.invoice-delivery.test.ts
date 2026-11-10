@@ -19,6 +19,7 @@ import {
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import {
   seedDevice,
@@ -819,6 +820,8 @@ describe("queued account mail primary admission at real boot", () => {
       const session = await withTransaction(suite.db, (tx) =>
         startManagementSession(tx, { personId }),
       );
+      if (role === "primary")
+        await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
       await withTransaction(suite.db, (tx) =>
         putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp }),
       );

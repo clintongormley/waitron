@@ -36,7 +36,7 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
-import { jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
+import { AppError, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { AccountEmail } from "./account-email.js";
@@ -2125,29 +2125,45 @@ describe("Management API — fresh sign-in for people changes", () => {
     "role",
     "status",
     "email",
+    "own-email",
   ])(
     "%s refuses before changing people or queuing mail, then accepts fresh proof",
     async (action) => {
-      const { staffId } = await setupTenant();
+      const { staffId: clerkId } = await setupTenant();
+      const [owner] = await suite.db
+        .select()
+        .from(persons)
+        .where(eq(persons.email, "owner@example.test"));
+      const staffId = action === "own-email" ? owner!.id : clerkId;
       if (action === "invitation" || action === "reactivate")
         await suite.db
           .update(persons)
           .set({ status: action === "invitation" ? "pending" : "suspended" })
           .where(eq(persons.id, staffId));
-      const app = mountApp(async () => "sent");
+      let primary = true;
+      const app = mountApp(
+        async () => "sent",
+        undefined,
+        undefined,
+        noopLog,
+        undefined,
+        async () => {
+          if (!primary) throw new AppError("node.read_only", {});
+        },
+      );
       const cookie = await login(app, "owner@example.test", "dashPass123");
       const managerCookie = await login(app, MANAGER_EMAIL);
-      const edit = ["role", "status", "email"].includes(action);
+      const edit = ["role", "status", "email", "own-email"].includes(action);
       const body =
         action === "invite"
           ? invitationBody("Invited", "invited@example.test")
           : {
-              displayName: "The Clerk",
+              displayName: action === "own-email" ? "Administrator" : "The Clerk",
               firstNames: "Clerk",
               lastNames: "Test",
               telephone: null,
-              email: action === "email" ? "changed@example.test" : STAFF_EMAIL,
-              role: action === "role" ? "supervisor" : "staff",
+              email: action.endsWith("email") ? "changed@example.test" : STAFF_EMAIL,
+              role: action === "own-email" ? "admin" : action === "role" ? "supervisor" : "staff",
               status: action === "status" ? "suspended" : "active",
             };
       const request = (session: string) =>
@@ -2176,6 +2192,13 @@ describe("Management API — fresh sign-in for people changes", () => {
       expect(await forbidden.json()).toMatchObject({
         error: { code: "authorization.not_permitted" },
       });
+      if (["invite", "invitation", "reset-login", "reactivate"].includes(action)) {
+        primary = false;
+        const readOnly = await request(cookie);
+        expect(readOnly.status).toBe(403);
+        expect(await readOnly.json()).toEqual({ error: { code: "node.read_only", params: {} } });
+        primary = true;
+      }
       const refused = await request(cookie);
       expect(refused.status).toBe(400);
       expect(await refused.json()).toEqual({
@@ -2188,7 +2211,7 @@ describe("Management API — fresh sign-in for people changes", () => {
         action === "invite" ? 201 : edit || action === "deactivate" ? 204 : 200,
       );
       const [person] = await suite.db.select().from(persons).where(eq(persons.id, staffId));
-      if (action === "email") expect(person!.email).toBe("changed@example.test");
+      if (action.endsWith("email")) expect(person!.email).toBe("changed@example.test");
       if (action === "role") expect(person!.role).toBe("supervisor");
       if (action === "status" || action === "deactivate") expect(person!.status).toBe("suspended");
       if (action === "reactivate" || action === "reset-login")
