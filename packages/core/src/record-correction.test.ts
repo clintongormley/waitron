@@ -562,6 +562,12 @@ describe("recordCorrection — the corrective sale", () => {
 });
 
 describe("recordCorrection — a whole-invoice credit copies the invoice's own VAT split", () => {
+  /** 0.55 refiled at 10% as 0.50: the credit's lines would still reverse 0.55. */
+  const FIXED = {
+    total: decimal("0.50"),
+    vatBreakdown: [{ rate: decimal("10.00"), base: decimal("0.45"), tax: decimal("0.05") }],
+  };
+
   /** Keeps the VAT breakdown each correction hands the backend. */
   class FilesBreakdownsBackend extends FakeFiscalBackend {
     readonly filed: SaleForFiscalRecord["vatBreakdown"][] = [];
@@ -886,6 +892,26 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
       code: "sale.total_mismatch",
       params: { declaredTotal: "-0.55", breakdownTotal: "-0.54" },
     });
+  });
+  it.each([
+    ["figures it cannot read", { readable: false as const }],
+    [
+      "a fix that changed its total",
+      { readable: true as const, newest: FIXED, newestAnswered: FIXED },
+    ],
+  ])("refuses to credit a whole invoice whose filing holds %s", async (_, figures) => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellMosto(backend);
+    backend.setFiledFigures(originalId, figures);
+    const [reversed] = wholeCredit().lines;
+    const correctsLineId = await soldLineId(originalId);
+
+    await expectRefusedUnwritten(
+      backend,
+      originalId,
+      wholeCredit({ lines: [{ ...reversed!, correctsLineId }] }),
+      { code: "sale.correction_history_unusable" },
+    );
   });
 });
 

@@ -353,3 +353,48 @@ it("refunds the fixed dish in two halves at 10%, refusing a refund that names th
   ]);
   expect(await agencyRates(saleId)).toEqual({ "10.00": [0, 0] });
 });
+
+it("cancels a dish whose fix at 10% the agency accepted by filing that split, leaving every rate at zero", async () => {
+  const saleId = await soldThenFixedAt10();
+  const [line] = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
+
+  // The whole-invoice credit `creditWholeInvoice` (apps/server) files: the lines reversed one for one.
+  const { saleId: creditId } = await withTransaction(suite.db, (tx) =>
+    recordCorrection(tx, backend, {
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: rectSeriesId,
+      correctsSaleId: saleId,
+      total: "-12.10",
+      lines: [
+        {
+          ...saleInput({ nodeId, seriesId }).lines[0]!,
+          quantity: "-2",
+          lineTotal: "-10.00",
+          lineGross: "-12.10",
+          correctsLineId: line!.id,
+        },
+      ],
+      wholeInvoice: true,
+      authz: { sessionId },
+      clock: steadyClock,
+    }),
+  );
+  const after = await snapshot(creditId);
+
+  expect(validate(fromRegistroRow(after.registro), { now: steadyClock.now().instant })).toEqual([]);
+  expect([
+    after.sale.vatBreakdown.map(({ rate, base, tax }) => [rate, base, tax]),
+    after.lines.map((row) => [row.vatRate, row.lineTotal, row.lineGross]),
+    after.registro.desglose?.map((group) => [
+      group.TipoImpositivo,
+      group.BaseImponibleOimporteNoSujeto,
+      group.CuotaRepercutida,
+    ]),
+  ]).toEqual([
+    [["10.00", "-11.00", "-1.10"]],
+    [[2100, -1000, -1210]],
+    [["10.00", "-11.00", "-1.10"]],
+  ]);
+  expect(await agencyRates(saleId)).toEqual({ "10.00": [0, 0] });
+});

@@ -230,9 +230,11 @@ export async function recordCorrection(
     });
   }
 
+  const storedWhole =
+    derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
   // The stored `sales.vat_breakdown` and the filed breakdown are this one value.
   const vatBreakdown =
-    derived ?? wholeInvoiceBreakdown(input.correctsSaleId, original, totalCents, input.lines);
+    derived ?? (await movedSplit(tx, backend, input, original, correction)) ?? storedWhole;
   // A whole-invoice credit converts its lines before a number is allocated, so a line value the
   // converters refuse (overflow, or not a decimal) is refused with nothing written; the sale's id
   // is filled in once it exists.
@@ -403,6 +405,34 @@ async function measuredHistory(
     throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
   }
   return measured;
+}
+
+/**
+ * For a whole-invoice credit, the split the regime accepted negated, when the invoice's filed
+ * figures moved from the stored ones; else none, and a backend reading no filed figures keeps the
+ * stored split. Refused with `sale.correction_history_unusable` when they cannot be read, or when
+ * the move changed the total the credit's lines reverse. A fix not yet answered does not refuse it.
+ */
+async function movedSplit(
+  tx: Transaction,
+  backend: FiscalBackend,
+  input: RecordCorrectionInput,
+  original: { total: number; vatBreakdown: { rate: string; base: string; tax: string }[] },
+  correction: Decimal,
+): Promise<VatBreakdownLine[] | undefined> {
+  if (!backend.filedFiguresFor) return undefined;
+  const measured = await measuredFigures(tx, backend, [{ id: input.correctsSaleId, ...original }]);
+  if (!measured.readable || measured.sales[0]!.measured.total !== original.total) {
+    throw new AppError("sale.correction_history_unusable", {});
+  }
+  if (!measured.moved) return undefined;
+  const breakdown = measured.sales[0]!.measured.vatBreakdown.map((group) => ({
+    rate: decimal(group.rate),
+    base: negateDecimal(decimal(group.base)),
+    tax: negateDecimal(decimal(group.tax)),
+  }));
+  assertSumsTo(breakdown, correction);
+  return breakdown;
 }
 
 /**
