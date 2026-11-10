@@ -159,8 +159,10 @@ describe("development disk writer", () => {
   it("formats LUKS2 before btrfs and closes the opened mapper on a later failure", () => {
     const result = writer({ PARTITION_EXIT: "0" });
     expect(result.status).toBe(44);
-    expect(result.writes).toMatch(/cryptsetup .*--type luks2 .*luksFormat \/dev\/vdb3/);
-    expect(result.writes).toMatch(/cryptsetup open .*\/dev\/vdb3 waitron-dev-root/);
+    expect(result.writes).toMatch(
+      /cryptsetup .*--type luks2 .*--key-file \S+ luksFormat \/dev\/vdb3/,
+    );
+    expect(result.writes).toMatch(/cryptsetup open --key-file \S+ \/dev\/vdb3 waitron-dev-root/);
     expect(result.writes).toContain("btrfs -q -f /dev/mapper/waitron-dev-root\n");
     expect(result.writes).toContain("cryptsetup close waitron-dev-root\n");
     expect(readFileSync(join(scratch, "layout"), "utf8")).toContain(

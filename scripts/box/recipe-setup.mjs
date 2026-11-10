@@ -1,3 +1,5 @@
+import { WAITRON_LAYOUTS } from "./disk-state.mjs";
+
 /** Compare the artifact and guest evidence before accepting a recipe boot. */
 export function recipeFailures(expected, observed) {
   const failures = [];
@@ -38,6 +40,13 @@ export function installedFailures(expected, installedUuid, first, again) {
       failures.push("root-uuid");
     if (!boot.luksUuid || boot.luksUuid === boot.uuid || boot.luksUuid !== first.luksUuid)
       failures.push("luks-uuid");
+    if (
+      boot.luksVersion !== "2" ||
+      boot.luksSubsystem !== WAITRON_LAYOUTS[0].subsystem ||
+      boot.dataPartition?.type?.toLowerCase() !== WAITRON_LAYOUTS[0].typeGuid ||
+      boot.dataPartition?.name !== WAITRON_LAYOUTS[0].partitionName
+    )
+      failures.push("disk-markers");
     const sizes = boot.partitionBytes;
     if (
       sizes?.length !== 3 ||

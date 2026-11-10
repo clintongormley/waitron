@@ -26,13 +26,19 @@ for name in app print-agent mailpit; do
 done | jq -s 'from_entries' >/run/waitron-images.json
 services="$(docker inspect $(docker compose ps -q) | jq -c 'map({key:.Config.Labels["com.docker.compose.service"],value:.State.Status})|from_entries')"
 areas="$(findmnt -rn -t btrfs -o FSROOT | sed 's|^/||;s|/.*||' | sort -u | jq -Rsc 'split("\n") | map(select(length > 0))')"
-partitions="$(sfdisk --json "/dev/$(lsblk -nro PKNAME "$backing")" | jq -c '.partitiontable | .sectorsize as $sector | [.partitions[].size * $sector]')"
+layout="$(sfdisk --json "/dev/$(lsblk -nro PKNAME "$backing")")"
+partitions="$(jq -c '.partitiontable | .sectorsize as $sector | [.partitions[].size * $sector]' <<< "$layout")"
+data_partition="$(jq -c '.partitiontable.partitions[2] | {type,name}' <<< "$layout")"
+header="$(LC_ALL=C cryptsetup luksDump "$backing")"
 absent=false
 if [ ! -e /usr/local/sbin/waitron-dev-install ] && [ ! -e /etc/systemd/system/waitron-dev-install.service ]; then absent=true; fi
 sync
 jq -cn --arg uuid "$(findmnt -nro UUID /)" --arg machineId "$(cat /etc/machine-id)" \
   --arg luksUuid "$luks_uuid" --argjson partitionBytes "$partitions" \
+  --argjson dataPartition "$data_partition" \
+  --arg luksVersion "$(awk '$1 == "Version:" {print $2}' <<< "$header")" \
+  --arg luksSubsystem "$(awk '$1 == "Subsystem:" {print $2}' <<< "$header")" \
   --argjson images "$(cat /run/waitron-images.json)" --argjson services "$services" \
   --argjson areas "$areas" --argjson writerAbsent "$absent" --argjson status "$(cat /run/waitron-status.json)" \
-  '{uuid:$uuid,luksUuid:$luksUuid,partitionBytes:$partitionBytes,machineId:$machineId,images:$images,services:$services,areas:$areas,writerAbsent:$writerAbsent,status:$status}' \
+  '{uuid:$uuid,luksUuid:$luksUuid,luksVersion:$luksVersion,luksSubsystem:$luksSubsystem,dataPartition:$dataPartition,partitionBytes:$partitionBytes,machineId:$machineId,images:$images,services:$services,areas:$areas,writerAbsent:$writerAbsent,status:$status}' \
   | sed 's/^/B3_INSTALLED:/'
