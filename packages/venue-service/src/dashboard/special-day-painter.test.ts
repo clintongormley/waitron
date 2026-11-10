@@ -775,7 +775,7 @@ describe("Every year", () => {
   it("shows the holiday note for a stored date saved on a holiday, and not once that date is removed", async () => {
     const { painter } = await mount();
     expect(note(painter)!.textContent!.trim()).toBe(
-      "Every year follows the holiday's name to its date each year.",
+      "With Yes, a date on a holiday repeats on that holiday, whatever its date that year.",
     );
     painter
       .shadowRoot!.querySelector<HTMLElement>(

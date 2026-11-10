@@ -121,6 +121,7 @@ it.each([
     "en",
     "Choose another default station first.",
     "Move the bound screens first.",
+    "Move the bound screen first.",
     "3 dishes are still waiting or being prepared.",
     "The change could not be saved.",
   ],
@@ -128,16 +129,20 @@ it.each([
     "es",
     "Elige otra estación predeterminada primero.",
     "Cambia primero las pantallas vinculadas.",
+    "Cambia primero la pantalla vinculada.",
     "3 platos siguen pendientes o en preparación.",
     "No se pudo guardar el cambio.",
   ],
 ] as const)(
   "explains delete action refusals and unexpected failures in %s",
-  (locale, defaultLine, screens, work, fallback) => {
+  (locale, defaultLine, screens, screen, work, fallback) => {
     setLocale(locale);
     expect(stationDeleteError({ code: "station.is_default" })).toBe(defaultLine);
     expect(stationDeleteError({ code: "station.screen_in_use", params: { count: 2 } })).toBe(
       screens,
+    );
+    expect(stationDeleteError({ code: "station.screen_in_use", params: { count: 1 } })).toBe(
+      screen,
     );
     expect(stationDeleteError({ code: "station.work_in_progress", params: { count: 3 } })).toBe(
       work,
@@ -159,6 +164,108 @@ it.each(["en", "es"] as const)(
             VENUE_SERVICE_STRINGS.es["prep.delete_removes"],
             VENUE_SERVICE_STRINGS.es["prep.delete_loading"],
           ],
+    );
+  },
+);
+
+const grill = [{ id: "private-id", name: "Grill" }];
+it.each([
+  [
+    "station_unsent_lines",
+    [],
+    "1 unsent order line returns to normal routing.",
+    "1 línea de pedido sin enviar vuelve al enrutamiento normal.",
+  ],
+  [
+    "station_draft_lines",
+    [],
+    "1 draft line returns to normal routing.",
+    "1 línea de borrador vuelve al enrutamiento normal.",
+  ],
+  [
+    "station_printers",
+    grill,
+    "Remove this printer link: Grill.",
+    "Quita este vínculo de impresora: Grill.",
+  ],
+  [
+    "station_made_here",
+    grill,
+    "Remove Made here from this device: Grill.",
+    "Quita Hecho aquí de este dispositivo: Grill.",
+  ],
+  [
+    "station_routing_cells",
+    [],
+    "Remove 1 normal routing rule.",
+    "Quita 1 regla de enrutamiento normal.",
+  ],
+  [
+    "station_routing_periods",
+    [],
+    "Remove 1 period routing rule.",
+    "Quita 1 regla de enrutamiento por periodo.",
+  ],
+  [
+    "station_device_screens",
+    grill,
+    "Remove this station from this device: Grill.",
+    "Quita esta estación de este dispositivo: Grill.",
+  ],
+  [
+    "station_profile_screens",
+    grill,
+    "Remove this station from this profile: Grill.",
+    "Quita esta estación de este perfil: Grill.",
+  ],
+  [
+    "station_daily_states",
+    [],
+    "Remove 1 daily station setting.",
+    "Quita 1 ajuste diario de la estación.",
+  ],
+  [
+    "station_daily_destinations",
+    grill,
+    "This closed station uses normal routing: Grill.",
+    "Esta estación cerrada usa el enrutamiento normal: Grill.",
+  ],
+] as const)("words %s in the singular for one item in both languages", (key, targets, en, es) => {
+  for (const [locale, line] of [
+    ["en", en],
+    ["es", es],
+  ] as const) {
+    setLocale(locale);
+    expect(stationDeleteCopy().item({ key, count: 1, targets: [...targets] })).toBe(line);
+  }
+});
+
+it("words a counted line by its count, whatever names it carries", () => {
+  expect(stationDeleteCopy().item({ key: "station_unsent_lines", count: 2, targets: grill })).toBe(
+    "2 unsent order lines return to normal routing.",
+  );
+});
+
+it.each([
+  ["en", "Move this screen first: Grill.", "1 dish is still waiting or being prepared."],
+  ["es", "Cambia primero esta pantalla: Grill.", "1 plato sigue pendiente o en preparación."],
+] as const)(
+  "words a refusal about one screen or one dish in the singular in %s",
+  (locale, screen, work) => {
+    setLocale(locale);
+    const copy = stationDeleteCopy();
+    expect(
+      copy.refusal({
+        code: "station.screen_in_use",
+        params: { count: 1 },
+        targets: [{ id: "private-id", name: "Grill" }],
+      }),
+    ).toBe(screen);
+    expect(
+      copy.refusal({ code: "station.work_in_progress", params: { count: 1 }, targets: [] }),
+    ).toBe(work);
+    expect(stationDeleteError({ code: "station.work_in_progress", params: { count: 1 } })).toBe(
+      work,
     );
   },
 );

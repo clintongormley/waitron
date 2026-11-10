@@ -11,7 +11,10 @@ const itemKeys = {
   routing_rules: ["venue.delete_item_routing_rules", "venue.delete_item_routing_rules_one"],
   routing_periods: ["venue.delete_item_routing_periods", "venue.delete_item_routing_periods_one"],
   profile_zones: ["venue.delete_item_profile_zones", "venue.delete_item_profile_zones_one"],
-  profile_starting_zones: ["venue.delete_item_profile_starting_zones"],
+  profile_starting_zones: [
+    "venue.delete_item_profile_starting_zones",
+    "venue.delete_item_profile_starting_zones_one",
+  ],
   screen_zones: ["venue.delete_item_screen_zones", "venue.delete_item_screen_zones_one"],
   screen_notices: ["venue.delete_item_screen_notices", "venue.delete_item_screen_notices_one"],
   zone_policies: ["venue.delete_item_zone_policies", "venue.delete_item_zone_policies_one"],
@@ -28,22 +31,43 @@ const itemKeys = {
     "venue.delete_item_department_policy_one",
   ],
   service_steps: ["venue.delete_item_service_steps", "venue.delete_item_service_steps_one"],
-  transfer_desks: ["venue.delete_item_transfer_desks"],
+  transfer_desks: ["venue.delete_item_transfer_desks", "venue.delete_item_transfer_desks_one"],
   transfer_routes: ["venue.delete_item_transfer_routes", "venue.delete_item_transfer_routes_one"],
   default_department: ["venue.delete_item_default_department"],
   counter_default: ["venue.delete_item_counter_default"],
 } as const;
+const namedItems = new Set(["profile_starting_zones", "transfer_desks"]);
 const refusalKeys = {
   "department.last_active": "venue.delete_refusal_department_last_active",
-  "zone.table_in_use": "venue.delete_refusal_zone_table_in_use",
-  "table.delivery_in_progress": "venue.delete_refusal_table_delivery_in_progress",
-  "table.booked": "venue.delete_refusal_table_booked",
+  "zone.table_in_use": [
+    "venue.delete_refusal_zone_table_in_use",
+    "venue.delete_refusal_zone_table_in_use",
+    "venue.delete_refusal_zone_table_in_use_unnamed",
+  ],
+  "table.delivery_in_progress": [
+    "venue.delete_refusal_table_delivery_in_progress",
+    "venue.delete_refusal_table_delivery_in_progress_one",
+    "venue.delete_refusal_table_delivery_in_progress_unnamed",
+  ],
+  "table.booked": [
+    "venue.delete_refusal_table_booked",
+    "venue.delete_refusal_table_booked_one",
+    "venue.delete_refusal_table_booked_unnamed",
+  ],
   "zone.order_in_progress": "venue.delete_refusal_zone_order_in_progress",
   "department.order_in_progress": "venue.delete_refusal_department_order_in_progress",
   "zone.transfer_pending": "venue.delete_refusal_zone_transfer_pending",
   "department.transfer_pending": "venue.delete_refusal_department_transfer_pending",
-  "zone.profile_in_use": "venue.delete_refusal_zone_profile_in_use",
-  "department.profile_in_use": "venue.delete_refusal_department_profile_in_use",
+  "zone.profile_in_use": [
+    "venue.delete_refusal_zone_profile_in_use",
+    "venue.delete_refusal_zone_profile_in_use_one",
+    "venue.delete_refusal_zone_profile_in_use_unnamed",
+  ],
+  "department.profile_in_use": [
+    "venue.delete_refusal_department_profile_in_use",
+    "venue.delete_refusal_department_profile_in_use_one",
+    "venue.delete_refusal_department_profile_in_use_unnamed",
+  ],
 } as const;
 export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy {
   return {
@@ -63,7 +87,8 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
       const keys = itemKeys[item.key as keyof typeof itemKeys];
       if (!keys) return t("venue.delete_action_error");
       const [many, one = many] = keys;
-      const line = format(item.count === 1 ? one : many, { count: String(item.count), names });
+      const single = namedItems.has(item.key) ? item.targets.length === 1 : item.count === 1;
+      const line = format(single ? one : many, { count: String(item.count), names });
       return ["tables", "saved_tables", "zones", "today_joins", "reset_targets"].includes(
         item.key,
       ) && names
@@ -71,13 +96,14 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
         : line;
     },
     refusal(item) {
-      const key = refusalKeys[item.code as keyof typeof refusalKeys];
-      return key
-        ? format(key, {
-            tableName: String(item.params.tableName ?? ""),
-            names: item.targets.map((target) => target.name).join(", "),
-          })
-        : t("venue.delete_action_error");
+      const keys = refusalKeys[item.code as keyof typeof refusalKeys];
+      if (!keys) return t("venue.delete_action_error");
+      const [many, one, unnamed] = typeof keys === "string" ? [keys, keys, keys] : keys;
+      const shown = item.targets.length;
+      return format(shown === 0 ? unnamed : shown === 1 ? one : many, {
+        tableName: String(item.params.tableName ?? ""),
+        names: item.targets.map((target) => target.name).join(", "),
+      });
     },
   };
 }

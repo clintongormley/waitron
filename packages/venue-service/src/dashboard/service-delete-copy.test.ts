@@ -37,8 +37,8 @@ it.each([
   ],
   [
     "profile_starting_zones",
-    "Chooses a surviving starting zone for these profiles: {names}.",
-    "Elige una zona inicial restante para estos perfiles: {names}.",
+    "Chooses a surviving starting zone for this profile: {names}.",
+    "Elige una zona inicial restante para este perfil: {names}.",
   ],
   [
     "screen_zones",
@@ -75,8 +75,8 @@ it.each([
   ["service_steps", "Removes {count} service steps.", "Quita {count} pasos de servicio."],
   [
     "transfer_desks",
-    "Removes transfer desks for these profiles: {names}.",
-    "Quita los puestos de traslado de estos perfiles: {names}.",
+    "Removes the transfer desk for this profile: {names}.",
+    "Quita el puesto de traslado de este perfil: {names}.",
   ],
   [
     "transfer_routes",
@@ -114,13 +114,13 @@ it.each([
   ],
   [
     "table.delivery_in_progress",
-    "Complete delivery of these orders first: {names}.",
-    "Completa primero la entrega de estos pedidos: {names}.",
+    "Complete delivery of this order first: {names}.",
+    "Completa primero la entrega de este pedido: {names}.",
   ],
   [
     "table.booked",
-    "Move or cancel these bookings first: {names}.",
-    "Mueve o cancela primero estas reservas: {names}.",
+    "Move or cancel this booking first: {names}.",
+    "Mueve o cancela primero esta reserva: {names}.",
   ],
   [
     "zone.order_in_progress",
@@ -144,13 +144,13 @@ it.each([
   ],
   [
     "zone.profile_in_use",
-    "These profiles would have no allowed zones: {names}.",
-    "Estos perfiles se quedarían sin zonas permitidas: {names}.",
+    "This profile would have no allowed zones: {names}.",
+    "Este perfil se quedaría sin zonas permitidas: {names}.",
   ],
   [
     "department.profile_in_use",
-    "Move these profiles to another department first: {names}.",
-    "Mueve primero estos perfiles a otro departamento: {names}.",
+    "Move this profile to another department first: {names}.",
+    "Mueve primero este perfil a otro departamento: {names}.",
   ],
 ])("explains %s in EN and ES", async (code, en, es) => {
   for (const [locale, line] of [
@@ -411,3 +411,117 @@ it.each([
     expect(line(0)).toBe(fill(many, 0));
   }
 });
+it.each([
+  [
+    "profile_starting_zones",
+    [
+      "Chooses a surviving starting zone for this profile: Patio.",
+      "Chooses a surviving starting zone for these profiles: Patio, Bar.",
+    ],
+    [
+      "Elige una zona inicial restante para este perfil: Patio.",
+      "Elige una zona inicial restante para estos perfiles: Patio, Bar.",
+    ],
+  ],
+  [
+    "transfer_desks",
+    [
+      "Removes the transfer desk for this profile: Patio.",
+      "Removes transfer desks for these profiles: Patio, Bar.",
+    ],
+    [
+      "Quita el puesto de traslado de este perfil: Patio.",
+      "Quita los puestos de traslado de estos perfiles: Patio, Bar.",
+    ],
+  ],
+] as const)("words %s by the names shown, not by the rows counted", (key, en, es) => {
+  for (const [locale, [one, many]] of [
+    ["en", en],
+    ["es", es],
+  ] as const) {
+    setLocale(locale);
+    const c = serviceDeleteCopy("department");
+    const patio = { id: "private", name: "Patio" };
+    expect(c.item({ key, count: 2, targets: [patio] })).toBe(one);
+    expect(c.item({ key, count: 1, targets: [patio, { id: "other", name: "Bar" }] })).toBe(many);
+  }
+});
+it.each([
+  [
+    "table.booked",
+    [
+      "Move or cancel this booking first: Ana.",
+      "Move or cancel these bookings first: Ana, Luis.",
+      "Move or cancel the bookings on the tables being deleted first.",
+    ],
+    [
+      "Mueve o cancela primero esta reserva: Ana.",
+      "Mueve o cancela primero estas reservas: Ana, Luis.",
+      "Mueve o cancela primero las reservas de las mesas que se eliminan.",
+    ],
+  ],
+  [
+    "table.delivery_in_progress",
+    [
+      "Complete delivery of this order first: Ana.",
+      "Complete delivery of these orders first: Ana, Luis.",
+      "Complete delivery of the orders to the tables being deleted first.",
+    ],
+    [
+      "Completa primero la entrega de este pedido: Ana.",
+      "Completa primero la entrega de estos pedidos: Ana, Luis.",
+      "Completa primero la entrega de los pedidos a las mesas que se eliminan.",
+    ],
+  ],
+  [
+    "zone.profile_in_use",
+    [
+      "This profile would have no allowed zones: Ana.",
+      "These profiles would have no allowed zones: Ana, Luis.",
+      "A profile would have no allowed zones.",
+    ],
+    [
+      "Este perfil se quedaría sin zonas permitidas: Ana.",
+      "Estos perfiles se quedarían sin zonas permitidas: Ana, Luis.",
+      "Un perfil se quedaría sin zonas permitidas.",
+    ],
+  ],
+  [
+    "department.profile_in_use",
+    [
+      "Move this profile to another department first: Ana.",
+      "Move these profiles to another department first: Ana, Luis.",
+      "Move this department's profiles to another department first.",
+    ],
+    [
+      "Mueve primero este perfil a otro departamento: Ana.",
+      "Mueve primero estos perfiles a otro departamento: Ana, Luis.",
+      "Mueve primero a otro departamento los perfiles de este departamento.",
+    ],
+  ],
+  [
+    "zone.table_in_use",
+    ["Table 4 has open work: Ana.", "Table 4 has open work: Ana, Luis.", "Table 4 has open work."],
+    [
+      "La mesa 4 tiene trabajo abierto: Ana.",
+      "La mesa 4 tiene trabajo abierto: Ana, Luis.",
+      "La mesa 4 tiene trabajo abierto.",
+    ],
+  ],
+] as const)(
+  "words %s by the names it carries, and without names when the delete itself is refused",
+  (code, en, es) => {
+    for (const [locale, [one, many, unnamed]] of [
+      ["en", en],
+      ["es", es],
+    ] as const) {
+      setLocale(locale);
+      const c = serviceDeleteCopy("zone");
+      const params = { tableName: "4" };
+      const ana = { id: "private", name: "Ana" };
+      expect(c.refusal({ code, params, targets: [ana] })).toBe(one);
+      expect(c.refusal({ code, params, targets: [ana, { id: "other", name: "Luis" }] })).toBe(many);
+      expect(serviceDeleteError("zone", { code, params })).toBe(unnamed);
+    }
+  },
+);

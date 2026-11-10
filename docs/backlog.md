@@ -624,10 +624,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
 
-- **A1174. Delete previews say "Remove 1 normal routing rules."** Several station, zone and
-  department delete lines have only a plural wording, so one item reads wrongly. Left open by A1083
-  (#2196). [Detail](backlog/service-periods.md#a1174-delete-previews-say-remove-1-normal-routing-rules)
-
 - **Seasons window** (bundle of 5, size S). [Detail](backlog/service-periods.md#bundle-seasons-window)
 
 - **Period dialogs** (bundle of 4, size S). [Detail](backlog/service-periods.md#bundle-period-dialogs)
@@ -671,9 +667,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Painting stops short of an off-quarter-hour changeover**
   [Detail](backlog/service-periods.md#painting-stops-short-of-an-off-quarter-hour-changeover)
-
-- **The special-day painter's note under "Every year" (`special.holiday_note`) says "each year"
-  twice in English** and reads as awkwardly in Spanish — left open by A506-7, #1623.
 
 - **Two date helpers read years 0 to 99 as 1900 to 1999**
   [Detail](backlog/service-periods.md#two-date-helpers-read-years-0-to-99-as-1900-to-1999)
