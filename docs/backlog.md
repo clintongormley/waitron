@@ -1880,9 +1880,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 ### Replication, failover and the cloud
 
-- **A1438. Code Waitron and Cloud share, published like ui-core (owner, 2026-11-08) — planned;
-  the owner answered its choices on 2026-11-09 and step 1 (signing) is queued in a Codex lane.** One database-free package, `@waitron-io/contract`: the
-  box-to-Cloud signing formats first, then the sign-in rules (with A1437 and Cloud's D608), then the
+- **A1438. Code Waitron and Cloud share, published like ui-core (owner, 2026-11-08).** The
+  box uses the three signing formats from the database-free workspace package `@waitron/contract`.
+  Private publication as `@waitron-io/contract` and Cloud adoption remain open, then the sign-in rules (with A1437 and Cloud's D608), then the
   message list and texts (with Cloud's D610 and the email relay). Roles, storage, sessions and
   screens stay apart. [Plan](superpowers/plans/2026-11-09-a1438-code-shared-with-cloud.md).
 
