@@ -6,7 +6,7 @@ Pull requests run selected packages without collecting package-wide coverage. Or
 pushes run the change classifier, lint, root guards and their coverage, and code-selected typechecks
 and bundle builds/smoke. The typecheck runs the whole workspace when selected. Main pushes start
 no package tests or shared mutation in `ci.yml`. The separate UI registry publication retains its
-package checks, and deploy-selected image smoke still runs.
+package checks, and deploy-selected image smoke still runs (owner, 2026-11-08, A1452).
 
 A pull request tests only the changed packages themselves, not the packages that depend on them
 (owner, 2026-11-08, A1461): a change to `packages/db` runs db's tests, not the server's. Within the
@@ -5008,3 +5008,19 @@ These supporting fragments are from `CLAUDE.md` at
 
 > , does not judge the limit
 > or read an external called workflow.
+
+## Root receipts moved on 2026-11-10
+
+These supporting fragments are from `CLAUDE.md` at
+`9ca4c3cf28787d47bba1f62f1522f49f074cf353`. The headings identify their unchanged root entries;
+[Scoped tests and full verification](#scoped-tests-and-full-verification) holds each one in full.
+
+### PR CI runs scoped package tests without package-wide coverage
+
+> UI registry publication keeps its separate package checks;
+> deploy-selected image smoke stays on main (owner, 2026-11-08, A1452).
+
+### CI does not run every check on every push
+
+> Main uses the newest completed successful main ancestor to scope quick checks;
+> without a baseline, change scope is global.

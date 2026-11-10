@@ -111,8 +111,7 @@ hook, or how tests are scheduled:
 - **PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no
   package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage.**
   A PR tests only the changed packages, not their dependents (owner, 2026-11-08, A1461); those are
-  typechecked on the PR and tested nightly. Root coverage remains on every run. UI registry publication keeps its separate package checks;
-  deploy-selected image smoke stays on main (owner, 2026-11-08, A1452). Verify the
+  typechecked on the PR and tested nightly. Root coverage remains on every run. Verify the
   current head's selected jobs, and the full run's coverage or merge jobs before claiming full
   coverage. Shard counts must not exceed the package's test-file count. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell fixtures,
@@ -134,9 +133,8 @@ hook, or how tests are scheduled:
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read `changes` outputs `code`, `scope`, `packages`
-  and `full`. Main uses the newest completed successful main ancestor to scope quick checks;
-  without a baseline, change scope is global. Main's named package gates are false even when `scope`
-  and `packages` name code changes. PR evidence is not reused. Container publication, including `:main`, follows
+  and `full`. Main's named package gates are false even when `scope` and `packages` name code
+  changes. PR evidence is not reused. Container publication, including `:main`, follows
   full scheduled/manual main verification or a fully checked release tag, never an ordinary main
   push. [Modes and limits](docs/developers/ci-and-gates.md#scoped-tests-and-full-verification).
 - **`bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server
@@ -480,9 +478,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A module's configuration is one document in the shared `settings` table, declared with
   `defineSettingsDocument` and saved only through `saveSettings`; its shape changes on read, never
   in a migration (and not at all before go-live), and a per-module database rule is a trigger on
-  `settings`, never a CHECK.** Guards: `scripts/settings-not-migrated.test.ts` (weaker than the rule:
-  reads SQL text, not TypeScript run at migration or start) and the pinned-CHECK case in
-  `packages/db/src/settings.test.ts` (reads the built table's text, not what each check does).
+  `settings`, never a CHECK.** Guards: `scripts/settings-not-migrated.test.ts` and the pinned-CHECK
+  case in `packages/db/src/settings.test.ts`, both weaker than the rule: they read text.
   [Detail](docs/developers/conventions-data.md#a-modules-settings-are-one-document-in-the-shared-settings-table).
 - **Multi-table writes share ONE transaction: `withTransaction`.** Write-path functions take `tx: Transaction`, never open their own; handlers open one per request. Secret checks take `Database` and derive outside it,
   taking turns through `inTurn`. **Splitting one logical change across transactions is a commented
@@ -620,10 +617,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **A column of a transferred table that holds another row's id is a foreign key, a declared
   `references` entry or left out of the export** (`omit`); any other column the export carries
   arrives holding the exporting venue's id. A short id list kept as JSON (design R4) declares
-  `jsonReferences`: export prunes it, import rewrites it, and deletion clears it with
-  `removeIdFromJson`. Guard:
-  `scripts/id-columns-are-references.test.ts`, weaker than its name — it knows an id column only by
-  a name ending `_id` or `_ids`, and a JSON column only by a `json_valid` CHECK naming it.
+  `jsonReferences`. Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name — it
+  knows an id column only by a name ending `_id` or `_ids`, and a JSON column only by a `json_valid`
+  CHECK naming it. [Detail](docs/developers/conventions-data.md#a-column-of-a-transferred-table-that-holds-another-rows-id-is-a-foreign-key-a-declared-references-entry-or-left-out-of-the-export).
 - **A module that can be switched off or swapped keeps a migration set of its own; any other adds
   its tables to core's set, and the commit says which.** Stated exceptions: staffing, switchable
   with its tables in workforce's set, and `node`, whose set is applied to `node.db`. Append-only
