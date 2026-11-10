@@ -1,5 +1,6 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, expect, it } from "vitest";
+import { Hono } from "hono";
+import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { previewCorrectionAmounts, recordCorrection, recordSale } from "@waitron/core";
 import {
   captureError,
@@ -11,7 +12,14 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, loginWithPin } from "@waitron/identity";
+import {
+  hashPin,
+  loginWithPin,
+  persons,
+  registerModulePermissions,
+  startManagementSession,
+} from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   centsToDecimal,
   decimal,
@@ -29,6 +37,9 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
+import { openFilingCase } from "./filing-cases.js";
+import { FISCAL_PERMISSIONS } from "./permissions.js";
+import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 
@@ -230,4 +241,85 @@ it("refuses a refused original before reading its history", async () => {
   });
   expect(unreadable).toMatchObject({ code: "sale.correction_history_unusable" });
   expect(await snapshot(saleId)).toEqual(before);
+});
+
+it("refuses an invoice the agency refused, then, once its fix files it at 10%, as moved", async () => {
+  // No line gross, so the history read would refuse: each refusal must come before it.
+  const { saleId, before } = await sell([["10.00", null]], ["10.00", "2.10"]);
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: "1161" })
+    .where(eq(envios.registroId, before.registro.id));
+  const refused = await captureError(() => preview(saleId, "1.00"));
+
+  vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
+  vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
+  vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
+  onTestFinished(() => vi.unstubAllEnvs());
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const [admin] = await suite.db
+    .insert(persons)
+    .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
+    .returning();
+  const { token, caseId } = await withTransaction(suite.db, async (tx) => ({
+    token: (await startManagementSession(tx, { personId: admin!.id })).token,
+    caseId: (
+      await openFilingCase(tx, {
+        registroId: before.registro.id,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: 1161, mensaje: null, csv: null },
+        now: steadyClock.now().instant,
+      })
+    ).id,
+  }));
+  const app = new Hono();
+  mountRecordRemedies(
+    app,
+    {
+      db: suite.db,
+      recordGeneration: {
+        nodeId,
+        environment: "production",
+        clock: steadyClock,
+        requireWritable: () => {},
+      },
+    },
+    () => {},
+    new Set(["record-correction"]),
+  );
+  const fixed = await app.request("/management-api/fiscal-records/remedy", {
+    method: "POST",
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+    body: JSON.stringify({
+      kind: "record-correction",
+      caseId,
+      registroId: before.registro.id,
+      actionKey: "fix-at-10",
+      reason: "Filed at the wrong VAT rate",
+      facts: {
+        breakdown: [
+          {
+            ClaveRegimen: "01",
+            CalificacionOperacion: "S1",
+            TipoImpositivo: "10.00",
+            BaseImponibleOimporteNoSujeto: "11.00",
+            CuotaRepercutida: "1.10",
+          },
+        ],
+        taxTotal: "1.10",
+        total: "12.10",
+      },
+    }),
+  });
+  expect(fixed.status).toBe(200);
+
+  expect(refused).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "filing_refused" },
+  });
+  expect(await captureError(() => preview(saleId, "1.00"))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "filed_figures_changed" },
+  });
+  expect((await snapshot(saleId)).sale).toEqual(before.sale);
 });
