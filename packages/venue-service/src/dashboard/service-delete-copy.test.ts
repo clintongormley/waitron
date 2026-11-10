@@ -37,8 +37,8 @@ it.each([
   ],
   [
     "profile_starting_zones",
-    "Chooses a surviving starting zone for these profiles: {names}.",
-    "Elige una zona inicial restante para estos perfiles: {names}.",
+    "Chooses a surviving starting zone for this profile: {names}.",
+    "Elige una zona inicial restante para este perfil: {names}.",
   ],
   [
     "screen_zones",
@@ -75,8 +75,8 @@ it.each([
   ["service_steps", "Removes {count} service steps.", "Quita {count} pasos de servicio."],
   [
     "transfer_desks",
-    "Removes transfer desks for these profiles: {names}.",
-    "Quita los puestos de traslado de estos perfiles: {names}.",
+    "Removes the transfer desk for this profile: {names}.",
+    "Quita el puesto de traslado de este perfil: {names}.",
   ],
   [
     "transfer_routes",
@@ -114,13 +114,13 @@ it.each([
   ],
   [
     "table.delivery_in_progress",
-    "Complete delivery of these orders first: {names}.",
-    "Completa primero la entrega de estos pedidos: {names}.",
+    "Complete delivery of this order first: {names}.",
+    "Completa primero la entrega de este pedido: {names}.",
   ],
   [
     "table.booked",
-    "Move or cancel these bookings first: {names}.",
-    "Mueve o cancela primero estas reservas: {names}.",
+    "Move or cancel this booking first: {names}.",
+    "Mueve o cancela primero esta reserva: {names}.",
   ],
   [
     "zone.order_in_progress",
@@ -411,3 +411,66 @@ it.each([
     expect(line(0)).toBe(fill(many, 0));
   }
 });
+it.each([
+  [
+    "profile_starting_zones",
+    [
+      "Chooses a surviving starting zone for this profile: Patio.",
+      "Chooses a surviving starting zone for these profiles: Patio, Bar.",
+    ],
+    [
+      "Elige una zona inicial restante para este perfil: Patio.",
+      "Elige una zona inicial restante para estos perfiles: Patio, Bar.",
+    ],
+  ],
+  [
+    "transfer_desks",
+    [
+      "Removes the transfer desk for this profile: Patio.",
+      "Removes transfer desks for these profiles: Patio, Bar.",
+    ],
+    [
+      "Quita el puesto de traslado de este perfil: Patio.",
+      "Quita los puestos de traslado de estos perfiles: Patio, Bar.",
+    ],
+  ],
+] as const)("words %s by the names shown, not by the rows counted", (key, en, es) => {
+  for (const [locale, [one, many]] of [
+    ["en", en],
+    ["es", es],
+  ] as const) {
+    setLocale(locale);
+    const c = serviceDeleteCopy("department");
+    const patio = { id: "private", name: "Patio" };
+    expect(c.item({ key, count: 2, targets: [patio] })).toBe(one);
+    expect(c.item({ key, count: 1, targets: [patio, { id: "other", name: "Bar" }] })).toBe(many);
+  }
+});
+it.each([
+  [
+    "table.booked",
+    ["Move or cancel this booking first: Ana.", "Move or cancel these bookings first: ."],
+    ["Mueve o cancela primero esta reserva: Ana.", "Mueve o cancela primero estas reservas: ."],
+  ],
+  [
+    "table.delivery_in_progress",
+    ["Complete delivery of this order first: Ana.", "Complete delivery of these orders first: ."],
+    [
+      "Completa primero la entrega de este pedido: Ana.",
+      "Completa primero la entrega de estos pedidos: .",
+    ],
+  ],
+] as const)(
+  "words %s about one named item in the singular and keeps the plural with no names",
+  (code, en, es) => {
+    for (const [locale, [one, unnamed]] of [
+      ["en", en],
+      ["es", es],
+    ] as const) {
+      setLocale(locale);
+      const c = serviceDeleteCopy("zone");
+      expect(c.refusal({ code, params: {}, targets: [{ id: "private", name: "Ana" }] })).toBe(one);
+      expect(serviceDeleteError("zone", { code, params: {} })).toBe(unnamed);
+    }
+  },
+);

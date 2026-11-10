@@ -54,14 +54,14 @@ it("permanent delete renders every canonical removal under Settings that are rem
   expect([...group.querySelectorAll("li")].map((line) => line.textContent?.trim())).toEqual([
     "3 unsent order lines return to normal routing.",
     "2 draft lines return to normal routing.",
-    "Remove these printer links: Thermal printer.",
-    "Remove Made here from these devices: Counter till.",
+    "Remove this printer link: Thermal printer.",
+    "Remove Made here from this device: Counter till.",
     "Remove 4 normal routing rules.",
     "Remove 5 period routing rules.",
-    "Remove this station from these devices: Kitchen display.",
-    "Remove this station from these profiles: Kitchen profile.",
+    "Remove this station from this device: Kitchen display.",
+    "Remove this station from this profile: Kitchen profile.",
     "Remove 2 daily station settings.",
-    "These closed stations use normal routing: Terrace station.",
+    "This closed station uses normal routing: Terrace station.",
   ]);
   expect(dialog.shadowRoot!.textContent).not.toContain("private-id");
 });

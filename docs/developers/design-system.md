@@ -2846,9 +2846,9 @@ opens a month to pick from (`add-dates-calendar.ts`): a click adds a date or rem
 and a double-click counts as one click; a drag (a touch drag too, with no long press), a
 shift-click or Shift+arrow adds every date of the run and leaves the dates already chosen as they
 are, at most 366 at a time (a longer run adds nothing and says "Choose at most 366 dates."). A run
-is drawn marked only while a drag is under way. One hint line under the month says so. A date another special day holds is marked with that day's name but still offered. Every year notes that it
-follows the holiday's name to its date each year when a stored date was saved on a public holiday
-or a new date is one, and warns that 29 February repeats only in leap years. The grid has a column
+is drawn marked only while a drag is under way. One hint line under the month says so. A date another special day holds is marked with that day's name but still offered. Every year notes that, on a
+holiday, it repeats on that holiday whatever its date that year, when a stored date was saved on a
+public holiday or a new date is one, and warns that 29 February repeats only in leap years. The grid has a column
 per date, headed by its short weekday, day and month, with a Closed tick under each heading that
 shuts the whole date.
 Each date's season hours are drawn faded under the paint; what is painted replaces them for that

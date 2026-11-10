@@ -162,3 +162,112 @@ it.each(["en", "es"] as const)(
     );
   },
 );
+
+const grill = [{ id: "private-id", name: "Grill" }];
+it.each([
+  [
+    "station_unsent_lines",
+    [],
+    "1 unsent order line returns to normal routing.",
+    "1 línea de pedido sin enviar vuelve al enrutamiento normal.",
+  ],
+  [
+    "station_draft_lines",
+    [],
+    "1 draft line returns to normal routing.",
+    "1 línea de borrador vuelve al enrutamiento normal.",
+  ],
+  [
+    "station_printers",
+    grill,
+    "Remove this printer link: Grill.",
+    "Quita este vínculo de impresora: Grill.",
+  ],
+  [
+    "station_made_here",
+    grill,
+    "Remove Made here from this device: Grill.",
+    "Quita Hecho aquí de este dispositivo: Grill.",
+  ],
+  [
+    "station_routing_cells",
+    [],
+    "Remove 1 normal routing rule.",
+    "Quita 1 regla de enrutamiento normal.",
+  ],
+  [
+    "station_routing_periods",
+    [],
+    "Remove 1 period routing rule.",
+    "Quita 1 regla de enrutamiento por periodo.",
+  ],
+  [
+    "station_device_screens",
+    grill,
+    "Remove this station from this device: Grill.",
+    "Quita esta estación de este dispositivo: Grill.",
+  ],
+  [
+    "station_profile_screens",
+    grill,
+    "Remove this station from this profile: Grill.",
+    "Quita esta estación de este perfil: Grill.",
+  ],
+  [
+    "station_daily_states",
+    [],
+    "Remove 1 daily station setting.",
+    "Quita 1 ajuste diario de la estación.",
+  ],
+  [
+    "station_daily_destinations",
+    grill,
+    "This closed station uses normal routing: Grill.",
+    "Esta estación cerrada usa el enrutamiento normal: Grill.",
+  ],
+] as const)("words %s in the singular for one item in both languages", (key, targets, en, es) => {
+  for (const [locale, line] of [
+    ["en", en],
+    ["es", es],
+  ] as const) {
+    setLocale(locale);
+    expect(stationDeleteCopy().item({ key, count: 1, targets: [...targets] })).toBe(line);
+  }
+});
+
+it.each([
+  [
+    "en",
+    "Move this screen first: Grill.",
+    "1 dish is still waiting or being prepared.",
+    "Move these screens first: .",
+  ],
+  [
+    "es",
+    "Cambia primero esta pantalla: Grill.",
+    "1 plato sigue pendiente o en preparación.",
+    "Cambia primero estas pantallas: .",
+  ],
+] as const)(
+  "words a refusal about one screen or one dish in the singular in %s",
+  (locale, screen, work, noNames) => {
+    setLocale(locale);
+    const copy = stationDeleteCopy();
+    expect(
+      copy.refusal({
+        code: "station.screen_in_use",
+        params: { count: 1 },
+        targets: [{ id: "private-id", name: "Grill" }],
+      }),
+    ).toBe(screen);
+    expect(copy.refusal({ code: "station.screen_in_use", params: { count: 1 }, targets: [] })).toBe(
+      noNames,
+    );
+    expect(
+      copy.refusal({ code: "station.work_in_progress", params: { count: 1 }, targets: [] }),
+    ).toBe(work);
+    expect(stationDeleteError({ code: "station.work_in_progress", params: { count: 1 } })).toBe(
+      work,
+    );
+  },
+);
