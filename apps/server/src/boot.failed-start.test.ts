@@ -22,6 +22,7 @@ import { appendOnlyTriggerFaults } from "@waitron/store";
 import { startAppendOnlyWatch } from "./append-only-watch.js";
 import { startFreeSpaceWatch } from "./free-space-watch.js";
 import { startBoxEmailDuty } from "./box-alert-email.js";
+import { StreamHost } from "./stream-host.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -31,7 +32,7 @@ import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
-import { startMenuActivation } from "./menu-activation.js";
+import { createJobRunner } from "./job-runner.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { createSealedStateRefresher } from "./sealed-state.js";
@@ -89,9 +90,9 @@ vi.mock("./cloud-snapshot-loop.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./cloud-snapshot-loop.js")>();
   return { ...actual, runCloudSnapshotLoop: vi.fn(actual.runCloudSnapshotLoop) };
 });
-vi.mock("./menu-activation.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./menu-activation.js")>();
-  return { ...actual, startMenuActivation: vi.fn(actual.startMenuActivation) };
+vi.mock("./job-runner.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./job-runner.js")>();
+  return { ...actual, createJobRunner: vi.fn(actual.createJobRunner) };
 });
 
 vi.mock("./append-only-watch.js", async (importOriginal) => {
@@ -161,7 +162,7 @@ afterEach(async () => {
   vi.mocked(runCloudWorker).mockClear();
   vi.mocked(createContentSuggestionRunner).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
-  vi.mocked(startMenuActivation).mockClear();
+  vi.mocked(createJobRunner).mockClear();
   vi.mocked(startAppendOnlyWatch).mockClear();
   vi.mocked(runTenderRefundRecoveryLoop).mockReset();
   vi.mocked(runPendingCardLoop).mockReset();
@@ -174,15 +175,15 @@ afterAll(async () => {
   }
 });
 
-/** Spies on the stop of the next menu activation duty boot starts. */
-async function spyOnMenuActivationStop() {
-  const { startMenuActivation: realStart } =
-    await vi.importActual<typeof import("./menu-activation.js")>("./menu-activation.js");
+/** Spies on the stop of the next job runner boot starts. */
+async function spyOnJobRunnerStop() {
+  const { createJobRunner: realStart } =
+    await vi.importActual<typeof import("./job-runner.js")>("./job-runner.js");
   const stop = vi.fn<() => Promise<void>>();
-  vi.mocked(startMenuActivation).mockImplementationOnce((deps) => {
+  vi.mocked(createJobRunner).mockImplementationOnce((deps) => {
     const duty = realStart(deps);
-    stop.mockImplementation(() => duty.stop());
-    return { stop };
+    stop.mockImplementation(() => duty.stopJobs());
+    return { ...duty, stopJobs: stop };
   });
   return stop;
 }
@@ -680,17 +681,25 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(vi.mocked(runCloudSnapshotLoop).mock.calls.at(-1)![0].signal.aborted).toBe(true);
   }, 60_000);
 
-  it("in trading mode, when a step after the listener is started throws, stopping the menu activation duty", async () => {
+  it("in trading mode, when a step after the listener is started throws, stopping the job runner", async () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state, { landing: true });
     const failure = new Error("interfaces unreadable");
     failLandingAfterMdns(failure);
-    const stop = await spyOnMenuActivationStop();
+    const stop = await spyOnJobRunnerStop();
 
-    await expect(startServer(env)).rejects.toBe(failure);
-    expect(stop).toHaveBeenCalledOnce();
-    expect(readVenueHolder(venueDir)).toBeNull();
+    const streamStop = vi.spyOn(StreamHost.prototype, "stop");
+    try {
+      await expect(startServer(env)).rejects.toBe(failure);
+      expect(stop).toHaveBeenCalledOnce();
+      expect(stop.mock.invocationCallOrder[0]).toBeLessThan(
+        streamStop.mock.invocationCallOrder[0]!,
+      );
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      streamStop.mockRestore();
+    }
   }, 60_000);
 
   it("in trading mode, when a step after the listener is started throws, stopping the append-only watch", async () => {
@@ -1142,7 +1151,7 @@ describe("closing a started server", () => {
     const venueDir = await seededVenueDir();
     const state = await stateDir(undefined, { leaf: true });
     const env = await tradingEnv(venueDir, state);
-    const stop = await spyOnMenuActivationStop();
+    const stop = await spyOnJobRunnerStop();
     const server = await startServer(env);
     await listening(Number(env.WAITRON_HTTP_PORT));
     expect(stop).not.toHaveBeenCalled();

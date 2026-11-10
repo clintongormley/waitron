@@ -355,7 +355,8 @@ import {
 import type { MdnsQuerySocket } from "./box-lookup.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
-import { startMenuActivation } from "./menu-activation.js";
+import { createJobRunner } from "./job-runner.js";
+import { menuActivationJob } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
@@ -2261,6 +2262,10 @@ async function bootServer(
     );
   }
   tradingAdmission.admit();
+  const jobRunner = createJobRunner({ now, log });
+  const stopJobRunner = () => jobRunner.stopJobs();
+  undoOnFailure.push(stopJobRunner);
+  health.readJobs = () => jobRunner.views();
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
   await installChangeFeed(db, changeSources);
@@ -3654,15 +3659,18 @@ async function bootServer(
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
   undoOnFailure.push(async () => liveEvents.close());
   undoOnFailure.push(async () => unsubscribeFromChanges());
-  const menuActivation = startMenuActivation({
-    db,
-    bus: liveEvents,
-    isPrimary: () => holders.singletonRole.current === "primary",
-    now,
-    log,
-    maxWaitMs: config.maxTickMs,
-  });
-  undoOnFailure.push(() => menuActivation.stop());
+  // A running menu pass must settle before the stream stops on a failed start.
+  undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
+  undoOnFailure.push(stopJobRunner);
+  jobRunner.add(
+    menuActivationJob({
+      db,
+      isPrimary: () => holders.singletonRole.current === "primary",
+      now,
+      log,
+      maxWaitMs: config.maxTickMs,
+    }),
+  );
 
   const controller = new AbortController();
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
@@ -3950,7 +3958,7 @@ async function bootServer(
     unsubscribeFromChanges,
     stopSealingNodeCommits,
     sealedState,
-    menuActivation,
+    jobRunner,
     appendOnlyWatch,
     freeSpaceWatch,
     boxEmails,

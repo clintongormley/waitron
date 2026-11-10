@@ -42,7 +42,7 @@ import { startMailSender } from "./mail-sender.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { runPendingCardLoop } from "./pending-card-recovery.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
-import { startMenuActivation } from "./menu-activation.js";
+import { menuActivationJob } from "./menu-activation.js";
 import { readVenueDetails } from "./venue-details.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import {
@@ -101,7 +101,7 @@ vi.mock("./tender-refund-recovery.js", async (load) => {
 });
 vi.mock("./menu-activation.js", async (load) => {
   const a = await load<typeof import("./menu-activation.js")>();
-  return { ...a, startMenuActivation: vi.fn(a.startMenuActivation) };
+  return { ...a, menuActivationJob: vi.fn(a.menuActivationJob) };
 });
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -117,7 +117,7 @@ const duties = [
   startMailSender,
   runPendingCardLoop,
   runTenderRefundRecoveryLoop,
-  startMenuActivation,
+  menuActivationJob,
 ];
 let scratch: string;
 let server: StartedServer | undefined;

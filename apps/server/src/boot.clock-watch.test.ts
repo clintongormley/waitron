@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { BoxHostClient } from "./box-host-client.js";
-import { startMenuActivation } from "./menu-activation.js";
+import { menuActivationJob } from "./menu-activation.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -75,7 +75,7 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
 });
 vi.mock("./menu-activation.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./menu-activation.js")>();
-  return { ...actual, startMenuActivation: vi.fn(actual.startMenuActivation) };
+  return { ...actual, menuActivationJob: vi.fn(actual.menuActivationJob) };
 });
 
 const migrations = migrationOptionsFor(manifestSets(), null);
@@ -87,7 +87,7 @@ beforeEach(async () => {
   seen.readers.length = 0;
   seen.watchBoots.length = 0;
   seen.confirmReadBoots.length = 0;
-  vi.mocked(startMenuActivation).mockClear();
+  vi.mocked(menuActivationJob).mockClear();
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-watch-"));
 });
 
@@ -154,7 +154,7 @@ describe("boot's clock watch", () => {
 
   it("is stopped when the start fails after it began", async () => {
     const env = await tradingEnv();
-    vi.mocked(startMenuActivation).mockImplementationOnce(() => {
+    vi.mocked(menuActivationJob).mockImplementationOnce(() => {
       throw new Error("menu activation failed");
     });
     await expect(startServer(env, env)).rejects.toThrow("menu activation failed");
