@@ -1468,7 +1468,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         ></wt-switch>
         ${
           isVoid
-            ? html`<p class="hint" data-test="note-hint">
+            ? html`<p class="hint" data-test="note-hint" aria-hidden="true">
                 ${t("adjustments.field.note_required_void_hint")}
               </p>`
             : nothing
