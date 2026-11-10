@@ -177,11 +177,17 @@ it("a modified Cancel click leaves its draft and navigation to the browser", asy
   onTestFinished(() => push.mockRestore());
   const link = el.shadowRoot!.querySelector<HTMLElement>("[data-action=close]")!;
   let intercepted: boolean | undefined;
-  link.addEventListener("click", (event) => {
-    intercepted = event.defaultPrevented;
-    event.preventDefault();
-  }, { once: true });
-  link.dispatchEvent(new MouseEvent("click", { ctrlKey: true, bubbles: true, composed: true, cancelable: true }));
+  link.addEventListener(
+    "click",
+    (event) => {
+      intercepted = event.defaultPrevented;
+      event.preventDefault();
+    },
+    { once: true },
+  );
+  link.dispatchEvent(
+    new MouseEvent("click", { ctrlKey: true, bubbles: true, composed: true, cancelable: true }),
+  );
   await el.updateComplete;
   expect(intercepted).toBe(false);
   expect(push).not.toHaveBeenCalled();

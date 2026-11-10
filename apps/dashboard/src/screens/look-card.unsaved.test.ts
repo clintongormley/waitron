@@ -160,20 +160,6 @@ it("a reverted draft leaves without asking", async () => {
   expect(await leave(app)).toBe("proceeded");
 });
 
-it("navigation Keep retains the draft and Cancel returns to saved rows without asking", async () => {
-  const { app, card, saveTheme } = await mount();
-  await square(card);
-  void leave(app);
-  await choose(app, "keep");
-  expect(editing(card)).toBe(true);
-  expect(corners(card).value).toBe("square");
-  q(card, "[data-test=cancel]")!.click();
-  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  await expect.poll(() => editing(card)).toBe(false);
-  expect(saveTheme).not.toHaveBeenCalled();
-  expect(unload()).toBe(false);
-});
-
 it("after a successful save, leaving asks nothing", async () => {
   const { app, card, saveTheme } = await mount();
   await square(card);

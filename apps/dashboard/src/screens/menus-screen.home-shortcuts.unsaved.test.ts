@@ -145,7 +145,6 @@ function cancel(window: HTMLElementTagNameMap["wt-modal"]): void {
   window.querySelector<HTMLElement>('[data-test="add-shortcut-cancel"]')!.click();
 }
 
-
 it("closes on Cancel without asking when nothing is chosen", async () => {
   const { app, window } = await mount(
     client(

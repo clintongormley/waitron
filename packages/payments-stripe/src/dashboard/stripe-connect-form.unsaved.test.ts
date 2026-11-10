@@ -80,9 +80,9 @@ for (const name of ["secret-key", "webhook-secret", "success-url", "cancel-url"]
     ).toBe("  changed  ");
     await field(form, name, "");
     expect(unload()).toBe(false);
-    expect(await app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed })).toBe(
-      "proceeded",
-    );
+    expect(
+      await app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed }),
+    ).toBe("proceeded");
     await field(form, name, " ");
     leave = app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed });
     q = await question();

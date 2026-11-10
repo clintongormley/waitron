@@ -175,7 +175,7 @@ it.each([
   const form = await open(screen);
   await field(form, name, value);
   expect(unload()).toBe(true);
-  const closing = dialog(form).requestClose("cancel");
+  const closing = dialog(form).requestClose("escape");
   expect((await question()).open).toBe(true);
   await choose("keep");
   expect(await closing).toBe(false);

@@ -74,17 +74,12 @@ it("tracks a detached baseline, including editing then restoring the original se
   await edit(form, "2026-01-01");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it.each(["cancel", "escape"] as const)(
+it.each(["escape"] as const)(
   "protects an edited %s, keeps the draft and discards only after the choice",
-  async (reason) => {
+  async () => {
     const { app, form, dialog, input } = await fixture();
     await edit(form, "2020-01-01");
-    const close = () =>
-      reason === "cancel"
-        ? Promise.resolve(
-            form.shadowRoot!.querySelector<HTMLElement>("[data-test=export-cancel]")!.click(),
-          )
-        : userEvent.keyboard("{Escape}");
+    const close = () => userEvent.keyboard("{Escape}");
     input.focus();
     await close();
     const q = await warning(app);

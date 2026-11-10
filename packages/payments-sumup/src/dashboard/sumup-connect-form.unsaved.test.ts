@@ -80,9 +80,9 @@ for (const name of ["api-key"]) {
     ).toBe("  changed  ");
     await field(form, name, "");
     expect(unload()).toBe(false);
-    expect(await app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed })).toBe(
-      "proceeded",
-    );
+    expect(
+      await app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed }),
+    ).toBe("proceeded");
     await field(form, name, " ");
     leave = app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed });
     q = await question();
@@ -253,7 +253,11 @@ it("an ambiguous merchant choice is dirty and Discard restores the visible empty
   merchant.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "B" } }));
   await field(form, "api-key", "");
   expect(unload()).toBe(true);
-  const leave = app.leave.coordinator.request({ scopes: [form], reason: "navigation", proceed() {} });
+  const leave = app.leave.coordinator.request({
+    scopes: [form],
+    reason: "navigation",
+    proceed() {},
+  });
   const q = await question();
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();

@@ -1846,14 +1846,6 @@ describe("the Edit dialog", () => {
     return { host, el };
   }
 
-  async function discardChanges(host: DevicesLeaveHost): Promise<void> {
-    const question = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    await vi.waitFor(() => expect(question.open).toBe(true));
-    await question.updateComplete;
-    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-    await vi.waitFor(() => expect(question.open).toBe(false));
-  }
-
   it("after a deleted reader's re-read puts the device back on Use default, leaving the page asks nothing", async () => {
     const api = editApi({
       getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
@@ -1889,7 +1881,7 @@ describe("the Edit dialog", () => {
           .fn()
           .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
       });
-      const { host, el } = await openEditInHost(api);
+      const { el } = await openEditInHost(api);
       vi.mocked(api.listReaders)
         .mockReturnValueOnce(
           new Promise<ReaderRow[]>((res, rej) => {
@@ -1904,7 +1896,6 @@ describe("the Edit dialog", () => {
       await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
 
       q(el, "[data-test=edit-cancel]")!.click();
-      await discardChanges(host);
       await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
       dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
       await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));

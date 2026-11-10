@@ -4281,8 +4281,8 @@ once, under Status, and acts at once. The view footer reads Close and Delete at 
 Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
 network receipt printer, its host and port; that form has no Close button, its footer reads Cancel and Save
 with the one bottom message, Cancel returns to the details, and Escape closes the window. The
-list's Edit opens the details in edit mode with the name focused. Cancel discards edits without asking; a dirty form asks before Escape,
-Escape or leaving the page discards it. An A4 printer opens the same modal with a Paper group and no
+list's Edit opens the details in edit mode with the name focused. Cancel discards edits without
+asking. Escape and leaving the page ask before discarding an edited form. An A4 printer opens the same modal with a Paper group and no
 Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
 is set. Its Active switch only switches off, and its Edit form holds the name alone.
 

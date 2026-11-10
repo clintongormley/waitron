@@ -93,7 +93,6 @@ async function saveButton(form: HTMLElementTagNameMap["dashboard-variant-form"])
   return { variant: save.variant, disabled: save.disabled };
 }
 
-
 it("a variant put back after a detached update still asks before Escape discards an edit", async () => {
   const { app, form } = await mount();
   await reattachAfterDetachedUpdate(form);

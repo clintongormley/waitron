@@ -8351,7 +8351,7 @@ describe("application unsaved changes renderer", () => {
         let left = 0;
         const pending = coordinator!.request({
           scopes: [scope.id],
-          reason: "cancel",
+          reason: "navigation",
           proceed() {
             left++;
           },
@@ -8406,7 +8406,7 @@ it("forced session exit aborts an open unsaved question and clears its registry 
   let left = 0;
   const pending = coordinator.request({
     scopes: [scope.id],
-    reason: "cancel",
+    reason: "navigation",
     proceed() {
       left++;
     },
@@ -9051,14 +9051,14 @@ describe("mounted public department dialogs", () => {
     ).toBe("Edit department: Restaurant");
     expect(find(app, "departments-list")).not.toBeNull();
   });
-  it("the real Cancel asks before discarding Settings and restores the department list", async () => {
+  it("Escape asks before discarding Settings and restores the department list", async () => {
     const app = await mountDepartments("/manage/venue-operations/department/d1");
     const box = await draft(app);
-    find(app, '[data-test="cancel-editor"]')!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
     expect(location.pathname).toBe("/manage/venue-operations/department/d1");
     expect(box.value).toBe("Draft restaurant");
-    find(app, '[data-test="cancel-editor"]')!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "discard");
     await expect.poll(() => location.pathname).toBe("/manage/venue-operations");
     await expect.poll(() => find(app, "departments-list")).not.toBeNull();
@@ -9191,9 +9191,9 @@ describe("mounted public department dialogs", () => {
     expect(find(app, "dashboard-venue-receipt-defaults-editor")).toBeNull();
     expect(find(app, '[data-test="receipt-language"]')).toBeNull();
   });
-  it.each(["cancel", "escape"] as const)(
+  it.each(["escape"] as const)(
     "the Receipts tab's %s Keeps then Discards one draft and returns to the list",
-    async (destination) => {
+    async () => {
       const app = await mountDepartments("/manage/venue-operations/department/d1/view/receipt", [
         "venue.configure",
       ]);
@@ -9204,10 +9204,7 @@ describe("mounted public department dialogs", () => {
         page.elementLocator(field.shadowRoot!.querySelector("input")!),
         "draft@example.com",
       );
-      const close = async () => {
-        if (destination === "escape") await userEvent.keyboard("{Escape}");
-        else find(app, '[data-test="cancel-receipt"]')!.click();
-      };
+      const close = () => userEvent.keyboard("{Escape}");
       await close();
       await choose(app, "keep");
       expect(location.pathname).toBe("/manage/venue-operations/department/d1/view/receipt");

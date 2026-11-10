@@ -129,7 +129,7 @@ for (const route of ["escape"] as const) {
     await select(f);
     await target(f);
     expect(unloadProtected()).toBe(true);
-    await userEvent.keyboard("{Escape}");
+    await cancel(f, "escape");
     expect((await question(f.app)).open).toBe(true);
     expect(f.modal.open).toBe(true);
     await choose(f, "keep");
@@ -142,7 +142,7 @@ for (const route of ["escape"] as const) {
             .shadowRoot!.activeElement?.tagName,
       )
       .toBe("BUTTON");
-    await userEvent.keyboard("{Escape}");
+    await cancel(f, "escape");
     await choose(f, "discard");
     await expect.poll(() => f.modal.open).toBe(false);
     expect(f.api.reassignProductsUnit).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ for (const changed of ["selection", "target"] as const) {
     if (changed === "selection") await select(f);
     else await target(f, "__each__");
     expect(unloadProtected()).toBe(true);
-    await userEvent.keyboard("{Escape}");
+    await cancel(f, "escape");
     expect((await question(f.app)).open).toBe(true);
     await choose(f, "keep");
     expect(f.modal.open).toBe(true);

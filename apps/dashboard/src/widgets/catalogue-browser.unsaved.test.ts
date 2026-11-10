@@ -132,7 +132,7 @@ for (const operation of ["move", "delete"] as const) {
       const f = await fixture(operation);
       await edit(f);
       expect(protectedUnload()).toBe(true);
-      await userEvent.keyboard("{Escape}");
+      await cancel(f, "escape");
       expect((await question(f)).open).toBe(true);
       expect(f.modal.open).toBe(true);
       await choose(f, "keep");
@@ -142,7 +142,7 @@ for (const operation of ["move", "delete"] as const) {
           () => f.modal.querySelector("wt-button[slot=cancel]")!.shadowRoot!.activeElement?.tagName,
         )
         .toBe("BUTTON");
-      await userEvent.keyboard("{Escape}");
+      await cancel(f, "escape");
       await choose(f, "discard");
       await expect.poll(() => f.browser.shadowRoot!.querySelector("wt-modal")).toBeNull();
       expect(f.api.moveCatalogueItems).not.toHaveBeenCalled();
@@ -192,7 +192,7 @@ for (const operation of ["move", "delete"] as const) {
     f.modal.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await expect.poll(() => f.modal.querySelector("[role=alert]")?.textContent).toBeTruthy();
     expect(protectedUnload()).toBe(true);
-    await userEvent.keyboard("{Escape}");
+    await cancel(f, "escape");
     expect((await question(f)).open).toBe(true);
     await choose(f, "keep");
     expect(value(f)).toBe(operation === "move" ? "f" : "delete");

@@ -90,7 +90,7 @@ async function question(app: ImagePickerLeaveApp) {
 it("enclosing picker Escape keeps an edited image child until Discard, preserving the Product draft", async () => {
   const { app, upload, library } = await mount();
   app.parentValue = "Edited product";
-  await userEvent.keyboard("{Escape}");
+  void upload.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(upload.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
@@ -100,7 +100,7 @@ it("enclosing picker Escape keeps an edited image child until Discard, preservin
   expect(
     library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
   ).toBe("Pan editado");
-  await userEvent.keyboard("{Escape}");
+  void upload.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => upload.shadowRoot!.querySelector("media-image-picker")).toBeNull();

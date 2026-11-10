@@ -6851,13 +6851,12 @@ describe("line-edit unsaved station choice", () => {
     await q.updateComplete;
     return q;
   }
-  for (const route of ["Cancel", "Escape"]) {
+  for (const route of ["Escape"]) {
     it(`${route} retains station choice until explicit discard without retrying`, async () => {
-      const { el, dialog, section, choose, cancel, updateOrderLine } = await opening();
+      const { el, dialog, section, choose, updateOrderLine } = await opening();
       const field = await choose();
       field.focus();
-      if (route === "Cancel") cancel();
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       const q = await question(el);
       expect(q.open).toBe(true);
       expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -6867,7 +6866,7 @@ describe("line-edit unsaved station choice", () => {
       await expect.poll(() => q.open).toBe(false);
       expect(section.choices.get("0")).toBe("kitchen");
       expect(unload()).toBe(true);
-      cancel();
+      await userEvent.keyboard("{Escape}");
       await question(el);
       q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
       await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
@@ -6944,9 +6943,9 @@ describe("line-edit unsaved station choice", () => {
   });
 
   it("Confirm accepts the existing exact retry and invalidates pending discard", async () => {
-    const { el, dialog, choose, cancel, updateOrderLine } = await opening();
+    const { el, dialog, choose, updateOrderLine } = await opening();
     await choose();
-    cancel();
+    void dialog.requestClose("escape");
     const q = await question(el);
     expect(q.open).toBe(true);
     const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -6977,9 +6976,9 @@ describe("line-edit unsaved station choice", () => {
     expect(updateOrderLine).toHaveBeenCalledTimes(1);
   });
   it("disconnect invalidates a pending answer and unregisters unload", async () => {
-    const { el, choose, cancel, updateOrderLine } = await opening();
+    const { el, dialog, choose, updateOrderLine } = await opening();
     await choose();
-    cancel();
+    void dialog.requestClose("escape");
     const q = await question(el);
     expect(q.open).toBe(true);
     const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -7007,9 +7006,9 @@ describe("line-edit unsaved station choice", () => {
     expect(updateOrderLine).toHaveBeenCalledTimes(1);
   });
   it("replacement entry rejects departed choices, close reports and Confirm", async () => {
-    const { el, dialog, section, choose, cancel, change, updateOrderLine } = await opening();
+    const { el, dialog, section, choose, change, updateOrderLine } = await opening();
     await choose();
-    cancel();
+    void dialog.requestClose("escape");
     const q = await question(el);
     expect(q.open).toBe(true);
     const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -7063,9 +7062,9 @@ describe("line-edit unsaved station choice", () => {
       start: vi.fn(),
       stop: vi.fn(),
     };
-    const { el, choose, cancel, updateOrderLine } = await opening(activity as never);
+    const { el, dialog, choose, updateOrderLine } = await opening(activity as never);
     await choose();
-    cancel();
+    void dialog.requestClose("escape");
     const q = await question(el);
     expect(q.open).toBe(true);
     const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;

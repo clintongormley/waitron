@@ -181,7 +181,11 @@ async function choice(value: "keep" | "discard") {
   await expect.poll(() => q.open).toBe(false);
 }
 
-it("Cancel asks, Keep retains and Discard restores the whole form", async () => {
+function leave() {
+  return app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed() {} });
+}
+
+it("navigation asks, Keep retains and Discard restores the whole form", async () => {
   const el = await mount();
   const change = async (value: string) => {
     el.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
@@ -192,13 +196,13 @@ it("Cancel asks, Keep retains and Discard restores the whole form", async () => 
   expect(unload()).toBe(false);
   await change("Draft");
   expect(unload()).toBe(true);
-  await userEvent.keyboard("{Escape}");
+  void leave();
   await choice("keep");
   expect(
     (el.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
   ).toBe("Draft");
   expect(unload()).toBe(true);
-  await userEvent.keyboard("{Escape}");
+  void leave();
   await choice("discard");
   await el.updateComplete;
   expect(
@@ -222,7 +226,7 @@ it("reconnect retains the draft against its original baseline", async () => {
       .value,
   ).toBe("Draft");
   expect(unload()).toBe(true);
-  await userEvent.keyboard("{Escape}");
+  void leave();
   await choice("keep");
   expect(unload()).toBe(true);
 });
@@ -303,7 +307,7 @@ it.each(["read-before-write", "write-before-read"] as const)(
       }),
     );
     await el.updateComplete;
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+    void leave();
     await choice("discard");
     await el.updateComplete;
     expect(name.value).toBe("Saved name");
@@ -352,7 +356,7 @@ it("destination deactivation retains other drafts against their original baselin
   await el.updateComplete;
   expect(name.value).toBe("Name draft");
   expect(unload()).toBe(true);
-  await userEvent.keyboard("{Escape}");
+  void leave();
   await choice("discard");
   await el.updateComplete;
   expect(name.value).toBe("Restaurant");
@@ -425,20 +429,14 @@ async function nativeSettingsDraft(kind: "tradingName" | "receivingProfileId" | 
       nativeDisabled: save.shadowRoot!.querySelector("button")!.disabled,
     };
   };
-  const cancel = async () => {
-    const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      "[data-test=cancel-editor]",
-    )!;
-    await button.updateComplete;
-    await userEvent.click(page.elementLocator(button.shadowRoot!.querySelector("button")!));
-  };
-  return { el, writes, change, value, save, state, cancel };
+
+  return { el, writes, change, value, save, state };
 }
 
 it.each(["tradingName", "receivingProfileId", "destination"] as const)(
   "native %s retains Keep, reverts cleanly and discards without writing",
   async (kind) => {
-    const { writes, change, value, state, cancel } = await nativeSettingsDraft(kind);
+    const { writes, change, value, state } = await nativeSettingsDraft(kind);
     const original = kind === "tradingName" ? "Casa" : kind === "receivingProfileId" ? "" : false;
     const edited =
       kind === "tradingName" ? "Draft trading name" : kind === "receivingProfileId" ? "p1" : true;
@@ -446,7 +444,7 @@ it.each(["tradingName", "receivingProfileId", "destination"] as const)(
     await change(true);
     expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
     expect(unload()).toBe(true);
-    await cancel();
+    void leave();
     await choice("keep");
     expect(value()).toBe(edited);
     expect(unload()).toBe(true);
@@ -454,11 +452,11 @@ it.each(["tradingName", "receivingProfileId", "destination"] as const)(
     await change(false);
     expect(await state()).toEqual({ variant: "secondary", disabled: true, nativeDisabled: true });
     expect(unload()).toBe(false);
-    await cancel();
+    void leave();
     await app.updateComplete;
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     await change(true);
-    await cancel();
+    void leave();
     await choice("discard");
     await expect.poll(value).toBe(original);
     expect(unload()).toBe(false);
@@ -470,9 +468,9 @@ it.each(["tradingName", "receivingProfileId", "destination"] as const)(
 it.each(["tradingName", "receivingProfileId"] as const)(
   "an accepted %s save cancels a pending discard and protects the next draft",
   async (kind) => {
-    const { el, writes, change, value, state, save, cancel } = await nativeSettingsDraft(kind);
+    const { el, writes, change, value, state, save } = await nativeSettingsDraft(kind);
     await change(true);
-    await cancel();
+    void leave();
     const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
     save.click();
@@ -513,7 +511,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
     expect(value()).toBe(newValue);
     expect(unload()).toBe(true);
     expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
-    await cancel();
+    void leave();
     await choice("discard");
     await expect.poll(value).toBe(kind === "tradingName" ? "Draft trading name" : "p1");
     expect(unload()).toBe(false);
@@ -524,7 +522,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
 it.each(["tradingName", "receivingProfileId"] as const)(
   "a refused %s save remains dirty and retryable through Keep",
   async (kind) => {
-    const { el, change, value, state, save, cancel } = await nativeSettingsDraft(kind);
+    const { el, change, value, state, save } = await nativeSettingsDraft(kind);
     const request = vi.fn(async () => {
       throw { code: "management.request_invalid", params: { field: kind } };
     });
@@ -536,7 +534,7 @@ it.each(["tradingName", "receivingProfileId"] as const)(
       .poll(() => el.shadowRoot!.querySelector(`[name=${kind}]`)!.getAttribute("error"))
       .not.toBe("");
     expect(await state()).toEqual({ variant: "primary", disabled: false, nativeDisabled: false });
-    await cancel();
+    void leave();
     await choice("keep");
     expect(value()).toBe(kind === "tradingName" ? "Draft trading name" : "p1");
     expect(unload()).toBe(true);
@@ -612,7 +610,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
       .toBe(false);
     expect(native.value).toBe("Newer name");
     expect(unload()).toBe(true);
-    await userEvent.keyboard("{Escape}");
+    void leave();
     await choice("keep");
     expect(native.value).toBe("Newer name");
     await userEvent.fill(page.elementLocator(native), " Submitted name ");
@@ -756,7 +754,7 @@ it("Settings left out of the page for a tick protects its retained native draft"
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(unload()).toBe(true);
   expect(field.shadowRoot!.querySelector("input")!.value).toBe("Retained draft");
-  await userEvent.keyboard("{Escape}");
+  void leave();
   await choice("keep");
   expect(field.shadowRoot!.querySelector("input")!.value).toBe("Retained draft");
   expect(unload()).toBe(true);

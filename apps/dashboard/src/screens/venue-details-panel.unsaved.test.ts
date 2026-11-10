@@ -122,18 +122,7 @@ for (const [name, value, original] of [
     expect(await leave(app)).toBe("proceeded");
   });
 }
-it("navigation Keep retains the draft and Cancel closes without asking or writing", async () => {
-  const { app, panel, writes } = await mount();
-  await change(panel, "addressLine1", "Different street");
-  void leave(app);
-  await choose(app, "keep");
-  expect(field(panel, "addressLine1").value).toBe("Different street");
-  click(panel, "cancel");
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  await expect.poll(() => panel.shadowRoot!.querySelector("wt-input")).toBeNull();
-  expect(writes).toEqual([]);
-  expect(unload()).toBe(false);
-});
+
 it("being hidden ends an unchanged edit and keeps a changed one", async () => {
   const { panel } = await mount();
   await change(panel, "addressLine1", "Different street");

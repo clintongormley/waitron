@@ -174,8 +174,7 @@ for (const add of [false, true])
       const modal = await open(screen, add);
       await field(screen, "name", "Changed reason");
       expect(unload()).toBe(true);
-      if (route === "escape") await userEvent.keyboard("{Escape}");
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       expect((await question()).open).toBe(true);
       expect(native(modal).open).toBe(true);
       await choose("keep");
@@ -458,7 +457,7 @@ it("disconnect aborts a question and old controls cannot change or save a replac
   const { screen, api } = await mount();
   const old = await open(screen);
   await field(screen, "name", "Old edit");
-  await userEvent.keyboard("{Escape}");
+  void old.requestClose("escape");
   const q = await question();
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!;
@@ -474,7 +473,7 @@ it("disconnect aborts a question and old controls cannot change or save a replac
     .querySelector('[name="name"]')!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Late edit" } }));
   old.querySelector<HTMLElement>('[data-test="save-editor"]')!.click();
-  await userEvent.keyboard("{Escape}");
+  old.querySelector<HTMLElement>('[data-test="cancel-editor"]')!.click();
   old.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   discard.click();
   await settle(screen);

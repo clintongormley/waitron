@@ -68,14 +68,14 @@ it("closing asks, Keep retains the service draft and Discard emits closed", asyn
   expect(unload()).toBe(false);
   await edit(el);
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  void el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await answer("keep");
   expect(events).toEqual([]);
   expect(unload()).toBe(true);
   expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value.orderStart).toBe(
     "counter",
   );
-  el.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  void el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await answer("discard");
   await expect.poll(() => events).toEqual([{ zoneId: "z2" }]);
   expect(unload()).toBe(false);
@@ -88,10 +88,10 @@ it("a retained editor reconnects with its original dirty baseline", async () => 
   app.shadowRoot!.append(el);
   await el.updateComplete;
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  void el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await answer("keep");
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
+  void el.shadowRoot!.querySelector("wt-modal")!.requestClose("escape");
   await answer("discard");
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value.orderStart).toBe(

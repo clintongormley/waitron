@@ -186,7 +186,7 @@ it.each(["en", "es"])(
     expect(install).toHaveBeenCalledTimes(1);
     expect(unload()).toBe(true);
 
-    await cancel(dialog);
+    await userEvent.keyboard("{Escape}");
     await vi.waitFor(async () => expect((await question()).open).toBe(true));
     await userEvent.click((await question()).shadowRoot!.querySelector("[data-choice=keep]")!);
     await vi.waitFor(async () => expect((await question()).open).toBe(false));
@@ -200,7 +200,7 @@ it.each(["en", "es"])(
     expect(unload()).toBe(true);
 
     const close = closed(dialog);
-    await cancel(dialog);
+    await userEvent.keyboard("{Escape}");
     await vi.waitFor(async () => expect((await question()).open).toBe(true));
     await userEvent.click((await question()).shadowRoot!.querySelector("[data-choice=discard]")!);
     await close;

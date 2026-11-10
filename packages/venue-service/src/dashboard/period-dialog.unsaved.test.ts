@@ -91,7 +91,7 @@ it("asks before closing a changed period and Keep preserves the editor", async (
   expect(unload()).toBe(false);
   await change(el, "Dinner");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(el.open).toBe(true);
@@ -118,7 +118,7 @@ it("asks for an edit made after removal and reconnect", async () => {
   await reconnect(el);
   await change(el, "Dinner");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -131,7 +131,7 @@ it("retains an edit made before removal and still compares it to the opened valu
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
 });
@@ -167,7 +167,7 @@ it("a submission that began before removal cannot commit after reconnect", async
 it("changing the draft cancels a pending discard answer", async () => {
   const el = await mount();
   await change(el, "Dinner");
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   expect((await question()).open).toBe(true);
   await change(el, "Evening");
   expect(await close).toBe(false);
@@ -328,7 +328,7 @@ it("a Floor plan-only change protects navigation and choosing the default back m
   expect(unload()).toBe(true);
   expect(save(el).variant).toBe("primary");
   expect(save(el).disabled).toBe(false);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(plan.value).toBe("dinner");

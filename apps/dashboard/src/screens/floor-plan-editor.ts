@@ -1334,7 +1334,12 @@ export class FloorPlanEditor extends LitElement {
                   ><wt-icon name="redo"></wt-icon
                 ></wt-button>
               </span>
-              <a slot="secondary" class="close" data-action="close" data-own-click href=${closeHref(this.back)}
+              <a
+                slot="secondary"
+                class="close"
+                data-action="close"
+                data-own-click
+                href=${closeHref(this.back)}
                 @click=${(event: MouseEvent) => void this.#cancel(event)}
                 >${t("action.cancel")}</a
               >

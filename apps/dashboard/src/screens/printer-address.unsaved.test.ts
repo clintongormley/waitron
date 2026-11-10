@@ -116,8 +116,7 @@ for (const route of ["escape"] as const) {
     await field(screen, "host").updateComplete;
     const input = field(screen, "host").shadowRoot!.querySelector("input")!;
     input.focus();
-    const close = async () =>
-      userEvent.keyboard("{Escape}");
+    const close = async () => userEvent.keyboard("{Escape}");
     await close();
     await choose(app, "keep");
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -161,7 +160,9 @@ it("closing a nested name leaves the edited address, while discovery Discard cov
   await screen.updateComplete;
   const name = q(screen, "[name=new-printer-name]") as HTMLElementTagNameMap["wt-input"];
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Changed kitchen" } }));
-  await userEvent.keyboard("{Escape}");
+  void (
+    q(screen, "[data-test=name-printer-modal]") as HTMLElementTagNameMap["wt-modal"]
+  ).requestClose("escape");
   await choose(app, "discard");
   await expect.poll(() => q(screen, "[data-test=name-printer-modal]")).toBeNull();
   expect(field(screen, "host").value).toBe("192.168.20.247");
@@ -171,7 +172,9 @@ it("closing a nested name leaves the edited address, while discovery Discard cov
   (q(screen, "[name=new-printer-name]") as HTMLElementTagNameMap["wt-input"]).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "New name" } }),
   );
-  await userEvent.keyboard("{Escape}");
+  void (
+    q(screen, "[data-test=new-printer-modal]") as HTMLElementTagNameMap["wt-modal"]
+  ).requestClose("escape");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect(q(screen, "[data-test=name-printer-modal]")).toBeNull();
@@ -287,7 +290,9 @@ it("refused registration retains the address and name for one parent question", 
     )
     .toBe(false);
   expect(unload()).toBe(true);
-  await userEvent.keyboard("{Escape}");
+  void (
+    q(screen, "[data-test=new-printer-modal]") as HTMLElementTagNameMap["wt-modal"]
+  ).requestClose("escape");
   await choose(app, "keep");
   expect(field(screen, "host").value).toBe("192.168.20.247");
   expect(q(screen, "[data-test=name-printer-modal]")).not.toBeNull();

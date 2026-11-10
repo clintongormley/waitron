@@ -451,7 +451,9 @@ export class TillFinishTableDialog extends LitElement {
             .disabled=${this.#busy()}
             @click=${() => {
               if (this.isConnected && this.active && !this.#busy())
-                void this.renderRoot.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation");
+                void this.renderRoot
+                  .querySelector<WtDialog>("wt-dialog")!
+                  .requestClose("navigation");
             }}
             >${t("action.back")}</wt-button
           >

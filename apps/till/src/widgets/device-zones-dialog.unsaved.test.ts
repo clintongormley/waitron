@@ -72,8 +72,7 @@ async function question(app: ZonesLeaveApp) {
 for (const way of ["Escape"] as const) {
   it(`${way} keeps the draft until Discard, without writing`, async () => {
     const { app, form } = await mount();
-    if (way === "Escape") await userEvent.keyboard("{Escape}");
-    else await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-zones-cancel]")!);
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     await userEvent.click(q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!);
@@ -82,7 +81,7 @@ for (const way of ["Escape"] as const) {
         .checked,
     ).toBe(true);
     expect(app.closes).toBe(0);
-    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-zones-cancel]")!);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     const closed = new Promise<void>((resolve) =>
       form.addEventListener("close-device-zones", () => resolve(), { once: true }),
@@ -143,7 +142,7 @@ it("a saved snapshot retires its warning before a refresh can fail", async () =>
 });
 it("security teardown invalidates an unanswered close and leaves no unload warning", async () => {
   const { app, form } = await mount();
-  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-zones-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   app.leave.forceReset();

@@ -363,7 +363,7 @@ export class PeriodDialog extends LitElement {
     if (this.scope && this.leave) {
       const outcome = await this.leave.request({
         scopes: [this.scope.id],
-        reason: "cancel",
+        reason: "navigation",
         proceed() {},
       });
       if (outcome !== "proceeded") return;

@@ -120,19 +120,6 @@ it("a reverted draft leaves without asking", async () => {
   expect(await leave(app)).toBe("proceeded");
 });
 
-it("navigation Keep retains the draft and Cancel returns to view mode without asking", async () => {
-  const { app, panel, writes } = await mount();
-  await change(panel, "defaultProductVatClass", "zero");
-  void leave(app);
-  await choose(app, "keep");
-  expect(field(panel, "defaultProductVatClass")!.value).toBe("zero");
-  click(panel, "cancel");
-  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-  await expect.poll(() => viewing(panel)).toBe(true);
-  expect(writes).toEqual([]);
-  expect(unload()).toBe(false);
-});
-
 it("reconnecting keeps the draft and its protection", async () => {
   const { app, panel } = await mount();
   await change(panel, "defaultProductVatClass", "zero");

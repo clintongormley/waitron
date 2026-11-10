@@ -10958,7 +10958,7 @@ describe("till-app: recording an unpaid departure", () => {
     ]);
   });
 
-  for (const action of ["Cancel", "Escape"]) {
+  for (const action of ["Escape"]) {
     it(`unpaid departure ${action} retains the reason and bills until local Discard`, async () => {
       const { el } = await openDeparture();
       const order = tableOrder(el)!;
@@ -10967,9 +10967,7 @@ describe("till-app: recording an unpaid departure", () => {
       await typeReason(el, "  Left during clearing  ");
       const input = form.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
       input.focus();
-      if (action === "Cancel")
-        form.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       await flush(el);
       const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
       expect(question.open).toBe(true);
@@ -10980,7 +10978,7 @@ describe("till-app: recording an unpaid departure", () => {
       expect(question.open).toBe(false);
       expect(input.value).toBe("  Left during clearing  ");
       expect(tableOrder(el)!.bills).toEqual(bills);
-      form.shadowRoot!.querySelector<HTMLElement>("[data-departure-close]")!.click();
+      await userEvent.keyboard("{Escape}");
       await flush(el);
       question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
       await expect.poll(() => dialog(el)).toBeNull();

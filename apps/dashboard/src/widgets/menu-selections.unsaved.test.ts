@@ -144,7 +144,7 @@ it("accepted placements clear only successful destinations before a failed retry
   await expect.poll(() => app.cancelled).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
-it("Add to menus put back after a detached update still asks before Cancel discards a pick", async () => {
+it("Add to menus put back after a detached update still protects its pick on Escape", async () => {
   const { app, form } = await mount();
   await reattachAfterDetachedUpdate(form);
   await toggle(form, "starter");
@@ -237,7 +237,7 @@ async function sectionQuestion(app: SectionSelectionLeaveApp) {
   await q.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return q;
 }
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`Section Add products ${route} preserves hidden picks through Keep and Discard`, async () => {
     const { app, form } = await mountSection();
     await selectProduct(form, "soup");
@@ -247,8 +247,7 @@ for (const route of ["cancel", "escape"] as const) {
     await userEvent.fill(page.elementLocator(search.shadowRoot!.querySelector("input")!), "Bread");
     await form.updateComplete;
     expect(form.shadowRoot!.querySelector('input[value="soup"]')).toBeNull();
-    if (route === "cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await sectionQuestion(app);
     expect(q.open).toBe(true);
     expect(app.cancelled).toBe(0);
@@ -256,7 +255,7 @@ for (const route of ["cancel", "escape"] as const) {
     await expect.poll(() => q.open).toBe(false);
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
     expect(app.submitted).toEqual([["soup"]]);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await sectionQuestion(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.cancelled).toBe(1);
@@ -302,12 +301,12 @@ it("Section success compares submitted membership independently of offered order
   await selectProduct(form, "bread");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("Section Add products put back after a detached update still asks before Cancel discards a pick", async () => {
+it("Section Add products put back after a detached update still protects its pick on Escape", async () => {
   const { app, form } = await mountSection();
   await reattachAfterDetachedUpdate(form);
   await selectProduct(form, "soup");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await sectionQuestion(app)).open).toBe(true);
   expect(app.cancelled).toBe(0);
 });
@@ -468,7 +467,7 @@ async function expectSectionUnchanged(app: SectionSelectionLeaveApp, form: Secti
 }
 
 for (const how of PUT_BACK_WAYS) {
-  for (const route of ["cancel", "escape"] as const) {
+  for (const route of ["escape"] as const) {
     it(`Section Add products: a pick made before being taken out counts when put back ${how}, and ${route} asks`, async () => {
       const { app, form } = await mountSection();
       await selectProduct(form, "soup");
@@ -477,8 +476,7 @@ for (const how of PUT_BACK_WAYS) {
       expect(product(form, "soup").checked).toBe(true);
       expect(app.leave.coordinator.isDirty()).toBe(true);
       expectDrawn(sectionAdd(form), "changed");
-      if (route === "cancel") cancel(form);
-      else await escapeFrom(product(form, "soup"));
+      await escapeFrom(product(form, "soup"));
       const q = await sectionQuestion(app);
       expect(q.open).toBe(true);
       expect(app.cancelled).toBe(0);

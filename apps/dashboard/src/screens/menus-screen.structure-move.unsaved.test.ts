@@ -143,7 +143,6 @@ function cancel(window: HTMLElementTagNameMap["wt-modal"]): void {
   window.querySelector<HTMLElement>('[data-test="move-selected-cancel"]')!.click();
 }
 
-
 it("closes on Cancel without asking when no destination is chosen", async () => {
   const { app, window } = await mount(client(async () => []));
   expect(app.leave.coordinator.isDirty()).toBe(false);

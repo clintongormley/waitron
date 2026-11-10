@@ -344,7 +344,7 @@ for (const action of ["replace", "disconnect"] as const) {
   it(`rename ${action} invalidates a pending leave and releases its draft`, async () => {
     const { app, screen } = await mount();
     change(screen, "New counter");
-    q(screen, "[data-test=close-reader-editor]")!.click();
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     if (action === "replace") await open(screen, "r2");
     else screen.remove();
@@ -507,10 +507,10 @@ it("an own-slip toggle protects the reader draft and Discard restores its saved 
   await userEvent.click(toggle().shadowRoot!.querySelector("label")!);
   expect(input.checked).toBe(true);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=close-reader-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(toggle().shadowRoot!.querySelector("input")!.checked).toBe(true);
-  q(screen, "[data-test=close-reader-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
   await open(screen);

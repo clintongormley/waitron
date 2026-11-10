@@ -55,13 +55,9 @@ async function question(app: KitchenNoteLeaveApp) {
 
 it.each(["escape"])(
   "protects an edited kitchen note on %s and Keep editing preserves text",
-  async (action) => {
+  async () => {
     const { app, note } = await mount();
-    if (action === "escape") await userEvent.keyboard("{Escape}");
-    else
-      await userEvent.click(
-        page.elementLocator(note.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!),
-      );
+    await userEvent.keyboard("{Escape}");
     const warning = await question(app);
     expect(note.shadowRoot!.querySelector("wt-dialog")?.open).toBe(true);
     const keep = warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!;
@@ -74,9 +70,7 @@ it.each(["escape"])(
 
 it("Discard closes the editor and leaves the saved note unchanged", async () => {
   const { app, note } = await mount();
-  await userEvent.click(
-    page.elementLocator(note.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!),
-  );
+  await userEvent.keyboard("{Escape}");
   const warning = await question(app);
   const discard = warning.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   await userEvent.click(page.elementLocator(discard));

@@ -100,18 +100,7 @@ for (const action of ["Escape"]) {
     expect(unload()).toBe(false);
   });
 }
-it("Cancel restores the bill name and closes without asking or naming", async () => {
-  const { app, form } = await mount();
-  const input = await fill(form, "Luis");
-  const closed = new Promise<void>((resolve) => form.addEventListener("bill-name-cancel", () => resolve(), { once: true }));
-  cancel(form);
-  await closed;
-  expect(app.closes).toBe(1);
-  expect((await question(app)).open).toBe(false);
-  expect(input.value).toBe("Ana");
-  expect(app.submitted).toEqual([]);
-  expect(unload()).toBe(false);
-});
+
 it("normalized reverted bill names close without a warning", async () => {
   const { app, form } = await mount();
   await fill(form, "Luis");

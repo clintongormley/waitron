@@ -319,8 +319,7 @@ it.each(["Escape", "navigation"])(
             app.closes++;
           },
         });
-      } else if (action === "Cancel") cancel(form);
-      else return userEvent.keyboard("{Escape}");
+      } else return userEvent.keyboard("{Escape}");
     };
     await leave();
     const q = await question(app);
@@ -341,7 +340,7 @@ it.each(["Escape", "navigation"])(
 
 it.each(["Escape"])(
   "A738 quantity %s protects Keep and restores the initial quantity on Discard",
-  async (action) => {
+  async () => {
     const { app, form } = await mount({
       product: { ...product, variants: undefined },
       lineDetails: true,
@@ -353,15 +352,14 @@ it.each(["Escape"])(
     await userEvent.fill(field.shadowRoot!.querySelector("input")!, "3");
     await form.updateComplete;
     expect(unload()).toBe(true);
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
     await expect.poll(() => q.open).toBe(false);
     expect(field.value).toBe("3");
     expect(app.closes).toBe(0);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -770,8 +768,7 @@ for (const action of ["Close", "Escape"] as const) {
     course.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "dessert" } }));
     await form.updateComplete;
     expect(unload()).toBe(true);
-    if (action === "Close") await userEvent.keyboard("{Escape}");
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.submitted).toEqual([]);

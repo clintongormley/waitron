@@ -1507,7 +1507,9 @@ export class TillTableOrderScreen extends LitElement {
   #dismissServe(): void {
     if (!this.isConnected || !this.servePending) return;
     if (this.#serveScope) {
-      void this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.requestClose("navigation");
+      void this.renderRoot
+        .querySelector<WtDialog>("[data-serve-dialog]")!
+        .requestClose("navigation");
     } else {
       this.servePending = null;
     }

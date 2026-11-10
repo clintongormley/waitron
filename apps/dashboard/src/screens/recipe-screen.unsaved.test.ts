@@ -220,18 +220,16 @@ it("Keep retains native choices and Discard restores the fetched membership befo
   expect(checked(screen, "i2")).toBe(false);
   expect(unload()).toBe(false);
 });
-for (const route of ["cancel", "product", "catalogue"] as const) {
+for (const route of ["product", "catalogue"] as const) {
   it(`asks before ${route} replaces the recipe and restores the picker on Keep`, async () => {
     const { app, screen } = await mount();
     await toggle(screen, "i2", true);
     const act = async () => {
-      if (route === "cancel") click(screen, "cancel");
-      else
-        await select(
-          screen,
-          route === "product" ? "productId" : "catalogueId",
-          route === "product" ? "p2" : "cat-b",
-        );
+      await select(
+        screen,
+        route === "product" ? "productId" : "catalogueId",
+        route === "product" ? "p2" : "cat-b",
+      );
     };
     await act();
     await choose(app, "keep");
@@ -403,14 +401,14 @@ it("disconnect releases recipe protection and reconnect starts with no selected 
   expect(box(screen, "catalogueId").value).toBe("");
   expect(unload()).toBe(false);
 });
-it("a recipe editor put back after a detached update still asks before Cancel discards a change", async () => {
+it("a recipe editor put back after a detached update still protects its draft on navigation", async () => {
   const { app, screen } = await mount();
   await reattachAfterDetachedUpdate(editor(screen));
   await toggle(screen, "i2", true);
   expect(app.leave.coordinator.isDirty()).toBe(true);
   let closed = 0;
   editor(screen).addEventListener("wt-close", () => closed++);
-  click(screen, "cancel");
+  void leave(app);
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   expect(closed).toBe(0);
 });

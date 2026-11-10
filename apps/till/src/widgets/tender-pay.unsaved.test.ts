@@ -137,7 +137,7 @@ it("A738 Escape keeps the Park name and focus until Discard closes its own openi
   expect(unload()).toBe(false);
 });
 for (const kind of ["cash", "weight", "label", "reference"] as const) {
-  it(`${kind} Cancel keeps the raw entry until local Discard without a command`, async () => {
+  it(`${kind} navigation retains the raw entry until Discard without a command`, async () => {
     const { app, form } = await mount();
     let input: HTMLInputElement | undefined;
     if (kind === "cash") {
@@ -160,9 +160,14 @@ for (const kind of ["cash", "weight", "label", "reference"] as const) {
       input = await fill(form, ".ref-input", "  TX-007  ");
     }
     expect(unload()).toBe(true);
-    await userEvent.keyboard("{Escape}");
+    const kept = app.leave.coordinator.request({
+      scopes: [form],
+      reason: "navigation",
+      proceed() {},
+    });
     expect((await question(app)).open).toBe(true);
     await choose(app, "keep");
+    expect(await kept).toBe("kept");
     if (input) {
       expect(input.value).toBe(kind === "label" ? "  Guest 07  " : "  TX-007  ");
       expect((input.getRootNode() as ShadowRoot).activeElement).toBe(input);
@@ -170,8 +175,14 @@ for (const kind of ["cash", "weight", "label", "reference"] as const) {
       expect(form.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe(
         kind === "cash" ? "5." : "1.",
       );
-    await userEvent.keyboard("{Escape}");
+    const discarded = app.leave.coordinator.request({
+      scopes: [form],
+      reason: "navigation",
+      proceed() {},
+    });
     await choose(app, "discard");
+    expect(await discarded).toBe("proceeded");
+    await click(form, ".cancel");
     await expect.poll(() => form.shadowRoot!.querySelector(".pay") !== null).toBe(true);
     expect(app.payments).toEqual([]);
     expect(app.collects).toEqual([]);
@@ -259,7 +270,7 @@ it("busy entry controls do not discard or submit a staged reference", async () =
   const confirm = form.shadowRoot!.querySelector<HTMLElement>(".confirm")!;
   form.busy = true;
   await form.updateComplete;
-  await userEvent.keyboard("{Escape}");
+  cancel.click();
   confirm.click();
   input.value = "busy";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -269,8 +280,7 @@ it("busy entry controls do not discard or submit a staged reference", async () =
   form.busy = false;
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("TX-007");
-  await userEvent.keyboard("{Escape}");
-  expect((await question(app)).open).toBe(true);
+  expect(unload()).toBe(true);
 });
 it("tip and offline consent protect page leave but cash Cancel preserves them independently", async () => {
   const { app, form } = await mount();
@@ -286,7 +296,7 @@ it("tip and offline consent protect page leave but cash Cancel preserves them in
   await click(form, ".pay");
   await press(form, "5");
   await click(form, ".cancel");
-  await choose(app, "discard");
+  expect((await question(app)).open).toBe(false);
   expect(form.shadowRoot!.querySelector<WtInput>(".tip-input")!.value).toBe("0.30");
   expect(form.shadowRoot!.querySelector("wt-switch")!.checked).toBe(true);
   expect(unload()).toBe(true);
@@ -308,17 +318,22 @@ it("tip and offline consent protect page leave but cash Cancel preserves them in
   await click(form, ".cancel");
   expect((await question(app)).open).toBe(false);
 });
-it("successful explicit submission invalidates an older Cancel answer", async () => {
+it("successful explicit submission invalidates an older navigation answer", async () => {
   const { app, form } = await mount();
   await click(form, ".pay-card");
   await fill(form, ".ref-input", "TX-007");
-  await userEvent.keyboard("{Escape}");
+  const leaving = app.leave.coordinator.request({
+    scopes: [form],
+    reason: "navigation",
+    proceed() {},
+  });
   const q = await question(app);
   expect(q.open).toBe(true);
   await click(form, ".confirm");
   await expect.poll(() => q.open).toBe(false);
   expect(app.payments).toEqual([{ method: "card", amount: "3.00", externalRef: "TX-007" }]);
   expect(unload()).toBe(false);
+  expect(await leaving).toBe("stale");
 });
 it("replacing a staged weight asks and Keep retains the original product and raw quantity", async () => {
   const { app, form } = await mount();

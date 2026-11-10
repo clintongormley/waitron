@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -48,9 +48,7 @@ it("the table screen protects a refused count against the stored count and disca
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   expect(input.value).toBe("1000");
   expect(field.error).toBe("Count refused");
-  await userEvent.click(
-    page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!),
-  );
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await question.updateComplete;

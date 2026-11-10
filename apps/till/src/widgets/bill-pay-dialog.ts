@@ -708,7 +708,8 @@ export class TillBillPayDialog extends LitElement {
       this.shownRefusal = null;
       this.#emit("bill-pay-edit");
     };
-    if (this.#tip) void this.#leave!.request({ scopes: [this.#tipId], reason: "navigation", proceed });
+    if (this.#tip)
+      void this.#leave!.request({ scopes: [this.#tipId], reason: "navigation", proceed });
     else proceed();
   }
 

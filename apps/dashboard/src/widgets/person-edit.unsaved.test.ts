@@ -96,9 +96,9 @@ for (const route of ["escape"] as const) {
     await expect.poll(() => q.open).toBe(false);
     expect(field.value).toBe("new@example.com");
     expect(
-        field.getRootNode() instanceof ShadowRoot &&
-          (field.getRootNode() as ShadowRoot).activeElement,
-      ).toBe(field);
+      field.getRootNode() instanceof ShadowRoot &&
+        (field.getRootNode() as ShadowRoot).activeElement,
+    ).toBe(field);
     await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();

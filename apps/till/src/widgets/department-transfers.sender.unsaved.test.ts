@@ -99,9 +99,7 @@ for (const action of ["Escape", "Close"]) {
   it(`${action} keeps a destination draft, then discards without writing`, async () => {
     const { app, form, input } = await mount();
     expect(unload()).toBe(true);
-    if (action === "Escape") await userEvent.keyboard("{Escape}");
-    else
-      await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     await expect.poll(() => q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();

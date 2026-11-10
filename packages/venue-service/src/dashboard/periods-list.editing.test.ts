@@ -881,7 +881,7 @@ it("voluntary period close waits for the native close event after discarding its
   const closed = new Promise<void>((done) =>
     modal.addEventListener("wt-close", () => done(), { once: true }),
   );
-  const result = modal.requestClose("cancel");
+  const result = modal.requestClose("escape");
   await app.updateComplete;
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);

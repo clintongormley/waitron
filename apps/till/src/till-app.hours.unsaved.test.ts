@@ -47,7 +47,7 @@ it("native Escape from the Hours correction keeps the draft until an explicit di
   expect(f.input.value).toBe("Forgot this shift");
   expect(f.hours()).not.toBeNull();
   expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
-  await userEvent.click(f.editor.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   await warning(f.el);
   const closed = new Promise((resolve) =>
     f.editor.addEventListener("correction-cancel", resolve, { once: true }),

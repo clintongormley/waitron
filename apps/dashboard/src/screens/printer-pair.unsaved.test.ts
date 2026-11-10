@@ -117,7 +117,7 @@ async function choose(app: PrinterPairLeaveApp, decision: "keep" | "discard") {
   await expect.poll(() => question.open).toBe(false);
 }
 
-for (const route of ["escape", "parent"] as const) {
+for (const route of ["escape"] as const) {
   it(`Bluetooth proof ${route} keeps the exact PIN and focus until Discard`, async () => {
     const { app, screen } = await mount();
     change(screen, " 8A? ");
@@ -126,8 +126,7 @@ for (const route of ["escape", "parent"] as const) {
     const input = field(screen).shadowRoot!.querySelector("input")!;
     input.focus();
     const dismiss = async () => {
-      if (route === "parent") q(screen, "[data-test=cancel-new-printer]")!.click();
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
     };
     await dismiss();
     await choose(app, "keep");
@@ -139,8 +138,7 @@ for (const route of ["escape", "parent"] as const) {
     await choose(app, "discard");
     await expect.poll(() => modal(screen)).toBeNull();
     expect(unload()).toBe(false);
-    if (route === "parent") expect(q(screen, "[data-test=new-printer-modal]")).toBeNull();
-    else {
+    {
       await open(screen, address);
       expect(field(screen)?.value).toBe("");
     }
@@ -228,8 +226,7 @@ for (const route of ["escape"] as const) {
     q(screen, "[data-test=confirm-pair]")!.click();
     await expect.poll(() => field(screen)?.disabled).toBe(true);
     expect(received).toEqual(["a1", address, "A?8"]);
-    if (route === "cancel") q(screen, "[data-test=cancel-pair]")!.click();
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => modal(screen)).toBeNull();
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(unload()).toBe(false);
@@ -370,7 +367,9 @@ it("a submitted Bluetooth request still protects the parent's independent addres
   change(screen, "A?8");
   q(screen, "[data-test=confirm-pair]")!.click();
   await expect.poll(() => field(screen)?.disabled).toBe(true);
-  await userEvent.keyboard("{Escape}");
+  void (
+    q(screen, "[data-test=new-printer-modal]") as HTMLElementTagNameMap["wt-modal"]
+  ).requestClose("escape");
   await choose(app, "keep");
   expect((q(screen, "[data-test=probe-host]") as HTMLElementTagNameMap["wt-input"]).value).toBe(
     "192.168.20.247",

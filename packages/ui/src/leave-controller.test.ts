@@ -196,7 +196,11 @@ test("security reset drops drafts without restoring them and tolerates a detache
 
 test("a removed renderer cannot answer a later leave question", async () => {
   const { app, field, scope } = await draft();
-  const old = app.leave.coordinator.request({ scopes: [scope.id], reason: "navigation", proceed() {} });
+  const old = app.leave.coordinator.request({
+    scopes: [scope.id],
+    reason: "navigation",
+    proceed() {},
+  });
   const oldQuestion = await question(app);
   scope.commit("Edited");
   expect(await old).toBe("stale");

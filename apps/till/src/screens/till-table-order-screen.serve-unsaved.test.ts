@@ -260,7 +260,7 @@ it("a clean asynchronous Back cannot dismiss a replacement serving choice", asyn
   });
   const close = vi.spyOn(dialog, "requestClose");
   screen.shadowRoot!.querySelector<HTMLElement>("[data-serve-dismiss]")!.click();
-  expect(close).toHaveBeenCalledExactlyOnceWith("cancel");
+  expect(close).toHaveBeenCalledExactlyOnceWith("navigation");
   const panel = screen.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   panel.dispatchEvent(
     new CustomEvent("sent-line-info", {

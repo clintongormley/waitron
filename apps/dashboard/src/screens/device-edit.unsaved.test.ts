@@ -179,8 +179,7 @@ for (const route of ["escape"] as const) {
     native.focus();
     let closes = 0;
     modal(screen)!.addEventListener("wt-close", () => closes++);
-    const dismiss = async () =>
-      userEvent.keyboard("{Escape}");
+    const dismiss = async () => userEvent.keyboard("{Escape}");
     await dismiss();
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);

@@ -59,8 +59,7 @@ for (const action of ["Escape"] as const) {
     const { app, form } = await mount();
     const input = await fill(form, "Forgot to clock");
     expect(unload()).toBe(true);
-    if (action === "Escape") await userEvent.keyboard("{Escape}");
-    else await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+    await userEvent.keyboard("{Escape}");
     const question = await warning(app);
     expect(question.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -68,7 +67,7 @@ for (const action of ["Escape"] as const) {
     await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
     await expect.poll(() => question.open).toBe(false);
     expect(input.value).toBe("Forgot to clock");
-    await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+    await userEvent.keyboard("{Escape}");
     await warning(app);
     const closed = new Promise((resolve) =>
       form.addEventListener("correction-cancel", resolve, { once: true }),
@@ -116,7 +115,7 @@ it("navigation can keep the draft, and locale refresh leaves the draft and leave
 it("disconnect retires a pending discard, reconnect retains the old baseline and departed controls cannot send", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "Forgot to clock");
-  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   const question = await warning(app);
   expect(question.open).toBe(true);
   const discard = question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -139,7 +138,7 @@ it("disconnect retires a pending discard, reconnect retains the old baseline and
 it("forced close retires a pending decision and reopening starts a new blank response", async () => {
   const { app, form } = await mount();
   await fill(form, "Forgot to clock");
-  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   const question = await warning(app);
   const discard = question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   form.open = false;

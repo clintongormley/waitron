@@ -71,7 +71,7 @@ it.each(["department", "zone"] as const)(
     const written: unknown[] = [];
     el.addEventListener("written", (event) => written.push((event as CustomEvent).detail));
     await change(" Accepted name ");
-    const closing = modal.requestClose("cancel");
+    const closing = modal.requestClose("escape");
     const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
     save().click();
@@ -158,30 +158,17 @@ it.each(["department", "zone"] as const)(
 
 it.each(
   (["department", "zone"] as const).flatMap((kind) =>
-    (["cancel", "escape"] as const).map((method) => ({ kind, method })),
+    (["escape"] as const).map((method) => ({ kind, method })),
   ),
-)("$kind native $method keeps or discards without writing", async ({ kind, method }) => {
+)("$kind native $method keeps or discards without writing", async ({ kind }) => {
   const { owner, app, modal, change, writes } = await mount(kind);
   await change("Protected draft");
   const name = owner.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
   await name.updateComplete;
   const input = name.shadowRoot!.querySelector("input")!;
   const dismiss = async () => {
-    if (method === "cancel") {
-      const cancel = owner.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        "wt-form-actions [slot=cancel]",
-      )!;
-      await cancel.updateComplete;
-      const native = cancel.shadowRoot!.querySelector("button")!;
-      const clicked = vi.fn();
-      native.addEventListener("click", clicked, { once: true });
-      expect(app.leave.coordinator.isDirty()).toBe(true);
-      await userEvent.click(page.elementLocator(native));
-      expect(clicked, "the real pointer click reaches Cancel").toHaveBeenCalledTimes(1);
-    } else {
-      await userEvent.click(page.elementLocator(input));
-      await userEvent.keyboard("{Escape}");
-    }
+    await userEvent.click(page.elementLocator(input));
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   };
   const choose = async (decision: "keep" | "discard") => {
@@ -388,7 +375,7 @@ it.each(["department", "zone"] as const)(
   async (kind) => {
     const { el, owner, app, modal, change, save, writes } = await mount(kind);
     await change("Departed draft");
-    const closing = modal.requestClose("cancel");
+    const closing = modal.requestClose("escape");
     const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
     await expect.poll(() => question.open).toBe(true);
     const oldName = owner.shadowRoot!.querySelector("[name=name]")!;

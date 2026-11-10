@@ -263,11 +263,9 @@ describe("a pending routing cell choice", () => {
     it(`preview ${how} restores without a second question`, async () => {
       const { screen, writes } = await mount();
       await choose(screen, "c:drinks", "every", "Kitchen");
-      const confirmation = await preview(screen);
+      await preview(screen);
       expect(unload()).toBe(true);
-      if (how === "Cancel")
-        await userEvent.keyboard("{Escape}");
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       await expect
         .poll(() => screen.shadowRoot!.querySelector("[data-test=routing-preview]"))
         .toBeNull();
