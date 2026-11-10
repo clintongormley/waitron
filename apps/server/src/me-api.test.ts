@@ -195,6 +195,11 @@ async function insertSwap(params: {
   return row!.id;
 }
 
+async function swapCount(): Promise<number> {
+  return (await suite.db.execute<{ n: number }>(sql`select count(*) as n from shift_swaps`))
+    .rows[0]!.n;
+}
+
 async function insertAbsence(personId: string, startsOn: string, endsOn: string): Promise<string> {
   const [row] = await suite.db
     .insert(absences)
@@ -736,31 +741,35 @@ describe("mountMeApi — swaps", () => {
   });
 
   it("400s (shift.not_found) a fromShiftId that names no shift, and writes no swap", async () => {
-    const swapCount = async () =>
-      (await suite.db.execute<{ n: number }>(sql`select count(*) as n from shift_swaps`)).rows[0]!
-        .n;
+    const unknown = crypto.randomUUID();
     const before = await swapCount();
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
       cookie: await cookieFor(me),
-      body: { fromShiftId: crypto.randomUUID(), toPersonId: colleague, toShiftId: null },
+      body: { fromShiftId: unknown, toPersonId: colleague, toShiftId: null },
     });
-    const body = (await res.json()) as { error: { code: string } };
-    expect([res.status, body.error.code]).toEqual([400, "shift.not_found"]);
+    const body = (await res.json()) as { error: { code: string; params: unknown } };
+    expect([res.status, body.error.code, body.error.params]).toEqual([
+      400,
+      "shift.not_found",
+      { shiftId: unknown },
+    ]);
     expect(await swapCount()).toBe(before);
   });
 
   it("400s (shift.not_found) an own shift offered for a toShiftId that names no shift, and writes no swap", async () => {
     const myShift = await insertShift(me, "2026-12-08T09:00:00Z", "2026-12-08T17:00:00Z");
-    const swapCount = async () =>
-      (await suite.db.execute<{ n: number }>(sql`select count(*) as n from shift_swaps`)).rows[0]!
-        .n;
+    const unknown = crypto.randomUUID();
     const before = await swapCount();
     const res = await send(mountApp(), "POST", "/management-api/me/schedule/swaps", {
       cookie: await cookieFor(me),
-      body: { fromShiftId: myShift, toPersonId: colleague, toShiftId: crypto.randomUUID() },
+      body: { fromShiftId: myShift, toPersonId: colleague, toShiftId: unknown },
     });
-    const body = (await res.json()) as { error: { code: string } };
-    expect([res.status, body.error.code]).toEqual([400, "shift.not_found"]);
+    const body = (await res.json()) as { error: { code: string; params: unknown } };
+    expect([res.status, body.error.code, body.error.params]).toEqual([
+      400,
+      "shift.not_found",
+      { shiftId: unknown },
+    ]);
     expect(await swapCount()).toBe(before);
   });
 
