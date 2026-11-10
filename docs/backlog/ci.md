@@ -154,10 +154,7 @@ existing clock-listener fixture already selects at bind time. None changes produ
 configured-binding checks above still apply.
 
 C88 (#920) reproduced the release-to-bind gap as one way the pause test's single CI failure
-could happen; `startS3TestServer` now recovers from it. A sibling scan found two draws in
-`promote-endpoint-e2e.test.ts`, but its mirror is bound and closed before the primary draw.
-That is not two draws before either bind. The remaining work concerns the release-to-bind
-interval, including single draws.
+could happen; `startS3TestServer` now recovers from it.
 
 Keep the shared fixture’s scope explicit when extending it: `ephemeralHttpMock` in
 `apps/server/src/testing/ephemeral-listener.ts` rewrites every `serve` port in its default mode,
