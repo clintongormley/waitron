@@ -2855,9 +2855,10 @@ export class TillTableOrderScreen extends LitElement {
     const dish = this.#isChild(line) ? this.#linesIndex().byNo.get(line.parentLineNo!) : undefined;
     return dish === undefined
       ? this.#nameForLine(line)
-      : t("table.extra_of")
-          .replace("{extra}", () => this.#nameForLine(line))
-          .replace("{dish}", () => this.#nameForLine(dish));
+      : fill(t("table.extra_of"), {
+          extra: this.#nameForLine(line),
+          dish: this.#nameForLine(dish),
+        });
   }
 
   #adjust(kind: AdjustKind, target: AdjustTarget): void {

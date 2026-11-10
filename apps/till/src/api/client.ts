@@ -1488,6 +1488,8 @@ export interface QueueModifier {
   perDish?: number;
   /** A measured extra's amount on each dish, in its unit. */
   amount?: string;
+  /** The measured extra's unit abbreviation by language, sent with `amount`. */
+  unitName?: Record<string, string>;
   /** The extra's OWN allergens, shown beside the dish's own — never folded. Absent/null when it
    *  declares none. */
   addAllergens?: ProductAllergens | null;
@@ -1501,6 +1503,8 @@ export interface QueueCrossRef {
   kind: "with" | "for";
   name: string;
   perDish?: number;
+  amount?: QueueModifier["amount"];
+  unitName?: QueueModifier["unitName"];
   stationName: string | null;
   addAllergens?: QueueModifier["addAllergens"];
   suitableFor?: QueueModifier["suitableFor"];

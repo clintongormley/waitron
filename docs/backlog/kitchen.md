@@ -150,13 +150,6 @@ plan's D68).
 Next: decide whether the report leaves held dishes out, as the floor does. If it does, add a
 `fired_at is not null` test to its `where` and a case beside `overdue-orders.test.ts`'s.
 
-## A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references
-
-`apps/till/src/widgets/queue-crossrefs.ts` fills `{name}` and `{station}` with
-`String.replace` and a string, so a replacement pattern in the venue's text is expanded; A757
-slice 8 fixed the same shape in `step-chip.ts` by passing a function (`() => step.name`). The
-fills also run one after the other, so a dish named `Tea {station}` takes the station's name.
-
 ## Supervisors have no dashboard path to a prep station's times
 
 - **Supervisors have no dashboard path to a prep station's times** (ASK A1 of A506-12). The times
@@ -255,23 +248,16 @@ older HOLD CHANGED words above still await that separate answer.
 
 ## Bundle: What a kitchen card draws
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **The kitchen screens and the pass still show allergens as text chips.** A668 brings icons to the
   editor, the till's buttons and its order list, not to these screens.
 - **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
   Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
   in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
-- **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
-  [Detail](kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 - **A following extra has different names on paper and on screen.** — left open by the product
   folders work.
   [Detail](kitchen.md#a-following-extra-has-different-names-on-paper-and-on-screen)
-- **A1202. The kitchen screen draws no amount for a measured extra (left open by A803 slice 1).**
-  Kitchen paper prints "+ Jamón 150.000 g"; the station queue and the pass draw "+ Jamón". The
-  queue sends the amount (`QueueModifier.amount`, `apps/server/src/working-order.ts`) and two
-  portions with different amounts already show as separate rows, but each row reads the same. Draw
-  the amount in its unit, as paper does.
 
 ## Bundle: Held paper followups
 

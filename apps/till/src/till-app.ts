@@ -1422,7 +1422,6 @@ interface LateChange {
 }
 
 function lateChangeMessage(late: LateChange): string {
-  // Replacer functions, so a `$` in a name is never read as a replacement pattern.
   const { tableLabel } = late;
   const named = late.tableNamed === true;
   const key = late.unanswered
@@ -1436,15 +1435,15 @@ function lateChangeMessage(late: LateChange): string {
       : named
         ? "table.change_not_saved_named"
         : "table.change_not_saved";
-  const text = t(key)
-    .replace("{line}", () => late.lineName)
-    .replace("{table}", () => tableLabel ?? "");
   const sentDish = sentDishRefusal(late.code, late.lineName);
-  return text.replace("{reason}", () =>
-    sentDish === undefined
-      ? codeMessage(late.code ?? "server.internal")
-      : sentDishRefusalText(sentDish),
-  );
+  return fill(t(key), {
+    line: late.lineName,
+    table: tableLabel ?? "",
+    reason:
+      sentDish === undefined
+        ? codeMessage(late.code ?? "server.internal")
+        : sentDishRefusalText(sentDish),
+  });
 }
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */

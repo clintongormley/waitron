@@ -16,6 +16,7 @@ import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
+import { fillTemplate } from "./fill-template.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import {
   BACKUP_DELETED_EMAIL_WORDS,
@@ -81,11 +82,12 @@ const TIME_PLACEHOLDERS = {
   after: "afterOffsetMinutes",
 } as const;
 
+/** A code's subject and text, with the slots only that code fills in `values`. */
 function wordsFor(
   code: EmailCode,
   language: "en" | "es",
   params?: Readonly<Record<string, unknown>>,
-): { subject: string; text: string } {
+): { subject: string; text: string; values?: Record<string, string> } {
   if (code === "backup.archives_deleted") {
     const words = BACKUP_DELETED_EMAIL_WORDS[language];
     const count = params?.["count"];
@@ -97,19 +99,21 @@ function wordsFor(
     };
     const template =
       params?.["severalDays"] === true ? words.severalDays : count === 1 ? words.one : words.text;
-    const text = template
-      .replaceAll("{count}", () => String(count))
-      .replaceAll("{date}", () => day("date"))
-      .replaceAll("{lastDate}", () => day("lastDate"));
-    return { subject: words.subject, text };
+    return {
+      subject: words.subject,
+      text: template,
+      values: { count: String(count), date: day("date"), lastDate: day("lastDate") },
+    };
   }
   if (code === BACKUP_REFUSED_EMAIL_CODE) {
     const words = BACKUP_REFUSED_EMAIL_WORDS[language];
     return {
       subject: words.subject,
-      text: words.text
-        .replaceAll("{needed}", () => formatBytes(params?.["neededBytes"], language))
-        .replaceAll("{available}", () => formatBytes(params?.["availableBytes"], language)),
+      text: words.text,
+      values: {
+        needed: formatBytes(params?.["neededBytes"], language),
+        available: formatBytes(params?.["availableBytes"], language),
+      },
     };
   }
   if (code === "clock.behind_chain_restarted") {
@@ -124,55 +128,46 @@ function wordsFor(
     if (params?.["byStaff"] === true && typeof person === "string") {
       const device = params["device"];
       const till =
-        typeof device === "string"
-          ? words.namedTill.replaceAll("{device}", () => device)
-          : words.unnamedTill;
-      return {
-        subject: words.subject,
-        text: words.byStaff.replaceAll("{person}", () => person).replaceAll("{till}", () => till),
-      };
+        typeof device === "string" ? fillTemplate(words.namedTill, { device }) : words.unnamedTill;
+      return { subject: words.subject, text: words.byStaff, values: { person, till } };
     }
-    return {
-      subject: words.subject,
-      text: words.text.replaceAll("{confirmedBy}", () => confirmedBy),
-    };
+    return { subject: words.subject, text: words.text, values: { confirmedBy } };
   }
   if (code === "clock.corrected") {
     const words = CLOCK_CORRECTED_EMAIL_WORDS[language];
     const direction = params?.["direction"];
-    const step = (
-      direction === "forward" ? words.forward : direction === "back" ? words.back : words.moved
-    ).replaceAll("{duration}", () =>
-      formatDuration(params?.["stepMs"], language === "es" ? "es-ES" : "en-GB"),
+    const step = fillTemplate(
+      direction === "forward" ? words.forward : direction === "back" ? words.back : words.moved,
+      { duration: formatDuration(params?.["stepMs"], language === "es" ? "es-ES" : "en-GB") },
     );
     const name = params?.["person"];
     const person = typeof name === "string" ? name : "—";
     const source = params?.["source"];
     let subject: string = words.subject;
-    let template: string = words.authority;
+    let text: string = words.authority;
+    const values: Record<string, string> = { step, person };
     if (params?.["unverified"] === true) {
       subject = words.unverifiedSubject;
-      template = words.unverified;
+      text = words.unverified;
     } else if (source === "staff") {
       const device = params?.["device"];
-      const till =
-        typeof device === "string"
-          ? words.namedTill.replaceAll("{device}", () => device)
-          : words.unnamedTill;
-      template = words.staff.replaceAll("{till}", () => till).replaceAll("{person}", () => person);
+      values["till"] =
+        typeof device === "string" ? fillTemplate(words.namedTill, { device }) : words.unnamedTill;
+      text = words.staff;
     } else if (source === "admin") {
-      template = words.admin.replaceAll("{person}", () => person);
+      text = words.admin;
     }
-    return { subject, text: template.replaceAll("{step}", () => step) };
+    return { subject, text, values };
   }
   if (code === "clock.records_misdated") {
     const words = CLOCK_MISDATED_EMAIL_WORDS[language];
     if (params?.["unconfirmed"] === true) return words.unconfirmed;
     const count = params?.["count"];
-    const main = count === 1 ? words.one : words.text.replaceAll("{count}", () => String(count));
+    const main = count === 1 ? words.one : words.text;
     return {
       subject: words.subject,
       text: params?.["partial"] === true ? `${main} ${words.partial}` : main,
+      values: { count: String(count) },
     };
   }
   return BOX_EMAIL_WORDS[code][language];
@@ -185,18 +180,14 @@ export function boxEmailMessage(
   params?: Readonly<Record<string, unknown>>,
 ): { subject: string; text: string } {
   const words = wordsFor(code, language, params);
-  const filled = (template: string) => {
-    // A function replacement, so a name such as "$&" is not read as a pattern.
-    let out = template.replaceAll("{venue}", () => venue);
-    for (const [name, offsetName] of Object.entries(TIME_PLACEHOLDERS)) {
-      const at = params?.[name];
-      const offset = params?.[offsetName];
-      if (typeof at !== "string" || typeof offset !== "number") continue;
-      out = out.replaceAll(`{${name}}`, receiptDateTimeNumeric(at, "en-GB", offset));
-    }
-    return out;
-  };
-  return { subject: filled(words.subject), text: filled(words.text) };
+  const values: Record<string, string> = { venue, ...words.values };
+  for (const [name, offsetName] of Object.entries(TIME_PLACEHOLDERS)) {
+    const at = params?.[name];
+    const offset = params?.[offsetName];
+    if (typeof at === "string" && typeof offset === "number")
+      values[name] = receiptDateTimeNumeric(at, "en-GB", offset);
+  }
+  return { subject: fillTemplate(words.subject, values), text: fillTemplate(words.text, values) };
 }
 
 /** The open alerts of `INCIDENT_EMAIL_CODES`, oldest first, read in one write-lock turn with no

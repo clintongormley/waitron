@@ -108,3 +108,24 @@ it.each([true, false])(
     expect(el.shadowRoot!.querySelector("till-keep-open")).toBeNull();
   },
 );
+it("the floor bar names a closing zone exactly as typed when its name spells the time's slot", async () => {
+  const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+    zones: [
+      {
+        id: "terrace",
+        name: "Terrace {time}",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        closesAt: "22:00",
+        hasPlan: false,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+      },
+    ],
+    tables: [],
+  } as Partial<TillFloorScreen>);
+  const line = el.shadowRoot!.querySelector("[data-zone-control] p")!.textContent!.trim();
+  expect(line).toBe("Terrace {time} closes at 22:00 today.");
+});

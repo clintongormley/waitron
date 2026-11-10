@@ -37,7 +37,7 @@ import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
 import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
@@ -1438,9 +1438,10 @@ export class TillBillPayDialog extends LitElement {
             return shown === "1" ? line.name : `${line.name} ×${shown}`;
           })
           .join(", ");
-        return t("bill_pay.scope_items")
-          .replace("{items}", () => names)
-          .replace("{amount}", () => this.#money(this.#pickedAmount()));
+        return fill(t("bill_pay.scope_items"), {
+          items: names,
+          amount: this.#money(this.#pickedAmount()),
+        });
       }
       case "contribution": {
         const amount = typedAmount(this.typedAmountValue);

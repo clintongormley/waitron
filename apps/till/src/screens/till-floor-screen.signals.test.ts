@@ -272,6 +272,18 @@ describe("till-floor-screen: what each station has ready", () => {
     ]);
   });
 
+  it("shows a station and a party exactly as typed when their names spell the other slots", async () => {
+    const el = await mountFloor([
+      table({
+        id: "t5",
+        label: "Table 5",
+        party: party({ id: "v5", displayName: "Ana {n}", tableIds: ["t5"] }),
+        signals: [ready(["bar", "Bar {tables}", 2])],
+      }),
+    ]);
+    expect(summary(el)).toEqual([{ station: "bar", text: "Bar {tables}: Ana {n} ×2" }]);
+  });
+
   it("covers tables in every zone, not only the zone on screen", async () => {
     const elsewhere = { ...table8, zoneId: "z2" };
     const el = await mountFloor([table({ signals: [ready(["bar", "Bar", 3])] }), elsewhere], {

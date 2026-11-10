@@ -526,6 +526,24 @@ describe("till-station-queue", () => {
       expect(dishAllergens!.textContent).toMatch(/gluten/i);
       expect(dishAllergens!.textContent).not.toContain(milkName);
     });
+    it("draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
+      const item = {
+        ...groupA.items[0]!,
+        modifiers: [
+          { descriptions: { "es-ES": "Jamón" }, amount: "150.000", unitName: { "es-ES": "g" } },
+          { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+        ],
+      };
+      const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+        groups: [{ ...groupA, items: [item] }],
+        stationId: "st-1",
+      });
+      expect(
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-item] .modifier")].map((modifier) =>
+          modifier.textContent!.trim(),
+        ),
+      ).toEqual(["+ Jamón 150 g", "+ Queso 0.250 kg"]);
+    });
   });
 
   describe("per-line customisation (Task 5): the snapshotted note as sub-text under the dish", () => {
@@ -2042,6 +2060,27 @@ describe("cross-station extra references", () => {
     );
     expect(line.textContent).not.toContain("+ CHIPS");
     expect(line.textContent).toContain("Queso");
+  });
+  it("names a measured extra made at another station with its amount and unit", async () => {
+    const item = {
+      ...groupA.items[0]!,
+      crossRefs: [
+        {
+          kind: "with" as const,
+          name: "JAMÓN",
+          amount: "150.000",
+          unitName: { "es-ES": "g" },
+          stationName: "Fryer",
+        },
+      ],
+    };
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [{ ...groupA, items: [item] }],
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-crossref]")!.textContent).toContain(
+      "with JAMÓN 150 g from Fryer",
+    );
   });
   it("renders the dish station and no-preparation parent in both locales", async () => {
     const previousLocale = currentLocale();

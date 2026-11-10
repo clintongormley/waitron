@@ -199,6 +199,13 @@ describe("till-floor-screen: the Ready bar", () => {
     expect(openButton(el).getAttribute("aria-label")).toBe("Open T2");
   });
 
+  it("shows a table's name exactly as typed when it spells the count's slot", async () => {
+    const el = await mountFloor([
+      table({ label: "Table {n}", shortName: "T{n}", signals: [ready(["bar", "Bar", 3])] }),
+    ]);
+    expect(entries(el)).toEqual(["T{n} · 3"]);
+  });
+
   it("draws nothing while nothing is ready", async () => {
     const el = await mountFloor([table()]);
     expect(bar(el)).toBeNull();

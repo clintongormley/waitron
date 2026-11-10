@@ -1035,6 +1035,30 @@ for (const [locale, label] of [
   });
 }
 
+it("names an include's folder exactly as typed when its name spells the menu's slot", async () => {
+  setLocale("en-GB");
+  const client = api();
+  client.getImage.mockResolvedValue({
+    image,
+    uses: [
+      {
+        kind: "menu_include",
+        id: "member-1",
+        menuId: "lunch",
+        menuName: "Lunch Menu",
+        includedMenuName: "Drinks {menu} $&",
+      },
+    ],
+  });
+  await mount(client);
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(
+      "Drinks {menu} $& folder in Lunch Menu",
+    ),
+  );
+});
+
 function openDialog(): HTMLDialogElement {
   return el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
 }

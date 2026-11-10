@@ -20,7 +20,7 @@ import {
   multiplyDecimal,
   perDishOptionQuantity,
 } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
@@ -1317,9 +1317,7 @@ export class TillBasket extends LitElement {
     sent: boolean,
     listing: StoredLines,
   ) {
-    const name = t("table.extra_of")
-      .replace("{extra}", () => extra.name)
-      .replace("{dish}", () => this.#lineName(line));
+    const name = fill(t("table.extra_of"), { extra: extra.name, dish: this.#lineName(line) });
     const dishes = listedDishes(line, (id) =>
       id === undefined ? undefined : this.#listedById.get(id),
     );

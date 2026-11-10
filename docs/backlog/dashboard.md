@@ -524,11 +524,8 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Bundle: Reorder controller
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in
-  A757 slice 7's review, 2026-10-19).**
-  [Detail](dashboard.md#a901-the-shared-reorder-announcement-misreads-an-item-name-holding--or-index-found-in-a757-slice-7s-review-2026-10-19)
 - **One earlier Spanish dark-theme 390 px demo probe reached its 12-second deadline before the
   bottom**
   [Detail](dashboard.md#one-earlier-spanish-dark-theme-390-px-demo-probe-reached-its-12-second-deadline-before-the-bottom)
@@ -853,18 +850,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   An isolated run of the complete file on the branch's earlier head passed. The cause remains
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
-
-## A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in A757 slice 7's review, 2026-10-19).
-
-`ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
-  `{index}` and `{total}` with chained `String.replace`, so on every list that reorders through it
-  a name holding `$&` is read back with the placeholder in its place
-  (`"{item} is now".replace("{item}", "Mains $& x")` prints `Mains {item} x is now`), and a name
-  holding `{index}` takes the position number itself, leaving the announcement's own `{index}`
-  unfilled (`Table 3 is now {index} of 5.`). `git blame` puts these lines in
-  524dbadd5 (2026-09-16) and 5b725d672 (2026-10-01), so I believe it predates A757 slice 7. Fix with
-  a single-pass formatter like `format()` in `packages/venue-service/src/dashboard/hours-view.ts:5`.
-
 
 ## The box's trust page still follows the device's setting, not the Theme choice (left open by A681).
 

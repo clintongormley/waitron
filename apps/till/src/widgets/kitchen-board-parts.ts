@@ -15,7 +15,7 @@ import { extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor, quantityText } from "./dish-format.js";
 import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import { optionAnswers } from "./option-snapshot.js";
-import { extraCount } from "./queue-crossrefs.js";
+import { extraAmount } from "./queue-crossrefs.js";
 
 registerIcons({
   "column-open": "M2 5.4 3.4 4 8 8.6 12.6 4 14 5.4 8 11.4Z",
@@ -269,7 +269,7 @@ export function dishModifiers(item: DishLines, prefix: string): TemplateResult |
     ${modifiers.map(
       (modifier, i) =>
         html`<span class="modifier"
-          >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
+          >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraAmount(modifier)}`}${extraNutrition(
             modifier,
             `item-modifier-allergens-${item.id}-${i}`,
             `item-modifier-diet-${item.id}-${i}`,

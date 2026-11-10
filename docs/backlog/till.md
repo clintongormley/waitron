@@ -1214,15 +1214,6 @@ is a decision. The counter's Waiting list and department transfers (`counter-wai
 `department-transfers.ts`) show no bill number or name at all.
 
 
-## A1238. A party named like a placeholder, such as "{tables}", can come out wrong in two till sentences (seen in A803 slice 2's review).
-
-Each fills its placeholders one after another, so a
-first name holding the second placeholder gets the second name written into it:
-`partyScope` in `apps/till/src/widgets/table-targets.ts`, and the `{table}`/`{party}` heading in
-`apps/till/src/screens/till-table-order-screen.ts`. Use `fill` (`apps/till/src/i18n/t.ts`), as the
-slice did for bill names.
-
-
 ## A997. An open order's item counts change when its dish's unit is changed (left open by A757 slice 6).
 
 A line freezes its unit's decimal places (`unit_precision`) but not whether the unit
@@ -2415,7 +2406,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Small till and floor wording fixes
 
-11 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+10 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** Delete
   both, in English and Spanish.
@@ -2424,10 +2415,6 @@ Printer identity is separate from the till route inventory.
   `device_zones.order_in_zone` (`apps/till/src/i18n/strings.ts`, English "Park, send or cancel…")
   reads «Retén, envía o cancela este pedido…», while parking is «aparcar» everywhere else
   (`held.title` «Pedidos aparcados»). Proposed: «Aparca, envía o cancela…».
-- **A1238. A party named like a placeholder, such as "{tables}", can come out wrong in two till
-  sentences (seen in A803 slice 2's review).** Use `fill` (`apps/till/src/i18n/t.ts`), as the slice
-  did for bill names.
-  [Detail](till.md#a1238-a-party-named-like-a-placeholder-such-as-tables-can-come-out-wrong-in-two-till-sentences-seen-in-a803-slice-2s-review)
 - **A920. The till's approval prompt: the Spanish no longer matches the English (left open by
   A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
   responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
@@ -2517,12 +2504,8 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Small till test renames
 
-5 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **A1053. Two till shell cases leave the screen language as Spanish.** Read, not run: in
-  `apps/till/src/widgets/till-shell.test.ts`, "shows the language's full name at 1280 wide…" never
-  restores it and "updates the chooser's active language…" restores es-ES, not what it found
-  (`fec3797f5`, `5c1a1c2df`). CLAUDE.md §4: such a test restores the language.
 - **A1054. A Lit "change-in-update" warning in "live device zones > recovers a floor-only device
   without needing a counter poll"** (`apps/till/src/till-app-device-zones.test.ts`). The case
   passes; the build's ledger saw the warning on `dc7ac4b50`, and it prints on A797 slice 4's tip.
@@ -4219,9 +4202,9 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1191–A1198, A1201, A1202, A1217 and the store limit under
+ticket/receipt grouping, has landed. What it leaves open is A1191–A1198, A1201, A1217 and the store limit under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
-landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
+landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261, A1264–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1294 and A1299–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single

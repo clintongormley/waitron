@@ -1,7 +1,7 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setContentLanguages } from "@waitron/ui";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
@@ -86,6 +86,62 @@ describe("A773 pass board widget: dishes", () => {
     ).toEqual(["+ Leche avena", "+ Sirope x2"]);
     expect(item.innerHTML.indexOf("Cortado")).toBeLessThan(item.innerHTML.indexOf("Kitchen large"));
   });
+
+  it("draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "toast",
+        modifiers: [
+          {
+            descriptions: { "es-ES": "Jamón" },
+            amount: "150.000",
+            unitName: { "en-GB": "gr", "es-ES": "g" },
+          },
+          { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+        ],
+      }),
+    ]);
+    expect(
+      [...itemOf(el, "toast").querySelectorAll(".modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Jamón 150 gr", "+ Queso 0.250 kg"]);
+  });
+
+  it("names a measured extra made at another station with its amount and unit", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "with",
+        crossRefs: [
+          {
+            kind: "with",
+            name: "JAMÓN",
+            amount: "0.250",
+            unitName: { "es-ES": "kg" },
+            stationName: "Fryer",
+          },
+        ],
+      }),
+    ]);
+    expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+      "with JAMÓN 0.250 kg from Fryer",
+    );
+  });
+
+  it.each(["Tea $& $' $`", "Tea {station}"])(
+    "shows a dish and station named %s exactly as typed in a cross-reference",
+    async (name) => {
+      const el = await inProgress([
+        passItem({
+          id: "with",
+          crossRefs: [{ kind: "with", name, stationName: `Bar ${name}` }],
+        }),
+      ]);
+      expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+        `with ${name} from Bar ${name}`,
+      );
+    },
+  );
 
   it("draws no option sub-text on a dish with none", async () => {
     const el = await inProgress([passItem()]);
@@ -178,6 +234,58 @@ describe("A773 pass board widget: dishes", () => {
       setLocale("es-ES");
     });
     afterEach(() => setLocale(previous));
+
+    it("draws a measured extra's unit in Spanish", async () => {
+      const el = await inProgress([
+        passItem({
+          id: "toast",
+          modifiers: [
+            {
+              descriptions: { "es-ES": "Jamón" },
+              amount: "150.000",
+              unitName: { "en-GB": "gr", "es-ES": "g" },
+            },
+          ],
+        }),
+      ]);
+      expect(itemOf(el, "toast").querySelector(".modifier")!.textContent!.trim()).toBe(
+        "+ Jamón 150 g",
+      );
+    });
+
+    it("draws a fractional measured extra with paper's digits in the Spanish decimal mark", async () => {
+      const el = await inProgress([
+        passItem({
+          id: "toast",
+          modifiers: [
+            { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+          ],
+        }),
+      ]);
+      expect(itemOf(el, "toast").querySelector(".modifier")!.textContent!.trim()).toBe(
+        "+ Queso 0,250 kg",
+      );
+    });
+
+    it("names a fractional measured extra at another station in the Spanish decimal mark", async () => {
+      const el = await inProgress([
+        passItem({
+          id: "with",
+          crossRefs: [
+            {
+              kind: "with",
+              name: "QUESO",
+              amount: "0.250",
+              unitName: { "es-ES": "kg" },
+              stationName: "Fryer",
+            },
+          ],
+        }),
+      ]);
+      expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+        fill(t("station.crossref_with"), { name: "QUESO 0,250 kg", station: "Fryer" }),
+      );
+    });
 
     it("words extras made at another station in Spanish", async () => {
       const el = await inProgress([

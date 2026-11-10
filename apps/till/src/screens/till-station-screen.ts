@@ -13,7 +13,7 @@ import { helpBadge, kitchenHelpStyles } from "../widgets/help-badge.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { UrlStateController, baseStyles } from "@waitron/ui";
 import { tillPath } from "../navigation.js";
-import { clockTime, currentLocale, t } from "../i18n/t.js";
+import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   kitchenScreenNoticeText,
@@ -1197,9 +1197,10 @@ export class TillStationScreen extends LitElement {
     slot?: "status",
   ): TemplateResult[] {
     return printers.map((printer) => {
-      const line = t("station.printer_down")
-        .replace("{name}", () => printer.printerName)
-        .replace("{time}", () => clockTime(Date.parse(printer.since)));
+      const line = fill(t("station.printer_down"), {
+        name: printer.printerName,
+        time: clockTime(Date.parse(printer.since)),
+      });
       return html`<p class="printer-down" role="status" data-printer-down slot=${slot ?? nothing}>
         ${station === undefined ? line : `${station}: ${line}`}
       </p>`;

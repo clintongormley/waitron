@@ -5,6 +5,7 @@ import {
 } from "@waitron/fiscal";
 import { decimal, toScale, type Decimal } from "@waitron/shared";
 import { csvCell } from "./attendance-export-csv.js";
+import { fillTemplate } from "./fill-template.js";
 import { CLOCK_CONFIRMED_BY_WORDS, CLOCK_MISDATED_EMAIL_WORDS } from "./i18n/box-emails.js";
 import { MISDATED_SALES_WORDS } from "./i18n/misdated-sales.js";
 import { invoiceNumberParts } from "./invoice-number-parts.js";
@@ -40,10 +41,6 @@ function time(iso: string, offsetMinutes: number): string {
   return receiptDateTimeNumeric(iso, "en-GB", offsetMinutes);
 }
 
-function fill(template: string, values: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/gu, (_, key: string) => values[key]!);
-}
-
 /** Written without the shared cell's formula guard, so a negative amount stays a number in a
  * spreadsheet; the text is digits, a sign and a decimal mark, so it needs no escaping. */
 function amountCell(value: Decimal, language: Language): string {
@@ -62,11 +59,11 @@ function header(input: MisdatedSalesInput, boundMs: number, offsetMinutes: numbe
       : closing.source === "admin"
         ? `${by.admin} (${name})`
         : closing.source === "staff"
-          ? by.staffNamed.replaceAll("{person}", () => name)
+          ? fillTemplate(by.staffNamed, { person: name })
           : by[SOURCE_WORD[closing.source]];
   // "Made before" stays true at minute precision only when a bound with seconds is rounded up.
   const roundedBound = Math.ceil(boundMs / MINUTE_MS) * MINUTE_MS;
-  const sentence = fill(records.length === 1 ? words.header.one : words.header.text, {
+  const sentence = fillTemplate(records.length === 1 ? words.header.one : words.header.text, {
     venue: input.venue,
     count: String(records.length),
     from: time(input.episode.from, input.episode.fromOffsetMinutes),

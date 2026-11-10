@@ -203,6 +203,15 @@ describe("till-table-order-screen: comping a dish", () => {
     expect(asked[0]!.target.extras![0]!.name).toBe("Olives (con Pizza)");
   });
 
+  it("names an extra exactly as typed when its name spells the dish's slot", async () => {
+    const el = await mountScreen({
+      lines: [pizza, { ...olives, name: "Tea {dish} $&" }],
+    });
+    const asked = capture(el);
+    await comp(el, 2);
+    expect(asked[0]!.target.extras![0]!.name).toBe("Tea {dish} $& (with Pizza)");
+  });
+
   it("asks the app to adjust a dish of several whole units, which may be done one at a time", async () => {
     const el = await mountScreen();
     const asked = capture(el);
