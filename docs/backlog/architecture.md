@@ -1344,9 +1344,15 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
   reads across the server and venue-service, including `listOrderGroups`, `working-order`,
   `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
-- **Decide when a box refreshes SQLite's planner statistics (A1370 follow-up).** Running
-  `ANALYZE` or `PRAGMA optimize` is a separate lifecycle decision; no automatic run is
-  scheduled. Measure it on representative venue data before choosing its timing.
+- **Decide whether a box gathers SQLite's planner statistics (A1370 follow-up).** Nothing
+  gathers them today. Measured on the A1308-S0 bench year (A1469, 2026-11-10, days 361–362,
+  `order_groups(number_party_id)` index in place in both runs): `PRAGMA optimize=0x10002` took
+  taking a payment from 160 to 54 ms, but sending a round from 19.7 to 309 ms, firing from 10 to
+  375 ms, marking served from 3.1 to 71 ms and finishing a party from 6.9 to 49 ms; a whole day went
+  from 0.35 to 1.63 s a bill (0.49 before the index). The first run took 53 s with a cold cache and
+  holds the write lock throughout. Lane A is finding which reads the statistics slow, then
+  proposing either no statistics with the four reads that pick the wrong index naming it in the
+  query, or statistics plus fixes to the reads they slow.
 - **Decide how kitchen queues order bills tied on time (A1370 follow-up).** The queue sorts by
   ticket `queued_at` and line number; different query plans can reorder bills tied on both.
   Check whether a product path produces those ties before choosing a stable tie-breaker.
