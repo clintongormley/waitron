@@ -6987,8 +6987,8 @@ export async function setWorkingOrderLabel(
  * {@link applyLineEdits} states. A line of the basket naming a stored line by id, through the same
  * offer and variant, edits it; a line naming a different offer or variant replaces it with a new
  * item priced now; a line naming none is new; a stored line the basket leaves out is removed. An
- * absent label clears it: the whole request is the new state. Answers the order's revision after
- * the save. A save given `issue` may issue the bill's invoice, so it must name who saves.
+ * absent label clears it: the whole request is the new state. A save given `issue` may issue the
+ * bill's invoice, so it must name who saves.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps & { admission: TradingAdmission },

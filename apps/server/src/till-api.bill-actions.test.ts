@@ -419,7 +419,7 @@ describe("the bill action routes", () => {
   });
 
   it.each(["split", "move-dishes"] as const)(
-    "a %s that leaves the source fully paid returns its invoice",
+    "a %s that leaves the source fully paid issues its invoice",
     async (route) => {
       const { partyId, tabId } = await seated("Paella", "Caña");
       await takeBillPayment(

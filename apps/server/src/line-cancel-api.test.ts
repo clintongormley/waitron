@@ -969,50 +969,56 @@ describe("the public cancellation read and command", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it("files and replays an off-bill cancellation that leaves a partial payment exactly sufficient", async () => {
-    const p = await fixture();
-    const paid = await send(
-      venue.app,
-      venue.cookie.staff,
-      "POST",
-      `/api/working-orders/${p.billId}/payments`,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: p.water.lineNo, quantity: "1" }],
-        method: "cash",
-        tendered: "2.00",
-        applied: "2.00",
-        tip: "0.00",
-      },
-    );
-    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-    const body = await bodyFor(p);
-    const before = await frozen();
-    const answer = await post(p, body);
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(answer.json).toHaveProperty("invoice.total", "2.00");
-    const after = await frozen();
-    const issued = after.sales.filter((s) => s.workingOrderId === p.billId);
-    expect(issued).toHaveLength(1);
-    expect(issued[0]).toMatchObject({ total: 200 });
-    expect(after.saleLines.filter((l) => l.saleId === issued[0]!.id)).toMatchObject([
-      { quantity: 1000, lineGross: 200 },
-    ]);
-    expect(after.tenders.filter((t) => t.saleId === issued[0]!.id)).toMatchObject([
-      { amount: 200, method: "cash" },
-    ]);
-    expect(after.bills.find((b) => b.id === p.billId)?.status).toBe("settled");
-    expect(after.payments).toEqual(before.payments);
-    const records = await venue.db.execute(
-      sql`select count(*) as count from registros_facturacion`,
-    );
-    expect((await post(p, body)).json).toEqual(answer.json);
-    expect(
-      await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
-    ).toEqual(records);
-    expect(await frozen()).toEqual(after);
-  });
+  it.each([false, true])(
+    "files and replays a settling cancellation (started=%s)",
+    async (started) => {
+      const p = started ? await startedFixture() : await fixture();
+      const paid = await send(
+        venue.app,
+        venue.cookie.staff,
+        "POST",
+        `/api/working-orders/${p.billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "items",
+          lines: [{ lineNo: p.water.lineNo, quantity: "1" }],
+          method: "cash",
+          tendered: "2.00",
+          applied: "2.00",
+          tip: "0.00",
+        },
+      );
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const body = await bodyFor(
+        p,
+        started ? { approver: { personId: venue.managerId, pin: PINS.manager } } : {},
+      );
+      const before = await frozen();
+      const answer = await post(p, body);
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      expect(answer.json).toHaveProperty("invoice.total", "2.00");
+      const after = await frozen();
+      const issued = after.sales.filter((s) => s.workingOrderId === p.billId);
+      expect(issued).toHaveLength(1);
+      expect(issued[0]).toMatchObject({ total: 200 });
+      expect(after.saleLines.filter((l) => l.saleId === issued[0]!.id)).toMatchObject([
+        { quantity: 1000, lineGross: 200 },
+      ]);
+      expect(after.tenders.filter((t) => t.saleId === issued[0]!.id)).toMatchObject([
+        { amount: 200, method: "cash" },
+      ]);
+      expect(after.bills.find((b) => b.id === p.billId)?.status).toBe("settled");
+      expect(after.payments).toEqual(before.payments);
+      const records = await venue.db.execute(
+        sql`select count(*) as count from registros_facturacion`,
+      );
+      expect((await post(p, body)).json).toEqual(answer.json);
+      expect(
+        await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
+      ).toEqual(records);
+      expect(await frozen()).toEqual(after);
+    },
+  );
 
   it("replays the made-here answer after cancellation deletes its subject line", async () => {
     await inTx(venue, (tx) =>
