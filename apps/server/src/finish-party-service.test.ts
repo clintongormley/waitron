@@ -1,8 +1,10 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  billPaymentRefunds,
+  billPayments,
   lineServiceCancellations,
   parties,
   partyTables,
@@ -18,8 +20,12 @@ import {
 } from "@waitron/db";
 import { adjustments } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
+import { readPartyFinishReadiness } from "./finish-party-service.js";
+import { saveDraft } from "./order-drafts.js";
+import { finishTable } from "./parties.js";
 import { advanceTicketItem, listStationQueue, markServed } from "./working-order.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { fireGroup } from "./order-groups.js";
@@ -755,5 +761,158 @@ describe("a finished table's paid food leaves the kitchen screens (A1344)", () =
 
     const cards = await inTx(venue, (tx) => listStationQueue(tx, venue.stationId));
     expect(cards.filter((group) => group.orderId === p.billId)).toEqual([]);
+  });
+});
+
+describe("whether a party's service can finish, read without writing", () => {
+  const empty = () => billWith(venue, []);
+  async function edits(partyId: string) {
+    const bills = await venue.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(eq(workingOrders.partyId, partyId))
+      .orderBy(workingOrders.id);
+    return Promise.all(bills.map(({ id }) => inTx(venue, (tx) => readBillEditState(tx, id))));
+  }
+  function frozen() {
+    return Object.fromEntries(
+      venue.db
+        .all<{ name: string }>(sql`select name from sqlite_master where type='table' order by name`)
+        .map(({ name }) => [
+          name,
+          venue.db
+            .all<Record<string, unknown>>(sql`select * from ${sql.identifier(name)} order by rowid`)
+            .map((row) => (name === "devices" ? { ...row, last_seen_at: null } : row)),
+        ]),
+    );
+  }
+  async function ready(partyId: string, over: Record<string, unknown> = {}) {
+    const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
+    const args = {
+      partyId,
+      expectedPartyRevision: party?.revision ?? 0,
+      operatorId: venue.staffId,
+      expectedEdits: await edits(partyId),
+      ...over,
+    } as Parameters<typeof readPartyFinishReadiness>[1];
+    const before = frozen();
+    const answer = await inTx(venue, (tx) => readPartyFinishReadiness(tx, args)).catch(
+      (error: unknown) => ({ thrown: error }),
+    );
+    expect(frozen()).toEqual(before);
+    return answer;
+  }
+  const blocked = (blocker: string) => ({ ready: false, blockers: [blocker] });
+  async function draft(p: { partyId: string; billId: string }, personId: string) {
+    const [expectedEdit] = await edits(p.partyId);
+    return inTx(venue, (tx) =>
+      saveDraft(tx, venue.cfg, p.partyId, personId, {
+        billId: p.billId,
+        expectedEdit: expectedEdit!,
+        draftId: null,
+        revision: 0,
+        lines: [{ menuItemId: venue.item("Water"), quantity: "1" }],
+      }),
+    );
+  }
+  async function tipOnEmptySibling(partyId: string) {
+    const billId = await inTx(
+      venue,
+      async (tx) => (await seedWorkingOrder(tx, { orderNumber: 2, partyId })).id,
+    );
+    const origin = { source: venue.cfg.origin.source, deviceId: venue.cfg.origin.deviceId };
+    const [payment] = await inTx(venue, (tx) =>
+      tx
+        .insert(billPayments)
+        .values({
+          ...origin,
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          kind: "contribution",
+          method: "cash",
+          applied: 0,
+          tip: 500,
+          tendered: 500,
+          state: "received",
+          receivedAt: new Date().toISOString(),
+          requestedBy: venue.staffId,
+        })
+        .returning(),
+    );
+    return async () =>
+      inTx(venue, (tx) =>
+        tx.insert(billPaymentRefunds).values({
+          ...origin,
+          billPaymentId: payment!.id,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount: 0,
+          tipAmount: 500,
+          reason: "error",
+          authorizedBy: venue.staffId,
+          requestedBy: venue.staffId,
+          state: "completed",
+          completedAt: new Date().toISOString(),
+        }),
+      );
+  }
+
+  it("answers ready for a party explicit finish would close", async () => {
+    const p = await empty();
+    expect(await ready(p.partyId)).toEqual({ ready: true });
+  });
+
+  it("names the first blocker in explicit finish's order: revision, other bills, then service", async () => {
+    const p = await fixture(false);
+    expect(await ready(p.partyId, { expectedPartyRevision: -1 })).toEqual(blocked("revision"));
+    expect(await ready(p.partyId)).toEqual(blocked("other_bills"));
+    expect(await ready((await fixture()).partyId)).toEqual(blocked("service"));
+  });
+
+  it("names another editor, a stale draft observation and unsent work as the editor", async () => {
+    const theirs = await empty();
+    await draft(theirs, venue.supervisorId);
+    expect(await ready(theirs.partyId)).toEqual(blocked("editor"));
+    const stale = await empty();
+    const old = await edits(stale.partyId);
+    await draft(stale, venue.staffId);
+    expect(await ready(stale.partyId, { expectedEdits: old })).toEqual(blocked("editor"));
+    expect(await ready(stale.partyId)).toEqual(blocked("editor"));
+  });
+
+  it("refuses an empty bill keeping a tip as another bill, until the tip is given back", async () => {
+    const p = await empty();
+    const giveBack = await tipOnEmptySibling(p.partyId);
+    expect(await ready(p.partyId)).toEqual(blocked("other_bills"));
+    await giveBack();
+    expect(await ready(p.partyId)).toEqual({ ready: true });
+    const unserved = await fixture();
+    await tipOnEmptySibling(unserved.partyId);
+    expect(await ready(unserved.partyId)).toEqual(blocked("service"));
+  });
+
+  it("propagates a missing or closed party and malformed observations with their own codes", async () => {
+    const missing = randomUUID();
+    expect(await ready(missing, { expectedEdits: [] })).toMatchObject({
+      thrown: { code: "party.not_open", params: { partyId: missing } },
+    });
+    const closed = await empty();
+    const args = {
+      partyId: closed.partyId,
+      expectedPartyRevision: (
+        await venue.db.select().from(parties).where(eq(parties.id, closed.partyId))
+      )[0]!.revision,
+      operatorId: venue.staffId,
+      expectedEdits: await edits(closed.partyId),
+    };
+    await inTx(venue, (tx) => finishTable(tx, args));
+    expect(await ready(closed.partyId, { expectedPartyRevision: -1 })).toMatchObject({
+      thrown: { code: "party.not_open" },
+    });
+    for (const expectedEdits of [null, []])
+      expect(await ready((await empty()).partyId, { expectedEdits })).toMatchObject({
+        thrown: { code: "management.request_invalid", params: { field: "expectedEdits" } },
+      });
   });
 });

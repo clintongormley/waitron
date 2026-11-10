@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ae52be8e-f0f5-40bc-9c5b-56ea960d17b5",
+  "id": "4f7300ad-9d7c-4afd-9b70-9adad157c769",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -9655,6 +9655,184 @@
         "unpaid_departures_source_device_ck": {
           "name": "unpaid_departures_source_device_ck",
           "value": "(\"unpaid_departures\".\"source\" = 'device') = (\"unpaid_departures\".\"device_id\" is not null)"
+        }
+      }
+    },
+    "transfer_closures": {
+      "name": "transfer_closures",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "working_order_id": {
+          "name": "working_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sale_id": {
+          "name": "sale_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "intent": {
+          "name": "intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_id": {
+          "name": "actor_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "device_id": {
+          "name": "device_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "closed_at": {
+          "name": "closed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "business_day": {
+          "name": "business_day",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "result": {
+          "name": "result",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "transfer_closures_node_day_idx": {
+          "name": "transfer_closures_node_day_idx",
+          "columns": [
+            "node_id",
+            "business_day",
+            "closed_at",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "transfer_closures_working_order_key": {
+          "name": "transfer_closures_working_order_key",
+          "columns": [
+            "working_order_id"
+          ],
+          "isUnique": true
+        },
+        "transfer_closures_sale_key": {
+          "name": "transfer_closures_sale_key",
+          "columns": [
+            "sale_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "transfer_closures_device_id_devices_id_fk": {
+          "name": "transfer_closures_device_id_devices_id_fk",
+          "tableFrom": "transfer_closures",
+          "tableTo": "devices",
+          "columnsFrom": [
+            "device_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfer_closures_working_order_fk": {
+          "name": "transfer_closures_working_order_fk",
+          "tableFrom": "transfer_closures",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfer_closures_sale_fk": {
+          "name": "transfer_closures_sale_fk",
+          "tableFrom": "transfer_closures",
+          "tableTo": "sales",
+          "columnsFrom": [
+            "sale_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfer_closures_node_fk": {
+          "name": "transfer_closures_node_fk",
+          "tableFrom": "transfer_closures",
+          "tableTo": "nodes",
+          "columnsFrom": [
+            "node_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "transfer_closures_business_day_ck": {
+          "name": "transfer_closures_business_day_ck",
+          "value": "length(\"transfer_closures\".\"business_day\") = 10 and \"transfer_closures\".\"business_day\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+        },
+        "transfer_closures_source_ck": {
+          "name": "transfer_closures_source_ck",
+          "value": "\"transfer_closures\".\"source\" in ('device', 'dashboard', 'fiscal_filing', 'payment_check', 'kitchen_timer', 'demo_seed', 'readiness_test', 'operator_script')"
+        },
+        "transfer_closures_source_device_ck": {
+          "name": "transfer_closures_source_device_ck",
+          "value": "(\"transfer_closures\".\"source\" = 'device') = (\"transfer_closures\".\"device_id\" is not null)"
         }
       }
     },

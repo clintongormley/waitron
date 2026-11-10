@@ -76,6 +76,7 @@ const EXPECTED = [
   "sales",
   "tenders",
   "time_entries",
+  "transfer_closures",
   "unpaid_departures",
 ];
 

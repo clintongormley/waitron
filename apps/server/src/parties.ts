@@ -48,7 +48,7 @@ export type BillInvoiceDelivery =
   | { medium: "a4"; pagePrinterId: string }
   | { medium: "email"; recipient: string };
 
-function billInvoiceDelivery(choice: StagedInvoiceDelivery): BillInvoiceDelivery {
+export function billInvoiceDelivery(choice: StagedInvoiceDelivery): BillInvoiceDelivery {
   if (choice.medium === "email") return { medium: "email", recipient: choice.recipient };
   if (choice.medium === "a4") return { medium: "a4", pagePrinterId: choice.pagePrinterId };
   return choice;

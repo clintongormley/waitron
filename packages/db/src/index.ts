@@ -203,6 +203,11 @@ export {
 } from "./schema/sales.js";
 export { saleVoids } from "./schema/sale-voids.js";
 export { unpaidDepartures } from "./schema/unpaid-departures.js";
+export { transferClosures } from "./schema/transfer-closures.js";
+export type {
+  TransferClosurePartyBlocker,
+  TransferClosureResult,
+} from "./schema/transfer-closures.js";
 export {
   ORDER_PORTION_EVENT_KINDS,
   orderPortionEvents,

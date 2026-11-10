@@ -347,6 +347,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This item is on hold and cannot be sent or served yet",
     es: "Este artículo está en espera y todavía no se puede enviar ni servir",
   },
+  "transfer_close.ineligible": {
+    en: "This bill can't be closed by transfer: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    es: "Esta cuenta no se puede cerrar por transferencia: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
+  },
+  "transfer_close.conflict": {
+    en: "This bill's total or invoice details have changed since you opened it. Reload the bill, check them and try again",
+    es: "El total o los datos de factura de esta cuenta han cambiado desde que la abriste. Vuelve a cargarla, revísalos e inténtalo de nuevo",
+  },
+  "transfer_close.day_frozen": {
+    en: "This business day already has its daily close. Close the bill by transfer once the next business day starts",
+    es: "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta por transferencia cuando empiece el siguiente día de trabajo",
+  },
   "submission.id_reused": {
     en: "This request could not be matched to what was sent before. Reload and try again",
     es: "Esta petición no coincide con la que se envió antes. Vuelve a cargar e inténtalo de nuevo",

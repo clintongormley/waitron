@@ -68,6 +68,7 @@ const ADDED_TABLES = [
   "recovery_packs",
   "sale_line_portions",
   "settings",
+  "transfer_closures",
   "working_line_portions",
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */

@@ -641,6 +641,23 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
+    /** The bill cannot be closed by transfer: it is not one whole, positive, untouched bill. */
+    "transfer_close.ineligible": {
+      workingOrderId: string;
+      reason:
+        | "non_positive"
+        | "prior_payment"
+        | "prior_tender"
+        | "correction"
+        | "void"
+        | "substitution"
+        | "final_without_transfer"
+        | "other_node";
+    };
+    /** The request's invoice type or total is not the bill's. */
+    "transfer_close.conflict": { workingOrderId: string };
+    /** This node's business day of the closure is already frozen by its daily close. */
+    "transfer_close.day_frozen": { nodeId: string; businessDay: string };
     "draft.taken_over":
       | { draftId: string; ownerId: string; ownerName: string }
       | {
