@@ -21,14 +21,14 @@ and Cloud screens remain separate release work.
 ## The rule
 
 **No hardcoded chrome.** No hex colours, no `rgb()`/`hsl()`/`hwb()`/`lab()`/`lch()`/`oklab()`/
-`oklch()`/`color-mix()` colours, no named colours (`red`, `blue`, …), no font sizes, no radii, no
+`oklch()`/`color()`/`color-mix()` colours, no named colours (`red`, `blue`, …), no font sizes, no radii, no
 px spacing above `1`, and no `rem`/`em` sizing at all (not even inside `min()`/`max()`/`clamp()`)
 in any component or view. Every such value reads a token instead. `transparent`, `currentColor`,
-and `inherit` are legitimate escape hatches, not chrome. This is enforced by
-`packages/ui/src/no-hardcoded-chrome.test.ts`, which discovers every primitive automatically via
+and `inherit` are legitimate escape hatches, not chrome.
+`packages/ui/src/no-hardcoded-chrome.test.ts` discovers primitives via
 `import.meta.glob("./components/*.ts", ...)` (excluding `*.test.ts`), scans each one's `static
-styles`, and fails the build on violations — a new component under `src/components/` is covered
-the moment it exists, with nothing to remember to register.
+styles`, and fails on violations. It covers a new primitive automatically; it does not scan
+app views. The rule above still applies to those views.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
@@ -713,63 +713,11 @@ and the zone editor's Save-edge cases at 1280 and 390px in
 `packages/venue-service/src/dashboard/zone-edit-dialog.test.ts`. A new field primitive that does not read
 `--wt-field-max-width` is seen by none of them, and neither is a new screen-styled native control.
 
-`--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
-is used in **three different directions**, which its name does not say. Grep for the token before
-quoting a list of its consumers — the list here has gone stale once already.
-
-As a **cap** (`max-width`) it is in the variants table (`apps/dashboard/src/widgets/variant-table.ts`)
-and the product editor's attached-lists table (`apps/dashboard/src/widgets/product-editor.ts`). The
-name is the one cell whose text can be long, so capping it, with `overflow-wrap: anywhere` so that
-a name with no space breaks too, makes the text wrap and keeps the controls after it (a switch, a
-row menu) on screen at phone width instead of pushing the row into a sideways scroll. The variants table no longer relies on the cap for that: measured 2026-09-24 in
-the product editor, on the earlier phone layout that still showed a price column, removing it
-changed no column at a 390px-wide frame, while in a 1280px frame it held the name column to 231px
-against 342px without it. It has not been re-measured since the price moved under the name or
-since `wt-modal`'s phone spacing shrank. At phone width it relies instead on its own rule for a
-table 30rem wide or less: the price column goes, each price moves onto its own line under the
-variant's name, and the name column takes whatever width the grip, Available and row menu
-columns leave. The unit button in the price heading goes with its column; the price field
-above the table keeps its own unit button, which opens the same unit chooser. The name is the one column that
-may break inside a word; an amount never breaks, so the name column is never narrower than the
-widest price. The Available heading is capped by `--wt-tap-min` plus a spacing token, and a longer
-heading runs on into the row menu's empty heading. The measurements in this paragraph were taken
-at the type scale before A179 (13, 15, 19 and 24px), and none has been repeated at the 12, 14, 18
-and 22px one. Measured 2026-09-24 in the product editor at
-390px, with `wt-modal`'s old 24px side margin and padding, a four-digit price, the text sizes raised
-a step and Verdana standing in for CI's Linux fonts: with the price column the table needed 304px of
-a 292px box. The price under the name carries its euro sign (`€1,250.00`, `1250,00 €`) and is drawn
-in the small text size, `--wt-font-size-sm`. Measured 2026-09-29 in the product editor in headless
-Chromium (Vitest browser mode), with three variants whose widest price is 1250.00, in English and
-Spanish, at the normal and raised text sizes, in the default fonts and Verdana; the figure is how
-much wider the name cell's content is than the widest price in it, the room left before a price
-widens the table, in the tightest case (Verdana, raised sizes). The bare number with no sign, at the
-name's size: 75.7px at 390px, 5.7px at 320px. With the sign at the name's size: 51.7px at 390px,
-and at 320px with raised sizes the table scrolled sideways by 2px in the default fonts and 18px in
-Verdana. With the sign in the small size: 77.6px at 390px, 47.6px at 360px, 7.6px at 320px, and no
-case scrolls. Narrower phones fit because `wt-modal` gives up most of its side margin and padding
-there (see the `wt-modal` entry below): measured 2026-09-24 with the modal's full 24px margin and
-padding, the table at the larger text size needed 268px (280px in Verdana) of a 262px box at 360px,
-and at 320px every case but English at the normal size in the default fonts overflowed a 222px box.
-Guard: the phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts`, at 390, 360 and
-320px, in English and Spanish, with the text sizes raised, and each again in Verdana. "Raised"
-means the small size set to `--wt-font-size-lg` and the body size to `--wt-font-size-xl`, so since
-A179 those cases draw 18px and 22px text where they drew 19px and 24px. They check
-that the table does not scroll, that each row menu ends inside both the table's box and the frame,
-that the price column is hidden and each price sits on one line inside the name's cell, that the
-Available heading sits on one line, that the heading's unit button is hidden, and that the price
-field's unit button is a tap target on both axes.
-
-As a **flex basis** it sizes the extras list form's product picker, which is a combobox rather
-than a table cell.
-
-As a **floor** (`min-width`) it is in the options list form's two single-input cells. An input
-alone in a cell has no width of its own, so the automatic table layout shrinks it to `wt-input`'s
-tap-target minimum and cuts the value off mid-word; the same value gives it room. That table then
-does scroll sideways, which is exactly what the cap exists to avoid — it carries its own focusable
-horizontal scroller so the dialog does not scroll instead. **So the two uses disagree about the
-sideways scroll.** Whether the floor deserves a token of its own is an open design question, not a
-settled convention; it is recorded in `docs/backlog.md` under "Users, sign-in and the dashboard
-shell", the entry on `--wt-cell-name-max-width`.
+`--wt-cell-name-max-width` is the shared sizing value for name content. Its 140px default is wider
+than the default `--wt-tap-min`; `packages/ui-core/src/tokens/structure.test.ts` checks that
+relationship in the shipped tokens. A form chooses how it uses the value to fit its layout.
+The [earlier variants-table measurements and phone-width checks](https://github.com/clintongormley/waitron/blob/4e24db3f7afeb68e0efe6cc494ea1d5ed2e85620/docs/developers/design-system.md#L716-L772)
+remain the historical receipt for the variants table.
 
 ### `--wt-tap-min`
 

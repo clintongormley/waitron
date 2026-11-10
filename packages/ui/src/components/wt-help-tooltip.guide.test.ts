@@ -80,10 +80,12 @@ describe.each(["always", "help-mode"] as const)("a %s badge", (mode) => {
     expect(popup.hasAttribute("role")).toBe(false);
   });
 
-  test("Tab from the badge reaches the link, and the box stays open", async () => {
+  test("clicking the box text keeps it open and Tab reaches the guide", async () => {
     const badge = await mountBadge(mode, WITH_GUIDE);
     const { popup, link } = await open(badge);
     expect(link).not.toBeNull();
+    await userEvent.click(popup.querySelector<HTMLElement>("[role=tooltip]")!);
+    expect(popup.matches(":popover-open")).toBe(true);
     await userEvent.keyboard("{Tab}");
     expect(badge.shadowRoot!.activeElement).toBe(link);
     await badge.updateComplete;

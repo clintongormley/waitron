@@ -28,12 +28,13 @@ for (const [path, mod] of Object.entries(modules)) {
   }
 }
 
-// Row actions and the help switch are interactive without a disabled state. Other primitives are
+// Row actions and the help controls are interactive without a disabled state. Other primitives are
 // checked only when they reflect disabled, whatever they render.
 const interactiveComponents = allComponents.filter(
   ({ tag, ctor }) =>
     tag === "wt-row-actions" ||
     tag === "wt-help-switch" ||
+    tag === "wt-help-tooltip" ||
     ctor.elementProperties?.get("disabled")?.reflect === true,
 );
 
@@ -41,7 +42,7 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-chooser, wt-combobox, wt-file-input, wt-help-switch, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
+test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-chooser, wt-combobox, wt-file-input, wt-help-switch, wt-help-tooltip, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
   // A primitive leaving or joining the set otherwise changes only how many tests run below.
   expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
     "wt-address-lookup",
@@ -50,6 +51,7 @@ test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-cho
     "wt-combobox",
     "wt-file-input",
     "wt-help-switch",
+    "wt-help-tooltip",
     "wt-input",
     "wt-number-stepper",
     "wt-price-input",
