@@ -57,7 +57,7 @@ test("sorts labels within groups while keeping empty and fixed anchors", async (
     { value: "fixed", label: "Middle", group: "One", fixed: true },
     { value: "d", label: "Delta", group: "One" },
     { value: "b", label: "Beta", group: "One" },
-    { value: "action", label: "Add", action: true },
+    { value: "action", label: "Add", group: "One", action: true },
     { value: "s", label: "Sierra", group: "Two" },
     { value: "c", label: "Charlie", group: "Two" },
   ];

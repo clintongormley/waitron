@@ -52,6 +52,7 @@ function rowKeys(el: WtDataTable<Row>): string[] {
 
 test("text rows re-sort when the page language changes", async () => {
   document.documentElement.lang = "en";
+  // The native Spanish name supplies its accented n without duplicating translated text.
   const label = SUPPORTED_LOCALES.find(({ code }) => code === "es-ES")!.label;
   const plain = label.normalize("NFD").replace(/\p{M}/gu, "");
   const el = await table({
