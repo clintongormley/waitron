@@ -6,6 +6,12 @@ blocked so you can practise recovery. In the dashboard's **Payments**, a manager
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
 contribution, and confirms. This ends the practice attempt without recording a charge.
 
+## Share a Counter bill {#counter-part-payments}
+
+Choose **Pay** to take all or part of a Counter bill. **Whole bill** starts selected;
+you can instead enter an amount, split equally or choose items. Choose **Cash** or **Card**
+for each payment. After a part payment, check **Still to pay** before taking the next payment.
+
 ## Check a card before cancelling {#cancel-pending-card}
 
 If cancelling an order says a card payment is pending, wait for the reader to finish, then choose

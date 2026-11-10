@@ -635,17 +635,15 @@ it.each(retirementLooks)(
         const pay = tender(el);
         await pay.updateComplete;
         if (state === "cash" || state === "card") {
-          const button = pay.shadowRoot!.querySelector<HTMLElement>(
-            state === "cash" ? ".pay" : ".pay-card",
-          )!;
+          const button = pay.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!;
           expect(button).not.toBeNull();
           await userEvent.click(button);
           await pay.updateComplete;
-          expect(pay.shadowRoot!.querySelector(".confirm")).not.toBeNull();
+          expect(pay.shadowRoot!.querySelector(".pay-card")).toBeNull();
         }
         if (state === "busy") expect(pay.busy).toBe(true);
         if (state === "pay-rest")
-          expect(el.shadowRoot!.querySelector("[data-pay-rest]")).not.toBeNull();
+          expect(el.shadowRoot!.querySelector("[data-counter-bill-payments]")).not.toBeNull();
         expect(window.innerWidth).toBe(width);
         expect(getComputedStyle(host).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
         pay.scrollIntoView();

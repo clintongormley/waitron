@@ -7,6 +7,13 @@ un encargado elige **Consultar con el proveedor de pagos** para un pago del pedi
 o **Consultar al proveedor** para un pago parcial de una cuenta, y confirma. Así termina el intento
 de práctica sin registrar un cobro.
 
+## Repartir una cuenta del mostrador {#counter-part-payments}
+
+Pulsa **Cobrar** para cobrar toda o parte de una cuenta del mostrador. Empiezas con **Toda la cuenta**
+seleccionada; también puedes indicar una cantidad, dividir a partes iguales o elegir artículos.
+Elige **Efectivo** o **Tarjeta** en cada pago. Después de un pago parcial, comprueba **Queda por pagar**
+antes de cobrar el siguiente.
+
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
 
 Si al cancelar un pedido se indica que hay un pago con tarjeta pendiente, espera a que termine el

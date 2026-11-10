@@ -2475,3 +2475,23 @@ describe("A803 table pay", () => {
     },
   );
 });
+
+it("waits for the Counter routing check before opening its payment window", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(coffee, "1");
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+    store,
+    paymentWindow: true,
+  });
+  let proceed!: (allowed: boolean) => void;
+  el.addEventListener("check-before-tender", (event) => {
+    event.preventDefault();
+    proceed = (event as CustomEvent<{ resolve: (allowed: boolean) => void }>).detail.resolve;
+  });
+  const opened = vi.fn();
+  el.addEventListener("counter-bill-pay", opened);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!);
+  expect(opened).not.toHaveBeenCalled();
+  proceed(true);
+  expect(opened).toHaveBeenCalledOnce();
+});

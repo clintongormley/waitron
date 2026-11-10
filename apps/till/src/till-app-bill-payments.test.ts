@@ -3991,7 +3991,7 @@ describe("till-app: a partly paid order at the counter", () => {
     c.store.splitLine(0);
     c.store.setLineMakeAt(0, "retired");
     c.store.setLineMakeAt(1, "kitchen");
-    emit(c, "counter-bill-pay", { amount: "70.00" });
+    emit(c, "counter-bill-pay", {});
     await flush(el);
     expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
     expect(updateWorkingOrder.mock.calls[1]![1].lines.map((line) => line.makeAt)).toEqual([
@@ -4042,7 +4042,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect((el as unknown as { billPaying: unknown }).billPaying).toBeNull();
     expect((el as unknown as { heldOrders: HeldOrderSummary[] }).heldOrders).toEqual([held()]);
     expect(payRest(el)).not.toBeNull();
-    emit(c, "counter-bill-pay", { amount: "70.00" });
+    emit(c, "counter-bill-pay", {});
     await flush(el);
     expect(updateWorkingOrder).toHaveBeenCalledOnce();
     const question = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
@@ -4083,7 +4083,11 @@ describe("till-app: a partly paid order at the counter", () => {
     el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
   const grid = (el: TillApp) => counter(el);
   const payRest = (el: TillApp) =>
-    grid(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]");
+    grid(el).payRest === null
+      ? null
+      : grid(el)
+          .shadowRoot!.querySelector("till-tender-pay")!
+          .shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]");
 
   /** Signed in at the counter with the held order `wo-1` retrieved into the basket. */
   async function retrieved(overrides: Record<string, unknown>): Promise<TillApp> {
@@ -4101,7 +4105,24 @@ describe("till-app: a partly paid order at the counter", () => {
         orderNumber: 5,
         label: "Ana",
         revision: 3,
-        lines: [],
+        lines: [
+          {
+            workingOrderLineId: "counter-dish",
+            menuItemId: "offer-meal",
+            quantity: "1.000",
+            product: {
+              id: "meal",
+              menuItemId: "offer-meal",
+              catalogueId: "cat-default",
+              name: "Meal",
+              pricingUnit: "each",
+              unitPrice: "120.00",
+              vatClass: "general",
+              category: null,
+              allergens: null,
+            },
+          },
+        ],
       }),
       getBillBalance: vi.fn().mockResolvedValue(counterBalance),
       previewBillPayment: vi.fn().mockResolvedValue(cash("70.00", "0.00")),
@@ -4171,7 +4192,7 @@ describe("till-app: a partly paid order at the counter", () => {
     // The bill holds money, so each portion is its own row.
     expect(c.store.lines.map((row) => row.quantity)).toEqual(["1", "1", "1"]);
     c.store.setLineQuantity(2, "2");
-    emit(c, "counter-bill-pay", { amount: "70.00" });
+    emit(c, "counter-bill-pay", {});
     await flush(el);
     expect(dialog(el)!.lines.map((row) => row.lineNo)).toEqual([1, 2, 3, 4]);
   });
@@ -4193,16 +4214,14 @@ describe("till-app: a partly paid order at the counter", () => {
     const el = await retrieved({ takeBillPayment });
     expect(
       grid(el).shadowRoot!.querySelector<HTMLElement & { busy: boolean }>("till-tender-pay")!.busy,
-    ).toBe(true);
-    expect(text(payRest(el))).toBe(t("bill.take_rest"));
+    ).toBe(false);
+    expect(text(payRest(el))).toBe(t("action.pay"));
     const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
 
     payRest(el)!.click();
     await flush(el);
     expect(api.getBillBalance).toHaveBeenCalledWith("wo-1");
-    expect(inDialog(el, 'wt-input[name="amount"]') as unknown as { value: string }).toMatchObject({
-      value: "70.00",
-    });
+    expect(dialog(el)!.way).toBe("whole");
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "50.00", "70.00"));
     await type(el, "tendered", "70");
     await press(el, "[data-pay-continue]");
@@ -4724,6 +4743,7 @@ describe("till-app: a partly paid order at the counter", () => {
         .fn()
         .mockResolvedValue({ ...till, formFactor: counterFormFactor, fullInvoices: true }),
       takeBillPayment,
+      setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 4 }),
     });
     emit(counter(el), "choose-invoice");
     await flush(el);
@@ -4749,8 +4769,32 @@ describe("till-app: a partly paid order at the counter", () => {
 
     await press(el, "[data-pay-confirm]");
 
+    expect(api.setOrderInvoiceChoice).toHaveBeenCalledWith(
+      "wo-1",
+      expect.objectContaining({
+        invoiceType: "F1",
+        recipient: expect.objectContaining({ taxId: "12345678Z", legalName: "Ana García" }),
+      }),
+    );
     expect(sent()).toHaveLength(1);
     expect(sent()[0]).not.toHaveProperty("guestCount");
+  });
+  it("keeps a retrieved table bill's editing observation when paying it at the Counter", async () => {
+    const el = await retrieved({});
+    const expectedEdit = { billId: "wo-1", editorVersion: 7, draftId: null, draftRevision: null };
+    const stored = await api.retrieveWorkingOrder("wo-1");
+    vi.mocked(api.retrieveWorkingOrder).mockResolvedValue({ ...stored, expectedEdit });
+    vi.mocked(api.listWorkingOrders).mockResolvedValue([held({ partyId: "v1" })]);
+    emit(counter(el), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    payRest(el)!.click();
+    await flush(el);
+    await type(el, "tendered", "70");
+    await press(el, "[data-pay-continue]");
+    expect(api.previewBillPayment).toHaveBeenCalledWith(
+      "wo-1",
+      expect.objectContaining({ expectedEdit }),
+    );
   });
 });
 

@@ -322,7 +322,9 @@ const counter = (el: TillApp) =>
 const grid = (el: TillApp) => counter(el).shadowRoot!;
 const tenderPay = (el: TillApp) => grid(el).querySelector<TillTenderPay>("till-tender-pay")!;
 const payButton = (el: TillApp) =>
-  tenderPay(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(".pay")!;
+  tenderPay(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+    "[data-counter-pay], .pay, .pay-card",
+  )!;
 const tile = (el: TillApp, name: string) =>
   [
     ...grid(el)
@@ -816,18 +818,20 @@ describe("the other counter requests refused because the menu changed", () => {
     await toCounter(el);
     add(el, "Lemonade");
     await flush(el);
-    tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+    Object.assign(el, { stage: "collect", collectFlow: "ticket_then_pay" });
+    el.requestUpdate();
+    emit(counter(el), "collect-card", {});
     await flush(el);
 
     expect(api.pay).toHaveBeenCalledTimes(2);
     await tenderPay(el).updateComplete;
-    expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).not.toBeNull();
+    expect(payButton(el).shadowRoot!.querySelector("button")!.disabled).toBe(true);
 
     refuseRetry({ code: "server.internal", status: 500 });
     await flush(el);
     await tenderPay(el).updateComplete;
-    expect(tenderPay(el).shadowRoot!.querySelector(".collecting")).toBeNull();
-    expect(tenderPay(el).shadowRoot!.querySelector(".pay-card")).not.toBeNull();
+    expect(payButton(el).shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    expect(tenderPay(el).shadowRoot!.querySelector("[data-counter-pay], .pay-card")).not.toBeNull();
   });
 
   it("retries placing an order once after a silent adoption", async () => {

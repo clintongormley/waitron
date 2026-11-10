@@ -14,6 +14,8 @@ de práctica sin registrar un cobro.
 
 Para cobrar toda la cuenta o una parte en una mesa, abre **Cobrar** y usa la [ventana de pago](table-service.md#pay-window).
 
+Para repartir un cobro del mostrador entre varias personas, sigue [Repartir una cuenta del mostrador](table-service.md#counter-part-payments).
+
 ## Reintenta un envío de mostrador si se pierde la respuesta {#counter-send-retry}
 
 Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el
