@@ -30,7 +30,10 @@ export interface MdnsResponder {
 export interface MdnsDeps {
   devMode: boolean;
   httpHost: string;
-  /** The names to answer for, read per query so a name dropped from the list stops being answered. */
+  /**
+   * The names to answer for, read per query so a name dropped from the list stops being answered.
+   * Called for every query on the network, so it returns a list built beforehand.
+   */
   names: () => readonly string[];
   /** Current box IPv4s, read per query (not cached) so a DHCP change is reflected. */
   getAddresses: () => string[];
@@ -63,12 +66,14 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
 
   socket.on("query", (query) => {
     const ours = names();
-    const asked = new Set(
-      query.questions
-        .filter((q) => ours.includes(q.name) && (q.type === "A" || q.type === "ANY"))
-        .map((q) => q.name),
-    );
-    if (asked.size === 0) return;
+    // Every query on the network arrives here, so one asking for none of ours allocates nothing.
+    let asked: Set<string> | undefined;
+    for (const q of query.questions) {
+      if ((q.type === "A" || q.type === "ANY") && ours.includes(q.name)) {
+        (asked ??= new Set()).add(q.name);
+      }
+    }
+    if (asked === undefined) return;
     const addresses = getAddresses();
     const answers = [...asked].flatMap((name) => buildMdnsAnswers(name, addresses));
     if (answers.length === 0) return;
@@ -119,6 +124,8 @@ export interface VenueNameWatch {
 /** The random delay keeps two boxes switched on together from asking in step for ever. */
 export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch {
   const { hostname } = deps;
+  const answering: readonly string[] = [hostname];
+  const silent: readonly string[] = [];
   // Until the first ask finishes, the box cannot know that no other box answers the name.
   let heardOthers = true;
   let stopped = false;
@@ -148,7 +155,7 @@ export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch 
   if (respondsOnLan(deps)) inFlight = ask();
 
   return {
-    names: () => (heardOthers ? [] : [hostname]),
+    names: () => (heardOthers ? silent : answering),
     async stop() {
       stopped = true;
       clearTimeout(timer);

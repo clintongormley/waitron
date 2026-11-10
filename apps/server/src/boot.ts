@@ -1709,6 +1709,8 @@ async function bootServer(
   // complete it today. In this mode boot serves `/health` and a minimal `/api/box/status`, and reads
   // no deployment axes or membership.
   const ownHostname = boxHostnameFor(config.node.nodeId);
+  const ownNameOnly: readonly string[] = [ownHostname];
+  const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
@@ -1728,7 +1730,7 @@ async function bootServer(
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
-      names: () => [ownHostname],
+      names: () => ownNameOnly,
       makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
@@ -1811,7 +1813,7 @@ async function bootServer(
         const server = startTradingListener(config, restrictedApp, now, log);
         undoOnFailure.push(() => closeListener(server));
         const mdns = startMdnsResponder({
-          names: () => [ownHostname],
+          names: () => ownNameOnly,
           makeSocket: seams.mdnsSocket,
           devMode: config.devMode,
           httpHost: config.httpHost,
@@ -1912,7 +1914,7 @@ async function bootServer(
         listen: (waitingApp) => {
           const server = startTradingListener(config, waitingApp, now, log);
           const mdns = startMdnsResponder({
-            names: () => [ownHostname, BOX_HOSTNAME],
+            names: () => ownAndVenueNames,
             makeSocket: seams.mdnsSocket,
             devMode: config.devMode,
             httpHost: config.httpHost,
@@ -3833,10 +3835,7 @@ async function bootServer(
 
   const mdns = startMdnsResponder({
     // A stepdown closes the gate while admitted requests drain; tills must stop finding it then.
-    names: () => [
-      ownHostname,
-      ...(acceptingSales && !handoverGate.isClosed() ? [BOX_HOSTNAME] : []),
-    ],
+    names: () => (acceptingSales && !handoverGate.isClosed() ? ownAndVenueNames : ownNameOnly),
     makeSocket: seams.mdnsSocket,
     devMode: config.devMode,
     httpHost: config.httpHost,
