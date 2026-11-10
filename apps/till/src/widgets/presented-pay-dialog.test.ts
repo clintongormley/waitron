@@ -243,14 +243,14 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(row(el)!.open).toBe(true);
   });
 
-  it("on a practice venue charges the demo reader before any equipment read", async () => {
-    const el = await mount({ equipment: null, fixedReader: { id: "sim-1", name: "Demo" } });
+  it("on a practice venue uses the instant simulator before any equipment read", async () => {
+    const el = await mount({ equipment: null, fixedReader: { name: "Instant simulator" } });
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
 
     expect(charge(el).disabled).toBe(false);
-    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")} en Demo`);
+    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")} en Instant simulator`);
     await take(el);
-    expect(paid).toEqual([{ method: "card", readerId: "sim-1" }]);
+    expect(paid).toStrictEqual([{ method: "card" }]);
   });
 
   it("disables Take payment while an equipment change is out, whatever the method", async () => {

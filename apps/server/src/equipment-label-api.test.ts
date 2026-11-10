@@ -9,7 +9,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, hashPin, startManagementSession } from "@waitron/identity";
 import { readRasterText } from "@waitron/printing";
-import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
+import { cardReaders } from "@waitron/payments";
 import { formatEquipmentCode, nodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mountPrintApi } from "./print-api.js";
@@ -204,14 +204,5 @@ it.each(["printer", "reader"] as const)("refuses a deleted %s source", async (ki
   const response = await send({ kind, id: kind === "printer" ? source : reader });
   expect(response.status).toBe(404);
   expect((await response.json()).error.code).toBe(`${kind}.not_found`);
-  expect(await suite.db.select().from(printJobs)).toEqual([]);
-});
-it("refuses a demo reader label that the till cannot select", async () => {
-  await suite.db
-    .insert(cardReaders)
-    .values({ id: DEMO_READER_ID, provider: "simulator", providerRef: "demo", name: "Demo" });
-  const response = await send({ kind: "reader", id: DEMO_READER_ID });
-  expect(response.status).toBe(404);
-  expect((await response.json()).error.code).toBe("reader.not_found");
   expect(await suite.db.select().from(printJobs)).toEqual([]);
 });

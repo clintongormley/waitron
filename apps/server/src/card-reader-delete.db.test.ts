@@ -14,8 +14,6 @@ import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/see
 import { loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import {
-  DEMO_READER_ID,
-  DEMO_READER_REF,
   cardReaderHolders,
   cardReaders,
   deviceCardReaders,
@@ -502,17 +500,11 @@ describe("deleting a card reader", () => {
     expect(await snapshot()).toEqual(before);
   });
 
-  it("answers reader.not_found for an unknown, a deleted and the demo reader, and writes nothing", async () => {
+  it("answers reader.not_found for an unknown and a deleted reader, and writes nothing", async () => {
     const v = await seedVenueWithReaders();
-    await suite.db.insert(cardReaders).values({
-      id: DEMO_READER_ID,
-      provider: "simulator",
-      providerRef: DEMO_READER_REF,
-      name: "Demo card reader",
-    });
     await remove(seats, v.r);
     const before = await snapshot();
-    for (const id of [randomUUID(), v.r, DEMO_READER_ID]) {
+    for (const id of [randomUUID(), v.r]) {
       for (const call of [read, remove, prepare]) {
         await expect(call(seats, id)).rejects.toMatchObject({
           code: "reader.not_found",

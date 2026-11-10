@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  DEMO_READER_ID,
-  PAYMENTS_MIGRATIONS,
-  SimulatorPaymentProvider,
-  cardReaders,
-} from "@waitron/payments";
+import { PAYMENTS_MIGRATIONS, SimulatorPaymentProvider, cardReaders } from "@waitron/payments";
 import { buildCardProvider } from "./boot.js";
 
 const suite = useVenueDb({
@@ -32,26 +26,9 @@ describe("buildCardProvider", () => {
     expect(provider).toBeUndefined();
   });
 
-  it("registers the pretend reader for Demo and disables it in Live", async () => {
+  it("builds practice providers without registering hardware", async () => {
     await buildCardProvider(suite.db, "demo");
-    const read = () =>
-      withTransaction(
-        suite.db,
-        async (tx) =>
-          (await tx.select().from(cardReaders).where(eq(cardReaders.id, DEMO_READER_ID)))[0],
-      );
-
-    expect(await read()).toMatchObject({
-      id: DEMO_READER_ID,
-      provider: "simulator",
-      providerRef: "waitron-demo-reader",
-      active: true,
-    });
-
-    await buildCardProvider(suite.db);
-    expect(await read()).toMatchObject({ active: false });
-    const firstDisabledAt = (await read())!.disabledAt;
-    await buildCardProvider(suite.db);
-    expect((await read())!.disabledAt).toBe(firstDisabledAt);
+    await buildCardProvider(suite.db, "prepare");
+    expect(await suite.db.select().from(cardReaders)).toEqual([]);
   });
 });

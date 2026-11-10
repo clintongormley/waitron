@@ -3778,7 +3778,6 @@ export class TillApp extends LitElement {
   @state() private cardAttemptsOver = 0;
   /** Card attempts started and not yet ended; {@link cardAttemptsOver} moves when this returns to 0. */
   #cardAttemptsRunning = 0;
-  readonly #cancelledDemoReaderOrders = new Set<string>();
   /**
    * Single-flight guard: two chained fiscal records for one purchase cannot be repaired. Set
    * synchronously before the first await of {@link TillApp.#onConfirmPayment}, so a second
@@ -6929,13 +6928,6 @@ export class TillApp extends LitElement {
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
     const basketVisit = this.#store.loadGeneration;
-    this.#cancelledDemoReaderOrders.delete(id);
-    const demoAttemptId = this.activeReaders.some(
-      (reader) => reader.id === detail.readerId && reader.provider === "simulator",
-    )
-      ? crypto.randomUUID()
-      : undefined;
-    if (demoAttemptId !== undefined) this.#demoAttempt = { orderId: id, attemptId: demoAttemptId };
     const lines = this.#currentSaleLines();
     const basketLines = [...this.#store.lines];
     const label = this.#store.label;
@@ -6956,7 +6948,6 @@ export class TillApp extends LitElement {
       )
         return;
       if (session !== this.#operatorSession) return;
-      if (this.#cancelledDemoReaderOrders.has(id)) return;
       reachedFiscal = true;
       const language = this.#chosenReceiptLanguage(id);
       const out: PayOutcome = await this.#withReaderPayment(
@@ -6977,7 +6968,6 @@ export class TillApp extends LitElement {
               : { simulationOutcome: detail.simulationOutcome }),
             // Omitted, the server uses the paying device's chosen reader, else its profile's default.
             ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
-            ...(demoAttemptId === undefined ? {} : { demoAttemptId }),
             ...(lateSend === undefined ? {} : { lateSend }),
           }),
         id,
@@ -7006,7 +6996,7 @@ export class TillApp extends LitElement {
           (await this.#adoptCreatedCounterNote(id, basketVisit, session))
         )
           this.#commitBasket(payload);
-        if (session === this.#operatorSession && !this.#cancelledDemoReaderOrders.has(id)) {
+        if (session === this.#operatorSession) {
           this.#cardOutcomes.set(id, { outcome: { ...out }, detail });
           this.requestUpdate();
         }
@@ -7050,7 +7040,6 @@ export class TillApp extends LitElement {
         await this.#adoptCreatedCounterNote(id, basketVisit, session, false);
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
-      if (this.#demoAttempt?.attemptId === demoAttemptId) this.#demoAttempt = undefined;
       this.submitting = false;
     }
     if (session !== this.#operatorSession) return;
@@ -7066,29 +7055,6 @@ export class TillApp extends LitElement {
       session === this.#operatorSession
     )
       await this.#collectCard(event, true, lateSend);
-  }
-
-  #demoAttempt?: { orderId: string; attemptId: string };
-
-  async #onCancelDemoReader(): Promise<void> {
-    if (this.cardProvider !== "simulator") return;
-    const id = this.#store.id;
-    const attemptId = this.#demoAttempt?.orderId === id ? this.#demoAttempt.attemptId : undefined;
-    if (attemptId === undefined) return;
-    this.#cancelledDemoReaderOrders.add(id);
-    const waiting = [...this.#readerPayments].filter((attempt) => attempt.orderId === id);
-    try {
-      if (!(await this.api.cancelDemoReaderPayment(id, attemptId))) {
-        this.#cancelledDemoReaderOrders.delete(id);
-      } else {
-        let ended = false;
-        for (const attempt of waiting) ended = this.#readerPayments.delete(attempt) || ended;
-        if (ended) this.#configureSessionActivity();
-      }
-    } catch (error) {
-      this.#cancelledDemoReaderOrders.delete(id);
-      this.errorKey = counterError(error, "sale.unconfirmed");
-    }
   }
 
   #basketPaidInPartFor?: {
@@ -10440,16 +10406,12 @@ export class TillApp extends LitElement {
     if (opening === this.#paySheetOpenings) this.payAutoPicking = false;
   }
 
-  /** A practice venue charges its demo reader, so it never picks one up. */
   #autoPickCandidate(): string | null {
     return this.#fixedPayReader() === null
       ? autoPickReader(this.deviceEquipment, this.#hadReader)
       : null;
   }
 
-  /** The pay screens follow the boot read before the equipment is read, and on a practice venue,
-   * which charges on its demo reader; otherwise the device's own reader as its equipment last
-   * said, or none. */
   #paysFromBoot(): boolean {
     return this.deviceEquipment === null || this.cardProvider === "simulator";
   }
@@ -11042,12 +11004,8 @@ export class TillApp extends LitElement {
     return label === undefined ? "" : t("floor.table_title").replace("{table}", () => label);
   }
 
-  /** A practice venue's demo reader, which its handhelds charge whatever their equipment says. */
   #fixedPayReader(): FixedReader | null {
-    if (this.cardProvider !== "simulator") return null;
-    const demo = this.activeReaders.filter((reader) => reader.provider === "simulator");
-    const reader = demo.find((shown) => shown.id === this.defaultReaderId) ?? demo[0];
-    return reader === undefined ? null : { id: reader.id, name: reader.name };
+    return this.cardProvider === "simulator" ? { name: t("card.instant_simulator") } : null;
   }
 
   #billPayingAsksGuests(open: BillPaying): boolean {
@@ -18977,7 +18935,7 @@ export class TillApp extends LitElement {
   async #payPresentedOnReader(
     id: number,
     bill: PartyBill,
-    readerId: string,
+    readerId: string | undefined,
     guestCount: number | null | undefined,
   ): Promise<void> {
     if (this.submitting) return;
@@ -19007,7 +18965,7 @@ export class TillApp extends LitElement {
               expectedEdit,
               id: billId,
               lines: [],
-              readerId,
+              ...(readerId === undefined ? {} : { readerId }),
               ...(guestCount === undefined ? {} : { guestCount }),
             })
             .then(
@@ -21059,7 +21017,6 @@ export class TillApp extends LitElement {
           this.receiptLanguageAsking = { orderId: this.#store.id };
         }}
         @collect-card=${(event: Event) => void this.#onCollectCard(event)}
-        @cancel-demo-reader=${() => void this.#onCancelDemoReader()}
         @check-before-tender=${(event: Event) => this.#onCheckBeforeTender(event)}
         @place-order=${() => void this.#onPlaceOrder()}
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}

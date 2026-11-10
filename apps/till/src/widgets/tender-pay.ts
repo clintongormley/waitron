@@ -699,9 +699,7 @@ export class TillTenderPay extends LitElement {
   }
 
   get #pickableReaders(): TillActiveReader[] {
-    return this.cardProvider === "simulator"
-      ? this.activeReaders.filter((reader) => reader.provider === "simulator")
-      : this.activeReaders;
+    return this.cardProvider === "simulator" ? [] : this.activeReaders;
   }
 
   get #displayedReader(): TillActiveReader | undefined {
@@ -760,17 +758,7 @@ export class TillTenderPay extends LitElement {
     );
   }
 
-  /** Real provider collects continue after leaving this spinner because PaymentProvider has no
-   * cancel method. The pretend reader alone accepts a cancellation. */
   #cancel(): void {
-    if (
-      this.view === "collecting" &&
-      this.activeReaders.some(
-        (reader) => reader.id === this.chosenReaderId && reader.provider === "simulator",
-      )
-    ) {
-      this.dispatchEvent(new CustomEvent("cancel-demo-reader", { bubbles: true, composed: true }));
-    }
     this.#finishEntry();
     this.selected = undefined;
     this.entry = "";
@@ -1079,13 +1067,7 @@ export class TillTenderPay extends LitElement {
         ${
           reader === undefined && this.cardProvider !== "simulator"
             ? nothing
-            : html`<p class="reader-name">
-                ${
-                  reader?.provider === "simulator"
-                    ? t("card.demo_reader")
-                    : (reader?.name ?? t("card.instant_simulator"))
-                }
-              </p>`
+            : html`<p class="reader-name">${reader?.name ?? t("card.instant_simulator")}</p>`
         }
         <wt-button
           class="change-reader"

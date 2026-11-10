@@ -13,7 +13,6 @@ import {
 } from "@waitron/layouts";
 import type { PrinterEquipment, PrinterRoleState, ProfilePrinterRole } from "@waitron/layouts";
 import {
-  DEMO_READER_ID,
   IN_PROGRESS_PAYMENT_STATES,
   cardReaderHolders,
   clearUnlistedReaderChoice,
@@ -296,7 +295,7 @@ export async function readDeviceEquipment(
         readerInfo,
         readerHolder,
         readerEquipment.listed
-          .filter((r) => r.profileId === device.profileId && r.id !== DEMO_READER_ID)
+          .filter((r) => r.profileId === device.profileId)
           .map((r) => r.id)
           .filter((id) => readerInfo.get(id)!.available),
       ),

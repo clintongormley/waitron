@@ -5975,7 +5975,7 @@ describe("the banner's email inbox link", () => {
     expect(links.indexOf("/manage/demo-printer")).toBe(links.indexOf("/manage/email") + 1);
   });
 
-  it("links to the pretend card reader in the Demo bar", async () => {
+  it("keeps practice card decisions on the till rather than linking another screen", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: withIntent(true, "demo"),
     });
@@ -5985,66 +5985,7 @@ describe("the banner's email inbox link", () => {
       link.getAttribute("href"),
     );
 
-    expect(links.indexOf("/manage/demo-reader")).toBe(links.indexOf("/manage/demo-printer") + 1);
-  });
-
-  it("opens the pretend reader page for a manager in Demo", async () => {
-    history.replaceState(null, "", "/manage/demo-reader");
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, role: "manager", onboardingIntent: "demo" }),
-        listDemoReaderPayments: vi.fn().mockResolvedValue({ payments: [] }),
-      }),
-    });
-    await flush(el);
-
-    expect(el.shadowRoot!.querySelector("dashboard-demo-reader-screen")).not.toBeNull();
-    expect(location.pathname).toBe("/manage/demo-reader");
-  });
-
-  it("shows the pending card amount and lets the manager approve it", async () => {
-    history.replaceState(null, "", "/manage/demo-reader");
-    const decideDemoReaderPayment = vi.fn().mockResolvedValue(undefined);
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, role: "manager", onboardingIntent: "demo" }),
-        listDemoReaderPayments: vi.fn().mockResolvedValue({
-          payments: [{ id: "payment-1", amount: "12.34" }],
-        }),
-        decideDemoReaderPayment,
-      }),
-    });
-    await flush(el);
-    const reader = el.shadowRoot!.querySelector("dashboard-demo-reader-screen")!;
-    await vi.waitFor(() =>
-      expect(
-        reader.shadowRoot!.querySelector("[data-test=demo-reader-amount]")?.textContent,
-      ).toContain("12"),
-    );
-
-    reader.shadowRoot!.querySelector<HTMLElement>("[data-test=demo-reader-approve]")!.click();
-    await vi.waitFor(() =>
-      expect(decideDemoReaderPayment).toHaveBeenCalledWith("payment-1", "captured"),
-    );
-  });
-
-  it("refuses the pretend reader page in Live", async () => {
-    history.replaceState(null, "", "/manage/demo-reader");
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-      api: stubApi({
-        getMe: vi
-          .fn()
-          .mockResolvedValue({ ...meResponse, role: "manager", onboardingIntent: "live" }),
-      }),
-    });
-    await flush(el);
-
-    expect(el.shadowRoot!.querySelector("dashboard-demo-reader-screen")).toBeNull();
-    expect(location.pathname).toBe("/manage/overview");
+    expect(links).not.toContain("/manage/demo-reader");
   });
 
   it("opens the pretend printer page for a manager", async () => {

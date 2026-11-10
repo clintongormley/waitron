@@ -13,7 +13,6 @@ import { deviceCardReaders } from "./schema/device-card-readers.js";
 import { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
 import { payments } from "./schema/payments.js";
 import type { PaymentState } from "./provider.js";
-import { DEMO_READER_ID } from "./simulator.js";
 import { insertAttempting } from "./store.js";
 import {
   appendReaderToProfiles,
@@ -347,18 +346,12 @@ describe("a device's card reader", () => {
     ).toEqual({ ok: false, refusal: "not_permitted" });
   });
 
-  it.each(["unlisted", "off", "unpaired", "demo"] as const)(
+  it.each(["unlisted", "off", "unpaired"] as const)(
     "refuses a %s reader as not permitted, storing nothing",
     async (kind) => {
       const s = await seed();
-      await inTx((tx) =>
-        tx
-          .insert(cardReaders)
-          .values({ id: DEMO_READER_ID, provider: "simulator", providerRef: "demo", name: "Demo" })
-          .onConflictDoNothing(),
-      );
-      await list(s, [s.r1, s.off, s.unpaired, DEMO_READER_ID]);
-      const id = { unlisted: s.r2, off: s.off, unpaired: s.unpaired, demo: DEMO_READER_ID }[kind];
+      await list(s, [s.r1, s.off, s.unpaired]);
+      const id = { unlisted: s.r2, off: s.off, unpaired: s.unpaired }[kind];
       const result = await inTx((tx) =>
         selectDeviceReader(tx, { deviceId: s.deviceA, selection: { id }, via: "scan" }),
       );

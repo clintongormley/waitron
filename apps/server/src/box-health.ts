@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { devices, incidents, printers, sales, type Database, type Transaction } from "@waitron/db";
 import type {
   ClockConfirmationSource,
@@ -8,7 +8,7 @@ import type {
   TrustedClock,
 } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
-import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
+import { cardReaders } from "@waitron/payments";
 import type { StreamView } from "@waitron/stream";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -302,13 +302,7 @@ export async function collectBoxHealth(
       ? await db
           .select({ id: cardReaders.id, name: cardReaders.name })
           .from(cardReaders)
-          .where(
-            and(
-              eq(cardReaders.active, true),
-              isNull(cardReaders.deletedAt),
-              ne(cardReaders.id, DEMO_READER_ID),
-            ),
-          )
+          .where(and(eq(cardReaders.active, true), isNull(cardReaders.deletedAt)))
           .orderBy(asc(cardReaders.name))
       : null;
     return {

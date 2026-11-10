@@ -1,6 +1,6 @@
 # Servicio en mesa
 
-En Demostración o Preparación, elige **Simulador inmediato** y selecciona **Aprobar**, **Rechazar**
+En Demostración o Preparación, selecciona **Aprobar**, **Rechazar**
 o **Sin respuesta** antes de pulsar **Tarjeta**. No se cobra ninguna tarjeta real. **Sin respuesta**
 mantiene el pago bloqueado para que puedas practicar su recuperación. En **Pagos** del panel,
 un encargado elige **Consultar con el proveedor de pagos** para un pago del pedido completo,

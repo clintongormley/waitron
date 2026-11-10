@@ -1432,11 +1432,6 @@ export interface DemoPrinterJob {
   preview: PrintJobPreview | null;
 }
 
-export interface DemoReaderPayment {
-  id: string;
-  amount: string;
-}
-
 export interface PrintJobRow {
   canResend: boolean;
   id: string;
@@ -4100,24 +4095,6 @@ export class DashboardApi {
 
   listDemoPrinterJobs(): Promise<DemoPrinterJob[]> {
     return this.#request<DemoPrinterJob[]>("/management-api/demo-printer/jobs", "GET");
-  }
-
-  listDemoReaderPayments(): Promise<{ payments: DemoReaderPayment[] }> {
-    return this.#request<{ payments: DemoReaderPayment[] }>(
-      "/management-api/demo-reader/payments",
-      "GET",
-    );
-  }
-
-  decideDemoReaderPayment(
-    id: string,
-    outcome: "captured" | "declined",
-  ): Promise<{ decided: boolean }> {
-    return this.#request<{ decided: boolean }>(
-      `/management-api/demo-reader/payments/${id}/decision`,
-      "POST",
-      { outcome },
-    );
   }
 
   listRecentJobs(): Promise<PrintJobRow[]> {

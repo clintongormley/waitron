@@ -6,7 +6,7 @@ import "./errors.js";
 import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { isFencedStanding, standingOf } from "@waitron/membership";
 import { isReadableChart } from "./membership-trust.js";
 import { readTakenOverFrom } from "./handover-collection.js";
@@ -30,7 +30,6 @@ import {
   appendReaderToProfiles,
   cardProviderById,
   cardReaders,
-  DEMO_READER_ID,
   deviceCardReaders,
   SimulatorPaymentProvider,
   deviceProfileCardReaders,
@@ -203,7 +202,7 @@ async function requireKnownReader(tx: Transaction, readerId: string): Promise<vo
     .select({ id: cardReaders.id })
     .from(cardReaders)
     .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
-  if (reader === undefined || readerId === DEMO_READER_ID) {
+  if (reader === undefined) {
     throw new AppError("reader.not_found", { id: readerId });
   }
 }
@@ -484,8 +483,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       .select()
       .from(cardReaders)
       .where(and(readerWhere(id), isNull(cardReaders.deletedAt)));
-    if (reader === undefined || id === DEMO_READER_ID)
-      throw new AppError("reader.not_found", { id });
+    if (reader === undefined) throw new AppError("reader.not_found", { id });
     return reader;
   };
 
@@ -796,7 +794,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             unpairedAt: cardReaders.unpairedAt,
           })
           .from(cardReaders)
-          .where(and(ne(cardReaders.id, DEMO_READER_ID), isNull(cardReaders.deletedAt)))
+          .where(isNull(cardReaders.deletedAt))
           .orderBy(cardReaders.name),
         assignments: await tx
           .select({
@@ -901,8 +899,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           })
           .from(cardReaders)
           .where(and(eq(cardReaders.id, readerId), isNull(cardReaders.deletedAt)));
-        if (row === undefined || readerId === DEMO_READER_ID)
-          throw new AppError("reader.not_found", { id: readerId });
+        if (row === undefined) throw new AppError("reader.not_found", { id: readerId });
         return row;
       });
       const seat = cardProviderById(deps.providers, reader.provider);

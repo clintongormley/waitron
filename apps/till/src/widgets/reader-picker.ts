@@ -132,9 +132,7 @@ export class TillReaderPicker extends LitElement {
         data-test="reader-${reader.id}"
         @click=${() => this.#choose(reader.id)}
       >
-        <span class="name"
-          >${reader.provider === "simulator" ? t("card.demo_reader") : reader.name}</span
-        >
+        <span class="name">${reader.name}</span>
         ${
           reader.online === false
             ? html`<span class="status" data-test="reader-${reader.id}-offline"

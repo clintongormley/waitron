@@ -97,10 +97,7 @@ import {
 import { closeAll } from "./close-all.js";
 import { StripeReconciler } from "@waitron/payments-stripe";
 import {
-  DEMO_READER_ID,
-  DEMO_READER_REF,
   SimulatorPaymentProvider,
-  cardReaders,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
   type CollectionOwners,
@@ -526,27 +523,6 @@ export async function buildCardProvider(
   if (!paymentsEnabled) return undefined;
   const simulated =
     onboardingIntent === "demo" || (onboardingIntent === "prepare" && !paymentTestProviders);
-  await withTransaction(db, async (tx) => {
-    const [existing] = await tx
-      .select({ id: cardReaders.id, active: cardReaders.active })
-      .from(cardReaders)
-      .where(eq(cardReaders.id, DEMO_READER_ID));
-    if (existing === undefined) {
-      if (simulated) {
-        await tx.insert(cardReaders).values({
-          id: DEMO_READER_ID,
-          provider: "simulator",
-          providerRef: DEMO_READER_REF,
-          name: "Demo card reader",
-        });
-      }
-    } else if (existing.active !== simulated) {
-      await tx
-        .update(cardReaders)
-        .set({ active: simulated, disabledAt: simulated ? null : new Date().toISOString() })
-        .where(eq(cardReaders.id, DEMO_READER_ID));
-    }
-  });
   if (simulated) {
     return new SimulatorPaymentProvider(db);
   }

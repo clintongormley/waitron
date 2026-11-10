@@ -1,6 +1,6 @@
 # Table service
 
-In Demo or Preparation, choose **Instant simulator** and select **Approve**, **Decline** or
+In Demo or Preparation, select **Approve**, **Decline** or
 **No answer** before pressing **Card**. No real card is charged. **No answer** keeps the payment
 blocked so you can practise recovery. In the dashboard's **Payments**, a manager chooses
 **Check with the card provider** for a whole-order payment, or **Check with provider** for a bill
