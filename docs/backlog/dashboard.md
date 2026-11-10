@@ -522,15 +522,6 @@ than becoming new items.
   [Detail](dashboard.md#dragging-a-row-a180-994-and-1003--two-things-seen-left-as-they-were)
 
 
-## Bundle: Box reset tab
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).**
-  [Detail](dashboard.md#loose-ends-left-by-signing-a-dashboard-tab-out-when-its-box-has-been-reset-a485-1545)
-- **Loose ends left by A501 (#1552).**
-  [Detail](dashboard.md#loose-ends-left-by-a501-1552)
-
 ## Decisions and deliberate limits
 
 - **Theme choice and certificate help (watcher, 2026-11-10 17:19).** The saved choice remains
@@ -838,29 +829,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   An isolated run of the complete file on the branch's earlier head passed. The cause remains
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
-
-
-## Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).
-
-- A dashboard tab that never meets the box in setup mode gets plain sign-in, not the "box was
-  reset" notice — for example one asleep through the reset and the new venue's setup; there is
-  no venue identity to compare.
-- A sign-in screen already showing when a box reset is found may already have started its passkey
-  autofill, and has started its Google settings read; the switch to the reset notice stops
-  neither. By reading, not run: a tab already on sign-in (sent by the shared session deadline, or
-  by a failed check on coming back into view) switches to the reset notice only when a later
-  request is answered `node.reset`.
-
-
-## Loose ends left by A501 (#1552).
-
-- A dashboard tab on the Backup screen learns of a box reset late. Setup mode answers only
-    `/management-api/*` with `node.reset` (`mountSetup`, `apps/server/src/setup-api.ts`); the Backup
-    screen and the content-languages read use `/api/...` paths, which setup mode answers with a 404
-    with no code (or, without the built wizard, the placeholder page), so such a tab shows the reset
-    notice only at its next management request. Measured by A501's Codex review against setup mode.
-    Options: answer those dashboard `/api` paths with `node.reset` too (the boot test pins
-    `/api/staff` answering the placeholder), or move the reads under `/management-api`.
 
 
 ## A398 — device-profile editor heading remains to align with the sub-page pattern.

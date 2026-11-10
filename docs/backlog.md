@@ -1431,8 +1431,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   checks keep a second tab; say if it should go (about 25 cases then lose their subject) — plan
   A756 PR 8 Decision 10.
 
-- **Box reset tab** (bundle of 2, size S). [Detail](backlog/dashboard.md#bundle-box-reset-tab)
-
 - **A398 — device-profile editor heading remains to align with the sub-page pattern.**
   [Detail](backlog/dashboard.md#a398--device-profile-editor-heading-remains-to-align-with-the-sub-page-pattern)
 
