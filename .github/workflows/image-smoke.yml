@@ -315,6 +315,9 @@ jobs:
           reported=$(docker exec "$app" versitygw --version | sed -nE 's/^Version *: ([0-9.]+)$/\1/p')
           echo "versitygw in the image: $reported; pinned: $pinned"
           [ "$reported" = "$pinned" ]
+          docker exec "$app" sh -c 'test -s /app/third-party/versitygw/NOTICE \
+            && grep -q "^## versitygw" /app/third-party/README.md'
+          docker exec "$app" grep -qx "versitygw version: $pinned" /app/third-party/versitygw/NOTICES.txt
 
       - name: The image carries the licence of the font printed text is drawn in
         run: |

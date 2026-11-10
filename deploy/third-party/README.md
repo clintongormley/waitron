@@ -1,7 +1,7 @@
 # Third-party software in the Waitron box image
 
 The box image carries software written by others under their own licences. This folder is
-copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream,
+copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream, versitygw,
 the Iosevka font receipt text is drawn from, the Noto Sans invoice font, the Moby template the print agent's AppArmor
 profile is copied from, the Material Symbols icons the web apps carry, the Google Sans font and
 Google's "G" on the dashboard's Sign in with Google button, and npm packages bundled into the
@@ -203,3 +203,49 @@ node scripts/litestream-notices.mjs deploy/third-party/litestream/NOTICES.txt \
 
 The Go toolchain that runs `go version -m` need not be the one the binaries were built with.
 Measured 2026-09-24: a go1.25.1 toolchain read binaries built with go1.25.14.
+
+## versitygw
+
+A spare box runs versitygw 1.8.0, an S3 server, as the store the main box streams its database to.
+It is a separate program, `/usr/local/bin/versitygw` in the image: the unmodified release binary the
+versitygw project publishes for its tag `v1.8.0` (<https://github.com/versity/versitygw>), and the
+image build checks it against the SHA-256 that `deploy/Dockerfile`'s `versitygw` stage pins before
+installing it. versitygw is licensed under the Apache License, Version 2.0: the release's `LICENSE`
+file opens "Apache License" over "Version 2.0, January 2004".
+
+- `licenses/Apache-2.0.txt` is that licence; the release's `LICENSE` file differs from it only in
+  lacking its first, blank, line.
+- `versitygw/NOTICE` is the release's own `NOTICE` file, copied unchanged from the release tarball.
+- `versitygw/NOTICES.txt` holds the licence and notice files of everything built into the binary:
+  the Go standard library and runtime, and every Go module the binary lists as built in. Its header
+  names the versitygw version and the command that produced it,
+  `node scripts/go-binary-notices.mjs versitygw`, which works as Litestream's does above.
+
+To regenerate both when the pinned version changes, set `v` to the new version and the two sums to
+the SHA-256 values `deploy/Dockerfile`'s `versitygw` stage pins for the `x86_64` and `arm64`
+assets, then run this from the repository root. Go need not be installed: `go version -m` runs in
+a `golang` container, which `--rm` removes when it exits.
+
+```sh
+v=1.8.0
+sum_x86_64=<the x86_64 sum from deploy/Dockerfile's versitygw stage>
+sum_arm64=<the arm64 sum from deploy/Dockerfile's versitygw stage>
+d=$(mktemp -d)
+for arch in x86_64 arm64; do
+  curl -fsSL -o "$d/$arch.tar.gz" \
+    "https://github.com/versity/versitygw/releases/download/v$v/versitygw_v${v}_Linux_$arch.tar.gz"
+done
+printf '%s  %s\n' "$sum_x86_64" "$d/x86_64.tar.gz" "$sum_arm64" "$d/arm64.tar.gz" | shasum -a 256 -c -
+for arch in x86_64 arm64; do
+  mkdir "$d/$arch" && tar -xzf "$d/$arch.tar.gz" -C "$d/$arch" --strip-components=1
+  docker run --rm --network none -v "$d/$arch:/w:ro" golang:1.26-alpine \
+    go version -m /w/versitygw > "$d/mods-$arch.txt"
+done
+cp "$d/x86_64/NOTICE" deploy/third-party/versitygw/NOTICE
+node scripts/go-binary-notices.mjs versitygw "$v" deploy/third-party/versitygw/NOTICES.txt \
+  "$d/mods-x86_64.txt" "$d/mods-arm64.txt"
+```
+
+The same container serves for Litestream's steps above on a machine without Go. Measured
+2026-11-10: the go1.26.10 toolchain in `golang:1.26-alpine` read the versitygw binaries, built with
+go1.27.1, and the Litestream ones, whose notice it regenerated unchanged.
