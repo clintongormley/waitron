@@ -58,7 +58,7 @@ pins mkosi and guest Docker versions; `packages.txt` records the Debian package
 versions actually selected. It is not a byte-for-byte reproducible build.
 
 The output contains `waitron-box-dev.img`, its kernel/initrd, root UUID and image
-inventory. The networkless loading boot checks each archive’s configuration hash
+inventory, plus the GPT firmware image `waitron-install-dev.img`. The networkless loading boot checks each archive’s configuration hash
 against `docker save` inside the guest. Docker and containerd data are embedded in
 the ext4 root. The acceptance boot uses QEMU’s temporary writes, checks that the
 base image hash stays unchanged, verifies the mounted UUID, embedded images and
@@ -68,14 +68,49 @@ a timing receipt and the CA
 fingerprint are retained in the check directory. The throwaway browser ignores
 certificate errors for rendering; this does not qualify certificate trust.
 
-This is an unencrypted development root booted with its kernel directly. The
-emulator supplies temporary startup units. It does not install from USB or start
-Waitron automatically on physical hardware. Firmware, TPM/Secure Boot, retained
-disk keys, first-start sealing, kiosk, clock/socket integration and real box/stick/
-Android checks remain later B3 work. The recipe supplies the USB origin through
-compose; direct Demo requests are refused by the app. This does not qualify
-physical USB installation. Rebuild and repeat the check after changing the app
-or recipe.
+## Install onto a virtual disk
+
+To rehearse installation and independent startup, use the same tool container and output:
+
+```sh
+docker exec -w /source -e B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img \
+  waitron-b3-rehearsal node bench/box-installer/run.mjs \
+  --case installed-refusals --run-dir /work/refusals
+docker exec -w /source -e B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img \
+  waitron-b3-rehearsal node bench/box-installer/run.mjs \
+  --case installed-setup --run-dir /work/installed
+docker exec waitron-b3-rehearsal sh -c 'cd /work/refusals && tar -cf /work/refusal-evidence.tar -- *.json *.log'
+docker cp waitron-b3-rehearsal:/work/refusal-evidence.tar "$inputs/results/"
+docker exec waitron-b3-rehearsal sh -c 'cd /work/installed && tar -cf /work/installed-evidence.tar -- *.json *.log *.png'
+docker cp waitron-b3-rehearsal:/work/installed-evidence.tar "$inputs/results/"
+```
+
+The first case checks that an occupied virtual target stays byte-for-byte unchanged.
+The second creates a blank 12 GiB virtual disk, firmware-boots the installer, installs,
+then detaches the source image and boots the target twice. It checks setup choices,
+opens Prepare, compares the installed images and services, and checks that the machine
+identity and certificate authority survive the second boot. A successful install must also
+report its systemd unit as successful. Serial logs and QEMU
+arguments show each phase; screenshots and observed JSON sit beside them.
+Copy the small evidence files you need, leaving target.img and firmware-variable copies
+inside the disposable container.
+
+The source is attached read-only. Its installer runs with a temporary overlay, so boot-time
+writes stay in memory. The writer takes no device argument. It requires the rig’s machine name, exactly one
+non-source disk, the target’s virtio serial, no mounts or holders and an all-zero disk.
+It writes EFI and boot partitions, then unencrypted btrfs with separate root, images,
+volumes, logs and host-state areas. The disk starts the shipped development service;
+no kernel, initrd, boot arguments or app-start unit is injected on disk-only boots.
+The installed payload contains no installer writer or installer unit. Startup uses `/health`
+after you complete setup; the setup-only evidence is emitted only while that route exists.
+Guest package notices are kept under `/app/third-party`.
+
+Both routes are development rehearsals in QEMU with Secure Boot off. The original
+`recipe-setup` still supplies a temporary startup unit and boots its kernel directly.
+Neither rehearsal qualifies physical installation, TPM/Secure Boot, retained disk keys,
+first-start sealing, kiosk or real box/stick/Android behavior. Encryption before go-live
+remains required. Next come the encrypted layout, then key sealing and startup with the
+retained key. Certificate errors are ignored only for rendering the setup screen.
 
 After retaining the small results, remove your rehearsal resources. Do not remove
 shared images, volumes or build caches. Export the image first with `docker cp`

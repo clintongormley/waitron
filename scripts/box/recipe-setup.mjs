@@ -4,6 +4,11 @@ export function recipeFailures(expected, observed) {
   if (observed.uuid !== expected.uuid) failures.push("root-uuid");
   if (observed.hashBefore !== expected.sha256 || observed.hashAfter !== expected.sha256)
     failures.push("artifact");
+  return [...failures, ...bootFailures(expected, observed)];
+}
+
+function bootFailures(expected, observed) {
+  const failures = [];
   for (const [name, image] of Object.entries(expected.images)) {
     if (observed.images?.[name] !== image) failures.push(`image:${name}`);
   }
@@ -23,4 +28,34 @@ export function recipeFailures(expected, observed) {
   )
     failures.push("setup-status");
   return failures;
+}
+
+export function installedFailures(expected, installedUuid, first, again) {
+  const failures = [];
+  for (const boot of [first, again]) {
+    failures.push(...bootFailures(expected, boot));
+    if (!installedUuid || installedUuid === expected.uuid || boot.uuid !== installedUuid)
+      failures.push("root-uuid");
+    if (boot.writerAbsent !== true) failures.push("installer-present");
+    if (
+      JSON.stringify([...boot.areas].sort()) !==
+      '["@host-state","@images","@logs","@rootfs","@volumes"]'
+    )
+      failures.push("areas");
+  }
+  if (!first.machineId || first.machineId !== again.machineId) failures.push("machine-id");
+  if (!first.ca || first.ca !== again.ca) failures.push("ca");
+  return [...new Set(failures)];
+}
+
+export function rigLine(serial, prefix) {
+  return serial
+    .split(/\r?\n/)
+    .slice(0, -1)
+    .find((line) => line.startsWith(prefix))
+    ?.slice(prefix.length);
+}
+
+export function installSucceeded(serial) {
+  return /unit=waitron-dev-install [^\r\n]*res=success(?:'|\s)/.test(serial);
 }

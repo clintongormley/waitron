@@ -560,12 +560,13 @@ old name only points at the new one for 14 days. Five slices; no migration.
 
 ## B3. The bootable USB installer
 
-**2026-11-10 development rehearsal:** the [recipe and single boot check](../../bench/box-installer/README.md)
-build an unencrypted Debian root, boot the embedded containers and open Prepare’s administrator
-form in QEMU. The emulator supplies startup units; this does not install or start a physical
-box. The recipe supplies USB origin; setup hides/refuses Demo and retains Prepare, Live and
-Join or recover. Encrypted host-state, first-start sealing/restart,
-retained disk keys, release VM and real stick/box/Android checks remain open.
+**2026-11-10 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
+install onto a second virtual disk and start it twice through OVMF firmware, with no supplied kernel
+or app-start unit. The disk has the design’s five btrfs areas, still unencrypted. Setup hides/refuses
+Demo and retains Prepare, Live and Join or recover; the rehearsal opens Prepare’s administrator form.
+This qualifies only the emulator. Next come encrypted layout, then key sealing/startup with the retained
+key; A1187 part 3 and A950 cuts 4+ wait for that last slice. Release and real stick/box/Android checks
+remain open. [Installed-start plan](../superpowers/plans/2026-11-10-b3-13-installed-first-start.md).
 
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”

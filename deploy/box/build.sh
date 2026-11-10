@@ -27,7 +27,13 @@ cd "$output"
 timeout -k 10 600 mkosi --directory="$repo/deploy/box" --sandbox-tree="$output/sandbox" \
   --output-directory="$output" "${packages[@]}" build
 root="$output/recipe-root"
+install -d -m 0755 "$root/app/third-party"
+chroot "$root" sh -c 'tar -chf - /usr/share/doc/*/copyright /usr/share/common-licenses/*' \
+  | tar -xf - -C "$root/app/third-party"
 install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
+install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron-dev-start"
+install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"
+systemctl --root="$root" enable waitron-dev.service
 cp "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
 mkdir "$output/input-stage"
 for kind in app agent mailpit; do
@@ -50,7 +56,7 @@ mkdir -p "$root/etc/systemd/system/bluetooth.service.d"
 bluez="$(sed -n 's/^ExecStart=//p' "$root/usr/lib/systemd/system/bluetooth.service")"
 printf '[Service]\nExecStart=\nExecStart=%s --noplugin=autopair\n' "$bluez" \
   > "$root/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf"
-printf 'hostonly="no"\nadd_drivers+=" virtio_pci virtio_blk ext4 "\n' > "$root/etc/dracut.conf.d/waitron.conf"
+printf 'hostonly="no"\nadd_drivers+=" virtio_pci virtio_blk ext4 btrfs "\n' > "$root/etc/dracut.conf.d/waitron.conf"
 printf '{"features":{"containerd-snapshotter":true}}\n' > "$root/etc/docker/daemon.json"
 systemctl --root="$root" enable docker.service NetworkManager.service
 mkdir -p "$root/etc/systemd/system-preset"
@@ -70,6 +76,7 @@ mkfs.ext4 -q -F -d "$output/input-stage" "$output/inputs.img"
 printf '%s\n' "$uuid" > "$output/uuid"
 B3_RECIPE_IMAGE="$output/waitron-box-dev.img" B3_POPULATE=1 \
   node "$repo/bench/box-installer/run.mjs" --case recipe-setup --run-dir "$output/populate"
-sha256sum "$output/waitron-box-dev.img" "$output/kernel" "$output/initrd" > "$output/SHA256SUMS"
+bash "$repo/deploy/box/firmware-image.sh" "$root" "$output/waitron-box-dev.img" "$output/waitron-install-dev.img"
+sha256sum "$output/waitron-install-dev.img" "$output/waitron-box-dev.img" "$output/kernel" "$output/initrd" > "$output/SHA256SUMS"
 chroot "$root" dpkg-query -W > "$output/packages.txt"
 printf 'Recipe assembled at %s\n' "$output"

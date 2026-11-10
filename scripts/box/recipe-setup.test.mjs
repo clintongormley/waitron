@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
@@ -60,7 +60,7 @@ describe("recipe boot evidence", () => {
     try {
       writeFileSync(join(root, "uuid"), expected.uuid);
       const qemu = join(root, "qemu-system-x86_64");
-      writeFileSync(qemu, "#!/bin/sh\nsleep 0.1\nexit 0\n");
+      writeFileSync(qemu, '#!/bin/sh\nprintf "%s\\n" "$@" > "$B3_QEMU_ARGS"\nsleep 0.1\nexit 0\n');
       chmodSync(qemu, 0o700);
       const result = spawnSync(
         process.execPath,
@@ -76,6 +76,7 @@ describe("recipe boot evidence", () => {
             ...process.env,
             PATH: `${root}:${process.env.PATH}`,
             B3_POPULATE: "1",
+            B3_QEMU_ARGS: join(root, "qemu-args"),
             B3_RECIPE_IMAGE: join(root, "image"),
           },
           encoding: "utf8",
@@ -84,6 +85,9 @@ describe("recipe boot evidence", () => {
       );
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("guest exited before B3_PRELOAD_OK");
+      expect(readFileSync(join(root, "qemu-args"), "utf8")).toContain(
+        "systemd.unit=setup-smoke.service",
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -149,4 +153,127 @@ describe("recipe boot evidence", () => {
       ),
     ).resolves.toEqual(["setup-status"]);
   });
+});
+
+describe("installed boot evidence", () => {
+  const first = {
+    ...complete,
+    uuid: "installed-root",
+    machineId: "machine-a",
+    ca: "ca-a",
+    writerAbsent: true,
+    areas: ["@rootfs", "@images", "@volumes", "@logs", "@host-state"],
+  };
+  it("accepts the installed services and a second boot keeping identity", async () => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    expect(installedFailures(expected, "installed-root", first, first)).toEqual([]);
+  });
+  it.each([
+    ["uuid", { uuid: expected.uuid }, "root-uuid"],
+    ["writer", { writerAbsent: false }, "installer-present"],
+    ["areas", { areas: ["@rootfs"] }, "areas"],
+    ["identity", { machineId: "another" }, "machine-id"],
+    ["CA", { ca: "another" }, "ca"],
+    ["app", { images: { ...first.images, app: "another" } }, "image:app"],
+  ])("rejects a changed %s on the disk-only reboot", async (_name, patch, failure) => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    expect(installedFailures(expected, "installed-root", first, { ...first, ...patch })).toContain(
+      failure,
+    );
+  });
+  it.each([
+    ["source UUID", expected.uuid, { uuid: expected.uuid }, "root-uuid"],
+    ["missing UUID", undefined, { uuid: undefined }, "root-uuid"],
+    ["blank identity", "installed-root", { machineId: "" }, "machine-id"],
+    ["blank CA", "installed-root", { ca: "" }, "ca"],
+  ])("rejects two matching but unusable boots (%s)", async (_name, uuid, patch, failure) => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    expect(
+      installedFailures(expected, uuid, { ...first, ...patch }, { ...first, ...patch }),
+    ).toContain(failure);
+  });
+});
+
+it.each(["installed-setup", "installed-refusals"])(
+  "names the missing installer image for %s",
+  (caseName) => {
+    const result = spawnSync(
+      process.execPath,
+      ["bench/box-installer/run.mjs", "--case", caseName, "--run-dir", "/tmp/not-created"],
+      {
+        env: { ...process.env, B3_INSTALLER_IMAGE: "" },
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
+    expect(result.stderr).toContain("B3_INSTALLER_IMAGE must be set");
+  },
+);
+
+it("waits for a complete serial record before parsing its JSON", async () => {
+  const { rigLine } = await import("./recipe-setup.mjs");
+  expect(rigLine('kernel boot\nB3_INSTALLED:{"uuid":"ro', "B3_INSTALLED:")).toBeUndefined();
+  expect(rigLine('kernel boot\nB3_INSTALLED:{"uuid":"root"}\r\n', "B3_INSTALLED:")).toBe(
+    '{"uuid":"root"}',
+  );
+});
+
+it.each([
+  ["unit=waitron-dev-install comm=systemd res=success'\n", true],
+  ["B3_INSTALL_OK:root\nunit=waitron-dev-install comm=systemd res=failed'\n", false],
+  ["B3_INSTALL_OK:root\n", false],
+])("requires the installer unit's success, beyond its marker", async (serial, expected) => {
+  const { installSucceeded } = await import("./recipe-setup.mjs");
+  expect(installSucceeded(serial)).toBe(expected);
+});
+
+it("stops the rig when the installer unit fails after printing its marker", () => {
+  const root = mkdtempSync(join(tmpdir(), "b3-unit-failure-"));
+  try {
+    const qemu = join(root, "qemu-system-x86_64");
+    writeFileSync(
+      qemu,
+      `#!/bin/sh
+sleep 0.1
+printf "%s\\n" "B3_INSTALL_OK:installed-root" "unit=waitron-dev-install comm=systemd res=failed'"
+sleep 0.1
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(join(root, "vars.fd"), "private firmware fixture");
+    writeFileSync(
+      join(root, "firmware.mjs"),
+      `import fs from "node:fs/promises";
+import {syncBuiltinESMExports} from "node:module";
+const copy = fs.copyFile;
+fs.copyFile = (source, ...rest) => copy(source === "/usr/share/OVMF/OVMF_VARS_4M.fd" ? new URL("./vars.fd", import.meta.url) : source, ...rest);
+syncBuiltinESMExports();
+`,
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        join(root, "firmware.mjs"),
+        "bench/box-installer/run.mjs",
+        "--case",
+        "installed-setup",
+        "--run-dir",
+        join(root, "check"),
+      ],
+      {
+        env: {
+          ...process.env,
+          PATH: `${root}:${process.env.PATH}`,
+          B3_INSTALLER_IMAGE: join(root, "image"),
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      },
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("install service did not report success");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
