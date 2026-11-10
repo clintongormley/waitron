@@ -566,7 +566,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       const probe = vi.spyOn(venue.backend, "recordSale").mockImplementation(async (tx, sale) => {
         if (recordFirst) await recordSale(tx, sale);
         attempted = true;
-        throw new AppError("clock.unusable");
+        throw new AppError("clock.unusable", {});
       });
       try {
         const answer = await discard(p, body);

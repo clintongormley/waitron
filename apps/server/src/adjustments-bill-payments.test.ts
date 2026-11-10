@@ -273,7 +273,7 @@ describe("a discount that leaves a bill fully paid", () => {
     const records = fiscalRecordCount(venue, billId);
     const probe = vi
       .spyOn(venue.backend, "recordSale")
-      .mockRejectedValue(new AppError("clock.unusable"));
+      .mockRejectedValue(new AppError("clock.unusable", {}));
     try {
       const answer = await adjust(billId, 2, { action: "discount_amount", amount: "10.00" });
       expect(answer.json).toMatchObject({ code: "clock.unusable" });
