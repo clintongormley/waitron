@@ -30,6 +30,7 @@ import {
   type UnpaidDepartureRequest,
   type UnpaidDepartureResult,
 } from "./client.js";
+import type { CloseByTransferRequest, CloseByTransferResult } from "./transfer-close-types.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */
 function jsonResponse(body: unknown, status = 200): Response {
@@ -6183,5 +6184,67 @@ describe("TillApi: the tab's person on every request", () => {
 
     expectTypeOf(api.logout).parameters.toEqualTypeOf<[]>();
     expect(fetchStub.mock.calls[0]![1]?.body).toBeUndefined();
+  });
+});
+
+describe("TillApi: closing a bill by transfer", () => {
+  const request: CloseByTransferRequest = {
+    submissionId: "sub-1",
+    expectedRevision: 3,
+    expectedEdit: null,
+    expectedTotal: "18.00",
+    invoiceType: "F2",
+    recipient: null,
+    receiptLanguage: "es",
+    delivery: { medium: "receipt" },
+    partyFinish: null,
+  };
+  const result: CloseByTransferResult = {
+    submissionId: "sub-1",
+    workingOrderId: "wo-1",
+    saleId: "s-1",
+    invoiceNumber: "F-0007",
+    classification: "to_be_paid_by_transfer",
+    closedAt: "2026-11-10T12:00:00.000Z",
+    businessDay: "2026-11-10",
+    total: "18.00",
+    currency: "EUR",
+    party: { state: "not_applicable", blockers: [] },
+  };
+
+  it("closeByTransfer POSTs the request to the bill's /close-by-transfer route, naming the person", async () => {
+    const fetchStub = vi.fn<typeof fetch>().mockResolvedValue(jsonResponse(result));
+    const api = new TillApi("", fetchStub);
+    api.namePersonFrom(
+      () => ({ personId: "p1" }),
+      () => {},
+    );
+
+    await expect(api.closeByTransfer("wo-1", request)).resolves.toEqual(result);
+
+    const [url, init] = fetchStub.mock.calls[0]!;
+    expect(url).toBe("/api/working-orders/wo-1/close-by-transfer");
+    expect(init).toMatchObject({ method: "POST", credentials: "include" });
+    expect(JSON.parse(init!.body as string)).toEqual(request);
+    expect(new Headers(init!.headers).get(PERSON_HEADER)).toBe("p1");
+  });
+
+  it("getTransferClosure GETs the bill's closure with the abort signal, and null for a bill not closed", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ closure: result }))
+      .mockResolvedValueOnce(jsonResponse({ closure: null }));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await expect(api.getTransferClosure("wo-1", { signal })).resolves.toEqual({ closure: result });
+    await expect(api.getTransferClosure("wo-2")).resolves.toEqual({ closure: null });
+
+    expect(fetchStub.mock.calls.map(([url]) => url)).toEqual([
+      "/api/working-orders/wo-1/transfer-closure",
+      "/api/working-orders/wo-2/transfer-closure",
+    ]);
+    expect(fetchStub.mock.calls[0]![1]).toMatchObject({ method: "GET", signal });
+    expect(fetchStub.mock.calls[0]![1]!.body).toBeUndefined();
   });
 });

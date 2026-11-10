@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { workingOrders } from "@waitron/db";
+import { deviceProfiles, devices, workingOrders } from "@waitron/db";
 import { payments } from "@waitron/payments";
 import { AppError } from "@waitron/shared";
 import { parkOrder } from "./working-order.js";
@@ -24,9 +24,11 @@ import {
 import "./errors.js";
 
 // Every role holds `payment.take`, so no real person can be refused it: `authorize` is wrapped
-// to refuse that one permission while `gate.deny` is set, and to record what it was asked.
+// to refuse that one permission while `gate.deny` is set, after letting `gate.allowFirst` checks
+// of it through, and to record what it was asked.
 const gate = vi.hoisted(() => ({
   deny: false,
+  allowFirst: 0,
   calls: [] as { sessionId: string; permission: string }[],
 }));
 vi.mock("@waitron/identity", async (importOriginal) => {
@@ -37,7 +39,8 @@ vi.mock("@waitron/identity", async (importOriginal) => {
       const [, request] = args;
       gate.calls.push({ sessionId: request.sessionId, permission: request.permission });
       if (gate.deny && request.permission === "payment.take") {
-        throw new AppError("authorization.not_permitted", { permission: request.permission });
+        if (gate.allowFirst > 0) gate.allowFirst -= 1;
+        else throw new AppError("authorization.not_permitted", { permission: request.permission });
       }
       return actual.authorize(...args);
     },
@@ -66,6 +69,7 @@ useVenueDb({
 
 beforeEach(() => {
   gate.deny = false;
+  gate.allowFirst = 0;
   gate.calls.length = 0;
 });
 
@@ -303,5 +307,99 @@ describe("POST /api/working-orders/:id/payments needs payment.take on every entr
     expect(answer).toMatchObject({ status: 200, json: { payment: { state: "received" } } });
     expectAsked();
     expect(await paymentRows(venue, billId)).toMatchObject([{ state: "received", applied: 500 }]);
+  });
+});
+
+describe("POST /api/working-orders/:id/close-by-transfer needs payment.take", () => {
+  /** An open counter order of one Tarta (18.00), on a till whose profile may close by transfer. */
+  async function openTarta(): Promise<{ id: string; body: Record<string, unknown> }> {
+    await inTx(venue, async (tx) => {
+      const [device] = await tx
+        .select({ profileId: devices.deviceProfileId })
+        .from(devices)
+        .where(eq(devices.id, venue.deviceId));
+      const [profile] = await tx
+        .select({ capabilities: deviceProfiles.capabilities })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.id, device!.profileId));
+      const capabilities = profile!.capabilities as readonly string[];
+      if (!capabilities.includes("close-by-transfer"))
+        await tx
+          .update(deviceProfiles)
+          .set({ capabilities: [...capabilities, "close-by-transfer"] })
+          .where(eq(deviceProfiles.id, device!.profileId));
+    });
+    const id = randomUUID();
+    const deps = { db: venue.db, backend: venue.backend, clock: venue.clock };
+    await parkOrder(deps, venue.cfg, {
+      id,
+      lines: [{ menuItemId: counter.offerFor(productIdOf("Tarta")), quantity: "1" }],
+      zoneId: counter.zoneId,
+      operatorId: venue.operatorId,
+    });
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: workingOrders.revision, invoiceType: workingOrders.invoiceType })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id)),
+    );
+    return {
+      id,
+      body: {
+        submissionId: randomUUID(),
+        expectedRevision: order!.revision,
+        expectedEdit: null,
+        expectedTotal: "18.00",
+        invoiceType: order!.invoiceType,
+        recipient: null,
+        receiptLanguage: venue.cfg.locale,
+        delivery: null,
+        partyFinish: null,
+      },
+    };
+  }
+
+  function closures(id: string) {
+    return venue.db.all(sql`select id from transfer_closures where working_order_id = ${id}`);
+  }
+
+  function closeByTransfer(id: string, body: Record<string, unknown>) {
+    return send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${id}/close-by-transfer`,
+      body,
+    );
+  }
+
+  it("refuses and leaves the order open, with no invoice and no closure", async () => {
+    const { id, body } = await openTarta();
+    gate.deny = true;
+
+    expectRefused(await closeByTransfer(id, body));
+
+    expectAsked();
+    expect(await statusOf(venue, id)).toBe("open");
+    expect(salesCount(id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
+    expect(closures(id)).toEqual([]);
+  });
+
+  it("refuses inside the write when the permission is gone after the check before the queue", async () => {
+    const { id, body } = await openTarta();
+    gate.deny = true;
+    gate.allowFirst = 1;
+
+    expectRefused(await closeByTransfer(id, body));
+
+    expect(gate.calls.filter(({ permission }) => permission === "payment.take")).toEqual([
+      { sessionId, permission: "payment.take" },
+      { sessionId, permission: "payment.take" },
+    ]);
+    expect(await statusOf(venue, id)).toBe("open");
+    expect(salesCount(id)).toBe(0);
+    expect(fiscalRecordCount(venue, id)).toBe(0);
+    expect(closures(id)).toEqual([]);
   });
 });

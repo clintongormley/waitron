@@ -134,7 +134,7 @@ describe("closeBillByTransferTx, new work", () => {
       t.venue.db.all(sql`select status, settled_at from working_orders where id = ${party.tabId}`),
     ).toEqual([{ status: "settled", settled_at: result.closedAt }]);
     expect(result).toEqual({
-      operationId: request.operationId,
+      submissionId: request.submissionId,
       workingOrderId: party.tabId,
       saleId: sale!.id,
       invoiceNumber: expect.any(String),
@@ -150,14 +150,14 @@ describe("closeBillByTransferTx, new work", () => {
       tx.select().from(transferClosures).where(eq(transferClosures.workingOrderId, party.tabId)),
     );
     expect(row).toMatchObject({
-      id: request.operationId,
+      id: request.submissionId,
       saleId: sale!.id,
       actorId: t.venue.operatorId,
       deviceId: t.venue.cfg.origin.deviceId,
       nodeId: t.venue.cfg.nodeId,
       closedAt: result.closedAt,
       businessDay: result.businessDay,
-      intent: expect.stringMatching(/^[0-9a-f]{64}$/),
+      fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
     expect(effects(party.tabId)).toEqual({
       billPayments: [],
@@ -295,7 +295,7 @@ describe("closeBillByTransferTx, new work", () => {
     ]);
   });
 
-  it("records one operation-keyed attendance capture for a bill placed before this command", async () => {
+  it("records one submission-keyed attendance capture for a bill placed before this command", async () => {
     const placed = await t.counterOrder("placed");
     const open = await t.counterOrder("open");
     const facts: Parameters<AttendanceRecorder>[1][] = [];
@@ -314,7 +314,7 @@ describe("closeBillByTransferTx, new work", () => {
     expect(placedFacts).toEqual([
       expect.objectContaining({
         source: "order",
-        key: `service:${placed}:${placedRequest.operationId}`,
+        key: `service:${placed}:${placedRequest.submissionId}`,
         personId: t.venue.operatorId,
       }),
     ]);

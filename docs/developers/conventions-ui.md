@@ -507,8 +507,8 @@ issued needs `sale.rectify` (C126), which staff do not hold, from the operator o
 holding it who enters their PIN, as an unpaid departure, a bill refund and opening the drawer accept (B33);
 collecting, like every route that takes
 a payment, needs `payment.take` (C128), which every role holds. Guard:
-`apps/server/src/take-payment-permission.test.ts`, weaker than its name — it covers only the four
-routes it names, so a fifth payment route that does not ask for the permission is seen by nothing;
+`apps/server/src/take-payment-permission.test.ts`, weaker than its name — it covers only the
+routes it names, so another payment route that does not ask for the permission is seen by nothing;
 and since every role holds the permission, it makes the refusal by wrapping `authorize`, so no real
 role is ever refused.
 

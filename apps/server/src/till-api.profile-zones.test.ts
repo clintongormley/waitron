@@ -207,6 +207,8 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/working-orders/:id/payments/preview           | order                  | refuses POST .../payments/preview                    |
  * | POST /api/working-orders/:id/payments                   | order                  | refuses POST /api/working-orders/:id/payments        |
  * | POST /api/working-orders/:id/payments/:paymentId/refunds| order                  | refuses POST .../payments/:paymentId/refunds         |
+ * | POST /api/working-orders/:id/close-by-transfer          | order, inside the write | refuses POST .../close-by-transfer                  |
+ * | GET  /api/working-orders/:id/transfer-closure           | order                  | refuses GET .../transfer-closure                     |
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
  * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
@@ -1348,6 +1350,30 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/payments/${id}/refunds`,
     () => ({}),
+    deliOrderZone,
+  ],
+  [
+    "POST /api/working-orders/:id/close-by-transfer",
+    "POST",
+    (x) => `/api/working-orders/${x.deliOrder}/close-by-transfer`,
+    () => ({
+      submissionId: randomUUID(),
+      expectedRevision: 0,
+      expectedEdit: null,
+      expectedTotal: "1.00",
+      invoiceType: "F2",
+      recipient: null,
+      receiptLanguage: "es",
+      delivery: null,
+      partyFinish: null,
+    }),
+    deliOrderZone,
+  ],
+  [
+    "GET /api/working-orders/:id/transfer-closure",
+    "GET",
+    (x) => `/api/working-orders/${x.deliOrder}/transfer-closure`,
+    undefined,
     deliOrderZone,
   ],
   [

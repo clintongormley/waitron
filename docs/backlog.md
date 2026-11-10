@@ -292,7 +292,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.
   [Detail](backlog/fiscal.md#a556-a-full-invoice-that-later-replaces-a-bills-simplified-one-would-not-be-delivered-through-the-bill)
 
-- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN APPROVED; [reviewed plan](superpowers/plans/2026-10-22-a275-final-transfer-close.md) published. Tasks 0–2 built (the `transfer_closures` table and a hidden close command, [2026-11-09 plans](superpowers/plans/2026-11-09-a275-transfer-close-command.md)); not usable until Task 7 adds the button, after A739 Cut B.
+- **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN APPROVED; [reviewed plan](superpowers/plans/2026-10-22-a275-final-transfer-close.md) published. Tasks 0–3 built (the `transfer_closures` table, the close command, its till route and recovery read, and a device-profile action that is off by default; [2026-11-09 plans](superpowers/plans/2026-11-09-a275-transfer-close-command.md), [Task 3 plan](superpowers/plans/2026-11-10-a275-transfer-close-route.md)); not usable until Task 7 adds the button, after A739 Cut B.
   Invoice at the meal, close finally by transfer, preserve sibling/service checks, and export for the accountant; no later receipts or debt.
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).

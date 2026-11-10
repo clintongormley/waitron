@@ -2,6 +2,9 @@
 
 **Goal:** Retain one immutable closure intent/result; transfer closure remains unusable after this slice. Basis: [approved design](../specs/2026-10-22-a275-final-transfer-close-design.md), [Task1/Gate0/Task2](2026-10-22-a275-final-transfer-close.md#task-1-retain-one-closure-intent-and-final-result). Read-only source pin: current main `2f57520831d7cec873ec0ea725d2ebe22b430dcf`; branch differs only in Task0 documentation. No runtime verification.
 
+2026-11-10: the digest column is now `fingerprint`, the request id `submissionId`, and `actorId`
+references `persons` ([Task 3 plan](2026-11-10-a275-transfer-close-route.md)).
+
 **Review status:** One Claude read completed (298 seconds), concrete corrections accepted. Watcher approved the three narrowings, strict-request digest and assignment on 2026-11-09 at 12:40 in Lane E’s questions.md. The 12:58 ruling folds Task 1 into Task 2, alongside corrected Task 0; no standalone schema pull request. Watcher 2026-11-09 13:31 approves the combined size (approximately 631–731 production and 1,010–1,240 test authored changed lines) and hidden route allowed on 2026-11-01, with the four corrections in the [command plan](2026-11-09-a275-transfer-close-command.md). Keep the 3-hour budget and normal **OVER BUDGET** note; size approval does not extend time. Count generated churn separately. No further plan read.
 
 **Before build:** Wait until 1a lands and 3a-i is done; check released 1a’s procedure and the affected area’s slice window. Task 1 supplies Task 2’s first schema/types commits, followed by corrected Task 0. Task 2 records Gate 0 and the clock contract. No standalone table or readiness pull request. Park the combined fiscal pull request `needs-owner-review` for the owner to land (watcher, 2026-11-09 13:31).

@@ -8,6 +8,8 @@
 > the plan re-pins source and records the other release dependencies. The historical proposal body
 > below is retained unchanged, including its then-pending approval and source observations.
 
+_2026-11-10: as built, the stored request digest is the column `fingerprint`, the request id is `submissionId`, and `actor_id` references `persons` ([A275 Task 3 plan](../plans/2026-11-10-a275-transfer-close-route.md))._
+
 **PROPOSED, 2026-10-22. Awaiting full owner approval; no plan or implementation authorised.**
 All new behaviour below is proposed. Synthetic pictures
 illustrate the policy, not a running application.

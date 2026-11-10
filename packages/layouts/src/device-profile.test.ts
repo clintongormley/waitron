@@ -307,3 +307,34 @@ describe("DEFAULT_DEVICE_PROFILES", () => {
     expect(byFormFactor.kds!.inactivityTimeoutSeconds ?? null).toBeNull();
   });
 });
+
+describe("close-by-transfer profile action", () => {
+  it("is in no default profile", () => {
+    for (const ff of FORM_FACTORS)
+      expect(DEFAULT_PROFILE_CAPABILITIES[ff], ff).not.toContain("close-by-transfer");
+    for (const profile of DEFAULT_DEVICE_PROFILES)
+      expect(profile.capabilities, profile.name).not.toContain("close-by-transfer");
+  });
+
+  it("is accepted on a till and refused on a shared display", () => {
+    expect(validateCapabilities(["close-by-transfer"], "till")).toEqual(["close-by-transfer"]);
+    expect(() => validateCapabilities(["close-by-transfer"], "kds")).toThrow(
+      expect.objectContaining({
+        code: "device_profile.invalid",
+        params: { reason: "shared_display_action" },
+      }),
+    );
+    expect(
+      profileAllows(
+        { formFactor: "till", capabilities: ["close-by-transfer"] },
+        "close-by-transfer",
+      ),
+    ).toBe(true);
+    expect(
+      profileAllows(
+        { formFactor: "kds", capabilities: ["close-by-transfer"] },
+        "close-by-transfer",
+      ),
+    ).toBe(false);
+  });
+});
