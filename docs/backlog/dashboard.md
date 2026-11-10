@@ -433,7 +433,8 @@ plans to retire the editor.
 
 ## Repeated Escape checks for menu, modifier and media writes
 
-The menu/modifier delete flows and media save/delete flows still need the repeated-key check;
+The menu/modifier delete flows and media save/delete flows still need a real Escape twice while
+saving, waiting for native close delivery after each key, as in `option-label-form.test.ts`;
 their earlier single-key probes do not settle it. This stays inside the existing bundle rather
 than becoming new items.
 

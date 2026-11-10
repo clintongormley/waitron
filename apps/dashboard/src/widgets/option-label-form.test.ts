@@ -335,6 +335,13 @@ it("holds the dialog open against Escape only while it is saving", async () => {
   await closeReportsDelivered();
   expect(dialog.open).toBe(true);
   expect(cancelled).toBe(false);
+  el.busy = false;
+  await el.updateComplete;
+  await modal.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(false);
+  expect(cancelled).toBe(true);
 });
 
 it("saves on Enter in a field", async () => {
