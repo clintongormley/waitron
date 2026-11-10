@@ -17,6 +17,7 @@ export function recipeFailures(expected, observed) {
     Array.isArray(status) ||
     status.provisioned !== false ||
     status.environment !== "preproduction" ||
+    status.installationOrigin !== "usb" ||
     JSON.stringify(status.needs) !== '["venue"]' ||
     ["developmentMode", "operation", "operationBlocked"].some((key) => Object.hasOwn(status, key))
   )

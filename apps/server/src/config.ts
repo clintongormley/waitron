@@ -24,6 +24,7 @@ export interface SchedulerConfig {
 }
 
 export interface ServerConfig {
+  installationOrigin?: "usb";
   environment: DeploymentEnvironment;
   /** `WAITRON_ENV=dev` only ({@link isDevMode}); `environment` maps `dev` to `preproduction`. */
   devMode: boolean;
@@ -416,6 +417,13 @@ export function loadConfig(
     });
   }
   const environment = deploymentEnvironment(env);
+  const installationOrigin = env.WAITRON_INSTALLATION_ORIGIN;
+  if (!isUnset(installationOrigin) && installationOrigin !== "usb") {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_INSTALLATION_ORIGIN",
+      reason: "not_an_installation_origin",
+    });
+  }
   // Resolved before the literal because `advertisedOrigin` defaults to `managementOrigin`. The RP
   // ID first, so a production host missing both reports the RP ID.
   const managementRpId = requiredInProduction(
@@ -467,6 +475,7 @@ export function loadConfig(
   }
   return {
     ...(staff === undefined ? {} : { staff }),
+    ...(installationOrigin === "usb" ? { installationOrigin } : {}),
     environment,
     devMode: isDevMode(env),
     onboardingIntent: onboardingIntent(env, environment),

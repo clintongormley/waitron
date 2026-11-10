@@ -19,6 +19,8 @@ services:
       mailpit:
         condition: service_started
     environment:
+      # Written by the USB image recipe; absent for hand-installed deployments.
+      WAITRON_INSTALLATION_ORIGIN: ${WAITRON_INSTALLATION_ORIGIN:-}
       # Only for a profile where the default-route interface is not the LAN (a bridge/cloud compose,
       # or Docker Desktop, whose "host" network is the Linux VM's). Empty = advertise the default-route
       # interface only, the on-prem default (Docker bridges are excluded automatically).

@@ -19,6 +19,7 @@ import type {
 export type FetchLike = typeof fetch;
 
 export interface SetupStatus {
+  installationOrigin?: "usb";
   provisioned: boolean;
   environment: "production" | "preproduction";
   developmentMode?: boolean;

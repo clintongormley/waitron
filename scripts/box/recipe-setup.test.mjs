@@ -16,7 +16,12 @@ const complete = {
   hashAfter: "original-root",
   images: { app: "app-config", "print-agent": "agent-config", mailpit: "mail-config" },
   services: { app: "running", "print-agent": "running", mailpit: "running" },
-  status: { provisioned: false, environment: "preproduction", needs: ["venue"] },
+  status: {
+    provisioned: false,
+    environment: "preproduction",
+    installationOrigin: "usb",
+    needs: ["venue"],
+  },
 };
 
 describe("recipe boot evidence", () => {
@@ -131,6 +136,8 @@ describe("recipe boot evidence", () => {
     {},
     { ...complete.status, provisioned: true },
     { ...complete.status, environment: "production" },
+    { ...complete.status, installationOrigin: undefined },
+    { ...complete.status, installationOrigin: "manual" },
     { ...complete.status, needs: [] },
     { ...complete.status, developmentMode: false },
     { ...complete.status, operation: {} },

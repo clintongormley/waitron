@@ -563,7 +563,8 @@ old name only points at the new one for 14 days. Five slices; no migration.
 **2026-11-10 development rehearsal:** the [recipe and single boot check](../../bench/box-installer/README.md)
 build an unencrypted Debian root, boot the embedded containers and open Prepare’s administrator
 form in QEMU. The emulator supplies startup units; this does not install or start a physical
-box. The image-consumed Demo restriction, encrypted host-state, first-start sealing/restart,
+box. The recipe supplies USB origin; setup hides/refuses Demo and retains Prepare, Live and
+Join or recover. Encrypted host-state, first-start sealing/restart,
 retained disk keys, release VM and real stick/box/Android checks remain open.
 
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
@@ -579,9 +580,8 @@ host-owned durable handoff and audit survive outside the removed venue. Interrup
 the recorded operation and never erase a newly created Live venue. No setup code, private preview,
 setup/resume/recovery grant or credential reserves that fresh setup; LAN first claim, including
 pending fresh Live, is explicitly accepted. W60's first-claim concern is closed by that decision.
-Remaining mode work: blank stick boxes offer Prepare/Live/existing-venue without Demo; Live or
-restored production venues cannot start same-box re-setup; installed-box choices use the deployment
-state. Setup explicitly started with `WAITRON_ENV=production` already hides Demo/Prepare and now
+Remaining mode work: Live or restored production venues cannot start same-box re-setup;
+installed-box choices use the deployment state. Setup explicitly started with `WAITRON_ENV=production` already hides Demo/Prepare and now
 refuses both at the provision route, including supplied operations.
 
 The small downloading stick and three guards stay: disk first in boot order, mandatory USB

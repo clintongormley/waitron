@@ -393,8 +393,13 @@ allocation uses the supplied operations after the route's mode check.
 route refuses Demo and Preparation after parsing, before calling provisioning. It answers HTTP 400
 with `setup.mode_not_allowed`, including when you supply `initialOperations`; the check
 does not depend on a module offering a throwaway allocation. The wizard hides both choices and
-offers Reload if either is requested anyway. This check uses the setup process's environment;
-binding installed-box choices to the deployment state remains part of B3.
+offers Reload if either is requested anyway. The development USB recipe writes
+`WAITRON_INSTALLATION_ORIGIN=usb` to its `.env`; compose passes it to the app. USB
+preproduction setup hides and refuses Demo, including supplied operations, while
+retaining Prepare, Live and Join or recover. Production takes precedence and also
+refuses Prepare. Missing or empty origin retains hand-installed choices; other
+values fail configuration parsing. The USB Demo refusal offers Reload and names
+the available choices. Same-box production re-setup remains part of B3.
 
 The throwaway signer also refuses unless both the box's environment and the request's are
 preproduction, before making a key. `provisionVenue` (`apps/server/src/provision.ts`) asks the

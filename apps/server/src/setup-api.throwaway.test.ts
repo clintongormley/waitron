@@ -26,7 +26,7 @@ import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
 type Mode = "demo" | "prepare" | "live";
-type Box = { environment: DeploymentEnvironment; devMode: boolean };
+type Box = { environment: DeploymentEnvironment; devMode: boolean; installationOrigin?: "usb" };
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -117,6 +117,7 @@ function harness(box: Box, provision?: (req: ProvisionRequest) => Promise<VenueR
     lines.push({ level, event, fields });
   };
   const deps: SetupDeps = {
+    installationOrigin: box.installationOrigin,
     environment: box.environment,
     devMode: box.devMode,
     provision: vi.fn(async (req: ProvisionRequest) => {
@@ -142,10 +143,44 @@ function harness(box: Box, provision?: (req: ProvisionRequest) => Promise<VenueR
       body: JSON.stringify(payload),
     });
   const throwawayLines = () => lines.filter((line) => line.event === "setup.throwaway_allocation");
-  return { post, received, throwawayLines };
+  return { post, received, throwawayLines, deps };
 }
 
 describe("POST /setup-api/provision — which requests the route marks for a throwaway allocation", () => {
+  it.each([false, true])(
+    "refuses USB Demo before provisioning or seeding (supplied operations: %s)",
+    async (supplied) => {
+      const { post, received, deps } = harness({ ...PREPRODUCTION_BOX, installationOrigin: "usb" });
+      const response = await post({
+        ...body("demo"),
+        ...(supplied ? { initialOperations: INITIAL_OPERATIONS } : {}),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.mode_not_allowed", params: { installationOrigin: "usb" } },
+      });
+      expect(received).toEqual([]);
+      expect(deps.seedDemo).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["prepare", "live"] as const)("admits USB %s", async (mode) => {
+    const { post, received } = harness({ ...PREPRODUCTION_BOX, installationOrigin: "usb" });
+    expect((await post(mode === "live" ? liveProductionBody() : body(mode))).status).toBe(200);
+    expect(received).toHaveLength(1);
+    expect(received[0].environment).toBe(mode === "live" ? "production" : "preproduction");
+  });
+
+  it("retains the production refusal on a USB production box", async () => {
+    const { post, received } = harness({ ...PRODUCTION_BOX, installationOrigin: "usb" });
+    const response = await post(body("demo"));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.mode_not_allowed", params: { environment: "production" } },
+    });
+    expect(received).toEqual([]);
+  });
+
   it.each<[string, Mode]>([
     ["Demo", "demo"],
     ["Preparation", "prepare"],

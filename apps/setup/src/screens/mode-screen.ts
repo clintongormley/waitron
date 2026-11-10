@@ -73,6 +73,8 @@ export class SetupModeScreen extends LitElement {
 
   @property({ type: Boolean }) certificateNote = false;
 
+  @property() installationOrigin?: "usb";
+
   @property() environment?: "production" | "preproduction";
 
   @property({ attribute: false }) beforeChoice?: (
@@ -181,20 +183,24 @@ export class SetupModeScreen extends LitElement {
     return html`
       <div class="choices">
         ${
+          this.environment === "production" || this.installationOrigin === "usb"
+            ? nothing
+            : html`<wt-choice-row
+                data-test="choose-demo"
+                heading=${t("mode.demo.heading")}
+                @click=${() => this.#chooseDemo()}
+                >${t("mode.demo.copy")}</wt-choice-row
+              >`
+        }
+        ${
           this.environment === "production"
             ? nothing
             : html`<wt-choice-row
-                  data-test="choose-demo"
-                  heading=${t("mode.demo.heading")}
-                  @click=${() => this.#chooseDemo()}
-                  >${t("mode.demo.copy")}</wt-choice-row
-                >
-                <wt-choice-row
-                  data-test="choose-prepare"
-                  heading=${t("mode.prepare.heading")}
-                  @click=${() => this.#choosePrepare()}
-                  >${t("mode.prepare.copy")}</wt-choice-row
-                >`
+                data-test="choose-prepare"
+                heading=${t("mode.prepare.heading")}
+                @click=${() => this.#choosePrepare()}
+                >${t("mode.prepare.copy")}</wt-choice-row
+              >`
         }
         <wt-choice-row
           data-test="choose-live"

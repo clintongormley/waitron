@@ -630,6 +630,28 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-mode]")).toBeNull();
   });
 
+  it.each([true, false])(
+    "USB origin is applied on boot and replaced on the connection read (starts USB: %s)",
+    async (usb) => {
+      const status = { provisioned: false, environment: "preproduction", needs: ["venue"] };
+      const getStatus = vi
+        .fn()
+        .mockResolvedValue({ ...status, ...(usb ? { installationOrigin: "usb" } : {}) });
+      const el = await mountSetupApp(stubApi({ getStatus }));
+      let mode = await screenHost(el, "mode");
+      expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]") === null).toBe(usb);
+      getStatus.mockResolvedValue({ ...status, ...(!usb ? { installationOrigin: "usb" } : {}) });
+      goto(el, "connection");
+      await el.updateComplete;
+      const connection = await screenHost(el, "connection");
+      connection.shadowRoot!.querySelector<HTMLElement>("[data-test=continue]")!.click();
+      await flush(el);
+      mode = await screenHost(el, "mode");
+      expect(mode.shadowRoot!.querySelector("[data-test=choose-demo]") === null).toBe(!usb);
+      expect(mode.shadowRoot!.querySelector("[data-test=choose-prepare]")).not.toBeNull();
+    },
+  );
+
   it("boot reads the box environment via getStatus and the mode screen warns of a production box", async () => {
     const getStatus = vi.fn().mockResolvedValue({
       provisioned: false,
@@ -1574,6 +1596,42 @@ describe("setup-app", () => {
         const provision = vi.fn().mockRejectedValue({
           code,
           params: { environment: "production" },
+          status: 400,
+        });
+        const el = await mountSetupApp(stubApi({ provision }));
+        setLocale(locale);
+        provisionRequest(el);
+        await flush(el);
+        expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(sentence);
+        const host = await screenHost(el, "provisioning");
+        expect(host.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+        expect(host.shadowRoot!.querySelector("[data-test=reload]")?.textContent?.trim()).toBe(
+          reload,
+        );
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
+    [
+      "en-GB",
+      "Demo is unavailable on this box. Reload to return to setup, then choose Prepare your restaurant, Live or Join or recover.",
+      "Reload",
+    ],
+    [
+      "es-ES",
+      "Demostración no está disponible en este servidor. Recarga para volver a la configuración y elige Prepara tu restaurante, En vivo o Unirse o recuperar.",
+      "Recargar",
+    ],
+  ] as const)(
+    "USB Demo refusal gives the available choices and Reload (%s)",
+    async (locale, sentence, reload) => {
+      try {
+        const provision = vi.fn().mockRejectedValue({
+          code: "setup.mode_not_allowed",
+          params: { installationOrigin: "usb" },
           status: 400,
         });
         const el = await mountSetupApp(stubApi({ provision }));

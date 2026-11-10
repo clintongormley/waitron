@@ -1383,6 +1383,7 @@ async function bootServer(
     mountSetup(
       app,
       {
+        installationOrigin: config.installationOrigin,
         environment: config.environment,
         firstSetup,
         firstFiscal: firstSetupHost,
