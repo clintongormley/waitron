@@ -112,7 +112,7 @@ it.each([false, true])(
           : app.shadowRoot!.querySelector("dashboard-login-screen"),
       )
       .not.toBeNull();
-    const report = app.shadowRoot!.querySelector(
+    const report = app.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-problem-report"]>(
       "[data-test=brand-banner] dashboard-problem-report",
     )!;
     expect(report).not.toBeNull();
