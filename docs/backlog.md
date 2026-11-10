@@ -129,7 +129,7 @@ no design yet.
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
-**5. Important work.** The 56 bundles marked important under each area, taken by theme so that a lane
+**5. Important work.** The 55 bundles marked important under each area, taken by theme so that a lane
 stays in one area.
 
 **6. After the first venue.** The 89 remaining bundles, which are nice to have. Take
@@ -1456,8 +1456,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
-
-- **Quantity display** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-quantity-display)
 
 - **Design system doc truth** (bundle of 4, size S). Holds A904. [Detail](backlog/dashboard.md#bundle-design-system-doc-truth)
 

@@ -1235,3 +1235,35 @@ it("moves focus to the count when Change dish is pressed with a lower one", asyn
   const field = picker.shadowRoot!.querySelector('[name="quantity"]');
   await expect.poll(() => picker.shadowRoot!.activeElement).toBe(field);
 });
+
+it("localises the sent dish, extras and served quantity", async () => {
+  setLocale("es-ES");
+  const el = await openRow(
+    {
+      currentOrders: current({
+        held: [],
+        ungrouped: [
+          row("l-weighed", "Fish", "0.750", {
+            unitPrecision: 3,
+            servedQuantity: "0.250",
+            extras: [
+              {
+                lineId: "extra",
+                name: "Sauce",
+                quantity: "0.500",
+                netAmount: "1.00",
+                unitPriceGross: "2.00",
+                priceQuantity: "1.000",
+              },
+            ],
+          }),
+        ],
+      }),
+    },
+    "l-weighed",
+    null,
+  );
+  expect(q(el, "[data-sent-line-dialog] .move-dish")!.textContent).toContain("×0,75");
+  expect(q(el, "[data-sent-extra]")!.textContent).toContain("Sauce ×0,5");
+  expect(q(el, "[data-sent-line-served]")!.textContent).toContain("0,25");
+});

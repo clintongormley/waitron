@@ -538,12 +538,12 @@ describe.each(["light", "dark"] as const)("overview card layout (%s)", (theme) =
         card.shadowRoot!.querySelector(".card")!.getBoundingClientRect(),
       );
       if (width >= 900) {
-        const firstRow = width === 900 ? painted.slice(0, 3) : painted;
+        const firstRow = painted.slice(0, 3);
         for (const box of firstRow) {
           expect(box.top).toBeCloseTo(painted[0]!.top, 1);
           expect(box.bottom).toBeCloseTo(painted[0]!.bottom, 1);
         }
-        if (width === 900) expect(painted[3]!.top).toBeGreaterThan(painted[0]!.bottom);
+        expect(painted[3]!.top).toBeGreaterThan(painted[0]!.bottom);
       } else {
         for (let i = 1; i < painted.length; i++) {
           expect(painted[i]!.top).toBeGreaterThan(painted[i - 1]!.bottom);
@@ -601,6 +601,7 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
       );
       await flush(el);
       const card = el.shadowRoot!.querySelector<HTMLElement>("[data-test=top-sellers]")!;
+      card.style.maxWidth = "300px";
       await (card as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
       await document.fonts.ready;
       expect(innerWidth).toBe(width);
@@ -649,3 +650,31 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
     }
   });
 });
+
+it.each([1280, 985, 390])(
+  "keeps ordinary top-seller words whole at %i CSS pixels",
+  async (width) => {
+    const previous = [innerWidth, innerHeight] as const;
+    await page.viewport(width, 1000);
+    try {
+      const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", {
+        api: stubApi({
+          getSalesOverview: vi.fn().mockResolvedValue({
+            ...overview,
+            topSellers: [
+              { name: "Octopus", quantity: "12.000", total: "240.00", variants: [] },
+              { name: "Croquetas", quantity: "36.000", total: "108.00", variants: [] },
+            ],
+          }),
+        }),
+      });
+      await flush(el);
+      await document.fonts.ready;
+      const words = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".seller-word")];
+      for (const word of words)
+        expect(word.scrollWidth, word.textContent!).toBeLessThanOrEqual(word.clientWidth);
+    } finally {
+      await page.viewport(...previous);
+    }
+  },
+);

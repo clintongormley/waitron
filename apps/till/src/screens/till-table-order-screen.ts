@@ -69,7 +69,7 @@ import {
   shownMenu,
 } from "../menu-filter.js";
 import { lineProductName, productName } from "../widgets/product-name.js";
-import { trimQuantity } from "../widgets/dish-format.js";
+import { quantityText, trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
 import {
@@ -3363,7 +3363,7 @@ export class TillTableOrderScreen extends LitElement {
     const quantity = decimal(line.quantity);
     return html`<div class="sent-fallback-row">
       <span class="sent-fallback-name"
-        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${this.#displayQty(this.#isChild(line) ? quantity : times(quantity))}`}
+        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${quantityText(this.#isChild(line) ? quantity : times(quantity))}`}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
         ${this.#paidMark(line.lineNo, line.quantity)}
@@ -3866,7 +3866,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)}${priceMoves ? nothing : ` ×${this.#displayQty(shownQuantity)}`}
+                ${row.name}${this.#nutrition(row)}${priceMoves ? nothing : ` ×${quantityText(shownQuantity)}`}
                 ${seed === undefined ? this.#sentDetails(row) : nothing}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
@@ -3918,7 +3918,7 @@ export class TillTableOrderScreen extends LitElement {
                   >${this.#sentPrice(row, times(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, count)}</span
                 >
               </div>
-              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${quantityText(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
               ${row.note === null || seed !== undefined ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
@@ -4606,7 +4606,7 @@ export class TillTableOrderScreen extends LitElement {
             >
               <span
                 >${name}
-                ×${this.#displayQty(family.reduce((total, member) => addDecimal(total, decimal(member.quantity)), decimal("0")))}</span
+                ×${quantityText(family.reduce((total, member) => addDecimal(total, decimal(member.quantity)), decimal("0")))}</span
               >
               <span aria-hidden="true">⌃</span>
             </button>`
@@ -5301,8 +5301,8 @@ export class TillTableOrderScreen extends LitElement {
         whole
           ? t("bill_pay.paid")
           : t("bill_pay.paid_part")
-              .replace("{paid}", () => this.#displayQty(paid))
-              .replace("{quantity}", () => this.#displayQty(quantity))
+              .replace("{paid}", () => quantityText(paid))
+              .replace("{quantity}", () => quantityText(quantity))
       }</span
     >`;
   }
@@ -5399,8 +5399,8 @@ export class TillTableOrderScreen extends LitElement {
 
   #servedOf(row: CurrentOrderRow): string {
     return t("table.row_served_of")
-      .replace("{served}", this.#displayQty(row.servedQuantity))
-      .replace("{quantity}", this.#displayQty(row.quantity));
+      .replace("{served}", quantityText(row.servedQuantity))
+      .replace("{quantity}", quantityText(row.quantity));
   }
 
   /** The most a press can mark served (what is left), or take back (what is served). */
@@ -5618,7 +5618,7 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<p class="move-dish">
                 ${pending.row.name}
-                ×${pending.members === undefined ? this.#displayQty(pending.row.quantity) : pending.members.length}
+                ×${pending.members === undefined ? quantityText(pending.row.quantity) : pending.members.length}
               </p>
               ${
                 pending.members === undefined &&

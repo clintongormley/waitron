@@ -503,18 +503,6 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 - The prep stations screen's contrast remains unmeasured, left open by A319
   (hover contrast after A306, #1347).
 
-## Bundle: Quantity display
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **Quantity-display follow-ups found while tracing A313, OPEN, unqueued:** the Top sellers table
-  renders its quantity strings directly (`apps/dashboard/src/widgets/top-sellers-table.ts`), and the
-  till's `trimQuantity` removes trailing zeros without localising a fraction's decimal mark. These
-  are readings, not browser reproductions; reproduce them before changing their displays.
-- **At 1280 px and 130% the Overview's Top sellers card cuts "Octopus" and "Croquetas" short with
-  "…"** (a 66 px box; they need 73 and 90 px); they fit at 100% and at 390 px. The ellipsis for long
-  words is A829's rule; the column is what gets too narrow. Left open by A841 slice 10b.
-
 ## Bundle: Design system doc truth
 
 4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

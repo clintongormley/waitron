@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
 import type { DeadEndAnswer } from "../api/client.js";
-import { trimQuantity } from "./dish-format.js";
+import { quantityText } from "./dish-format.js";
 
 @customElement("till-dead-ends-section")
 export class TillDeadEndsSection extends LitElement {
@@ -53,7 +53,7 @@ export class TillDeadEndsSection extends LitElement {
     return html`${this.answer.deadEnds.map(
       (row) => html`
         <div class="row" data-dead-end=${row.key}>
-          <div class="name">${row.name} ×${trimQuantity(row.quantity)}</div>
+          <div class="name">${row.name} ×${quantityText(row.quantity)}</div>
           <p class="reason">
             ${t(row.why === "closed" ? "dead_end.closed" : "dead_end.disabled").replace("{station}", () => row.stationName)}
           </p>

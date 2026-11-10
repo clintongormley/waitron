@@ -344,15 +344,24 @@ describe("Current orders and Sent service", () => {
   });
 
   it("serves a weighed row whole, as there are no units to count", async () => {
-    const ham = row("l-jamon", "Jamón", "0.250", { unitPrecision: 3 });
-    const { el } = await mountSent({
-      currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [ham])] }),
-    });
-    const serves = capture(el, "serve-lines");
-    await chooseSentServing(el, "l-jamon");
-    expect(serves.map((event) => event.detail)).toEqual([
-      { items: [{ lineId: "l-jamon", quantity: "0.25" }] },
-    ]);
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const ham = row("l-jamon", "Ham", "0.250", { unitPrecision: 3 });
+      const { el } = await mountSent({
+        currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [ham])] }),
+      });
+      await openSentDish(el, "l-jamon");
+      expect(text(q(el, "[data-sent-line-dialog] .move-dish")!)).toContain("Ham ×0,25");
+      await closeSentDish(el);
+      const serves = capture(el, "serve-lines");
+      await chooseSentServing(el, "l-jamon");
+      expect(serves.map((event) => event.detail)).toEqual([
+        { items: [{ lineId: "l-jamon", quantity: "0.25" }] },
+      ]);
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("takes back what was marked served: a row of one at once, more than one asking how many", async () => {

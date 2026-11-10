@@ -4734,7 +4734,7 @@ describe("department transfers across operator lifetimes", () => {
         [
           {
             product: c.products[0]!,
-            quantity: "2",
+            quantity: "2.500",
           },
         ],
         "Lunch",
@@ -4767,6 +4767,9 @@ describe("department transfers across operator lifetimes", () => {
       expect(copy()?.textContent).toContain("Milk");
       expect(copy()?.textContent).toContain("Decaf");
       expect(copy()?.querySelectorAll("[data-local-line]")).toHaveLength(2);
+      expect(copy()?.querySelector("[data-local-line]")?.textContent).toContain(
+        locale === "es-ES" ? "2,5 ×" : "2.5 ×",
+      );
       expect(copy()?.querySelectorAll("[data-local-line]")[1]?.textContent).toContain("1");
       const native = copy()?.shadowRoot?.querySelector("dialog");
       expect(native?.open).toBe(true);

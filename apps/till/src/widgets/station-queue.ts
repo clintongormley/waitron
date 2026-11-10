@@ -18,7 +18,7 @@ import {
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
-import { dishLine, trimQuantity } from "./dish-format.js";
+import { dishLine, quantityText } from "./dish-format.js";
 import {
   type CourseSection,
   type KitchenCard,
@@ -945,7 +945,7 @@ export class TillStationQueue extends LitElement {
     const dishes =
       toMake === 1000
         ? t("station.to_make_one")
-        : t("station.to_make").replace("{n}", trimQuantity(thousandthsToDecimal(toMake)));
+        : t("station.to_make").replace("{n}", quantityText(thousandthsToDecimal(toMake)));
     const lateWords = late === 0 ? "" : ` · ${t("station.late").replace("{n}", String(late))}`;
     return html`<p class="kitchen-counts" data-kitchen-counts>${dishes}${lateWords}</p>`;
   }

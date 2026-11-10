@@ -1,6 +1,14 @@
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { setContentLanguages } from "@waitron/ui";
 import { descriptionFor, dishLine, snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("en-GB");
+});
+afterEach(() => setLocale(previousLocale));
 
 beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es"] }));
 
@@ -48,4 +56,17 @@ it("keeps a measured unit after the trimmed quantity", () => {
   expect(dishLine({ quantity: "0.500", unitName: { es: "kg" }, soldInEach: false }, "Pulpo")).toBe(
     "0.5 kg× Pulpo",
   );
+});
+
+it.each([
+  ["en-GB", ["0", "2", "0.5", "0.125", "-0.5", "1234.5"]],
+  ["es-ES", ["0", "2", "0,5", "0,125", "-0,5", "1234,5"]],
+] as const)("localises displayed dish quantities in %s without grouping", (locale, expected) => {
+  setLocale(locale);
+  expect(
+    ["0.000", "2.000", "0.500", "0.125", "-0.500", "1234.500"].map((quantity) =>
+      dishLine({ quantity, unitName: { en: "kg" } }, "Fish"),
+    ),
+  ).toEqual(expected.map((quantity) => `${quantity} kg× Fish`));
+  expect(trimQuantity("0.500")).toBe("0.5");
 });

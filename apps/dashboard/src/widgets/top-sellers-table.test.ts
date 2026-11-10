@@ -54,10 +54,10 @@ it("draws each product's variants as rows beneath it, in the order the server se
       [
         {
           name: "Wine by the glass",
-          quantity: "5.000",
+          quantity: "5.500",
           total: "24.50",
           variants: [
-            { name: "175 ml", quantity: "3.000", total: "16.50" },
+            { name: "175 ml", quantity: "3.250", total: "16.50" },
             { name: "125 ml", quantity: "2.000", total: "8.00" },
           ],
         },
@@ -76,9 +76,9 @@ it("draws each product's variants as rows beneath it, in the order the server se
   ]);
   const cells = (test: string) =>
     [...host.querySelectorAll(`[data-test="${test}"] td`)].map((td) => td.textContent?.trim());
-  expect(cells("seller-row-0")).toEqual(["5.000", "24,50\u00a0€"]);
-  expect(cells("seller-row-0-variant-0")).toEqual(["3.000", "16,50\u00a0€"]);
-  expect(cells("seller-row-0-variant-1")).toEqual(["2.000", "8,00\u00a0€"]);
+  expect(cells("seller-row-0")).toEqual(["5,5", "24,50\u00a0€"]);
+  expect(cells("seller-row-0-variant-0")).toEqual(["3,25", "16,50\u00a0€"]);
+  expect(cells("seller-row-0-variant-1")).toEqual(["2", "8,00\u00a0€"]);
   // The visible label is the variant's own name alone; the parent's rides in visually hidden text,
   // so the row header's text is "Wine by the glass, 175 ml".
   const variantHeader = host.querySelector('[data-test="seller-row-0-variant-0"] th[scope="row"]')!;

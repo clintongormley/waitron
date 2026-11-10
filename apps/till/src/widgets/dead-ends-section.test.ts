@@ -1,13 +1,20 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { DeadEndAnswer } from "../api/client.js";
 import type { WtCombobox } from "@waitron/ui";
 import "./dead-ends-section.js";
 import type { TillDeadEndsSection } from "./dead-ends-section.js";
 
-beforeEach(() => setLocale("en"));
-afterEach(cleanupWidgets);
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("en");
+});
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(previousLocale);
+});
 
 const answer: DeadEndAnswer = {
   sends: true,
@@ -60,9 +67,10 @@ it("shows each reason, closed option, required station, and removal events", asy
 it("says a disabled station is disabled in Spanish", async () => {
   setLocale("es");
   const { el: host } = await mountWidget<TillDeadEndsSection>("till-dead-ends-section", {
-    answer,
+    answer: { ...answer, deadEnds: [{ ...answer.deadEnds[1]!, quantity: "0.500" }] },
     allowRemove: true,
   });
+  expect(host.shadowRoot!.querySelector(".name")!.textContent).toBe("Wine ×0,5");
   expect(host.shadowRoot!.textContent!.replace(/\s+/g, " ")).toContain(
     "Upstairs bar está deshabilitada y ninguna estación puede sustituirla.",
   );

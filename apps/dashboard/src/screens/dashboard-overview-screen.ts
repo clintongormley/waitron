@@ -59,6 +59,9 @@ export class OverviewScreen extends LitElement {
       .cards > wt-card {
         display: grid;
       }
+      .cards > [data-test="top-sellers"] {
+        grid-column: 1 / -1;
+      }
       .metric {
         display: flex;
         justify-content: space-between;
