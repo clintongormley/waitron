@@ -1,5 +1,7 @@
 # Help tooltip and design documentation truth — plan for approval
 
+**Approval, 2026-11-10 09:23:** the watcher approved the reduced cut. Availability stays without a guide link, wrapper APIs stay unchanged, and the Add rule keeps its Menus/Staff/Units exceptions. These settle the proposal below; the [decisions are recorded in the backlog](../../backlog/dashboard.md#decisions-and-deliberate-limits).
+
 **Authority/outcome:** watcher 2026-11-10 08:24 queued Help tooltip primitive and Design system doc truth together. Proposed useful cut: focusable help badges and accurate component documentation, without new unused wrapper APIs. Build approval and the decisions below remain pending. Inline work, at most three hours to an open PR; normal hooks, one run-it review and current-head CI before authorised landing.
 
 **Decisions for the watcher:** A1247 asks for three wrappers and Products Availability linking, but the current contract explicitly omits Availability (`docs/developers/design-system.md:2662-2665`). Recommend retaining that deliberate limit and dropping A1247 rather than adding unused properties. If a link is still wanted, recommend only the table wrapper and its Products user, after approving the contract change; tabs/menu-row stay unchanged. For W79, recommend retaining the current Add rule and its documented Menus/Staff/Units exceptions, rather than choosing a new default. Do not mark either decision settled until answered.

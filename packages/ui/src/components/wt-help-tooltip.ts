@@ -161,9 +161,7 @@ export class WtHelpTooltip extends LitElement {
     this.positionTooltip();
   }
 
-  /** Escape closes only this tooltip, never an enclosing dismissible dialog too. A popover opened
-   * without a real click on its trigger never has focus inside this component, so only a
-   * capture-phase document listener sees the key (wt-help-tooltip.guard.test.ts). */
+  /** Escape closes only this tooltip, never an enclosing dismissible dialog too. */
   private readonly onDocumentKeydown = (event: KeyboardEvent): void => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();

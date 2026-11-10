@@ -347,9 +347,7 @@ export class ProductEditor extends LitElement {
         padding-block-start: calc(var(--wt-space-2) + (var(--wt-tap-min) - 1lh) / 2);
       }
       /* The name column is the one that grows; capping it, and breaking inside a word so that a
-         name with no space breaks too, keep the actions on screen at phone width. The token is
-         used in three different directions across the dashboard, which
-         packages/ui-core/src/tokens/structure.css describes. */
+         name with no space breaks too, keep the actions on screen at phone width. */
       td:nth-child(2) {
         max-width: var(--wt-cell-name-max-width);
         overflow-wrap: anywhere;

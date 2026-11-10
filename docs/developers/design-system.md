@@ -716,6 +716,8 @@ and the zone editor's Save-edge cases at 1280 and 390px in
 `--wt-cell-name-max-width` is the shared sizing value for name content. Its 140px default is wider
 than the default `--wt-tap-min`; `packages/ui-core/src/tokens/structure.test.ts` checks that
 relationship in the shipped tokens. A form chooses how it uses the value to fit its layout.
+The [earlier variants-table measurements and phone-width checks](https://github.com/clintongormley/waitron/blob/4e24db3f7afeb68e0efe6cc494ea1d5ed2e85620/docs/developers/design-system.md#L716-L772)
+remain the historical receipt for the variants table.
 
 ### `--wt-tap-min`
 

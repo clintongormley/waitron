@@ -952,11 +952,8 @@ On a till's PIN sign-in, a person the device's profile does not admit also answe
 
 [design-system.md](design-system.md) is the DESIGN authority for the rules in this group and states
 several of them more broadly — the token rule there binds any component or view, not only
-`packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower and in
-one place wider: `packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts`
-only, and its forbidden list includes `color()`. Where the
-two differ, the guard decides what CI does and design-system.md decides what a reviewer should ask
-for.
+`packages/ui`. What follows records what the GUARDS mechanically enforce, which is narrower:
+`packages/ui/src/no-hardcoded-chrome.test.ts` scans `packages/ui/src/components/*.ts` only.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 

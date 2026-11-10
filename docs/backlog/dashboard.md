@@ -289,7 +289,7 @@ minting the break-glass secret or first-setup key, stops the event loop; device 
 [The box](box.md#every-synchronous-derivekey-caller-still-blocks-the-event-loop-while-it-derives). Left by #912's review: `verifySecretAsync` could be
 renamed `verifySecret` (optional).
 
-## Open, and it bites this work first: two documents state the component rules and they have drifted
+## App views are not scanned by the no-hardcoded-chrome guards
 
 The design rule binds every component and view. The guards in `packages/ui` and `packages/ui-core`
 scan their components' static styles; they do not scan app views. The docs now distinguish the rule
@@ -502,9 +502,9 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 1 entry, size S.
 
-- **The token guards do not scan app views.** The shared design rule already binds every component
+- **The no-hardcoded-chrome guards do not scan app views.** The shared design rule already binds every component
   and view; extend enforcement without claiming that component-only checks cover those views.
-  [Detail](dashboard.md#open-and-it-bites-this-work-first-two-documents-state-the-component-rules-and-they-have-drifted)
+  [Detail](dashboard.md#app-views-are-not-scanned-by-the-no-hardcoded-chrome-guards)
 
 ## Bundle: Other browser check
 
