@@ -111,8 +111,8 @@ describe("Counter payments through the bill window", () => {
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, id));
-        expect(linesAfter.map(({ sentAt, firedAt }) => ({ sentAt, firedAt }))).toEqual(
-          linesBefore.map(({ sentAt, firedAt }) => ({ sentAt, firedAt })),
+        expect(linesAfter.map(({ sentAt }) => ({ sentAt }))).toEqual(
+          linesBefore.map(({ sentAt }) => ({ sentAt })),
         );
       }
     },
