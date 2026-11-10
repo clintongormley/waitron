@@ -218,11 +218,7 @@ function mountApp(
   venue: Venue,
   providers: readonly CardProviderContribution[] = PROVIDERS,
   db: Database = suite.db,
-  {
-    log = noopLog,
-    fetch,
-    simulator,
-  }: { log?: Logger; fetch?: typeof globalThis.fetch; simulator?: SimulatorPaymentProvider } = {},
+  { log = noopLog, fetch }: { log?: Logger; fetch?: typeof globalThis.fetch } = {},
 ): Hono {
   const app = new Hono();
   mountPaymentsApi(
@@ -237,7 +233,6 @@ function mountApp(
       environment: "preproduction",
       pool,
       providers,
-      ...(simulator === undefined ? {} : { simulator }),
       ...(fetch === undefined ? {} : { fetch }),
     },
     log,
@@ -3054,7 +3049,7 @@ describe("reader delete", () => {
 
 describe("manager-ended practice uncertainty", () => {
   it.each(["whole", "bill"] as const)(
-    "ends a %s practice attempt without a live-provider credential",
+    "ends a %s practice attempt after a restart without a mounted simulator",
     async (kind) => {
       const venue = await seedVenueWithStaff();
       const deviceId = await seedDevice();
@@ -3099,7 +3094,7 @@ describe("manager-ended practice uncertainty", () => {
         kind === "whole"
           ? `/management-api/payments/stuck/${payment!.id}/resolve`
           : `/management-api/payments/bill-payments/${billPaymentId}/resolve`;
-      const app = mountApp(venue, [], suite.db, { simulator });
+      const app = mountApp(venue, []);
       const denied = await send(app, "POST", path, { cookie: venue.staffCookie });
       expect(denied.status).toBe(403);
       expect(await denied.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
