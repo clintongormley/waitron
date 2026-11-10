@@ -226,7 +226,7 @@ pin today's number are in the part named.
 - **Printing, orders, reports (A394-14)** — part 3: `printer.not_found` from a body on
   `/orders/:id/reprint`, `/reports/categories/print`, `/watchers/:id/printers`,
   `/stations/:sid/printers` → 400; `watcher.not_found` on `/printers/:id/watcher` → 400;
-  `printer.invalid_config` 422 → 400.
+  `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; it waits on question 4).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
   (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400; `payment.not_stuck` for an unknown
   payment 409 → 404.
@@ -553,16 +553,17 @@ Status changes:
   `POST /management-api/printers/:id/equipment-label` names in its body `id` answers
   `reader.not_found` 400. Each route has its own boundary built from its file's `STATUS` with that
   one code at 400 (`runReprint`, `runCategoryPrint`, `runStationPrinterList`,
-  `runEquipmentLabel`); the shared tables still map both codes to 404, so every other route under them keeps 404,
-  among them the path printer on `POST`/`DELETE /stations/:sid/printers/:pid` (pinned by
-  `print-api.printer-wiring.test.ts`, "404s an unknown station/printer"). On the equipment-label route `printer.not_found` keeps 404: it names both the
-  path printer that prints the label and a body `id` when `kind` is `printer`, one code for two
-  meanings, the same choice the earlier follow-ups made where the address and the form raise one
-  code. `reader.not_found` there comes only from the body `id`. The watcher rows no longer exist:
-  the watcher routes were removed by #1502. `printer.invalid_config` 422 and the two Bluetooth
-  409s (questions 4 and 9) were left alone. A grep of `apps/dashboard`, `apps/till`, `apps/setup`
-  and `packages/` on 2026-11-10 finds no client comparing the status of these four routes; the
-  dashboard reads the code, and no client calls the station printer list `PUT`.
+  `runEquipmentLabel`); the shared tables are unchanged, so every other route under them keeps its
+  status, among them the path printer on `POST`/`DELETE /stations/:sid/printers/:pid`. On the
+  equipment-label route `printer.not_found` keeps 404: it names both the path printer that prints
+  the label and a body `id` when `kind` is `printer`, one code for two meanings, the choice A394-11
+  made where the address and the form raise one code (A394-9 left the same case with the owner).
+  `reader.not_found` there comes only from the body `id`. The watcher rows no longer exist: the
+  watcher routes were removed by #1502. `printer.invalid_config` 422 and the two Bluetooth 409s
+  (questions 4 and 9) were left alone; A394-20 now carries them. A grep of `apps/dashboard`,
+  `apps/till`, `apps/setup` and `packages/` on 2026-11-10 finds no client comparing the status of
+  these four routes; the dashboard reads the code, and no client calls the station printer list
+  `PUT`.
 - **A394-15 — Payments: body ids answer 400, an unknown stuck payment 404.** Files:
   `apps/server/src/payments-api.ts`. Changes `payment.provider_unknown` and `reader.not_found` from
   bodies → 400; `reader.not_listed` on adopt → 400; `payment.not_stuck` for an unknown payment →
@@ -592,7 +593,11 @@ Status changes:
 - **A394-20 — One-off rows after the owner's answers.** Files: `units-api.ts` with
   `packages/catalogue/src/units.ts` (target unit → a second code), `location-settings-api.ts`,
   `cloud-api.ts`, `promote-api.ts`, `receipt-preview-api.ts`, `stream-api.ts`, `backup-api.ts`, the
-  till's no-reader case. Statuses per questions 5, 8, 10, 11, 14. Tests listed per row in the parts.
+  till's no-reader case, `print-api.ts`'s `printer.invalid_config` 422 and two Bluetooth 409s
+  (left by A394-14), and `catalogue-api.ts`'s `menu_section.wrong_role`,
+  `menu.shortcut_unreachable` and `extras.product_has_variants` 409s (left by A394-11) and its
+  folder summary's query ids at 404 (question 8, left by A394-11). Statuses per questions 4, 5, 8,
+  9, 10, 11, 14. Tests listed per row in the parts.
   Size M; split by file if it grows. Depends on: those questions.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
