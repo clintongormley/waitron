@@ -1275,13 +1275,10 @@ Left as they were, from #827's review: unlike the two staff
 
 ## A1315. Bring every help bubble down to orientation, one area per PR
 
-Dashboard, till and server pages, in English and Spanish. The rule is in
+The remaining help work is in English and Spanish. The rule is in
 [conventions-ui.md](../developers/conventions-ui.md#a-help-bubble-orients): read the code a bubble
 describes first, move each dropped fact into its linked guide section, and list every changed text
 before and after.
-
-Left: the server pages. A773-2 B4b (#2440) rewrote the kitchen card, columns, pass
-and More menu Pass help, so this work leaves those alone.
 
 - **The till's Transfers help** (`help.more.transfers`): its last sentence, on the order counts, is
   more than orientation, but `apps/till/src/i18n/help-strings.test.ts` (A757 slice 6) pins it word

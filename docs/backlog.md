@@ -1460,12 +1460,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Help tooltip primitive** (bundle of 2, size S). Holds A1244, A1247. [Detail](backlog/dashboard.md#bundle-help-tooltip-primitive)
 
-- **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, server
-  pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
-  Done: dashboard, setup (#2435) and the till's counter, floor, menu, order, More menu, person and kitchen
-  notices/merge help (#2437, #2439), but for an owner choice on the Transfers help. Left: the
-  server pages; A773-2 B4b (#2440) rewrote the kitchen card, columns, pass and More
-  menu Pass help.
+- **A1315. Help bubbles: the Transfers wording and missing guide destinations.** The Transfers
+  help's last sentence awaits the owner's choice; some help still has no guide section to link.
+  The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
   [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 
 - **A1069. Venue settings keeps a `kitchen` tab key with no panel (owner question).** The key in

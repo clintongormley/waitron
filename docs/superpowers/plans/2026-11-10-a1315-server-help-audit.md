@@ -1,6 +1,6 @@
 # A1315 server-page help audit
 
-**Status: pending.** One Claude read and watcher approval are required before implementation. Publication is not authorised. The owner’s 2026-11-10 instruction says, “The owner authorises finish-branch and land-branch.” That applies after the gate. The native driver executes inline; no further agents are needed.
+**Status: approved.** The watcher approved this docs-only closure on 2026-11-10 at 02:27 after the completed Claude read and its corrections: “Publish the docs-only closure as asked (both backlog corrections, keep the Transfers owner choice and the missing-guide work).” The owner’s 2026-11-10 instruction authorises finish-branch and land-branch. The native driver executes inline; no further agents are needed.
 
 **Goal:** make the remaining-work list honest. Apply [the orientation rule](../../developers/conventions-ui.md#a-help-bubble-orients) only to actual help bubbles in English and Spanish, preserving instructions people need to act.
 
