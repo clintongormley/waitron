@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { compareLabels } from "./compare-labels.js";
+import { compareLabels, createLabelComparator } from "./compare-labels.js";
 
 it.each([",", "."])("orders decimal weights by value with a %s separator", (separator) => {
   const names = [`0${separator}5 kg`, `1${separator}2 kg`, `0${separator}25 kg`];
@@ -66,4 +66,27 @@ it("reads dotted version and address names as decimal runs without special numbe
   expect(
     ["Printer 192.168.1.9", "Printer 192.168.1.20", "Printer 192.168.1.100"].sort(compareLabels),
   ).toEqual(["Printer 192.168.1.100", "Printer 192.168.1.20", "Printer 192.168.1.9"]);
+});
+
+it.each([
+  ["en", ["Nísperos", "Ñoquis", "Nuez", "Olivas"], 0],
+  ["es", ["Nísperos", "Nuez", "Ñoquis", "Olivas"], -1],
+] as const)(
+  "uses %s label order in direct and cached comparisons",
+  (language, ordered, nBeforeEnye) => {
+    const names = ["Olivas", "Nuez", "Ñoquis", "Nísperos"];
+    expect([...names].sort((a, b) => compareLabels(a, b, language))).toEqual(ordered);
+    const compare = createLabelComparator(language);
+    expect([...names].sort(compare)).toEqual(ordered);
+    expect(Math.sign(compareLabels("n", "ñ", language))).toBe(nBeforeEnye);
+    expect(Math.sign(compare("n", "ñ"))).toBe(nBeforeEnye);
+    expect(compare("0.10000000000000001 kg", "0,10000000000000002 kg")).toBeLessThan(0);
+  },
+);
+
+it.each(["", "not_a_language"])("falls back to runtime label order for %j", (language) => {
+  const names = ["Olivas", "Nuez", "Ñoquis", "Nísperos"];
+  const defaultOrder = [...names].sort(compareLabels);
+  expect([...names].sort((a, b) => compareLabels(a, b, language))).toEqual(defaultOrder);
+  expect([...names].sort(createLabelComparator(language))).toEqual(defaultOrder);
 });
