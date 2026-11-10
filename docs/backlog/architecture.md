@@ -330,7 +330,7 @@ On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run 
   identity-owned `management_sessions` to revoke an old viewer token. Probe real startup with identity and its dependants
   disabled before changing that path; the runtime outcome remains unverified.
 
-## A394-5, A394-9, A394-10, A394-16 and A394-20 to A394-22 — refusal statuses by one rule
+## A394-5, A394-10, A394-16 and A394-20 to A394-22 — refusal statuses by one rule
 
 OPEN,
 low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to
@@ -1574,6 +1574,14 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#files-that-still-spell-the-stores-file-names-themselves)
 
 ## Decisions and deliberate limits
+
+**Three till refusals keep their statuses (A394-9, owner 2026-11-10: "Leave them, write it down (Rec.)").**
+On the till, `service_zone.not_found`, `table.not_found`/`table.inactive` and `reader.not_found`
+answer as they did before A394, a deliberate exception to the one-status-rule in
+[conventions-data.md](../developers/conventions-data.md): each is raised in more than one of the
+rule's situations (the address names it, the form names it, or a stored row does), so following
+the rule would need a new refusal for each situation; no screen reads the number, and every screen
+acts on the refusal's name. The trace is in the A394 plan, under A394-9.
 
 **No runtime planner statistics (A1469, watcher, 2026-11-10).** A box does not gather SQLite's
 planner statistics (`ANALYZE` or `PRAGMA optimize`). On the bench's year of trading (days

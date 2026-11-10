@@ -464,8 +464,12 @@ Status changes:
   in the path (its stored-zone throws were judged unreachable by reading), so 404 stands; `status.not_found` is gone (A757). `service_zone.not_found`,
   `table.not_found`/`table.inactive` and `reader.not_found` each come from more than one of the path, the body and
   stored rows, so following the rule needs new codes (and till wording for the table ones); the
-  client grep above, re-run unchanged on 2026-11-10, finds no status comparison on these routes. That choice is
-  with the owner.
+  client grep above, re-run unchanged on 2026-11-10, finds no status comparison on these routes.
+  **Owner, 2026-11-10: "Leave them, write it down (Rec.)".** `service_zone.not_found`,
+  `table.not_found`/`table.inactive` and `reader.not_found` keep the statuses they answer on the till
+  today, a deliberate exception to the 8 October rule: each is raised in more than one of the rule's
+  situations (the address, the form, a stored row), no screen reads the number, and every screen acts
+  on the refusal's name. No new codes. **A394-9 is done.**
 - **A394-10 — Till, lines, groups, drafts and courses: body ids answer 400.** Same files plus
   `adjustments-api.ts` and the doc comment at `apps/till/src/api/client.ts:2723`. Changes
   `tab.line_not_found`, `group.not_found`, `draft.not_found`, `course.not_found`, `station.not_found`,
