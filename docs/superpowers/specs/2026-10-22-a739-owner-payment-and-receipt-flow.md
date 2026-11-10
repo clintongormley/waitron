@@ -1,6 +1,6 @@
 # 2026-10-27 approved contract: payment first, dismissal means None
 
-**10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. A requested card slip is held in memory; a restart or unclear reader answer may miss it. Staff recover with “print a copy”, including before full payment, using each payment’s stored remaining balance. This supersedes the restart-recovery proposal below; no slip-request table is authorised. The [revised slip plan](../plans/2026-11-10-a739-memory-only-card-slips.md) is awaiting Claude review and watcher clearance.
+**10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. A requested card slip is held in memory; a restart or unclear reader answer may miss it. Staff recover with “print a copy”, including before full payment, using the reader payment’s stored remaining balance. This supersedes the restart-recovery proposal below; no slip-request table is authorised. The [revised slip plan](../plans/2026-11-10-a739-memory-only-card-slips.md) was reviewed by Claude and cleared by watcher17:32 with reader-only balance writes, no copy audit and a build hold until #2736 lands.
 
 **Authoritative addendum.** The owner approved the revised pay screen at about 02:12 CET,
 after answering dismissal at 02:01 and reader settings at 02:05. These answers take precedence

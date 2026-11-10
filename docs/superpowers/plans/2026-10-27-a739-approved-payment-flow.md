@@ -1,6 +1,6 @@
 > **10 November 2026, watcher01:26 approval:** follow the [current payment-flow plan](2026-11-10-a739-current-payment-flow.md). Build its non-slip cuts in order; slip recovery remains held for the owner. This supersedes conflicting build instructions below; history is preserved.
 
-**10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. The [revised slip plan](2026-11-10-a739-memory-only-card-slips.md) supersedes the durable slip-request proposal here, subject to Claude review and watcher clearance. This earlier plan remains historical input.
+**10 November 2026 update:** the owner chose “Memory only (Recommended)” at 16:53, relayed by the watcher at 17:38. The [revised slip plan](2026-11-10-a739-memory-only-card-slips.md) supersedes the durable slip-request proposal here; Claude reviewed it and watcher17:32 cleared it with reader-only balance writes, no copy audit and a build hold until #2736 lands. This earlier plan remains historical input.
 
 > **9 November 2026, owner20:34 direction; watcher23:10 documentation approval:**
 > A739 follows A790’s [till document/printer slice](2026-11-09-a790-till-document-printer.md),
