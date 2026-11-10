@@ -4719,13 +4719,13 @@ export const es: Record<StringKey, string> = {
   "help.label": "Ayuda",
   "help.badge_label": "Ayuda: {part}",
   "help.guide_link": "Más información en la guía",
-  "help.account.settings": "Cambia tus datos personales y cómo inicias sesión. |",
+  "help.account.settings": "Cambia tus datos personales y cómo inicias sesión.",
   "help.products.keep_variant":
     "Cancela el archivado de esta variante. Se archiva solo al guardar el producto.",
   "help.products.price":
     "El precio incluye el IVA, por unidad. Si se vende al peso o con una unidad con decimales, la caja pregunta la cantidad; si no, cada toque vende una.",
   "help.products.vat":
-    "La clase de IVA. Vuelve a publicar la carta para usar la nueva clase en las cajas. |",
+    "La clase de IVA. Vuelve a publicar la carta para usar la nueva clase en las cajas.",
   "help.products.course":
     "El curso en que sale este plato, salvo que el personal lo cambie en el pedido de una mesa. Pedido como extra, sale con su plato.",
   "help.products.variants":
@@ -5181,7 +5181,7 @@ export const es: Record<StringKey, string> = {
   "profile.data_copy_busy": "Preparando…",
   "profile.data_copy_help_label": "Qué contiene la copia",
   "profile.data_copy_holds":
-    "Tus datos de perfil y de acceso, y tus acciones registradas en Waitron, además de los datos de trabajo que se guarden aquí. Un README.txt explica los archivos y tus derechos. |",
+    "Tus datos de perfil y de acceso, y tus acciones registradas en Waitron, además de los datos de trabajo que se guarden aquí. Un README.txt explica los archivos y tus derechos.",
   "profile.data_copy_help_guide": "Más sobre tus datos",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
@@ -7592,7 +7592,7 @@ export const es: Record<StringKey, string> = {
   "box_status.retry": "Reintentar ahora",
   "box_status.retry_help_label": "Qué hace Reintentar ahora",
   "box_status.retry_help":
-    "Vuelve a intentar los registros pendientes tras un envío fallido. Puede que aún tengan que esperar para enviarse. No libera los registros parados. |",
+    "Vuelve a intentar los registros pendientes tras un envío fallido. Puede que aún tengan que esperar para enviarse. No libera los registros parados.",
   "box_status.retry_help_guide": "Más sobre volver a intentar",
   "box_status.retried":
     "{count} registros se volverán a intentar en cuanto Hacienda permita el siguiente envío.",
@@ -7692,7 +7692,7 @@ export const es: Record<StringKey, string> = {
   "box_status.freed": "Se han liberado {size}.",
   "box_status.free_help_label": "Qué borra Liberar",
   "box_status.free_help":
-    "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad. |",
+    "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.fillers":
     "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",
