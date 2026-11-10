@@ -149,7 +149,7 @@ export class ServerRouter extends EventTarget {
       }
     }
     await Promise.all(probed.map((s) => this.#probe(s)));
-    // The page's answer can unhide a box's line; probe it now so the till can follow that box in
+    // The page's probe can unhide a box's line; probe it now so the till can follow that box in
     // this round.
     await Promise.all(
       this.#shown()

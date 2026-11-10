@@ -786,6 +786,28 @@ describe("ServerRouter: one line per box", () => {
       expect(r.waiting).toBe(false);
     });
 
+    it("follows the box at its own name, in the same round, when the page answers an error status", async () => {
+      let pageFails = false;
+      const { r, moves } = await twoBoxes((t) => {
+        const inner = probeFetch(t);
+        return (async (input: RequestInfo | URL, init?: RequestInit) => {
+          // A box in setup mode answers the page's name and has no /api/node.
+          if (pageFails && String(input) === `${PAGE}/api/node`) {
+            return new Response("not found", { status: 404 });
+          }
+          return inner(input, init);
+        }) as typeof fetch;
+      });
+      pageFails = true;
+      await r.probeNow();
+      expect(moves).toEqual([A]);
+      expect(r.current).toBe(A);
+      expect(r.statuses().slice(0, 2)).toEqual([
+        { url: PAGE, label: "waitron.local", state: "unreachable", term: null },
+        { url: A, label: "box-aaaa.waitron.local", state: "primary", term: 2 },
+      ]);
+    });
+
     it("follows the promoted box at its own name, then back to the page when the page answers as it", async () => {
       const { r, table, moves } = await twoBoxes();
       table[PAGE] = "down";
