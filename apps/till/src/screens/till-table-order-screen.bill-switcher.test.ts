@@ -428,7 +428,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     expect(triggerText(two)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ 2 cuentas sin enviar");
   });
 
-  describe("on a phone, embedded in the till, 360 wide", () => {
+  describe("on a phone, embedded in the till", () => {
     // The ⋮ icon is registered by till-app.ts; without it the ⋮ is drawn empty.
     registerIcons({
       kebab:
@@ -437,8 +437,8 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
 
     afterEach(() => resetPage());
 
-    async function mountPhone() {
-      await pageAt(360, 740);
+    async function mountPhone(width: number) {
+      await pageAt(width, 740);
       const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
         products: [],
         lines: [],
@@ -455,9 +455,9 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     const box = (node: Element) => node.getBoundingClientRect();
     const middle = (rect: DOMRect) => rect.top + rect.height / 2;
 
-    it("in Spanish the mark wraps inside the switcher and the ⋮ stays on its row, inside the screen", async () => {
+    it("360 wide, in Spanish the mark wraps inside the switcher and the ⋮ stays on its row, inside the screen", async () => {
       setLocale("es");
-      const el = await mountPhone();
+      const el = await mountPhone(360);
       const sw = box(switcher(el)!);
       const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
 
@@ -466,13 +466,18 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
       expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
     });
 
-    it("in English the closed label and the mark stay on one line", async () => {
-      const el = await mountPhone();
+    // CI's Linux fonts draw this row about a fifth wider than macOS's, enough to wrap it at 360 wide.
+    it("480 wide, in English, where there is room, the closed label and the mark stay on one line beside the ⋮", async () => {
+      const el = await mountPhone(480);
       const closed = box(trigger(el).querySelector(".bill-switcher-closed")!);
       const mark = box(trigger(el).querySelector("[data-unsent-mark]")!);
+      const sw = box(switcher(el)!);
+      const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
 
       expect(mark.left).toBeGreaterThanOrEqual(closed.right);
       expect(Math.abs(middle(mark) - middle(closed))).toBeLessThanOrEqual(1);
+      expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
+      expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
     });
   });
 });
