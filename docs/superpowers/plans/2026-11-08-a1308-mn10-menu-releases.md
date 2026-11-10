@@ -132,8 +132,11 @@ the release's primary key, about 18 µs. The measurement still runs and decides.
 
 8.2 and 8.4 need no year of trading: they build their own small databases. If slice 0's bench has
 landed (`apps/server/scripts/bench/`), also run `bench compare` for `sale.counter` and
-`payment.final` before and after, and paste it. The measurement scripts are not committed; their text
-and output go in the pull request description, with the machine named (README §5 U11).
+`payment.final` before and after, and paste it. (2026-11-10: the bench no longer runs per slice;
+a `Sale-path read changed:` line in the pull request takes this step's place. See
+[when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).) The measurement
+scripts are not committed; their text and output go in the pull request description, with the
+machine named (README §5 U11).
 
 ## Decisions this plan makes
 
@@ -289,7 +292,7 @@ index prints as one more `extra index` line, which the watcher's confirmation ad
 ## Needs
 
 - **Outside this area:** slice 2 (`recordActivity`); slice 1a's trigger file. Slice 0's bench is used
-  if present, not needed.
+  if present, not needed. (2026-11-10: no longer; see the measurements section.)
 - **In this area:** mn3 (names); mn8 (it last changed `core.sql`'s media triggers; take `main`'s
   generated files on rebase and re-run the rebuild, rules §2.4).
 

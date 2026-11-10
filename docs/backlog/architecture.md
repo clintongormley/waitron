@@ -1044,8 +1044,11 @@ product failures.
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
   reviewed every file and answered every question (2026-11-04), and approved it the same day.
-  [Slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built; [the testing guide](../developers/testing-guide.md#the-protection-list)
-  says how each slice uses it. Its bench is built too ([how to use it](../developers/testing-guide.md#the-bench)). Next is
+  [Slice 0](../superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built;
+  [the testing guide](../developers/testing-guide.md#the-protection-list) says how each slice uses
+  it. Its bench is built too ([how to use it](../developers/testing-guide.md#the-bench)); it runs
+  from time to time, not per slice (owner, 2026-11-10;
+  [when](../developers/testing-guide.md#when-the-bench-runs)). Next is
   [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes

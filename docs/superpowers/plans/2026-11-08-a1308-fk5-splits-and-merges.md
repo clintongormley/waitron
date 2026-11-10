@@ -112,6 +112,9 @@ node scripts/a1308/fk5-rename-merges.mjs && node scripts/a1308/fk5-split-merge-f
 Every floor suite (appendix §8 item 2) passes with its assertions unchanged. If the bench has
 landed, `bench compare` base against branch shows `same` or `faster` for `floor.read` and
 `floor.open`.
+(2026-11-10: the bench no longer runs per slice; a `Sale-path read changed:` line in the pull
+request takes this step's place. See
+[when the bench runs](../../developers/testing-guide.md#when-the-bench-runs).)
 
 ## Expected protection-list difference
 
