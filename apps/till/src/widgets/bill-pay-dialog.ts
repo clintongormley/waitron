@@ -31,6 +31,7 @@ import {
   payNoticeStyles,
   payScanView,
   readerButtonLabel,
+  cardSlipChoice,
   type SheetView,
 } from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
@@ -97,7 +98,10 @@ export interface PayRequest {
 }
 
 /** `bill-pay-confirm`'s detail: on a handheld, a reader card names the reader to charge. */
-export type BillPayConfirmDetail = ReceiptGuestsDetail & { readerId?: string };
+export type BillPayConfirmDetail = ReceiptGuestsDetail & {
+  readerId?: string;
+  printCardSlip?: boolean;
+};
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
  * reader, the amount it holds on the bill; on a handheld, for a card charged on a reader, the
@@ -477,6 +481,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) refunded: RefundNotice | null = null;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) canPrintReceipt = false;
+  @property({ type: Boolean }) slipPrinterAvailable = false;
+  @state() private printCardSlip = false;
   @property({ type: Boolean }) confirmationLocked = false;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
@@ -767,6 +773,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   paymentAccepted(): void {
+    this.printCardSlip = false;
     this.#accept(null);
   }
 
@@ -961,6 +968,18 @@ export class TillBillPayDialog extends LitElement {
   #canAsk(): boolean {
     if (this.chosenWay === "whole" && !this.#owing()) return false;
     return !this.handheld || this.#methods().length > 0;
+  }
+
+  #slipAvailable(): boolean {
+    const reader =
+      this.handheld && this.fixedReader?.id === undefined && this.fixedReader !== null
+        ? undefined
+        : this.handheld
+          ? this.equipment?.roles.find((role) => role.role === "card_terminal")?.resolved
+          : this.readers.find(
+              (reader) => reader.id === (this.chosenReaderId ?? this.defaultReaderId),
+            );
+    return this.slipPrinterAvailable && reader?.printsOwnSlipAutomatically !== true;
   }
 
   #readyReader(): FixedReader | null {
@@ -1924,6 +1943,7 @@ export class TillBillPayDialog extends LitElement {
     this.#sharePaying = asked.choice.kind === "share" ? asked.choice.shareOf : null;
     this.#emit("bill-pay-confirm", {
       ...this.#guestsDetail(guestsShown),
+      ...(onReader && this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
       ...(reader?.id === undefined ? {} : { readerId: reader.id }),
     } satisfies BillPayConfirmDetail);
   }
@@ -2022,6 +2042,14 @@ export class TillBillPayDialog extends LitElement {
         }
       </dl>
       ${this.#equipmentRow(onReader)}
+      ${cardSlipChoice(
+        onReader && this.#slipAvailable(),
+        this.printCardSlip,
+        this.busy || this.confirmationLocked,
+        (value) => {
+          this.printCardSlip = value;
+        },
+      )}
       ${
         this.tipsEnabled &&
         cash !== null &&

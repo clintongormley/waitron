@@ -4,8 +4,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import "./tender-pay.js";
 import type { TillTenderPay } from "./tender-pay.js";
 import type { TillProduct } from "../api/client.js";
-import { page } from "vitest/browser";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { page, userEvent } from "vitest/browser";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -315,3 +315,43 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 });
+
+for (const theme of ["light", "dark"] as const) {
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1280]) {
+      it(`labels and keyboard-toggles the requested slip in ${locale}/${theme}/${width}`, async () => {
+        const previousLocale = currentLocale();
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        setLocale(locale);
+        await page.viewport(width, 900);
+        try {
+          const store = new WorkingOrderStore();
+          store.addProduct(coffee, "1");
+          const { el, host } = await mountWidget<TillTenderPay>(
+            "till-tender-pay",
+            { store, cardProvider: "simulator", slipPrinterAvailable: true },
+            theme,
+          );
+          const field =
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+              '[name="printCardSlip"]',
+            )!;
+          await field.updateComplete;
+          const input = field.shadowRoot!.querySelector("input")!;
+          expect(input.getAttribute("aria-label")).toBe(t("payment_slip.request"));
+          input.focus();
+          await userEvent.keyboard(" ");
+          expect(input.checked).toBe(true);
+          await expectNoA11yViolations(host);
+          expect(window.innerWidth).toBe(width);
+          await page.screenshot({
+            path: `__screenshots__/a739-slip4-tender-pay-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale(previousLocale);
+          await page.viewport(viewport.width, viewport.height);
+        }
+      });
+    }
+  }
+}

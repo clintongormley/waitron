@@ -8342,3 +8342,39 @@ it("a handheld opens the remaining bill payment after a short presented-bill cap
   expect(shownBalance(el)).toEqual(balanceShows("120.00", "110.00", "10.00"));
   expect(api.takeBillPayment).not.toHaveBeenCalled();
 });
+
+it("forwards a reader slip request and reports print failure without retrying the payment", async () => {
+  const { el } = await mountApp({
+    previewBillPayment: vi.fn().mockResolvedValue({
+      kind: "allocated",
+      choice: null,
+      applied: "10.00",
+      tip: "0.00",
+      change: null,
+      charged: "10.00",
+    }),
+    takeBillPayment: vi.fn().mockResolvedValue({
+      ...takenOf(
+        { method: "card", entry: "reader", applied: "10.00", change: null },
+        { received: "10.00", outstanding: "110.00" },
+      ),
+      slipPrintFailed: true,
+    }),
+  });
+  await openTable(el);
+  await openDialog(el, "rest");
+  emit(dialog(el)!, "bill-pay-preview", {
+    choice: { kind: "contribution", amount: "10.00" },
+    pay: { method: "card" },
+    card: { entry: "reader" },
+  });
+  await vi.waitFor(() => expect(dialog(el)!.preview).not.toBeNull());
+  emit(dialog(el)!, "bill-pay-confirm", { printCardSlip: true });
+  await vi.waitFor(() => expect(api.takeBillPayment).toHaveBeenCalledOnce());
+  expect(sent()[0]).toHaveProperty("printCardSlip", true);
+  await flush(el);
+  expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toContain(
+    t("payment_slip.capture_failed"),
+  );
+  expect(dialog(el)).not.toBeNull();
+});

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./presented-pay-dialog.js";
 import type { TillPresentedPayDialog } from "./presented-pay-dialog.js";
@@ -554,3 +554,47 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
     },
   );
 });
+
+for (const theme of ["light", "dark"] as const) {
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1280]) {
+      it(`labels and keyboard-toggles the requested slip in ${locale}/${theme}/${width}`, async () => {
+        const previousLocale = currentLocale();
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        setLocale(locale);
+        await page.viewport(width, 900);
+        try {
+          const { el, host } = await mountWidget<TillPresentedPayDialog>(
+            "till-presented-pay-dialog",
+            {
+              open: true,
+              amount: "30.00",
+              takesReaderCard: true,
+              equipment,
+              slipPrinterAvailable: true,
+            },
+            theme,
+          );
+          const field =
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+              '[name="printCardSlip"]',
+            )!;
+          await field.updateComplete;
+          const input = field.shadowRoot!.querySelector("input")!;
+          expect(input.getAttribute("aria-label")).toBe(t("payment_slip.request"));
+          input.focus();
+          await userEvent.keyboard(" ");
+          expect(input.checked).toBe(true);
+          await expectNoA11yViolations(host);
+          expect(window.innerWidth).toBe(width);
+          await page.screenshot({
+            path: `__screenshots__/a739-slip4-presented-pay-dialog-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale(previousLocale);
+          await page.viewport(viewport.width, viewport.height);
+        }
+      });
+    }
+  }
+}

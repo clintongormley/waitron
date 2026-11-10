@@ -6975,11 +6975,13 @@ export class TillApp extends LitElement {
               : { simulationOutcome: detail.simulationOutcome }),
             // Omitted, the server uses the paying device's chosen reader, else its profile's default.
             ...(detail.readerId === undefined ? {} : { readerId: detail.readerId }),
+            ...(detail.printCardSlip === undefined ? {} : { printCardSlip: detail.printCardSlip }),
             ...(lateSend === undefined ? {} : { lateSend }),
           }),
         id,
       );
       if (session !== this.#operatorSession) return;
+      if (out.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       if (out.outcome === "partial") {
         await this.#reloadCounterOrder(id, session);
         if (this.#hasLeftCounterOrder(id, session)) return;
@@ -10862,6 +10864,14 @@ export class TillApp extends LitElement {
       }`;
   }
 
+  #slipPrinterAvailable(): boolean {
+    return (
+      this.capabilities.includes("print-receipt") &&
+      this.deviceEquipment?.roles.find((role) => role.role === "payment_slip")?.resolved
+        ?.available === true
+    );
+  }
+
   #renderBillPaying(): TemplateResult | typeof nothing {
     const open = this.billPaying;
     if (open === null) return nothing;
@@ -10869,6 +10879,7 @@ export class TillApp extends LitElement {
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
         .canPrintReceipt=${this.capabilities.includes("print-receipt")}
+        .slipPrinterAvailable=${this.#slipPrinterAvailable()}
         .checkTimeOffered=${this.checkTimeOffered}
         .balance=${open.balance}
         .lines=${open.lines}
@@ -10929,6 +10940,7 @@ export class TillApp extends LitElement {
     if (open === null || bill === undefined) return nothing;
     const reason = this.#payReaderReason();
     return html`<till-presented-pay-dialog
+      .slipPrinterAvailable=${this.#slipPrinterAvailable()}
       .checkTimeOffered=${this.checkTimeOffered}
       .open=${true}
       .amount=${bill.outstanding}
@@ -18925,7 +18937,13 @@ export class TillApp extends LitElement {
     const detail = (event as CustomEvent<PresentedPayDetail>).detail;
     this.presentedPaying = { ...open, refusal: null };
     if (detail.method === "card") {
-      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guestCount);
+      await this.#payPresentedOnReader(
+        open.id,
+        bill,
+        detail.readerId,
+        detail.guestCount,
+        detail.printCardSlip,
+      );
       return;
     }
     const guestCount = detail.guestCount === undefined ? {} : { guestCount: detail.guestCount };
@@ -18982,6 +19000,7 @@ export class TillApp extends LitElement {
     bill: PartyBill,
     readerId: string | undefined,
     guestCount: number | null | undefined,
+    printCardSlip?: boolean,
   ): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
@@ -19011,6 +19030,7 @@ export class TillApp extends LitElement {
               id: billId,
               lines: [],
               ...(readerId === undefined ? {} : { readerId }),
+              ...(printCardSlip === undefined ? {} : { printCardSlip }),
               ...(guestCount === undefined ? {} : { guestCount }),
             })
             .then(
@@ -19026,6 +19046,7 @@ export class TillApp extends LitElement {
         billId,
       );
       if (left()) return;
+      if (out.slipPrintFailed) this.errorKey = "payment_slip.capture_failed";
       if (out.outcome === "partial") {
         this.#closePresented(id);
         this.billBalance = out.balance;
@@ -19718,6 +19739,8 @@ export class TillApp extends LitElement {
         if (card && result.outcome === "timeout") this.#unknownCardOutcome.add(key);
         settle(undefined, result.payment.state === "pending");
         await this.#onBillPaid(open, result, readerName);
+        if (result.slipPrintFailed && session === this.#operatorSession)
+          this.errorKey = "payment_slip.capture_failed";
       } catch (error) {
         const notChecked =
           (keyed === previous || noAnswer) &&
@@ -20563,6 +20586,7 @@ export class TillApp extends LitElement {
         .cardOutcome=${this.cardOutcome}
         .cardRetryDetail=${this.cardRetryDetail}
         .cardAttemptsOver=${this.cardAttemptsOver}
+        .slipPrinterAvailable=${this.#slipPrinterAvailable()}
         .activeReaders=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .receiptLanguages=${this.receiptLanguages}

@@ -8,6 +8,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "./equipment-scanner.js";
+import "@waitron/ui/src/components/wt-switch.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
 import type { DeviceEquipment, EquipmentItem } from "../api/client.js";
@@ -511,4 +512,24 @@ declare global {
   interface HTMLElementTagNameMap {
     "till-pay-equipment": TillPayEquipment;
   }
+}
+
+export function cardSlipChoice(
+  available: boolean,
+  checked: boolean,
+  disabled: boolean,
+  change: (checked: boolean) => void,
+): TemplateResult | typeof nothing {
+  return available
+    ? html`<wt-switch
+        name="printCardSlip"
+        .label=${t("payment_slip.request")}
+        .checked=${checked}
+        .disabled=${disabled}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          event.stopPropagation();
+          change(event.detail.checked);
+        }}
+      ></wt-switch>`
+    : nothing;
 }

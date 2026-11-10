@@ -1354,3 +1354,60 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     }
   });
 });
+
+for (const theme of ["light", "dark"] as const) {
+  for (const locale of ["en", "es"]) {
+    for (const width of [390, 1280]) {
+      it(`labels and keyboard-toggles the requested slip in ${locale}/${theme}/${width}`, async () => {
+        const previousLocale = currentLocale();
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        setLocale(locale);
+        await page.viewport(width, 900);
+        try {
+          const { el, host } = await mountWidget<TillBillPayDialog>(
+            "till-bill-pay-dialog",
+            {
+              balance,
+              lines,
+              takesCash: false,
+              cardReader: "simulator",
+              slipPrinterAvailable: true,
+              asked: {
+                choice: { kind: "contribution", amount: "10.00" },
+                pay: { method: "card" },
+                card: { entry: "reader" },
+              },
+              preview: {
+                kind: "allocated",
+                choice: null,
+                applied: "10.00",
+                tip: "0.00",
+                change: null,
+                charged: "10.00",
+              },
+            },
+            theme,
+          );
+          const field =
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+              '[name="printCardSlip"]',
+            )!;
+          await field.updateComplete;
+          const input = field.shadowRoot!.querySelector("input")!;
+          expect(input.getAttribute("aria-label")).toBe(t("payment_slip.request"));
+          input.focus();
+          await userEvent.keyboard(" ");
+          expect(input.checked).toBe(true);
+          await expectNoA11yViolations(host);
+          expect(window.innerWidth).toBe(width);
+          await page.screenshot({
+            path: `__screenshots__/a739-slip4-bill-pay-dialog-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale(previousLocale);
+          await page.viewport(viewport.width, viewport.height);
+        }
+      });
+    }
+  }
+}

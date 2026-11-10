@@ -1,3 +1,4 @@
+import { cardSlipChoice } from "./pay-equipment.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -71,6 +72,7 @@ export interface ParkOrderDetail {
 }
 
 export interface CollectCardDetail extends ReceiptGuestsDetail {
+  printCardSlip?: boolean;
   tip?: string;
   simulationOutcome?: "captured" | "declined" | "attempting";
   /** Absent when the operator never picked one — the server then falls back to the paying
@@ -329,6 +331,8 @@ export class TillTenderPay extends LitElement {
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
   #guestsOrderId?: string;
+  @property({ type: Boolean }) slipPrinterAvailable = false;
+  @state() private printCardSlip = false;
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
   /** Replayed by `#retryCard`: the idle screen's tip field is gone by the time
    * Retry is tapped. */
@@ -513,6 +517,7 @@ export class TillTenderPay extends LitElement {
       this.view = "idle";
     }
     if (this.#guestsOrderId !== this.store.id) {
+      this.printCardSlip = false;
       this.#guestsOrderId = this.store.id;
       this.#resetGuests();
     }
@@ -646,6 +651,7 @@ export class TillTenderPay extends LitElement {
           : {}),
         ...(this.chosenReaderId === undefined ? {} : { readerId: this.chosenReaderId }),
         ...this.#guestsDetail(),
+        ...(this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
       });
     });
   }
@@ -1080,11 +1086,18 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
+  #slipAvailable(): boolean {
+    return this.slipPrinterAvailable && this.#displayedReader?.printsOwnSlipAutomatically !== true;
+  }
+
   #renderCardExtras() {
     if (this.cardProvider === "none") return nothing;
     return html`
       <div class="card-extras">
         ${this.#renderReaderControl()}
+        ${cardSlipChoice(this.#slipAvailable(), this.printCardSlip, this.busy, (value) => {
+          this.printCardSlip = value;
+        })}
         ${
           this.cardProvider === "simulator" && this.chosenReaderId === undefined
             ? html`<div

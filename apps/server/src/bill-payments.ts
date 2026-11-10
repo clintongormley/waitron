@@ -115,6 +115,7 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 import { storePrepayMadeHere } from "./made-here.js";
 import { assertStillSignedIn } from "./till-session.js";
 import "./errors.js";
+import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 import { saleLanguageFor } from "./venue-locale.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
@@ -151,6 +152,7 @@ export interface BillPaymentAsk {
 /** A payment request as taken: the ask, the allocation the operator saw, and its retry key. */
 export interface BillPaymentRequest extends BillPaymentAsk {
   submissionId: string;
+  printCardSlip?: boolean;
   /** A card only: `manual` is a card charged on a terminal the POS does not drive, `reader` one
    * the provider drives. */
   entry?: "manual" | "reader";
@@ -218,6 +220,7 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
+  slipPrintFailed?: true;
   /** The payment's state; a reader card's own answer is `declined`, `timeout` (still pending),
    * `network_unavailable` (failed, nothing charged). A retry whose own sign-in is open on an active
    * till (the first sign-in or a later one) answers the state it finds. */
@@ -1071,6 +1074,7 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
     ...req,
     expectedEdit: req.expectedEdit == null ? null : parseBillEditExpected(req.expectedEdit),
     guestCount: undefined,
+    printCardSlip: undefined,
     lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),
     tendered: scaled(req.tendered),
@@ -1551,7 +1555,11 @@ export async function takeReaderBillPayment(
       }
       // Inside the transaction, so no loop pass runs between the insert and its registration.
       release = claimLive(liveBillPaymentsOf(deps.db), started.payment.id);
-      return { kind: "collect" as const, payment: started.payment };
+      return {
+        kind: "collect" as const,
+        payment: started.payment,
+        slip: await freezeCardSlip(tx, cfg, workingOrderId, req.printCardSlip, deps.readerId),
+      };
     });
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
@@ -1599,7 +1607,7 @@ export async function takeReaderBillPayment(
       const settledAt = result.settledAt!;
       // Wrapped outside the transaction: when a full disk ended it or refused its commit,
       // `withTransaction` throws the store's own error (`failure` in `node-sqlite-adapter.ts`).
-      return await afterCardCharged(deps, workingOrderId, () =>
+      const answer = await afterCardCharged(deps, workingOrderId, () =>
         withIssuanceTransaction(
           deps.db,
           async (tx) => {
@@ -1617,6 +1625,10 @@ export async function takeReaderBillPayment(
           deps.log,
         ),
       );
+      return {
+        ...answer,
+        ...(await printCapturedCardSlip(deps.db, cfg, workingOrderId, result, begun.slip)),
+      };
     }
     return await withTransaction(deps.db, async (tx) => {
       await requireEconomicWrite(tx, cfg, deps.admission);

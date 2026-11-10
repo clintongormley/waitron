@@ -2,6 +2,9 @@ import "./errors.js";
 import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
   billPayments,
+  workingOrders,
+  devices,
+  deviceProfiles,
   readTenant,
   sales,
   tenders,
@@ -10,14 +13,109 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { cardReaders, payments, type CardDetails } from "@waitron/payments";
-import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
+import { cardReaders, payments, type CardDetails, type PaymentResult } from "@waitron/payments";
+import {
+  AppError,
+  centsToDecimal,
+  decimalToCents,
+  decimal,
+  subtractDecimal,
+  type Decimal,
+} from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
+import { profileAllows } from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
 import type { OriginConfig } from "./trading-context.js";
+
+type CardSlipRequest = { printerId: string; locale: string } | undefined;
+
+export async function freezeCardSlip(
+  tx: Transaction,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  requested: boolean | undefined,
+  readerId: string | undefined,
+): Promise<CardSlipRequest> {
+  if (requested !== true || cfg.origin.source !== "device") return;
+  const [profile] = await tx
+    .select({ formFactor: deviceProfiles.formFactor, capabilities: deviceProfiles.capabilities })
+    .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+    .where(eq(devices.id, cfg.origin.deviceId));
+  if (
+    profile === undefined ||
+    !profileAllows({ ...profile, capabilities: profile.capabilities as string[] }, "print-receipt")
+  )
+    return;
+  if (readerId !== undefined) {
+    const [reader] = await tx.select().from(cardReaders).where(eq(cardReaders.id, readerId));
+    if (reader?.printsOwnSlipAutomatically === true) return;
+  }
+  const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
+  if (printer === undefined) return;
+  const [order] = await tx
+    .select({ locale: workingOrders.receiptLocale })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, workingOrderId));
+  return { printerId: printer.id, locale: order?.locale ?? (await readReceiptLanguage(tx)).locale };
+}
+
+export async function printCapturedCardSlip(
+  db: Database,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  result: PaymentResult,
+  requested: CardSlipRequest,
+  wholeTip?: Decimal,
+): Promise<{ slipPrintFailed?: true }> {
+  if (requested === undefined) return {};
+  try {
+    // Money has committed; a printer refusal must not roll back or retry the charge.
+    await withTransaction(db, async (tx) => {
+      const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
+      if (printer?.id !== requested.printerId) throw new Error("Payment slip printer changed");
+      const [payment] = await tx
+        .select()
+        .from(payments)
+        .where(
+          and(eq(payments.provider, result.provider), eq(payments.paymentRef, result.paymentRef)),
+        );
+      if (payment === undefined) throw new Error("Captured payment missing");
+      const [bill] =
+        payment.billPaymentId === null
+          ? []
+          : await tx
+              .select({ remaining: billPayments.remainingAfter, tip: billPayments.tip })
+              .from(billPayments)
+              .where(eq(billPayments.id, payment.billPaymentId));
+      await enqueueSlips(
+        tx,
+        cfg,
+        workingOrderId,
+        [
+          {
+            charged: payment.amount,
+            paidAt: payment.settledAt,
+            tip: bill?.tip ?? decimalToCents(wholeTip ?? decimal("0.00")),
+            remaining: payment.billPaymentId === null ? 0 : (bill?.remaining ?? null),
+            scheme: payment.cardScheme,
+            last4: payment.cardLast4,
+            entryMode: payment.cardEntryMode,
+            authCode: payment.cardAuthCode,
+          },
+        ],
+        requested.locale,
+        false,
+      );
+    });
+    return {};
+  } catch {
+    return { slipPrintFailed: true };
+  }
+}
 
 export async function printSalePaymentSlip(
   db: Database,

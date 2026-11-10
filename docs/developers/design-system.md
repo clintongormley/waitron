@@ -6459,6 +6459,8 @@ own row when the zone offers sending before payment.
 
 ### Shared bill payment window
 
+Eligible reader payments offer Print card slip before Card. It starts off for each payer; printing failure reports that payment was received and points to the copy actions.
+
 The Payments list offers Print a copy beside eligible received reader payments, including an unpaid bill, on devices that can print receipts.
 
 Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,

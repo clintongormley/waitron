@@ -19,6 +19,7 @@ import {
   payNoticeStyles,
   payScanView,
   readerButtonLabel,
+  cardSlipChoice,
   type SheetView,
 } from "./pay-equipment.js";
 import { cardWaitingView, sentCard, type SentCard } from "./card-waiting.js";
@@ -42,7 +43,7 @@ type Field = "tendered" | "externalRef" | "guests";
 
 /** `presented-pay`'s detail; `guestCount` is absent unless the venue asks for it, null for none. */
 export type PresentedPayDetail =
-  | { method: "card"; readerId?: string; guestCount?: number | null }
+  | { method: "card"; readerId?: string; guestCount?: number | null; printCardSlip?: boolean }
   | { method: "cash"; tendered: string; guestCount?: number | null }
   | { method: "manual"; externalRef?: string; guestCount?: number | null };
 
@@ -142,6 +143,8 @@ export class TillPresentedPayDialog extends LitElement {
   ];
 
   @property({ type: Boolean }) open = false;
+  @property({ type: Boolean }) slipPrinterAvailable = false;
+  @state() private printCardSlip = false;
   /** The box offers this till "Check the time": a clock refusal points at it. */
   @property({ attribute: false }) checkTimeOffered = false;
   /** The bill's whole amount. */
@@ -215,6 +218,7 @@ export class TillPresentedPayDialog extends LitElement {
 
   #syncDraft(): void {
     if (!this.open) {
+      this.printCardSlip = false;
       this.#dropDraft();
       return;
     }
@@ -263,6 +267,15 @@ export class TillPresentedPayDialog extends LitElement {
   /** The app has put a refusal under one of the row's fields: the row opens so it shows. */
   openEquipmentRow(): void {
     this.rowOpen = true;
+  }
+
+  #slipAvailable(): boolean {
+    return (
+      this.slipPrinterAvailable &&
+      ((this.fixedReader !== null && this.fixedReader.id === undefined) ||
+        this.equipment?.roles.find((role) => role.role === "card_terminal")?.resolved
+          ?.printsOwnSlipAutomatically !== true)
+    );
   }
 
   #methods(): Method[] {
@@ -374,7 +387,12 @@ export class TillPresentedPayDialog extends LitElement {
     this.#sent = reader === null ? null : sentCard(reader, this.amount);
     const detail: PresentedPayDetail =
       reader !== null
-        ? { method: "card", ...(reader.id === undefined ? {} : { readerId: reader.id }), ...guests }
+        ? {
+            method: "card",
+            ...(reader.id === undefined ? {} : { readerId: reader.id }),
+            ...(this.#slipAvailable() ? { printCardSlip: this.printCardSlip } : {}),
+            ...guests,
+          }
         : this.method === "cash"
           ? { method: "cash", tendered: typedAmount(this.tendered)!, ...guests }
           : { method: "manual", ...(ref === "" ? {} : { externalRef: ref }), ...guests };
@@ -571,7 +589,15 @@ export class TillPresentedPayDialog extends LitElement {
                     })
                   : nothing
             }
-            ${this.#equipmentRow()}`
+            ${this.#equipmentRow()}
+            ${cardSlipChoice(
+              this.method === "card" && this.#slipAvailable(),
+              this.printCardSlip,
+              this.busy || this.equipmentBusy,
+              (value) => {
+                this.printCardSlip = value;
+              },
+            )}`
       }`;
   }
 

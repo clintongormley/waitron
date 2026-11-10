@@ -265,6 +265,7 @@ export class TillCounterScreen extends LitElement {
   @property() cardOutcome?: CardOutcome;
   @property({ attribute: false }) cardRetryDetail?: CollectCardDetail;
   @property({ attribute: false }) cardAttemptsOver = 0;
+  @property({ type: Boolean }) slipPrinterAvailable = false;
   @property({ attribute: false }) activeReaders: TillActiveReader[] = [];
   @property() defaultReaderId?: string;
   @property({ attribute: false }) receiptLanguages: string[] = [];
@@ -422,6 +423,7 @@ export class TillCounterScreen extends LitElement {
             .cardOutcome=${this.cardOutcome}
             .cardRetryDetail=${this.cardRetryDetail}
             .cardAttemptsOver=${this.cardAttemptsOver}
+            .slipPrinterAvailable=${this.slipPrinterAvailable}
             .activeReaders=${this.activeReaders}
             .defaultReaderId=${this.defaultReaderId}
             .receiptLanguages=${this.receiptLanguages}
