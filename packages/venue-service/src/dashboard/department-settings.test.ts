@@ -1655,9 +1655,12 @@ it("gives the reminder dropdown its search, Off and its hint", async () => {
   const { el } = await mount(reminderView(null));
   const control = reminder(el);
   await control.updateComplete;
-  expect([control.search, control.placeholder, control.value]).toEqual(["auto", "Off", ""]);
+  expect([control.search, control.value]).toEqual(["auto", ""]);
   expect(control.hint).toContain("marked served");
   expect(shownText(control)).toBe("Off");
+  expect(
+    control.shadowRoot!.querySelector(".trigger .value")!.classList.contains("placeholder"),
+  ).toBe(false);
 });
 it("offers Off and 5 to 30 minutes, and keeps a stored value the list does not offer", async () => {
   const { el } = await mount(reminderView(7));

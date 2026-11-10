@@ -513,7 +513,7 @@ export class DepartmentSettings extends LitElement {
       label=${t("venue.release_reminder")}
       hint=${t("venue.release_reminder_hint")}
       search="auto"
-      placeholder=${t("venue.release_reminder.off")}
+      show-empty-option
       searchPlaceholder=${t("venue.combobox_search")}
       noResultsLabel=${t("venue.combobox_no_results")}
       .options=${[
@@ -953,7 +953,7 @@ export class DepartmentSettings extends LitElement {
           this.showsTransfers
             ? html`<div class="panel" slot="transfers" @keydown=${this.submitOnEnter}>
                 <section data-test="transfers-section" aria-label=${t("venue.tab_transfers")}>
-                  <h2>${t("venue.tab_transfers")}</h2>
+                  <h3>${t("venue.tab_transfers")}</h3>
                   ${
                     this.transferFailure
                       ? html`<p class="error" data-test="transfers-load-error" role="alert">
