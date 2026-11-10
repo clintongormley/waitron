@@ -198,7 +198,10 @@ export async function showView(
   { ifShown = false, scripted = false }: { ifShown?: boolean; scripted?: boolean } = {},
 ): Promise<void> {
   const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-view="${view}"]`);
-  if (ifShown && !button?.checkVisibility()) return;
+  if (ifShown && !button?.checkVisibility()) {
+    await el.updateComplete;
+    return;
+  }
   if (scripted) button!.click();
   else await userEvent.click(button!);
   await el.updateComplete;

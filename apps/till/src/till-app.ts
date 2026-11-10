@@ -12933,7 +12933,13 @@ export class TillApp extends LitElement {
       return;
     }
     const floorRead = await this.#retakePartyFromFloor();
-    if (!floorRead && live() && onSentTable() && this.errorKey === undefined)
+    if (
+      !floorRead &&
+      live() &&
+      onSentTable() &&
+      !this.#hasLeftOrder(tabId, visit) &&
+      this.errorKey === undefined
+    )
       this.errorKey = "table.reread_failed";
   }
 

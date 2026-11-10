@@ -115,6 +115,11 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
   it("keeps Send all on screen without scrolling at 1024 × 768, with a long order beside the menu", async () => {
     const { el, host } = await orderedInWindow(1024, 768);
     await linesRendered(el);
+    // The last tap's smooth reveal of the newest line scrolls the window; it ends before the
+    // window is put back at its top.
+    await scrollSettled(host);
+    host.scrollTop = 0;
+    await scrollSettled(host);
 
     expect(host.scrollHeight).toBeGreaterThan(host.clientHeight);
     expect(host.scrollTop).toBe(0);

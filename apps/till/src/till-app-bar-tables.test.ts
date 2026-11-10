@@ -481,6 +481,26 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     }
   });
 
+  it("after sending everything, a phone whose floor read fails once the waiter has gone to the Floor says nothing there", async () => {
+    try {
+      let failRead: (error: Error) => void = () => {};
+      const held = new Promise<TableState[]>((_resolve, reject) => {
+        failRead = reject;
+      });
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]", () => {
+        api.getTablesState!.mockReturnValue(held);
+      });
+      await toFloor(el);
+      expect(activeScreen(el)).toBe("floor");
+      failRead(new Error("offline after send"));
+      await flush(el, 10);
+      expect(activeScreen(el)).toBe("floor");
+      expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim() ?? "").toBe("");
+    } finally {
+      await resetPage();
+    }
+  });
+
   it("a tablet stays on its table, side by side", async () => {
     try {
       const el = await sendAllFromT9(

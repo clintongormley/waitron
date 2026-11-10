@@ -58,7 +58,7 @@ async function draftWithUnits() {
   const draft = store(el);
   draft.addProduct(beer, "3");
   await el.updateComplete;
-  await showView(el, "order", { ifShown: true });
+  await showView(el, "order");
   return { el, draft };
 }
 
