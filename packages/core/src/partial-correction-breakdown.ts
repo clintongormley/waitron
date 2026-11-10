@@ -78,6 +78,7 @@ export function checkPartialCorrectionBreakdown(
       (line.priceQuantity !== undefined && thousandths(line.priceQuantity) <= 0)
     )
       refuse();
+    // Called for its refusal of a rate that is not a stored one; the value is not needed.
     basisPoints(line.vatRate);
   }
   const rates = new Set<number>();

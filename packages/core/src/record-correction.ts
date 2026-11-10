@@ -32,7 +32,7 @@ import {
   checkPartialCorrectionBreakdown,
   checkPartialCorrectionHistory,
 } from "./partial-correction-breakdown.js";
-import { measuredFigures } from "./filed-figures.js";
+import { measuredFigures, type Figures } from "./filed-figures.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 const ZERO = decimal("0");
@@ -398,7 +398,7 @@ async function measuredHistory(
   tx: Transaction,
   backend: FiscalBackend,
   saleId: SaleId,
-  original: { total: number; vatBreakdown: { rate: string; base: string; tax: string }[] },
+  original: Figures,
 ) {
   const earlier = await tx
     .select({ id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown })
@@ -419,7 +419,7 @@ async function movedSplit(
   tx: Transaction,
   backend: FiscalBackend,
   saleId: SaleId,
-  original: { total: number; vatBreakdown: { rate: string; base: string; tax: string }[] },
+  original: Figures,
   correction: Decimal,
 ): Promise<VatBreakdownLine[] | undefined> {
   if (!backend.filedFiguresFor) return undefined;
@@ -428,7 +428,13 @@ async function movedSplit(
     throw new AppError("sale.correction_history_unusable", {});
   }
   if (!measured.moved) return undefined;
-  const breakdown = measured.sales[0]!.measured.vatBreakdown.map((group) => ({
+  return negatedSplit(measured.sales[0]!.measured.vatBreakdown, correction);
+}
+
+/** `split` with each base and VAT negated; refused with `sale.total_mismatch` unless it sums to
+ * `correction`. */
+function negatedSplit(split: Figures["vatBreakdown"], correction: Decimal): VatBreakdownLine[] {
+  const breakdown = split.map((group) => ({
     rate: decimal(group.rate),
     base: negateDecimal(decimal(group.base)),
     tax: negateDecimal(decimal(group.tax)),
@@ -495,11 +501,7 @@ function assertReversesLineForLine(
  */
 function wholeInvoiceBreakdown(
   saleId: SaleId,
-  original: {
-    total: number;
-    correctionCount: number;
-    vatBreakdown: { rate: string; base: string; tax: string }[];
-  },
+  original: Figures & { correctionCount: number },
   totalCents: number,
   lines: readonly RecordSaleLine[],
 ): VatBreakdownLine[] {
@@ -512,12 +514,7 @@ function wholeInvoiceBreakdown(
       correction,
     });
   }
-  const breakdown = original.vatBreakdown.map((group) => ({
-    rate: decimal(group.rate),
-    base: negateDecimal(decimal(group.base)),
-    tax: negateDecimal(decimal(group.tax)),
-  }));
-  assertSumsTo(breakdown, correction);
+  const breakdown = negatedSplit(original.vatBreakdown, correction);
   for (const rate of [...breakdown.map((g) => g.rate), ...lines.map((l) => decimal(l.vatRate))]) {
     const atRate = (other: Decimal) => compareDecimal(other, rate) === 0;
     const linesAtRate = lines.filter((l) => atRate(decimal(l.vatRate)));

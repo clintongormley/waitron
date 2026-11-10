@@ -10,6 +10,8 @@ import {
   decimalToBasisPoints,
   decimalToCents,
   negateDecimal,
+  subtractDecimal,
+  sumDecimals,
   thousandthsToDecimal,
   type Decimal,
   type NodeId,
@@ -22,7 +24,12 @@ import {
   type CorrectionAmountPreview,
 } from "./correction-allocation.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
-import { measuredFigures, type MeasuredSale } from "./filed-figures.js";
+import {
+  measuredFigures,
+  type Figures,
+  type MeasuredSale,
+  type StoredSaleFigures,
+} from "./filed-figures.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
@@ -86,9 +93,12 @@ export async function previewCorrectionAmounts(
     throw new AppError("sale.correction_scope_invalid", { reason: "filed_split_changed" });
   }
   const { history, invoiceLines } = await readHistory(tx, saleId, stored, { moved: true });
-  const linesRemaining =
-    sumCents(history.lines.map((line) => line.gross)) -
-    sumCents(history.consumed.map((allocation) => allocation.gross));
+  const linesRemaining = decimalToCents(
+    subtractDecimal(
+      sumDecimals(history.lines.map((line) => line.gross)),
+      sumDecimals(history.consumed.map((allocation) => allocation.gross)),
+    ),
+  );
   const inTotal = figures.measuredRemaining !== linesRemaining;
   if (inTotal && decimalToCents(selection.gross) !== figures.measuredRemaining) {
     throw new AppError("sale.correction_scope_invalid", { reason: "filed_total_changed" });
@@ -116,7 +126,7 @@ export async function previewCorrectionAmounts(
 /** One stand-in line per rate of the invoice's measured split, with what each earlier
  * correction's measured split took from that rate, for working out a moved invoice's split. */
 function splitHistory(
-  invoiceSplit: MeasuredSale["measured"]["vatBreakdown"],
+  invoiceSplit: Figures["vatBreakdown"],
   corrections: readonly MeasuredSale[],
 ): CorrectionAmountHistory {
   const standIn = (rate: string) => `rate:${decimalToBasisPoints(decimal(rate))}`;
@@ -145,10 +155,6 @@ function splitHistory(
   };
 }
 
-function sumCents(amounts: readonly Decimal[]): number {
-  return amounts.reduce((sum, amount) => sum + decimalToCents(amount), 0);
-}
-
 /**
  * What a paid invoice holds and what every earlier correction of it took, whatever that
  * correction's filing state, for `allocateCorrectionAmounts`. Refused with
@@ -164,16 +170,14 @@ export async function readCorrectionAmountHistory(
   return (await readHistory(tx, saleId)).history;
 }
 
-type StoredFigures = Pick<typeof sales.$inferSelect, "id" | "total" | "vatBreakdown">;
-
 /** The invoice's and its earlier corrections' stored figures; refused when the sale is unknown or
  * is itself a correction. */
 async function readStored(
   tx: Transaction,
   saleId: SaleId,
 ): Promise<{
-  sale: StoredFigures & Pick<typeof sales.$inferSelect, "counterpartyTaxId">;
-  corrections: StoredFigures[];
+  sale: StoredSaleFigures & Pick<typeof sales.$inferSelect, "counterpartyTaxId">;
+  corrections: StoredSaleFigures[];
 }> {
   const figures = { id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown };
   const [sale] = await tx

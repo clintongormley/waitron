@@ -483,13 +483,13 @@ const filed = (total: string, ...split: (readonly [string, string, string])[]) =
   newestAwaitingAnswer: true,
 });
 const AT_21 = ["21.00", "10.00", "2.10"] as const;
-const CHANGED = "filed_figures_unanswered";
+const UNANSWERED = "filed_figures_unanswered";
 
 it.each<[name: string, whose: "invoice" | "corrective", figures: FiledFigures, reason: string]>([
-  ["an extra rate", "invoice", filed("12.10", AT_21, ["10.00", "0.00", "0.00"]), CHANGED],
-  ["another base and VAT", "invoice", filed("12.10", ["21.00", "10.01", "2.09"]), CHANGED],
-  ["another total alone", "invoice", filed("12.11", AT_21), CHANGED],
-  ["another split", "corrective", filed("-1.05", ["21.00", "-0.88", "-0.17"]), CHANGED],
+  ["an extra rate", "invoice", filed("12.10", AT_21, ["10.00", "0.00", "0.00"]), UNANSWERED],
+  ["another base and VAT", "invoice", filed("12.10", ["21.00", "10.01", "2.09"]), UNANSWERED],
+  ["another total alone", "invoice", filed("12.11", AT_21), UNANSWERED],
+  ["another split", "corrective", filed("-1.05", ["21.00", "-0.88", "-0.17"]), UNANSWERED],
   ["nothing readable", "corrective", { readable: false }, "filed_figures_unreadable"],
 ])("refuses when the filed figures show %s for the %s", async (_name, whose, figures, reason) => {
   const { saleId, ids } = await sellSteak();

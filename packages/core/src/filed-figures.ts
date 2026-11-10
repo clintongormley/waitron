@@ -9,19 +9,20 @@ import {
 } from "@waitron/shared";
 import "./errors.js";
 
-type Split = readonly { rate: string; base: string; tax: string }[];
-
-export interface StoredSaleFigures {
-  id: string;
+export interface Figures {
   /** Cents. */
   total: number;
-  vatBreakdown: Split;
+  vatBreakdown: readonly { rate: string; base: string; tax: string }[];
+}
+
+export interface StoredSaleFigures extends Figures {
+  id: string;
 }
 
 export interface MeasuredSale {
   id: string;
-  /** The newest answered version's figures, else the stored ones; the total in cents. */
-  measured: { total: number; vatBreakdown: Split };
+  /** The newest answered version's figures, else the stored ones. */
+  measured: Figures;
 }
 
 /**
@@ -68,11 +69,8 @@ export async function measuredFigures(
 }
 
 /** The same total, and at each rate the same base and VAT, to the cent. */
-export function sameFigures(
-  a: { total: number; vatBreakdown: Split },
-  b: { total: number; vatBreakdown: Split },
-): boolean {
-  const splitOf = (split: Split) =>
+function sameFigures(a: Figures, b: Figures): boolean {
+  const splitOf = (split: Figures["vatBreakdown"]) =>
     new Map(
       split.map((line) => [
         decimalToBasisPoints(decimal(line.rate)),
@@ -88,7 +86,7 @@ export function sameFigures(
   );
 }
 
-function atCents(version: FiledVersionFigures): { total: number; vatBreakdown: Split } {
+function atCents(version: FiledVersionFigures): Figures {
   return {
     total: decimalToCents(version.total),
     vatBreakdown: version.vatBreakdown,
