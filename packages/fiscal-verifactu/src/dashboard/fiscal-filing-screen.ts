@@ -425,6 +425,13 @@ export class FiscalFilingScreen extends LitElement {
             </p>`
           : nothing
       }
+      ${
+        cases.length > 0
+          ? html`<p class="muted" data-test="no-correction">
+              ${t("fiscal_filing.cases.no_correction")}
+            </p>`
+          : nothing
+      }
       <wt-data-table
         data-test="case-table"
         aria-label=${t("fiscal_filing.cases")}

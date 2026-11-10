@@ -181,6 +181,7 @@ const en = {
   "fiscal_filing.held_without_case": "Held with no case: {count}",
   "fiscal_filing.cases.none": "No case needs a decision.",
   "fiscal_filing.cases.bounded": "The newest {shown} of {total}",
+  "fiscal_filing.cases.no_correction": "Waitron cannot correct these records yet.",
   "fiscal_filing.cases.range": "{from}–{to} of {total}",
   "fiscal_filing.cases.previous": "Previous page",
   "fiscal_filing.cases.next": "Next page",
@@ -206,7 +207,7 @@ const en = {
   "fiscal_filing.now.fiscal.huella_divergente":
     "This record is refused and is not sent again. While the conflict is active, this box issues no invoices.",
   "fiscal_filing.now.fiscal.duplicado_anulado":
-    "AEAT holds this invoice as cancelled, so this record is refused and is not sent again.",
+    "AEAT holds this invoice as cancelled, so this record is refused and is not sent again. While the conflict is active, this box issues no invoices.",
   "fiscal_filing.detail.invoice": "Invoice",
   "fiscal_filing.detail.issuer": "Issuer tax number",
   "fiscal_filing.detail.type": "Record and invoice type",
@@ -414,6 +415,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.held_without_case": "Detenidos sin caso: {count}",
   "fiscal_filing.cases.none": "Ningún caso necesita una decisión.",
   "fiscal_filing.cases.bounded": "Los {shown} más recientes de {total}",
+  "fiscal_filing.cases.no_correction": "Waitron todavía no puede corregir estos registros.",
   "fiscal_filing.cases.range": "{from}–{to} de {total}",
   "fiscal_filing.cases.previous": "Página anterior",
   "fiscal_filing.cases.next": "Página siguiente",
@@ -439,7 +441,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.now.fiscal.huella_divergente":
     "Este registro está rechazado y no se vuelve a enviar. Mientras el conflicto siga activo, este equipo no emite facturas.",
   "fiscal_filing.now.fiscal.duplicado_anulado":
-    "La AEAT tiene esta factura como anulada, así que este registro está rechazado y no se vuelve a enviar.",
+    "La AEAT tiene esta factura como anulada, así que este registro está rechazado y no se vuelve a enviar. Mientras el conflicto siga activo, este equipo no emite facturas.",
   "fiscal_filing.detail.invoice": "Factura",
   "fiscal_filing.detail.issuer": "NIF del emisor",
   "fiscal_filing.detail.type": "Tipo de registro y de factura",

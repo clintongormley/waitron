@@ -220,6 +220,19 @@ describe("vf-fiscal-filing-screen", () => {
     expect(details).toContain("Registro de facturación duplicado.");
   });
 
+  it("says once that Waitron cannot correct the records while there are cases, and not without", async () => {
+    const { screen } = await mount(vi.fn(async () => overview()));
+    expect(screen.shadowRoot!.querySelectorAll("[data-test=no-correction]")).toHaveLength(1);
+    expect(text(screen, "[data-test=cases] [data-test=no-correction]")).toBe(
+      "Waitron cannot correct these records yet.",
+    );
+
+    const { screen: empty } = await mount(
+      vi.fn(async () => overview({ cases: [], totalCases: 0 })),
+    );
+    expect(empty.shadowRoot!.querySelector("[data-test=no-correction]")).toBeNull();
+  });
+
   it("says the list is the newest 200 when there are more", async () => {
     const cases = Array.from({ length: 200 }, (_, i) =>
       conflictCase(`rec-${i}`, "2026-11-03T11:02:00.000Z"),
