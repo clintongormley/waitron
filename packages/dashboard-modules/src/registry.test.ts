@@ -53,7 +53,7 @@ describe("DASHBOARD_MODULES honesty", () => {
     });
   });
 
-  it("puts Fiscal filing first in the reports group for anyone who may export reports", () => {
+  it("places Fiscal filing right after VAT return, before the other module reports, for anyone who may export reports", () => {
     const fiscal = DASHBOARD_MODULES.find((c) => c.module === "fiscal-verifactu");
     expect(
       fiscal?.moreScreens?.find((entry) => entry.screen.id === "fiscal-filing")?.screen,

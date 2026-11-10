@@ -14,9 +14,9 @@ again. **Read at** says when the figures were read.
 ## An identity conflict {#conflict}
 
 When this box has stopped issuing invoices because of an identity conflict, a red box at the top
-says so and lists what AEAT holds for each invoice involved. Choose **Open conflict recovery** and
-follow [Recover an invoice identity conflict](box-status.md#invoice-conflict). You need the box's
-recovery key.
+says so and lists each invoice involved with what AEAT said about it. Choose **Open conflict
+recovery** and follow [Recover an invoice identity conflict](box-status.md#invoice-conflict). You
+need the box's recovery key.
 
 ## Sending progress {#progress}
 

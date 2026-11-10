@@ -185,37 +185,37 @@ that bundle's heading in the area's file: take a bundle as one pull request.
 
   The [inspection and caller-scope proposal](superpowers/specs/2026-10-29-a1089-fiscal-reconcile-recovery-design.md)
   and [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reconcile-evidence.md)
-  follow the owner's 29 October evidence-first decision. The 08:07 instruction approves the
-  read-only build after fresh plan review and coordination of shared files. The screen and its
-  qualification remain open. A local queue-reset marker does not prove a repeat submission;
-  persistent recovery remains open.
+  follow the owner's 29 October evidence-first decision. The owner retired its separate evidence
+  branch on 2026-11-10; its evidence belongs on Reporting → Fiscal filing. A local queue-reset
+  marker does not prove a repeat submission; persistent recovery remains open.
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
-  The owner approved running-dashboard evidence-first planning on 2026-10-29. The
-  [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-environment-evidence.md)
-  awaits separate build approval. Persistent repair from the running dashboard remains open;
-  the startup database guard also applies. A1501 supplies the wrong-environment failed-start
-  Move/Stop route; it never relabels the retained database.
+  The owner retired this item's separate evidence screen on 2026-11-10: its evidence goes on
+  Reporting → Fiscal filing, with the reply-line and integrity evidence, as one small step. The
+  [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-environment-evidence.md) keeps the
+  source audit. Persistent repair from the running dashboard remains open; the startup database
+  guard also applies. A1501 supplies the wrong-environment failed-start Move/Stop route; it never
+  relabels the retained database.
 
 - **A1089: a fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
   [Audit](backlog/self-service-refusals.md#fiscal-reply).
   The [inspection design](superpowers/specs/2026-10-28-a1089-fiscal-reply-recovery-design.md) and
-  [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reply-evidence.md) follow the owner's
-  29 October evidence-first decision. The read-only build is approved once the plan has had its fresh
-  review; implementation and qualification remain open. The first retained warning may differ from
-  the latest reply; persistent repair requires a separate owner decision.
+  [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reply-evidence.md) keep the source
+  audit. The owner retired this item's separate evidence screen on 2026-11-10: its evidence goes on
+  Reporting → Fiscal filing, with the environment and integrity evidence, as one small step. The
+  first retained warning may differ from the latest reply; persistent repair requires a separate
+  owner decision.
 
 - **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for W41s-8's remedies to be enabled (`ENABLED_REMEDIES` is empty); until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
   [Audit](backlog/self-service-refusals.md#fiscal-cases).
 
 - **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
   [Audit](backlog/self-service-refusals.md#fiscal-integrity).
-  The owner chose evidence-first inspection on 2026-10-29; the 08:07 instruction approves
-  building the [integrity evidence plan](superpowers/plans/2026-10-29-a1089-fiscal-integrity-evidence.md)
-  after its fresh review, subject to coordination of shared files. The
+  The owner retired this item's separate evidence screen on 2026-11-10: its evidence goes on
+  Reporting → Fiscal filing, with the reply-line and environment evidence, as one small step. The
   [proposal](superpowers/specs/2026-10-29-a1089-fiscal-integrity-recovery-design.md) retains the source audit.
-  The screen remains to be built. Saved predecessor-check issues and local validation warnings
+  Saved predecessor-check issues and local validation warnings
   are distinct; persistent repair and whole-chain auditing remain open. Inspection does not establish AEAT acceptance.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
@@ -286,10 +286,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
-- **W41s. Fiscal prevention and offline recovery.** The filing investigation screen (W41s-9) comes
-  in two slices: slice 1, **Reporting → Fiscal filing** with progress, cases, conflicts, held records
-  and export, is on branch `feat/w41s-9-fiscal-filing`; slice 2, possibly missing history, remains
-  queued, and the complete old-backup/new-hardware exercise (W41s-11) waits for it. Signed witnesses and fencing (W41s-10b)
+- **W41s. Fiscal prevention and offline recovery.** The filing investigation screen's slice 2 (W41s-9),
+  possibly missing history, remains queued, and the complete old-backup/new-hardware exercise
+  (W41s-11) waits for it. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
   restored server, and history before the oldest known month. Task 8's disputed production remedies
   remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision. Once its original's

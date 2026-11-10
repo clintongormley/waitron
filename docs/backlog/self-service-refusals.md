@@ -291,7 +291,7 @@ Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a suppo
 
 State: A duplicate lookup identifies a different fingerprint and opens a case. External or restored-data disagreement is not proved to be bug-only. Receipt: `packages/fiscal-verifactu/src/drain.ts:1773`.
 
-Route: Missing: a supported evidence/decision route for the conflict. Never rewrite a recorded fingerprint.
+Route: Missing: a supported decision route for the conflict; the evidence page, **Reporting → Fiscal filing**, exists (W41s-9 slice 1, 2026-11-10). Never rewrite a recorded fingerprint.
 
 ### `fiscal.environment_mismatch`
 
@@ -939,9 +939,9 @@ Unchanged local commands run for this recheck:
 Logs are in `/Users/clintongormley/waitron-campaign-e/receipts/a1089-fiscal-integrity-20261029/`.
 These local fixtures do not qualify live AEAT, a complete chain audit, persistent repair or a rendered
 inspection screen. The proposal separates saved evidence from fresh reads, offers sign-in at the
-action and a safe Stop, and grants no write or repair authority. Choose planning inspection first,
-leaving persistent repair open, or designing the complete recovery/decision path before a build.
-Both options require separate implementation approval; the product referrals remain open.
+action and a safe Stop, and grants no write or repair authority. The owner retired the separate
+evidence screen on 2026-11-10: its evidence goes on Reporting → Fiscal filing as one small step.
+The product referrals remain open.
 
 ### fiscal-cases
 
@@ -980,8 +980,8 @@ The logs report **23**, **56** and **20** passing cases respectively; the first 
 real XML client, not live AEAT, an end-to-end inspection journey or a persistent-repair qualification.
 No original assertion, fiscal record, guard or production source changes in this milestone.
 
-**Still open:** decide whether to plan evidence inspection first, with persistent response repair
-explicitly open, or design the complete fiscal decision route before a build. Keep the support
+**Still open:** the owner retired the separate evidence screen on 2026-11-10: its evidence goes on
+Reporting → Fiscal filing as one small step; persistent response repair stays open. Keep the support
 wording in scope until an actual action exists. Inspection must distinguish the first retained
 warning from freshly read submission state; it cannot reconstruct replies that were never kept.
 A malformed reply does not establish a Waitron bug or authorise a reset, altered chain, new invoice
