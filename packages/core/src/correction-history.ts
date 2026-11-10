@@ -19,6 +19,7 @@ import {
   type CorrectionAmountHistory,
   type CorrectionAmountPreview,
 } from "./correction-allocation.js";
+import { requireSupportedCorrection } from "./correction-eligibility.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
@@ -32,7 +33,8 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * file, as the lines and split `recordCorrection` takes. Refused with
  * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
  * not admit a correction of it, or the regime's newest filed figures of it or of an earlier
- * correction cannot be read or differ from the stored ones.
+ * correction cannot be read or differ from the stored ones; refused with
+ * `sale.correction_unsupported`, as `recordCorrection` is, when the invoice names a customer.
  */
 export async function previewCorrectionAmounts(
   tx: Transaction,
@@ -55,6 +57,7 @@ export async function previewCorrectionAmounts(
     throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
   }
   const stored = await readStored(tx, saleId);
+  requireSupportedCorrection(stored.sale.counterpartyTaxId, saleId);
   await refuseMovedFigures(tx, backend, [stored.sale, ...stored.corrections]);
   const { history, invoiceLines } = await readHistory(tx, saleId, stored);
   const preview = allocateCorrectionAmounts(history, selection);
@@ -88,10 +91,17 @@ type StoredFigures = Pick<typeof sales.$inferSelect, "id" | "total" | "vatBreakd
 async function readStored(
   tx: Transaction,
   saleId: SaleId,
-): Promise<{ sale: StoredFigures; corrections: StoredFigures[] }> {
+): Promise<{
+  sale: StoredFigures & Pick<typeof sales.$inferSelect, "counterpartyTaxId">;
+  corrections: StoredFigures[];
+}> {
   const figures = { id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown };
   const [sale] = await tx
-    .select({ ...figures, correctsSaleId: sales.correctsSaleId })
+    .select({
+      ...figures,
+      correctsSaleId: sales.correctsSaleId,
+      counterpartyTaxId: sales.counterpartyTaxId,
+    })
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("sale.not_found", { saleId });

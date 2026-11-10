@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, decimal, jobOrigin, nodeId, saleId, seriesId } from "@waitron/shared";
-import { CORE_MIGRATIONS, invoiceSeries, sales } from "@waitron/db";
-import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { FiscalBackend, SaleForFiscalRecord } from "../backend.js";
 import { FakeFiscalBackend } from "./fake-backend.js";
@@ -29,10 +27,7 @@ function saleOn(node: typeof NODE_A, invoiceNumber: number): SaleForFiscalRecord
   };
 }
 
-const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS],
-  setup: (db) => FakeFiscalBackend.install(db),
-});
+const suite = useVenueDb({ migrations: [], setup: (db) => FakeFiscalBackend.install(db) });
 
 beforeEach(async () => {
   await FakeFiscalBackend.truncate(suite.db);
@@ -411,48 +406,38 @@ describe("correctionAdmissionFor", () => {
 });
 
 describe("filedFiguresFor", () => {
-  it("answers each stored sale's figures as both versions, or what the test sets", async () => {
-    await seedVenue(suite.db);
-    const node = await seedNode(suite.db);
-    const { deviceId } = await seedDevice(suite.db);
-    const [series] = await suite.db
-      .insert(invoiceSeries)
-      .values({ nodeId: node, code: "T1", purpose: "standard", nextNumber: 1 })
-      .returning({ id: invoiceSeries.id });
-    const [row] = await suite.db
-      .insert(sales)
-      .values({
-        source: "device",
-        deviceId,
-        nodeId: node,
-        seriesId: series!.id,
-        invoiceNumber: 1,
-        issuedAt: "2027-03-14T11:00:00+01:00",
-        issuedOffsetMinutes: 60,
-        total: 1210,
-        vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
-        locale: "es",
-        invoiceLocales: ["es"],
-        fiscalBackend: "fake",
-        fiscalState: "recorded",
-      })
-      .returning({ id: sales.id });
-    const sold = saleId(row!.id);
-    const unknown = saleId("00000000-0000-0000-0000-000000000000");
+  it("answers each filed sale's and correction's figures as both versions, or what the test sets", async () => {
+    const sold = saleOn(NODE_A, 1);
+    const corrective = {
+      ...saleOn(NODE_A, 2),
+      total: decimal("-1.21"),
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("-1.00"), tax: decimal("-0.21") }],
+    };
+    const unfiled = saleOn(NODE_A, 3).saleId;
+    await suite.db.transaction(async (tx) => {
+      await backend.registerNode(tx, NODE_A);
+      await backend.recordSale(tx, sold);
+      await backend.recordCorrection(tx, corrective, { correctsSaleId: sold.saleId });
+    });
     const ask = () =>
       suite.db.transaction((tx) =>
-        (backend as FiscalBackend).filedFiguresFor!(tx, [sold, unknown]),
+        (backend as FiscalBackend).filedFiguresFor!(tx, [sold.saleId, corrective.saleId, unfiled]),
       );
-    const stored = {
-      total: "12.10",
-      vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
-    };
+    const both = ({ total, vatBreakdown }: SaleForFiscalRecord) => ({
+      readable: true,
+      newest: { total, vatBreakdown },
+      newestAnswered: { total, vatBreakdown },
+    });
 
     const answer = await ask();
-    backend.setFiledFigures(sold, { readable: false });
+    backend.setFiledFigures(sold.saleId, { readable: false });
 
-    expect(answer.get(sold)).toEqual({ readable: true, newest: stored, newestAnswered: stored });
-    expect(answer.has(unknown)).toBe(false);
-    expect((await ask()).get(sold)).toEqual({ readable: false });
+    expect(answer).toEqual(
+      new Map([
+        [sold.saleId, both(sold)],
+        [corrective.saleId, both(corrective)],
+      ]),
+    );
+    expect((await ask()).get(sold.saleId)).toEqual({ readable: false });
   });
 });

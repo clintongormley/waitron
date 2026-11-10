@@ -1,11 +1,17 @@
 import { beforeEach, expect, it } from "vitest";
-import { decimal, deviceOrigin, saleId as brandSaleId } from "@waitron/shared";
+import {
+  decimal,
+  deviceOrigin,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+} from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiledFigures, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   captureError,
+  invoiceSeries,
   newId,
   saleLines,
   sales,
@@ -15,7 +21,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   correctionLinesFor,
   previewCorrectionAmounts,
@@ -133,7 +139,11 @@ beforeEach(async () => {
   await withTransaction(suite.db, (tx) => backend.registerNode(tx, nodeId));
 });
 
-async function sell(lines = invoiceLines(), total = "24.20") {
+async function sell(
+  lines = invoiceLines(),
+  total = "24.20",
+  extra: Partial<Parameters<typeof recordSale>[2]> = {},
+) {
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
       origin: deviceOrigin(deviceId),
@@ -150,6 +160,7 @@ async function sell(lines = invoiceLines(), total = "24.20") {
         ],
       },
       clock,
+      ...extra,
     }),
   );
   const rows = await suite.db
@@ -259,7 +270,12 @@ async function history(change: Change) {
 }
 
 it("reads every invoice line, extras included, its stored split and what earlier corrections took", async () => {
-  const { ids, result } = await history({});
+  const { ids, result } = await history({
+    correctionLines: [
+      ["-0.50", "-0.61"],
+      ["-0.37", "-0.44"],
+    ],
+  });
 
   expect(await result()).toEqual({
     lines: [
@@ -268,7 +284,10 @@ it("reads every invoice line, extras included, its stored split and what earlier
       { id: ids[2], lineNo: 3, rate: "10.00", gross: "1.10", base: "1.00" },
     ],
     vatBreakdown: BREAKDOWN,
-    consumed: [{ saleLineId: ids[1], rate: "21.00", gross: "1.05", base: "0.87", tax: "0.18" }],
+    consumed: [
+      { saleLineId: ids[1], rate: "21.00", gross: "0.61", base: "0.50", tax: "0.11" },
+      { saleLineId: ids[1], rate: "21.00", gross: "0.44", base: "0.37", tax: "0.07" },
+    ],
   });
 });
 
@@ -391,6 +410,26 @@ it("previews an admitted correction with the admission's filing and the lines to
     filing: "accepted",
     original: { number: "T1-1", issuedAt: "2027-03-14" },
     lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
+  });
+});
+
+it("refuses an invoice with a named customer, as the writer does", async () => {
+  const [full] = await suite.db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "F", purpose: "full" })
+    .returning({ id: invoiceSeries.id });
+  suite.db.run(
+    sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+  );
+  const { saleId } = await sell([{ ...invoiceLines()[1]!, lineNo: 1 }], "12.10", {
+    seriesId: brandSeriesId(full!.id),
+    counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+    recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
+  });
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_unsupported",
+    params: { saleId },
   });
 });
 

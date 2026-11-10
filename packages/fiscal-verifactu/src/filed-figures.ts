@@ -14,6 +14,9 @@ type Version = Pick<
   estado: string | null;
 };
 
+/** Each id binds one value, so a run stays under the engine's bound-value ceiling. */
+const IDS_PER_QUERY = 1000;
+
 const ANSWERED = new Set(["aceptado", "aceptado_con_errores"]);
 
 /** The keys `toDetalleDesglose` (./backend.ts) writes, and no other. */
@@ -34,21 +37,24 @@ export async function filedFiguresFor(
   saleIds: readonly SaleId[],
 ): Promise<ReadonlyMap<SaleId, FiledFigures>> {
   const answer = new Map<SaleId, FiledFigures>();
-  if (saleIds.length === 0) return answer;
-  const { rows } = await tx.execute<Record<string, unknown>>(sql`
-    select r.id, r.sale_id, r.corrects_registro_id, r.desglose, r.cuota_total, r.importe_total,
-      e.estado
-    from registros_facturacion as r indexed by registros_sale_idx
-    left join envios as e on e.registro_id = r.id
-    where r.sale_id in (${sql.join(
-      saleIds.map((id) => sql`${id}`),
-      sql`, `,
-    )}) and r.tipo_registro = 'alta'
-  `);
+  // A sale named in two runs would bring its versions twice, which reads as two newest versions.
+  const distinct = [...new Set(saleIds)];
   const bySale = new Map<string, Version[]>();
-  for (const raw of rows) {
-    const version = decodeRegistroRow(raw) as unknown as Version;
-    bySale.set(version.sale_id, [...(bySale.get(version.sale_id) ?? []), version]);
+  for (let start = 0; start < distinct.length; start += IDS_PER_QUERY) {
+    const { rows } = await tx.execute<Record<string, unknown>>(sql`
+      select r.id, r.sale_id, r.corrects_registro_id, r.desglose, r.cuota_total, r.importe_total,
+        e.estado
+      from registros_facturacion as r indexed by registros_sale_idx
+      left join envios as e on e.registro_id = r.id
+      where r.sale_id in (${sql.join(
+        distinct.slice(start, start + IDS_PER_QUERY).map((id) => sql`${id}`),
+        sql`, `,
+      )}) and r.tipo_registro = 'alta'
+    `);
+    for (const raw of rows) {
+      const version = decodeRegistroRow(raw) as unknown as Version;
+      bySale.set(version.sale_id, [...(bySale.get(version.sale_id) ?? []), version]);
+    }
   }
   for (const [saleId, versions] of bySale) {
     answer.set(saleId as SaleId, figuresOf(versions));

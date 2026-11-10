@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { CorrectionAdmission, FiledFigures } from "@waitron/fiscal";
-import type { SaleId } from "@waitron/shared";
+import { saleId as brandSaleId, type SaleId } from "@waitron/shared";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -36,13 +37,14 @@ beforeEach(async () => {
   });
 });
 
-const detail = (rate: string, base: string, tax: string): DetalleDesgloseInput => ({
-  ClaveRegimen: "01",
-  CalificacionOperacion: "S1",
-  BaseImponibleOimporteNoSujeto: base,
-  TipoImpositivo: rate,
-  CuotaRepercutida: tax,
-});
+const detail = (rate: string, base: string, tax: string) =>
+  ({
+    ClaveRegimen: "01",
+    CalificacionOperacion: "S1",
+    BaseImponibleOimporteNoSujeto: base,
+    TipoImpositivo: rate,
+    CuotaRepercutida: tax,
+  }) satisfies DetalleDesgloseInput;
 
 interface Figures {
   desglose: DetalleDesgloseInput[];
@@ -266,4 +268,16 @@ it("leaves out a sale with no alta, and a cancellation is not one", async () => 
 
   expect(answer.has(bare)).toBe(false);
   expect(answer.get(voided.saleId)).toMatchObject({ readable: true, newest: V21 });
+});
+
+it("reads more sales than one statement can bind, a repeated sale once", async () => {
+  const first = await file({ estado: "aceptado" });
+  const last = await file({ estado: "aceptado" });
+  const unfiled = Array.from({ length: SQL_VARIABLE_LIMIT }, () => brandSaleId(newId()));
+
+  const answer = await figuresFor(first.saleId, ...unfiled, last.saleId, first.saleId);
+
+  expect([...answer.keys()]).toEqual([first.saleId, last.saleId]);
+  expect(answer.get(first.saleId)).toMatchObject({ readable: true, newest: V21 });
+  expect(answer.get(last.saleId)).toMatchObject({ readable: true, newest: V21 });
 });
