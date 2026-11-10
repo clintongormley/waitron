@@ -75,7 +75,7 @@ off by default.
 4. **GET recovery read**, same file: `{ closure: CloseByTransferResult | null }` from
    `readTransferClosure`; 200 with `null` for a bill not closed, `working_order.not_found` for none.
    Session, device and zone read scope as the bill's own read; no `sale.take_payment`, no
-   `close-by-transfer`, passive request; no write of any kind.
+   `close-by-transfer`, passive request; it adds no sale or closure and stamps no device sighting.
 5. **Till client.** `apps/till/src/api/transfer-close-types.ts` (browser-safe copies of the request
    and result) and `closeByTransfer` / `getTransferClosure` in `apps/till/src/api/client.ts`, with a
    client test of both shapes. No screen.
