@@ -1,0 +1,32 @@
+# B3-13: install, then start from the installed disk
+
+**Proposed; watcher approval and scope choice required.** Provenance: `/Users/clintongormley/waitron-campaign-k/questions.md`, WATCHER 2026-11-10 11:03:
+
+> Plan this next (one page, one Claude read, PLAN FOR APPROVAL): the USB image installs Waitron onto the machine's own disk and the machine then starts from that disk and reaches setup, shown end to end in this Mac's emulator (a second virtual disk; boot the stick, install, boot the disk).
+
+The same note says: “if the encrypted state is inseparable from the install step, say so in the plan with sizes for both ways rather than widening silently.”
+
+**Build/leaves out.** Recommend an unencrypted development installation, requiring watcher choice. Deliver emulated UEFI boot (OVMF), Secure Boot off, and installed startup; qualify no physical firmware. No setup/fiscal changes, setup codes, signed-release format, CI workflow, host physical-device writes or public appliance distribution. Downloading stick, RAM removal, boot-order updates, reinstall guards, kiosk, host adapters and physical/Android checks remain open. The [design](../specs/2026-10-21-b3-usb-installer-design.md) §§5–8/15 and [six-slice plan](2026-10-26-b3-usb-installer.md) remain release gates.
+
+**Source.** At `133de46c88`, `deploy/box/mkosi.conf:11` disables bootability; `bench/box-installer/run.mjs:60–112` injects startup/kernel/initrd; `scripts/box/disk-key.mjs:322–328` refuses without a mount adapter. Proposed mechanisms below are untested.
+
+**Mechanism.** Reuse the preloaded ext4 payload. Build a development GPT USB image with EFI, installer root and unmounted payload; attach USB source and virtio target. Separate roots keep the writer/unit absent from the installed payload, checked in acceptance. `build.sh`'s image-file preload leaves its source tree unchanged. Install GRUB/dosfstools in the x86-64 guest tree; generate `EFI/BOOT/BOOTX64.EFI` there by chroot. OVMF stays in the tool container. Ship installer kernel/initrd, UUID-based GRUB configuration and an install-only unit; mount source read-only with volatile runtime writes. The writer creates 512 MiB EFI, 1 GiB boot and remaining ext4, copies/verifies payload, assigns a fresh UUID, grows ext4 and writes fstab/GRUB. The separate boot partition deliberately follows the future layout. Shut down, detach source, then firmware-boot target without injected unit/kernel/initrd/arguments. Its enabled unit checks root UUID, loads AppArmor before naming the print profile, then runs Compose `--pull never`. Its shipped development script emits one secret-free JSON readiness record to serial: mounted UUID, machine-id, image IDs and service states. This supplies evidence without a probe that starts the app.
+
+**Writer boundary.** The writer accepts no device argument. Require QEMU DMI product `Waitron-B3-dev`, virtio serial `waitron-dev-target`, exactly one non-source whole disk, sufficient size, no mounts/holders and entirely zero target bytes. Recheck identity/size before writing; refuse source/root, ambiguous, occupied or nonvirtual targets. Bind these limits to partitioning/copying. Do not fabricate TPM/Secure Boot observations or change existing classifier/policy. Existing disks are refused.
+
+**Exact paths and estimates.** 1,055 changed lines across 19 paths. Added/removed lines, including configuration:
+
+| Layer | Change | + / − |
+| --- | --- | --- |
+| Development scripts/config | Modify `deploy/box/build.sh`, `deploy/box/mkosi.conf`; create `deploy/box/firmware-image.sh`, `deploy/box/install-dev.sh`, `deploy/box/start-dev.sh`, `deploy/box/waitron-dev-install.service`, `deploy/box/waitron-dev.service` | 430 / 20 |
+| Tests | Create `scripts/box/installed-start.test.mjs`; extend `scripts/box/rig-contract.test.mjs`, `scripts/box/recipe-setup.test.mjs` | 220 / 5 |
+| Support | Extend `scripts/box/rig-contract.mjs`, `scripts/box/recipe-setup.mjs`, `bench/box-installer/run.mjs`, `bench/box-installer/Containerfile` | 230 / 45 |
+| Docs | This plan, `bench/box-installer/README.md`, `deploy/README.md`, `docs/backlog.md`, `docs/backlog/box.md` | 90 / 15 |
+
+**Tests/finish.** TDD: observe named failures, implement, rerun green. Root tests execute startup with PATH stubs for ordering/failure/wrong UUID; parser/evidence cases retain existing assertions. Existing `recipe-setup` still selects its smoke target, bypassing normal startup; pin that choice. Reuse `parseRigArgs` and shared status checks.
+
+Add both named rig cases to parser/tests. `installed-refusals` runs the real writer against occupied target, two targets, wrong serial/DMI and source-as-target; require refusal and unchanged disk hashes. In a disposable control remove one write guard, observe the hash assertion fail, restore and pass. `installed-setup` installs, shuts down, detaches source, boots target and renders setup/Prepare. Require readiness UUID/images/services, absent writer/unit, USB origin, no Demo and Prepare/Live/existing choices. Reboot target alone: machine-id and CA fingerprint (persisted state) stay identical. Keep serial logs/hashes/screenshots/timings; cleanup only owned resources.
+
+Run every changed root test file, then `B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img node bench/box-installer/run.mjs --case <installed-refusals|installed-setup> --run-dir <fresh-dir>` for each case in the private tool container. Add firmware/partition tools with inventories/notices; use owned firmware-variable copies.
+
+**Budget/decision.** Three hours to PR including inputs/rebuild: 25 minutes feasibility, 65 implementation/tests, 40 acceptance, 50 review/hook/PR. Measure sparse filesystem-copy cost during feasibility; return to watcher on failure. Harness phase limits: install 15 minutes, boot/reboot/refusals five each. All timing is unmeasured. Encryption also needs §7.3's seal/restart/empty-slot startup gate. Alternative estimate: production +950/−80, tests +550/−30, support +350/−70, docs +120/−30. Firmware/stick assembly, startup ordering and two-disk acceptance survive; ext4 copy/new-UUID/growth are replaced by file copying into encrypted btrfs subvolumes (estimated 100 code/40 test lines replaced). Layout/firmware and sealing/startup may fit separate three-hour slices; no TPM feasibility claim. Retained keys follow only with real encrypted `@host-state`, never an ext4 fallback. Update only delivered B3 backlog progress. Approve reduced development scope, or commission encrypted slices?
