@@ -123,7 +123,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
     () => process.exit(0),
     (error: unknown) => {
       console.error(error instanceof Error ? error.message : error);
-      process.exit(1);
+      process.exit(2);
     },
   );
 }

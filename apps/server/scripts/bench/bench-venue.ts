@@ -24,7 +24,7 @@ import {
   menuItems,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { hashSecret, persons, startManagementSession } from "@waitron/identity";
+import { hashDeviceToken, persons, startManagementSession } from "@waitron/identity";
 import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets } from "@waitron/module";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -266,7 +266,7 @@ async function renewDeviceTokens(db: Database): Promise<Record<string, string>> 
     const token = randomUUID();
     await db
       .update(devices)
-      .set({ tokenHash: hashSecret(token) })
+      .set({ tokenHash: hashDeviceToken(token) })
       .where(eq(devices.id, id));
     renewed[id] = `${DEVICE_COOKIE}=${id}.${token}`;
   }
@@ -286,7 +286,7 @@ async function printAgentToken(db: Database, cfg: WithVenueRowId): Promise<strin
     const token = randomUUID();
     await db
       .update(printAgents)
-      .set({ tokenHash: hashSecret(token) })
+      .set({ tokenHash: hashDeviceToken(token) })
       .where(eq(printAgents.id, agent.id));
     return `${agent.id}.${token}`;
   }
