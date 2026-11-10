@@ -252,11 +252,11 @@ describe("product-list", () => {
           ordering: "not_sold_separately",
           modifiers: [{ kind: "extras", id: "ex-1" }],
           variants: [
-            { ...bunVariant, id: "cana", name: "Small glass", unitPrice: null },
+            { ...bunVariant, id: "cana", name: "Glass", unitPrice: null },
             { ...bunVariant, id: "jarra", name: "Jug", unitPrice: null },
           ],
         }),
-        product({ id: "agua", name: "Water", primaryCategoryId: null }),
+        product({ id: "agua", name: "Artesian water", primaryCategoryId: null }),
       ],
       extraLists: [{ id: "ex-1", name: "Tapas" }],
     });
@@ -267,7 +267,7 @@ describe("product-list", () => {
       return rowKeys(root);
     };
     expect(await searchFor("jug")).toContain("cerveza");
-    expect(await searchFor("beer small glass")).toContain("cerveza");
+    expect(await searchFor("beer glass")).toContain("cerveza");
     const price = cellUnder(root, "cerveza", t("product.price")).textContent!;
     expect(price).toContain("2,50");
     for (const other of [
@@ -1617,7 +1617,7 @@ describe("product-list", () => {
           unitId: EACH_UNIT_ID,
           unit: { ...product().unit, id: EACH_UNIT_ID },
         }),
-        product({ id: "ham", name: "Ham", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
+        product({ id: "ham", name: "Sliced ham", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
       ],
     });
     const root = await tableRoot(el);
@@ -2204,7 +2204,7 @@ describe("the product list at phone width", () => {
         { ...bunVariant, id: "r10", name: "Portion of ten handmade aged ham fritters" },
         { ...bunVariant, id: "r6", name: "Half portion of six croquettes" },
         { ...bunVariant, id: "r4", name: "Four croquettes" },
-        { ...bunVariant, id: "r2", name: "Two" },
+        { ...bunVariant, id: "r2", name: "Double" },
       ],
     });
   const singleWords = () => ({
