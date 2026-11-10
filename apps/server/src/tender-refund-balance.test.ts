@@ -53,7 +53,6 @@ beforeEach(async () => {
     nodeId,
     locationId: placeId,
     locale: "en-GB",
-    invoiceLocales: ["en-GB"],
     tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
@@ -269,7 +268,7 @@ describe("settled-tender refundable balances", () => {
     ]);
   });
 
-  it.each(["attempting", "failed", "accepted_offline", "initiated", "declined", "voided"] as const)(
+  it.each(["attempting", "failed", "initiated", "voided"] as const)(
     "does not offer a card whose only provider row is %s",
     async (state) => {
       const target = await paid("card");

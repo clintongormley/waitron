@@ -5,11 +5,9 @@ import { formatIsoMinute } from "../date-utils.js";
 import { t } from "./t.js";
 
 it("registers the dashboard's alert wording on import", () => {
-  expect(hasAlertMessage("payment.offline_forward_declined")).toBe(true);
-  expect(
-    alertMessage("payment.offline_forward_declined", { amount: "12.50", paymentRef: "pi_1" }, "en"),
-  ).toBe(
-    "A card payment of €12.50 taken while offline was declined when it was sent on (reference pi_1). Collect the money another way.",
+  expect(hasAlertMessage("payment.refund_unresolved")).toBe(true);
+  expect(alertMessage("payment.refund_unresolved", { amount: "12.50" }, "en")).toBe(
+    "A card refund of €12.50 has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms. Later checks do not add to this alert while it is open, so there may be more.",
   );
 });
 
@@ -56,12 +54,6 @@ it("reads a backwards clock jump correctly with its negative number", () => {
 
 it("shows every amount an alert carries with the euro sign, where each language writes it", () => {
   const cases: [string, Record<string, unknown>, string, string][] = [
-    [
-      "payment.offline_forward_declined",
-      { amount: "1279.50", paymentRef: "pi_1" },
-      "A card payment of €1,279.50 taken",
-      "Un pago con tarjeta de 1279,50\u00a0€ cobrado",
-    ],
     [
       "payment.bill_settle_failed",
       { amount: "12.00" },

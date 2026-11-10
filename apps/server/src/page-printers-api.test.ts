@@ -63,7 +63,6 @@ beforeEach(async () => {
     nodeId: brandNodeId(randomUUID()),
     locationId: venueId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

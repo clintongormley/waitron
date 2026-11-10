@@ -589,7 +589,6 @@ describe("the printer delete impact", () => {
     const tillCfg: TradingContext = {
       nodeId: brandNodeId(series!.nodeId),
       locale: "es-ES",
-      invoiceLocales: ["es-ES"],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };

@@ -73,6 +73,7 @@ const ADDED_TABLES = [
 ];
 const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
 const REMOVED_TABLES = [
+  "payment_policy",
   "tenant_receipts",
   "ingredients",
   "recipe_lines",

@@ -559,7 +559,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
           {
             key: "incident:1",
             kind: "event",
-            code: "payment.offline_forward_declined",
+            code: "payment.refund_unresolved",
             params: { amount: "12.50", paymentRef: "pi_1" },
             severity: "error",
             since: "2026-09-14T12:00:00.000Z",
@@ -586,7 +586,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const alert = (id: string) => ({
       key: `incident:${id}`,
       kind: "event",
-      code: "payment.offline_forward_declined",
+      code: "payment.refund_unresolved",
       params: { amount: "12.50", paymentRef: `pi_${id}` },
       severity: "error",
       since: "2026-09-14T12:00:00.000Z",

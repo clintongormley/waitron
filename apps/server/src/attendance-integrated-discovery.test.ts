@@ -50,7 +50,7 @@ async function request() {
 }
 async function payment(
   ref: string,
-  state: "attempting" | "captured" | "accepted_offline" | "failed" | "declined",
+  state: "attempting" | "captured" | "failed",
   provider = "fake",
 ) {
   const [row] = await suite.db
@@ -62,7 +62,7 @@ async function payment(
       source: "operator_script",
       amount: 100,
       state,
-      settledAt: ["captured", "accepted_offline"].includes(state) ? later.toISOString() : null,
+      settledAt: ["captured"].includes(state) ? later.toISOString() : null,
     })
     .returning();
   return row!.id;
@@ -77,7 +77,7 @@ async function discover(at = later) {
   }
   throw new Error("scan did not finish");
 }
-it.each(["captured", "accepted_offline"] as const)(
+it.each(["captured"] as const)(
   "qualifies a late %s under the original request without recovery",
   async (state) => {
     const key = await request();
@@ -136,7 +136,7 @@ it("remembers the exact attempted payment across restart and later capture", asy
     at: "2026-01-05T11:00:00.000Z",
   });
 });
-it.each(["failed", "declined"] as const)(
+it.each(["failed"] as const)(
   "refuses a definitively %s payment without qualifying the request",
   async (state) => {
     await request();

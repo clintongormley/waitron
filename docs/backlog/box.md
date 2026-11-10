@@ -190,9 +190,8 @@ carry none.
   (`box-secrets.ts`, A52) leaves a linked `tls/` and the folder it points to as found, by the
   owner's choice, and a link swapped in for the state folder or a folder above it is followed; a
   folder its owner cannot read is changed by path after an `lstat`, and a link swapped in between
-  the two would be followed. The restore itself (`stageSecrets`, `restore-secrets.ts`) keeps none of `waitron-recovery
-unpack`'s destination refusals (a symbolic link, another user's folder, not a folder) on the
-  state folder it is given. The lock-file measurement kept in `db-wipe.ts` names no engine version
+  the two would be followed. The restore itself (`stageSecrets`, `restore-secrets.ts`) refuses none of these on the state folder it is given: a symbolic link, another user's
+  folder, or something that is not a folder. The lock-file measurement kept in `db-wipe.ts` names no engine version
   or platform.
 
 ## `apps/server/src/errors.ts` still cites CLAUDE.md §5 for things §5 does not say
@@ -263,8 +262,7 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   `encodeConfigurationBundle` (through `encryptArtifact`); everything reaching `decryptArtifact`
   (`apps/server/src/artifact-cipher.ts`) — `decodeConfigurationBundle` (on the request path),
   `validateArtifact` (`apps/server/src/restore.ts`) and `unsealNodeState`
-  (`apps/server/src/sealed-state.ts`); and the recovery bundle's `encryptBundle` and
-  `decryptBundle` (`apps/server/src/recovery-bundle.ts`).
+  (`apps/server/src/sealed-state.ts`).
 
 ## A pointer write from a process that has since died, landing after the restart, can still make the box refuse itself
 

@@ -88,7 +88,6 @@ export interface DevEnv {
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
   WAITRON_NODE_ID: string;
-  WAITRON_TILL_LOCALE: string;
 }
 
 const ENV_KEYS: readonly (keyof DevEnv)[] = [
@@ -99,7 +98,6 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
   "WAITRON_NODE_ID",
-  "WAITRON_TILL_LOCALE",
 ];
 
 export function renderEnvFileLines<K extends string>(
@@ -147,7 +145,7 @@ export function buildDevEnv(input: {
   receiptLocale?: string;
   httpPort?: string;
 }): DevEnv {
-  const { venueDir, credentialsKey, ids, seedLocale } = input;
+  const { venueDir, credentialsKey, ids } = input;
   return {
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_ENV: "dev",
@@ -156,7 +154,6 @@ export function buildDevEnv(input: {
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_NODE_ID: ids.nodeId,
-    WAITRON_TILL_LOCALE: input.receiptLocale ?? SEED_INVOICE_LOCALE[seedLocale],
   };
 }
 
@@ -285,7 +282,6 @@ async function seedDemoDevices(
   const cfg: TradingContext = {
     nodeId: brandNodeId(ids.nodeId),
     locale: receiptLocale,
-    invoiceLocales: [receiptLocale],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -463,7 +459,6 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`  demo PIN (every till login):   ${ADMIN_PIN}`);
   console.log(`  dashboard login (owner):       ${DEMO_ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
-  console.log(`  locale:                        ${result.env.WAITRON_TILL_LOCALE}`);
   console.log("");
   console.log(`  Pick a pre-enrolled device at http://localhost:${tillPort}/?dev`);
   for (const line of DEMO_DEVICE_LINES) console.log(`    ${line}`);

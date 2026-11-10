@@ -256,7 +256,7 @@ describe("Find Transactions SQL paging", () => {
     const wholeSale = await invoice({ workingOrderId: whole }, false);
     await tender(wholeSale, "card");
     await settle(wholeSale);
-    await attempt(whole, wholeSale, "4321", { state: "settled" });
+    await attempt(whole, wholeSale, "4321", { state: "captured" });
     expect((await list({ q: "4321" })).rows[0]!.methods).toEqual([
       { method: "card", last4: "4321" },
     ]);

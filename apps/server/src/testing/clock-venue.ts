@@ -65,7 +65,6 @@ export async function createClockVenue(
     nodeId: nodeId(venue.nodeId),
     locationId: venueId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

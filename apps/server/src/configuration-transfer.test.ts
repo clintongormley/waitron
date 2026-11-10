@@ -790,7 +790,7 @@ describe("configuration transfer database path", () => {
       );
       // Rows are written through their table definitions: the NOT NULL timestamp columns are
       // `$defaultFn` generators a raw insert never reaches, and the definition encodes the JSON
-      // columns. `payment_policy` is the one exception below.
+      // columns.
       await tx.insert(persons).values({
         id: "12121212-aaaa-aaaa-aaaa-121212121212",
         displayName: "Second admin",
@@ -861,12 +861,6 @@ describe("configuration transfer database path", () => {
         breakThresholdMinutes: 300,
         minBreakMinutes: 20,
       });
-      // Raw because `@waitron/payments` does not export `paymentPolicy`, so the two `$defaultFn`
-      // timestamps are supplied here.
-      const policyStamp = new Date().toISOString();
-      await tx.execute(sql`
-        insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
-        values ('cash_only', 5000, ${policyStamp}, ${policyStamp})`);
       await seedWorkingOrder(tx, {
         id: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
         source: "dashboard",
@@ -1026,7 +1020,6 @@ describe("configuration transfer database path", () => {
       availability: number;
       shift_templates: number;
       convenio_config: number;
-      payment_policy: number;
       target_orders: number;
       target_payments: number;
       target_bookings: number;
@@ -1048,7 +1041,6 @@ describe("configuration transfer database path", () => {
         (select count(*) from availability) as availability,
         (select count(*) from shift_templates) as shift_templates,
         (select count(*) from convenio_config) as convenio_config,
-        (select count(*) from payment_policy) as payment_policy,
         (select count(*) from working_orders ) as target_orders,
         (select count(*) from payments) as target_payments,
         (select count(*) from bookings) as target_bookings
@@ -1067,7 +1059,6 @@ describe("configuration transfer database path", () => {
       availability: 1,
       shift_templates: 1,
       convenio_config: 1,
-      payment_policy: 1,
       target_orders: 0,
       target_payments: 0,
       target_bookings: 0,
@@ -3877,7 +3868,6 @@ async function shortNamedBundle(taxId: string) {
     locationId: venueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -7247,7 +7237,6 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     locationId: sourceVenueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -7382,7 +7371,6 @@ it("carries Long table's parts, naming the imported tables", async () => {
     locationId: venueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -7467,7 +7455,6 @@ it("carries a kept size, naming the imported table", async () => {
     locationId: venueId,
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

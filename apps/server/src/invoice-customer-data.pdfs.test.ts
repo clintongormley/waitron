@@ -99,7 +99,7 @@ async function jordiInvoiceIn(seriesId: string, taxId = "01234567L"): Promise<st
       seriesId: brandSeriesId(seriesId),
       workingOrderId: brandWorkingOrderId(billId),
       locale: venue.cfg.locale,
-      invoiceLocales: venue.cfg.invoiceLocales,
+      invoiceLocales: [venue.cfg.locale],
       counterparty: { taxId, legalName: "Jordi Puig", countryCode: "ES" },
       recipientAddress: "12 Harbour Road, 46023 Valencia",
       total: "3.00",

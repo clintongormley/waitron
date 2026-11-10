@@ -15,7 +15,7 @@ export function matchTenderRefundCapture(
       (tender.billPaymentId === null
         ? capture.saleId === tender.saleId && capture.billPaymentId === null
         : capture.billPaymentId === tender.billPaymentId) &&
-      ["captured", "settled", "partially_refunded", "refunded"].includes(capture.state),
+      ["captured", "partially_refunded", "refunded"].includes(capture.state),
   );
   if (matching.length !== 1) return undefined;
   const capture = matching[0]!;

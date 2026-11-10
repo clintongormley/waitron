@@ -19,7 +19,7 @@ afterEach(() => {
 const event = (id: string, severity: AlertView["severity"] = "error"): AlertView => ({
   key: `incident:${id}`,
   kind: "event",
-  code: "payment.offline_forward_declined",
+  code: "payment.refund_unresolved",
   params: { amount: "12.50", paymentRef: `pi_${id}` },
   severity,
   since: "2026-09-14T12:00:00.000Z",
@@ -164,7 +164,7 @@ describe("dashboard-alerts-bell", () => {
     const alerts = ["1", "2", "3", "4", "5", "6"].map((id) => event(id));
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts });
     expect(qa(el, "li")).toHaveLength(5);
-    expect(qa(el, "li")[0]!.textContent).toContain("A card payment of €12.50 taken while offline");
+    expect(qa(el, "li")[0]!.textContent).toContain("A card refund of €12.50 has been waiting");
     expect(q(el, "[data-test=alerts-see-all]")).not.toBeNull();
   });
 

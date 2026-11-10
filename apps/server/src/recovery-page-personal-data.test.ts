@@ -172,7 +172,6 @@ async function setupVenue(): Promise<{ adminId: string; clerkId: string }> {
   venueCfg = {
     nodeId: brandNodeId(venue.nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

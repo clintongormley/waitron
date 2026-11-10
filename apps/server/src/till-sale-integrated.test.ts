@@ -30,7 +30,7 @@ import { toPayOutcome } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 
 // The orchestrator calls `toPayOutcome` only for non-captured states, so this is the one place its
-// `captured`/`accepted_offline` arms run.
+// `captured` arm runs.
 
 const TICKET: TillSaleResult = {
   receiptTrim: {},
@@ -54,20 +54,13 @@ function result(state: PaymentResult["state"]): PaymentResult {
     paymentRef: "ref-1",
     state,
     amount: decimal("1.50"),
-    settledAt: state === "captured" || state === "accepted_offline" ? new Date() : null,
+    settledAt: state === "captured" ? new Date() : null,
   };
 }
 
 describe("toPayOutcome", () => {
   it("captured → { outcome: 'captured', ticket }", () => {
     expect(toPayOutcome(result("captured"), TICKET)).toEqual({
-      outcome: "captured",
-      ticket: TICKET,
-    });
-  });
-
-  it("accepted_offline → { outcome: 'captured', ticket } (the offline card chained a sale immediately)", () => {
-    expect(toPayOutcome(result("accepted_offline"), TICKET)).toEqual({
       outcome: "captured",
       ticket: TICKET,
     });
@@ -98,17 +91,14 @@ describe("staff-only card failure metadata", () => {
     "attempting",
     "network_unavailable",
     "captured",
-    "accepted_offline",
     "initiated",
     "voided",
     "refunded",
     "partially_refunded",
-    "settled",
-    "declined",
   ] as const)("never attaches a stale decline reason to %s", (state) => {
     const out = toPayOutcome(
       { ...result(state), failureReason: "lost_card" },
-      state === "captured" || state === "accepted_offline" ? TICKET : null,
+      state === "captured" ? TICKET : null,
     );
     expect(out).not.toHaveProperty("failureReason");
   });
@@ -494,26 +484,6 @@ describe("saved-zone payment transactions", () => {
         before.map((row) => ({ ...row, sale_id: (after[0] as Record<string, unknown>).sale_id })),
       );
     });
-  });
-
-  it("accepted-offline capture keeps its received facts and uses the fresh issue reading", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-10-14T21:59:00.000Z"));
-    const source = zoneClock();
-    const deps = zoneDeps(source.clock);
-    const req = zoneRequest();
-    zoneDb.db.run(
-      sql`insert into payment_policy (id, offline_mode, offline_amount_cap, created_at, updated_at) values (1, 'accept_offline', 1000, '2026-10-14T21:59:00.000Z', '2026-10-14T21:59:00.000Z')`,
-    );
-    deps.provider.offlineNextCollect();
-    const out = await readerPay(deps, zoneVenue.cfg, { ...req, allowOffline: true });
-    expect(out.outcome).toBe("captured");
-    expect(await issueFacts(req.id)).toEqual([nightFacts]);
-    expect(
-      zoneDb.db.all(
-        sql`select state, amount, settled_at from payments where working_order_id = ${req.id}`,
-      ),
-    ).toEqual([{ state: "accepted_offline", amount: 250, settled_at: "2026-10-14T21:59:00.000Z" }]);
   });
   it.each([false, true])(
     "closed admission retains a completed capture for later finalization (issued=%s)",

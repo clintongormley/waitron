@@ -55,7 +55,6 @@ import {
 } from "@waitron/shared";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import {
-  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
@@ -167,7 +166,6 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -305,11 +303,9 @@ function cannedProvider(
         paymentRef: randomUUID(),
         state,
         amount: params.amount,
-        settledAt: state === "captured" || state === "accepted_offline" ? new Date() : null,
+        settledAt: state === "captured" ? new Date() : null,
       };
     },
-    forward: () =>
-      Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
     resolvePending: () =>
       Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
     void: () => Promise.reject(new Error("cannedProvider: void unused")),
@@ -1366,7 +1362,6 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
         activeId = fresh!.id;
         return captured;
       },
-      forward: (...args) => provider.forward(...args),
       resolvePending: (...args) => provider.resolvePending(...args),
       void: (...args) => provider.void(...args),
       refund: (...args) => provider.refund(...args),
@@ -1829,8 +1824,6 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   it.each([
     ["captured", "1", "1.50"],
     ["captured", "2001", "3001.50"],
-    ["accepted_offline", "1", "1.50"],
-    ["accepted_offline", "2001", "3001.50"],
   ] as const)(
     "retains an unfiled F1 %s payment of %s coffees while public issuance is disabled",
     async (state, quantity, amount) => {
@@ -1853,7 +1846,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
             recipientNameMaxLength: backend.recipientNameMaxLength,
           },
         });
-        const insert = state === "captured" ? insertCapturedPayment : insertAcceptedOffline;
+        const insert = insertCapturedPayment;
         await insert(tx, {
           origin: cfg.origin,
           nodeId: cfg.nodeId,

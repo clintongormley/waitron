@@ -1420,7 +1420,7 @@ export async function completeBillPayment(
     .where(eq(billPayments.id, billPaymentId));
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
   const actual =
-    provided !== undefined && ["captured", "accepted_offline", "settled"].includes(provided.state)
+    provided !== undefined && provided.state === "captured"
       ? decimalToCents(decimal(provided.amount))
       : undefined;
   const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
@@ -1473,7 +1473,6 @@ export async function failBillPayment(
 /** These outcomes leave no retained charge to allocate to the bill. */
 const NO_RETAINED_CHARGE: ReadonlySet<PaymentResultState> = new Set([
   "failed",
-  "declined",
   "network_unavailable",
   "refunded",
 ]);

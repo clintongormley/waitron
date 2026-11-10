@@ -1,12 +1,12 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { decimal, deviceId as brandDeviceId } from "@waitron/shared";
+import { deviceId as brandDeviceId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones, isUniqueViolation, constraintTarget, withTransaction } from "@waitron/db";
-import { captureAttempting, failAttempting, insertAcceptedOffline } from "@waitron/payments";
+import { captureAttempting, failAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -637,27 +637,12 @@ describe("cancelling a placed order respects stored cards", () => {
     });
   }
 
-  it.each(["attempting", "captured", "accepted_offline", "settled"] as const)(
+  it.each(["attempting", "captured"] as const)(
     "refuses an uninvoiced order with a stored %s payment after the live attempt ends",
     async (state) => {
       const id = await placed("uninvoiced");
-      if (state === "accepted_offline" || state === "settled") {
-        await inTx(venue, (tx) =>
-          insertAcceptedOffline(tx, {
-            origin: venue.cfg.origin,
-            nodeId: venue.cfg.nodeId,
-            workingOrderId: id,
-            provider: "fake",
-            paymentRef: randomUUID(),
-            amount: decimal("3.00"),
-            settledAt: new Date(),
-          }),
-        );
-        if (state === "settled") await venue.card.forward(new Date());
-      } else {
-        venue.card.crashNextCollect(state);
-        expect((await pay(id)).status).toBe(500);
-      }
+      venue.card.crashNextCollect(state);
+      expect((await pay(id)).status).toBe(500);
       expect(paymentAttemptIsLive(venue.db, id)).toBe(false);
       const before = snapshot();
       const amendments = venue.db.all(
@@ -754,36 +739,6 @@ describe("a captured card's duplicate-sale fallback", () => {
     expect(salesOf(id)).toHaveLength(1);
     expect(tendersOf(id)).toEqual([]);
     expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "captured", saleId: null }]);
-  });
-});
-
-describe("forwarded offline card recovery", () => {
-  it("files a forwarded offline charge without asking the reader again", async () => {
-    const id = await placed("uninvoiced");
-    await inTx(venue, (tx) =>
-      insertAcceptedOffline(tx, {
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        workingOrderId: id,
-        provider: "fake",
-        paymentRef: randomUUID(),
-        amount: decimal("3.00"),
-        settledAt: new Date(),
-      }),
-    );
-    await venue.card.forward(new Date());
-    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "settled", saleId: null }]);
-    const calls = venue.card.collectCalls.length;
-
-    const recovered = await pay(id);
-
-    expect(recovered.status).toBe(200);
-    expect(recovered.json.outcome).toBe("captured");
-    expect(venue.card.collectCalls.length).toBe(calls);
-    const sale = salesOf(id);
-    expect(sale).toHaveLength(1);
-    expect(tendersOf(id)).toEqual([{ method: "card", amount: 300 }]);
-    expect(paymentsOf(id)).toEqual([{ provider: "fake", state: "settled", saleId: sale[0]!.id }]);
   });
 });
 

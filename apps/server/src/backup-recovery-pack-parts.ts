@@ -29,7 +29,7 @@ import {
   loadRecoveryKey,
   readHeldKey,
 } from "./backup-config.js";
-import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import type { BackupDestination } from "./storage-backend.js";
 import { readStreamSettingsIn, STREAM_PURPOSE } from "./stream-host.js";
 import "./errors.js";
@@ -104,7 +104,7 @@ async function backupKey(env: PartsContext["env"]): Promise<string> {
   const { held, key } = await readHeldKey(async () => loadRecoveryKey(env));
   if (!held) throw new AppError("backup.recovery_key_missing", {});
   if (key === undefined) {
-    throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+    throw new AppError("backup.recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
   }
   return key;
 }

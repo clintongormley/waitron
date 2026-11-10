@@ -37,7 +37,6 @@ beforeEach(async () => {
     locationId: await venueLocationId(suite.db),
     nodeId: nodeId(await seedNode(suite.db)),
     locale: "en-GB",
-    invoiceLocales: ["en-GB"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

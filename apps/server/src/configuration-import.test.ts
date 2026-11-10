@@ -207,6 +207,8 @@ describe("staged configuration import", () => {
     ["old version", { version: 1 }],
     ["A1308 pre-location-column export", { version: 11 }],
     ["previous format before venue-language storage", { version: 15 }],
+    ["pre-payment-policy-retirement export with the policy", { version: 16, tables: { ...bundle.tables, payment_policy: [] } }],
+    ["pre-payment-policy-retirement export without it", { version: 16 }],
     ["future version", { version: 17 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

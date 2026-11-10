@@ -40,21 +40,9 @@ function readVenueGeography(
   return withTransaction(db, geographyIn);
 }
 
-/**
- * The venue's default UI locale, from geography and an optional override, through the shared
- * `override → area → country → English` chain.
- *
- * This is a DISPLAY value, DELIBERATELY separate from the venue's receipt language. The
- * `override` is the RAW `WAITRON_TILL_LOCALE` (`cfg.localeOverride`), NOT the defaulted
- * `cfg.locale`, whose `es-ES` default would mask the geography derivation.
- */
-export async function readVenueLocale(
-  db: Database,
-  params: { override?: string },
-): Promise<SupportedLocale> {
+export async function readVenueLocale(db: Database): Promise<SupportedLocale> {
   const { country, area } = await readVenueGeography(db);
   return resolveInstalledCountryLocale(SUPPORTED_LOCALE_CODES, {
-    override: params.override,
     area,
     country,
     fallback: FALLBACK_LOCALE,

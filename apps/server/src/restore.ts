@@ -75,7 +75,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { checkRestoreCompatibility } from "./restore-gate.js";
 import { assertSafeEntryName } from "./restore-entry-guard.js";
-import type { BundleFiles } from "./recovery-bundle.js";
+import type { StateSecretFiles } from "./state-secrets.js";
 import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { ARCHIVE_VALIDATE_PREFIX, RESTORE_ADMISSION_PREFIX } from "./restore-staging-dirs.js";
 import { unpackBundleToDir } from "./state-secrets.js";
@@ -844,7 +844,7 @@ export async function clearReplacedDatabases(
 /**
  * Restore every `secrets/<path>` entry into `stateDir`, prefix stripped, via `unpackBundleToDir` —
  * which re-applies the same traversal guard AND writes each file 0600, durably unless `durable` is
- * `false`, exactly as the recovery-bundle unpack does. Secret contents are utf8 text
+ * `false`. Secret contents are utf8 text
  * (`RECOVERY_FILES` are `.env`/PEM), matching the utf8 they were read as into the archive.
  * `trading.env` is written last, after every other secret succeeds, so a failure cannot publish a
  * partial identity.
@@ -855,7 +855,7 @@ export async function restoreSecrets(args: {
   log: Logger;
   durable?: boolean;
 }): Promise<void> {
-  const files: BundleFiles = {};
+  const files: StateSecretFiles = {};
   for (const entry of args.entries) {
     if (entry.name === TRADING_ENV_ENTRY) continue;
     files[entry.name.slice(SECRETS_PREFIX.length)] = Buffer.from(entry.bytes).toString("utf8");

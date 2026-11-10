@@ -61,7 +61,6 @@ function tillConfigFor(venue: Venue): OriginConfig {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
     locale: SEED_INVOICE_LOCALE[LOCALE],
-    invoiceLocales: [SEED_INVOICE_LOCALE[LOCALE]],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

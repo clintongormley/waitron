@@ -264,7 +264,7 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     },
   );
 
-  it("has no violations on the idle screen with the tip field and offline-consent toggle shown", async () => {
+  it("has no violations on the idle screen with the tip field shown", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(coffee, "2");
     const { host } = await mountWidget<TillTenderPay>(

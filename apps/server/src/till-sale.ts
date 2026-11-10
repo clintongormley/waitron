@@ -606,9 +606,6 @@ export interface IntegratedPayRequest {
   /** The till-entered gross tip. CLAMPED to "0.00" when `TradingContext.tipsEnabled` is false, so a
    *  client cannot add a tip the venue does not take. */
   tip?: string;
-  /** Per-transaction staff consent to accept the card offline; meaningful only to a provider with a
-   *  device-local offline queue. */
-  allowOffline?: boolean;
   /** Test result selected by the practice UI. Only a server-mounted simulator may receive it. */
   simulationOutcome?: "captured" | "declined" | "attempting";
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
@@ -1421,7 +1418,6 @@ async function payIntegrated(
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
       ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
-      allowOffline: req.allowOffline,
       simulationOutcome: req.simulationOutcome,
     });
   } catch (error) {
@@ -1433,7 +1429,7 @@ async function payIntegrated(
       workingOrderId: req.id,
       reason: "partial_refund",
     });
-  if (result.state !== "captured" && result.state !== "accepted_offline") {
+  if (result.state !== "captured") {
     if (result.state === "failed" || result.state === "network_unavailable") {
       await withTransaction(deps.db, (tx) =>
         finishIntegratedAttendance(tx, deps.attendance, prepared.attendanceKey, "refused"),
@@ -1611,12 +1607,7 @@ export async function ordersWithUnfiledPayment(
         or(
           eq(payments.state, "attempting"),
           and(
-            inArray(payments.state, [
-              "captured",
-              "accepted_offline",
-              "settled",
-              "partially_refunded",
-            ]),
+            inArray(payments.state, ["captured", "partially_refunded"]),
             isNull(payments.saleId),
             or(isNull(billPayments.id), ne(billPayments.state, "received")),
           ),
@@ -1711,7 +1702,7 @@ async function finalizeCapture(
   attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
-  /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`/`accepted_offline`
+  /* v8 ignore start -- unreachable: finalizeCapture is only called on a `captured`
      result, whose `settledAt` is always set (provider.ts:66-83). The guard mirrors `readSettledTicket`'s
      own "impossible" throws — a defended contract, not a claim reasoned away (CLAUDE.md §1). */
   if (settledAt === null) {
@@ -1870,7 +1861,7 @@ async function finalizeRecovery(
 
       const tip = subtractDecimal(capturedAmount, priced.total);
 
-      /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
+      /* v8 ignore start -- a captured row always carries settled_at (store.ts's
        insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
        reasoned away (CLAUDE.md §1), mirroring finalizeCapture's own settledAt guard. */
       if (captured.settledAt === null) {
@@ -2046,7 +2037,7 @@ async function finalizeSettle(
   attendanceKey?: string,
 ): Promise<TillSaleResult> {
   const settledAt = result.settledAt;
-  /* v8 ignore start -- unreachable: finalizeSettle is only called on a `captured`/`accepted_offline`
+  /* v8 ignore start -- unreachable: finalizeSettle is only called on a `captured`
      result, whose `settledAt` is always set (provider.ts:66-83). The guard mirrors finalizeCapture's
      own "impossible" throw — a defended contract, not a claim reasoned away (CLAUDE.md §1). */
   if (settledAt === null) {
@@ -2130,7 +2121,7 @@ async function finalizeSettleRecovery(
 
     const tip = subtractDecimal(capturedAmount, outstanding.amountDue);
 
-    /* v8 ignore start -- a captured/accepted_offline row always carries settled_at (store.ts's
+    /* v8 ignore start -- a captured row always carries settled_at (store.ts's
        insertCapturedPayment/captureAttempting set it); the null-typed column is DEFENDED here, not
        reasoned away (CLAUDE.md §1), mirroring finalizeRecovery's own settledAt guard. */
     if (captured.settledAt === null) {
@@ -2171,7 +2162,7 @@ export function toPayOutcome(
   result: PaymentResult,
   ticket: TillSaleResult | null,
 ): IntegratedPayOutcome {
-  if (result.state === "captured" || result.state === "accepted_offline") {
+  if (result.state === "captured") {
     return { outcome: "captured", ticket: ticket! };
   }
   if (result.state === "network_unavailable") {

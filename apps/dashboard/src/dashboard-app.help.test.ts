@@ -195,7 +195,7 @@ async function turnHelpOn(el: DashboardApp): Promise<void> {
 const alert = (id: string): AlertView => ({
   key: `incident:${id}`,
   kind: "event",
-  code: "payment.offline_forward_declined",
+  code: "payment.refund_unresolved",
   params: { amount: "12.50", paymentRef: `pi_${id}` },
   severity: "warning",
   since: "2026-09-14T12:00:00.000Z",

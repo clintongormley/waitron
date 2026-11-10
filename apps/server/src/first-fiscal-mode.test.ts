@@ -26,7 +26,6 @@ it.each(["activation-started", "committed", "publication"] as const)(
       const config = loadConfig(
         {
           WAITRON_NODE_ID: f.context.binding.targetNodeId,
-          WAITRON_TILL_LOCALE: "ca-ES",
           WAITRON_TILL_TIPS: "1",
         },
         "/migrations",

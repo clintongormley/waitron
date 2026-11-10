@@ -296,7 +296,6 @@ function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

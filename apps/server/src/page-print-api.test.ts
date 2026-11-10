@@ -92,7 +92,6 @@ async function venue(opts: { render?: Render; realClock?: true } = {}) {
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

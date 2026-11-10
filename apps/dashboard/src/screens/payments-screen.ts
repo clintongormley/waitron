@@ -1488,15 +1488,8 @@ export class PaymentsScreen extends LitElement {
 
   #billProviderState(state: string | null): string {
     if (state === "attempting") return t("payments.bill.state_attempting");
-    if (state === "failed" || state === "declined" || state === "voided")
-      return t("payments.bill.state_failed");
-    if (
-      state === "captured" ||
-      state === "settled" ||
-      state === "refunded" ||
-      state === "partially_refunded" ||
-      state === "accepted_offline"
-    )
+    if (state === "failed" || state === "voided") return t("payments.bill.state_failed");
+    if (state === "captured" || state === "refunded" || state === "partially_refunded")
       return t("payments.bill.state_charged");
     if (state === "initiated") return t("payments.bill.state_started");
     return t("payments.bill.state_missing");

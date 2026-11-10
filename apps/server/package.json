@@ -7,14 +7,13 @@
   "waitron": {
     "commands": {
       "waitron-server": "./dist/server.js",
-      "waitron-recovery": "./dist/bin-recovery.js",
       "waitron-break-glass": "./dist/bin-break-glass.js",
       "waitron-restore": "./dist/bin-restore.js",
       "waitron-rejoin": "./dist/bin-rejoin.js"
     }
   },
   "scripts": {
-    "build": "node scripts/copy-migrations.mjs && node ../../scripts/bundle-node.mjs src/bin.ts=dist/server.js src/bin-recovery.ts=dist/bin-recovery.js src/bin-break-glass.ts=dist/bin-break-glass.js src/bin-restore.ts=dist/bin-restore.js src/bin-rejoin.ts=dist/bin-rejoin.js src/node-entry.ts=dist/node-entry.js src/backup-verification-entry.ts=dist/backup-verification.js src/fiscal-certificate-diagnosis-entry.ts=dist/fiscal-certificate-diagnosis.js",
+    "build": "node scripts/copy-migrations.mjs && node ../../scripts/bundle-node.mjs src/bin.ts=dist/server.js src/bin-break-glass.ts=dist/bin-break-glass.js src/bin-restore.ts=dist/bin-restore.js src/bin-rejoin.ts=dist/bin-rejoin.js src/node-entry.ts=dist/node-entry.js src/backup-verification-entry.ts=dist/backup-verification.js src/fiscal-certificate-diagnosis-entry.ts=dist/fiscal-certificate-diagnosis.js",
     "dev": "node scripts/dev-server.mjs",
     "dev:setup": "tsx scripts/dev-setup.ts",
     "dev:reset": "tsx scripts/dev-setup.ts --reset",

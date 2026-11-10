@@ -314,7 +314,7 @@ describe.each(paths)("%s checks its sign-in in the money write", (path) => {
 });
 
 it.each(
-  (["captured", "accepted_offline"] as const).flatMap((state) =>
+  (["captured"] as const).flatMap((state) =>
     ([false, true] as const).flatMap((issued) =>
       (["signed out", "switched off", "deleted"] as const).map((change) => ({
         state,
@@ -326,14 +326,6 @@ it.each(
 )(
   "finishes an admitted $state card charge (issued: $issued) after $change",
   async ({ state, issued, change }) => {
-    if (state === "accepted_offline") {
-      venue.card.offlineNextCollect();
-      const stamp = new Date().toISOString();
-      await suite.db
-        .execute(sql`insert into payment_policy (id, offline_mode, offline_amount_cap, created_at, updated_at)
-        values (1, 'accept_offline', 5000, ${stamp}, ${stamp})
-        on conflict(id) do update set offline_mode = 'accept_offline', offline_amount_cap = 5000`);
-    }
     const request = await requestFor(issued ? "collection" : "integrated pay");
     if (issued) {
       await issueOrderInvoice(
@@ -353,7 +345,6 @@ it.each(
     const release = venue.card.holdNextCollect();
     const answer = send(venue.app, cookie, "POST", "/api/pay", {
       ...(issued ? { id: request.id, lines: [] } : request.body),
-      allowOffline: state === "accepted_offline",
     });
     try {
       await vi.waitFor(() => expect(venue.card.collectCalls).toHaveLength(calls + 1));

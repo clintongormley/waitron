@@ -6964,7 +6964,6 @@ export class TillApp extends LitElement {
             ...(this.invoiceChoice?.orderId === id ? this.invoiceChoice.invoice : {}),
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
-            ...(detail.allowOffline ? { allowOffline: true } : {}),
             ...(detail.guestCount === undefined ? {} : { guestCount: detail.guestCount }),
             ...(detail.simulationOutcome === undefined
               ? {}

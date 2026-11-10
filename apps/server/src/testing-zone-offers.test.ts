@@ -72,7 +72,6 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
     nodeId: brandNodeId(await seedNode(db)),
     locationId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

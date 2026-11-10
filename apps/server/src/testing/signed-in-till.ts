@@ -100,7 +100,6 @@ export async function provisionSignedInTill<S extends TillSeed>(
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: SIGNED_IN_TILL_LOCALE,
-    invoiceLocales: [SIGNED_IN_TILL_LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

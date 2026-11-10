@@ -185,7 +185,7 @@ it.each(["first-setup.json", "first-setup-claim.json", "module-operation-public.
   },
 );
 
-it("does not import host claim or enrolment files through the generic recovery bundle writer", async () => {
+it("does not import host claim or enrolment files through the generic state-secrets writer", async () => {
   const f = await fixture();
   const { unpackBundleToDir } = await import("./state-secrets.js");
   for (const name of [

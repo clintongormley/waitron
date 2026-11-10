@@ -12,7 +12,7 @@ import type { AlertsScreen } from "./alerts-screen.js";
 const open: AlertView = {
   key: "incident:i1",
   kind: "event",
-  code: "payment.offline_forward_declined",
+  code: "payment.refund_unresolved",
   params: { amount: "12.50", paymentRef: "pi_1" },
   severity: "error",
   since: "2026-09-14T12:00:00.000Z",
@@ -83,7 +83,7 @@ describe("dashboard-alerts-screen", () => {
     await flush(el);
     expect(rows(el, "open-alerts-table")).toHaveLength(2);
     expect(rows(el, "open-alerts-table")[0]!.textContent).toContain(
-      "A card payment of €12.50 taken while offline",
+      "A card refund of €12.50 has been waiting",
     );
     expect(location.pathname).toBe("/manage/alerts/view/open");
   });
@@ -588,7 +588,7 @@ describe("dashboard-alerts-screen", () => {
     await flush(el);
     const [worded, raw] = rows(el, "open-alerts-table");
     expect(raw!.textContent).toContain("vendor.unmapped_check");
-    expect(worded!.textContent).not.toContain("payment.offline_forward_declined");
+    expect(worded!.textContent).not.toContain("payment.refund_unresolved");
   });
 
   it("says someone handled an alert when the server records neither who nor when", async () => {

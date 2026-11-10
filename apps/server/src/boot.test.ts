@@ -101,7 +101,7 @@ import { createHourTestClock } from "./testing/hour-test-clock.js";
 import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
-import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { freePort } from "./testing/free-ports.js";
 import { seedDevice, seedWorkingOrder, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
@@ -657,14 +657,10 @@ describe("startServer, against a migrated venue directory", () => {
       );
       expect(recipe.status).toBe(404);
 
-      // A 404 would mean `mountRecoveryBundleApi` never ran; a 200, that a secret download is ungated.
       const recovery = await fetch(`http://127.0.0.1:${port}/api/box/recovery-bundle`, {
         method: "POST",
       });
-      expect(recovery.status).toBe(401);
-      expect((await recovery.json()) as { error: { code: string } }).toMatchObject({
-        error: { code: "management_session.required" },
-      });
+      expect(recovery.status).toBe(404);
 
       const packPasskey = await fetch(
         `http://127.0.0.1:${port}/management-api/session/me/fresh-sign-in/passkey-options`,
@@ -2078,6 +2074,7 @@ describe("startServer, against a migrated venue directory", () => {
         defaultLayout(
           db,
           {
+            locale: "es-ES",
             ...loadNodeIdentity(TILL_ENV),
             ...loadTillAppSettings(TILL_ENV),
             locationId: TILL_LOCATION_ID,
@@ -2979,6 +2976,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   beforeAll(async () => {
     const cfg: TradingContext = {
+      locale: "es-ES",
       ...loadNodeIdentity(TILL_ENV),
       ...loadTillAppSettings(TILL_ENV),
       simplifiedInvoiceLimit: null,
@@ -3194,6 +3192,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   it("the equipment read names a stuck kitchen printer", async () => {
     const cfg = {
+      locale: "es-ES",
       ...loadNodeIdentity(TILL_ENV),
       ...loadTillAppSettings(TILL_ENV),
       locationId: TILL_LOCATION_ID,
@@ -3659,7 +3658,7 @@ describe("startServer — what a trading boot wires behind its management routes
       const rotation = fetch(`http://127.0.0.1:${httpPort()}/api/backup/rotate`, {
         method: "POST",
         headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify({ recoveryKey: "k".repeat(MIN_PASSPHRASE_LENGTH) }),
+        body: JSON.stringify({ recoveryKey: "k".repeat(MIN_RECOVERY_KEY_LENGTH) }),
       });
       await vi.waitFor(() => expect(backupQueue.started).toBe(started + 1), {
         timeout: POLL_TRIES * POLL_INTERVAL_MS,

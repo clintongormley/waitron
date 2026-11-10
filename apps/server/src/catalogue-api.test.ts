@@ -665,7 +665,6 @@ function venueCfg(): WithVenueRowId {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     locationId: locationId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

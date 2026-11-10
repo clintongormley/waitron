@@ -207,7 +207,6 @@ function cfgOf(venue: Venue): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

@@ -11,8 +11,7 @@ import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrders } from "@waitron/db";
-import { seedPaymentPolicy } from "@waitron/payments/test/seed.js";
-import { SimulatorPaymentProvider, insertAcceptedOffline, payments } from "@waitron/payments";
+import { SimulatorPaymentProvider, payments } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
 import {
   inTx,
@@ -56,7 +55,6 @@ interface Body {
   tendered?: string;
   addedTip?: string;
   choice?: "full_with_tip" | "use_pool";
-  allowOffline?: boolean;
   readerId?: string;
   applied: string;
   tip: string;
@@ -241,57 +239,6 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       payment: { state: "failed" },
       balance: { reserved: "0.00", outstanding: "35.00" },
     });
-  });
-
-  it("keeps a card the provider accepted offline pending: money may have moved", async () => {
-    const billId = await tabWithDishes("Paella");
-    vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
-      const settledAt = new Date();
-      const row = {
-        origin: params.origin,
-        workingOrderId: params.workingOrderId,
-        nodeId: params.nodeId,
-        provider: venue.card.provider,
-        paymentRef: randomUUID(),
-        amount: params.amount,
-        settledAt,
-        billPaymentId: params.billPaymentId,
-      };
-      await inTx(venue, (tx) => insertAcceptedOffline(tx, row));
-      return { ...row, state: "accepted_offline", offline: true };
-    });
-
-    const paid = await cardContribution(billId, "20.00");
-
-    expect(paid.json).toMatchObject({
-      outcome: "timeout",
-      payment: { state: "pending" },
-      balance: { reserved: "20.00", outstanding: "15.00" },
-    });
-  });
-
-  it("refuses to let a card be accepted offline, asking no reader and writing nothing (design §11.9)", async () => {
-    const billId = await tabWithDishes("Paella");
-    await seedPaymentPolicy(venue.db, "accept_offline", "50.00");
-    const calls = venue.card.collectCalls.length;
-
-    const paid = await pay(billId, {
-      kind: "contribution",
-      amount: "20.00",
-      method: "card",
-      entry: "reader",
-      allowOffline: true,
-      applied: "20.00",
-      tip: "0.00",
-    });
-
-    expect(paid.status).toBe(400);
-    expect(paid.json).toMatchObject({
-      code: "management.request_invalid",
-      params: { field: "allowOffline" },
-    });
-    expect(venue.card.collectCalls).toHaveLength(calls);
-    expect(await paymentRows(venue, billId)).toEqual([]);
   });
 
   it("issues the invoice from the capture that pays the bill, under the device", async () => {
@@ -545,13 +492,7 @@ describe("a malformed payment body", () => {
       { ...card, entry: "manual", externalRef: 7 },
       "externalRef",
     ],
-    [
-      "an offline consent that is not true or false",
-      { ...card, allowOffline: "yes" },
-      "allowOffline",
-    ],
     ["an unknown practice outcome", { ...card, simulationOutcome: "maybe" }, "simulationOutcome"],
-    ["an offline consent on cash", { ...cash, allowOffline: true }, "allowOffline"],
     [
       "a reader named on a hand-keyed card",
       { ...card, entry: "manual", readerId: "r" },

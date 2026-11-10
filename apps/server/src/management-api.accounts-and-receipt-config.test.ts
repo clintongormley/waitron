@@ -135,7 +135,6 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

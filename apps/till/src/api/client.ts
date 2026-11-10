@@ -1124,7 +1124,6 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   readerId?: string;
   /** The practice simulator only. */
   simulationOutcome?: "captured" | "declined" | "attempting";
-  allowOffline?: false;
   guestCount?: number | null;
 }
 
@@ -2987,7 +2986,7 @@ export class TillApi {
   /**
    * Pay over the INTEGRATED card terminal → `POST /api/pay`. `id` is the pay-idempotency key, as in
    * {@link recordSale}; `lines` is ignored server-side for a retrieved or placed order, which files its
-   * own stored lines. `allowOffline` is per-transaction staff consent to accept the card offline.
+   * own stored lines.
    * `readerId` names a reader other than the device default; omitted, the server uses the default. A
    * decline is data, not a throw — see {@link PayOutcome}.
    */
@@ -3006,7 +3005,6 @@ export class TillApi {
     } | null;
     zoneId?: string;
     tip?: string;
-    allowOffline?: boolean;
     simulationOutcome?: "captured" | "declined" | "attempting";
     readerId?: string;
     receiptLanguage?: string;

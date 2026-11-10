@@ -1265,7 +1265,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`locations`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`payment_policy`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`station_printers`: decide the remaining UPDATE restriction (A805 follow-up).**
 - **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**

@@ -82,7 +82,6 @@ beforeEach(async () => {
     locationId: placeId,
     origin: deviceOrigin(device.deviceId),
     locale: "en-GB",
-    invoiceLocales: ["en-GB"],
     tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };

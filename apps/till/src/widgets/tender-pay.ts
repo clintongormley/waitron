@@ -72,7 +72,6 @@ export interface ParkOrderDetail {
 
 export interface CollectCardDetail extends ReceiptGuestsDetail {
   tip?: string;
-  allowOffline?: boolean;
   simulationOutcome?: "captured" | "declined" | "attempting";
   /** Absent when the operator never picked one — the server then falls back to the paying
    * device's chosen reader, else its profile's default. */
@@ -128,7 +127,6 @@ const ZERO = decimal("0");
 type EntryDraft = { entry: string; label: string; ref: string };
 type CardDraft = {
   tip: string;
-  offline: boolean;
   simulation: "captured" | "declined" | "attempting";
 };
 
@@ -331,9 +329,8 @@ export class TillTenderPay extends LitElement {
   @state() private guestsEntry?: string;
   @state() private guestsAttempted = false;
   #guestsOrderId?: string;
-  @state() private allowOffline = false;
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
-  /** Replayed by `#retryCard`: the idle screen's tip and offline fields are gone by the time
+  /** Replayed by `#retryCard`: the idle screen's tip field is gone by the time
    * Retry is tapped. */
   #lastCollectDetail: CollectCardDetail = {};
   #cardOutcomeOrderId?: string;
@@ -374,7 +371,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #cardDraft(): CardDraft {
-    return { tip: this.tipEntry, offline: this.allowOffline, simulation: this.simulationOutcome };
+    return { tip: this.tipEntry, simulation: this.simulationOutcome };
   }
 
   #sameNumber(a: string, b: string): boolean {
@@ -435,13 +432,11 @@ export class TillTenderPay extends LitElement {
           snapshot: (value) => ({ ...value }),
           equal: (a, b) =>
             (!this.tipsEnabled || this.#sameNumber(a.tip, b.tip)) &&
-            (this.cardProvider !== "stripe_on_device" || a.offline === b.offline) &&
             (this.cardProvider !== "simulator" ||
               this.chosenReaderId !== undefined ||
               a.simulation === b.simulation),
           restore: (value) => {
             this.tipEntry = value.tip;
-            this.allowOffline = value.offline;
             this.simulationOutcome = value.simulation;
           },
         });
@@ -646,9 +641,6 @@ export class TillTenderPay extends LitElement {
       const tip = typedAmount(this.tipEntry);
       this.#collectCard({
         ...(this.tipsEnabled && tip !== null ? { tip } : {}),
-        ...(this.cardProvider === "stripe_on_device" && this.allowOffline
-          ? { allowOffline: true }
-          : {}),
         ...(this.cardProvider === "simulator" && this.chosenReaderId === undefined
           ? { simulationOutcome: this.simulationOutcome }
           : {}),
@@ -684,13 +676,6 @@ export class TillTenderPay extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
     this.tipEntry = (event as CustomEvent<{ value: string }>).detail.value;
-    this.#extrasScope?.changed();
-  }
-
-  #onOfflineChange(event: Event): void {
-    event.stopPropagation();
-    if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || this.busy) return;
-    this.allowOffline = (event as CustomEvent<{ checked: boolean }>).detail.checked;
     this.#extrasScope?.changed();
   }
 
@@ -1095,11 +1080,6 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
-  /**
-   * The offline-consent toggle shows only for `"stripe_on_device"`: a server-driven
-   * `"stripe_terminal"` reader has no device-local offline queue to consent INTO
-   * (`StripeTerminalProvider.forward`, `packages/payments-stripe/src/provider.ts`).
-   */
   #renderCardExtras() {
     if (this.cardProvider === "none") return nothing;
     return html`
@@ -1165,18 +1145,6 @@ export class TillTenderPay extends LitElement {
                   .label=${t("card.tip")}
                   @wt-change=${(event: Event) => this.#onTipChange(event)}
                 ></wt-input>
-              `
-            : nothing
-        }
-        ${
-          this.cardProvider === "stripe_on_device"
-            ? html`
-                <wt-switch
-                  class="offline-consent"
-                  .checked=${this.allowOffline}
-                  .label=${t("card.offline_consent")}
-                  @wt-change=${(event: Event) => this.#onOfflineChange(event)}
-                ></wt-switch>
               `
             : nothing
         }

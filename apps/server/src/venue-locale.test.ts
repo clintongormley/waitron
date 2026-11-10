@@ -1,7 +1,4 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { loadTillAppSettings } from "./till-config.js";
-import { tenants } from "@waitron/db";
-import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -49,19 +46,7 @@ async function inMadrid(act: () => Promise<void>) {
 describe("readVenueLocale", () => {
   it("derives the country default when no override and no regional catalogue", async () => {
     // Barcelona → ca-ES unavailable in this build → country ES → es-ES.
-    const got = await readVenueLocale(suite.db, { override: undefined });
-    expect(got).toBe("es-ES");
-  });
-
-  it("honours a supported override", async () => {
-    const got = await readVenueLocale(suite.db, { override: "en-GB" });
-    expect(got).toBe("en-GB");
-  });
-
-  it("ignores an unsupported override, falls to country", async () => {
-    // 'ca-ES' has no catalogue (not in SUPPORTED_LOCALES), so the override is dropped and the country
-    // default 'ES' → es-ES wins — the same result as no override at all.
-    const got = await readVenueLocale(suite.db, { override: "ca-ES" });
+    const got = await readVenueLocale(suite.db);
     expect(got).toBe("es-ES");
   });
 
@@ -71,7 +56,7 @@ describe("readVenueLocale", () => {
     // Restored afterwards so the suite stays order-independent.
     await suite.db.execute(sql`delete from tenants`);
     try {
-      const got = await readVenueLocale(suite.db, { override: undefined });
+      const got = await readVenueLocale(suite.db);
       expect(got).toBe("en-GB");
     } finally {
       await seedTenant(suite.db);
@@ -88,7 +73,7 @@ it.each([
         saleLanguageFor(tx, undefined, { log: undefined, workingOrderId: randomUUID() }),
       ),
   ],
-  ["readVenueLocale", () => readVenueLocale(suite.db, {})],
+  ["readVenueLocale", () => readVenueLocale(suite.db)],
   ["readVenueContentLanguageRules", () => readVenueContentLanguageRules(suite.db)],
   ["readVenueReceiptLanguageRules", () => withTransaction(suite.db, readVenueReceiptLanguageRules)],
 ])("%s refuses when no venue is set up", async (_name, read) => {
@@ -218,19 +203,4 @@ describe("readOfferedReceiptLanguages", () => {
       ),
     ).toEqual({ locale: "es-ES", invoiceLocales: ["es-ES"] });
   });
-});
-
-it.each([
-  [undefined, "en-GB"],
-  ["", "en-GB"],
-  ["es-ES", "es-ES"],
-  ["zz-ZZ", "en-GB"],
-])("raw locale override leaves GB geography visible (%s)", async (raw, expected) => {
-  await suite.db.update(tenants).set({ country: "GB" }).where(eq(tenants.id, 1));
-  try {
-    const settings = loadTillAppSettings({ WAITRON_TILL_LOCALE: raw });
-    expect(await readVenueLocale(suite.db, { override: settings.localeOverride })).toBe(expected);
-  } finally {
-    await suite.db.update(tenants).set({ country: "ES" }).where(eq(tenants.id, 1));
-  }
 });

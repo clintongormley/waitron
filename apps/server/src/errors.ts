@@ -1363,19 +1363,15 @@ declare module "@waitron/shared" {
      * removed machine frees a place.
      */
     "mirror.membership_full": { limit: number };
-    /** The recovery-bundle download request carried no `passphrase` string (or an empty one). */
-    "recovery.passphrase_required": Record<string, never>;
-    /** A recovery-bundle passphrase shorter than the minimum. `min` is `MIN_PASSPHRASE_LENGTH`. */
-    "recovery.passphrase_too_short": { min: number };
-    /** A recovery-bundle envelope that is not the expected JSON shape/version, or whose KDF
-     * parameters are out of the accepted bounds. `reason` is a coarse cause, never bundle contents. */
+    /** A secret file's path, from a backup archive being restored, would land outside the state
+     * folder or on a first-setup host file; `reason` is `unsafe_path`. */
     "recovery.bundle_invalid": { reason: string };
     "recovery.pack_invalid": { reason: string };
     /** A recovery pack was asked for over a connection that is not encrypted. */
     "recovery.pack_connection_insecure": Record<string, never>;
     /** A recovery pack was asked for by a page on another site (`Origin` or `Sec-Fetch-Site`). */
     "recovery.pack_origin_refused": Record<string, never>;
-    /** The box is missing one of its own persisted secret files, so a complete recovery bundle
+    /** The box is missing one of its own persisted secret files, so a complete backup archive
      * cannot be built. `missing` is the state-dir-relative path (e.g. `secrets.env`). A server
      * fault, not a client error: the box has lost part of its own unrecoverable state. */
     "recovery.state_incomplete": { missing: string };

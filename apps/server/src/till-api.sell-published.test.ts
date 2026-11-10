@@ -187,7 +187,6 @@ async function setupLunch(): Promise<Lunch> {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

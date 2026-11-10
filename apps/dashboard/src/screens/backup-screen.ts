@@ -49,7 +49,7 @@ import {
   type CustomBucket,
 } from "./backup-destination-model.js";
 
-/** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
+/** Mirrors the server's `MIN_RECOVERY_KEY_LENGTH` (`apps/server/src/backup-config.ts`) for fast
  * feedback on a PASTED key; the server stays the authority. */
 const MIN_KEY_LENGTH = 12;
 

@@ -844,7 +844,6 @@ export const en = {
   "card.cancelled": "Card payment cancelled",
   "card.retry": "Retry",
   "card.tip": "Tip (optional)",
-  "card.offline_consent": "Accept offline if the network is down",
   // Payment-time card reader picker
   "action.use_different_reader": "Use a different reader",
   "reader_picker.heading": "Choose a card reader",
@@ -2806,7 +2805,6 @@ export const es: Record<StringKey, string> = {
   "card.cancelled": "Pago con tarjeta cancelado",
   "card.retry": "Reintentar",
   "card.tip": "Propina (opcional)",
-  "card.offline_consent": "Aceptar sin conexión si la red no funciona",
   "action.use_different_reader": "Usar otro lector",
   "reader_picker.heading": "Elige un lector de tarjetas",
   "reader_picker.empty": "No hay lectores activos configurados",

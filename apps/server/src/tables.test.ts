@@ -76,7 +76,6 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<WithVenueRo
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -398,7 +397,6 @@ async function setupTabVenue(): Promise<{
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

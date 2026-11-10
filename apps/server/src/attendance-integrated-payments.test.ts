@@ -5,7 +5,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
 import { payments, captureAttempting } from "@waitron/payments";
-import { paymentPolicy } from "@waitron/payments/src/schema/payment-policy.js";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
@@ -408,39 +407,6 @@ describe("integrated whole-order attendance", () => {
     ).toEqual(first);
     expect(await operations()).toHaveLength(1);
   });
-
-  it.each([false, true])(
-    "offline consent=%s activates only an accepted human request",
-    async (accept) => {
-      const req = { ...request(), allowOffline: accept };
-      at();
-      await suite.db
-        .insert(paymentPolicy)
-        .values({ offlineMode: "accept_offline", offlineAmountCap: 2000 });
-      provider.offlineNextCollect();
-      expect(
-        (
-          await payWorkingOrderIntegrated(
-            { ...deps(), admission: testTradingAdmission() },
-            v.cfg,
-            req,
-            collector,
-          )
-        ).outcome,
-      ).toBe(accept ? "captured" : "network_unavailable");
-      const before = await operations();
-      expect(before).toEqual([
-        { sequence: 1, key: expect.any(String), ...evidence(accept ? "qualifying" : "refused") },
-      ]);
-      if (accept) {
-        const [payment] = await suite.db.select().from(payments);
-        provider.declineForwardFor(payment!.paymentRef);
-        await provider.forward(new Date("2026-01-06T18:00:00Z"));
-        expect((await suite.db.select().from(payments))[0]!.state).toBe("declined");
-        expect(await operations()).toEqual(before);
-      }
-    },
-  );
 
   it("a snapshot refusal rolls back the start before any reader charge", async () => {
     const req = request();

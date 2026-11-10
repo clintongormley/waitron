@@ -330,8 +330,6 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
         settledAt,
       };
     },
-    forward: () =>
-      Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
     resolvePending: () =>
       Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 }),
     void: () => Promise.reject(new Error("stubProvider: void unused")),

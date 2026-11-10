@@ -59,7 +59,6 @@ beforeEach(async () => {
     locationId: placeId,
     origin: deviceOrigin(deviceId),
     locale: "en-GB",
-    invoiceLocales: ["en-GB"],
     tipsEnabled: true,
     simplifiedInvoiceLimit: null,
   };
@@ -611,14 +610,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
       code: "tender.refund_unavailable",
     });
   });
-  it("refuses a settled provider projection that the existing reversal gate does not admit", async () => {
-    const target = await paid("card", { state: "settled" });
-    await expect(reserve(target.saleId, request(target.tenderId))).rejects.toMatchObject({
-      code: "payment.not_refundable",
-    });
-    expect(await rows()).toEqual([]);
-  });
-
   it("uses provider evidence to limit the remaining card money", async () => {
     const target = await paid("card");
     await store.db.insert(paymentRefunds).values({

@@ -722,8 +722,7 @@ async function recordRefusal(
 
 /* v8 ignore start -- the real process wiring: `process.env`, a timer and `process.exit`. Every
    decision lives in `runEntry` above, which takes each of these as a dependency; this half is
-   exercised by a container boot, not by a unit test — the shape `bin-recovery.ts` and
-   `run-server.ts`'s `DEFAULT_DEPS` both use. */
+   exercised by a container boot, not by a unit test, as in `run-server.ts`'s `DEFAULT_DEPS`. */
 function bootThisProcess(): Promise<void> {
   const env = { ...process.env };
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);

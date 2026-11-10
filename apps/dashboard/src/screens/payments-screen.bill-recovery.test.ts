@@ -525,13 +525,10 @@ describe("bill payment recovery on the Payments screen", () => {
 
   it.each([
     ["attempting", "payments.bill.state_attempting"],
-    ["declined", "payments.bill.state_failed"],
     ["voided", "payments.bill.state_failed"],
     ["captured", "payments.bill.state_charged"],
-    ["settled", "payments.bill.state_charged"],
     ["refunded", "payments.bill.state_charged"],
     ["partially_refunded", "payments.bill.state_charged"],
-    ["accepted_offline", "payments.bill.state_charged"],
     ["initiated", "payments.bill.state_started"],
     [null, "payments.bill.state_missing"],
   ] as const)(

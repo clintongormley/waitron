@@ -9,8 +9,6 @@ function context(): TradingContext {
   return {
     nodeId: nodeId("7a2b8c63-4d2c-4e3b-8c9f-2a3b4c5d6e7f"),
     locale: "ca-ES",
-    invoiceLocales: ["ca-ES"],
-    localeOverride: "ca-ES",
     tipsEnabled: true,
     simplifiedInvoiceLimit: decimal("400"),
     operationDescriptionRequired: true,
@@ -28,8 +26,6 @@ describe("trading context", () => {
     expect(requestCfg(cfg, { deviceId: device })).toEqual({
       nodeId: "7a2b8c63-4d2c-4e3b-8c9f-2a3b4c5d6e7f",
       locale: "ca-ES",
-      invoiceLocales: ["ca-ES"],
-      localeOverride: "ca-ES",
       tipsEnabled: true,
       simplifiedInvoiceLimit: decimal("400"),
       operationDescriptionRequired: true,

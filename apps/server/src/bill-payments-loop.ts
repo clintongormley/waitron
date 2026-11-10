@@ -70,7 +70,7 @@ type RefundRow = typeof billPaymentRefunds.$inferSelect;
 const PAYMENT_CHECK = jobOrigin("payment_check");
 
 /** The provider row's states that mean the card was charged. */
-export const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
+export const CHARGED = new Set(["captured"]);
 
 /** What {@link settleFromProviderRow} did; `left` names the provider row's state, or `pending` for a
  * payment no longer pending or live in this process. */

@@ -176,7 +176,6 @@ async function setupVenue(countryCourses = false): Promise<Venue> {
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   } satisfies WithVenueRowId);

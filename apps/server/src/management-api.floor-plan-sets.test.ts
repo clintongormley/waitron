@@ -78,7 +78,6 @@ async function provisionTenant(): Promise<WithVenueRowId> {
     nodeId: nodeId(venue.nodeId),
     locationId: venueId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

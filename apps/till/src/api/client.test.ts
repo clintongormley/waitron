@@ -393,7 +393,7 @@ describe("TillApi", () => {
     );
   });
 
-  it("pay POSTs id+lines(+tip+allowOffline) to /api/pay and returns the captured outcome with its ticket", async () => {
+  it("pay POSTs id+lines(+tip) to /api/pay and returns the captured outcome with its ticket", async () => {
     const ticket = {
       orderLabel: null,
       orderNumber: 1,
@@ -413,7 +413,6 @@ describe("TillApi", () => {
       id: "wo1",
       lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
       tip: "0.50",
-      allowOffline: true,
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -427,7 +426,6 @@ describe("TillApi", () => {
           id: "wo1",
           lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
           tip: "0.50",
-          allowOffline: true,
         }),
       }),
     );

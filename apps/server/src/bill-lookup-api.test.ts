@@ -152,7 +152,7 @@ describe("till bill lookup", () => {
           },
         ],
         locale: venue.cfg.locale,
-        invoiceLocales: venue.cfg.invoiceLocales,
+        invoiceLocales: [venue.cfg.locale],
         clock: venue.clock,
       }),
     );

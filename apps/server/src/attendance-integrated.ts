@@ -136,7 +136,7 @@ export async function discoverIntegratedAttendance(
     if (candidate.settledAt !== null) {
       await finishIntegratedAttendance(tx, recordAttendanceFact, watch.key, "qualified");
       terminal = true;
-    } else if (candidate.state === "failed" || candidate.state === "declined") {
+    } else if (candidate.state === "failed") {
       await finishIntegratedAttendance(tx, recordAttendanceFact, watch.key, "refused");
       terminal = true;
     }

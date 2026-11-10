@@ -74,7 +74,6 @@ beforeEach(async () => {
       cfg: {
         nodeId: nodeId(randomUUID()),
         locale: "en-GB",
-        invoiceLocales: ["en-GB"],
         tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       },

@@ -42,7 +42,7 @@ import { writeRecoveryKey } from "./backup-env-writer.js";
 import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import {
   keyFingerprint,
   type BackupRuntimeStatus,
@@ -411,7 +411,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         // A held key under the length floor is replaced, not kept: archives, the bucket copy and
         // sealed state all read the key through `loadRecoveryKey`, which refuses one this short.
         if (held.held && held.key === undefined && body.recoveryKey === undefined) {
-          throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+          throw new AppError("backup.recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
         }
         // One recovery key per venue: a box holding a key long enough to use keeps it; only `rotate`
         // changes it.
