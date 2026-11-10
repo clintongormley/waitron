@@ -16,6 +16,7 @@ import { tillPath } from "../navigation.js";
 import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
+  emptiedScreenGuidance,
   kitchenScreenNoticeText,
   lostSlotLine,
   unavailableStyles,
@@ -934,7 +935,7 @@ export class TillStationScreen extends LitElement {
         this.stations.length > 0
           ? this.#body()
           : this.stationScreenGone || this.lostStations.length > 0
-            ? nothing
+            ? emptiedScreenGuidance(this.stationScreenGone)
             : this.#noStations()
       }`,
     });
@@ -947,7 +948,7 @@ export class TillStationScreen extends LitElement {
       return this.#renderQueueSurface({
         showBack: false,
         body: html`${this.deviceStations.map((station) => this.#unavailable(station.name))}
-          <p class="choose-again" data-choose-again>${t("kitchen_screen.choose_again")}</p>`,
+        ${emptiedScreenGuidance(false)}`,
       });
     const body =
       this.deviceStations.length === 1 && only?.available === true

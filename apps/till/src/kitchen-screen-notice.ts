@@ -51,6 +51,13 @@ export function lostSlotLine(slot: "station" | "zone", name: string): string {
   );
 }
 
+/** Where to fix a Station or Pass screen that a profile change left with nothing to show. */
+export function emptiedScreenGuidance(screenGone: boolean) {
+  return html`<p class="choose-again" data-choose-again>
+    ${t(screenGone ? "kitchen_screen.offer_again_in_dashboard" : "kitchen_screen.choose_again")}
+  </p>`;
+}
+
 /** The look of a "no longer available" line. */
 export const unavailableStyles = css`
   .unavailable {
@@ -121,11 +128,7 @@ export class TillKitchenScreenNotice extends LitElement {
 
   override render() {
     return html`<p class="kitchen-screen-message">${kitchenScreenNoticeText(this.notice)}</p>
-      ${
-        this.notice.kind === "unavailable"
-          ? html`<p data-choose-again>${t("kitchen_screen.choose_again")}</p>`
-          : nothing
-      }`;
+      ${this.notice.kind === "unavailable" ? emptiedScreenGuidance(false) : nothing}`;
   }
 }
 

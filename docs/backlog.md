@@ -761,10 +761,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
   collapse Ready to a strip that draws no cards (slice 9)? [Detail](backlog/kitchen.md#a1139--a-kitchen-card-in-ready-keeps-ageing-2026-10-27-open-owner-question)
 
-- **The till's own Station and Pass screens, left with nothing to show, say nothing** — a kitchen
-  display shows a sentence saying what to do, but a till or handheld whose choice a profile
-  narrowed to nothing shows an empty screen. Left open by A366 slice 5 Part A.
-
 - **A move made from the old station's own screen still gives that station a "moved" notice, and a
   correction slip where its ticket printed** — `moveDishesToStation`
   (`apps/server/src/station-move.ts`) does so whoever moved it. Should it? A question for the owner.

@@ -1639,18 +1639,18 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).toBeNull();
     const guidance = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-again]")!;
     expect(guidance.textContent!.trim()).toBe(
-      "Ask a manager to choose its screens again in Devices.",
+      "Choose this device's screens again in the dashboard, under Devices.",
     );
     const last = [...el.shadowRoot!.querySelectorAll("[data-station-unavailable]")].at(-1)!;
     expect(last.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("with no station left available, says in Spanish who chooses its screens again", async () => {
+  it("with no station left available, says in Spanish where to choose its screens again", async () => {
     setLocale("es-ES");
     try {
       const { el } = await mountDevice({ stations: [gone("st-deli", "Deli")] });
       expect(el.shadowRoot!.querySelector("[data-choose-again]")!.textContent!.trim()).toBe(
-        "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",
+        "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
       );
     } finally {
       setLocale("en-GB");
@@ -2270,6 +2270,62 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     } finally {
       setLocale("en-GB");
     }
+  });
+
+  describe("left with nothing to show, says what to do", () => {
+    const guidance = (el: TillStationScreen) =>
+      el.shadowRoot!.querySelector("[data-choose-again]")?.textContent?.trim() ?? null;
+    const goneScreen: ResolvedKitchenScreen = {
+      kind: "station",
+      available: false,
+      stations: [],
+      zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
+    };
+
+    it.each([
+      [
+        "en-GB",
+        "Choose this device's screens again in the dashboard, under Devices.",
+        "This device's profile can offer it again in the dashboard, under Device profiles.",
+      ],
+      [
+        "es-ES",
+        "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+        "El perfil de este dispositivo puede volver a ofrecerla en el panel, en Perfiles de dispositivo.",
+      ],
+    ])("in %s", async (locale, chooseAgain, offerAgain) => {
+      setLocale(locale);
+      try {
+        const emptied = await mountOperator(() =>
+          Promise.resolve(
+            identity([stationScreen([{ id: "st-f", name: "Fryer", available: false }])]),
+          ),
+        );
+        expect(guidance(emptied.el)).toBe(chooseAgain);
+        emptied.el.remove();
+        const gone = await mountOperator(() => Promise.resolve(identity([goneScreen])));
+        expect(guidance(gone.el)).toBe(offerAgain);
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+
+    it("says nothing while a station is left to show", async () => {
+      const { el } = await mountOperator(() =>
+        Promise.resolve(
+          identity([
+            stationScreen([
+              { id: "st-g", name: "Grill", available: true },
+              { id: "st-f", name: "Fryer", available: false },
+            ]),
+          ]),
+        ),
+      );
+      expect(picks(el)).toEqual(["st-g"]);
+      expect(guidance(el)).toBeNull();
+    });
   });
 
   it("reads the device's choice again at the next refresh after a failed read, and then follows it", async () => {

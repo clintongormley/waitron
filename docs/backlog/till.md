@@ -2050,12 +2050,12 @@ Left open by A1382, which changed only `device.forbidden_action`. By code:
   `fiscal.taxpayer_domicile_missing`, `invoice_delivery.receipt_invalid`,
   `invoice_delivery.printer_invalid`, `invoice_delivery.receipt_unavailable`,
   `invoice_delivery.email_unavailable`, `sale.correction_unsupported`, `reader.not_found`,
-  `reader.provider_disconnected`, `device.forbidden_station`, `kitchen_screen.not_allowed`,
+  `reader.provider_disconnected`, `device.forbidden_station`,
   `device.pairing_closed`, `reader.payment_in_progress`, `sale.department_missing`,
   `department.operation_description_required`, `sale.charged_not_recorded`, `clock.unusable`,
   `clock.behind_chain`.
 - `apps/till/src/i18n/strings.ts`: `venue.time_zone_confirm`, `tender_refund.storage`,
-  `kitchen_screen.none`, `kitchen_screen.choose_again`, `station.printer_down`,
+  `station.printer_down`,
   `device.join_refused_hint`, `card.pending_check`, `adjust.no_reasons`, `sale.clock_unusable`,
   `sale.clock_behind_chain`, `bill_pay.reader_not_held_unknown`, `bill_pay.card_pending`,
   `bill_pay.pending_where`, `bill_refund.pending`, `sale.refused`, `place.refused`.

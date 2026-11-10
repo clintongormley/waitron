@@ -850,6 +850,76 @@ describe("A773 pass screen", () => {
       expect(api.getExpoBoard).not.toHaveBeenCalled();
     });
 
+    it.each([
+      [
+        "en-GB",
+        "Choose this device's screens again in the dashboard, under Devices.",
+        "This device's profile can offer it again in the dashboard, under Device profiles.",
+      ],
+      [
+        "es-ES",
+        "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+        "El perfil de este dispositivo puede volver a ofrecerla en el panel, en Perfiles de dispositivo.",
+      ],
+    ])(
+      "at a till left with nothing to show, says what to do (%s)",
+      async (locale, choose, offer) => {
+        const guidance = (el: TillPassScreen) =>
+          el.shadowRoot!.querySelector("[data-choose-again]")?.textContent?.trim() ?? null;
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          const emptied = await mount({
+            api: fakeApi({
+              getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+              getDevicePassBoard: vi.fn().mockResolvedValue(
+                deviceBoard(boardA, {
+                  zones: [{ id: "z-1", name: "Terraza", available: false }],
+                }),
+              ),
+            }),
+          });
+          expect(guidance(emptied)).toBe(choose);
+          emptied.remove();
+          const gone = await mount({
+            api: fakeApi({
+              getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass", false)])),
+            }),
+          });
+          expect(guidance(gone)).toBe(offer);
+          gone.remove();
+          const left = await mount({
+            api: fakeApi({
+              getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+              getDevicePassBoard: vi.fn().mockResolvedValue(
+                deviceBoard(boardA, {
+                  zones: [
+                    { id: "z-1", name: "Terraza", available: false },
+                    { id: "z-2", name: "Sala", available: true },
+                  ],
+                }),
+              ),
+            }),
+          });
+          expect(cardKeys(left)).toEqual(["bill:a"]);
+          expect(guidance(left)).toBeNull();
+        } finally {
+          setLocale(previous);
+        }
+      },
+    );
+
+    it("at a till still reading the device's choice, says nothing about choosing screens again", async () => {
+      const choice = deferred<DeviceIdentity>();
+      const api = fakeApi({ getDeviceIdentity: vi.fn(() => choice.promise) });
+      const el = await mount({ api });
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+      choice.resolve(identity([chosen("pass")]));
+      await flush(el);
+      expect(cardKeys(el)).toEqual(["bill:a"]);
+      expect(el.shadowRoot!.querySelector("[data-choose-again]")).toBeNull();
+    });
+
     it("at a till whose pass screen a narrowing took, reads no board on a refresh either", () =>
       withFakeTimers(async () => {
         const api = fakeApi({
