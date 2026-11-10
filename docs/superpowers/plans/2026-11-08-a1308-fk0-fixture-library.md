@@ -105,6 +105,10 @@ line is a stop (rules §5.2).
 leave Task 2 until 5e lands. The first part supplies tested rewrite tooling, with no test-tree or
 product change. Its proportional forecast is about 360 lines: 230 code and 130 tests.
 
+**2026-11-10, watcher decision at 18:48:** correct the reviewed tool on its branch, within about
+620–650 additions, and get one fresh read. Open no separate PR for this part; land it inside fk1,
+where running it on real fixtures supplies the output to review. Task 2 still waits for 5e.
+
 ## Global constraints
 
 - Scripts change only `*.test.ts` files and test helpers (`src/testing/`, `test/`), never product

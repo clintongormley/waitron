@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, relative } from "node:path/posix";
+import { dirname, relative, resolve } from "node:path/posix";
 import ts from "typescript";
 
 export const parse = (source, path) =>
@@ -12,6 +12,15 @@ function walk(node, visit) {
 }
 export function addNamedImport(text, moduleName, name) {
   const imports = parse(text, "imports.ts").statements.filter(ts.isImportDeclaration);
+  if (
+    imports.some(
+      (node) =>
+        node.importClause?.name?.text === name ||
+        (ts.isNamedImports(node.importClause?.namedBindings) &&
+          node.importClause.namedBindings.elements.some((item) => item.name.text === name)),
+    )
+  )
+    return text;
   const statement = imports.find(
     (node) =>
       node.moduleSpecifier.text === moduleName &&
@@ -20,7 +29,6 @@ export function addNamedImport(text, moduleName, name) {
   );
   if (statement) {
     const bindings = statement.importClause.namedBindings;
-    if (bindings.elements.some((item) => item.name.text === name)) return text;
     return replaceNode(
       text,
       bindings,
@@ -109,8 +117,15 @@ function fixturePath(path) {
     (path.endsWith(".test.ts") || path.includes("/src/testing/") || path.includes("/test/"))
   );
 }
+function statementFor(call) {
+  const value = ts.isAwaitExpression(call.parent) ? call.parent : call;
+  return ts.isExpressionStatement(value.parent) ? value.parent : null;
+}
+const deletable = (statement) =>
+  statement && (ts.isBlock(statement.parent) || ts.isSourceFile(statement.parent));
 export function foldInserts(source, path, rules) {
   if (!fixturePath(path)) return { text: source, reports: [] };
+  const localPath = relative(process.cwd(), resolve(path));
   const tree = parse(source, path),
     edits = [],
     reports = [],
@@ -138,10 +153,14 @@ export function foldInserts(source, path, rules) {
       while (
         ts.isPropertyAccessExpression(outer.parent) &&
         ts.isCallExpression(outer.parent.parent)
-      )
+      ) {
+        const method = outer.parent.name.text;
+        if (!["onConflictDoNothing", "onConflictDoUpdate"].includes(method))
+          return report(node, `${method} chain must be adapted by hand`);
         outer = outer.parent.parent;
-      if (outer.getText().includes(".returning("))
-        return report(node, "returning must be adapted by hand");
+      }
+      const statement = statementFor(outer);
+      if (!statement) return report(node, "insert result is used");
       const value = node.arguments[0];
       const data =
         value && ts.isObjectLiteralExpression(value)
@@ -154,10 +173,8 @@ export function foldInserts(source, path, rules) {
         replacement = `${database}.update(${rule.parent}).set({ ${data.fields.map(([key, value]) => `${key}: ${value}`).join(", ")} }).where(eq(${rule.parent}.${rule.parentKey ?? "id"}, ${data.key}))`;
         folded.add(rule);
       } else {
-        if (ts.isAwaitExpression(outer.parent)) outer = outer.parent;
-        if (!ts.isExpressionStatement(outer.parent))
-          return report(node, "empty insert result is used");
-        outer = outer.parent;
+        if (!deletable(statement)) return report(node, "empty insert is conditional");
+        outer = statement;
       }
       edits.push({ node: outer, replacement });
       folded.add({ child: rule.child });
@@ -197,9 +214,11 @@ export function foldInserts(source, path, rules) {
       if (data.fields.length)
         replacement = `sql\`update ${raw.parentTable} set ${data.fields.map(([key, value]) => `${key} = ${value}`).join(", ")} where ${raw.parentKey ?? "id"} = ${data.key}\``;
       else {
-        while (!ts.isStatement(outer) && outer.parent) outer = outer.parent;
-        if (!ts.isExpressionStatement(outer)) {
-          report(node, "empty SQL result is used");
+        const call = node.parent;
+        outer =
+          ts.isCallExpression(call) && call.arguments.length === 1 ? statementFor(call) : null;
+        if (!deletable(outer)) {
+          report(node, "empty SQL result is used or conditional");
           continue;
         }
         replacement = "";
@@ -213,8 +232,8 @@ export function foldInserts(source, path, rules) {
   for (const rule of folded) {
     if (rule.parent) {
       let moduleName = "@waitron/db";
-      if (path.startsWith("packages/db/")) {
-        moduleName = relative(dirname(path), "packages/db/src/index.js");
+      if (localPath.startsWith("packages/db/")) {
+        moduleName = relative(dirname(localPath), "packages/db/src/index.js");
         if (!moduleName.startsWith(".")) moduleName = "./" + moduleName;
       }
       text = addNamedImport(addNamedImport(text, moduleName, rule.parent), "drizzle-orm", "eq");

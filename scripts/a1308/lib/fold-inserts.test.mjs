@@ -1,4 +1,5 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
@@ -98,12 +99,16 @@ describe("foldInserts", () => {
     expect(foldInserts(source, path, [rule]).text).toContain("policies");
   });
 
-  it("folds several inserts in a db helper, preserving its default import", () => {
+  it.each([
+    "packages/db/src/testing/zones.ts",
+    "./packages/db/src/testing/zones.ts",
+    join(process.cwd(), "packages/db/src/testing/zones.ts"),
+  ])("folds several inserts in db helper %s, preserving its default import", (file) => {
     const source =
       'import db, { policies } from "./fixture.js";\n' +
       "await db.insert(policies).values({ zoneId: A, enabled: true });\n" +
       "await db.insert(policies).values({ zoneId: B, enabled: false });";
-    const result = foldInserts(source, "packages/db/src/testing/zones.ts", [rule]);
+    const result = foldInserts(source, file, [rule]);
     expect(result).toEqual({
       text:
         'import { eq } from "drizzle-orm";\nimport { floorZones } from "../index.js";\nimport db from "./fixture.js";\n' +
@@ -113,16 +118,24 @@ describe("foldInserts", () => {
     });
   });
 
-  it("rewrites raw SQL substitutions, drops columns, and is idempotent", () => {
-    const source =
-      "await tx.execute(sql`insert into policies (zone_id, enabled, location_id) values (${zone}, 1, ${location})`);";
-    const out = foldInserts(source, path, [rule]);
-    expect(out).toEqual({
-      text: "await tx.execute(sql`update floor_zones set active = 1 where id = ${zone}`);",
-      reports: [],
-    });
-    expect(foldInserts(out.text, path, [rule])).toEqual(out);
-  });
+  it.each(["1", "'a,b'"])(
+    "rewrites raw SQL value %s, drops columns, and is idempotent",
+    (value) => {
+      const source =
+        "await tx.execute(sql`insert into policies (zone_id, enabled, location_id) values (${zone}, " +
+        value +
+        ", ${location})`);";
+      const out = foldInserts(source, path, [rule]);
+      expect(out).toEqual({
+        text:
+          "await tx.execute(sql`update floor_zones set active = " +
+          value +
+          " where id = ${zone}`);",
+        reports: [],
+      });
+      expect(foldInserts(out.text, path, [rule])).toEqual(out);
+    },
+  );
 
   it.each([
     "insert into policies (zone_id, enabled) values (${zone}, coalesce(1, 0))",
@@ -144,6 +157,29 @@ describe("foldInserts", () => {
     expect(foldInserts(text, file, [rule])).toEqual({ text, reports: [] });
   });
 
+  it.each([
+    "await Promise.all([tx.execute(sql`insert into policies (zone_id) values (${Z})`), seedOther(tx)]);",
+    "expect(await tx.execute(sql`insert into policies (zone_id) values (${Z})`)).toBeTruthy();",
+    "if (withPolicy) await db.insert(policies).values({ zoneId: Z });\nawait mustAlwaysRun();",
+    "if (withPolicy) await tx.execute(sql`insert into policies (zone_id) values (${Z})`);\nawait mustAlwaysRun();",
+    "await expect(db.insert(policies).values({ zoneId: Z, enabled: true })).rejects.toThrow();",
+    "db.insert(policies).values({ zoneId: Z, enabled: true }).run();",
+    "db.insert(policies).values({ zoneId: Z, enabled: true }).then(done).catch(fail);",
+  ])("reports a wrapped or chained insert instead of changing its meaning: %s", (text) => {
+    const out = foldInserts(text, path, [rule]);
+    expect(out.text).toBe(text);
+    expect(out.reports).toEqual([expect.stringContaining(":1:")]);
+  });
+
+  it("keeps a parent table already imported through another module", () => {
+    const source =
+      'import { floorZones } from "./zones.js";\ndb.insert(policies).values({ zoneId: Z, enabled: true });';
+    expect(foldInserts(source, path, [rule])).toEqual({
+      text: 'import { eq } from "drizzle-orm";\nimport { floorZones } from "./zones.js";\ndb.update(floorZones).set({ active: true }).where(eq(floorZones.id, Z));',
+      reports: [],
+    });
+  });
+
   it("previews the command line, writes on request, and reports manual sites", async () => {
     const root = mkdtempSync(join(tmpdir(), "fold-cli-"));
     const saved = process.argv;
@@ -155,8 +191,15 @@ describe("foldInserts", () => {
     const source = imports + "db.insert(policies).values({ zoneId: Z, enabled: true });";
     writeFileSync(file, source);
     process.argv = ["node", "fold.mjs", file];
+    const lines = [],
+      output = console.log;
+    console.log = (line) => lines.push(line);
+    onTestFinished(() => {
+      console.log = output;
+    });
     await library.runFoldCli([rule]);
     expect(readFileSync(file, "utf8")).toBe(source);
+    expect(lines).toEqual([`${file}: would rewrite`]);
     process.argv = ["node", "fold.mjs", "--write", file];
     await library.runFoldCli([rule]);
     expect(readFileSync(file, "utf8")).toBe(
@@ -164,9 +207,7 @@ describe("foldInserts", () => {
     );
     await library.runFoldCli([rule]);
     writeFileSync(file, "db.insert(policies).values(rows);");
-    const lines = [];
-    const output = console.log;
-    console.log = (line) => lines.push(line);
+    lines.length = 0;
     try {
       await library.runFoldCli([rule]);
     } finally {
@@ -174,6 +215,20 @@ describe("foldInserts", () => {
     }
     expect(lines).toEqual([`${file}:1: unsupported insert values`]);
     expect(readFileSync(file, "utf8")).toBe("db.insert(policies).values(rows);");
+    const alias = join(root, "fold.mjs");
+    symlinkSync(join(process.cwd(), "scripts/a1308/fk1-zone-fixtures.mjs"), alias);
+    writeFileSync(
+      file,
+      imports + 'db.insert(zoneSalePolicies).values({ zoneId: Z, paidWhen: "prepay" });',
+    );
+    const child = spawnSync(process.execPath, [alias, "--write", file], {
+      encoding: "utf8",
+      timeout: 10_000,
+    });
+    expect(child.status, child.stderr).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(
+      imports + 'db.update(floorZones).set({ paidWhen: "prepay" }).where(eq(floorZones.id, Z));',
+    );
   });
 
   it("runs an extra rewrite only on fixture files", async () => {

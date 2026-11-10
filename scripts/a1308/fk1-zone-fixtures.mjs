@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
 import { runFoldCli } from "./lib/fold-inserts.mjs";
 
 export const rules = [
@@ -46,5 +47,5 @@ export const rules = [
   },
 ];
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href)
   await runFoldCli(rules);
