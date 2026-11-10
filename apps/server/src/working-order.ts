@@ -8689,7 +8689,7 @@ export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationC
 };
 
 /** Every live kitchen item `scope` selects, with the facts the pass card and release read; each
- *  bill's `tableShortNames` only `withShortNames`, since the release names no table. */
+ *  bill's `tableShortNames` only `withShortNames`. */
 export async function readPassRows(
   tx: Transaction,
   scope: SQL,

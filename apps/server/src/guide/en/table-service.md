@@ -271,13 +271,14 @@ menu and the order sit side by side.
 
 A phone or tablet shows a table's short name in the bar's table buttons and the Ready bar, where
 space is tight, and the cards on the [kitchen screen](kitchen-service.md#kitchen-screen) and the
-[pass](kitchen-service.md#pass-screen) name their table by it. In the dashboard's **Floor plan**, each table has a **Short name** under its
-**Name**, filled in from the name: "T1" for "Terrace 1", "Win" for "Window", and a name of four
-characters or fewer as it is. It follows the name until you type your own, of up to five characters,
-which cannot contain "+" because the till uses it for tables joined together. Two tables of the
-venue cannot share a short name, whatever the capitals: if Save says "Terrace 1 already uses T1",
-type another, such as "Tb1". **Add tables** shows the short names it will give, and lets you type
-them when you choose custom names; **Add joined table** asks for one.
+[pass](kitchen-service.md#pass-screen) name their table by it. In the dashboard's **Floor plan**,
+each table has a **Short name** under its **Name**, filled in from the name: "T1" for "Terrace 1",
+"Win" for "Window", and a name of four characters or fewer as it is. It follows the name until you
+type your own, of up to five characters, which cannot contain "+" because the till uses it for
+tables joined together. Two tables of the venue cannot share a short name, whatever the capitals: if
+Save says "Terrace 1 already uses T1", type another, such as "Tb1". **Add tables** shows the short
+names it will give, and lets you type them when you choose custom names; **Add joined table** asks
+for one.
 
 ## Switch bills {#bill-switcher}
 

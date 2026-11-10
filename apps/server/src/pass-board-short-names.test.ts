@@ -32,6 +32,7 @@ import {
   orderForParty,
   seat,
   setupPartyVenue,
+  tableRow,
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { fireLines } from "./working-order.js";
@@ -118,16 +119,6 @@ async function seatedWithBurger(tableId: string): Promise<{ partyId: string; bil
   const { partyId } = await seat(v, tableId);
   const { tabId } = await orderForParty(v, partyId, ["Burger"]);
   return { partyId, billId: tabId };
-}
-
-async function zoneOf(tableId: string): Promise<string> {
-  const [row] = await inTx(v, (tx) =>
-    tx
-      .select({ zoneId: diningTables.zoneId })
-      .from(diningTables)
-      .where(eq(diningTables.id, tableId)),
-  );
-  return row!.zoneId;
 }
 
 describe("the pass card names each bill's tables by their short names", () => {
@@ -250,7 +241,7 @@ describe("a table named for today keeps its short name on the pass", () => {
     const first = await table("Counter", "C");
     const second = await table("Counter", "D");
     const name = `Smith wedding ${serial}`;
-    const zoneId = await zoneOf(first);
+    const { zoneId } = await tableRow(v, first);
     await inTx(v, async (tx) => {
       const [joined] = await tx
         .insert(floorTodayJoins)

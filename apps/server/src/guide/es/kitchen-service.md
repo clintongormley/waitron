@@ -249,15 +249,15 @@ esperan al pase tras el **+**.
 
 La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente pase** o
 **Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
-grupo. Nombra la mesa por su [nombre corto](table-service.md#short-names), como **T4**, o
-**T4+T5** para mesas unidas. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Listo** muestra **Listo
-3 min**, contados desde que su último plato estuvo listo, y una en espera no muestra ninguno. El
-borde izquierdo de la tarjeta toma el color de marca y luego pasa a rojo a medida que pasa el tiempo
-desde que se enviaron sus platos, según los avisos de demora de sus estaciones. Un plato listo sigue
-contando, así que una tarjeta en **Listo** también pasa a rojo. Un plato enviado hace demasiado
-tiempo dice **Olvidado**, y la fila encima de las columnas cuenta las tarjetas en rojo (**2 con
-retraso**). Cada plato muestra su estado y su estación, como **Preparando · Parrilla**; un plato en
-espera no muestra ninguno de los dos.
+grupo. Nombra la mesa por su [nombre corto](table-service.md#short-names), como **M4**, o **M4+M5**
+para mesas unidas. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Listo**
+muestra **Listo 3 min**, contados desde que su último plato estuvo listo, y una en espera no muestra
+ninguno. El borde izquierdo de la tarjeta toma el color de marca y luego pasa a rojo a medida que
+pasa el tiempo desde que se enviaron sus platos, según los avisos de demora de sus estaciones. Un
+plato listo sigue contando, así que una tarjeta en **Listo** también pasa a rojo. Un plato enviado
+hace demasiado tiempo dice **Olvidado**, y la fila encima de las columnas cuenta las tarjetas en
+rojo (**2 con retraso**). Cada plato muestra su estado y su estación, como **Preparando ·
+Parrilla**; un plato en espera no muestra ninguno de los dos.
 
 Un plato cuya [estación espera al pase](kitchen-service.md#station-waits) no se prepara hasta que
 el pase lo marcha. Cuando el camarero

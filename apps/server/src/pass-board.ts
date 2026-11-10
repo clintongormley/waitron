@@ -102,8 +102,8 @@ export async function readPassCardRows(tx: Transaction, target: PassTarget): Pro
 }
 
 /** `known.waits` holds every station that waits for the pass; `known.zones` holds orders whose
- *  watched zone is already read. Only a board passes `known`, and only a board names tables, so
- *  the bills' short names are read only then. */
+ *  watched zone is already read. Only a board passes `known`, so the bills' short names are read
+ *  only then. */
 async function readCardRows(
   tx: Transaction,
   cards: SQL,

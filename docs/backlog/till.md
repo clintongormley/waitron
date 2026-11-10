@@ -799,13 +799,11 @@ may predate that branch:
 
 ## Build good screens for each kind of device, and retire canvases (A182, owner 2026-10-01)
 
-A182 part 1's handheld, kitchen screen and pass (A797) finished with slice 12b (2026-11-10); the
-Counter's custom item and the payment window have entries of their own,
-[A738 residual](#custom-item-on-the-counter-a738-residual) and
-[A739](#a739-paying-hold--pay-and-one-payment-window).
-
-A737 Part 2 adds the separate durable post-invoice payment-refund path. The screen designer was
-retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
+What remains of A182 part 1 is the Counter's custom item,
+[A738 residual](#custom-item-on-the-counter-a738-residual), and the payment window,
+[A739](#a739-paying-hold--pay-and-one-payment-window); the screen designer was retired in
+[#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning them. A737 Part 2
+adds the separate durable post-invoice payment-refund path.
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
 
