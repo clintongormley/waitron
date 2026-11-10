@@ -1639,18 +1639,18 @@ describe("till-station-screen device mode with several stations (A366 decision 7
     expect(el.shadowRoot!.querySelector("[data-merge-toggle]")).toBeNull();
     const guidance = el.shadowRoot!.querySelector<HTMLElement>("[data-choose-again]")!;
     expect(guidance.textContent!.trim()).toBe(
-      "Ask a manager to choose its screens again in Devices.",
+      "Choose this device's screens again in the dashboard, under Devices.",
     );
     const last = [...el.shadowRoot!.querySelectorAll("[data-station-unavailable]")].at(-1)!;
     expect(last.compareDocumentPosition(guidance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("with no station left available, says in Spanish who chooses its screens again", async () => {
+  it("with no station left available, says in Spanish where to choose its screens again", async () => {
     setLocale("es-ES");
     try {
       const { el } = await mountDevice({ stations: [gone("st-deli", "Deli")] });
       expect(el.shadowRoot!.querySelector("[data-choose-again]")!.textContent!.trim()).toBe(
-        "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",
+        "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
       );
     } finally {
       setLocale("en-GB");

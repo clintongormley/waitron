@@ -1059,8 +1059,8 @@ describe("till-app session activity", () => {
     {
       name: "a kitchen display with no kitchen screen says so",
       kitchenScreens: [],
-      en: "This screen has nothing to show yet. Ask a manager to choose a screen for it in Devices.",
-      es: "Esta pantalla aún no tiene nada que mostrar. Pide a un responsable que le elija una pantalla en Dispositivos.",
+      en: "This screen has nothing to show yet. Choose a screen for it in the dashboard, under Devices.",
+      es: "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla para este dispositivo en el panel, en Dispositivos.",
       guidance: { en: null, es: null },
     },
     {
@@ -1069,8 +1069,8 @@ describe("till-app session activity", () => {
       en: "This screen is no longer available: Pass screen",
       es: "Esta pantalla ya no está disponible: Pantalla de pase",
       guidance: {
-        en: "Ask a manager to choose its screens again in Devices.",
-        es: "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",
+        en: "Choose this device's screens again in the dashboard, under Devices.",
+        es: "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
       },
     },
   ])("$name", ({ kitchenScreens, en, es, guidance }) => {
