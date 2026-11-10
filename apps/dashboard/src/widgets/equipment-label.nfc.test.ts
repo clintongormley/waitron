@@ -44,7 +44,7 @@ async function mount(kind: "printer" | "reader" = "reader") {
   const { el } = await mountWidget<EquipmentLabel>("dashboard-equipment-label", {
     kind,
     itemId: ID,
-    name: "Terraza",
+    name: "Terrace",
     drawQr: async () => PIXEL,
   });
   await el.updateComplete;

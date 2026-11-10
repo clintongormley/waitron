@@ -59,7 +59,7 @@ describe("unit-form", () => {
     const getUnitExtraUsage = vi.fn().mockResolvedValue([
       {
         productId: "p1",
-        productName: "Jamón",
+        productName: "Ham",
         lists: [{ id: "l1", name: "Toppings", menus: [{ id: "m1", name: "Dinner" }] }],
       },
     ]);
@@ -83,7 +83,7 @@ describe("unit-form", () => {
     );
     expect(
       el.shadowRoot!.querySelector("[data-test=precision-usage-warning]")!.textContent,
-    ).toContain("Jamón: Toppings (Dinner)");
+    ).toContain("Ham: Toppings (Dinner)");
     expect(getUnitExtraUsage).toHaveBeenCalledWith("u1");
     expect(saveOf(el).disabled).toBe(false);
     await chooseOption(precisionBox(el), "3");
@@ -644,7 +644,7 @@ describe("unit-form", () => {
     saveOf(el).click();
     await el.updateComplete;
 
-    change(el, "staffName", "caja");
+    change(el, "staffName", "box");
     await el.updateComplete;
     expect(errorOf(el, "staffName")).toBe("");
     expect(errorOf(el, "staffAbbreviation")).toBe(t("units.staff_abbreviation_required"));
@@ -654,7 +654,7 @@ describe("unit-form", () => {
     await el.updateComplete;
     expect(errorOf(el, "staffName")).toBe(t("units.staff_name_required"));
 
-    change(el, "staffName", "caja");
+    change(el, "staffName", "box");
     change(el, "staffAbbreviation", "cj");
     await el.updateComplete;
     expect(errorOf(el, "staffAbbreviation")).toBe("");

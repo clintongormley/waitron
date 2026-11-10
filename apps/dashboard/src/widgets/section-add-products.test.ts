@@ -22,9 +22,9 @@ const category = (id: string, name: string, parentId: string | null): CategorySu
 });
 
 const categories = [
-  category("c-drinks", "Bebidas", null),
-  category("c-beer", "Cerveza", "c-drinks"),
-  category("c-mains", "Principales", null),
+  category("c-drinks", "Drinks", null),
+  category("c-beer", "Beer", "c-drinks"),
+  category("c-mains", "Mains", null),
 ];
 
 const products = [
@@ -135,16 +135,16 @@ it("filters by category from the shared dropdown, with All categories as its pro
   expect(box.placeholder).toBe(t("add_products.all_categories"));
   expect(box.options).toEqual([
     { value: "", label: t("add_products.all_categories") },
-    { value: "c-drinks", label: "Bebidas" },
-    { value: "c-beer", label: "Bebidas › Cerveza" },
-    { value: "c-mains", label: "Principales" },
+    { value: "c-drinks", label: "Drinks" },
+    { value: "c-beer", label: "Drinks › Beer" },
+    { value: "c-mains", label: "Mains" },
   ]);
   expect(box.value).toBe("");
   expect(await shownCategory(el)).toBe(t("add_products.all_categories"));
   await chooseOption(box, "c-mains");
   await el.updateComplete;
   expect(listed(el)).toEqual(["p-burger"]);
-  expect(await shownCategory(el)).toBe("Principales");
+  expect(await shownCategory(el)).toBe("Mains");
 });
 
 it("keeps the category filter's width, and the search field beside it, whatever category is shown", async () => {
@@ -159,12 +159,12 @@ it("keeps the category filter's width, and the search field beside it, whatever 
   expect(before.width).toBeGreaterThan(0);
   await chooseOption(box, "c-mains");
   await el.updateComplete;
-  expect(await shownCategory(el)).toBe("Principales");
+  expect(await shownCategory(el)).toBe("Mains");
   expect(measure().width).toBeCloseTo(before.width, 0);
   expect(measure().searchLeft).toBeCloseTo(before.searchLeft, 0);
   await chooseOption(box, "c-beer");
   await el.updateComplete;
-  expect(await shownCategory(el)).toBe("Bebidas › Cerveza");
+  expect(await shownCategory(el)).toBe("Drinks › Beer");
   expect(measure().width).toBeCloseTo(before.width, 0);
   expect(measure().searchLeft).toBeCloseTo(before.searchLeft, 0);
 });
@@ -178,7 +178,7 @@ it("offers every reporting category by its path", async () => {
   const el = await mount();
   const options = categoryBox(el).options;
   expect(options.map((option) => option.value)).toEqual(["", "c-drinks", "c-beer", "c-mains"]);
-  expect(options[2]!.label).toBe("Bebidas › Cerveza");
+  expect(options[2]!.label).toBe("Drinks › Beer");
 });
 
 it("filtering by Drinks also lists what sits under Beer, and not Mains", async () => {
@@ -186,7 +186,7 @@ it("filtering by Drinks also lists what sits under Beer, and not Mains", async (
   await filterBy(el, "c-drinks");
   expect(listed(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
   expect(categoryBox(el).value).toBe("c-drinks");
-  expect(await shownCategory(el)).toBe("Bebidas");
+  expect(await shownCategory(el)).toBe("Drinks");
   await filterBy(el, "c-beer");
   expect(listed(el)).toEqual(["p-ipa", "p-lager"]);
   await filterBy(el, "");
@@ -364,11 +364,11 @@ it("widens the chosen filter when a category is added beneath it", async () => {
   });
   await filterBy(el, "c-drinks");
   expect(listed(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
-  el.categories = [...categories, category("c-cider", "Sidra", "c-drinks")];
+  el.categories = [...categories, category("c-cider", "Ciders", "c-drinks")];
   await el.updateComplete;
   expect(listed(el)).toEqual(["p-cider", "p-ipa", "p-lager", "p-lemonade"]);
   expect(categoryBox(el).options.find((option) => option.value === "c-cider")!.label).toBe(
-    "Bebidas › Sidra",
+    "Drinks › Ciders",
   );
 });
 
@@ -378,7 +378,7 @@ it("names the categories by their one name whatever language is in force", async
   setLocale("en");
   await search(el, "a");
   expect(categoryBox(el).options.find((option) => option.value === "c-beer")!.label).toBe(
-    "Bebidas › Cerveza",
+    "Drinks › Beer",
   );
 });
 

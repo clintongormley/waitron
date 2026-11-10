@@ -20,13 +20,11 @@ import type {
 registerIcons(DASHBOARD_ICONS);
 
 const catalogues: CatalogueSummary[] = [
-  { id: "cat-a", name: "Comida", active: true, version: 1 },
-  { id: "cat-b", name: "Bebidas", active: true, version: 1 },
+  { id: "cat-a", name: "Food", active: true, version: 1 },
+  { id: "cat-b", name: "Drinks", active: true, version: 1 },
 ];
 
-const categories: CategorySummary[] = [
-  { id: "c1", name: "Entrantes", parentId: null, color: null },
-];
+const categories: CategorySummary[] = [{ id: "c1", name: "Starters", parentId: null, color: null }];
 
 const products: Product[] = [
   {
@@ -35,7 +33,7 @@ const products: Product[] = [
     catalogueId: "cat-a",
     categoryId: "c1",
     primaryCategoryId: "c1",
-    name: "Croquetas de jamón",
+    name: "Ham croquettes",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
     unitId: "u1",
     unit: {
@@ -66,9 +64,9 @@ const products: Product[] = [
   },
 ];
 
-const stations = [{ id: "s1", name: "Cocina", displayOrder: 0, isDefault: true, active: true }];
+const stations = [{ id: "s1", name: "Kitchen", displayOrder: 0, isDefault: true, active: true }];
 
-const courses = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true, inUse: false }];
+const courses = [{ id: "k1", name: "Starters", displayOrder: 0, active: true, inUse: false }];
 
 const drinks = {
   memberId: "m-drinks",
@@ -156,7 +154,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     ]),
     listExtraLists: vi.fn().mockResolvedValue([]),
     listOptionLists: vi.fn().mockResolvedValue([]),
-    createProductEditor: vi.fn().mockResolvedValue({ id: "new", name: "Croquetas de jamón" }),
+    createProductEditor: vi.fn().mockResolvedValue({ id: "new", name: "Ham croquettes" }),
     getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
     listSections: vi.fn().mockResolvedValue(sections),
     ...overrides,
@@ -262,7 +260,7 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
     await el.updateComplete;
     el.shadowRoot!.querySelector("dashboard-product-editor")!.dispatchEvent(
       new CustomEvent("wt-submit", {
-        detail: { value: { name: "Croquetas de jamón" } as ProductEditorInput },
+        detail: { value: { name: "Ham croquettes" } as ProductEditorInput },
         bubbles: true,
         composed: true,
       }),
@@ -291,7 +289,7 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
             updateProductEditor: vi.fn().mockRejectedValue({
               code: "product.on_live_menu",
               params: {
-                products: [{ id: "p1", name: "Croquetas de jamón" }],
+                products: [{ id: "p1", name: "Ham croquettes" }],
                 menus: [
                   { id: "d", name: "Dinner" },
                   { id: "l", name: "Lunch Menu" },
@@ -329,7 +327,7 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
           const native = modal.shadowRoot!.querySelector("dialog")!;
           expect(native.open).toBe(true);
           expect(modal.heading).toBe(
-            t("product.archive_named").replace("{name}", "Croquetas de jamón"),
+            t("product.archive_named").replace("{name}", "Ham croquettes"),
           );
           const confirm = modal.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
           expect(confirm.textContent!.trim()).toBe(t("product.archive"));
@@ -375,7 +373,7 @@ describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", 
             expect(innerWidth).toBe(width);
             const variant = {
               id: "v1",
-              name: "Media ración",
+              name: "Half portion",
               customerName: null,
               kitchenName: null,
               unitPrice: null,
@@ -397,7 +395,7 @@ describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", 
               variants: [variant],
             };
             const names = [
-              "Salsas caseras y acompañamientos de temporada",
+              "Housemade sauces and seasonal side dishes",
               "ExtraordinarilyLongUnbrokenSauceListNameThatMustWrapAtPhoneWidth",
             ];
             const api = stubApi({

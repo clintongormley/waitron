@@ -25,7 +25,7 @@ import type {
 const stations: Station[] = [
   {
     id: "s1",
-    name: "Cocina",
+    name: "Kitchen",
     isDefault: true,
     active: true,
     showsRestOfOrder: false,
@@ -35,7 +35,7 @@ const stations: Station[] = [
   },
   {
     id: "s2",
-    name: "Barra",
+    name: "Back bar",
     isDefault: false,
     active: true,
     showsRestOfOrder: false,
@@ -58,13 +58,13 @@ const devices: DeviceRow[] = [
         everyStation: false,
         everyZone: true,
         profileEveryStation: true,
-        stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
+        stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
         zones: null,
         nonPassStationsOverride: null,
         showNonPassStations: true,
       },
     ],
-    label: "Pantalla Cocina",
+    label: "Kitchen display",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
@@ -84,7 +84,7 @@ const devices: DeviceRow[] = [
     approvedProfileIds: [],
     kind: "kds_station",
     kitchenScreens: [],
-    label: "Pase",
+    label: "Pass",
     active: false,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
@@ -173,14 +173,14 @@ const pending: JoinRequestRow[] = [
   {
     id: "r1",
     kind: "device",
-    label: "Pantalla pase",
+    label: "Pass display",
     createdAt: "2026-09-08T10:02:00.000Z",
     pairingBy: null,
   },
   {
     id: "r2",
     kind: "device",
-    label: "Caja de la terraza",
+    label: "Terrace till",
     createdAt: "2026-09-08T10:03:00.000Z",
     pairingBy: { name: "Ana", mine: false },
   },
@@ -191,7 +191,7 @@ const CHOICES = ["12", "47", "83"];
 const printers: Printer[] = [
   {
     id: "pr1",
-    name: "Cocina",
+    name: "Kitchen",
     transport: "network_tcp",
     pendingJobs: 0,
     lastPrintAt: null,
@@ -243,7 +243,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     denyJoinRequest: vi.fn().mockResolvedValue(undefined),
     acceptDeviceJoinRequest: vi
       .fn()
-      .mockResolvedValue({ deviceId: "d9", name: "Pantalla pase", formFactor: "kds" }),
+      .mockResolvedValue({ deviceId: "d9", name: "Pass display", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     updateDevice: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue([
@@ -338,7 +338,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       ): DeviceRow => ({
         ...devices[0]!,
         id,
-        label: `Caja ${id}`,
+        label: `Till ${id}`,
         batteryLevel,
         batteryCharging,
         batteryReportedAt: minutes === null ? null : ago(minutes),
@@ -425,7 +425,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=edit-made-here]")).not.toBeNull();
-      await rename(el, "Barra 1");
+      await rename(el, "Back bar 1");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
       await vi.waitFor(() =>
         expect(
@@ -468,8 +468,8 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
             everyStation: false,
             everyZone: false,
             profileEveryStation: true,
-            stations: [slot("s1", "Cocina"), slot("s9", "Deli", false)],
-            zones: [slot("z1", "Terraza"), { ...slot("z3", "Patio", false), switchedOff: true }],
+            stations: [slot("s1", "Kitchen"), slot("s9", "Deli", false)],
+            zones: [slot("z1", "Terrace"), { ...slot("z3", "Patio", false), switchedOff: true }],
             nonPassStationsOverride: null,
             showNonPassStations: true,
           },
@@ -481,8 +481,8 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
           api: stubApi({
             listDevices: vi.fn().mockResolvedValue([screen]),
             listZones: vi.fn().mockResolvedValue([
-              { id: "z1", name: "Terraza", displayOrder: 0, active: true },
-              { id: "z2", name: "Salón", displayOrder: 1, active: true },
+              { id: "z1", name: "Terrace", displayOrder: 0, active: true },
+              { id: "z2", name: "Dining room", displayOrder: 1, active: true },
               { id: "z3", name: "Patio", displayOrder: 2, active: false },
             ]),
             listProfileKitchenScreens: vi.fn().mockResolvedValue([
@@ -594,7 +594,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await save.updateComplete;
     expect([save.variant, save.disabled]).toEqual(["secondary", true]);
     await expectNoA11yViolations(host);
-    await rename(el, "Caja 2");
+    await rename(el, "Till 2");
     await save.updateComplete;
     expect([save.variant, save.disabled]).toEqual(["primary", false]);
     await expectNoA11yViolations(host);
@@ -615,9 +615,9 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       const carried = {
         ...printers[0]!,
         id: "pr2",
-        name: "Mano de sala",
+        name: "Dining handheld",
         portable: true,
-        holder: { deviceId: "d7", deviceName: "Móvil 2", personName: "Ana" },
+        holder: { deviceId: "d7", deviceName: "Mobile 2", personName: "Ana" },
       };
       const equipped = {
         ...deviceProfiles[0]!,
@@ -643,7 +643,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
               params: {
                 field: "receiptPrinterId",
                 holderDeviceId: "d7",
-                holderDeviceName: "Móvil 2",
+                holderDeviceName: "Mobile 2",
                 holderPersonName: "Ana",
               },
             }),
@@ -667,7 +667,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       );
       await flush(el);
       await expectNoA11yViolations(host);
-      await rename(el, "Caja 2");
+      await rename(el, "Till 2");
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
       await vi.waitFor(() =>
         expect(
@@ -806,7 +806,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         createdAt: "2026-09-08T10:04:00.000Z",
         pairingBy: null,
         returning: {
-          name: "Pase",
+          name: "Pass",
           profileId: "dp3",
           kitchenScreens: [
             {
@@ -815,7 +815,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
               everyStation: false,
               everyZone: true,
               profileEveryStation: true,
-              stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
+              stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
               zones: null,
               nonPassStationsOverride: null,
               showNonPassStations: true,
@@ -1008,7 +1008,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
             "[data-test=pair-screen-stations] wt-switch",
           ),
         ).map((toggle) => toggle.label),
-      ).toEqual(["Todas las estaciones", "Cocina", "Barra"]);
+      ).toEqual(["Todas las estaciones", "Kitchen", "Back bar"]);
       await userEvent.click(screen.shadowRoot!.querySelector(".trigger")!);
       await userEvent.keyboard("{Escape}");
       await flush(el);
@@ -1035,12 +1035,12 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
   });
 
   describe("the delete dialog", () => {
-    const named = { id: "d1", name: "Pantalla Cocina" };
+    const named = { id: "d1", name: "Kitchen display" };
     const ready: DeleteImpact = {
       target: named,
       refusals: [],
       ends: [{ key: "sessions", count: 2, targets: [] }],
-      removes: [{ key: "printer_choices", count: 1, targets: [{ id: "p1", name: "Barra" }] }],
+      removes: [{ key: "printer_choices", count: 1, targets: [{ id: "p1", name: "Back bar" }] }],
     };
     const refused: DeleteImpact = {
       ...ready,
@@ -1048,7 +1048,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         {
           code: "device.payment_in_progress",
           params: {},
-          targets: [{ id: "o1", name: "Mesa 4" }],
+          targets: [{ id: "o1", name: "Table 4" }],
         },
       ],
     };
@@ -1129,7 +1129,7 @@ describe("devices-screen a11y — the numeric match", () => {
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() =>
       expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
-        name: "Pantalla pase",
+        name: "Pass display",
         profileId: "dp1",
         kitchenScreens: [],
       }),
