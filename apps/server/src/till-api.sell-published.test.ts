@@ -254,7 +254,7 @@ async function setupLunch(): Promise<Lunch> {
       select zone_id as id from zone_service_policies
       where is_counter_default`);
     const zoneId = zone.rows[0]!.id;
-    await offerMenuThroughZone(tx, cfg, zoneId, lunch.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, zoneId, lunch.id, { makeDefault: true });
     await tx.execute(sql`
       insert into routing_cells (id, category_id, station_id)
       values (${randomUUID()}, ${category.id}, (select id from kitchen_stations where location_id = ${cfg.locationId} and is_default))`);
@@ -475,7 +475,7 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     const brunch = await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Brunch" });
       await addProductToMenu(tx, { menuId: menu.id, productId: v.burger.productId });
-      await offerMenuThroughZone(tx, v.cfg, v.zoneId, menu.id, { displayOrder: 1 });
+      await offerMenuThroughZone(tx, v.zoneId, menu.id, { displayOrder: 1 });
       return publishWorkingMenu(tx, menu.id);
     });
     const before = await written();

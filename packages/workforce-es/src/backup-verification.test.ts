@@ -194,7 +194,7 @@ describe("agreement backup evidence", () => {
       .values({ id: 1, createdAt: "2026-10-20T08:00:00.000Z" });
     expect((await run({ absent: true, sourceSchema: 0 })).status).toBe("invalid");
   });
-  it("accepts no config and no parent reference", async () => {
+  it("accepts an empty configuration table", async () => {
     for (const db of [original.db, restored.db]) db.run(sql`delete from convenio_config`);
     expect(await run({ wrap: hideTable("locations") })).toEqual(passed);
   });

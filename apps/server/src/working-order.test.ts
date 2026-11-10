@@ -251,10 +251,10 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
       await tx.execute(sql`
       insert into zone_sale_policies (zone_id) values (${zoneId})`);
-      await offerMenuThroughZone(tx, { locationId: locationId }, zoneId, cat.id, {
+      await offerMenuThroughZone(tx, zoneId, cat.id, {
         makeDefault: true,
       });
-      await offerMenuThroughZone(tx, { locationId: locationId }, zoneId, premium.id, {
+      await offerMenuThroughZone(tx, zoneId, premium.id, {
         displayOrder: 1,
       });
       await publishWorkingMenu(tx, cat.id);

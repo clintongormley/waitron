@@ -128,9 +128,9 @@ describe("Always fixture periods", () => {
   it("keeps the previous customer menu and staff menus when the fixture selects another default", async () => {
     const v = await venue({ timetable: false });
     await scoped(async (tx) => {
-      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Desayunos);
-      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Bebidas, { displayOrder: 9 });
-      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Café, { makeDefault: true });
+      await offerMenuThroughZone(tx, v.sala, v.menus.Desayunos);
+      await offerMenuThroughZone(tx, v.sala, v.menus.Bebidas, { displayOrder: 9 });
+      await offerMenuThroughZone(tx, v.sala, v.menus.Café, { makeDefault: true });
     });
     const offers = await scoped((tx) =>
       listZoneOffers(tx, v.barra, { at: madrid(MONDAY, "15:00") }),
@@ -166,8 +166,8 @@ describe("Always fixture periods", () => {
   it("keeps two menus orderable on both sides of midnight and both touching ranges", async () => {
     const v = await venue({ timetable: false });
     await scoped(async (tx) => {
-      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Desayunos, { makeDefault: true });
-      await offerMenuThroughZone(tx, v.cfg, v.sala, v.menus.Bebidas);
+      await offerMenuThroughZone(tx, v.sala, v.menus.Desayunos, { makeDefault: true });
+      await offerMenuThroughZone(tx, v.sala, v.menus.Bebidas);
     });
     for (const time of ["03:00", "06:00", "15:00", "18:00"])
       for (const zoneId of [v.sala, v.barra]) {

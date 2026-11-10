@@ -239,8 +239,7 @@ const suite = useVenueDb({
         insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id, order_start) values (${zone!.id}, 'counter')`);
-        const venueScope = { locationId: venueId };
-        await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
+        await offerMenuThroughZone(tx, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
           productId: p.id,
@@ -4138,7 +4137,7 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       sql`insert into zone_sale_policies (zone_id, order_start) values (${zoneId}, 'table')`,
     );
     await withTransaction(suite.db, async (tx) => {
-      await offerMenuThroughZone(tx, cfg, zoneId, waterProduct.catalogueId, { makeDefault: true });
+      await offerMenuThroughZone(tx, zoneId, waterProduct.catalogueId, { makeDefault: true });
     });
 
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
@@ -4674,7 +4673,7 @@ describe("canonical modifier HTTP serialization", () => {
       sql`insert into zone_sale_policies (zone_id, order_start) values (${zoneId}, 'table')`,
     );
     await withTransaction(suite.db, async (tx) => {
-      await offerMenuThroughZone(tx, cfg, zoneId, waterProduct.catalogueId, { makeDefault: true });
+      await offerMenuThroughZone(tx, zoneId, waterProduct.catalogueId, { makeDefault: true });
     });
     const { id: tableId } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "Modifiers", zoneId }),
@@ -4977,7 +4976,7 @@ describe("sale-policy order flow routes", () => {
         await tx.execute(
           sql`update zone_sale_policies set order_start = null, paid_when = ${paidWhen} where zone_id = ${zone.id}`,
         );
-        await offerMenuThroughZone(tx, cfg, zone.id, waterProduct.catalogueId, {
+        await offerMenuThroughZone(tx, zone.id, waterProduct.catalogueId, {
           makeDefault: true,
         });
         return zone.id;

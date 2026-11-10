@@ -498,7 +498,7 @@ describe("venue service routing", () => {
       const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
       await configureZone(tx, { zoneId: zone, departmentId: department.id });
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
-      await offerMenuThroughZone(tx, { locationId }, zone, menu.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, zone, menu.id, { makeDefault: true });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
       const drinks = await createSectionIn(tx, rootSectionId, { internalName: "Drinks" });
       const soft = await createSectionIn(tx, drinks.id, { internalName: "Soft drinks" });
@@ -597,7 +597,7 @@ describe("venue service routing", () => {
       ]);
 
       const menu = await createCatalogue(tx, { name: "Terrace menu" });
-      await offerMenuThroughZone(tx, { locationId }, zone, menu.id, {
+      await offerMenuThroughZone(tx, zone, menu.id, {
         makeDefault: true,
       });
       await expect(listVenueReadiness(tx)).resolves.toEqual([
@@ -753,7 +753,7 @@ describe("venue service routing", () => {
         productId: ham.id,
         grossPrice: "1.00",
       });
-      await offerMenuThroughZone(tx, { locationId }, zone, menu.id, {
+      await offerMenuThroughZone(tx, zone, menu.id, {
         makeDefault: true,
       });
       const versionId = await publish(tx, menu.id);
@@ -935,7 +935,7 @@ describe("venue service routing", () => {
         productId: sweets.id,
         grossPrice: "1.20",
       });
-      await offerMenuThroughZone(tx, { locationId }, zone, menu.id, {
+      await offerMenuThroughZone(tx, zone, menu.id, {
         makeDefault: true,
       });
       await publish(tx, menu.id);
@@ -1004,11 +1004,11 @@ describe("venue service routing", () => {
         }),
       ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
-        offerMenuThroughZone(tx, { locationId }, zone, "00000000-0000-4000-8000-000000000099"),
+        offerMenuThroughZone(tx, zone, "00000000-0000-4000-8000-000000000099"),
       ).rejects.toMatchObject({ code: "catalogue.not_found" });
 
       const menu = await createCatalogue(tx, { name: "Terrace" });
-      await expect(offerMenuThroughZone(tx, { locationId }, zone, menu.id)).rejects.toMatchObject({
+      await expect(offerMenuThroughZone(tx, zone, menu.id)).rejects.toMatchObject({
         code: "service_zone.not_found",
       });
       await configureZone(tx, {
@@ -1016,7 +1016,7 @@ describe("venue service routing", () => {
         departmentId: department.id,
         orderStart: "counter",
       });
-      await offerMenuThroughZone(tx, { locationId }, zone, menu.id);
+      await offerMenuThroughZone(tx, zone, menu.id);
       const versionId = await publish(tx, menu.id);
       const terrace = await listZoneOffers(tx, zone);
       expect({ ...terrace, menus: terrace.menus.map(versionOf) }).toEqual({
@@ -1176,7 +1176,7 @@ describe("routing outcomes and menu readiness", () => {
 
   // A sold-out product remains visible and still fills the live menu.
   it("serves an Unavailable product marked while readiness still judges its setup", async () => {
-    const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
+    const { zoneId, otherZoneId } = await seedRoutingVenue();
     await scoped(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Tapas" });
       const croquette = await createProduct(tx, {
@@ -1193,7 +1193,7 @@ describe("routing outcomes and menu readiness", () => {
         productId: croquette.id,
         grossPrice: "6.00",
       });
-      await offerMenuThroughZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, zoneId, menu.id, { makeDefault: true });
       await publish(tx, menu.id);
 
       const served = (await listZoneOffers(tx, zoneId)).offers;
@@ -1749,7 +1749,7 @@ async function seedSellingVenue() {
       grossPrice: "4.50",
     });
     for (const zoneId of [diningZone, barZone]) {
-      await offerMenuThroughZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, zoneId, menu.id, { makeDefault: true });
     }
     const versionId = await publish(tx, menu.id);
     return {
@@ -1962,7 +1962,7 @@ describe("retired and moved zones", () => {
     const venue = await seedSellingVenue();
     const destinationMenu = await scoped(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Destination period menu" });
-      await offerMenuThroughZone(tx, venue.cfg, venue.diningZone, menu.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, venue.diningZone, menu.id, { makeDefault: true });
       await publish(tx, menu.id);
       return menu.id;
     });
@@ -2242,7 +2242,6 @@ const WITH_ICE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
  */
 async function seedTwoMenuVenue() {
   const venue = await seedSellingVenue();
-  const { cfg } = venue;
   return scoped(async (tx) => {
     const dinner = await createCatalogue(tx, { name: "Dinner" });
     const make = async (name: string, unitPrice: string) =>
@@ -2314,7 +2313,7 @@ async function seedTwoMenuVenue() {
       .id;
 
     const burgerOffer = (await addProductToMenu(tx, { menuId: dinner.id, productId: burger })).id;
-    await offerMenuThroughZone(tx, cfg, venue.diningZone, dinner.id, { displayOrder: 1 });
+    await offerMenuThroughZone(tx, venue.diningZone, dinner.id, { displayOrder: 1 });
     return {
       ...venue,
       dinner: dinner.id,
@@ -2516,10 +2515,9 @@ describe("zone offers from the published menus", () => {
 
   it("leaves a zone's unpublished menus out, and falls back to its first published menu", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const brunch = await createCatalogue(tx, { name: "Brunch" });
-      await offerMenuThroughZone(tx, cfg, venue.diningZone, brunch.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, venue.diningZone, brunch.id, { makeDefault: true });
       const served = await listZoneOffers(tx, venue.diningZone);
       expect(served.defaultMenuId).toBe(venue.menuId);
       expect(served.menus.map((menu) => [menu.id, menu.isDefault])).toEqual([
@@ -2528,7 +2526,7 @@ describe("zone offers from the published menus", () => {
       ]);
 
       // The bar zone sells All day alone; with only an unpublished menu it sells nothing.
-      await offerMenuThroughZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
         sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
@@ -2556,17 +2554,16 @@ describe("zone offers from the published menus", () => {
 
   it("reports a zone whose menus are all unpublished, and judges emptiness on the live version", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       await expect(listVenueReadiness(tx)).resolves.toEqual([]);
 
       const brunch = await createCatalogue(tx, { name: "Brunch" });
-      await offerMenuThroughZone(tx, cfg, venue.barZone, brunch.id, { makeDefault: true });
+      await offerMenuThroughZone(tx, venue.barZone, brunch.id, { makeDefault: true });
       await tx.execute(
         sql`delete from menu_period_staff_menus where department_id = ${venue.barId} and menu_id = ${venue.menuId}`,
       );
       // The dining room's unpublished Brunch is beside published menus, so it is not reported.
-      await offerMenuThroughZone(tx, cfg, venue.diningZone, brunch.id);
+      await offerMenuThroughZone(tx, venue.diningZone, brunch.id);
       await expect(listVenueReadiness(tx)).resolves.toEqual([
         { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
       ]);
@@ -2844,9 +2841,8 @@ describe("zone offers from the published menus", () => {
 
   it("reads the live versions once for every zone, however many share a menu", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
-      await offerMenuThroughZone(tx, cfg, venue.barZone, venue.dinner);
+      await offerMenuThroughZone(tx, venue.barZone, venue.dinner);
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       await expect(listVenueReadiness(tx)).resolves.toEqual([]);
       const sqlOf = prepared.mock.calls.map(([query]) => (query as unknown as { sql: string }).sql);
@@ -3639,7 +3635,6 @@ describe("products a zone's listed menus offer", () => {
 
   it("answers the products and variants a listed menu of the zone offers in its live version", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
     await scoped(async (tx) => {
       const barMenu = await createCatalogue(tx, { name: "Bar specials" });
       const nuts = await createProduct(tx, {
@@ -3651,7 +3646,7 @@ describe("products a zone's listed menus offer", () => {
         vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: barMenu.id, productId: nuts.id });
-      await offerMenuThroughZone(tx, cfg, venue.barZone, barMenu.id, { displayOrder: 1 });
+      await offerMenuThroughZone(tx, venue.barZone, barMenu.id, { displayOrder: 1 });
       await publish(tx, barMenu.id);
       const offered = (items: { productId: string; variantId: string | null }[]) =>
         productsOfferedIn(tx, venue.diningZone, [venue.dinner, barMenu.id], items);

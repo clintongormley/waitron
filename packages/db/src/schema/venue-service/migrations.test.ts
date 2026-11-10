@@ -980,7 +980,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   });
 
   it("a season row written without a colour takes grey, and the table takes any text there", async () => {
-    const v = await venue();
+    await venue();
     const plain = randomUUID();
     await db.execute(sql`insert into seasons (id, name, starts_on)
       values (${plain}, 'Summer', '06-01')`);
@@ -1410,7 +1410,6 @@ describe("single-venue defaults", () => {
       invoiceLocales: ["en"],
       operationDescription: "Sale on premises",
     });
-    const locationId = await venueLocationId(single.db);
     async function add(name: string, isDefault: boolean) {
       return single.db.insert(departments).values({ name, tradingName: name, isDefault });
     }

@@ -12,6 +12,16 @@ const options = {
 };
 const fixtures = [
   [
+    "exported venue",
+    'import { venueLocationId } from "@waitron/db";\nexport const venueId = await venueLocationId(db);\ndb.insert(shifts).values({ locationId: venueId, personId });',
+    'import { venueLocationId } from "@waitron/db";\nexport const venueId = await venueLocationId(db);\ndb.insert(shifts).values({ personId });',
+  ],
+  [
+    "next property comment",
+    "db.insert(shifts).values({\n  locationId: venue,\n  // The person who works it.\n  personId,\n});",
+    "db.insert(shifts).values({\n  // The person who works it.\n  personId,\n});",
+  ],
+  [
     "listed insert",
     "db.insert(shifts).values({ personId, locationId: venue, startsAt });",
     "db.insert(shifts).values({ personId, startsAt });",

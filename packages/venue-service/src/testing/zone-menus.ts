@@ -14,7 +14,6 @@ import "../errors.js";
 
 export async function offerMenuThroughZone(
   tx: Transaction,
-  _cfg: { locationId: string },
   zoneId: string,
   menuId: string,
   options: { displayOrder?: number; makeDefault?: boolean } = {},

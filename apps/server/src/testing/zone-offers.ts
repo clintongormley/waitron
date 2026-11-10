@@ -67,7 +67,7 @@ export async function offerProducts(
   }
 
   const menuId = await ownMenu(tx);
-  await offerMenuThroughZone(tx, cfg, zoneId, menuId);
+  await offerMenuThroughZone(tx, zoneId, menuId);
 
   const productIds = [...new Set(options.productIds ?? (await topLevelProducts(tx)))];
   const offerByProduct = await placeOnTopLevel(tx, menuId, productIds);

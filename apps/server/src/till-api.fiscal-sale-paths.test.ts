@@ -231,7 +231,7 @@ async function setupVenue(): Promise<{
     const counter = await tx.execute<{ zone_id: string }>(sql`
       select zone_id from zone_service_policies
       where is_counter_default`);
-    await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     const defaultStation = sql`(select id from kitchen_stations
            where location_id = ${cfg.locationId} and is_default)`;

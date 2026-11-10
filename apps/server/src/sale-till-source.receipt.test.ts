@@ -161,7 +161,7 @@ async function setupVenue(): Promise<{
     const counter = await tx.execute<{ zone_id: string }>(sql`
       select zone_id from zone_service_policies
       where is_counter_default`);
-    await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     // Through the table definition: `routingCells.id`
     // (`packages/db/src/schema/venue-service/routing.ts`) is a `$defaultFn` generator, which a raw

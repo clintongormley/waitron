@@ -19,7 +19,8 @@ function removeItem(source, items, node) {
   let start = node.getStart();
   let end = node.end;
   const next = items[index + 1];
-  if (next !== undefined) end = next.getStart();
+  if (next !== undefined)
+    end = ts.getLeadingCommentRanges(source, next.pos)?.[0]?.pos ?? next.getStart();
   else if (index > 0) start = items[index - 1].end;
   else {
     if (source[end] === ",") end++;
@@ -179,6 +180,7 @@ export function transformSource(path, source, options) {
       if (ts.isVariableStatement(node) && node.declarationList.declarations.length === 1) {
         const declaration = node.declarationList.declarations[0];
         if (
+          (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Export) !== 0 ||
           !ts.isIdentifier(declaration.name) ||
           declaration.initializer === undefined ||
           used(declaration.name.text, node)

@@ -168,7 +168,7 @@ describe("offerProducts", () => {
         grossPrice: "2.50",
       });
       await publishWorkingMenu(tx, venue.catalogueId);
-      await offerMenuThroughZone(tx, venue.cfg, offers.zoneId, venue.catalogueId, {
+      await offerMenuThroughZone(tx, offers.zoneId, venue.catalogueId, {
         makeDefault: true,
       });
       return offers;
@@ -280,7 +280,7 @@ describe("offerProducts", () => {
         productId: venue.coffee,
         grossPrice: "2.50",
       });
-      await offerMenuThroughZone(tx, venue.cfg, offers.zoneId, venue.catalogueId);
+      await offerMenuThroughZone(tx, offers.zoneId, venue.catalogueId);
     });
 
     const id = randomUUID();

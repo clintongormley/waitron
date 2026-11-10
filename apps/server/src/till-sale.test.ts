@@ -271,7 +271,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       ]);
       variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
     }
-    await offerMenuThroughZone(tx, cfg, zone.rows[0]!.id, cat.id, { makeDefault: true });
+    await offerMenuThroughZone(tx, zone.rows[0]!.id, cat.id, { makeDefault: true });
     await tx.execute(sql`
       insert into routing_cells (id, category_id, station_id)
       values (${randomUUID()}, ${drinks.id}, (select id from kitchen_stations

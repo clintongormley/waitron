@@ -1609,7 +1609,7 @@ describe("routing previews", () => {
       f: Awaited<ReturnType<typeof withExtras>>,
       dishes: readonly string[],
     ) {
-      await offerMenuThroughZone(tx, f.cfg, f.terrace, f.menu);
+      await offerMenuThroughZone(tx, f.terrace, f.menu);
       for (const productId of dishes) await addProductToMenu(tx, { menuId: f.menu, productId });
       const { document } = await buildMenuDocument(tx, f.menu);
       await publishMenu(tx, f.menu, menuDocumentHash(document), "person-1");
@@ -1898,7 +1898,7 @@ describe("routing previews", () => {
           await setRoutingCell(tx, { row: productRow(dish), zoneId: null }, station(f.terraceBar));
         }
         const second = await createCatalogue(tx, { name: "Second menu" });
-        await offerMenuThroughZone(tx, f.cfg, patio!.id, second.id, { displayOrder: 1 });
+        await offerMenuThroughZone(tx, patio!.id, second.id, { displayOrder: 1 });
         await addProductToMenu(tx, { menuId: second.id, productId: dishes[1]! });
         const { document } = await buildMenuDocument(tx, second.id);
         await publishMenu(tx, second.id, menuDocumentHash(document), "person-1");
@@ -2100,7 +2100,7 @@ describe("routing previews", () => {
       await writeProductModifiers(tx, pasta, [
         { kind: "extras", id: await list("Sauces", [sauce]) },
       ]);
-      await offerMenuThroughZone(tx, cfg, terrace, menu.id);
+      await offerMenuThroughZone(tx, terrace, menu.id);
       await addProductToMenu(tx, { menuId: menu.id, productId: pasta });
       const { document } = await buildMenuDocument(tx, menu.id);
       await publishMenu(tx, menu.id, menuDocumentHash(document), "person-1");
