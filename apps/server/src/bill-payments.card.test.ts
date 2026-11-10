@@ -263,6 +263,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(fiscalRecordCount(venue, billId)).toBe(1);
     const cardPayment = (await paymentRows(venue, billId)).find((row) => row.method === "card")!;
+    expect(cardPayment.remainingAfter).toBe(0);
     const filed = await tendersOfBill(venue, billId);
     expect(filed).toHaveLength(2);
     expect(filed.find((tender) => tender.method === "card")).toMatchObject({
