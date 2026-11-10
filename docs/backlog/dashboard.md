@@ -629,8 +629,8 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 The backup saved-key acknowledgement stays a prerequisite. Request refusals keep retry available;
 a marked field still uses the shared bottom correction sentence. Purchase-line refusals carry no
-line number, so they stay at the bottom. No generic wording is replaced without a more specific
-existing sentence.
+line number, so they stay at the bottom. Catalogue and venue generic wording stays where no more
+specific existing sentence applies.
 
 The smaller Forms plan accepts the malformed-value exclusions: Boolean and enum controls, setup's
 matching series pairs and derived geography, and configuration export's matching passphrase

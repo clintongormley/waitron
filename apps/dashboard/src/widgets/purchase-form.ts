@@ -351,7 +351,12 @@ export class PurchaseForm extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this[field] = event.detail.value;
-    this.#dismiss(HEADER_KEYS[field]);
+    const pair = ["supplier-tax-id", "supplier-invoice-number"];
+    this.#dismiss(
+      ...(pair.includes(HEADER_KEYS[field]) && pair.every((key) => this.fieldErrors[key])
+        ? pair
+        : [HEADER_KEYS[field]]),
+    );
     this.#scope?.changed();
   }
 

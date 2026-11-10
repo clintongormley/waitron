@@ -831,6 +831,7 @@ export class BackupScreen extends LitElement {
       if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
       if (!this.configureAfterApply) {
+        this.attempted = false;
         this.advancedPaste = false;
         this.pastedKey = "";
         await this.#mint();
@@ -1165,12 +1166,12 @@ export class BackupScreen extends LitElement {
   }
 
   #submitOnEnter(event: KeyboardEvent): void {
-    const action = this.editSettings
-      ? "save-settings"
-      : this.status?.enabled
-        ? "rotate-confirm"
-        : "apply";
-    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`));
+    submitOnEnter(
+      event,
+      this.shadowRoot!.querySelector<HTMLElement>(
+        "[data-test=save-settings], [data-test=apply], [data-test=rotate-confirm]",
+      ),
+    );
   }
 
   #onDestination(event: CustomEvent<{ value: string }>): void {

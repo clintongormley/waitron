@@ -747,6 +747,7 @@ describe("backup-screen", () => {
     );
     expect(alertText(el)).toBeUndefined();
     expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
   });
 
   it("gates rotate on the old key being re-shown first, then confirms with the new minted key", async () => {
@@ -2490,3 +2491,49 @@ it.each(["paste-key", "at-time", "retain-count", "retain-days"])(
     expect(api.applyBackup).toHaveBeenCalledOnce();
   },
 );
+
+it("starts Rotate quietly after Apply, then corrects a short key and submits it with Enter", async () => {
+  const api = stubApi();
+  const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+  await flush(el);
+  setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+  tickCheckbox(el, "[data-test=saved-it]");
+  vi.mocked(api.getBackupStatus).mockResolvedValue(ENABLED);
+  await el.updateComplete;
+  q(el, "[data-test=apply]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=rotate-confirm]")).not.toBeNull());
+  q(el, "[data-test=show-old-key]")!.click();
+  await flush(el);
+  q(el, "[data-test=advanced-toggle]")!.click();
+  await el.updateComplete;
+  const key = q(el, "[data-test=paste-key]") as WtInput;
+  await key.updateComplete;
+  expect(key.error).toBe("");
+  expect(key.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("false");
+  setInput(el, "[data-test=paste-key]", "short");
+  tickCheckbox(el, "[data-test=saved-it]");
+  await el.updateComplete;
+  const action = q(el, "[data-test=rotate-confirm]")!;
+  expect(action.hasAttribute("disabled")).toBe(false);
+  action.click();
+  await flush(el);
+  expect(key.error).toBe(codeMessage("backup.recovery_key_too_short"));
+  expect(key.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  expect(action.hasAttribute("disabled")).toBe(true);
+  expect(
+    action.closest("wt-form-actions")!.shadowRoot!.querySelector("[role=alert]")?.textContent,
+  ).toBe(t("form.fix_fields"));
+  expect(api.rotateBackupKey).not.toHaveBeenCalled();
+  setInput(el, "[data-test=paste-key]", "correct-horse-battery-staple");
+  await el.updateComplete;
+  expect(key.error).toBe("");
+  expect(action.hasAttribute("disabled")).toBe(false);
+  await key.updateComplete;
+  key
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  await flush(el);
+  expect(api.rotateBackupKey).toHaveBeenCalledExactlyOnceWith({
+    recoveryKey: "correct-horse-battery-staple",
+  });
+});
