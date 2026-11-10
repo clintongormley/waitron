@@ -1,9 +1,8 @@
 import { SCRATCH_DIR } from "@waitron/store";
 import { lstat, readdir, rm } from "node:fs/promises";
-import { realpathSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
-import { isWithin } from "./disk-usage.js";
+import { isWithin, realOrNearest } from "./disk-usage.js";
 import "./errors.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -44,31 +43,27 @@ export async function emptyScratch(stateDir: string, log: Logger): Promise<numbe
   return deleteScratchEntries(stateDir, (await listScratch(stateDir, log)) ?? [], log);
 }
 
-export function inScratch(stateDir: string, path: string): boolean {
-  return isWithin(physicalPath(path), physicalPath(join(stateDir, SCRATCH_DIR)));
+export async function inScratch(stateDir: string, path: string): Promise<boolean> {
+  const target = await realOrNearest(path, true);
+  const scratch = await realOrNearest(join(stateDir, SCRATCH_DIR), true);
+  return isWithin(target.real, scratch.real);
 }
 
 export function assertOutsideScratch(stateDir: string, path: string, variable: string): void {
-  if (inScratch(stateDir, path))
-    throw new AppError("server.config_invalid", {
-      variable,
-      reason: "scratch_is_temporary_choose_a_folder_outside_scratch",
-    });
+  if (isWithin(resolve(path), resolve(stateDir, SCRATCH_DIR))) scratchRefused(variable);
 }
 
-// Resolve existing parents too: a new destination can sit behind an existing link.
-function physicalPath(path: string): string {
-  let current = resolve(path);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return join(realpathSync(current), ...tail);
-    } catch (error) {
-      if (errnoOf(error) !== "ENOENT" && errnoOf(error) !== "ENOTDIR") throw error;
-      const parent = dirname(current);
-      if (parent === current) throw error;
-      tail.unshift(basename(current));
-      current = parent;
-    }
-  }
+export async function assertOutsideScratchResolved(
+  stateDir: string,
+  path: string,
+  variable: string,
+): Promise<void> {
+  if (await inScratch(stateDir, path)) scratchRefused(variable);
+}
+
+function scratchRefused(variable: string): never {
+  throw new AppError("server.config_invalid", {
+    variable,
+    reason: "scratch_is_temporary_choose_a_folder_outside_scratch",
+  });
 }

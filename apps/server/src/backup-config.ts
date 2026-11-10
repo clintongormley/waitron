@@ -1,4 +1,4 @@
-import { assertOutsideScratch } from "./scratch.js";
+import { assertOutsideScratchResolved } from "./scratch.js";
 import { randomBytes } from "node:crypto";
 import { resolve } from "node:path";
 import { codeOf } from "@waitron/server-kit";
@@ -411,10 +411,10 @@ function heldUsableKey(env: Env): string | undefined {
 }
 
 /** Used before startup sweeps, without requiring a recovery key or opening a database. */
-export function assertBackupOutsideScratch(env: Env, stateDir: string): void {
+export async function assertBackupOutsideScratch(env: Env, stateDir: string): Promise<void> {
   for (const destination of parseDestinations(env, "scratch-path-check")) {
     if (destination.kind === "local-fs")
-      assertOutsideScratch(
+      await assertOutsideScratchResolved(
         stateDir,
         destination.dir,
         "WAITRON_BACKUP_DIR / WAITRON_BACKUP_DESTINATIONS",

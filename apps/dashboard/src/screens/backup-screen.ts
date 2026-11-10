@@ -329,6 +329,8 @@ export class BackupScreen extends LitElement {
   @state() private folder = "";
   /** The server refused the folder, and it has not changed since. */
   @state() private folderRefused = false;
+  @state() private folderRefusalReason = "";
+  @state() private folderScratchRoot = "";
   /** Another bucket's fields. The secret lives in memory only, and is cleared once saved. */
   @state() private custom: CustomBucket = { ...EMPTY_CUSTOM };
   /** The bucket field the server refused, until that field changes. */
@@ -752,6 +754,9 @@ export class BackupScreen extends LitElement {
         this.#focusFirstInvalidBox();
       } else if (field === "dir" && this.folderOn) {
         this.folderRefused = true;
+        const params = (error as { params?: { reason?: unknown; scratchRoot?: unknown } }).params;
+        this.folderRefusalReason = typeof params?.reason === "string" ? params.reason : "";
+        this.folderScratchRoot = typeof params?.scratchRoot === "string" ? params.scratchRoot : "";
         this.#focusFirstInvalidBox();
       } else if (field === "prefix" && sent.some((d) => d.kind === "stream-bucket")) {
         this.formRefusal = {
@@ -1502,7 +1507,11 @@ export class BackupScreen extends LitElement {
         : null;
     const streamMarked = this.attempted && this.#streamGone;
     const folderMessage = this.folderRefused
-      ? t("backup.destination.folder_refused")
+      ? this.folderRefusalReason === "scratch"
+        ? fill("backup.destination.folder_scratch_refused", { folder: this.folderScratchRoot })
+        : this.folderRefusalReason === "unreadable"
+          ? t("backup.destination.folder_unreadable")
+          : t("backup.destination.folder_refused")
       : this.attempted && this.#folderMissing
         ? t("backup.destination.folder_required")
         : "";

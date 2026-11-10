@@ -7,7 +7,7 @@ import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import {
-  assertOutsideScratch,
+  assertOutsideScratchResolved,
   deleteScratchEntries,
   emptyScratch,
   listScratch,
@@ -61,8 +61,9 @@ export interface StartSpaceDeps {
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
 ): Promise<{ freeBytes: number | null; belowFloor: boolean }> {
-  assertOutsideScratch(deps.stateDir, deps.venueDir, "WAITRON_VENUE_DIR");
-  if (deps.logDir !== null) assertOutsideScratch(deps.stateDir, deps.logDir, "WAITRON_LOG_DIR");
+  await assertOutsideScratchResolved(deps.stateDir, deps.venueDir, "WAITRON_VENUE_DIR");
+  if (deps.logDir !== null)
+    await assertOutsideScratchResolved(deps.stateDir, deps.logDir, "WAITRON_LOG_DIR");
   const dirs = [deps.stateDir, deps.venueDir];
   const before = await lowestFreeBytes(dirs, deps.statfs);
   const failed = (error: unknown) =>

@@ -744,13 +744,13 @@ it.each([
       { kind: "local-fs", id: "extra", dir: "/state/scratch/backups" },
     ]),
   },
-])("refuses a backup destination in scratch before startup cleanup: %j", (env) => {
-  expect(() => assertBackupOutsideScratch(env, "/state")).toThrow(
-    expect.objectContaining({ code: "server.config_invalid" }),
-  );
+])("refuses a backup destination in scratch before startup cleanup: %j", async (env) => {
+  await expect(assertBackupOutsideScratch(env, "/state")).rejects.toMatchObject({
+    code: "server.config_invalid",
+  });
 });
-it("keeps a sibling backup folder outside scratch usable", () => {
-  expect(() =>
+it("keeps a sibling backup folder outside scratch usable", async () => {
+  await expect(
     assertBackupOutsideScratch({ WAITRON_BACKUP_DIR: "/state/scratch-backups" }, "/state"),
-  ).not.toThrow();
+  ).resolves.toBeUndefined();
 });

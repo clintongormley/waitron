@@ -580,8 +580,34 @@ it("refuses an environment backup inside scratch before cleanup removes its arch
   dirs.push(destination);
   const archive = join(destination, "saved.backup.enc");
   await writeFile(archive, "keep");
-  const d = deps({ baseEnv: { WAITRON_BACKUP_DIR: destination } }, () => 100 * MIB);
+  const d = deps(
+    { baseEnv: { WAITRON_BACKUP_DIR: destination }, reportFailure: vi.fn() },
+    () => 100 * MIB,
+  );
   await expect(runEntry(d)).rejects.toMatchObject({ code: "server.config_invalid" });
   expect(await readFile(archive, "utf8")).toBe("keep");
+  expect(d.reportFailure).toHaveBeenCalledWith(expect.stringContaining("Choose a folder outside"));
   expect(d.startServer).not.toHaveBeenCalled();
+});
+
+it("checks the merged box environment before cleanup", async () => {
+  const destination = join(STATE_DIR, "scratch", "merged-backups");
+  await mkdir(destination, { recursive: true });
+  dirs.push(destination);
+  const archive = join(destination, "saved.backup.enc");
+  await writeFile(archive, "keep");
+  const d = deps(
+    {
+      baseEnv: { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" },
+      loadBoxEnv: vi.fn(async () => ({
+        WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        WAITRON_BACKUP_DIR: destination,
+      })),
+      reportFailure: vi.fn(),
+    },
+    () => 100 * MIB,
+  );
+  await expect(runEntry(d)).rejects.toMatchObject({ code: "server.config_invalid" });
+  expect(await readFile(archive, "utf8")).toBe("keep");
+  expect(d.reportFailure).toHaveBeenCalledWith(expect.stringContaining("Choose a folder outside"));
 });

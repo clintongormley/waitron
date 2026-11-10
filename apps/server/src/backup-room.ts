@@ -1,10 +1,10 @@
 import * as fs from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import type { ClockStepHold } from "./backup-sweep.js";
-import type { DeviceOf } from "./disk-usage.js";
+import { realOrNearest, type DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
@@ -107,7 +107,7 @@ export async function foldersOnDisk(
   dir: string,
   deviceOf?: DeviceOf,
 ): Promise<{ folders: BackupFolder[]; copies: number }> {
-  const staging = await realOrNearest(dir);
+  const staging = await realOrNearest(dir, false);
   const stagingDevice = deviceOf
     ? await deviceOf(staging.existing)
     : (await fs.stat(staging.existing)).dev;
@@ -120,7 +120,7 @@ export async function foldersOnDisk(
     let device: number;
     let identity: string;
     try {
-      const found = await realOrNearest(localDir);
+      const found = await realOrNearest(localDir, false);
       real = found.real;
       const { dev, ino } = await fs.stat(found.existing, { bigint: true });
       device = deviceOf ? await deviceOf(found.existing) : Number(dev);
@@ -136,24 +136,6 @@ export async function foldersOnDisk(
     folders.push({ destination: id, dir: real });
   }
   return { folders, copies };
-}
-
-/** A folder's real path, or for one not made yet, its nearest existing parent's real path with the
- * rest appended. */
-async function realOrNearest(path: string): Promise<{ real: string; existing: string }> {
-  let current = resolve(path);
-  const rest: string[] = [];
-  for (;;) {
-    try {
-      const existing = await fs.realpath(current);
-      return { real: join(existing, ...rest), existing };
-    } catch (error) {
-      const parent = dirname(current);
-      if (errnoOf(error) !== "ENOENT" || parent === current) throw error;
-      rest.unshift(basename(current));
-      current = parent;
-    }
-  }
 }
 
 /** The installation start, or null when there is no reader or it throws (logged

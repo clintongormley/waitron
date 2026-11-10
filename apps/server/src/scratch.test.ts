@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
-  assertOutsideScratch,
+  assertOutsideScratchResolved,
   deleteScratchEntries,
   emptyScratch,
   listScratch,
@@ -89,7 +89,7 @@ it("only the listed entries are deleted", async () => {
 it("refuses a configured folder whose existing parent links into scratch", async () => {
   await mkdir(scratch);
   await symlink(scratch, join(root, "alias"));
-  expect(() =>
-    assertOutsideScratch(root, join(root, "alias", "backups"), "WAITRON_BACKUP_DIR"),
-  ).toThrow(expect.objectContaining({ code: "server.config_invalid" }));
+  await expect(
+    assertOutsideScratchResolved(root, join(root, "alias", "backups"), "WAITRON_BACKUP_DIR"),
+  ).rejects.toMatchObject({ code: "server.config_invalid" });
 });

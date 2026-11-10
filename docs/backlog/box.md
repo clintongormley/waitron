@@ -1523,7 +1523,7 @@ once released. Belongs with A1016.
 
 ## Bundle: Card reader alerts
 
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A card reader whose status the provider could not read raises nothing.** SumUp and Stripe
   answer `{ online: false, unreachable: true }` rather than throwing, so
@@ -1597,7 +1597,7 @@ once released. Belongs with A1016.
 
 ## Bundle: Refuse folders that cannot be safe
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
   the server resolves whatever it is given (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`),
