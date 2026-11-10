@@ -682,10 +682,9 @@ describe("on a mirror, promotion answers only the box itself", () => {
       ipAddresses: [],
       now: new Date(),
     });
-    let listening: ServerType[] = [];
+    const listening: ServerType[] = [];
     afterEach(() => {
-      for (const server of listening) server.close();
-      listening = [];
+      for (const server of listening.splice(0)) if (server !== undefined) server.close();
     });
 
     async function listen(app: Hono, tls: boolean) {

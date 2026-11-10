@@ -112,7 +112,7 @@ it("a box check that permits counts only a readable box address", async () => {
 });
 
 describe("a connection reset before its route runs", () => {
-  let server: ServerType;
+  let server: ServerType | undefined;
   let port: number;
   const reset = resetObserver();
   beforeAll(async () => {
@@ -125,7 +125,7 @@ describe("a connection reset before its route runs", () => {
     port = (server.address() as AddressInfo).port;
   });
   afterAll(() => {
-    server.close();
+    if (server !== undefined) server.close();
   });
 
   it("is counted as the box by a check that refuses, and never by one that permits", async () => {
