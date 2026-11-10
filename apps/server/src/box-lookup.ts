@@ -30,20 +30,21 @@ const DEFAULT_TIMEOUT_MS = 2000;
  * Asks once for `hostname`'s A record and gathers every other box's IPv4 answered within the time
  * limit. The socket hears this box's own answers too (multicast-dns loops them back), and leaving
  * them out here, rather than switching loopback off, is what lets a box in setup mode hear others
- * answering for the venue's name it also answers for.
+ * answering for the venue's name it also answers for. A socket error rejects with that error: an
+ * ask that could not be made heard nothing about who answers.
  */
 function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<string[]> {
   const own = new Set(opts.ownAddresses?.() ?? ownInterfaceAddresses());
   const wanted = hostname.toLowerCase();
   const socket = (opts.makeSocket ?? (() => multicastDns() as MdnsQuerySocket))();
   const heard: string[] = [];
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let done = false;
-    const finish = () => {
+    const finish = (failure?: Error) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      socket.destroy(() => resolve(heard));
+      socket.destroy(() => (failure === undefined ? resolve(heard) : reject(failure)));
     };
     const timer = setTimeout(finish, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     socket.on("response", (response) => {
@@ -73,12 +74,12 @@ export async function lookupBoxName(
     const found = await lookup(hostname, { all: true });
     return found.map((entry) => entry.address);
   }
-  const heard = await askNetwork(hostname, opts);
+  const heard = await askNetwork(hostname, opts).catch(() => []);
   if (heard.length === 0) throw new AppError("mirror.peer_unresolved", {});
   return heard;
 }
 
-/** Whether any box but this one answers for `hostname`. */
+/** Whether any box but this one answers for `hostname`; rejects when the ask could not be made. */
 export async function askedAndHeardOthers(
   hostname: string,
   opts: BoxLookupOptions = {},

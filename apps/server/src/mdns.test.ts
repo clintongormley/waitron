@@ -327,9 +327,10 @@ describe("a box in setup mode and the venue's name", () => {
     vi.useRealTimers();
   });
 
-  function watch(random: () => number, answering = [OWN]) {
+  function watch(random: () => number, answering = [OWN], fail?: Error) {
     const { net, makeSocket } = fakeNetwork();
     net.answering = answering;
+    net.fail = fail;
     const w = watchVenueNameInSetup({
       hostname: "waitron.local",
       devMode: false,
@@ -424,17 +425,41 @@ describe("a box in setup mode and the venue's name", () => {
     expect(random).not.toHaveBeenCalled();
   });
 
-  it("a failed ask counts as hearing nobody, so the box answers again", async () => {
+  it("a failed ask leaves the box answering nothing until an ask at the usual interval hears nobody", async () => {
     vi.useFakeTimers({ now: 0 });
-    const { net, w } = watch(() => 0);
-    net.answering = [OWN, OTHER];
-    await vi.advanceTimersByTimeAsync(2_000 + 30_000 + 2_000);
+    const { net, w } = watch(() => 0, [OWN, OTHER]);
+    await vi.advanceTimersByTimeAsync(2_000);
     expect(w.names()).toEqual([]);
     net.fail = new Error("bind EADDRINUSE 0.0.0.0:5353");
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(net.asks).toEqual([0, 32_000, 64_000]);
+    expect(net.asks).toEqual([0, 32_000]);
+    expect(w.names()).toEqual([]);
+    net.fail = undefined;
+    net.answering = [OWN];
+    await vi.advanceTimersByTimeAsync(30_000 + 1_999);
+    expect(net.asks).toEqual([0, 32_000, 62_000]);
+    expect(w.names()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
     expect(w.names()).toEqual(["waitron.local"]);
     await w.stop();
+  });
+
+  it("a box that is answering stops when an ask fails, and a failed first ask answers nothing", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { net, w } = watch(() => 0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.names()).toEqual(["waitron.local"]);
+    net.fail = new Error("bind EADDRINUSE 0.0.0.0:5353");
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(net.asks).toEqual([0, 32_000]);
+    expect(w.names()).toEqual([]);
+    await w.stop();
+
+    const first = watch(() => 0, [OWN], new Error("bind EADDRINUSE 0.0.0.0:5353"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(first.net.asks).toEqual([32_000, 62_000]);
+    expect(first.w.names()).toEqual([]);
+    await first.w.stop();
   });
 
   it.each([

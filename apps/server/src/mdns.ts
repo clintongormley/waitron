@@ -111,7 +111,7 @@ export interface VenueNameWatchDeps {
 }
 
 export interface VenueNameWatch {
-  /** `[hostname]` once an ask has finished and only while the last one heard no other box, else none. */
+  /** `[hostname]` only while the last ask finished and heard no other box, else none. */
   names(): readonly string[];
   stop(): Promise<void>;
 }
@@ -126,10 +126,15 @@ export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch 
   let inFlight: Promise<void> = Promise.resolve();
 
   const ask = async (): Promise<void> => {
-    heardOthers = await askedAndHeardOthers(hostname, {
-      makeSocket: deps.makeSocket,
-      ownAddresses: deps.ownAddresses,
-    });
+    try {
+      heardOthers = await askedAndHeardOthers(hostname, {
+        makeSocket: deps.makeSocket,
+        ownAddresses: deps.ownAddresses,
+      });
+    } catch {
+      // A failed ask cannot show that no other box answers.
+      heardOthers = true;
+    }
     if (stopped) return;
     timer = setTimeout(
       () => {

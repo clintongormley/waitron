@@ -1,4 +1,6 @@
+import { createSocket } from "node:dgram";
 import { networkInterfaces } from "node:os";
+import multicastDns from "multicast-dns";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 
@@ -152,6 +154,15 @@ describe("lookupBoxName", () => {
     expect(fake.isDestroyed()).toBe(true);
   });
 
+  it("refuses when the socket fails after another box answered, rather than return what it heard", async () => {
+    const fake = fakeSocket([[a("192.168.10.7")]]);
+    const pending = refusal(lookupBoxName(NAME, opts(fake, 60_000)));
+    await Promise.resolve();
+    fake.fail(new Error("EADDRINUSE"));
+    expect((await pending).code).toBe("mirror.peer_unresolved");
+    expect(fake.isDestroyed()).toBe(true);
+  });
+
   it("hands a name that is not .local to the system lookup", async () => {
     systemLookup.mockResolvedValue([
       { address: "203.0.113.4", family: 4 },
@@ -183,5 +194,33 @@ describe("askedAndHeardOthers", () => {
   it("answers false when only this box answers", async () => {
     const fake = fakeSocket([[a(OWN, VENUE)]]);
     await expect(askedAndHeardOthers(VENUE, opts(fake))).resolves.toBe(false);
+  });
+
+  it("rejects when the socket fails, whether or not anyone answered first", async () => {
+    for (const packets of [[], [[a("192.168.10.7", VENUE)]]]) {
+      const fake = fakeSocket(packets);
+      const pending = askedAndHeardOthers(VENUE, opts(fake, 60_000));
+      await Promise.resolve();
+      fake.fail(new Error("EADDRINUSE"));
+      await expect(pending).rejects.toThrow("EADDRINUSE");
+      expect(fake.isDestroyed()).toBe(true);
+    }
+  });
+
+  it("rejects when the port it asks from is already taken", async () => {
+    const blocker = createSocket("udp4");
+    await new Promise<void>((resolve) => blocker.bind(0, "0.0.0.0", resolve));
+    try {
+      const { port } = blocker.address();
+      await expect(
+        askedAndHeardOthers(VENUE, {
+          timeoutMs: 1_000,
+          ownAddresses: () => [],
+          makeSocket: () => multicastDns({ port, multicast: false }) as MdnsQuerySocket,
+        }),
+      ).rejects.toMatchObject({ code: "EADDRINUSE" });
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
   });
 });
