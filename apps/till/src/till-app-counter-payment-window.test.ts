@@ -27,7 +27,7 @@ const product = {
   name: "Lunch",
   pricingUnit: "each" as const,
   unitPrice: "30.00",
-  vatClass: "general",
+  vatClass: "general" as const,
   category: null,
   allergens: null,
 };
@@ -134,7 +134,7 @@ it("persists the first Counter payment before opening the window, then offers th
   await type(el, "amount", "20");
   await type(el, "tendered", "20");
   await press(el, "[data-pay-continue]");
-  const guests = inDialog(el, '[name="guests"]') as HTMLElement & {
+  const guests = inDialog(el, '[name="guests"]') as NonNullable<ReturnType<typeof inDialog>> & {
     updateComplete: Promise<unknown>;
   };
   await guests.updateComplete;
