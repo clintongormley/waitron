@@ -13,7 +13,7 @@ import {
   formatIsoMinute,
   subscribeLocale,
 } from "@waitron/dashboard-kit";
-import type { EnvioState } from "../handover-summary.js";
+import type { EnvioState } from "../filing-states.js";
 import type {
   ActiveConflictView,
   FilingCaseView,

@@ -1,6 +1,5 @@
 import type { ConflictCause } from "./conflict-types.js";
-import type { FilingCaseCause } from "./schema/filing-cases.js";
-import type { EnvioState } from "./handover-summary.js";
+import type { EnvioState, FilingCaseCause } from "./filing-states.js";
 
 /** Type-only imports: the browser bundle must take no database code from this file. */
 

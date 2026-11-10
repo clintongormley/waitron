@@ -1,18 +1,10 @@
 import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, json, label, newId, table, ts } from "@waitron/db";
+import type { FilingCaseCause } from "../filing-states.js";
 import { registrosFacturacion } from "./registros.js";
 
-/**
- * The cause of a case, written as an incident code. Closed here, not in the table: a fixed list in
- * a CHECK would make each new cause a table rebuild, which fails once events point at the cases.
- */
-export type FilingCaseCause =
-  | "fiscal.registro_rechazado"
-  | "fiscal.huella_divergente"
-  | "fiscal.duplicado_anulado"
-  | "fiscal.aceptado_con_errores"
-  | "fiscal.anulacion_retenida";
+export type { FilingCaseCause };
 
 /** What AEAT said about the record when the case opened. `csv` is the envío's. */
 export interface FilingCaseEvidence {
