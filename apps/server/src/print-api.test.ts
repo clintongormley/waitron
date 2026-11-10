@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -2213,10 +2214,7 @@ describe("mountPrintApi — management: test-print", () => {
     const app = mountApp({ venueLocale: "en-GB" });
     const printerId = await createNetworkPrinter(app, "10.0.0.47", 9100, "Sample language");
     for (const locale of ["es-ES", "ca-ES"]) {
-      await suite.db
-        .update(locations)
-        .set({ invoiceLocales: [locale] })
-        .where(eq(locations.id, locationId));
+      await seedVenueSettings(suite.db, { invoiceLocales: [locale] });
       const response = await send(
         app,
         "POST",

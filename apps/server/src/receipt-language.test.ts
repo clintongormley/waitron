@@ -13,7 +13,6 @@ import {
   deviceProfiles,
   devices,
   invoiceSeries,
-  locations,
   printJobs,
   printers,
   sales,
@@ -361,12 +360,7 @@ describe("a receipt follows its location's saved language when its order saves n
 
     // A reprint that names no language is in the language the sale was filed in, whatever the
     // location says now.
-    await withTransaction(suite.db, (tx) =>
-      tx
-        .update(locations)
-        .set({ invoiceLocales: ["es-ES"] })
-        .where(eq(locations.id, v.cfg.locationId)),
-    );
+    await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { invoiceLocales: ["es-ES"] }));
     const reprint = await v.app.request(`/api/sales/${sale.id}/reprint`, {
       method: "POST",
       headers: { cookie: v.session },
@@ -440,12 +434,7 @@ describe("a receipt follows its location's saved language when its order saves n
 async function catalanBillVenue(): Promise<BillVenue> {
   const venue = await provisionBillVenue(suite.db);
   expect(venue.cfg.locale).toBe("es-ES");
-  await inTx(venue, (tx) =>
-    tx
-      .update(locations)
-      .set({ invoiceLocales: ["ca-ES"] })
-      .where(eq(locations.id, venue.cfg.locationId)),
-  );
+  await inTx(venue, (tx) => seedVenueSettings(tx, { invoiceLocales: ["ca-ES"] }));
   return venue;
 }
 
@@ -750,10 +739,7 @@ describe("an issued receipt reprinted in another receipt language", () => {
     expect(sale.body.locale).toBe("gl-ES");
     await takePrinted(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ invoiceLocales: ["es-ES"] })
-        .where(eq(locations.id, v.cfg.locationId));
+      await seedVenueSettings(tx, { invoiceLocales: ["es-ES"] });
       await tx.execute(
         sql`update content_languages set default_language = 'es', languages = '["es","ca"]'`,
       );
@@ -1498,10 +1484,7 @@ describe("a sale files in the receipt language saved on its order", () => {
   async function barcelonaVenue(locales: string[] = ["ca-ES"]): Promise<BillVenue> {
     const venue = await provisionBillVenue(suite.db);
     await inTx(venue, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ invoiceLocales: locales })
-        .where(eq(locations.id, venue.cfg.locationId));
+      await seedVenueSettings(tx, { invoiceLocales: locales });
       await seedVenueSettings(tx, { province: "Barcelona", city: "Barcelona" });
       await tx.execute(
         sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca"]')

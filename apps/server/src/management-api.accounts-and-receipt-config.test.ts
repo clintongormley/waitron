@@ -6,7 +6,7 @@ import {
   departmentSalePolicies,
   readPrintedDepartmentReceipt,
 } from "@waitron/venue-service";
-import { locations, venueLocationId } from "@waitron/db";
+import { venueLocationId } from "@waitron/db";
 /**
  * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
  * and its gate, invitations, password reset, Google linking, degenerate bodies answering 4xx rather
@@ -2246,10 +2246,7 @@ describe("independent department receipt routes", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
-    await suite.db
-      .update(locations)
-      .set({ invoiceLocales: ["ca-ES", "es-ES"] })
-      .where(eq(locations.id, venueCfg!.locationId));
+    await seedVenueSettings(suite.db, { invoiceLocales: ["ca-ES", "es-ES"] });
     const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
     expect(response.status).toBe(200);
     const body = await response.json();

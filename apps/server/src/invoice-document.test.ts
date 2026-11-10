@@ -1,3 +1,4 @@
+import { readVenueSettings } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -9,7 +10,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   invoiceSeries,
-  locations,
   parties,
   sales,
   saleLines,
@@ -693,15 +693,9 @@ describe("A4 filed language outside the current pack choices", () => {
         footerMessage: { [printed]: "Printed footer", "es-ES": "Current footer" },
       },
     });
-    const [location] = await suite.db
-      .select()
-      .from(locations)
-      .where(eq(locations.id, venue.cfg.locationId));
+    const { doc: location } = await readVenueSettings(suite.db);
     try {
-      await suite.db
-        .update(locations)
-        .set({ invoiceLocales: ["es-ES"] })
-        .where(eq(locations.id, venue.cfg.locationId));
+      await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
       const document = await read(backend, issued.saleId);
       expect(document.receipt).toEqual({
         headerSubtitle: "Printed subtitle",
@@ -709,10 +703,7 @@ describe("A4 filed language outside the current pack choices", () => {
       });
       expect(document.invoiceLocale).toBe(printed);
     } finally {
-      await suite.db
-        .update(locations)
-        .set({ invoiceLocales: location!.invoiceLocales })
-        .where(eq(locations.id, venue.cfg.locationId));
+      await seedVenueSettings(suite.db, { invoiceLocales: location.invoiceLocales });
     }
   });
 });

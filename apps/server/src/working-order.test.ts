@@ -3288,10 +3288,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
   it("keys each stored line's customer text by the venue's invoice locales", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const offers = await counterOffers(cfg);
-    await db
-      .update(locations)
-      .set({ invoiceLocales: [LOCALE, "en-GB"] })
-      .where(eq(locations.id, cfg.locationId));
+    await seedVenueSettings(db, { invoiceLocales: [LOCALE, "en-GB"] });
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, id, offers.toOfferLines([line(coffeeId)]), null, {
@@ -9653,10 +9650,7 @@ describe("a variant is sold as the product it is", () => {
   it("names a variant line with no customer or kitchen name by its own name on the tab, the kitchen screens and the receipt, in every invoice locale", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const locales = [LOCALE, "en-GB"];
-    await db
-      .update(locations)
-      .set({ invoiceLocales: locales })
-      .where(eq(locations.id, cfg.locationId));
+    await seedVenueSettings(db, { invoiceLocales: locales });
     const twoLocales = { ...cfg, invoiceLocales: locales };
     const orderId = randomUUID();
     const seen = await withTransaction(db, async (tx) => {
@@ -9727,10 +9721,7 @@ describe("a variant is sold as the product it is", () => {
       const twoLocales = { ...cfg, invoiceLocales: locales };
       const orderId = randomUUID();
       const seen = await withTransaction(db, async (tx) => {
-        await tx
-          .update(locations)
-          .set({ invoiceLocales: locales })
-          .where(eq(locations.id, cfg.locationId));
+        await seedVenueSettings(tx, { invoiceLocales: locales });
         const wine = await seedWine(tx, catalogueId);
         await tx
           .update(products)
@@ -9774,10 +9765,7 @@ describe("a variant is sold as the product it is", () => {
   it("stores a variant's own staff name in every invoice locale when only an unrelated language has text", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const locales = [LOCALE, "en-GB"];
-    await db
-      .update(locations)
-      .set({ invoiceLocales: locales })
-      .where(eq(locations.id, cfg.locationId));
+    await seedVenueSettings(db, { invoiceLocales: locales });
     const twoLocales = { ...cfg, invoiceLocales: locales };
     const id = randomUUID();
     const wine = await withTransaction(db, async (tx) => {

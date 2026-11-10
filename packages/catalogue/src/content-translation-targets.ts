@@ -7,7 +7,7 @@ import {
 } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { batches } from "./batches.js";
-import { contentLanguagesOr } from "./content-languages.js";
+import { readContentLanguages } from "./content-languages.js";
 import type { TranslationGapKind, TranslationGapReason } from "@waitron/shared";
 import type { TranslationOwners, TranslationRef } from "./content-translation-types.js";
 import {
@@ -99,20 +99,8 @@ export async function readTranslationSettings(
   tx: Transaction,
   context: TranslationContext,
 ): Promise<TranslationSettings> {
-  const saved = await tx.execute<{ default_language: string; languages: string }>(
-    sql`select default_language, languages from content_languages where id = 1`,
-  );
-  const row = saved.rows[0];
   return {
-    config: contentLanguagesOr(
-      row
-        ? {
-            defaultLanguage: row.default_language,
-            languages: JSON.parse(row.languages) as string[],
-          }
-        : undefined,
-      context.fallbackLanguage,
-    ),
+    config: await readContentLanguages(tx, context.fallbackLanguage),
     required: [...new Set(context.required.map(contentLanguageCode))].sort(),
   };
 }

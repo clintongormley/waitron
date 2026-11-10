@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -9,7 +10,6 @@ import {
   billPayments,
   captureError,
   diningTables,
-  locations,
   sales,
   serviceCommands,
   parties,
@@ -218,10 +218,7 @@ describe("related bills", () => {
       .from(sales)
       .where(eq(sales.workingOrderId, tabId));
     const other = filed!.locale === "ca-ES" ? "es-ES" : "ca-ES";
-    await suite.db
-      .update(locations)
-      .set({ invoiceLocales: [other] })
-      .where(eq(locations.id, venue.cfg.locationId));
+    await seedVenueSettings(suite.db, { invoiceLocales: [other] });
 
     const bills = await inTx(suite, (tx) => readPartyBills(tx, partyId));
 

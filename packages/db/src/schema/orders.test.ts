@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -19,7 +20,6 @@ import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations } from "./tenants.js";
 import { venueLocationId } from "../venue.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -611,10 +611,7 @@ describe("working_order_lines", () => {
     // from the one the customer took.
     const id = await openOrder(db);
     await db.insert(workingOrderLines).values({ ...LINE, productId: productA, workingOrderId: id });
-    await db
-      .update(locations)
-      .set({ invoiceLocales: ["es", "en"] })
-      .where(eq(locations.id, LOCATION_A));
+    await seedVenueSettings(db, { invoiceLocales: ["es", "en"] });
     const [line] = await db.select().from(workingOrderLines);
     expect(line.descriptions).toEqual({ es: "Café solo", ca: "Cafè sol" });
   });

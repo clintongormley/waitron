@@ -913,7 +913,6 @@ it("scopes department receipt subscriptions by department and refreshes passivel
     { type: "departments" },
     { type: "locations" },
     { type: "settings.venue" },
-    { type: "settings.venue" },
   ]);
   const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
   expect(other.key).not.toBe(query.key);

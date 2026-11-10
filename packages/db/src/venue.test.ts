@@ -33,7 +33,6 @@ describe("the venue accessor", () => {
     const [row] = await suite.db
       .insert(locations)
       .values({
-        invoiceLocales: ["es"],
         operationDescription: "Meals",
         ...columns,
       })

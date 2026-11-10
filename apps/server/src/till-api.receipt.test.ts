@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -8,7 +9,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
-  locations,
   drawerOpens,
   printers,
   printJobs,
@@ -2289,10 +2289,7 @@ describe("payment slip persisted capture facts", () => {
     async ({ saved, configured }) => {
       const { cfg, each, operatorId } = await setupVenue();
       cfg.locale = configured;
-      await suite.db
-        .update(locations)
-        .set({ invoiceLocales: [saved] })
-        .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(suite.db, { invoiceLocales: [saved] });
       await withTransaction(suite.db, (tx) =>
         writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
       );
@@ -2325,10 +2322,7 @@ describe("payment slip persisted capture facts", () => {
         });
       for (const changed of [false, true]) {
         if (changed) {
-          await suite.db
-            .update(locations)
-            .set({ invoiceLocales: ["en-GB"] })
-            .where(eq(locations.id, cfg.locationId));
+          await seedVenueSettings(suite.db, { invoiceLocales: ["en-GB"] });
           await withTransaction(suite.db, (tx) =>
             writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en"] }),
           );

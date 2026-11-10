@@ -58,3 +58,63 @@ it("refuses two source rows and leaves an empty phase with no document", () => {
     madridWithDocument(empty, "locations", { name: "name" }, metadata).tables.settings!.rows,
   ).toEqual({});
 });
+
+it("merges captured table rows into the existing venue document and empties the source", () => {
+  const captured = madridWithDocument(
+    original,
+    "locations",
+    { name: "name", city: "city" },
+    metadata,
+  );
+  captured.tables.content_languages = {
+    columns: [],
+    foreignKeys: [],
+    rows: { policy: { default_language: "en", languages: ["en", "es"] } },
+  };
+  const before = structuredClone(captured);
+  const result = madridWithDocument(
+    captured,
+    "content_languages",
+    {
+      default_language: "defaultContentLanguage",
+      languages: "contentLanguages",
+    },
+    { ...metadata, revision: 2, mode: "row" },
+  );
+  expect(Object.values(result.tables.settings!.rows)).toEqual([
+    {
+      module: "venue",
+      version: 1,
+      revision: 2,
+      doc: {
+        name: "Deli",
+        city: "Madrid",
+        defaultContentLanguage: "en",
+        contentLanguages: ["en", "es"],
+      },
+      updated_at: metadata.updatedAt,
+      updated_by: null,
+    },
+  ]);
+  expect(result.tables.content_languages!.rows).toEqual({});
+  expect(captured).toEqual(before);
+  result.tables.holiday_geographies = { columns: [], foreignKeys: [], rows: {} };
+  const emptyArea = madridWithDocument(
+    result,
+    "holiday_geographies",
+    { country: "country" },
+    {
+      ...metadata,
+      revision: 2,
+      mode: "row",
+      targetField: "holidayArea",
+    },
+  );
+  expect(Object.values(emptyArea.tables.settings!.rows)[0]!.doc).toEqual({
+    name: "Deli",
+    city: "Madrid",
+    defaultContentLanguage: "en",
+    contentLanguages: ["en", "es"],
+    holidayArea: null,
+  });
+});

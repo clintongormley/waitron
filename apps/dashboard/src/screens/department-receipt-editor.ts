@@ -268,7 +268,6 @@ export class DepartmentReceiptEditor extends LitElement {
             { type: "department_sale_policies" },
             { type: "locations" },
             { type: "settings.venue" },
-            { type: "settings.venue" },
           ],
           read: () => {
             const client = initialRead ? this.api : (this.api.background ?? this.api);

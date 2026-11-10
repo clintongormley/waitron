@@ -29,7 +29,6 @@ import {
   invoiceDeliveries,
   invoiceSeries,
   tenders,
-  locations,
   pagePrinters,
   workingOrders,
   nowIso,
@@ -61,7 +60,7 @@ import {
   createCategory,
   createProduct,
   listAvailableProducts,
-  contentLanguages,
+  readSavedContentLanguages,
 } from "@waitron/catalogue";
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -2650,7 +2649,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
       tradingName: "Retained",
       active: false,
     });
-    const [languages] = await suite.db.select().from(contentLanguages);
+    const languages = await readSavedContentLanguages(suite.db);
     expect(languages).toBeDefined();
     const language = languages!.defaultLanguage;
     async function solid(background: string) {
@@ -3710,10 +3709,7 @@ describe("department receipt presentation on thermal jobs", () => {
       });
       const ticket = await sell();
       const id = await onlySaleId(cfg);
-      await suite.db
-        .update(locations)
-        .set({ invoiceLocales: ["es-ES"] })
-        .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
       expect(text).toContain("Printed subtitle");
@@ -3738,10 +3734,7 @@ describe("department receipt presentation on thermal jobs", () => {
       });
       const ticket = await sell();
       const id = await onlySaleId(cfg);
-      await suite.db
-        .update(locations)
-        .set({ invoiceLocales: [current] })
-        .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(suite.db, { invoiceLocales: [current] });
       await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id, printed));
       const text = decodeTicket((await documents())[1]!.payload);
       if (subtitle === null) expect(text).not.toContain("Venue subtitle");

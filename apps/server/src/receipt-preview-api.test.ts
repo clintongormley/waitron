@@ -7,7 +7,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import {
   devices,
-  locations,
   printers,
   readTenant,
   withTransaction,
@@ -25,7 +24,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
-import {} from "@waitron/catalogue";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
@@ -134,9 +132,7 @@ function printedLines(result: ReceiptPreviewResponse): string[] {
 }
 
 function setLocationLanguages(invoiceLocales: string[]): Promise<unknown> {
-  return withTransaction(suite.db, (tx) =>
-    tx.update(locations).set({ invoiceLocales }).where(eq(locations.id, venue.cfg.locationId)),
-  );
+  return withTransaction(suite.db, (tx) => seedVenueSettings(tx, { invoiceLocales }));
 }
 
 /** Each row is one device of the location, on its own new receipt printer. */
