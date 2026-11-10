@@ -327,8 +327,9 @@ describe("a box in setup mode and the venue's name", () => {
     vi.useRealTimers();
   });
 
-  function watch(random: () => number) {
+  function watch(random: () => number, answering = [OWN]) {
     const { net, makeSocket } = fakeNetwork();
+    net.answering = answering;
     const w = watchVenueNameInSetup({
       hostname: "waitron.local",
       devMode: false,
@@ -357,6 +358,44 @@ describe("a box in setup mode and the venue's name", () => {
     await vi.advanceTimersByTimeAsync(35_000 + 2_000);
     expect(net.asks).toEqual([0, 37_000, 74_000]);
     expect(w.names()).toEqual(["waitron.local"]);
+    await w.stop();
+  });
+
+  it("a box in setup mode answers nothing while its first ask is in flight, nor after it hears another box", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { net, w } = watch(() => 0, [OWN, OTHER]);
+    expect(w.names()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(net.asks).toEqual([0]);
+    expect(w.names()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(w.names()).toEqual([]);
+    await w.stop();
+  });
+
+  it("a box in setup mode begins answering only when its first ask ends having heard nobody", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { w } = watch(() => 0);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(w.names()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(w.names()).toEqual(["waitron.local"]);
+    await w.stop();
+  });
+
+  it("a box in setup mode that is answering stops at the end of the next ask that hears another box, and no later", async () => {
+    vi.useFakeTimers({ now: 0 });
+    const { net, w } = watch(() => 0.999_9);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(w.names()).toEqual(["waitron.local"]);
+    net.answering = [OWN, OTHER];
+    // The longest wait: 30 s plus a draw just under the 10 s of jitter, then the 2 s ask.
+    await vi.advanceTimersByTimeAsync(30_000 + 9_999);
+    expect(net.asks).toEqual([0, 41_999]);
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(w.names()).toEqual(["waitron.local"]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(w.names()).toEqual([]);
     await w.stop();
   });
 

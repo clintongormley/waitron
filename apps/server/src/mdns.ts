@@ -111,7 +111,7 @@ export interface VenueNameWatchDeps {
 }
 
 export interface VenueNameWatch {
-  /** `[hostname]` while the last ask heard no other box answer it, else none. */
+  /** `[hostname]` once an ask has finished and only while the last one heard no other box, else none. */
   names(): readonly string[];
   stop(): Promise<void>;
 }
@@ -119,7 +119,8 @@ export interface VenueNameWatch {
 /** The random delay keeps two boxes switched on together from asking in step for ever. */
 export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch {
   const { hostname } = deps;
-  let heardOthers = false;
+  // Until the first ask finishes, the box cannot know that no other box answers the name.
+  let heardOthers = true;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> = Promise.resolve();
