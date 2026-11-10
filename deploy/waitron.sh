@@ -456,10 +456,9 @@ ensure_images_present() {
   done <<<"$images"
 }
 
-# The box's own IPv4 addresses, one per line, chosen as the server's listBoxIpv4
-# (apps/server/src/box-reach.ts) chooses the ones it advertises: those of the interface carrying the
-# lowest-metric default route, or, with none, every non-loopback one off a virtual interface. Prints
-# nothing, and still succeeds, when `ip` is missing or fails.
+# The box's IPv4 addresses, one per line, by the same interface choice as the server's listBoxIpv4
+# (apps/server/src/box-reach.ts). It applies neither WAITRON_BOX_ADDRESSES nor the server's
+# private-range filter. Prints nothing, and still succeeds, when `ip` is missing or fails.
 box_own_ipv4() {
   local route_file="${WAITRON_SH_PROC_NET_ROUTE:-/proc/net/route}" uplink="" best=""
   local iface dest metric mask family cidr addr listing
@@ -474,7 +473,7 @@ box_own_ipv4() {
   local -a on_uplink=() others=()
   while read -r _ iface family cidr _; do
     [ "$family" = inet ] || continue
-    iface="${iface%%@*}" addr="${cidr%%/*}"
+    addr="${cidr%%/*}"
     [ "$iface" = lo ] && continue
     case "$addr" in 127.*) continue ;; esac
     [ -n "$uplink" ] && [ "$iface" = "$uplink" ] && on_uplink+=("$addr")

@@ -247,7 +247,7 @@ const REAL_CMP = spawnSync("bash", ["-c", "command -v cmp"], { encoding: "utf8" 
 quietStub("cmp", `[ "\${WT_CMP_FAIL}" = "1" ] && exit 2\nexec "${REAL_CMP}" "$@"`);
 stub("qrencode", "exit 0");
 // `ip` prints WT_IP_ADDRS (the lines `ip -4 -o addr show` would) and exits WT_IP_STATUS, so no case
-// reads the machine's real interfaces; WT_IP_STATUS=127 stands for a host with no `ip` at all.
+// reads the machine's real interfaces.
 stub(
   "ip",
   `[ -n "\${WT_IP_ADDRS}" ] && printf '%s\\n' "\${WT_IP_ADDRS}"\nexit "\${WT_IP_STATUS:-0}"`,
@@ -829,8 +829,34 @@ describe("waitron.sh install and the box's own setup address", () => {
     expect(r.stdout).not.toContain("http://172.17.0.1/setup/trust");
   });
 
+  it("when the default-route interface has no IPv4 address, it falls back to the non-virtual ones", () => {
+    const sb = sandbox();
+    const route = routeFile(sb, ["ppp0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
+    expect(r.stdout).toContain("http://10.0.0.7/setup/trust");
+    expect(r.stdout).not.toContain("http://172.17.0.1/setup/trust");
+  });
+
+  it("skips the same interface-name prefixes as the server's VIRTUAL_IFACE_PREFIXES", () => {
+    const server = readFileSync(join(HERE, "..", "apps/server/src/box-reach.ts"), "utf8");
+    const script = readFileSync(SCRIPT, "utf8");
+    const listed = server.match(/const VIRTUAL_IFACE_PREFIXES = \[([^\]]*)\]/);
+    const cased = script.match(/^\s*case "\$iface" in ([^)]*)\) continue ;; esac$/m);
+    expect(listed, "VIRTUAL_IFACE_PREFIXES in box-reach.ts").not.toBeNull();
+    expect(cased, "the virtual-interface case in box_own_ipv4").not.toBeNull();
+    const fromServer = [...listed[1].matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+    const fromScript = cased[1].split("|").map((p) => p.trim().replace(/\*$/, ""));
+    expect(fromScript).toEqual(fromServer);
+  });
+
   it.each([
-    ["is missing", { WT_IP_ADDRS: ADDRS, WT_IP_STATUS: "127" }],
+    ["prints addresses and then fails", { WT_IP_ADDRS: ADDRS, WT_IP_STATUS: "1" }],
+    [
+      "prints nothing and exits 127, as a missing command does",
+      { WT_IP_ADDRS: "", WT_IP_STATUS: "127" },
+    ],
     ["prints nothing", { WT_IP_ADDRS: "" }],
   ])("when `ip` %s, prints no own setup address and the install still succeeds", (_, env) => {
     const sb = sandbox();

@@ -163,12 +163,14 @@ It finishes by printing a setup address and QR code, also shown on an attached m
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
 connection certificate, then continue to the secure site. The guide covers common operating systems
 and browsers, and walks through removing any old certificate first and fully quitting the browser.
-Below that address it prints the box's own address at the same path, for example
+Below that address it prints the box's own addresses at the same path, one line each, for example
 `http://192.168.1.20/setup/trust`, under the words "If this venue already has a Waitron box,
-waitron.local reaches that box instead. Use this box's own address:". Use it when the name does not
-resolve, or when the venue already has a Waitron box. The address is that of the network connection
-carrying the box's default route, or, when there is none, each address on a connection that is not
-Docker's or another virtual one. The QR code always stays `http://waitron.local/setup/trust`.
+waitron.local reaches that box instead. Use this box's own address:". Use one when the name does not
+resolve, or when the venue already has a Waitron box. They are the addresses of the network
+connection carrying the box's default route; when there is no default route, or that connection
+has no address, they are every address except loopback and those on connections whose names start
+`docker`, `br-`, `veth`, `virbr`, `cni`, `flannel` or `cali`. When the box's addresses cannot be
+read, nothing is printed there. The QR code always stays `http://waitron.local/setup/trust`.
 
 A browser may upgrade HTTP to HTTPS before the guide opens. Both listeners serve the guide and
 certificate downloads at matching paths, but HTTPS can still show a certificate warning. Use the
@@ -724,8 +726,9 @@ replaced (`restore.membership_invalid`, described under
 [The operator CLIs](#the-operator-clis--two-different-invocation-forms)).
 
 **`WAITRON_BOX_ADDRESSES`** is a comma-separated list of IPv4 literals that REPLACES interface
-sniffing everywhere the box reports its own addresses: the SANs in the leaf certificate it presents,
-the reach URLs and QR the setup wizard shows, and the mDNS responder's answers. Leave it empty on a
+sniffing in the server: the SANs in the leaf certificate it presents, the reach URLs and QR the
+setup wizard shows, and the mDNS responder's answers. The addresses `waitron.sh` prints on the
+console do not use it. Leave it empty on a
 real box — unset, the box advertises only its **default-route interface** (its real uplink), so the
 Docker bridge interfaces every box carries (`docker0`/`br-*`, on 172.x) are not advertised and
 `waitron.local` resolves to a reachable address without any override. Set it where the container
