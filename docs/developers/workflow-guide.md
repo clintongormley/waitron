@@ -391,7 +391,7 @@ allocation uses the supplied operations after the route's mode check.
 
 **When the setup route refuses it.** On a box started with `WAITRON_ENV=production`, the provision
 route refuses Demo and Preparation after parsing, before calling provisioning. It answers HTTP 400
-with `sif.throwaway_allocation_refused`, including when you supply `initialOperations`; the check
+with `setup.mode_not_allowed`, including when you supply `initialOperations`; the check
 does not depend on a module offering a throwaway allocation. The wizard hides both choices and
 offers Reload if either is requested anyway. This check uses the setup process's environment;
 binding installed-box choices to the deployment state remains part of B3.

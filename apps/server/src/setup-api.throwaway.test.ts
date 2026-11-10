@@ -184,7 +184,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: {
-          code: "sif.throwaway_allocation_refused",
+          code: "setup.mode_not_allowed",
           params: { environment: "production" },
         },
       });

@@ -880,7 +880,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         c.req.header("Accept-Language"),
       );
       if (deps.environment === "production" && payload.mode !== "live") {
-        throw new AppError("sif.throwaway_allocation_refused", { environment: "production" });
+        throw new AppError("setup.mode_not_allowed", { environment: "production" });
       }
       const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
       if (

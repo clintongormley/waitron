@@ -785,7 +785,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(response.status).toBe(400);
           expect(await response.json()).toEqual({
             error: {
-              code: "sif.throwaway_allocation_refused",
+              code: "setup.mode_not_allowed",
               params: { environment: "production" },
             },
           });

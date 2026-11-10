@@ -1545,23 +1545,34 @@ describe("setup-app", () => {
     );
   });
 
-  it.each([
-    [
-      "en-GB",
-      "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
-      "Reload",
-    ],
-    [
-      "es-ES",
-      "Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.",
-      "Recargar",
-    ],
-  ] as const)(
-    "Demo refused sif.throwaway_allocation_refused says the box is for production and offers Reload, not Retry (%s)",
-    async (locale, sentence, reload) => {
+  it.each(
+    (
+      [
+        [
+          "en-GB",
+          "This server is stamped for production, so it does not offer Demo or Prepare your restaurant. Reload to choose another option.",
+          "Reload",
+        ],
+        [
+          "es-ES",
+          "Este servidor está marcado para producción, así que no ofrece Demostración ni Prepara tu restaurante. Recarga para elegir otra opción.",
+          "Recargar",
+        ],
+      ] as const
+    ).flatMap(([locale, sentence, reload]) =>
+      ["sif.throwaway_allocation_refused", "setup.mode_not_allowed"].map((code) => ({
+        locale,
+        sentence,
+        reload,
+        code,
+      })),
+    ),
+  )(
+    "Demo refusal $code offers Reload instead of Retry ($locale)",
+    async ({ locale, sentence, reload, code }) => {
       try {
         const provision = vi.fn().mockRejectedValue({
-          code: "sif.throwaway_allocation_refused",
+          code,
           params: { environment: "production" },
           status: 400,
         });
