@@ -16,9 +16,9 @@ afterEach(cleanupWidgets);
  */
 const halfPortion: ProductEditorVariant = {
   id: "8f1f2f3f-4f5f-4f6f-8f7f-9f8f7f6f5f4f",
-  name: "Media",
+  name: "Half",
   customerName: { es: "Media ración", en: "Half portion" },
-  kitchenName: "1/2 RAC",
+  kitchenName: "1/2 PRT",
   image: "half.png",
   unitPrice: "6.50",
   available: true,
@@ -79,10 +79,10 @@ const saveOf = (el: VariantForm): HTMLElement =>
 
 it("opens with every field of the variant it was given", async () => {
   const el = await mountForm({ value: halfPortion });
-  expect(field(el, "name").value).toBe("Media");
+  expect(field(el, "name").value).toBe("Half");
   expect(field(el, "unitPrice").value).toBe("6.50");
   expect(field(el, "available").checked).toBe(true);
-  expect(field(el, "kitchenName").value).toBe("1/2 RAC");
+  expect(field(el, "kitchenName").value).toBe("1/2 PRT");
   expect(field(el, "customerName-es").value).toBe("Media ración");
   expect(field(el, "customerName-en").value).toBe("Half portion");
   expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe("half.png");
@@ -96,26 +96,26 @@ const nameHints = (el: VariantForm) =>
 it("hints a new variant's blank names with what they fall back to, as its name is typed", async () => {
   const el = await mountForm();
   expect(nameHints(el)).toEqual(["", "", ""]);
-  await change(el, "name", "Grande");
-  expect(nameHints(el)).toEqual(["Grande", "Grande", "Grande"]);
+  await change(el, "name", "Large");
+  expect(nameHints(el)).toEqual(["Large", "Large", "Large"]);
   await change(el, "customerName-es", "Ración grande");
-  expect(nameHints(el)).toEqual(["Grande", "Grande", "Ración grande"]);
+  expect(nameHints(el)).toEqual(["Large", "Large", "Ración grande"]);
 });
 
 it("hints an existing variant's blank names with its own name", async () => {
   const el = await mountForm({ value: { ...halfPortion, customerName: null, kitchenName: null } });
-  expect(nameHints(el)).toEqual(["Media", "Media", "Media"]);
+  expect(nameHints(el)).toEqual(["Half", "Half", "Half"]);
 });
 
 it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
   const el = await mountForm({ value: { ...halfPortion, customerName: null } });
-  expect(field(el, "kitchenName").value).toBe("1/2 RAC");
-  expect(nameHints(el).slice(1)).toEqual(["Media", "Media"]);
+  expect(field(el, "kitchenName").value).toBe("1/2 PRT");
+  expect(nameHints(el).slice(1)).toEqual(["Half", "Half"]);
   await change(el, "customerName-es", "Media ración");
-  expect(nameHints(el).slice(1)).toEqual(["Media", "Media ración"]);
-  await change(el, "kitchenName", "MEDIA");
-  expect(field(el, "kitchenName").value).toBe("MEDIA");
-  expect(nameHints(el).slice(1)).toEqual(["Media", "Media ración"]);
+  expect(nameHints(el).slice(1)).toEqual(["Half", "Media ración"]);
+  await change(el, "kitchenName", "HALF");
+  expect(field(el, "kitchenName").value).toBe("HALF");
+  expect(nameHints(el).slice(1)).toEqual(["Half", "Media ración"]);
 });
 
 it("marks the name as required and leaves the price and the optional names unmarked", async () => {
@@ -269,7 +269,7 @@ it("refuses a blank name, explains it beside the field and above Save, and keeps
   expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   // The window stays as the person left it, so they correct one field rather than retyping the rest.
   expect(field(el, "unitPrice").value).toBe("7.25");
-  await change(el, "name", "Entera");
+  await change(el, "name", "Whole");
   await click(el, "variant-save");
   expect(submit).toHaveBeenCalledTimes(1);
 });
@@ -279,7 +279,7 @@ it("opens a variant with no price of its own blank, and saves it back blank, nev
   expect(field(el, "unitPrice").value).toBe("");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "name", "Entera");
+  await change(el, "name", "Whole");
   await click(el, "variant-save");
   expect(
     (submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>).detail.value
@@ -302,7 +302,7 @@ it("emits the edited variant, keeping its id and folding blank optional text to 
   const el = await mountForm({ value: halfPortion });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "name", " Entera ");
+  await change(el, "name", " Whole ");
   await change(el, "unitPrice", "12.00");
   await change(el, "available", false);
   await change(el, "kitchenName", "  ");
@@ -312,7 +312,7 @@ it("emits the edited variant, keeping its id and folding blank optional text to 
   const event = submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>;
   expect(event.detail.value).toEqual({
     id: halfPortion.id,
-    name: "Entera",
+    name: "Whole",
     customerName: { es: "Ración entera" },
     kitchenName: null,
     image: "half.png",
@@ -364,7 +364,7 @@ it("takes the image the picker reports", async () => {
   await el.updateComplete;
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "name", "Entera");
+  await change(el, "name", "Whole");
   await change(el, "unitPrice", "9.00");
   await click(el, "variant-save");
   expect(
@@ -419,7 +419,7 @@ it("does not report a cancel when it is closed by the form that opened it", asyn
 it("does nothing while the save it already started is in flight", async () => {
   const el = await mountForm({ value: halfPortion });
   // Changed first, so it is the save in flight, not an unchanged form, that holds Save.
-  await change(el, "kitchenName", "MEDIA");
+  await change(el, "kitchenName", "HALF");
   el.busy = true;
   await el.updateComplete;
   const submit = vi.fn();
@@ -430,12 +430,12 @@ it("does nothing while the save it already started is in flight", async () => {
   await click(el, "variant-cancel");
   expect(submit).not.toHaveBeenCalled();
   expect(cancel).not.toHaveBeenCalled();
-  expect(field(el, "name").value).toBe("Media");
+  expect(field(el, "name").value).toBe("Half");
 });
 
 it("reseeds its fields when it is reopened for a different variant", async () => {
   const el = await mountForm({ value: halfPortion });
-  await change(el, "name", "Editada a medias");
+  await change(el, "name", "Partly edited");
   el.open = false;
   await el.updateComplete;
   el.value = null;
@@ -471,7 +471,7 @@ async function focusName(el: VariantForm) {
 
 it("saves on Enter and cancels on Escape from a focused field", async () => {
   const el = await mountForm({ value: halfPortion });
-  await change(el, "kitchenName", "MEDIA");
+  await change(el, "kitchenName", "HALF");
   await focusName(el);
   const submit = vi.fn();
   const cancel = vi.fn();
@@ -510,7 +510,7 @@ it("opens a new variant with a blank price whose hint is the base price, and sav
   expect((field(el, "unitPrice") as unknown as { placeholder: string }).placeholder).toBe("9.00");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "name", "Copa");
+  await change(el, "name", "Glass");
   await click(el, "variant-save");
   const value = (submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>).detail
     .value;
@@ -522,7 +522,7 @@ it("keeps an Inactive variant Inactive when it is edited", async () => {
   const el = await mountForm({ value: { ...halfPortion, active: false } });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
-  await change(el, "name", "Media ración");
+  await change(el, "name", "Half portion");
   await click(el, "variant-save");
   expect(
     (submit.mock.calls[0]![0] as CustomEvent<{ value: ProductEditorVariant }>).detail.value.active,
@@ -570,7 +570,7 @@ it("re-checks every change after a failed submission, and Save works again once 
   await change(el, "unitPrice", "6,5x");
   await click(el, "variant-save");
 
-  await change(el, "name", "Entera");
+  await change(el, "name", "Whole");
   expect(field(el, "name").error).toBe("");
   expect(field(el, "unitPrice").error).toBe(t("editor.price_invalid"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
@@ -578,7 +578,7 @@ it("re-checks every change after a failed submission, and Save works again once 
   await change(el, "name", "");
   expect(field(el, "name").error).toBe(t("editor.variant_name_required"));
 
-  await change(el, "name", "Entera");
+  await change(el, "name", "Whole");
   await change(el, "unitPrice", "");
   expect(field(el, "unitPrice").error).toBe("");
   expect(await bottomOf(el)).toBe("");

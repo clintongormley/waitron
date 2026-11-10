@@ -40,7 +40,7 @@ const fieldOf = (overrides: Partial<Parameters<typeof categoryPathField>[0]>) =>
 
 const food: CategorySummary = {
   id: "food",
-  name: "Comida",
+  name: "Food",
   parentId: null,
   color: null,
 };
@@ -52,7 +52,7 @@ const tapas: CategorySummary = {
 };
 const drinks: CategorySummary = {
   id: "drinks",
-  name: "Bebidas",
+  name: "Drinks",
   parentId: null,
   color: null,
 };
@@ -77,9 +77,9 @@ it("offers none and then every category as a tree, each named by its own name an
   expect(combobox.showEmptyOption).toBe(true);
   expect(combobox.options).toEqual([
     { value: "", label: "Uncategorised" },
-    { value: "drinks", label: "Bebidas", depth: 0, valueLabel: "Bebidas" },
-    { value: "food", label: "Comida", depth: 0, valueLabel: "Comida" },
-    { value: "tapas", label: "Tapas", depth: 1, valueLabel: "Comida › Tapas" },
+    { value: "drinks", label: "Drinks", depth: 0, valueLabel: "Drinks" },
+    { value: "food", label: "Food", depth: 0, valueLabel: "Food" },
+    { value: "tapas", label: "Tapas", depth: 1, valueLabel: "Food › Tapas" },
   ]);
   expect(combobox.value).toBe("tapas");
   expect(combobox.placeholder).toBe("Unavailable");
@@ -105,7 +105,7 @@ it("orders numbered sibling categories by value, as the tables do", async () => 
 it("lists a category whose parent the list lacks at the top level", async () => {
   const combobox = await mount(fieldOf({ categories: [tapas, drinks] }));
   expect(combobox.options.slice(1)).toEqual([
-    { value: "drinks", label: "Bebidas", depth: 0, valueLabel: "Bebidas" },
+    { value: "drinks", label: "Drinks", depth: 0, valueLabel: "Drinks" },
     { value: "tapas", label: "Tapas", depth: 0, valueLabel: "Tapas" },
   ]);
 });
@@ -130,6 +130,6 @@ it("reports a picked category, and none as null, without letting the combobox's 
 });
 
 it("writes a category's whole path, or the missing wording for an id the list lacks", () => {
-  expect(categoryPathText("tapas", [food, tapas], "Unavailable")).toBe("Comida › Tapas");
+  expect(categoryPathText("tapas", [food, tapas], "Unavailable")).toBe("Food › Tapas");
   expect(categoryPathText("gone", [food, tapas], "Unavailable")).toBe("Unavailable");
 });

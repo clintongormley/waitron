@@ -96,7 +96,7 @@ const tillLists = {
 };
 const office: PagePrinterRow = {
   id: "pg1",
-  name: "Oficina",
+  name: "Office",
   host: "10.0.0.20",
   port: 631,
   resourcePath: "/ipp/print",

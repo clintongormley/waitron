@@ -14,9 +14,9 @@ import "./variant-form.js";
 
 const half: ProductEditorVariant = {
   id: "8f1f2f3f-4f5f-4f6f-8f7f-9f8f7f6f5f4f",
-  name: "Media",
+  name: "Half",
   customerName: null,
-  kitchenName: "1/2 RAC",
+  kitchenName: "1/2 PRT",
   image: null,
   unitPrice: "6.50",
   available: true,
@@ -24,9 +24,9 @@ const half: ProductEditorVariant = {
 };
 const whole: ProductEditorVariant = {
   id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-  name: "Entera",
+  name: "Whole",
   customerName: null,
-  kitchenName: "RAC",
+  kitchenName: "PRT",
   image: null,
   unitPrice: "11.00",
   available: true,
@@ -96,7 +96,7 @@ async function saveButton(form: HTMLElementTagNameMap["dashboard-variant-form"])
 it("a variant put back after a detached update still asks before Escape discards an edit", async () => {
   const { app, form } = await mount();
   await reattachAfterDetachedUpdate(form);
-  await editName(form, "Media ración");
+  await editName(form, "Half portion");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
@@ -105,9 +105,9 @@ it("a variant put back after a detached update still asks before Escape discards
 });
 it("a variant keeps an edit made before it was taken out and put back, and still asks", async () => {
   const { app, form } = await mount();
-  await editName(form, "Media ración");
+  await editName(form, "Half portion");
   await reattachAfterDetachedUpdate(form);
-  expect(nameField(form).value).toBe("Media ración");
+  expect(nameField(form).value).toBe("Half portion");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
   await userEvent.keyboard("{Escape}");
@@ -117,19 +117,19 @@ it("a variant keeps an edit made before it was taken out and put back, and still
 });
 it("a variant reopened on another variant after a put-back save opens quiet with that variant", async () => {
   const { app, form } = await mount();
-  await editName(form, "Media ración");
+  await editName(form, "Half portion");
   await reattachAfterDetachedUpdate(form);
-  form.closeSaved({ ...half, name: "Media ración" });
+  form.closeSaved({ ...half, name: "Half portion" });
   expect(form.open).toBe(false);
   await closeReportsDelivered();
   form.value = whole;
   form.open = true;
   await form.updateComplete;
-  expect(nameField(form).value).toBe("Entera");
+  expect(nameField(form).value).toBe("Whole");
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect((await saveButton(form)).disabled).toBe(true);
-  await editName(form, "Entera grande");
+  await editName(form, "Large whole");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  await editName(form, "Entera");
+  await editName(form, "Whole");
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
