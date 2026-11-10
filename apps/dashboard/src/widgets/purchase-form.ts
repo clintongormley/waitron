@@ -116,6 +116,8 @@ export type PurchaseFormErrors = Record<string, string>;
 export function purchaseRefusalErrors(error: unknown): PurchaseFormErrors {
   const code = codeOf(error);
   const message = codeMessage(code);
+  if (code === "purchase.duplicate")
+    return { "supplier-tax-id": message, "supplier-invoice-number": message };
   const params = (error as { params?: { field?: unknown; reason?: unknown } }).params ?? {};
   if (code === "management.request_invalid" && typeof params.field === "string") {
     const key = (HEADER_KEYS as Record<string, string>)[params.field];
@@ -349,7 +351,12 @@ export class PurchaseForm extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this[field] = event.detail.value;
-    this.#dismiss(HEADER_KEYS[field]);
+    const pair = ["supplier-tax-id", "supplier-invoice-number"];
+    this.#dismiss(
+      ...(pair.includes(HEADER_KEYS[field]) && pair.every((key) => this.fieldErrors[key])
+        ? pair
+        : [HEADER_KEYS[field]]),
+    );
     this.#scope?.changed();
   }
 

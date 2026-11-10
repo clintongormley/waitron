@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -254,4 +255,33 @@ describe("SetupLiveSourceScreen in Spanish", () => {
     expect(q(el, "h1")!.textContent).toBe("Importar una configuración");
     expect((q(el, "wt-input") as HTMLElement & { value: string }).value).toBe("twelve-chars");
   });
+});
+
+it("puts a refused import passphrase under Passphrase, focuses it and allows retry", async () => {
+  const { el, host } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+  chooseExport(el, EXPORT);
+  await typePassphrase(el, "wrong-twelve-chars");
+  q(el, "[data-test=import]")!.click();
+  await el.updateComplete;
+  Object.assign(el, {
+    errorCode: "recovery.passphrase_invalid",
+    errorMessage: "This passphrase does not open the export.",
+  });
+  await el.updateComplete;
+  const field = el.shadowRoot!.querySelector("wt-input")!;
+  await field.updateComplete;
+  const native = field.shadowRoot!.querySelector("input")!;
+  await expect
+    .element(page.elementLocator(native))
+    .toHaveAccessibleDescription(/This passphrase does not open the export[.]/);
+  expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  await expect.poll(() => field.shadowRoot!.activeElement).toBe(native);
+  expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(false);
+  await typePassphrase(el, "correct-passphrase");
+  expect(field.error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  const requested = vi.fn();
+  host.addEventListener("configuration-requested", requested);
+  q(el, "[data-test=import]")!.click();
+  expect(requested).toHaveBeenCalledOnce();
 });

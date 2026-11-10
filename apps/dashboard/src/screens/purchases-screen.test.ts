@@ -194,7 +194,7 @@ describe("purchases-screen", () => {
 
   it("keeps the form open and says a create refusal in its bottom message, not on the page", async () => {
     const api = stubApi({
-      createPurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.duplicate" }),
+      createPurchaseInvoice: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
     const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
     await flush(el);
@@ -203,7 +203,7 @@ describe("purchases-screen", () => {
     emitFromChild(form(el), "create-purchase", createDetail());
     await flush(el);
     expect(form(el).open).toBe(true);
-    expect(await bottomOf(form(el))).toBe(codeMessage("purchase.duplicate", "es-ES"));
+    expect(await bottomOf(form(el))).toBe(codeMessage("server.internal", "es-ES"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
@@ -261,13 +261,23 @@ describe("purchases-screen", () => {
     await el.updateComplete;
     emitFromChild(form(el), "create-purchase", createDetail());
     await flush(el);
-    expect(await bottomOf(form(el))).toBe(codeMessage("purchase.duplicate", "es-ES"));
+    expect(await bottomOf(form(el))).toBe(t("form.fix_fields"));
+    for (const key of ["supplier-tax-id", "supplier-invoice-number"])
+      expect(
+        form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(`[data-test=${key}]`)!
+          .error,
+      ).toBe(codeMessage("purchase.duplicate", "es-ES"));
 
     form(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
     emitFromChild(list(el)!, "edit-purchase", { id: "pi-1" });
     await el.updateComplete;
     expect(await bottomOf(form(el))).toBe("");
+    for (const key of ["supplier-tax-id", "supplier-invoice-number"])
+      expect(
+        form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(`[data-test=${key}]`)!
+          .error,
+      ).toBe("");
   });
 
   it("closes the form after a successful create whose refresh fails, and says the load failure on the page", async () => {

@@ -1,7 +1,7 @@
 import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -120,4 +120,22 @@ it("an inherited variant follows its parent's replacement while its own picture 
   expect(explicit.el.shadowRoot!.querySelector(".thumb")!.classList.contains("inherited")).toBe(
     false,
   );
+});
+
+it("reads the refusal before an inherited-photo hint and restores the hint when cleared", async () => {
+  const { el } = await mountWidget<HTMLElementTagNameMap["dashboard-product-appearance"]>(
+    "dashboard-product-appearance",
+    { inheritedImage: mediaTestReference("parent.png"), invalid: true, error: "The photo is gone" },
+  );
+  const button = el.shadowRoot!.querySelector("button")!;
+  await expect
+    .element(page.elementLocator(button), { timeout: 1000 })
+    .toHaveAccessibleDescription("The photo is gone");
+  el.error = "";
+  el.invalid = false;
+  await el.updateComplete;
+  const caption = el.shadowRoot!.querySelector("[data-test=inherited-caption]")!;
+  await expect
+    .element(page.elementLocator(button), { timeout: 1000 })
+    .toHaveAccessibleDescription(caption.textContent!);
 });

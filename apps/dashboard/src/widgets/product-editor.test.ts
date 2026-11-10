@@ -5879,6 +5879,15 @@ it("marks the photo invalid on a refused photo, with the reason under it", async
   await el.updateComplete;
   await photoControl(el).updateComplete;
   expect(photoButton(el).getAttribute("aria-invalid")).toBe("true");
+  await expect
+    .element(page.elementLocator(photoButton(el)))
+    .toHaveAccessibleDescription("The photo is gone");
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  await upload.updateComplete;
+  const choose = upload.shadowRoot!.querySelector("[data-test=choose-image]")!;
+  await expect
+    .element(page.elementLocator(choose.shadowRoot!.querySelector("button")!))
+    .toHaveAccessibleDescription("The photo is gone");
   const error = el.shadowRoot!.querySelector<HTMLElement>("[data-test=image-error]")!;
   expect(nameGroup(el).contains(error)).toBe(true);
   const photo = photoButton(el).getBoundingClientRect();

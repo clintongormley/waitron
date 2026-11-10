@@ -148,7 +148,7 @@ function input(el: ProfileScreen, name: string, value: string) {
 }
 
 describe("your profile", () => {
-  it("opens incomplete details with missing required fields marked, then saves them", async () => {
+  it("opens incomplete details quietly, marks missing fields on the first edited save, then saves them", async () => {
     const profile = await apiStub().getProfile();
     const { el, api } = await mount({
       getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null, lastNames: " " }),
@@ -156,20 +156,33 @@ describe("your profile", () => {
     // The details card stays visible behind the modal, so the open modal is what shows the edit form
     // opened.
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
-    for (const [name, key] of [
-      ["firstNames", "form.first_names_required"],
-      ["lastNames", "form.last_names_required"],
-    ] as const) {
+    for (const name of ["firstNames", "lastNames"]) {
       const field = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
         `wt-input[name=${name}]`,
       )!;
-      expect(field.error).toBe(t(key));
+      expect(field.error).toBe("");
       expect(field.required).toBe(true);
     }
     expect(
       el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=displayName]")!
         .error,
     ).toBe("");
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtButton>("[data-test=save]")!.disabled,
+    ).toBe(true);
+    input(el, "displayName", "Alex R.");
+    await flush(el);
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtButton>("[data-test=save]")!.disabled,
+    ).toBe(false);
+    await click(el, "save");
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("[name=firstNames]")!.error,
+    ).toBe(t("form.first_names_required"));
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("[name=lastNames]")!.error,
+    ).toBe(t("form.last_names_required"));
+    expect(api.saveProfile).not.toHaveBeenCalled();
     input(el, "firstNames", "Alex");
     input(el, "lastNames", "Rivera");
     await click(el, "save");
@@ -1069,9 +1082,9 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(values).toContainEqual([t("profile.language"), "Español"]);
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
     expect(field(el, "lastNames").value).toBe("");
-    expect(field(el, "lastNames").error).toBe(t("form.last_names_required"));
+    expect(field(el, "lastNames").error).toBe("");
     expect(field(el, "email").value).toBe("");
-    expect(field(el, "email").error).toBe(t("form.email_required"));
+    expect(field(el, "email").error).toBe("");
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-combobox[name=locale]")!
         .value,
@@ -1590,12 +1603,13 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("still waits on a required field an incomplete profile opens with", async () => {
+  it("keeps an unchanged incomplete profile quiet and disabled", async () => {
     const profile = await apiStub().getProfile();
     const { el } = await mount({
       getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null }),
     });
-    expect(field(el, "firstNames").error).toBe(t("form.first_names_required"));
+    expect(field(el, "firstNames").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
     expect(await nativeSaveDisabled(el)).toBe(true);
   });
 

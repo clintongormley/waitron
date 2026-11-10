@@ -309,5 +309,11 @@ describe("turning archives on: Apply", () => {
     action(el, "apply").click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(api.applyBackup).toHaveBeenCalledOnce();
+    await typeInto("destination", "/mnt/usb/second")(el);
+    const folder = q<HTMLElementTagNameMap["wt-input"]>(el, "[data-test=destination]")!;
+    await folder.updateComplete;
+    await userEvent.click(page.elementLocator(folder.shadowRoot!.querySelector("input")!));
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledTimes(2));
   });
 });

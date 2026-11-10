@@ -1,6 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { BOOKINGS_STRINGS, bookingStatusName } from "./strings.js";
@@ -438,9 +438,10 @@ describe("bookings-screen", () => {
     });
     await flush(el);
     expect(form(el).open).toBe(true);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("booking.invalid", "es-ES"),
-    );
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(
+      (await formMessageOf(form(el).shadowRoot!.querySelector("wt-form-actions")!))?.textContent,
+    ).toContain(codeMessage("booking.invalid", "es-ES"));
   });
 
   it("keeps the form open and shows the error when an update fails", async () => {
@@ -453,9 +454,35 @@ describe("bookings-screen", () => {
     emitFromChild(form(el), "update-booking", { id: "bk-early", patch: { partySize: 6 } });
     await flush(el);
     expect(form(el).open).toBe(true);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("booking.not_found", "es-ES"),
-    );
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(
+      (await formMessageOf(form(el).shadowRoot!.querySelector("wt-form-actions")!))?.textContent,
+    ).toContain(codeMessage("booking.not_found", "es-ES"));
+  });
+
+  it.each([
+    ["en", "That table no longer exists"],
+    ["es", "Esa mesa ya no existe"],
+  ])("puts table.not_found with its actual tableId under Table (%s)", async (locale, sentence) => {
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      const api = stubApi({
+        createBooking: vi
+          .fn()
+          .mockRejectedValue({ code: "table.not_found", params: { tableId: "t-1" } }),
+      });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      await click(el, "add-booking");
+      emitFromChild(form(el), "create-booking", { ...booking(), tableId: "t-1" });
+      await flush(el);
+      const table = form(el).shadowRoot!.querySelector("wt-combobox")!;
+      expect(table.error).toBe(sentence);
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    } finally {
+      setLocale(before);
+    }
   });
 
   const refusedTable = {

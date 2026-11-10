@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { afterEach, expect, it, vi } from "vitest";
@@ -159,6 +160,10 @@ it("focuses Choose image when a refusal names the image", async () => {
       upload.shadowRoot!.querySelector('[data-test="choose-image"]'),
     ),
   );
+  const button = upload.shadowRoot!.querySelector('[data-test="choose-image"]')!;
+  await expect
+    .element(page.elementLocator(button.shadowRoot!.querySelector("button")!))
+    .toHaveAccessibleDescription(codeMessage("menu_section.invalid"));
   expect(
     upload.shadowRoot!.querySelector('[data-test="choose-image"]')!.getAttribute("aria-invalid"),
   ).toBe("true");

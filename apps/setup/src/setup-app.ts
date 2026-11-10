@@ -514,6 +514,7 @@ const PRIVACY_CONTACT_MESSAGES: Record<string, { invalid: StringKey; tooLong: St
 
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
+  if (code === "recovery.passphrase_invalid") return say("shell.configuration.passphrase_invalid");
   if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
   if (code === "setup.configuration_newer" || code === "setup.configuration_parts_differ") {
     return say("shell.configuration.newer");
@@ -770,7 +771,7 @@ export class SetupApp extends LitElement {
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
   @state() private cloudLiveUnknown = false;
-  @state() private configurationError?: Message;
+  @state() private configurationError?: { code?: string; message: Message };
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
   @state() private fiscalTestRejections: { code: string | null; message: string | null }[] = [];
@@ -1994,7 +1995,10 @@ export class SetupApp extends LitElement {
     } catch (error) {
       if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
         return;
-      this.configurationError = describeConfigurationRefusal(error);
+      this.configurationError = {
+        code: (error as ApiError | null)?.code,
+        message: describeConfigurationRefusal(error),
+      };
       this.screen = "live-source";
     }
   }
@@ -2523,7 +2527,8 @@ export class SetupApp extends LitElement {
       case "live-source":
         return html`<setup-live-source-screen
           data-test="screen-live-source"
-          .errorMessage=${this.configurationError?.()}
+          .errorMessage=${this.configurationError?.message()}
+          .errorCode=${this.configurationError?.code}
           .beforeEmpty=${(proceed: () => void, signal: AbortSignal) => this.#requestStartEmpty(proceed, signal)}
         ></setup-live-source-screen>`;
       case "configuration-preview":

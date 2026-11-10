@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, host, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import { currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { BookingForm } from "./booking-form.js";
@@ -73,7 +73,9 @@ describe.each(["light", "dark"] as const)("booking Save accessibility (%s)", (th
     expect(name.error).toBe("Enter a name");
     expect(name.shadowRoot!.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
     expect(el.shadowRoot!.querySelector("wt-combobox")!.error).not.toBe("");
-    expect(el.shadowRoot!.querySelector("[data-test=error]")!.textContent!.trim()).toBe(
+    const row = el.shadowRoot!.querySelector("wt-form-actions")!;
+    await row.updateComplete;
+    expect((await formMessageOf(row))!.textContent!.trim()).toBe(
       "Correct the highlighted fields to continue.",
     );
     await expectNoA11yViolations(host);

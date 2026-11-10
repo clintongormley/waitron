@@ -113,6 +113,7 @@ export class BookingsScreen extends LitElement {
   @state() private errorKey: string | null = null;
   /** A save's refusal naming the table, which the form shows under its Table field. */
   @state() private tableRefusal: string | null = null;
+  @state() private formRefusal: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   // Single-flight, so a double-fired event makes at most one call.
@@ -129,9 +130,14 @@ export class BookingsScreen extends LitElement {
   }
 
   #showSaveRefusal(error: unknown): void {
-    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    if (field === "tableId") this.tableRefusal = codeOf(error);
-    else this.#showError(codeOf(error));
+    const code = codeOf(error);
+    const params = (error as { params?: { field?: unknown; tableId?: unknown } } | null)?.params;
+    if (
+      params?.field === "tableId" ||
+      (code === "table.not_found" && typeof params?.tableId === "string")
+    )
+      this.tableRefusal = code;
+    else this.formRefusal = code;
   }
 
   /** A read's failure never replaces an action's message. */
@@ -209,6 +215,7 @@ export class BookingsScreen extends LitElement {
   #openForm(): void {
     this.#showError(null);
     this.tableRefusal = null;
+    this.formRefusal = null;
     this.editingBooking = null;
     this.formOpen = true;
   }
@@ -219,6 +226,7 @@ export class BookingsScreen extends LitElement {
     this.#showError(null);
     this.editingBooking = found;
     this.tableRefusal = null;
+    this.formRefusal = null;
     this.formOpen = true;
   }
 
@@ -229,6 +237,7 @@ export class BookingsScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     this.tableRefusal = null;
+    this.formRefusal = null;
     let written = false;
     try {
       await this.api.createBooking(event.detail);
@@ -250,6 +259,7 @@ export class BookingsScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     this.tableRefusal = null;
+    this.formRefusal = null;
     let written = false;
     try {
       await this.api.updateBooking(event.detail.id, event.detail.patch);
@@ -449,6 +459,7 @@ export class BookingsScreen extends LitElement {
         .defaultDate=${this.date}
         .busy=${this.busy}
         .tableRefusal=${this.tableRefusal}
+        .error=${this.formRefusal === null ? "" : codeMessage(this.formRefusal)}
         @create-booking=${(e: CustomEvent<BookingInput>) => void this.#onCreate(e)}
         @update-booking=${(e: CustomEvent<UpdateBookingDetail>) => void this.#onUpdate(e)}
         @wt-close=${() => (this.formOpen = false)}

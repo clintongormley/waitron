@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale, codeMessage } from "@waitron/dashboard-kit";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { BookingForm } from "./booking-form.js";
 
@@ -19,8 +19,11 @@ async function change(el: BookingForm, id: string, value: string) {
 
 const field = (el: BookingForm, id: string) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[data-test=${id}]`)!;
-const bottom = (el: BookingForm) =>
-  el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim() ?? "";
+const bottom = async (el: BookingForm) => {
+  const row = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await row.updateComplete;
+  return (await formMessageOf(row))?.textContent?.trim() ?? "";
+};
 
 async function save(el: BookingForm) {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
@@ -81,7 +84,7 @@ describe.each([
       expect(el.shadowRoot!.activeElement).toBe(phone);
       await save(el);
       await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "contact-name"));
-      expect(bottom(el)).toBe(sentence);
+      expect(await bottom(el)).toBe(sentence);
       expect(field(el, "contact-name").error).toBe(nameError);
       expect(el.shadowRoot!.querySelector("wt-combobox")!.error).toBe(
         codeMessage("table.in_joined_table"),
@@ -89,11 +92,11 @@ describe.each([
       await expectDisabled(el, true);
       await change(el, "contact-name", "Morgan");
       expect(field(el, "contact-name").error).toBe("");
-      expect(bottom(el)).toBe(sentence);
+      expect(await bottom(el)).toBe(sentence);
       await expectDisabled(el, false);
       await chooseOption(el.shadowRoot!.querySelector("wt-combobox")!, "table");
       await el.updateComplete;
-      expect(bottom(el)).toBe("");
+      expect(await bottom(el)).toBe("");
     });
 
     it("marks every bad field after Save, focuses the first and keeps checking until corrected", async () => {
@@ -104,7 +107,7 @@ describe.each([
         expect(field(el, id).required).toBe(true);
         expect(field(el, id).error).toBe("");
       }
-      expect(bottom(el)).toBe("");
+      expect(await bottom(el)).toBe("");
       await change(el, "booking-date", "");
       const phone = field(el, "contact-phone");
       await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -117,7 +120,7 @@ describe.each([
       expect(field(el, "party-size").error).toBe(codeMessage("booking.party_invalid"));
       expect(field(el, "contact-name").error).toBe(nameError);
       await expect.poll(() => el.shadowRoot!.activeElement).toBe(field(el, "booking-date"));
-      expect(bottom(el)).toBe(sentence);
+      expect(await bottom(el)).toBe(sentence);
       await expectDisabled(el, true);
       await change(el, "contact-phone", "600100200");
       expect(field(el, "contact-name").error).toBe(nameError);
@@ -127,7 +130,7 @@ describe.each([
       await validExceptName(el);
       await expectDisabled(el, true);
       await change(el, "contact-name", "Morgan");
-      expect(bottom(el)).toBe("");
+      expect(await bottom(el)).toBe("");
       await expectDisabled(el, false);
       await change(el, "party-size", "0");
       expect(field(el, "party-size").error).toBe(codeMessage("booking.party_invalid"));
@@ -136,9 +139,23 @@ describe.each([
       await el.updateComplete;
       el.open = true;
       await el.updateComplete;
-      expect(bottom(el)).toBe("");
+      expect(await bottom(el)).toBe("");
       for (const id of ids) expect(field(el, id).error).toBe("");
       await expectDisabled(el, true);
     });
   },
 );
+
+it("puts local correction text in the dialog footer above Save", async () => {
+  setLocale("en");
+  const el = await mount();
+  await validExceptName(el);
+  await save(el);
+  const row = el.shadowRoot!.querySelector("wt-form-actions");
+  expect(row?.getAttribute("slot")).toBe("footer");
+  await row!.updateComplete;
+  expect((await formMessageOf(row!))?.textContent).toBe(
+    "Correct the highlighted fields to continue.",
+  );
+  expect(row!.contains(el.shadowRoot!.querySelector("[data-test=confirm]"))).toBe(true);
+});

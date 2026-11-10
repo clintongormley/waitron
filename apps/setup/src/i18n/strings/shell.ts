@@ -162,6 +162,8 @@ export const shellEn = {
     "This configuration export is from an older format. Export it again from a current box.",
   "shell.configuration.newer":
     "This export comes from a newer version of Waitron. Update the software on this server then load the export again.",
+  "shell.configuration.passphrase_invalid":
+    "This passphrase does not open the export. Check it and try again.",
   "shell.configuration.could_not_open":
     "The configuration export could not be opened. Check the file and passphrase.",
   "shell.configuration.category_name_taken":
@@ -349,6 +351,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
   "shell.configuration.newer":
     "Esta exportación viene de una versión más reciente de Waitron. Actualiza el software de este servidor y vuelve a cargar la exportación.",
+  "shell.configuration.passphrase_invalid":
+    "Esta frase de contraseña no abre la exportación. Revísala e inténtalo de nuevo.",
   "shell.configuration.could_not_open":
     "No se ha podido abrir la exportación de configuración. Revisa el archivo y la contraseña de exportación.",
   "shell.configuration.category_name_taken":

@@ -1,4 +1,4 @@
-import { LitElement, type PropertyValues, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,
@@ -11,6 +11,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "./strings.js";
@@ -65,10 +66,6 @@ export class BookingForm extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
-      .error {
-        color: var(--wt-color-danger);
-        margin-top: var(--wt-space-3);
-      }
     `,
   ];
 
@@ -86,6 +83,7 @@ export class BookingForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** The code of a save's refusal that names the table, shown under Table until the table changes. */
   @property({ attribute: false }) tableRefusal: string | null = null;
+  @property() error = "";
 
   @state() private date = "";
   @state() private time = "";
@@ -392,19 +390,18 @@ export class BookingForm extends LitElement {
             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onTableChange(e, opening)}
           ></wt-combobox>
 
-          ${
-            marked
-              ? html`<p class="error" role="alert" data-test="error">${t("booking.fix_fields")}</p>`
-              : nothing
-          }
-          <wt-button
+          <wt-form-actions
             slot="footer"
-            variant=${save.variant}
-            data-test="confirm"
-            ?disabled=${save.unchanged || this.busy || invalid}
-            @click=${(e: Event) => this.#confirm(e, opening)}
-            >${t("action.save")}</wt-button
+            .error=${[this.error, marked ? t("booking.fix_fields") : ""].filter(Boolean).join(" ")}
           >
+            <wt-button
+              variant=${save.variant}
+              data-test="confirm"
+              ?disabled=${save.unchanged || this.busy || invalid}
+              @click=${(e: Event) => this.#confirm(e, opening)}
+              >${t("action.save")}</wt-button
+            >
+          </wt-form-actions>
         </wt-dialog>
       `,
     )}`;

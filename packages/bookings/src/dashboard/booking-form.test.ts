@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
 import { BOOKINGS_STRINGS } from "./strings.js";
@@ -260,7 +260,7 @@ describe("booking-form", () => {
     // contact-name left blank
     await click(el, "confirm");
     expect(fired).toBe(false);
-    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
+    const alert = (await formMessageOf(el.shadowRoot!.querySelector("wt-form-actions")!))!;
     expect(alert.textContent!.trim()).toBe(BOOKINGS_STRINGS.es["booking.fix_fields"]);
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=contact-name]")!
@@ -276,9 +276,9 @@ describe("booking-form", () => {
     await setInput(el, "party-size", "0");
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent!.trim()).toBe(
-      BOOKINGS_STRINGS.es["booking.fix_fields"],
-    );
+    expect(
+      (await formMessageOf(el.shadowRoot!.querySelector("wt-form-actions")!))!.textContent!.trim(),
+    ).toBe(BOOKINGS_STRINGS.es["booking.fix_fields"]);
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=party-size]")!
         .error,
@@ -303,9 +303,9 @@ describe("booking-form", () => {
     await setInput(el, "booking-time", "20:00");
     await setInput(el, "party-size", "4");
     await click(el, "confirm"); // contact-name blank → the alert shows
-    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(await formMessageOf(el.shadowRoot!.querySelector("wt-form-actions")!)).not.toBeNull();
     await setInput(el, "contact-name", "Morgan");
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(await formMessageOf(el.shadowRoot!.querySelector("wt-form-actions")!)).toBeNull();
   });
 
   it("shows a refusal naming the table under Table, and clears it once the table changes", async () => {
@@ -334,11 +334,14 @@ describe("booking-form", () => {
           "dashboard-booking-form",
           baseProps({ tableRefusal: "table.in_joined_table" }),
         );
-        const bottom = el.shadowRoot!.querySelector("[data-test=error]")!;
+        const row = el.shadowRoot!.querySelector("wt-form-actions")!;
+        await row.updateComplete;
+        const bottom = (await formMessageOf(row))!;
         expect(bottom.textContent!.trim()).toBe(sentence);
         expect(bottom.textContent).not.toContain(codeMessage("table.in_joined_table"));
         await setSelect(el, "booking-table", "t-2");
-        expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull();
+        await row.updateComplete;
+        expect(await formMessageOf(row)).toBeNull();
       } finally {
         setLocale(before);
       }

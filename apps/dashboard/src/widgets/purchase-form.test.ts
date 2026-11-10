@@ -811,7 +811,10 @@ describe("purchase-form — a server refusal", () => {
         code: "purchase.duplicate",
         params: { supplierTaxId: "B1", supplierInvoiceNumber: "N-1" },
       }),
-    ).toEqual({ _form: codeMessage("purchase.duplicate") });
+    ).toEqual({
+      "supplier-tax-id": codeMessage("purchase.duplicate"),
+      "supplier-invoice-number": codeMessage("purchase.duplicate"),
+    });
     expect(purchaseRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
   });
 
@@ -875,12 +878,12 @@ describe("purchase-form — a server refusal", () => {
   it("says a refusal naming no field in the bottom message, leaves Save working, and drops it on the next submit", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
-    el.fieldErrors = { _form: codeMessage("purchase.duplicate") };
+    el.fieldErrors = { _form: codeMessage("connection.failed") };
     await el.updateComplete;
 
     const bottom = await bottomOf(el);
     expect(bottom?.getAttribute("role")).toBe("alert");
-    expect(bottom?.textContent).toBe(codeMessage("purchase.duplicate"));
+    expect(bottom?.textContent).toBe(codeMessage("connection.failed"));
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
 
     const created = nextEvent(el, "create-purchase");
@@ -976,3 +979,31 @@ describe("purchase-form — a VAT line's layout", () => {
     }
   });
 });
+
+it.each([
+  ["supplier-tax-id", "B87654321"],
+  ["supplier-invoice-number", "F-2026/002"],
+])(
+  "clears a duplicate pair after editing %s while keeping an independent refusal",
+  async (edited, value) => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    el.fieldErrors = purchaseRefusalErrors({
+      code: "purchase.duplicate",
+      params: { supplierTaxId: "B12345678", supplierInvoiceNumber: "F-2026/001" },
+    });
+    await el.updateComplete;
+    expect(errorOf(el, "supplier-tax-id")).toBe(codeMessage("purchase.duplicate"));
+    expect(errorOf(el, "supplier-invoice-number")).toBe(codeMessage("purchase.duplicate"));
+    await setInput(el, edited, value);
+    expect(errorOf(el, "supplier-tax-id")).toBe("");
+    expect(errorOf(el, "supplier-invoice-number")).toBe("");
+    el.fieldErrors = purchaseRefusalErrors({
+      code: "management.request_invalid",
+      params: { field: "supplierInvoiceNumber" },
+    });
+    await el.updateComplete;
+    await setInput(el, "supplier-tax-id", edited === "supplier-tax-id" ? "B12345678" : "B87654321");
+    expect(errorOf(el, "supplier-invoice-number")).toBe(codeMessage("management.request_invalid"));
+  },
+);

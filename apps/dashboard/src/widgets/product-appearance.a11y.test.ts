@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -22,6 +23,11 @@ describe.each(["light", "dark"] as const)("appearance %s", (theme) => {
         el.shadowRoot!.querySelector<HTMLElement>("#product-color-error")!.checkVisibility(),
       )
       .toBe(true);
+    const appearance = el.shadowRoot!.querySelector("dashboard-product-appearance")!;
+    await appearance.updateComplete;
+    await expect
+      .element(page.elementLocator(appearance.shadowRoot!.querySelector("button")!))
+      .toHaveAccessibleDescription("Refused colour");
     await expectNoA11yViolations(host);
   });
   it.each([false, true])("combined image/colour controls, open=%s", async (open) => {
