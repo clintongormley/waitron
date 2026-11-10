@@ -79,7 +79,6 @@ export function createJobRunner(deps: {
     for (const [name, job] of jobs) {
       if (!change.resources.some((resource) => job.definition.wakeOn?.includes(resource.type)))
         continue;
-      // Change listeners run on the writer's stack; job code must never reach it.
       queueMicrotask(() => {
         try {
           job.waker.wake();
@@ -204,6 +203,8 @@ export function createJobRunner(deps: {
       };
       jobs.set(definition.name, job);
       job.loop = run(job);
+      // Stepdown may end a loop before close awaits its failure.
+      void job.loop.catch(() => {});
     },
     wake(name) {
       jobs.get(name)?.waker.wake();

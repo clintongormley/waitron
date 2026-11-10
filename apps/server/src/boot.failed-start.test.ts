@@ -22,6 +22,7 @@ import { appendOnlyTriggerFaults } from "@waitron/store";
 import { startAppendOnlyWatch } from "./append-only-watch.js";
 import { startFreeSpaceWatch } from "./free-space-watch.js";
 import { startBoxEmailDuty } from "./box-alert-email.js";
+import { StreamHost } from "./stream-host.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -688,9 +689,17 @@ describe("a start that fails after the venue folder is opened gives the folder b
     failLandingAfterMdns(failure);
     const stop = await spyOnJobRunnerStop();
 
-    await expect(startServer(env)).rejects.toBe(failure);
-    expect(stop).toHaveBeenCalledOnce();
-    expect(readVenueHolder(venueDir)).toBeNull();
+    const streamStop = vi.spyOn(StreamHost.prototype, "stop");
+    try {
+      await expect(startServer(env)).rejects.toBe(failure);
+      expect(stop).toHaveBeenCalledOnce();
+      expect(stop.mock.invocationCallOrder[0]).toBeLessThan(
+        streamStop.mock.invocationCallOrder[0]!,
+      );
+      expect(readVenueHolder(venueDir)).toBeNull();
+    } finally {
+      streamStop.mockRestore();
+    }
   }, 60_000);
 
   it("in trading mode, when a step after the listener is started throws, stopping the append-only watch", async () => {

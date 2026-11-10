@@ -2263,7 +2263,8 @@ async function bootServer(
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
-  undoOnFailure.push(() => jobRunner.stopJobs());
+  const stopJobRunner = () => jobRunner.stopJobs();
+  undoOnFailure.push(stopJobRunner);
   health.readJobs = () => jobRunner.views();
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
@@ -3658,6 +3659,8 @@ async function bootServer(
   const unsubscribeFromChanges = subscribeToChanges(changeSubscriber(liveEvents, log));
   undoOnFailure.push(async () => liveEvents.close());
   undoOnFailure.push(async () => unsubscribeFromChanges());
+  undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
+  undoOnFailure.push(stopJobRunner);
   jobRunner.add(
     menuActivationJob({
       db,

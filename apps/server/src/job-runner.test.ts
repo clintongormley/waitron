@@ -235,6 +235,33 @@ describe("job runner", () => {
     expect(runner.views()["menu.activation"].state).toBe("stopped");
   });
 
+  it("keeps a stop-hook rejection handled until close can report it", async () => {
+    const failure = Error("stop failed");
+    const unhandled: unknown[] = [];
+    const remember = (error: unknown) => {
+      unhandled.push(error);
+    };
+    process.on("unhandledRejection", remember);
+    try {
+      runner.add(
+        job({
+          onStop: async () => {
+            throw failure;
+          },
+        }),
+      );
+      await advance();
+      runner.signalStepdown();
+      await advance();
+      const closing = runner.stopJobs();
+      runner = createJobRunner({ now: () => new Date(), log });
+      await expect(closing).rejects.toBe(failure);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", remember);
+    }
+  });
+
   it("coalesces wakes during a running pass without overlap", async () => {
     let finish!: () => void;
     runner.add(
@@ -298,9 +325,12 @@ describe("job runner", () => {
     );
     runner.add(job({ name: "storage.free_space" }));
     await advance();
-    runner.signalStepdown();
-    expect(signal.aborted).toBe(true);
-    finish();
+    try {
+      runner.signalStepdown();
+      expect(signal.aborted).toBe(true);
+    } finally {
+      finish();
+    }
     await advance();
     expect(onStop).toHaveBeenCalledTimes(1);
     await advance(60_000);
