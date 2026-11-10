@@ -2,6 +2,14 @@
 
 **Authority.** Watcher 2026-11-09 19:10 records the owner's “yes” to [design §6 step 1](../specs/2026-11-09-a1437-dashboard-sign-in-rules-design.md). Queue choice 7e says “one proof covers every §3 action for 15 minutes, or until the sign-in session ends if sooner”; 7c excludes pairing. Choices 7a/7b/7d remain deferred. Watcher 20:03 permits publication only: “build nothing until the owner's answer is written here” (Lane K questions.md).
 
+**Status, 2026-11-10.** Cut 1 landed as `049ddd9`. The watcher’s 2026-11-10 12:48
+clearance in Lane K `questions.md` supersedes the historical waits below: build the remaining
+people, own-account, connection and box/fiscal parts using the 23:05 four-part forecast.
+People management is about 200 changed lines, with a 300-line stop; own account about 1,000;
+connections about 200; box/fiscal about 300. Group the last two. Claude reviewed the original
+plan; the watcher cleared this revised split. The owner’s exceptions were recorded by the
+watcher at 2026-11-09 20:05. No new owner approval is claimed.
+
 **Build.** Add nullable `provedAt` on `management_sessions`; stamp only successful existing proof, never login/reuse. One identity check resolves the live session and refuses missing, future or expired proof. Keep permissions, throttling and password derivation outside transactions. Check session → permission/disabled state → freshness → effects; fiscal routes check proof after admission and enabled checks.
 
 **Decisions before build.** Recommend leaving the two promote routes and `mirror-bundle-api.ts` unchanged: they authenticate body credentials per request; this defers their passkey support. Recommend retaining own-account authenticator-code checks: the window replaces their password check, and recovery codes still cannot change sign-in details. Handover uses the common window under owner choice 7e, confirmed by the watcher at20:03. Owner approval of the two exceptions and three cuts is still required before building. No new pre-login or cross-box protocol.

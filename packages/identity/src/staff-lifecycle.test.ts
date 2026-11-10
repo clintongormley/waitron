@@ -28,7 +28,7 @@ import { loginManager } from "./manager-login.js";
 import type { PersonRoleValue } from "@waitron/shared";
 import {
   codeOf,
-  openManagementSession,
+  openFreshManagementSession as openManagementSession,
   openSession,
   seedPerson,
   seedSessionDevice,

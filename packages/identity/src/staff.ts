@@ -21,6 +21,7 @@ import { AppError, assertSupportedLocale, isValidTelephone } from "@waitron/shar
 import { normalizeEmail, isValidEmail } from "./email.js";
 import { foldForUniqueness } from "./fold.js";
 import { authorizeManager } from "./manager-login.js";
+import { requireFreshManagementSignIn } from "./fresh-sign-in.js";
 import { assertPinLength, hashPin } from "./verify-pin.js";
 import { assertPasswordLength, hashPassword } from "./verify-password.js";
 import { roleHasPermission, type Permission } from "./permissions.js";
@@ -257,6 +258,8 @@ export async function updatePersonDetails(
   if ((email !== person.email && authorizedBy !== person.id) || input.status !== person.status) {
     requireAdminAuthority(actorRole);
   }
+  if (email !== person.email || input.role !== person.role || input.status !== person.status)
+    await requireFreshManagementSignIn(tx, input.managementSessionId);
   await assertDisplayNameAvailable(tx, displayName, person.id);
   await assertEmailAvailable(tx, email, person.id);
   const becomesSuspended = input.status === "suspended" && person.status !== "suspended";

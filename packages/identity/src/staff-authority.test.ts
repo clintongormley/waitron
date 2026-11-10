@@ -8,7 +8,10 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { openManagementSession, seedPerson } from "../test/fixtures.js";
+import {
+  openFreshManagementSession as openManagementSession,
+  seedPerson,
+} from "../test/fixtures.js";
 import {
   completeAccountAction,
   inspectAccountAction,

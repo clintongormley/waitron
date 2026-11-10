@@ -42,6 +42,7 @@ import {
 } from "@waitron/db";
 import {
   authorizeManager,
+  requireFreshManagementSignIn,
   beginGoogleLink,
   beginGoogleLogin,
   beginPasskeyAuthentication,
@@ -1123,6 +1124,8 @@ export function mountManagementApi(
       }
       const { displayName, firstNames, lastNames, telephone = null, role, email } = body;
       const { created, delivery } = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
+        await requireFreshManagementSignIn(tx, sessionId);
         const created = await invitePerson(tx, {
           managementSessionId: sessionId,
           displayName,
@@ -1149,12 +1152,14 @@ export function mountManagementApi(
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await requireFreshManagementSignIn(tx, sessionId);
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const delivery = await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await requireFreshManagementSignIn(tx, sessionId);
         return queueInvitationAnswer(tx, deps, {
           managementSessionId: sessionId,
           personId,
@@ -1222,6 +1227,8 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: sessionId, permission: "person.admin" });
+        await requireFreshManagementSignIn(tx, sessionId);
         await deactivatePerson(tx, { managementSessionId: sessionId, personId });
       });
       return c.body(null, 204);
@@ -1234,11 +1241,14 @@ export function mountManagementApi(
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await requireFreshManagementSignIn(tx, sessionId);
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const delivery = await withTransaction(deps.db, async (tx) => {
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await requireFreshManagementSignIn(tx, sessionId);
         await resetPersonLogin(tx, { managementSessionId: sessionId, personId });
         return queueInvitationAnswer(tx, deps, {
           managementSessionId: sessionId,
@@ -1256,11 +1266,14 @@ export function mountManagementApi(
       const personId = requirePersonId(c.req.param("id"));
       await withTransaction(deps.db, async (tx) => {
         await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await requireFreshManagementSignIn(tx, sessionId);
       });
       if (!acceptInvitation(personId)) {
         return c.json({ invitationSent: false });
       }
       const delivery = await withTransaction(deps.db, async (tx) => {
+        await authorizePersonLoginChange(tx, { managementSessionId: sessionId, personId });
+        await requireFreshManagementSignIn(tx, sessionId);
         await reactivatePersonForInvitation(tx, { managementSessionId: sessionId, personId });
         return queueInvitationAnswer(tx, deps, {
           managementSessionId: sessionId,
