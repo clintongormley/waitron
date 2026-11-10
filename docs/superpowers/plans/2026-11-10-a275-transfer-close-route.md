@@ -1,6 +1,6 @@
 # A275 Task 3: the till can call close-by-transfer (route, device permission, recovery read)
 
-**Status: for the watcher's approval (lane L, 2026-11-10).** Tasks 0–2 landed as #2664
+**Status: cleared by the watcher 2026-11-10 12:48 (lane L `questions.md`); built on `feat/a275-transfer-close-route`.** Tasks 0–2 landed as #2664
 (`959b1cd89a`): `closeBillByTransferTx` in `apps/server/src/transfer-close.ts` issues or reuses the
 invoice and closes the whole bill as **to be paid by transfer**, but nothing can call it yet.
 
