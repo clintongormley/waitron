@@ -112,3 +112,9 @@ export interface FilingOverview {
   heldWithoutCase: number;
   activeConflicts: ActiveConflictView[];
 }
+
+/** The answer of `GET /management-api/fiscal-filing`. */
+export interface FilingOverviewAnswer extends FilingOverview {
+  filing: boolean;
+  awaitingCertificate: boolean;
+}

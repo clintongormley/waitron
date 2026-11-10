@@ -146,6 +146,38 @@ const en = {
     "AEAT answered with HTTP error {status}. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
   "aeat_certificate.refused.check_failed":
     "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+  "nav.fiscal_filing": "Fiscal filing",
+  "fiscal_filing.title": "Fiscal filing",
+  "fiscal_filing.intro":
+    "How this box's invoice records are being sent to AEAT, and which ones need a decision.",
+  "fiscal_filing.read_at": "Read at {time}",
+  "fiscal_filing.refresh": "Refresh",
+  "fiscal_filing.export": "Export these cases",
+  "fiscal_filing.not_filing": "This box does not send invoice records to AEAT.",
+  "fiscal_filing.awaiting_certificate":
+    "Nothing can be sent until the tax agency's certificate is installed.",
+  "fiscal_filing.conflict.stopped":
+    "This box has stopped issuing invoices because of an identity conflict. Recovering needs the box's recovery key.",
+  "fiscal_filing.conflict.open": "Open conflict recovery",
+  "fiscal_filing.conflict.reply": "Invoice {number}: AEAT answered {state} {code} {description}",
+  "fiscal_filing.conflict.lookup": "AEAT holds invoice {number} as {state}.",
+  "fiscal_filing.conflict.cancelled": "Invoice {number}: AEAT lists it as cancelled.",
+  "fiscal_filing.conflict.no_evidence": "Invoice {number}: AEAT's answer was not kept.",
+  "fiscal_filing.conflict.theirs": "AEAT's fingerprint: {fingerprint}",
+  "fiscal_filing.conflict.seen": "Installation {installation}, seen {time}",
+  "fiscal_filing.progress": "Sending progress",
+  "fiscal_filing.state.pendiente": "Waiting",
+  "fiscal_filing.state.enviando": "Sending",
+  "fiscal_filing.state.aceptado": "Accepted",
+  "fiscal_filing.state.aceptado_con_errores": "Accepted with errors",
+  "fiscal_filing.state.rechazado": "Refused",
+  "fiscal_filing.state.detenido": "Held",
+  "fiscal_filing.state.retenido": "Set aside",
+  "fiscal_filing.oldest_waiting": "Oldest waiting",
+  "fiscal_filing.last_accepted": "Last accepted",
+  "fiscal_filing.none": "None",
+  "fiscal_filing.cases": "Filing cases",
+  "fiscal_filing.held_without_case": "Held with no case: {count}",
 } as const;
 
 export type AeatCertificateKey = keyof typeof en;
@@ -300,6 +332,39 @@ const es: Record<AeatCertificateKey, string> = {
     "La AEAT ha respondido con el error HTTP {status}. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
   "aeat_certificate.refused.check_failed":
     "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+  "nav.fiscal_filing": "Remisión a la AEAT",
+  "fiscal_filing.title": "Remisión a la AEAT",
+  "fiscal_filing.intro":
+    "Cómo se envían a la AEAT los registros de facturación de este equipo y cuáles necesitan una decisión.",
+  "fiscal_filing.read_at": "Leído: {time}",
+  "fiscal_filing.refresh": "Actualizar",
+  "fiscal_filing.export": "Exportar estos casos",
+  "fiscal_filing.not_filing": "Este equipo no envía registros de facturación a la AEAT.",
+  "fiscal_filing.awaiting_certificate":
+    "No se puede enviar nada hasta que se instale el certificado de la AEAT.",
+  "fiscal_filing.conflict.stopped":
+    "Este equipo ha dejado de emitir facturas por un conflicto de identidad. Para recuperarlo hace falta la clave de recuperación del equipo.",
+  "fiscal_filing.conflict.open": "Abrir la recuperación del conflicto",
+  "fiscal_filing.conflict.reply":
+    "Factura {number}: la AEAT respondió {state} {code} {description}",
+  "fiscal_filing.conflict.lookup": "La AEAT tiene la factura {number} como {state}.",
+  "fiscal_filing.conflict.cancelled": "Factura {number}: la AEAT la tiene como anulada.",
+  "fiscal_filing.conflict.no_evidence": "Factura {number}: no se guardó la respuesta de la AEAT.",
+  "fiscal_filing.conflict.theirs": "Huella de la AEAT: {fingerprint}",
+  "fiscal_filing.conflict.seen": "Instalación {installation}, vista: {time}",
+  "fiscal_filing.progress": "Estado de los envíos",
+  "fiscal_filing.state.pendiente": "Pendientes",
+  "fiscal_filing.state.enviando": "Enviándose",
+  "fiscal_filing.state.aceptado": "Aceptados",
+  "fiscal_filing.state.aceptado_con_errores": "Aceptados con errores",
+  "fiscal_filing.state.rechazado": "Rechazados",
+  "fiscal_filing.state.detenido": "Detenidos",
+  "fiscal_filing.state.retenido": "Apartados",
+  "fiscal_filing.oldest_waiting": "Pendiente más antiguo",
+  "fiscal_filing.last_accepted": "Última aceptación",
+  "fiscal_filing.none": "Ninguno",
+  "fiscal_filing.cases": "Casos de remisión",
+  "fiscal_filing.held_without_case": "Detenidos sin caso: {count}",
 };
 
 export const AEAT_CERTIFICATE_STRINGS = { en, es };
