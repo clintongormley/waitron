@@ -208,8 +208,9 @@ hook, or how tests are scheduled:
   (`memory_pressure | grep free`): beside another session only well above 15% free (owner, 2026-09-24),
   never beside background whole-workspace coverage. Chromium launch depends on seat permissions.
 - **A migration can fail on a box with an earlier trigger naming what it changes, including in
-  another set's trigger body.** Guard: `scripts/migration-upgrade.test.ts`, weaker than its name:
-  synthetic counted rows, not compared; today's trigger lists, not each historical boot's.
+  the body of a trigger on another table.** Guard: `scripts/migration-upgrade.test.ts`, weaker
+  than its name: synthetic counted rows, not compared; today's trigger lists, not each
+  historical boot's.
 - **The upgrade test uses `scratchParent()` from `scripts/scratch-dir.mjs` for its scratch directory.**
   It prefers `/dev/shm` when present. Nothing guards it.
 - **CI's stream loop/pause tests and each `test-venue-service` shard set `TMPDIR=/dev/shm`, in CI only.**
@@ -647,6 +648,13 @@ called weaker than its name, the topic file lists what it does not see.
 - **Rehearse a drizzle table rebuild on `node:sqlite`, never the `sqlite3` command line**: the
   `sqlite3` rehearsal fails a sound migration. Nothing guards it.
   [Receipt](docs/developers/conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
+- **From go-live, a migration that rebuilds a table first drops every trigger on another table
+  whose body reads it. After the rename it creates again each of those it still needs, and the
+  table's own triggers that `DROP TABLE` removed, rewritten for any column the rebuild changed.
+  It drops one of the table's own triggers by hand only when that trigger is meant to go**, or
+  the box refuses the rename (`no such table`). Guard: `scripts/migration-upgrade.test.ts`,
+  weaker than the rule: a reading trigger dropped and never created again passes it.
+  [Receipt](docs/developers/conventions-data.md#from-go-live-a-rebuild-drops-and-recreates-every-trigger-whose-body-reads-the-table).
 - **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate
   time** (`foreign key mismatch`). So a green migrate is no evidence a new key is sound — write
   through it.

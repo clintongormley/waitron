@@ -1720,9 +1720,9 @@ its two earlier rows and `products` had no `parent_id` (measured 2026-09-23 thro
 shapes separated, measured 2026-09-23 on `node:sqlite` (Node v26.7.0) with the same
 create-copy-drop-rename sequence inside `begin`: a trigger ON `products` raised nothing and was gone
 afterwards, while a trigger on another table whose body reads `products` failed the rename with
-`error in trigger t_body: no such table: main.products`. What that means for venues is in
-`docs/backlog/box.md`, the point _A rebuild of a table another set's trigger BODY reads is still
-refused_ under _Upgrade testing — blocking before go-live_.
+`error in trigger t_body: no such table: main.products`. 2026-11-10: what a migration does about it
+from go-live is under
+[From go-live, a rebuild drops and recreates every trigger whose body reads the table](#from-go-live-a-rebuild-drops-and-recreates-every-trigger-whose-body-reads-the-table).
 
 **A drizzle table rebuild runs with foreign keys ON, so its `DROP TABLE` acts on every row that
 points at the table.** Drizzle rebuilds a SQLite table to change a column's nullability, with the
@@ -3971,6 +3971,54 @@ printed `error in table t after rename: no such column: __new_t.a` and exited 1,
 v26.11.1's `node:sqlite` (SQLite 3.54.0) ran the same statements and stored the CHECK as
 `"t".a > 0 OR "t".a = -1`. So a rehearsal on the command line fails a migration the app runs; run
 it on `node:sqlite`.
+
+## From go-live, a rebuild drops and recreates every trigger whose body reads the table
+
+drizzle-kit makes some column changes, nullability among them, by rebuilding the table: create
+`__new_<table>`, copy the rows, drop the old table, rename the new one. The rename re-checks every
+trigger in the database, and a trigger on ANOTHER table whose body reads the rebuilt one is refused
+while the table is gone. So from go-live, a migration that rebuilds a table first drops every
+trigger on another table whose body reads it. After the rename it creates again each of those it
+still needs, and the table's own triggers, which the `DROP TABLE` removes; each is rewritten
+wherever the rebuild changed a column it reads. It names one of the table's own triggers in a
+`DROP TRIGGER` only when that trigger is meant to go, so the guard below still sees one that is not
+recreated. Before go-live it does not arise, because a schema change rebuilds the set's starting
+migration instead. SQLite's own procedure for changing a table
+(<https://sqlite.org/lang_altertable.html>, section 8) recreates the table's own triggers — "Use
+CREATE INDEX, CREATE TRIGGER, and CREATE VIEW to reconstruct indexes, triggers, and views associated
+with table X", which it lists with `SELECT type, sql FROM sqlite_schema WHERE tbl_name='X'` — and
+drops and recreates views that refer to X "in a way that is affected by the schema change". The
+page says nothing about triggers on other tables; dropping those before the rebuild is this rule's
+own step, measured below. A view that reads X blocks the rename the same way, even one the change
+does not affect (measured 2026-11-10 on SQLite 3.54.1); the repository has no views today.
+
+Run 2026-11-10 (A986) on `node:sqlite` (Node v26.13.0, SQLite 3.54.1) against today's core
+starting migration, `packages/db/drizzle/0000_baseline.sql`, with a drizzle-shaped rebuild inside
+`BEGIN`: the plain rebuild of `products` was refused with
+`error in trigger products_media_image_fk_parent_delete: no such table: main.products`. Dropping the
+reading triggers first and recreating them after the rename rebuilt each of the 13 core tables a
+trigger on another table reads (`products`, `sales`, `tenders`, `sale_settlements`,
+`working_orders`, `locations`, `devices`, `media_images`, `sections`, `section_members`,
+`menu_publications`, `menu_scheduled_publications`, `menu_version_images`); every recreated trigger
+was byte-identical to the original and `pragma integrity_check` answered `ok`. Two other repairs
+were tried and rejected. SQLite's `legacy_alter_table=ON`, which skips that re-check, rebuilt
+`devices` but refused `products`, whose CHECKs name its own columns: drizzle writes those CHECKs
+against `__new_<table>` and relies on the normal rename to correct them
+(`error in table products after rename: no such column: __new_products.parent_id`). Having the
+migrator drop and recreate the triggers around every migration was not built: it would bring back a
+trigger a migration meant to remove, and recreate one unchanged after the migration changed the
+columns it reads. The probe scripts were kept outside the repository.
+
+**Guard: `scripts/migration-upgrade.test.ts`, weaker than the rule.** The test migrates a database
+one step at a time (the walk), and a rebuild that leaves a reading trigger in place fails it
+(measured 2026-11-07 for A1422, in
+[ci-and-gates.md](ci-and-gates.md#a-migration-can-fail-on-a-database-that-already-carries-earlier-migrations-and-what-boot-installed-after-them)).
+A step that loses a trigger on a table it kept fails as well, unless the step's own SQL names that
+trigger in a `DROP TRIGGER` (`scripts/migration-upgrade.test.ts:265-310`). So a migration that
+drops a reading trigger and forgets to create it again passes the walk: in review on 2026-11-10 a
+temporary walk case that did exactly that passed. Review is what catches it, by checking that every
+trigger a rebuild drops is created again after the rename, in a form valid for the new columns, or
+is meant to go.
 
 ## `applyMigrations` refuses to report success on a short set
 
