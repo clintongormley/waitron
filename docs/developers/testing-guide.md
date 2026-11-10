@@ -3466,6 +3466,10 @@ cannot be removed from the append-only tables, and carries on from `last-day/`. 
 a larger `--days` extends a finished build. It refuses only a different `--seed`. Nothing checks that
 the code is the same, so never resume a folder with code that plans the days differently.
 
+Plan for a long run. On 9 November 2026 the full year took 8 h 28 min on an otherwise idle 32-core
+Linux server with Node 26.13.0, from 0.18 s a bill on day 1 to 0.49 s on day 360, and left 12.7
+million rows in a 15.5 GB `venue.db`; each `measure` with the defaults then took about an hour.
+
 **Measure it.**
 
 ```sh
