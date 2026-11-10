@@ -1588,9 +1588,10 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 - **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
   Devices list; nothing alerts when a handheld runs low.
 
-- **A982. Logging Slice 2 — one-touch bug report.** The [implementation plan](superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) splits the build into trail privacy hardening, frozen local reports with manager read/download, then the
-  shared dialog and app buttons, including setup. Planning only; all three implementation PRs
-  remain open. Cloud forwarding and automatic crash/freeze reporting remain separate follow-ups.
+- **A982. Logging Slice 2 — one-touch bug report.** Dashboard browser-only preview/download
+  is implemented by the [download-first plan](superpowers/plans/2026-11-08-a982-client-only-report-first.md).
+  Till/setup buttons, richer trail privacy and stored capture with manager read/download remain;
+  stored capture needs its own plan. Cloud forwarding and automatic crash/freeze reporting are separate.
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
 - **A1047. Send a problem report to Waitron Cloud (owner, 2026-10-24).** The follow-up A982

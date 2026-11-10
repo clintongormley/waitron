@@ -7,6 +7,13 @@ registro del equipo, usa **Diagnóstico**.
 
 ## Abre la página {#open}
 
+Para guardar un archivo sobre un problema del panel, elige **Informar de un problema** en la barra
+superior. También puedes hacerlo antes de iniciar sesión. Abre el panel por HTTPS si no aparece
+el botón. Describe qué ha pasado, revisa la vista previa y elige **Descargar informe**. El archivo
+incluye la actividad reciente de este navegador, en lugar del registro del equipo. No se envía
+nada ni se guarda en el equipo. No incluyas contraseñas, datos de pago ni información personal
+en tu descripción.
+
 Abre **Ajustes → Estado del equipo**, justo encima de **Diagnóstico**. Solo la ven las personas
 que pueden gestionar el sistema.
 

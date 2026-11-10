@@ -20,13 +20,14 @@ answer inside the savepoint.
 [Design](../superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md). Eventual vendor destination
 is GitHub issues; for now a bundle only needs to be copy-pastable.
 
-**A982 plan, 2026-10-22:** follow the
-[implementation plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) for the
-owner's “button now, Cloud later” scope. Its three implementation PRs remain unbuilt. The manual
-report capture, manager read/download list and carried privacy/setup hardening belong to A982;
-Cloud forwarding, automatic crash/freeze intake and the remaining triage workflow stay open.
-The plan proposes client-only downloads for setup, signed-out and offline screens, without public
-server-log access. The older slice descriptions and decisions below retain their original context.
+**2026-11-10 update:** the [download-first plan](../superpowers/plans/2026-11-08-a982-client-only-report-first.md)
+provides the dashboard's browser-only preview and download, including before sign-in. Its opening
+activity and environment stay fixed while description edits update the exact downloaded preview.
+Nothing is submitted to or stored on the box. Till/setup buttons, richer trail hardening and stored
+capture with manager read/download remain open; the stored slices need separate plans. The
+[2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) and older slice
+notes below retain their original context. Cloud forwarding and automatic crash/freeze intake remain
+separate follow-ups.
 
 - **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
   module's set), a capture endpoint that FREEZES a self-contained bundle (client trail `snapshot()` +
