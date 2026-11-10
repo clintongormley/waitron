@@ -70,7 +70,7 @@ elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se h
 
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 
-Para imprimir un pago con tarjeta antes de completar la cuenta, vuelve a **Pagar** y elige **Imprimir una copia** junto al pago recibido en **Pagos**. La copia muestra lo que quedaba pendiente cuando se cobró esa tarjeta.
+Para imprimir un pago con tarjeta antes de completar la cuenta, vuelve a **Cobrar** y elige **Imprimir una copia** junto al pago recibido en **Pagos de esta cuenta**. La copia muestra lo que quedaba pendiente cuando se cobró esa tarjeta.
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
 panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige

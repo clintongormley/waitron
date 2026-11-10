@@ -157,8 +157,6 @@ async function enqueueSlips(
             entryMode: payment.entryMode as CardDetails["entryMode"],
             authCode: payment.authCode,
           };
-    // `payments.amount` and `tenders.tip_amount` each store a count of whole cents; the slip is
-    // printed from amounts, so both become decimals here, at the row that read them.
     const charged = centsToDecimal(payment.charged);
     const tip = centsToDecimal(payment.tip);
     const payload = formatPaymentSlip({

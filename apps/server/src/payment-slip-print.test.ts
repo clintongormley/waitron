@@ -5,7 +5,7 @@ import { billPayments, deviceProfiles, printJobs, sales, withTransaction } from 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { receiptLabelsFor } from "@waitron/country-packs";
-import { cardReaders } from "@waitron/payments";
+import { cardReaders, payments } from "@waitron/payments";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 
@@ -155,6 +155,43 @@ it("rejects a payment on another bill and offers no copy for an own-slip reader"
   );
   expect(wrong.status).toBe(404);
   expect(wrong.json).toMatchObject({ code: "bill.payment_not_found" });
+  const withoutBalance = randomUUID();
+  await withTransaction(venue.db, async (tx) => {
+    const [row] = await tx.select().from(billPayments).where(eq(billPayments.id, paymentId));
+    const [capture] = await tx.select().from(payments).where(eq(payments.billPaymentId, paymentId));
+    await tx
+      .insert(billPayments)
+      .values({ ...row!, id: withoutBalance, submissionId: randomUUID(), remainingAfter: null });
+    await tx
+      .insert(payments)
+      .values({
+        ...capture!,
+        id: randomUUID(),
+        billPaymentId: withoutBalance,
+        paymentRef: randomUUID(),
+        externalRef: null,
+      });
+  });
+  const missing = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/payments/${withoutBalance}/slip-copy`,
+    {},
+  );
+  expect(missing.status).toBe(200);
+  const legacyBalance = await send(
+    venue.app,
+    venue.cookie,
+    "GET",
+    `/api/working-orders/${billId}/payments`,
+  );
+  expect(
+    (legacyBalance.json as { payments: { id: string }[] }).payments.find(
+      (row) => row.id === withoutBalance,
+    ),
+  ).not.toHaveProperty("canCopySlip");
+  expect(venue.db.all(sql`select id from print_jobs`)).toHaveLength(before);
   await withTransaction(venue.db, (tx) =>
     tx.update(cardReaders).set({ printsOwnSlipAutomatically: true }),
   );

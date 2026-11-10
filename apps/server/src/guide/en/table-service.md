@@ -63,7 +63,7 @@ save, choose **Retry**; use **Refresh** if the list could not load.
 
 ## Avoid duplicate card slips {#reader-slips}
 
-To print a card payment again before the bill is fully paid, reopen **Pay** and choose **Print a copy** beside the received payment under **Payments**. The copy shows what remained when that card was taken.
+To print a card payment again before the bill is fully paid, reopen **Pay** and choose **Print a copy** beside the received payment under **Payments on this bill**. The copy shows what remained when that card was taken.
 
 If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that
 reader and turn on **Prints its own slip automatically**, then choose **Save**. Waitron then leaves
