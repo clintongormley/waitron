@@ -2,13 +2,24 @@ import { beforeEach, expect, it } from "vitest";
 import { decimal, deviceOrigin, saleId as brandSaleId } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
-import { CORE_MIGRATIONS, captureError, newId, saleLines, withTransaction } from "@waitron/db";
+import type { FiscalBackend, TrustedClock, VatBreakdownLine } from "@waitron/fiscal";
+import {
+  CORE_MIGRATIONS,
+  captureError,
+  newId,
+  saleLines,
+  saleSubstitutions,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { eq } from "drizzle-orm";
-import { correctionLinesFor, readCorrectionAmountHistory } from "./correction-history.js";
+import {
+  correctionLinesFor,
+  previewCorrectionAmounts,
+  readCorrectionAmountHistory,
+} from "./correction-history.js";
 import type { CorrectionAmountAllocation } from "./correction-allocation.js";
 import { recordCorrection } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
@@ -63,6 +74,15 @@ function invoiceLines(): RecordSaleLine[] {
       variantName: "Large",
       variantDescriptions: { "es-ES": "Large bowl" },
       variantKitchenName: "LG",
+      category: "Mains",
+      kitchenName: "RICE",
+      productId: "product-rice-large",
+      parentProductId: "product-rice",
+      menuId: "menu-1",
+      menuVersionId: "menu-1-v2",
+      listGross: "11.00",
+      listUnitPriceGross: "2.20",
+      classification: { reporting: [{ id: "food", name: "Food" }] },
     },
     {
       lineNo: 2,
@@ -113,7 +133,7 @@ beforeEach(async () => {
   await withTransaction(suite.db, (tx) => backend.registerNode(tx, nodeId));
 });
 
-async function sell(lines = invoiceLines()) {
+async function sell(lines = invoiceLines(), total = "24.20") {
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(tx, backend, {
       origin: deviceOrigin(deviceId),
@@ -121,12 +141,12 @@ async function sell(lines = invoiceLines()) {
       seriesId,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
-      total: "24.20",
+      total,
       lines,
       settlement: {
         kind: "immediate",
         tenders: [
-          { method: "cash", amount: "24.20", tipAmount: "0", settledAt: clock.now().instant },
+          { method: "cash", amount: total, tipAmount: "0", settledAt: clock.now().instant },
         ],
       },
       clock,
@@ -343,13 +363,30 @@ it("builds correction lines carrying the invoice line's frozen facts, negated", 
       variantName: "Large",
       variantDescriptions: { "es-ES": "Large bowl" },
       variantKitchenName: "LG",
+      category: "Mains",
+      kitchenName: "RICE",
+      productId: "product-rice-large",
+      parentProductId: "product-rice",
+      menuId: "menu-1",
+      menuVersionId: "menu-1-v2",
+      listGross: null,
+      listUnitPriceGross: "2.20",
+      classification: { reporting: [{ id: "food", name: "Food" }] },
+      parentLineNo: null,
       correctsLineId: ids[0],
     },
   ]);
 });
 
-it("numbers built lines in allocation order and keeps an extra's own rate", async () => {
+it("numbers built lines in allocation order, keeping an extra's rate and its corrected dish", async () => {
   const { rows, ids } = await sell();
+  const sauce: CorrectionAmountAllocation = {
+    saleLineId: ids[2]!,
+    rate: decimal("10.00"),
+    gross: decimal("1.10"),
+    base: decimal("1.00"),
+    tax: decimal("0.10"),
+  };
   const lines = correctionLinesFor(rows, [
     {
       saleLineId: ids[1]!,
@@ -358,24 +395,79 @@ it("numbers built lines in allocation order and keeps an extra's own rate", asyn
       base: decimal("1.00"),
       tax: decimal("0.21"),
     },
-    {
-      saleLineId: ids[2]!,
-      rate: decimal("10.00"),
-      gross: decimal("1.10"),
-      base: decimal("1.00"),
-      tax: decimal("0.10"),
-    },
+    sauce,
   ]);
 
   expect(
-    lines.map(({ lineNo, name, vatRate, correctsLineId }) => [
+    lines.map(({ lineNo, name, vatRate, parentLineNo, correctsLineId }) => [
       lineNo,
       name,
       vatRate,
+      parentLineNo,
       correctsLineId,
     ]),
   ).toEqual([
-    [1, "Steak", "21.00", ids[1]],
-    [2, "Sauce", "10.00", ids[2]],
+    [1, "Steak", "21.00", null, ids[1]],
+    [2, "Sauce", "10.00", 1, ids[2]],
   ]);
+  expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
+});
+
+function preview(saleId: SaleId, of = backend as FiscalBackend) {
+  return withTransaction(suite.db, (tx) =>
+    previewCorrectionAmounts(tx, of, { saleId, nodeId }, { gross: decimal("6.05") }),
+  );
+}
+
+async function sellSteak() {
+  return sell([{ ...invoiceLines()[1]!, lineNo: 1 }], "12.10");
+}
+
+it("previews an admitted correction with the admission's filing and the lines to file", async () => {
+  const { saleId, ids } = await sellSteak();
+
+  expect(await preview(saleId)).toMatchObject({
+    gross: "6.05",
+    vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+    filing: "accepted",
+    original: { number: "T1-1", issuedAt: "2027-03-14" },
+    lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
+  });
+});
+
+it("refuses an invoice the regime does not admit, with the regime's reason", async () => {
+  const { saleId } = await sellSteak();
+  backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "filing_refused" },
+  });
+});
+
+it("refuses every invoice when the regime cannot answer", async () => {
+  const { saleId } = await sellSteak();
+  const unanswering = new Proxy<FiscalBackend>(backend, {
+    get: (target, key, receiver) =>
+      key === "correctionAdmissionFor" ? undefined : Reflect.get(target, key, receiver),
+  });
+
+  expect(await captureError(() => preview(saleId, unanswering))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "unsupported" },
+  });
+});
+
+it("refuses a substituted invoice as replaced before asking the regime", async () => {
+  const { saleId } = await sellSteak();
+  const substitute = await sellSteak();
+  await suite.db
+    .insert(saleSubstitutions)
+    .values({ substitutionSaleId: substitute.saleId, substitutedSaleId: saleId });
+  backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
+
+  expect(await captureError(() => preview(saleId))).toMatchObject({
+    code: "sale.correction_not_admitted",
+    params: { reason: "replaced" },
+  });
 });

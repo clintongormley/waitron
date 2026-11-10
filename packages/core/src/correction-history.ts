@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { saleLines, sales, type Transaction } from "@waitron/db";
+import { saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
+import type { CorrectionAdmission, FiscalBackend } from "@waitron/fiscal";
 import {
   AppError,
   basisPointsToDecimal,
@@ -8,14 +9,61 @@ import {
   decimalToBasisPoints,
   decimalToCents,
   thousandthsToDecimal,
+  type Decimal,
+  type NodeId,
   type SaleId,
 } from "@waitron/shared";
-import type {
-  CorrectionAmountAllocation,
-  CorrectionAmountHistory,
+import {
+  allocateCorrectionAmounts,
+  type CorrectionAmountAllocation,
+  type CorrectionAmountHistory,
+  type CorrectionAmountPreview,
 } from "./correction-allocation.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
+
+export type CorrectionPreview = CorrectionAmountPreview &
+  Omit<Extract<CorrectionAdmission, { eligible: true }>, "eligible"> & { lines: RecordSaleLine[] };
+
+/**
+ * What a correction of `selection.gross` from the invoice would file, as the lines and split
+ * `recordCorrection` takes. Refused with `sale.correction_not_admitted` when the invoice was
+ * replaced by a full invoice or its regime does not admit a correction of it.
+ */
+export async function previewCorrectionAmounts(
+  tx: Transaction,
+  backend: FiscalBackend,
+  invoice: { saleId: SaleId; nodeId: NodeId },
+  selection: { gross: Decimal; lineIds?: readonly string[] },
+): Promise<CorrectionPreview> {
+  const [substituted] = await tx
+    .select({ id: saleSubstitutions.id })
+    .from(saleSubstitutions)
+    .where(eq(saleSubstitutions.substitutedSaleId, invoice.saleId));
+  if (substituted !== undefined) {
+    throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
+  }
+  const admission: CorrectionAdmission = backend.correctionAdmissionFor
+    ? await backend.correctionAdmissionFor(tx, invoice.saleId, invoice.nodeId)
+    : { eligible: false, reason: "unsupported" };
+  if (!admission.eligible) {
+    throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
+  }
+  const preview = allocateCorrectionAmounts(
+    await readCorrectionAmountHistory(tx, invoice.saleId),
+    selection,
+  );
+  const invoiceLines = await tx
+    .select()
+    .from(saleLines)
+    .where(eq(saleLines.saleId, invoice.saleId));
+  return {
+    ...preview,
+    filing: admission.filing,
+    original: admission.original,
+    lines: correctionLinesFor(invoiceLines, preview.allocations),
+  };
+}
 
 /**
  * What a paid invoice holds and what every earlier correction of it took, whatever that
@@ -119,13 +167,18 @@ export async function readCorrectionAmountHistory(
 /**
  * The lines of a correction taking `allocations` from the invoice whose stored lines are
  * `invoiceLines`, in allocation order. The quantity is the invoice line's, negated: an amount
- * correction's quantity is the scope shown, never units returned.
+ * correction's quantity is the scope shown, never units returned. The list gross is a line amount,
+ * not a frozen fact, so it is left out; an extra points at its dish only when the dish is corrected
+ * too.
  */
 export function correctionLinesFor(
   invoiceLines: readonly (typeof saleLines.$inferSelect)[],
   allocations: readonly CorrectionAmountAllocation[],
 ): RecordSaleLine[] {
   const byId = new Map(invoiceLines.map((line) => [line.id, line]));
+  const lineNoOf = new Map(
+    allocations.map((allocation, index) => [allocation.saleLineId, index + 1]),
+  );
   return allocations.map((allocation, index) => {
     const line = byId.get(allocation.saleLineId)!;
     return {
@@ -144,8 +197,19 @@ export function correctionLinesFor(
       variantName: line.variantName,
       variantDescriptions: line.variantDescriptions,
       variantKitchenName: line.variantKitchenName,
+      category: line.category,
+      kitchenName: line.kitchenName,
+      productId: line.productId,
+      parentProductId: line.parentProductId,
+      menuId: line.menuId,
+      menuVersionId: line.menuVersionId,
+      listGross: null,
+      listUnitPriceGross:
+        line.listUnitPriceGross === null ? null : centsToDecimal(line.listUnitPriceGross),
+      classification: line.classification,
+      parentLineNo: line.parentLineId === null ? null : (lineNoOf.get(line.parentLineId) ?? null),
       correctsLineId: line.id,
-    };
+    } satisfies Required<RecordSaleLine>;
   });
 }
 
