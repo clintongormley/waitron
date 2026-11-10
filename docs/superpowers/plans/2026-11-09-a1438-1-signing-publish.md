@@ -3,7 +3,7 @@
 **2026-11-10 status:** A1437-1's initial proof check landed as `049ddd9`; this plan's build condition is met. The watcher
 cleared the as-built core and box use at about 1,550 changed lines, with a stop at 2,325, followed
 by the publisher at about 500, with a stop at 750 (Lane K questions.md, 12:48).
-The core is in PR #2743; the separate publisher implements the fixed matrix and authenticated
+The core landed in PR #2743 (`1e93c62fdc`); the separate publisher implements the fixed matrix and authenticated
 checks. Watcher 2026-11-09 23:28 moved credential execution into the final workflow step and
 Cloud’s own-token install immediately after the first publication. Actual registry qualification
 remains open until those operations run; local checks are not registry evidence.

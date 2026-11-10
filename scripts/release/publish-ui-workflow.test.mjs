@@ -95,6 +95,7 @@ describe.each(["ui-core", "contract"])("automatic private %s publication", (pack
     );
     expect(text).toMatch(/matrix:\n {8}package: \[ui-core, contract\]/);
     expect(text).toContain("fail-fast: false");
+    expect(text).toMatch(/- name: Install Chromium\n {8}if: matrix\.package == 'ui-core'/);
     expect(text).toMatch(
       /^concurrency:\n {2}group: ui-core-publication\n {2}queue: max\n {2}cancel-in-progress: false$/m,
     );
