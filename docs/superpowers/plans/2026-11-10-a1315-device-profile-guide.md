@@ -28,6 +28,7 @@ Choose another **Device profile** and tap **Switch**. You can only switch to a p
 allowed to use.
 
 Before switching, park or clear the order in progress and wait for any payment in progress to finish.
+Other staff signed in on this device are signed out if the new profile does not allow them to sign in.
 To choose which zones this device shows, see
 [Choose the zones this device shows](table-service.md#device-zones).
 ```
@@ -42,6 +43,8 @@ Elige otro **Perfil de dispositivo** y toca **Cambiar**. Solo puedes cambiar a u
 tengas permiso para usar.
 
 Antes de cambiar, aparca o vacía el pedido en curso y espera a que termine cualquier cobro en curso.
+Las otras personas que tengan sesión en este dispositivo salen de ella si el nuevo perfil no les
+permite iniciar sesión.
 Para elegir qué zonas muestra este dispositivo, consulta
 [Elegir las zonas que muestra este dispositivo](table-service.md#device-zones).
 ```
@@ -54,10 +57,8 @@ Bubble before = after (`apps/till/src/i18n/help-strings.ts:37-38,100-101`): EN "
 
 Expected lines: guides +10/-0 each; root backlog +3/-3; detailed backlog +2/-2; this plan +59/-0. Production code, tests and support each +0/-0. Exclude the other four topics, new pages/link mechanisms/wrapper APIs, business behavior, automatic recovery/race detail and CLAUDE.md edits.
 
-## Watcher decisions before build
+## Review and build clearance
 
-Claude read157s; the driver applied its single-profile, payment, navigation and receipt corrections. Recommend one additional sentence in the guide: EN “Other staff signed in on this device are signed out if the new profile does not allow them to sign in.” ES «Las otras personas que tengan sesión en este dispositivo salen de ella si el nuevo perfil no les permite iniciar sesión.» Source read: `apps/server/src/device.ts:263-284,325`. This visible consequence is pending watcher clearance, not an automatic recovery detail. Also ask whether the other three menu-row topics should use guide-only sections while A1247 excludes wrapper links; each still gets its own source-informed plan. No such extra section is authorised here.
+Claude read this plan once (157s); the driver applied its single-profile, payment, navigation and source-receipt corrections. The watcher (waitron-94) cleared this device-profile section on 2026-11-10 at 22:32 in lane D's questions.md, including the colleague sign-out sentence and its Spanish twin above. The owner did not approve this plan.
 
-## Driver handoff
-
-No build permission or owner approval is claimed. After this single Claude read and corrections, request watcher clearance before building or publishing the plan.
+That same watcher note directs the other three menu-row topics to guide-only sections while A1247's wrapper exclusion stands, written as one later source-informed plan and one pull request. Those sections are outside this plan. Publish this plan docs-only, then build this device-profile section.
