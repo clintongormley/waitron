@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
   holidayGeographies,
-  locations,
   specialDayDates,
   specialDays,
   tenants,
@@ -15,7 +14,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   createHolidayStore,
   readHolidayDates as packageReadHolidayDates,
@@ -167,14 +166,13 @@ async function venue(address: Address = {}): Promise<{ locationId: string }> {
   });
 }
 
-async function moveTo(cfg: { locationId: string }, address: Address) {
+async function moveTo(_cfg: { locationId: string }, address: Address) {
   await withTransaction(db, async (tx) => {
     if (address.country !== undefined) await setCountry(tx, address.country);
     const set: { province?: string | null; city?: string | null } = {};
     if (address.province !== undefined) set.province = address.province;
     if (address.city !== undefined) set.city = address.city;
-    if (Object.keys(set).length > 0)
-      await tx.update(locations).set(set).where(eq(locations.id, cfg.locationId));
+    if (Object.keys(set).length > 0) await seedVenueSettings(tx, set);
   });
 }
 
