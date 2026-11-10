@@ -27,7 +27,6 @@ declare module "@waitron/shared" {
         | Extract<CorrectionAdmission, { eligible: false }>["reason"]
         | "replaced"
         | "filed_figures_unreadable"
-        | "filed_figures_changed"
         | "filed_figures_unanswered";
     };
     /** A tender still has `settledAt: null`, so `settleSale` settles nothing and the sale stays

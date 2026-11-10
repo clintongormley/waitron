@@ -2,10 +2,11 @@ import { beforeEach, expect, it } from "vitest";
 import {
   decimal,
   deviceOrigin,
+  negateDecimal,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
+import type { Decimal, DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiledFigures, FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
@@ -391,9 +392,13 @@ it("builds lines in allocation order from the invoice line's frozen facts, negat
   expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
 });
 
-function preview(saleId: SaleId, of = backend as FiscalBackend) {
+function preview(
+  saleId: SaleId,
+  of = backend as FiscalBackend,
+  selection: { gross: Decimal; lineIds?: string[] } = { gross: decimal("6.05") },
+) {
   return withTransaction(suite.db, (tx) =>
-    previewCorrectionAmounts(tx, of, saleId, nodeId, { gross: decimal("6.05") }),
+    previewCorrectionAmounts(tx, of, saleId, nodeId, selection),
   );
 }
 
@@ -477,7 +482,7 @@ const filed = (total: string, ...split: (readonly [string, string, string])[]) =
   newestAnswered: null,
 });
 const AT_21 = ["21.00", "10.00", "2.10"] as const;
-const CHANGED = "filed_figures_changed";
+const CHANGED = "filed_figures_unanswered";
 
 it.each<[name: string, whose: "invoice" | "corrective", figures: FiledFigures, reason: string]>([
   ["an extra rate", "invoice", filed("12.10", AT_21, ["10.00", "0.00", "0.00"]), CHANGED],
@@ -493,5 +498,108 @@ it.each<[name: string, whose: "invoice" | "corrective", figures: FiledFigures, r
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_not_admitted",
     params: { reason },
+  });
+});
+
+const answered = (total: string, ...split: (readonly [string, string, string])[]): FiledFigures => {
+  const figures = filed(total, ...split);
+  return { ...figures, newestAnswered: figures.newest };
+};
+const scopeInvalid = (reason: string) => ({
+  code: "sale.correction_scope_invalid",
+  params: { reason },
+});
+
+it.each<
+  [
+    name: string,
+    figures: (saleId: SaleId, steakId: string) => Promise<[SaleId, FiledFigures]>,
+    lineIds: "steak" | undefined,
+    expected: object,
+  ]
+>([
+  [
+    "kept its figures in a fix still queued, previews the steak's own split",
+    async (saleId) => [saleId, filed("12.10", AT_21)],
+    "steak",
+    {
+      gross: "6.05",
+      vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+      lines: [{ vatRate: "21.00", lineTotal: "-5.00", lineGross: "-6.05" }],
+    },
+  ],
+  [
+    "was fixed to 10%, refuses a request naming the steak",
+    async (saleId) => [saleId, answered("12.10", ["10.00", "11.00", "1.10"])],
+    "steak",
+    scopeInvalid("filed_split_changed"),
+  ],
+  [
+    "kept its figures while an earlier correction's were fixed, refuses a request naming the steak",
+    async (saleId, steakId) => {
+      const corrective = await correct(saleId, "-1.05", [steakTaken(1, steakId, "-0.87", "-1.05")]);
+      return [corrective.saleId, answered("-1.05", ["21.00", "-0.88", "-0.17"])];
+    },
+    "steak",
+    scopeInvalid("filed_split_changed"),
+  ],
+  [
+    "was fixed to a €11.00 total, refuses a part of it",
+    async (saleId) => [saleId, answered("11.00", ["10.00", "10.00", "1.00"])],
+    undefined,
+    scopeInvalid("filed_total_changed"),
+  ],
+])(
+  "previewing €6.05 off a sold €12.10 steak whose filing %s",
+  async (_name, figures, lineIds, expected) => {
+    const { saleId, ids } = await sellSteak();
+    backend.setFiledFigures(...(await figures(saleId, ids[0]!)));
+    const selection = { gross: decimal("6.05"), ...(lineIds && { lineIds: [ids[0]!] }) };
+
+    if ("code" in expected) {
+      expect(await captureError(() => preview(saleId, backend, selection))).toMatchObject(expected);
+    } else {
+      expect(await preview(saleId, backend, selection)).toMatchObject(expected);
+    }
+  },
+);
+
+it("previews and files the whole of a steak whose filing was fixed to €11.00, then no more", async () => {
+  const { saleId, ids } = await sellSteak();
+  backend.setFiledFigures(saleId, answered("11.00", ["10.00", "10.00", "1.00"]));
+
+  const whole = await preview(saleId, backend, { gross: decimal("11.00") });
+  expect(whole).toMatchObject({
+    gross: "11.00",
+    vatBreakdown: [{ rate: "10.00", base: "10.00", tax: "1.00" }],
+  });
+  expect(
+    whole.lines.map((line) => [line.vatRate, line.lineTotal, line.lineGross, line.correctsLineId]),
+  ).toEqual([["21.00", "-10.00", "-12.10", ids[0]]]);
+
+  await withTransaction(suite.db, (tx) =>
+    recordCorrection(tx, backend, {
+      ...correctionInput(saleId, negateDecimal(whole.gross), whole.lines),
+      partialVatBreakdown: whole.vatBreakdown.map(({ rate, base, tax }) => ({
+        rate,
+        base: negateDecimal(base),
+        tax: negateDecimal(tax),
+      })),
+    }),
+  );
+  expect(
+    await captureError(() => preview(saleId, backend, { gross: decimal("0.01") })),
+  ).toMatchObject({ code: "sale.correction_amount_invalid" });
+});
+
+it("previews the rest of a steak at an earlier correction's fixed figures, not its stored ones", async () => {
+  const { saleId, ids } = await sellSteak();
+  const earlier = await correct(saleId, "-6.05", [steakTaken(1, ids[0]!, "-5.00", "-6.05")]);
+  backend.setFiledFigures(earlier.saleId, answered("-6.05", ["21.00", "-5.01", "-1.04"]));
+
+  expect(await preview(saleId)).toMatchObject({
+    gross: "6.05",
+    vatBreakdown: [{ rate: "21.00", base: "4.99", tax: "1.06" }],
+    lines: [{ vatRate: "21.00", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
   });
 });

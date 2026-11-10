@@ -181,7 +181,7 @@ it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, the
   expect(await snapshot(saleId)).toEqual(before);
 });
 
-it("refuses an invoice the agency refused, then, once its fix files it at 10%, as moved", async () => {
+it("refuses an invoice the agency refused, then, once its fix files it at 10%, until the fix is answered", async () => {
   // No line gross, so the history read would refuse: each refusal must come before it.
   const { saleId, before } = await sell(null);
   await suite.db
@@ -260,7 +260,7 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
   });
   expect(await captureError(() => preview(saleId, "1.00"))).toMatchObject({
     code: "sale.correction_not_admitted",
-    params: { reason: "filed_figures_changed" },
+    params: { reason: "filed_figures_unanswered" },
   });
   expect((await snapshot(saleId)).sale).toEqual(before.sale);
 });

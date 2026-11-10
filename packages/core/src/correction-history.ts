@@ -1,13 +1,15 @@
 import { eq } from "drizzle-orm";
 import { saleLines, sales, saleSubstitutions, type Transaction } from "@waitron/db";
-import type { CorrectionAdmission, FiledFigures, FiscalBackend } from "@waitron/fiscal";
+import type { CorrectionAdmission, FiscalBackend } from "@waitron/fiscal";
 import {
   AppError,
+  addDecimal,
   basisPointsToDecimal,
   centsToDecimal,
   decimal,
   decimalToBasisPoints,
   decimalToCents,
+  negateDecimal,
   thousandthsToDecimal,
   type Decimal,
   type NodeId,
@@ -20,6 +22,7 @@ import {
   type CorrectionAmountPreview,
 } from "./correction-allocation.js";
 import { requireSupportedCorrection } from "./correction-eligibility.js";
+import { measuredFigures, type MeasuredSale } from "./filed-figures.js";
 import type { RecordSaleLine } from "./record-sale.js";
 import "./errors.js";
 
@@ -32,9 +35,15 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * What a correction of `selection.gross` from the invoice `saleId`, issued by `issuingNodeId`, would
  * file, as the lines and split `recordCorrection` takes. Refused with
  * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
- * not admit a correction of it, or the regime's newest filed figures of it or of an earlier
- * correction cannot be read or differ from the stored ones; refused with
- * `sale.correction_unsupported`, as `recordCorrection` is, when the invoice names a customer.
+ * not admit a correction of it, the regime cannot read the filed figures of it or of an earlier
+ * correction (`filed_figures_unreadable`), or the newest of those figures still waits for the
+ * regime's answer (`filed_figures_unanswered`); refused with `sale.correction_unsupported`, as
+ * `recordCorrection` is, when the invoice names a customer. When the answered figures differ from
+ * the stored ones, the split is worked out from the answered figures and the lines from the stored
+ * ones, and `sale.correction_scope_invalid` refuses a request naming lines (`filed_split_changed`)
+ * and, when the answered total left is not what the lines have left, any amount but the whole of
+ * it (`filed_total_changed`); the lines then take everything they have left, so their gross is not
+ * `gross`.
  */
 export async function previewCorrectionAmounts(
   tx: Transaction,
@@ -58,15 +67,88 @@ export async function previewCorrectionAmounts(
   }
   const stored = await readStored(tx, saleId);
   requireSupportedCorrection(stored.sale.counterpartyTaxId, saleId);
-  await refuseMovedFigures(tx, backend, [stored.sale, ...stored.corrections]);
-  const { history, invoiceLines } = await readHistory(tx, saleId, stored);
-  const preview = allocateCorrectionAmounts(history, selection);
+  const figures = await measuredFigures(tx, backend, [stored.sale, ...stored.corrections]);
+  if (!figures.readable) {
+    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unreadable" });
+  }
+  if (figures.sales.some((sale) => sale.differs)) {
+    throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unanswered" });
+  }
+  if (!figures.moved) {
+    const { history, invoiceLines } = await readHistory(tx, saleId, stored);
+    const preview = allocateCorrectionAmounts(history, selection);
+    return {
+      ...preview,
+      filing: admission.filing,
+      original: admission.original,
+      lines: correctionLinesFor(invoiceLines, preview.allocations),
+    };
+  }
+  if (selection.lineIds !== undefined) {
+    throw new AppError("sale.correction_scope_invalid", { reason: "filed_split_changed" });
+  }
+  const { history, invoiceLines } = await readHistory(tx, saleId, stored, { moved: true });
+  const linesRemaining =
+    sumCents(history.lines.map((line) => line.gross)) -
+    sumCents(history.consumed.map((allocation) => allocation.gross));
+  const inTotal = figures.measuredRemaining !== linesRemaining;
+  if (inTotal && decimalToCents(selection.gross) !== figures.measuredRemaining) {
+    throw new AppError("sale.correction_scope_invalid", { reason: "filed_total_changed" });
+  }
+  const [invoice, ...corrections] = figures.sales;
+  const split = splitHistory(invoice!.measured.vatBreakdown, corrections);
+  const { gross, vatBreakdown } = allocateCorrectionAmounts(split, {
+    gross: selection.gross,
+    lineIds: split.lines.map((line) => line.id),
+  });
+  const { allocations } = allocateCorrectionAmounts(history, {
+    gross: inTotal ? centsToDecimal(linesRemaining) : selection.gross,
+    lineIds: history.lines.map((line) => line.id),
+  });
   return {
-    ...preview,
+    gross,
+    vatBreakdown,
+    allocations,
     filing: admission.filing,
     original: admission.original,
-    lines: correctionLinesFor(invoiceLines, preview.allocations),
+    lines: correctionLinesFor(invoiceLines, allocations),
   };
+}
+
+/** One stand-in line per rate of the invoice's measured split, with what each earlier
+ * correction's measured split took from that rate, for working out a moved invoice's split. */
+function splitHistory(
+  invoiceSplit: MeasuredSale["measured"]["vatBreakdown"],
+  corrections: readonly MeasuredSale[],
+): CorrectionAmountHistory {
+  const standIn = (rate: string) => `rate:${decimalToBasisPoints(decimal(rate))}`;
+  return {
+    lines: invoiceSplit.map((group, index) => ({
+      id: standIn(group.rate),
+      lineNo: index + 1,
+      rate: decimal(group.rate),
+      gross: addDecimal(decimal(group.base), decimal(group.tax)),
+      base: decimal(group.base),
+    })),
+    vatBreakdown: invoiceSplit.map((group) => ({
+      rate: decimal(group.rate),
+      base: decimal(group.base),
+      tax: decimal(group.tax),
+    })),
+    consumed: corrections.flatMap((correction) =>
+      correction.measured.vatBreakdown.map((group) => ({
+        saleLineId: standIn(group.rate),
+        rate: decimal(group.rate),
+        gross: negateDecimal(addDecimal(decimal(group.base), decimal(group.tax))),
+        base: negateDecimal(decimal(group.base)),
+        tax: negateDecimal(decimal(group.tax)),
+      })),
+    ),
+  };
+}
+
+function sumCents(amounts: readonly Decimal[]): number {
+  return amounts.reduce((sum, amount) => sum + decimalToCents(amount), 0);
 }
 
 /**
@@ -110,46 +192,13 @@ async function readStored(
   return { sale, corrections };
 }
 
-/**
- * Refuses unless the regime reads each sale's newest filed figures and they equal the stored
- * ones: the same total, and at each rate, the same base and VAT.
- */
-async function refuseMovedFigures(
-  tx: Transaction,
-  backend: FiscalBackend,
-  stored: readonly StoredFigures[],
-): Promise<void> {
-  const ids = stored.map((sale) => sale.id as SaleId);
-  const filed = backend.filedFiguresFor ? await backend.filedFiguresFor(tx, ids) : new Map();
-  for (const sale of stored) {
-    const figures: FiledFigures | undefined = filed.get(sale.id as SaleId);
-    if (figures === undefined || !figures.readable) {
-      throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_unreadable" });
-    }
-    const { newest } = figures;
-    const splitOf = (split: readonly { rate: string; base: string; tax: string }[]) =>
-      new Map(
-        split.map((line) => [
-          decimalToBasisPoints(decimal(line.rate)),
-          [decimalToCents(decimal(line.base)), decimalToCents(decimal(line.tax))].join(),
-        ]),
-      );
-    const storedSplit = splitOf(sale.vatBreakdown);
-    const filedSplit = splitOf(newest.vatBreakdown);
-    if (
-      decimalToCents(newest.total) !== sale.total ||
-      storedSplit.size !== filedSplit.size ||
-      [...storedSplit].some(([rate, amounts]) => filedSplit.get(rate) !== amounts)
-    ) {
-      throw new AppError("sale.correction_not_admitted", { reason: "filed_figures_changed" });
-    }
-  }
-}
-
+/** With `moved`, an earlier correction's lines are not checked against its stored split: they
+ * stay at the dishes' stored rates while its split may be at the regime's answered ones. */
 async function readHistory(
   tx: Transaction,
   saleId: SaleId,
   stored?: Awaited<ReturnType<typeof readStored>>,
+  options: { moved?: boolean } = {},
 ): Promise<{ history: CorrectionAmountHistory; invoiceLines: InvoiceLine[] }> {
   const { sale, corrections } = stored ?? (await readStored(tx, saleId));
 
@@ -175,29 +224,31 @@ async function readHistory(
   if (earlierLines.some((line) => line.lineGross === null || line.correctsLineId === null)) {
     unusable();
   }
-  for (const correction of corrections) {
-    const groups = new Map<number, { base: number; gross: number }>();
-    for (const line of earlierLines.filter((entry) => entry.saleId === correction.id)) {
-      const group = groups.get(line.vatRate) ?? { base: 0, gross: 0 };
-      groups.set(line.vatRate, {
-        base: group.base + line.lineTotal,
-        gross: group.gross + line.lineGross!,
-      });
-    }
-    for (const stored of correction.vatBreakdown) {
-      const rate = decimalToBasisPoints(decimal(stored.rate));
-      const base = decimalToCents(decimal(stored.base));
-      const group = groups.get(rate);
-      if (
-        group === undefined ||
-        group.base !== base ||
-        group.gross !== base + decimalToCents(decimal(stored.tax))
-      ) {
-        unusable();
+  if (!options.moved) {
+    for (const correction of corrections) {
+      const groups = new Map<number, { base: number; gross: number }>();
+      for (const line of earlierLines.filter((entry) => entry.saleId === correction.id)) {
+        const group = groups.get(line.vatRate) ?? { base: 0, gross: 0 };
+        groups.set(line.vatRate, {
+          base: group.base + line.lineTotal,
+          gross: group.gross + line.lineGross!,
+        });
       }
-      groups.delete(rate);
+      for (const stored of correction.vatBreakdown) {
+        const rate = decimalToBasisPoints(decimal(stored.rate));
+        const base = decimalToCents(decimal(stored.base));
+        const group = groups.get(rate);
+        if (
+          group === undefined ||
+          group.base !== base ||
+          group.gross !== base + decimalToCents(decimal(stored.tax))
+        ) {
+          unusable();
+        }
+        groups.delete(rate);
+      }
+      if (groups.size > 0) unusable();
     }
-    if (groups.size > 0) unusable();
   }
 
   const history: CorrectionAmountHistory = {
