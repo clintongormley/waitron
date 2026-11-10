@@ -556,6 +556,14 @@ named once on the server's first page, before its certificate authority is made;
 a planned "re-trust every device" event — devices pair again in place of their old entries, and the
 old name only points at the new one for 14 days. Five slices; no migration.
 
+## A1483. Native ARM image and installer before go-live
+
+The owner asked on 2026-11-10 at 17:17: “for go live we should support ARM too”. At 21:45: “arm is slow to build and can wait until we are ready to go live. backlog it for now”. Start when go-live is near.
+
+The 10 November `docker manifest inspect ghcr.io/clintongormley/waitron:main` result lists linux/amd64 and an unknown/unknown descriptor, with no arm64 entry. Image builds select `linux/amd64` in `.github/workflows/ci.yml:4475`, `:4528`, `:4547` and `.github/workflows/image-smoke.yml:144`, `:159`. The installer selects amd64 packages in `deploy/box/mkosi.conf:13` and `:24`, an amd64 repository in `deploy/box/build.sh:17`, and x86 firmware in `deploy/box/firmware-image.sh:26`.
+
+Plan one multi-platform application image with arm64 smoke, and an arm64 installer that reaches setup in its emulator. Measure build cost and name the shared CI caches it competes with. Keep actual ARM hardware qualification distinct from emulator results.
+
 ## B3. The bootable USB installer
 
 **2026-11-10 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
