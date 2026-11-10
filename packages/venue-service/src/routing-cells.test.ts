@@ -113,12 +113,10 @@ type RawCell = {
   noCategory?: boolean | number;
 };
 
-function rawInsert(f: Fixture, cell: RawCell) {
+function rawInsert(_f: Fixture, cell: RawCell) {
   return sql`insert into routing_cells
-      (id, location_id, category_id, product_id, zone_id, station_id, no_preparation, no_category)
-    values (${randomUUID()}, ${f.cfg.locationId}, ${cell.category ?? null}, ${cell.product ?? null},
-      ${cell.zone ?? null}, ${cell.station ?? null}, ${cell.noPrep === true ? 1 : 0},
-      ${typeof cell.noCategory === "number" ? cell.noCategory : cell.noCategory === true ? 1 : 0})`;
+      (id, category_id, product_id, zone_id, station_id, no_preparation, no_category)
+    values (${randomUUID()}, ${cell.category ?? null}, ${cell.product ?? null}, ${cell.zone ?? null}, ${cell.station ?? null}, ${cell.noPrep === true ? 1 : 0}, ${typeof cell.noCategory === "number" ? cell.noCategory : cell.noCategory === true ? 1 : 0})`;
 }
 
 const insert = (statement: ReturnType<typeof sql>) =>
@@ -139,13 +137,13 @@ describe("the routing_cells table", () => {
   it("stores each of the seven coordinate classes once and refuses a second identical one", async () => {
     const f = await setup();
     const classes: [RawCell, string][] = [
-      [{ category: f.drinks }, UNIQUE("location_id", "category_id")],
-      [{ category: f.drinks, zone: f.terrace }, UNIQUE("location_id", "category_id", "zone_id")],
-      [{ product: f.mojito }, UNIQUE("location_id", "product_id")],
-      [{ product: f.mojito, zone: f.terrace }, UNIQUE("location_id", "product_id", "zone_id")],
-      [{ zone: f.terrace }, UNIQUE("location_id", "zone_id")],
-      [{ noCategory: true }, UNIQUE("location_id", "no_category")],
-      [{ noCategory: true, zone: f.terrace }, UNIQUE("location_id", "no_category", "zone_id")],
+      [{ category: f.drinks }, UNIQUE("category_id")],
+      [{ category: f.drinks, zone: f.terrace }, UNIQUE("category_id", "zone_id")],
+      [{ product: f.mojito }, UNIQUE("product_id")],
+      [{ product: f.mojito, zone: f.terrace }, UNIQUE("product_id", "zone_id")],
+      [{ zone: f.terrace }, UNIQUE("zone_id")],
+      [{ noCategory: true }, UNIQUE("no_category")],
+      [{ noCategory: true, zone: f.terrace }, UNIQUE("no_category", "zone_id")],
     ];
     for (const [cell] of classes) await insert(rawInsert(f, { ...cell, station: f.bar }));
     for (const [cell, words] of classes)
@@ -234,11 +232,11 @@ type StoredCell = {
   no_category: number;
 };
 
-async function readStoredCells(f: Fixture): Promise<StoredCell[]> {
+async function readStoredCells(_f: Fixture): Promise<StoredCell[]> {
   return (
     await db.execute<StoredCell>(
       sql`select category_id, product_id, zone_id, station_id, no_preparation, no_category
-        from routing_cells where location_id = ${f.cfg.locationId}
+        from routing_cells
         order by category_id, product_id, no_category, zone_id`,
     )
   ).rows;
@@ -475,10 +473,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
 
   it("refuses an active zone whose department is switched off", async () => {
     const f = await setup();
-    const [dining] = await db
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, f.cfg.locationId));
+    const [dining] = await db.select({ id: departments.id }).from(departments);
     await db.update(departments).set({ active: false }).where(eq(departments.id, dining!.id));
     const address: CellAddress = {
       row: { kind: "category", categoryId: f.drinks },

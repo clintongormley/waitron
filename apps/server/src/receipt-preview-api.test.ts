@@ -45,10 +45,7 @@ let departmentId: string;
 const policy = { receiptPrintMode: "auto", printTradingName: false } as const;
 beforeAll(async () => {
   venue = await setupVenue(suite.db);
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, venue.cfg.locationId));
+  const [department] = await suite.db.select().from(departments);
   departmentId = department!.id;
   await suite.db
     .update(departmentSalePolicies)
@@ -189,9 +186,7 @@ async function withPrinters(
 describe("POST /management-api/receipt-preview", () => {
   it("draws the department receipt and draft policy through the public mount", async () => {
     const [{ id }] = (
-      await suite.db.execute<{ id: string }>(
-        sql`select id from departments where location_id = ${venue.cfg.locationId} limit 1`,
-      )
+      await suite.db.execute<{ id: string }>(sql`select id from departments  limit 1`)
     ).rows;
     const response = await previewRaw(
       JSON.stringify({
@@ -261,7 +256,7 @@ describe("POST /management-api/receipt-preview", () => {
   it("previews a department's enabled trading name before the legal issuer without saving", async () => {
     const [{ id, trading_name: originalName }] = (
       await suite.db.execute<{ id: string; trading_name: string }>(
-        sql`select id, trading_name from departments where location_id = ${venue.cfg.locationId} limit 1`,
+        sql`select id, trading_name from departments  limit 1`,
       )
     ).rows;
     await suite.db.execute(

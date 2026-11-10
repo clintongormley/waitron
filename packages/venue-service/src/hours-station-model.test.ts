@@ -44,7 +44,7 @@ async function fixture() {
 }
 
 /** A special day "Festival" on 2026-10-09, written straight to its tables. */
-async function festival(f: Awaited<ReturnType<typeof fixture>>) {
+async function festival(_f: Awaited<ReturnType<typeof fixture>>) {
   return withTransaction(suite.db, async (tx) => {
     const [day] = await tx
       .insert(specialDays)

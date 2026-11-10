@@ -10,10 +10,10 @@ import { attendanceQuestions } from "./schema/attendance.js";
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
-let personId: string, manager: string, locationId: string, questionId: string;
+let personId: string, manager: string, questionId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   personId = await seedPerson(suite.db);
   manager = await seedPerson(suite.db, "Manager");
   const [question] = await suite.db
@@ -38,7 +38,6 @@ function receipt(patch: Record<string, string | null> = {}) {
     requester: personId,
     authorizer: personId,
     subject: personId,
-    location: locationId,
     question: questionId,
     action: "request",
     input: JSON.stringify({
@@ -58,10 +57,8 @@ const insert = (r: ReturnType<typeof receipt>) =>
   withTransaction(suite.db, (tx) =>
     tx.execute(sql`
   insert into attendance_response_commands
-    (id, requested_by_person_id, authorized_by_person_id, person_id, location_id,
-     question_id, action, input, entry_ids, created_at)
-  values (${r.id}, ${r.requester}, ${r.authorizer}, ${r.subject}, ${r.location},
-    ${r.question}, ${r.action}, ${r.input}, ${r.entries}, '2026-01-06T08:00:00.000Z')`),
+    (id, requested_by_person_id, authorized_by_person_id, person_id, question_id, action, input, entry_ids, created_at)
+  values (${r.id}, ${r.requester}, ${r.authorizer}, ${r.subject}, ${r.question}, ${r.action}, ${r.input}, ${r.entries}, '2026-01-06T08:00:00.000Z')`),
   );
 
 it("stores a question-linked response receipt and both legal result ids", async () => {
@@ -73,7 +70,6 @@ it("stores a question-linked response receipt and both legal result ids", async 
       requested_by_person_id: personId,
       authorized_by_person_id: personId,
       person_id: personId,
-      location_id: locationId,
       question_id: questionId,
       action: "request",
       input: r.input,
@@ -83,14 +79,14 @@ it("stores a question-linked response receipt and both legal result ids", async 
   ]);
 });
 
-it.each(["requester", "authorizer", "subject", "location", "question"])(
+it.each(["requester", "authorizer", "subject", "question"])(
   "refuses an absent %s without retaining a receipt",
   async (field) => {
     await expect(
       insert(
         receipt({
           [field]: newId(),
-          ...(field === "subject" || field === "location" ? { question: null } : {}),
+          ...(field === "subject" ? { question: null } : {}),
         }),
       ),
     ).rejects.toThrow("FOREIGN KEY constraint failed");
@@ -98,12 +94,8 @@ it.each(["requester", "authorizer", "subject", "location", "question"])(
   },
 );
 
-it("refuses another person's or location's question even when every individual id exists", async () => {
-  const otherLocation = await seedLocation(suite.db);
-  const scopes: Record<string, string | null>[] = [
-    { subject: manager },
-    { location: otherLocation },
-  ];
+it("refuses another person's question even when every individual id exists", async () => {
+  const scopes: Record<string, string | null>[] = [{ subject: manager }];
   for (const patch of scopes) {
     await expect(insert(receipt(patch))).rejects.toThrow("FOREIGN KEY constraint failed");
     expect(suite.db.execute(sql`select * from attendance_response_commands`).rows).toEqual([]);

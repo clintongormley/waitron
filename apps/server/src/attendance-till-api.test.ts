@@ -160,19 +160,17 @@ describe("till attendance recorder admission", () => {
       expect(
         (await suite.db.select().from(attendanceOperationFacts))
           .filter((r) => r.source === "draft")
-          .map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
+          .map((r) => [r.key, r.personId, r.at, r.outcome]),
       ).toEqual([
         [
           `event:${(await suite.db.select().from(orderDraftEvents).where(eq(orderDraftEvents.draftId, draft.id))).find((event) => event.kind === "discarded")!.id}`,
           OPERATOR,
-          v.cfg.locationId,
           "2026-10-14T13:00:00.000Z",
           "qualifying",
         ],
         [
           `${draft.id}:${draft.revision + 1}:discard`,
           OPERATOR,
-          v.cfg.locationId,
           "2026-10-14T13:00:00.000Z",
           "qualifying",
         ],
@@ -226,8 +224,8 @@ describe("till attendance recorder admission", () => {
       expect(
         (await suite.db.select().from(attendanceOperationFacts))
           .filter((r) => r.source === "whole-payment")
-          .map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
-      ).toEqual([[id, OPERATOR, v.cfg.locationId, "2026-10-14T13:00:00.000Z", "qualifying"]]);
+          .map((r) => [r.key, r.personId, r.at, r.outcome]),
+      ).toEqual([[id, OPERATOR, "2026-10-14T13:00:00.000Z", "qualifying"]]);
     },
   );
 
@@ -254,8 +252,8 @@ describe("till attendance recorder admission", () => {
     expect(
       (await suite.db.select().from(attendanceOperationFacts))
         .filter((r) => r.source === "whole-payment")
-        .map((r) => [r.personId, r.locationId, r.at, r.outcome]),
-    ).toEqual([[OPERATOR, v.cfg.locationId, "2026-10-14T13:00:00.000Z", "qualifying"]]);
+        .map((r) => [r.personId, r.at, r.outcome]),
+    ).toEqual([[OPERATOR, "2026-10-14T13:00:00.000Z", "qualifying"]]);
   });
 
   it("passes the admitted bill payment to the recorder without trusting body attribution", async () => {
@@ -290,27 +288,12 @@ describe("till attendance recorder admission", () => {
         r.source,
         r.key,
         r.personId,
-        r.locationId,
         r.at,
         r.outcome,
       ]),
     ).toEqual([
-      [
-        "session",
-        expect.any(String),
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-10-14T12:00:00.000Z",
-        "qualifying",
-      ],
-      [
-        "bill-payment",
-        body.payment.id,
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-10-14T13:00:00.000Z",
-        "qualifying",
-      ],
+      ["session", expect.any(String), OPERATOR, "2026-10-14T12:00:00.000Z", "qualifying"],
+      ["bill-payment", body.payment.id, OPERATOR, "2026-10-14T13:00:00.000Z", "qualifying"],
     ]);
   });
 
@@ -360,7 +343,6 @@ describe("till attendance recorder admission", () => {
         source: "session",
         key: session!.id,
         personId: OPERATOR,
-        locationId: v.cfg.locationId,
         kind: "sign-in",
         at: "2026-10-14T12:00:00.000Z",
         offsetMinutes: 120,
@@ -585,7 +567,6 @@ describe("till refund attendance", () => {
       );
       expect(fact).toMatchObject({
         personId: paid.workerId,
-        locationId: v.cfg.locationId,
         at: "2026-10-14T15:00:00.000Z",
         businessDay: "2026-10-14",
         outcome:
@@ -679,7 +660,6 @@ describe("till refund attendance", () => {
       );
       expect(fact).toMatchObject({
         personId: paid.workerId,
-        locationId: v.cfg.locationId,
         at: "2026-10-14T15:00:00.000Z",
         businessDay: "2026-10-14",
         outcome: outcome === "completed" ? "qualifying" : "refused",

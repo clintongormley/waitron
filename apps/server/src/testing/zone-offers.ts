@@ -102,12 +102,7 @@ async function resolveZone(
     const [counter] = await tx
       .select({ zoneId: zoneServicePolicies.zoneId })
       .from(zoneServicePolicies)
-      .where(
-        and(
-          eq(zoneServicePolicies.locationId, cfg.locationId),
-          eq(zoneServicePolicies.isCounterDefault, true),
-        ),
-      );
+      .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
     zoneId = counter?.zoneId ?? (await floorZone(tx, cfg, COUNTER_ZONE));
   } else {
     zoneId = await floorZone(tx, cfg, TABLES_ZONE);

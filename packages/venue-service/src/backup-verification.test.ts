@@ -37,7 +37,7 @@ beforeEach(() => {
       sql`insert into sales (id,source,series_id,node_id,invoice_number,issued_at,issued_offset_minutes,total,vat_breakdown,locale,invoice_locales,fiscal_backend,fiscal_state) values ('sale','operator_script','series','source',1,'2026-10-20T08:00:00.000Z',0,100,'[]','en','["en"]','none','not_applicable')`,
     );
     db.run(
-      sql`insert into departments (id,location_id,name,trading_name,created_at) values ('department','venue','Current department','Current business','2026-10-20T08:00:00.000Z'),('other','venue','Other department','Other business','2026-10-20T08:00:00.000Z')`,
+      sql`insert into departments (id, name, trading_name, created_at) values ('department', 'Current department', 'Current business', '2026-10-20T08:00:00.000Z'),('other','Other department','Other business','2026-10-20T08:00:00.000Z')`,
     );
     db.run(
       sql`insert into sale_receipt_headers (sale_id,department_id,trading_name,print_trading_name) values ('sale','department','Issued business',1)`,
@@ -49,7 +49,7 @@ beforeEach(() => {
       sql`insert into working_orders (id,source,location_id,order_number,opened_at) values ('order','operator_script','venue',1,'2026-10-20T08:00:00.000Z')`,
     );
     db.run(
-      sql`insert into order_service_contexts (working_order_id,location_id,zone_id,department_id,service_mode) values ('order','venue','zone','department','table_tab')`,
+      sql`insert into order_service_contexts (working_order_id, zone_id, department_id, service_mode) values ('order', 'zone', 'department', 'table_tab')`,
     );
     db.run(
       sql`insert into catalogues (id,name,created_at,updated_at) values ('menu','Current menu','2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
-import { venueLocationId, type Transaction } from "@waitron/db";
+import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
   AppError,
@@ -28,34 +28,16 @@ function staffRoleValues(input: StaffRoleInput): StaffRoleInput {
   return { name, colour: input.colour };
 }
 
-/** Names the venue's row only so `staff_roles_location_name_key`, which leads with `location_id`,
- *  plans the read; without it the name check scans every staff role. */
-export function staffRolesNamed(
-  tx: Transaction,
-  venueId: string,
-  name: string,
-  except: string | null,
-) {
+export function staffRolesNamed(tx: Transaction, name: string, except: string | null) {
   return tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(
-      and(
-        eq(staffRoles.locationId, venueId),
-        eq(staffRoles.name, name),
-        except === null ? undefined : ne(staffRoles.id, except),
-      ),
-    );
+    .where(and(eq(staffRoles.name, name), except === null ? undefined : ne(staffRoles.id, except)));
 }
 
 /** Names compare exactly after trimming, as the unique index does. */
-async function assertNameFree(
-  tx: Transaction,
-  venueId: string,
-  name: string,
-  except: string | null,
-) {
-  const [clash] = await staffRolesNamed(tx, venueId, name, except);
+async function assertNameFree(tx: Transaction, name: string, except: string | null) {
+  const [clash] = await staffRolesNamed(tx, name, except);
   if (clash) throw new AppError("staff_role.name_taken", { name });
 }
 
@@ -148,8 +130,7 @@ export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<Li
 /** Adds a staff role after the last one. */
 export async function createStaffRole(tx: Transaction, input: StaffRoleInput): Promise<StaffRole> {
   const values = staffRoleValues(input);
-  const venueId = await venueLocationId(tx);
-  await assertNameFree(tx, venueId, values.name, null);
+  await assertNameFree(tx, values.name, null);
   const [next] = await tx
     .select({ position: sql<number>`coalesce(max(${staffRoles.position}) + 1, 0)`.mapWith(Number) })
     .from(staffRoles);
@@ -167,7 +148,7 @@ export async function updateStaffRole(
 ): Promise<StaffRole> {
   const values = staffRoleValues(input);
   await assertStaffRoleExists(tx, staffRoleId);
-  await assertNameFree(tx, await venueLocationId(tx), values.name, staffRoleId);
+  await assertNameFree(tx, values.name, staffRoleId);
   await tx.update(staffRoles).set(values).where(eq(staffRoles.id, staffRoleId));
   return readStaffRole(tx, staffRoleId);
 }

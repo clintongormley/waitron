@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { isUniqueViolation, newId, nowIso, venueLocationId, type Transaction } from "@waitron/db";
+import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
 import { assertPersonExists } from "./body-ids.js";
@@ -301,8 +301,8 @@ export class WorkforceBackend {
     if (existing.rows.length > 0) throw new AppError("roster.draft_exists", {});
     // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into roster_versions (id, location_id, period_start, period_end, created_at)
-      values (${newId()}, ${await venueLocationId(tx)}, ${period}, date(${period}, '+6 days'), ${nowIso()})
+      insert into roster_versions (id, period_start, period_end, created_at)
+      values (${newId()}, ${period}, date(${period}, '+6 days'), ${nowIso()})
       returning id`);
     return rows[0]!.id;
   }
@@ -323,17 +323,16 @@ export class WorkforceBackend {
       select id from roster_versions where period_start=${source.periodStart}
         and period_end=${source.periodEnd} and status='draft' limit 1`);
     if (drafts.length > 0) throw new AppError("roster.draft_exists", {});
-    const venueId = await venueLocationId(tx);
     const versionId = newId();
-    await tx.execute(sql`insert into roster_versions (id, location_id, period_start, period_end, created_at)
-      values (${versionId}, ${venueId}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
+    await tx.execute(sql`insert into roster_versions (id, period_start, period_end, created_at)
+      values (${versionId}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
     const originalShifts = await this.shiftsForVersion(tx, source.id);
     const shiftIds = new Map<string, string>();
     for (const shift of originalShifts) {
       const copyId = newId();
-      await tx.execute(sql`insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
+      await tx.execute(sql`insert into shifts (id, person_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, roster_version_id, created_at)
-        select ${copyId}, person_id, ${venueId}, starts_at, starts_offset_minutes,
+        select ${copyId}, person_id, starts_at, starts_offset_minutes,
           ends_at, ends_offset_minutes, ${versionId}, created_at from shifts where id=${shift.id}`);
       shiftIds.set(shift.id, copyId);
     }
@@ -419,9 +418,9 @@ export class WorkforceBackend {
     await assertPersonExists(tx, input.personId, "personId");
     // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
     const { rows } = await tx.execute<{ id: string }>(sql`
-      insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
+      insert into shifts (id, person_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, roster_version_id, created_at)
-      values (${newId()}, ${input.personId}, ${await venueLocationId(tx)},
+      values (${newId()}, ${input.personId},
         ${startsAt}, ${input.startsOffsetMinutes}, ${endsAt}, ${input.endsOffsetMinutes},
         ${input.versionId}, ${nowIso()})
       returning id`);

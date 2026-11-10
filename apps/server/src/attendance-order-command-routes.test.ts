@@ -140,27 +140,17 @@ describe("accepted till order command attendance", () => {
           r.source,
           r.key,
           r.personId,
-          r.locationId,
           r.kind,
           r.at,
           r.offsetMinutes,
           r.outcome,
         ]),
       ).toEqual([
-        [
-          "order",
-          key,
-          v.operatorId,
-          v.cfg.locationId,
-          "order",
-          "2026-01-05T16:40:00.000Z",
-          60,
-          "qualifying",
-        ],
+        ["order", key, v.operatorId, "order", "2026-01-05T16:40:00.000Z", 60, "qualifying"],
       ]);
-      expect(
-        (await state()).days.map((r) => [r.locationId, r.businessDay, r.dirtyRevision]),
-      ).toEqual([[v.cfg.locationId, "2026-01-05", 1]]);
+      expect((await state()).days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([
+        ["2026-01-05", 1],
+      ]);
       const [order] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, id));
       expect([order!.status, order!.revision]).toEqual([
         action === "place" ? "placed" : action === "cancel" ? "abandoned" : "open",
@@ -252,8 +242,8 @@ describe("accepted till order command attendance", () => {
           (row) => row.workingOrderId === party.tabId && row.kind === "order_placed",
         );
         expect(amendment!.actorId).toBe(v.operatorId);
-        expect((await state()).facts.map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
-          [amendment!.id, v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"],
+        expect((await state()).facts.map((r) => [r.key, r.personId, r.at])).toEqual([
+          [amendment!.id, v.operatorId, "2026-01-05T16:40:00.000Z"],
         ]);
       }
     },

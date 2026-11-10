@@ -204,12 +204,10 @@ describe("group events from draft submission and order editing", () => {
       expect(
         saved.facts
           .filter((f) => f.key.startsWith("group:"))
-          .map((f) => [f.key, f.personId, f.locationId, f.at])
+          .map((f) => [f.key, f.personId, f.at])
           .sort(),
       ).toEqual(
-        events
-          .map((e) => [`group:${e.id}`, v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"])
-          .sort(),
+        events.map((e) => [`group:${e.id}`, v.operatorId, "2026-01-05T16:40:00.000Z"]).sort(),
       );
     },
   );

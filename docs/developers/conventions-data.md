@@ -1836,6 +1836,10 @@ format 10, and older files are refused as `setup.configuration_outdated`.
 A1308 slice 1b-ii (format 11) moves the comp limit from `adjustment_settings` to the
 `settings.adjustments` document; a format-10 export is refused as outdated.
 
+**2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
+staff and booking tables and makes `convenio_config` a singleton with integer id 1.
+The format-11 refusal is exercised by `apps/server/src/configuration-import.test.ts`.
+
 From go-live, retiring a module also ships a way for an older export that names it to load (owner,
 2026-11-07), because setup answers an export refused as `setup.configuration_parts_differ` by
 telling the person to update this server. Until go-live a server is reset instead (CLAUDE.md §3).

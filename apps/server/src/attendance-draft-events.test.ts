@@ -109,8 +109,8 @@ async function assertSnapshots(
   actor: string,
 ) {
   const facts = (await state()).facts.filter((f) => events.some((e) => f.key === `event:${e.id}`));
-  expect(facts.map((f) => [f.source, f.key, f.personId, f.locationId, f.at, f.outcome])).toEqual(
-    events.map((e) => ["draft", `event:${e.id}`, actor, v.cfg.locationId, at, "qualifying"]),
+  expect(facts.map((f) => [f.source, f.key, f.personId, f.at, f.outcome])).toEqual(
+    events.map((e) => ["draft", `event:${e.id}`, actor, at, "qualifying"]),
   );
   for (const event of events)
     expect((await factsAt()).filter((f) => f.key === `event:${event.id}`)).toEqual([

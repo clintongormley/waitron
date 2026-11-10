@@ -145,7 +145,7 @@ const standing = async (days: readonly string[]) => {
  *  and moves a repeating holiday date onto it, which the special-day writer refuses once that list
  *  is present, as it is in this suite. */
 const rawDay = (
-  v: Venue,
+  _v: Venue,
   name: string,
   date: string,
   repeatsYearly = false,

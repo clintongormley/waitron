@@ -123,9 +123,13 @@ async function fixture(
       dayCutover: "05:00:00",
     });
     const departmentId = randomUUID();
+    const [otherDepartment] = await tx
+      .select({ id: departments.id })
+      .from(departments)
+      .where(eq(departments.name, "Service"));
     await tx.insert(departments).values({
       id: departmentId,
-      name: "Service",
+      name: otherDepartment === undefined ? "Service" : `Service ${departmentId}`,
       tradingName: "Service",
       active: !options.disabled,
     });
@@ -139,8 +143,13 @@ async function fixture(
       name: "Service",
     });
     // One season covers the whole year, so every weekday range is in it.
-    const seasonId = randomUUID();
-    await tx.insert(seasons).values({ id: seasonId, name: "Winter", startsOn: "12-01" });
+    const [winter] = await tx
+      .select({ id: seasons.id })
+      .from(seasons)
+      .where(eq(seasons.name, "Winter"));
+    const seasonId = winter?.id ?? randomUUID();
+    if (winter === undefined)
+      await tx.insert(seasons).values({ id: seasonId, name: "Winter", startsOn: "12-01" });
     const specialDayId = options.date === undefined ? undefined : randomUUID();
     const specialDayDateId = randomUUID();
     if (specialDayId !== undefined) {
@@ -997,16 +1006,9 @@ describe("a waiting change checks the hours written while it waits", () => {
     });
     expect(await storedZone(v)).toEqual([]);
   });
-  const specialDayNames = (v: Awaited<ReturnType<typeof fixture>>) =>
+  const specialDayNames = (_v: Awaited<ReturnType<typeof fixture>>) =>
     withTransaction(suite.db, async (tx) =>
-      (
-        await tx
-          .select({ name: specialDays.name })
-          .from(specialDays)
-          .where(eq(specialDays.locationId, v.cfg.locationId))
-      )
-        .map((row) => row.name)
-        .sort(),
+      (await tx.select({ name: specialDays.name }).from(specialDays)).map((row) => row.name).sort(),
     );
   const seasonNames = () =>
     withTransaction(suite.db, async (tx) => (await readSeasons(tx)).map((s) => s.name));
@@ -1424,10 +1426,7 @@ describe("undated hours are checked against the start in force", () => {
       paintDate(v, "menu", "2026-12-25", [range("09:00", "17:00")], at, 1),
     ).resolves.toBeUndefined();
     const [day] = await withTransaction(suite.db, (tx) =>
-      tx
-        .select({ id: specialDays.id })
-        .from(specialDays)
-        .where(eq(specialDays.locationId, v.cfg.locationId)),
+      tx.select({ id: specialDays.id }).from(specialDays),
     );
     await expect(
       withTransaction(suite.db, (tx) => deleteSpecialDay(tx, day!.id, at, 1)),

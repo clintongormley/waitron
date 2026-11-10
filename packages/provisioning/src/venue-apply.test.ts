@@ -413,9 +413,9 @@ describe("applyVenue", () => {
         (select count(*) from kitchen_stations
            where location_id = ${venueId} and is_default and active) as default_stations,
         (select count(*) from departments
-           where location_id = ${venueId} and is_default and active) as default_departments,
+           where is_default and active) as default_departments,
         (select count(*) from zone_service_policies
-           where location_id = ${venueId} and is_counter_default) as counter_zones`);
+           where is_counter_default) as counter_zones`);
     expect(counts.rows[0]).toEqual({
       tenants: 1,
       nodes: 1,

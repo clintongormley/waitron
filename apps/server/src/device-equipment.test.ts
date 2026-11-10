@@ -194,12 +194,9 @@ async function signIn(deviceId: string, displayName = "Lucía") {
 }
 
 async function cashSale(venue: Venue, deviceId: string): Promise<void> {
-  const departmentIds = (
-    await suite.db
-      .select({ id: departments.id })
-      .from(departments)
-      .where(eq(departments.locationId, venue.cfg.locationId))
-  ).map((row) => row.id);
+  const departmentIds = (await suite.db.select({ id: departments.id }).from(departments)).map(
+    (row) => row.id,
+  );
   await suite.db
     .update(departmentSalePolicies)
     .set({ receiptPrintMode: "auto" })

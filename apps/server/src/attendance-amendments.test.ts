@@ -108,31 +108,17 @@ async function expectFact(id: string, kind: "order_placed" | "order_cancelled", 
       r.source,
       r.key,
       r.personId,
-      r.locationId,
       r.kind,
       r.at,
       r.offsetMinutes,
       r.outcome,
     ]),
   ).toEqual([
-    [
-      "order",
-      amendment.id,
-      actor,
-      v.cfg.locationId,
-      "order",
-      "2026-01-05T16:40:00.000Z",
-      60,
-      "qualifying",
-    ],
+    ["order", amendment.id, actor, "order", "2026-01-05T16:40:00.000Z", 60, "qualifying"],
   ]);
   expect(
-    (await suite.db.select().from(attendanceDayWork)).map((r) => [
-      r.locationId,
-      r.businessDay,
-      r.dirtyRevision,
-    ]),
-  ).toEqual([[v.cfg.locationId, "2026-01-05", 1]]);
+    (await suite.db.select().from(attendanceDayWork)).map((r) => [r.businessDay, r.dirtyRevision]),
+  ).toEqual([["2026-01-05", 1]]);
   const facts = await run((tx) =>
     readAttendanceFacts(tx, {
       businessDay: "2026-01-05",

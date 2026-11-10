@@ -302,21 +302,18 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
 const MARTA_ROTA = {
   shifts: [
     {
-      location: "Harbour Terrace",
       startsAt: "2026-01-01T22:30:00-02:00",
       endsAt: "2026-01-02T06:30:00-02:00",
       rota: null,
       createdAt: "2026-01-01T08:40:00.000Z",
     },
     {
-      location: "Harbour Terrace",
       startsAt: "2026-02-14T04:41:00+01:00",
       endsAt: "2026-02-14T12:41:00+01:00",
       rota: "draft",
       createdAt: "2025-12-15T08:20:00.000Z",
     },
     {
-      location: "Harbour Terrace",
       startsAt: "2026-07-10T18:00:00+02:00",
       endsAt: "2026-07-11T00:00:00+02:00",
       rota: "published",
@@ -1009,7 +1006,7 @@ describe("WORKFORCE_PERSONAL_DATA", () => {
 
   it("writes a null reason and no changes for an answer that has neither", async () => {
     const people = await seedAll(suite.db);
-    const { locationId, nodeId } = await seedAttendance(suite.db, people);
+    const { nodeId } = await seedAttendance(suite.db, people);
     const person = await seedPerson(suite.db, "Confirms Only");
     const [openEntry, automaticEntry] = await clockInThenAutomaticOut(suite.db, {
       nodeId,

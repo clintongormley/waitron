@@ -191,7 +191,6 @@ describe("provisionVenue", () => {
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
-    const venueId = await venueLocationId(db);
 
     expect(result).not.toHaveProperty("tillId");
     const devices = await db.execute<{ n: number }>(
@@ -214,12 +213,12 @@ describe("provisionVenue", () => {
         (select cast(count(*) as int) from catalogues) as menus,
         (select cast(count(*) as int) from menu_periods p
           join departments d on d.id = p.department_id
-          where d.location_id = ${venueId}) as periods,
+          ) as periods,
         (select cast(count(*) as int) from department_day_ranges s
           join department_days t on t.id = s.day_id
           join seasons se on se.id = t.season_id and se.starts_on = '12-01'
           join departments d on d.id = s.department_id
-          where d.location_id = ${venueId}) as slots`);
+          ) as slots`);
     expect(defaults.rows[0]).toEqual({ menus: 1, periods: 1, slots: 5 });
 
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
@@ -440,9 +439,9 @@ describe("clearProvisionFixture", () => {
     const zoneId = randomUUID();
     await withTransaction(db, async (tx) => {
       await tx.insert(floorZones).values({ id: zoneId, locationId: venueId, name: "Terrace" });
-      await tx.execute(sql`insert into zone_service_policies (zone_id, location_id, department_id)
-        select ${zoneId}, ${venueId}, id from departments
-        where location_id = ${venueId} limit 1`);
+      await tx.execute(sql`insert into zone_service_policies (zone_id, department_id)
+        select ${zoneId}, id from departments
+         limit 1`);
       await tx.execute(sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)
         values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`);
     });
@@ -500,10 +499,10 @@ describe("clearProvisionFixture", () => {
         .returning({ id: kitchenStations.id });
       await tx.insert(kitchenStations).values({ locationId: venueId, name: "Bar" });
       const day = randomUUID();
-      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
-        values (${day}, ${venueId}, 'Christmas Eve', 0)`);
-      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
-        values (${randomUUID()}, ${day}, ${venueId}, '2026-12-24', 0)`);
+      await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
+        values (${day}, 'Christmas Eve', 0)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
+        values (${randomUUID()}, ${day}, '2026-12-24', 0)`);
     });
 
     await clearProvisionFixture(db);
@@ -529,13 +528,13 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const venueId = await venueLocationId(db);
+    await venueLocationId(db);
     const [fiesta, date, day] = [randomUUID(), randomUUID(), randomUUID()];
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
-        values (${fiesta}, ${venueId}, 'Fiesta', 1)`);
-      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
-        values (${date}, ${fiesta}, ${venueId}, '2026-08-15', 0)`);
+      await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
+        values (${fiesta}, 'Fiesta', 1)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
+        values (${date}, ${fiesta}, '2026-08-15', 0)`);
       const department = await createDepartment(tx, { name: "Restaurant", orderStart: "table" });
       await tx.execute(sql`insert into department_days (id, department_id, season_id, weekday, special_day_date_id)
         values (${day}, ${department.id}, null, null, ${date})`);

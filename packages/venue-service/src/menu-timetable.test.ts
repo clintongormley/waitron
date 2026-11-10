@@ -1509,8 +1509,8 @@ const lineContexts = () =>
   db.execute(sql`select * from working_line_contexts order by working_order_line_id`);
 
 /** The restaurant's painted day rows and ranges a special day holds on `date`. */
-const paintOn = async (v: Venue, date: string) => {
-  const onDate = and(eq(specialDayDates.locationId, v.locationId), eq(specialDayDates.date, date));
+const paintOn = async (_v: Venue, date: string) => {
+  const onDate = eq(specialDayDates.date, date);
   const days = await db
     .select({ id: departmentDayRows.id })
     .from(departmentDayRows)
@@ -2794,9 +2794,7 @@ describe("the routing that names a period", () => {
         .from(routingCellPeriods)
         .where(eq(routingCellPeriods.cellId, cocktailsEverywhere)),
     ).toEqual([{ periodId: periods.mediodia }]);
-    expect(
-      await db.select().from(routingCells).where(eq(routingCells.locationId, v.locationId)),
-    ).toHaveLength(6);
+    expect(await db.select().from(routingCells)).toHaveLength(6);
     expect((await uses()).get(periods.mediodia)).toEqual([
       { rowKind: "category", rowLabel: "Cocktails", zoneName: null },
     ]);

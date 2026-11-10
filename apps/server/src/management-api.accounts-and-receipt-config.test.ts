@@ -1223,10 +1223,7 @@ async function getReceiptOverHttp(
 
 const RECEIPT_POLICY = { receiptPrintMode: "auto", printTradingName: true } as const;
 async function receiptDepartment() {
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, venueCfg!.locationId));
+  const [department] = await suite.db.select().from(departments);
   return department!.id;
 }
 async function receiptPath() {

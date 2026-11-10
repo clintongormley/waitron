@@ -188,13 +188,8 @@ describe("attendance for dishes arriving in a party", () => {
     const saved = await state();
     const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
     expect(events).toHaveLength(2);
-    expect(saved.facts.map((f) => [f.key, f.personId, f.locationId, f.at])).toEqual(
-      events.map((e) => [
-        `group:${e.id}`,
-        v.operatorId,
-        v.cfg.locationId,
-        "2026-01-05T16:40:00.000Z",
-      ]),
+    expect(saved.facts.map((f) => [f.key, f.personId, f.at])).toEqual(
+      events.map((e) => [`group:${e.id}`, v.operatorId, "2026-01-05T16:40:00.000Z"]),
     );
   });
   it.each(actions)(
@@ -221,7 +216,6 @@ describe("attendance for dishes arriving in a party", () => {
           source: "draft",
           key: `group:${events[0]!.id}`,
           personId: v.operatorId,
-          locationId: v.cfg.locationId,
           kind: "order",
           at: "2026-01-05T16:40:00.000Z",
           outcome: "qualifying",

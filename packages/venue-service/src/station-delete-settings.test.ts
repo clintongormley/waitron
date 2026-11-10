@@ -154,9 +154,7 @@ it("counts base and child routing rows once and clears only their union", async 
         },
       ])
       .returning();
-    expect(
-      await tx.select().from(routingCells).where(eq(routingCells.locationId, f.cfg.locationId)),
-    ).toEqual(bases);
+    expect(await tx.select().from(routingCells)).toEqual(bases);
     expect(
       sorted(
         await tx
@@ -178,9 +176,7 @@ it("counts base and child routing rows once and clears only their union", async 
       boundScreens: [],
     });
     await module.clearStationDeleteSettings(tx, f.gone);
-    expect(
-      await tx.select().from(routingCells).where(eq(routingCells.locationId, f.cfg.locationId)),
-    ).toEqual(bases.slice(1));
+    expect(await tx.select().from(routingCells)).toEqual(bases.slice(1));
     expect(
       sorted(
         await tx

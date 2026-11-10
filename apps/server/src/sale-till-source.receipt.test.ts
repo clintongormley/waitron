@@ -1,5 +1,4 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { eq } from "drizzle-orm";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 // Sale writes and receipt reads through the real device-authenticated sale route, against a real
 // migrated venue database.
@@ -137,10 +136,7 @@ async function setupVenue(): Promise<{
 
   const venueId = await venueLocationId(suite.db);
   const cfg = tillConfigFromVenue(venue, venueId);
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
     receipt: { operationDescription: "Venta en establecimiento" },
@@ -164,7 +160,7 @@ async function setupVenue(): Promise<{
     });
     const counter = await tx.execute<{ zone_id: string }>(sql`
       select zone_id from zone_service_policies
-      where location_id=${cfg.locationId} and is_counter_default`);
+      where is_counter_default`);
     await offerMenuThroughZone(tx, cfg, counter.rows[0]!.zone_id, cat.id, { makeDefault: true });
     await publishWorkingMenu(tx, cat.id);
     // Through the table definition: `routingCells.id`

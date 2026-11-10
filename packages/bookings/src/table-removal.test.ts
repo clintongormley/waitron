@@ -53,17 +53,15 @@ async function makeTable(v: Venue, label: string): Promise<string> {
 }
 
 async function insertBooking(
-  v: Venue,
+  _v: Venue,
   fields: { tableId: string; date: string; time?: string; status?: string; contact?: string },
 ): Promise<string> {
   const id = newId();
   await db.execute(sql`
     insert into bookings
-      (id, created_at, location_id, table_id, booking_date, booking_time, party_size,
-       contact_name, created_by, status)
+      (id, created_at, table_id, booking_date, booking_time, party_size, contact_name, created_by, status)
     values
-      (${id}, ${nowIso()}, ${v.locationId}, ${fields.tableId}, ${fields.date}, ${fields.time ?? "20:00:00"},
-       2, ${fields.contact ?? "Ana"}, ${randomUUID()}, ${fields.status ?? "booked"})`);
+      (${id}, ${nowIso()}, ${fields.tableId}, ${fields.date}, ${fields.time ?? "20:00:00"}, 2, ${fields.contact ?? "Ana"}, ${randomUUID()}, ${fields.status ?? "booked"})`);
   return id;
 }
 

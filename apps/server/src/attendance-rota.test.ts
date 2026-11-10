@@ -104,7 +104,6 @@ describe("accepted rota writes invalidate attendance in their transaction", () =
     await add(await version());
     expect(await days()).toEqual([
       expect.objectContaining({
-        locationId,
         businessDay: "2026-01-05",
         startAt: "2026-01-05T03:00:00.000Z",
         endAt: "2026-01-06T03:00:00.000Z",

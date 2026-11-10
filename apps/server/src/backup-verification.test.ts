@@ -640,9 +640,8 @@ describe("complete backup verification", () => {
     await appendFile(
       join(targetOnlyRoot, journal.entries.at(-1)!.tag + ".sql"),
       `\n--> statement-breakpoint\ninsert into bookings
-        (id, location_id, booking_date, booking_time, party_size, contact_name, created_by, created_at)
-        values ('90000000-0000-4000-8000-000000000009', '${locationId}', '2026-10-20', '20:00', 2,
-          'verification-fixture', 'verification-fixture', '${capturedAt}');`,
+        (id, booking_date, booking_time, party_size, contact_name, created_by, created_at)
+        values ('90000000-0000-4000-8000-000000000009', '2026-10-20', '20:00', 2, 'verification-fixture', 'verification-fixture', '${capturedAt}');`,
     );
     f.request.target = buildBackupVerificationTarget(f.deps);
     expect(await verify(f)).toMatchObject({
@@ -942,7 +941,7 @@ describe("a venue with workforce, with staffing on and off", () => {
     setup: async (db) => {
       await seedSource(db);
       await db.run(
-        sql`insert into staff_roles (id, location_id, name) values ('30000000-0000-4000-8000-000000000003', ${locationId}, 'Floor')`,
+        sql`insert into staff_roles (id, name) values ('30000000-0000-4000-8000-000000000003', 'Floor')`,
       );
     },
   });

@@ -99,7 +99,7 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("leaves a venue that already has a season alone", async () => {
-    const locationId = await newLocation("One season");
+    await newLocation("One season");
     const [own] = await db
       .insert(seasons)
       .values({ name: "All year", startsOn: "01-01" })
@@ -179,7 +179,7 @@ describe("ensureDefaultSeasons", () => {
   });
 
   it("reads the venue's seasons, ordered by start", async () => {
-    const mine = await newLocation("Mine");
+    await newLocation("Mine");
     await db.insert(seasons).values([
       { name: "Late", startsOn: "10-01" },
       { name: "Early", startsOn: "02-01" },
@@ -575,7 +575,7 @@ describe("saveSeasons", () => {
   });
 
   it("refuses deleting every season", async () => {
-    const locationId = await newLocation("Lone season, saveSeasons");
+    await newLocation("Lone season, saveSeasons");
     const [only] = await db
       .insert(seasons)
       .values({ name: "All year", startsOn: "01-01" })

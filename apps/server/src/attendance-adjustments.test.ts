@@ -140,9 +140,9 @@ describe("an adjustment that empties a held group", () => {
       .where(eq(orderGroupEvents.kind, "removed"));
     expect(event!.actorId).toBe(v.supervisorId);
     const facts = (await state()).facts;
-    expect(facts.map((f) => [f.personId, f.locationId, f.at])).toEqual([
-      [v.supervisorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"],
-      [v.supervisorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"],
+    expect(facts.map((f) => [f.personId, f.at])).toEqual([
+      [v.supervisorId, "2026-01-05T16:40:00.000Z"],
+      [v.supervisorId, "2026-01-05T16:40:00.000Z"],
     ]);
     expect(facts[0]!.key).toBe(`group:${event!.id}`);
     const before = await state();
@@ -190,7 +190,6 @@ describe("adjustment order activity", () => {
           r.source,
           r.key,
           r.personId,
-          r.locationId,
           r.kind,
           r.at,
           r.offsetMinutes,
@@ -201,7 +200,6 @@ describe("adjustment order activity", () => {
           "order",
           `${billId}:${revision + 1}:adjustment`,
           v.supervisorId,
-          v.cfg.locationId,
           "order",
           "2026-01-05T16:40:00.000Z",
           60,
@@ -217,9 +215,9 @@ describe("adjustment order activity", () => {
         1200,
         action === "cancel" || action === "comp" ? 0 : action === "discount_percent" ? 1080 : 1100,
       ]);
-      expect(
-        (await state()).days.map((r) => [r.locationId, r.businessDay, r.dirtyRevision]),
-      ).toEqual([[v.cfg.locationId, "2026-01-05", 1]]);
+      expect((await state()).days.map((r) => [r.businessDay, r.dirtyRevision])).toEqual([
+        ["2026-01-05", 1],
+      ]);
     },
   );
   it.each(actions)(

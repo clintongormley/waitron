@@ -101,7 +101,7 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 /** Insert a booking directly at an arbitrary status, bypassing the lifecycle verbs. */
 async function seedBooking(
-  cfg: VenueCfg,
+  _cfg: VenueCfg,
   createdBy: string,
   status: "booked" | "seated" | "completed" | "no_show" | "cancelled",
 ): Promise<string> {
@@ -237,10 +237,10 @@ describe("createBooking + listBookings", () => {
     expect(listed.map((b) => b.bookingTime)).toEqual(["18:15:00", "18:15:00"]);
   });
 
-  it("plans the day list on the location and date index, not a scan", async () => {
+  it("plans the day list on the date index, not a scan", async () => {
     await setupVenue();
     const plan = await withTransaction(db, async (tx) => {
-      const emitted = bookingsOnDay(tx, await venueLocationId(tx), "2026-08-21").toSQL();
+      const emitted = bookingsOnDay(tx, "2026-08-21").toSQL();
       const parts = emitted.sql.split("?");
       const statement = sql.raw(`explain query plan ${parts[0]}`);
       emitted.params.forEach((param, i) => {
@@ -250,7 +250,7 @@ describe("createBooking + listBookings", () => {
       return tx.execute<{ detail: string }>(statement);
     });
     const details = plan.rows.map((row) => row.detail);
-    expect(details.some((d) => d.includes("USING INDEX bookings_location_date_idx"))).toBe(true);
+    expect(details.some((d) => d.includes("USING INDEX bookings_date_idx"))).toBe(true);
     expect(details.some((d) => d.includes("SCAN bookings"))).toBe(false);
   });
 });

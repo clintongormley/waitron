@@ -32,7 +32,9 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           timeZone: "Europe/Madrid",
           dayCutover: "06:00:00",
         });
-        const cfg = { locationId: await venueLocationId(tx) };
+        {
+          locationId: await venueLocationId(tx);
+        }
         const [special] = await tx
           .insert(specialDays)
           .values({ name: "Annual closure", repeatsYearly: true })

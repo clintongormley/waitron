@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -155,8 +154,7 @@ const expectedDetail = (r: Routed, id: string) => ({
 
 const seeded = (r: Routed) => scoped((tx) => saveSpecialDay(tx, null, christmas(r), new Date(), 0));
 const stored = (id: string) => scoped((tx) => readSpecialDay(tx, id));
-const countDays = async (r: Routed) =>
-  (await db.select().from(specialDays).where(eq(specialDays.locationId, r.cfg.locationId))).length;
+const countDays = async (_r: Routed) => (await db.select().from(specialDays)).length;
 
 async function answers(response: Response, status: number, error?: Record<string, unknown>) {
   expect(response.status).toBe(status);

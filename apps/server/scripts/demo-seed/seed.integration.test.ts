@@ -6,7 +6,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
-import { venueLocationId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -230,12 +230,7 @@ describe("demo seed end-to-end", () => {
       const [counter] = await tx
         .select({ zoneId: zoneServicePolicies.zoneId })
         .from(zoneServicePolicies)
-        .where(
-          and(
-            eq(zoneServicePolicies.locationId, await venueLocationId(tx)),
-            eq(zoneServicePolicies.isCounterDefault, true),
-          ),
-        );
+        .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
       const offerOf = async (product: { id: string; catalogueId: string }) => {
         const [item] = await tx
           .select({ id: menuItems.id })

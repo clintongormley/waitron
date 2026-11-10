@@ -276,10 +276,7 @@ describe("rota counts in the staffing month", () => {
         startsOffsetMinutes: 120,
         endsOffsetMinutes: 120,
       });
-      const [role] = await tx
-        .select()
-        .from(staffRoles)
-        .where(eq(staffRoles.locationId, v.cfg.locationId));
+      const [role] = await tx.select().from(staffRoles);
       await tx
         .insert(shiftAssignments)
         .values({ shiftId, departmentId: v.departmentId, staffRoleId: role!.id });

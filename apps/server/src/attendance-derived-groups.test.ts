@@ -173,10 +173,8 @@ describe("group events derived from accepted commands", () => {
       const saved = await state();
       const events = saved.events.filter((e) => e.actorId === v.operatorId);
       expect(events.map((e) => e.kind).sort()).toEqual(["lines_moved", "removed"]);
-      expect(saved.facts.map((f) => [f.key, f.personId, f.locationId, f.at]).sort()).toEqual(
-        events
-          .map((e) => [`group:${e.id}`, v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"])
-          .sort(),
+      expect(saved.facts.map((f) => [f.key, f.personId, f.at]).sort()).toEqual(
+        events.map((e) => [`group:${e.id}`, v.operatorId, "2026-01-05T16:40:00.000Z"]).sort(),
       );
       const read = (await factsAt()).filter(
         (f) => f.personId === v.operatorId && f.kind === "order",

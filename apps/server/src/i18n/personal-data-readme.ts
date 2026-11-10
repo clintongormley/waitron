@@ -68,7 +68,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "rota.json": {
         holds:
-          "your shifts (their times, location and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them.",
+          "your shifts (their times and the state of the rota each is on), the availability recorded for you, and the shift swaps you asked for or were offered, with the other person's name and who decided them.",
         use: "Used to plan the rota.",
         sentTo: [
           "A manager or admin can download a configuration export that holds your availability, including after you leave.",
@@ -191,7 +191,7 @@ export const PERSONAL_DATA_README_WORDS: Record<"en" | "es", ReadmeWords> = {
       },
       "rota.json": {
         holds:
-          "tus turnos (sus horas, el centro y el estado del cuadrante en que está cada uno), la disponibilidad registrada para ti y los cambios de turno que pediste o te ofrecieron, con el nombre de la otra persona y de quien los decidió.",
+          "tus turnos (sus horas y el estado del cuadrante en que está cada uno), la disponibilidad registrada para ti y los cambios de turno que pediste o te ofrecieron, con el nombre de la otra persona y de quien los decidió.",
         use: "Sirve para planificar el cuadrante.",
         sentTo: [
           "Un gerente o un administrador puede descargar una exportación de la configuración que contiene tu disponibilidad, también después de que te vayas.",

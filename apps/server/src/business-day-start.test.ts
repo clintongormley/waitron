@@ -75,7 +75,7 @@ async function authorRange(
     // Only the season holding the cases' November dates, so each weekday's range is one entry in `conflicts`.
     const seasonId = (
       await tx.execute<{ id: string }>(
-        sql`select id from seasons where location_id = ${venue.cfg.locationId} and starts_on <= '11-03' order by starts_on desc limit 1`,
+        sql`select id from seasons where starts_on <= '11-03' order by starts_on desc limit 1`,
       )
     ).rows[0]!.id;
     await replaceMenuWeek(
@@ -1182,8 +1182,8 @@ describe("a keep-open for tonight past the new changeover", () => {
             values (${zoneId}, ${venue.cfg.locationId}, 'Terrace', ${at.toISOString()})`,
       );
       await tx.execute(
-        sql`insert into zone_service_policies (zone_id, location_id, department_id)
-            values (${zoneId}, ${venue.cfg.locationId}, ${department.id})`,
+        sql`insert into zone_service_policies (zone_id, department_id)
+            values (${zoneId}, ${department.id})`,
       );
       await tx.execute(
         sql`insert into zone_extensions (id, zone_id, business_day, starts_at, ends_at)

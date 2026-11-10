@@ -74,7 +74,7 @@ async function count(table: typeof staffingDays | typeof staffingBlocks) {
 }
 
 it("lets the colour CHECK take every calendar colour and refuses an unknown one", async () => {
-  const v = await venue();
+  await venue();
   const insert = (colour: string) =>
     withTransaction(suite.db, (tx) =>
       tx.insert(staffRoles).values({ name: `Role ${colour}`, colour: colour as never }),

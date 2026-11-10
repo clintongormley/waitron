@@ -281,53 +281,53 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
   });
 
   it("rejects a roster version whose period_end precedes its period_start", async () => {
-    const { locationId } = await seedPersonAndLocation();
+    await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (id, created_at, location_id, period_start, period_end)
-        values (${rowIdentity()}, ${locationId}, '2026-03-08', '2026-03-02')`),
+        insert into roster_versions (id, created_at, period_start, period_end)
+        values (${rowIdentity()}, '2026-03-08', '2026-03-02')`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/roster_versions_period_ck/);
   });
 
   it("rejects a published status carrying a null published_at (the publish-shape invariant)", async () => {
-    const { locationId } = await seedPersonAndLocation();
+    await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (id, created_at, location_id, period_start, period_end, status)
-        values (${rowIdentity()}, ${locationId}, '2026-03-02', '2026-03-08', 'published')`),
+        insert into roster_versions (id, created_at, period_start, period_end, status)
+        values (${rowIdentity()}, '2026-03-02', '2026-03-08', 'published')`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
   it("rejects a draft status carrying a non-null published_at (the other direction)", async () => {
-    const { locationId } = await seedPersonAndLocation();
+    await seedPersonAndLocation();
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (id, created_at, location_id, period_start, period_end, published_at)
-        values (${rowIdentity()}, ${locationId}, '2026-03-02', '2026-03-08', ${nowIso()})`),
+        insert into roster_versions (id, created_at, period_start, period_end, published_at)
+        values (${rowIdentity()}, '2026-03-02', '2026-03-08', ${nowIso()})`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toMatch(/roster_versions_publish_shape_ck/);
   });
 
   it("rejects a second published version for the same (location, period) via the partial unique index", async () => {
-    const { locationId } = await seedPersonAndLocation();
+    await seedPersonAndLocation();
     await suite.db.execute(sql`
-      insert into roster_versions (id, created_at, location_id, period_start, period_end, status, published_at)
-      values (${rowIdentity()}, ${locationId}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`);
+      insert into roster_versions (id, created_at, period_start, period_end, status, published_at)
+      values (${rowIdentity()}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`);
     const error = await captureError(() =>
       suite.db.execute(sql`
-        insert into roster_versions (id, created_at, location_id, period_start, period_end, status, published_at)
-        values (${rowIdentity()}, ${locationId}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`),
+        insert into roster_versions (id, created_at, period_start, period_end, status, published_at)
+        values (${rowIdentity()}, '2026-05-04', '2026-05-10', 'published', ${nowIso()})`),
     );
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
     // SQLite names the index's columns, not the index; these three are
     // `roster_versions_published_period_uq`'s.
     expect(engineErrorMessage(error)).toMatch(
-      /UNIQUE constraint failed: roster_versions\.location_id, roster_versions\.period_start, roster_versions\.period_end/,
+      /UNIQUE constraint failed: roster_versions\.period_start, roster_versions\.period_end/,
     );
   });
 
@@ -345,8 +345,7 @@ describe("the D2 scheduling tables (shifts + roster_versions)", () => {
     });
     const rows = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from roster_versions
-      where location_id = ${locationId}
-        and period_start = '2026-05-11' and period_end = '2026-05-17'`);
+      where period_start = '2026-05-11' and period_end = '2026-05-17'`);
     expect(rows.rows[0]!.n).toBe(2);
   });
 
@@ -582,7 +581,7 @@ describe("the workforce set carries no tenant column", () => {
       "person_id, node_id, sequence_no",
     );
     expect(indexes["roster_versions_published_period_uq"]!.columns).toBe(
-      "location_id, period_start, period_end",
+      "period_start, period_end",
     );
     expect(indexes["roster_versions_published_period_uq"]!.sql).toContain(
       `WHERE "roster_versions"."status" = 'published'`,
@@ -590,9 +589,7 @@ describe("the workforce set carries no tenant column", () => {
     expect(indexes["absences_person_idx"]!.columns).toBe("person_id, starts_on");
     expect(indexes["availability_person_idx"]!.columns).toBe("person_id");
     expect(indexes["employments_person_idx"]!.columns).toBe("person_id");
-    expect(indexes["roster_versions_location_idx"]!.columns).toBe("location_id");
     expect(indexes["shifts_person_starts_idx"]!.columns).toBe("person_id, starts_at");
-    expect(indexes["shift_templates_location_idx"]!.columns).toBe("location_id");
     expect(indexes["shift_swaps_from_shift_idx"]!.columns).toBe("from_shift_id");
     expect(indexes["time_entries_person_event_idx"]!.columns).toBe("person_id, event_at");
     expect(Object.keys(indexes).filter((name) => name.includes("tenant"))).toEqual([]);
@@ -603,7 +600,7 @@ describe("question ownership", () => {
   const single = useVenueDb({ migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS] });
   it("a command's question belongs to its person", async () => {
     await seedTenant(single.db);
-    const locationId = await seedLocation(single.db);
+    await seedLocation(single.db);
     const personId = await seedPerson(single.db, "Worker");
     const other = await seedPerson(single.db, "Other");
     const [question] = await single.db

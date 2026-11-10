@@ -110,7 +110,7 @@ it.each([
 it("refuses a configuration format newer than this box's as newer software", () => {
   const artifact = encryptArtifact(
     packArchive([
-      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 12 })) },
+      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 13 })) },
     ]),
     passphrase,
   );
@@ -690,12 +690,11 @@ it("puts every row under the importing venue whatever location id it names", asy
   const bundle = configurationBundle();
   bundle.modules = { "synthetic-transfer": 1 };
   bundle.tables = {
-    departments: [
+    floor_zones: [
       {
         id: "source-department",
         location_id: "not-a-location-here",
         name: "Bar",
-        trading_name: "Bar",
         created_at: "2026-10-16T11:40:00.000Z",
       },
     ],
@@ -704,10 +703,10 @@ it("puts every row under the importing venue whatever location id it names", asy
     await importConfigurationTables(
       tx,
       bundle,
-      [moduleWith([{ name: "departments" }])],
+      [moduleWith([{ name: "floor_zones" }])],
       bundle.modules,
     );
-    expect((await tx.execute(sql`select location_id from departments`)).rows).toEqual([
+    expect((await tx.execute(sql`select location_id from floor_zones`)).rows).toEqual([
       { location_id: await venueLocationId(tx) },
     ]);
   });

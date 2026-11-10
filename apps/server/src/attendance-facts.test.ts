@@ -414,7 +414,7 @@ describe("attendance source facts", () => {
 });
 
 describe("planned attendance shifts", () => {
-  async function version(status: "draft" | "published" | "superseded", place = locationId) {
+  async function version(status: "draft" | "published" | "superseded", _place = locationId) {
     const id = newId();
     await suite.db.insert(rosterVersions).values({
       id,
@@ -429,7 +429,7 @@ describe("planned attendance shifts", () => {
     rosterVersionId: string | null,
     startsAt: string,
     endsAt: string,
-    place = locationId,
+    _place = locationId,
   ) {
     const id = newId();
     await suite.db.insert(shifts).values({

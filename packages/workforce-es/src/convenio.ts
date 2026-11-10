@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { venueLocationId, type Database, type Transaction } from "@waitron/db";
+import { type Database, type Transaction } from "@waitron/db";
 import { AppError, basisPointsToDecimal, centsToDecimal } from "@waitron/shared";
 import type { OvertimeModel, WorkTimeRuleset, PaidBreakPolicy } from "@waitron/workforce";
 import { convenioConfig } from "./schema/convenio-config.js";
@@ -61,7 +61,7 @@ export async function resolveWorkTimeRuleset(tx: Transaction | Database): Promis
       splitMinGapMinutes: convenioConfig.splitMinGapMinutes,
     })
     .from(convenioConfig)
-    .where(eq(convenioConfig.locationId, await venueLocationId(tx)))
+    .where(eq(convenioConfig.id, 1))
     .limit(1);
   const row = rows[0];
   if (row === undefined) {
@@ -115,11 +115,7 @@ export function policyRowFault(row: Readonly<Record<string, unknown>>): string |
 export async function resolvePaidBreakPolicy(
   tx: Transaction | Database,
 ): Promise<PaidBreakPolicy | null> {
-  const [row] = await tx
-    .select()
-    .from(convenioConfig)
-    .where(eq(convenioConfig.locationId, await venueLocationId(tx)))
-    .limit(1);
+  const [row] = await tx.select().from(convenioConfig).where(eq(convenioConfig.id, 1)).limit(1);
   if (row === undefined || row.continuousPaidBreakMinutes === null) return null;
   if (
     policyRowFault({

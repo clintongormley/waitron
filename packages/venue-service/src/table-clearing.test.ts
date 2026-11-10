@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   departments,
@@ -76,10 +76,7 @@ describe("readTablesNeedingClearing", () => {
       .insert(diningTables)
       .values({ locationId: cfg.locationId, zoneId: zone!.id, label: randomUUID() })
       .returning({ id: diningTables.id });
-    await db
-      .update(departments)
-      .set({ needsClearing: true })
-      .where(eq(departments.locationId, cfg.locationId));
+    await db.update(departments).set({ needsClearing: true });
     const found = await scoped((tx) => readTablesNeedingClearing(tx, [a.tableId, table!.id]));
     expect(found.has(table!.id)).toBe(false);
     expect(found.has(a.tableId)).toBe(true);

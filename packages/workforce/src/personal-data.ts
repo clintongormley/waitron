@@ -1,5 +1,5 @@
 import { attendanceMailOutcome } from "./attendance-mail.js";
-import { locations, outgoingMail } from "@waitron/db";
+import { outgoingMail } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { jsonFile, type ModulePersonalData, type PersonalDataFile } from "@waitron/module";
@@ -61,7 +61,6 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
 
     const shiftRows = await tx
       .select({
-        location: locations.name,
         startsAt: shifts.startsAt,
         startsOffsetMinutes: shifts.startsOffsetMinutes,
         endsAt: shifts.endsAt,
@@ -70,7 +69,6 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         createdAt: shifts.createdAt,
       })
       .from(shifts)
-      .innerJoin(locations, eq(locations.id, shifts.locationId))
       .leftJoin(rosterVersions, eq(rosterVersions.id, shifts.rosterVersionId))
       .where(eq(shifts.personId, personId))
       .orderBy(asc(shifts.startsAt), asc(shifts.createdAt), asc(shifts.id));
@@ -184,7 +182,6 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         files.push(
           jsonFile("rota.json", {
             shifts: shiftRows.map((row) => ({
-              location: row.location,
               startsAt: localWallClock(row.startsAt, row.startsOffsetMinutes),
               endsAt: localWallClock(row.endsAt, row.endsOffsetMinutes),
               rota: row.rota,

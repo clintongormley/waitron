@@ -431,7 +431,7 @@ beforeEach(async () => {
     createdAt: string;
   }) => {
     await suite.db.run(
-      sql`insert into attendance_response_commands (id, requested_by_person_id, authorized_by_person_id, person_id, location_id, question_id, action, input, entry_ids, created_at) values (${row.id}, ${row.by}, ${row.by}, ${row.personId}, ${locationId}, ${row.questionId}, ${row.action}, ${JSON.stringify(row.input)}, ${JSON.stringify([entry!.id])}, ${row.createdAt})`,
+      sql`insert into attendance_response_commands (id, requested_by_person_id, authorized_by_person_id, person_id, question_id, action, input, entry_ids, created_at) values (${row.id}, ${row.by}, ${row.by}, ${row.personId}, ${row.questionId}, ${row.action}, ${JSON.stringify(row.input)}, ${JSON.stringify([entry!.id])}, ${row.createdAt})`,
     );
   };
   await response({
@@ -518,9 +518,7 @@ beforeEach(async () => {
     [sommelier, COLLEAGUE.staffRole],
     [barback, "Barback"],
   ] as const)
-    await suite.db.run(
-      sql`insert into staff_roles (id, location_id, name) values (${id}, ${locationId}, ${name})`,
-    );
+    await suite.db.run(sql`insert into staff_roles (id, name) values (${id}, ${name})`);
   for (const [personId, roleId] of [
     [martaId, bartender],
     [colleagueId, sommelier],

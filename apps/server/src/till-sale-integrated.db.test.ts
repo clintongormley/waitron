@@ -219,10 +219,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
 
   const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
-  const rows = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const rows = await suite.db.select().from(departments);
   for (const department of rows)
     await suite.db.insert(departmentReceipts).values({
       departmentId: department.id,
@@ -1182,9 +1179,7 @@ describe("walk-up invoice preparation", () => {
 describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 2)", () => {
   it("snapshots the zone department's receipt header with a captured card sale", async () => {
     const { cfg, coffee } = await setupVenue();
-    suite.db.run(
-      sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
-    );
+    suite.db.run(sql`update departments set trading_name = 'Deli Counter' `);
     const id = randomUUID();
     const provider = new SimulatorPaymentProvider(suite.db);
 
@@ -1906,9 +1901,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 
   it("snapshots the original zone department when a captured card payment is recovered", async () => {
     const { cfg, coffee } = await setupVenue();
-    suite.db.run(
-      sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
-    );
+    suite.db.run(sql`update departments set trading_name = 'Deli Counter' `);
     const { id } = await seedLostCapture(cfg, coffee, "1", "1.50");
     const { deps } = integratedDeps(suite.db);
 
@@ -3771,8 +3764,8 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       );
       const otherId = randomUUID();
       suite.db
-        .run(sql`insert into departments (id, location_id, name, trading_name, is_default, active, created_at)
-      values (${otherId}, ${cfg.locationId}, 'Other dining', 'Other brand', 0, 1, '2026-10-10T00:00:00Z')`);
+        .run(sql`insert into departments (id, name, trading_name, is_default, active, created_at)
+      values (${otherId}, 'Other dining', 'Other brand', 0, 1, '2026-10-10T00:00:00Z')`);
       suite.db.run(
         sql`update departments set trading_name = 'Recorded counter' where id = ${departmentId}`,
       );

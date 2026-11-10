@@ -101,7 +101,6 @@ describe("seedDemoRestaurant", () => {
 
   it("seeds department service periods instead of a second opening-hours grid", async () => {
     const venue = await provisionVenue();
-    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -121,7 +120,7 @@ describe("seedDemoRestaurant", () => {
       join department_days t on t.id = s.day_id
       join seasons se on se.id = t.season_id and se.starts_on = '12-01'
       join departments d on d.id = p.department_id
-      where d.location_id = ${venueId}
+
       order by d.name, t.weekday, s.starts_at`);
     expect(rows).toEqual([
       ...[1, 2, 3, 4, 5, 6].map((weekday) => ({
@@ -147,7 +146,6 @@ describe("seedDemoRestaurant", () => {
   it("seeds Christmas Day as a closed special day that repeats every year", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-10-06T10:00:00Z") });
     const venue = await provisionVenue();
-    const venueId = await venueLocationId(suite.db);
     await seedDemoRestaurant(suite.db, {
       venue,
       locale: LOCALE,
@@ -164,7 +162,7 @@ describe("seedDemoRestaurant", () => {
     }>(sql`
       select s.name, s.repeats_yearly, d.date, d.closed_all_day, d.holiday_name
       from special_days s join special_day_dates d on d.special_day_id = s.id
-      where s.location_id = ${venueId}`);
+      `);
     expect(rows).toEqual([
       {
         name: "Christmas Day",
@@ -390,7 +388,7 @@ describe("seedDemoRestaurant", () => {
       expect(retired).toEqual([]);
 
       const { rows: subjects } = await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from departments where location_id = ${venueId} order by name`);
+        select id, name from departments  order by name`);
       const weeks: Record<string, string[]> = {};
       for (const subject of subjects) {
         const { rows: ranges } = await tx.execute<{
@@ -420,7 +418,7 @@ describe("seedDemoRestaurant", () => {
 
       const { rows: periods } = await tx.execute<{ name: string }>(sql`
         select p.name from menu_periods p join departments d on d.id = p.department_id
-        where d.location_id = ${venueId} order by d.name`);
+         order by d.name`);
       expect(periods).toEqual([{ name: "Open" }, { name: "Open" }]);
 
       const { rows: zones } = await tx.execute<{ id: string }>(sql`
@@ -761,7 +759,6 @@ describe("seedDemoRestaurant", () => {
         postalCode,
         city: province,
       })();
-      const venueId = await venueLocationId(suite.db);
       await seedDemoRestaurant(suite.db, {
         venue,
         locale: "es",
@@ -773,7 +770,7 @@ describe("seedDemoRestaurant", () => {
       const restaurantPeriods = await suite.db.execute<{ count: number }>(sql`
         select count(*) as count from zone_service_policies p
         join menu_periods d on d.department_id = p.department_id
-        where p.location_id = ${venueId} and p.is_counter_default`);
+        where p.is_counter_default`);
       expect(restaurantPeriods.rows).toEqual([{ count: 1 }]);
 
       const read = await withTransaction(suite.db, async (tx) => {

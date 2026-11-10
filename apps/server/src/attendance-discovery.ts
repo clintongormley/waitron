@@ -2,7 +2,7 @@ import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { lstat } from "node:fs/promises";
 import { and, asc, eq, sql, type SQL } from "drizzle-orm";
-import { billPayments, readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
+import { billPayments, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import {
   attendanceDayWork,
@@ -78,7 +78,6 @@ export async function reconcileAttendanceDay(
         .from(attendanceSourceState)
         .where(
           and(
-            eq(attendanceSourceState.locationId, await venueLocationId(tx)),
             eq(attendanceSourceState.source, "whole-payment"),
             eq(attendanceSourceState.recordKind, "watch"),
             eq(attendanceSourceState.key, fact.key),
@@ -167,11 +166,8 @@ const rowSources: readonly RowSource[] = [
   },
 ];
 
-function scanScope(venueId: string) {
-  return and(
-    eq(attendanceSourceState.locationId, venueId),
-    eq(attendanceSourceState.recordKind, "scan"),
-  );
+function scanScope() {
+  return eq(attendanceSourceState.recordKind, "scan");
 }
 async function endpoints(tx: Transaction) {
   const result: { source: Source; key: string; endpoint: number }[] = [];
@@ -203,7 +199,6 @@ export async function beginAttendanceDiscovery(
   if (!scope.generation)
     throw new AppError("attendance.invalid", { reason: "empty discovery generation" });
   const clock = await readVenueClock(tx);
-  const venueId = await venueLocationId(tx);
   const database = (
     await tx.execute<{ name: string; file: string }>(sql`pragma database_list`)
   ).rows.find((row) => row.name === "main")!.file;
@@ -221,7 +216,7 @@ export async function beginAttendanceDiscovery(
     ...identity,
     scope.schemaVersionBeforeMigrations ?? schemaVersion,
   ]);
-  const scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
+  const scans = await tx.select().from(attendanceSourceState).where(scanScope());
   const saved = scans.find((scan) => scan.source === "rota" && scan.key === "shifts");
   if (
     saved?.fingerprint &&
@@ -236,7 +231,7 @@ export async function beginAttendanceDiscovery(
         .where(eq(attendanceSourceState.id, saved.id));
     return;
   }
-  await tx.delete(attendanceSourceState).where(scanScope(venueId));
+  await tx.delete(attendanceSourceState).where(scanScope());
   for (const endpoint of await endpoints(tx)) {
     await tx.insert(attendanceSourceState).values({
       ...endpoint,
@@ -271,13 +266,7 @@ async function dirtyDay(tx: Transaction, businessDay: string): Promise<void> {
   }
 }
 
-async function remember(
-  tx: Transaction,
-  venueId: string,
-  scan: Scan,
-  row: SourceRow,
-  now: Date,
-): Promise<void> {
+async function remember(tx: Transaction, scan: Scan, row: SourceRow, now: Date): Promise<void> {
   const clock = await readVenueClock(tx);
   const instants = [...(row.instants ?? []), ...(row.at === null ? [] : [row.at])];
   if (scan.source === "clock" && row.relatedId) {
@@ -308,7 +297,6 @@ async function remember(
     days,
   ]);
   const predicate = and(
-    eq(attendanceSourceState.locationId, venueId),
     eq(attendanceSourceState.source, scan.source),
     eq(attendanceSourceState.recordKind, "watch"),
     eq(attendanceSourceState.key, row.key),
@@ -432,11 +420,10 @@ export async function discoverAttendanceDays(
     scope.batchSize > 100
   )
     throw new AppError("attendance.invalid", { reason: "invalid discovery batch" });
-  const venueId = await venueLocationId(tx);
-  let scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
+  let scans = await tx.select().from(attendanceSourceState).where(scanScope());
   if (scans.length === 0) {
     await beginAttendanceDiscovery(tx, { generation: randomUUID() });
-    scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
+    scans = await tx.select().from(attendanceSourceState).where(scanScope());
   }
   const generation = scans[0]!.generation!;
   const clock = await readVenueClock(tx);
@@ -484,8 +471,7 @@ export async function discoverAttendanceDays(
   const scan = scans.find((s) => !s.completed);
   if (scan) {
     const page = await sourcePage(tx, scan, scope.batchSize);
-    for (const row of page)
-      await remember(tx, venueId, scan, row, new Date(scope.now.getTime() - 30_000));
+    for (const row of page) await remember(tx, scan, row, new Date(scope.now.getTime() - 30_000));
     const cursor = page.length === scope.batchSize ? page.at(-1)!.position : scan.endpoint!;
     const completed = cursor === scan.endpoint;
     const fingerprint =
@@ -504,7 +490,6 @@ export async function discoverAttendanceDays(
   if (scan) return { more: scans.some((s) => !s.completed) };
   const due = () =>
     and(
-      eq(attendanceSourceState.locationId, venueId),
       eq(attendanceSourceState.recordKind, "watch"),
       sql`${attendanceSourceState.nextDueAt} <= ${scope.now.toISOString()}`,
     );
@@ -520,7 +505,7 @@ export async function discoverAttendanceDays(
       continue;
     }
     const row = await watchedRow(tx, watch);
-    if (row) await remember(tx, venueId, watch, row, scope.now);
+    if (row) await remember(tx, watch, row, scope.now);
     else {
       for (const day of watch.previousDays) await dirtyDay(tx, day);
       await tx
@@ -543,10 +528,7 @@ export async function nextAttendanceDay(
 ): Promise<AttendanceDay | null> {
   if (!Number.isFinite(scope.now.getTime()))
     throw new AppError("attendance.invalid", { reason: "invalid attendance instant" });
-  const scans = await tx
-    .select()
-    .from(attendanceSourceState)
-    .where(scanScope(await venueLocationId(tx)));
+  const scans = await tx.select().from(attendanceSourceState).where(scanScope());
   if (scans.length === 0 || scans.some((s) => !s.completed)) return null;
   const clock = await readVenueClock(tx);
   const future = await tx

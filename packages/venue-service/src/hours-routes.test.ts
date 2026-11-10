@@ -206,12 +206,12 @@ const week = (cells: Partial<Record<number, WeekCell>> = {}): WeekDay[] =>
 const unsetWeek = (): WeekDay[] =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, cell: { mode: "not_set", periods: [] } }));
 
-const venueDates = (fx: Fixture) =>
+const venueDates = (_fx: Fixture) =>
   db
     .select({ id: specialDays.id, date: specialDayDates.date, name: specialDays.name })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(eq(specialDayDates.locationId, fx.cfg.locationId))
+
     .orderBy(asc(specialDayDates.date));
 
 const createDay = (

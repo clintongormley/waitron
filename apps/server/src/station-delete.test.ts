@@ -410,7 +410,7 @@ describe("permanent station deletion", () => {
       survivingCell = randomUUID();
     await inTx(v, async (tx) => {
       await tx.execute(
-        sql`insert into routing_cells (id,location_id,no_category,station_id,product_id) values (${ownedCell},${v.cfg.locationId},1,${id},null), (${survivingCell},${v.cfg.locationId},0,${otherId},${v.productId("Flan")})`,
+        sql`insert into routing_cells (id, no_category, station_id, product_id) values (${ownedCell}, 1, ${id}, null), (${survivingCell},0,${otherId},${v.productId("Flan")})`,
       );
       await tx.execute(
         sql`insert into station_day_states (id,station_id,business_day,open,sends_to_station_id) values (${randomUUID()},${id},'2026-10-09',0,null), (${randomUUID()},${id},'2026-10-10',0,null), (${randomUUID()},${otherId},'2026-10-10',0,${id})`,

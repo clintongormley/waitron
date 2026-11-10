@@ -70,7 +70,7 @@ for (const enabled of [true, false]) {
             .returning();
           const staffRoleId = crypto.randomUUID();
           await tx.execute(
-            sql`insert into staff_roles (id, location_id, name, colour, position) values (${staffRoleId}, ${venue.cfg.locationId}, 'Sous chef', 'green', 0)`,
+            sql`insert into staff_roles (id, name, colour, position) values (${staffRoleId}, 'Sous chef', 'green', 0)`,
           );
           await tx.execute(
             sql`insert into shift_assignments (shift_id, department_id, staff_role_id) values (${shift!.id}, ${department!.id}, ${staffRoleId})`,

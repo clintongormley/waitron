@@ -120,7 +120,7 @@ async function send(
   });
 }
 
-async function seedAcceptedSwap(personId: string, locationId: string): Promise<string> {
+async function seedAcceptedSwap(personId: string, _locationId: string): Promise<string> {
   const [shift] = await suite.db
     .insert(shifts)
     .values({

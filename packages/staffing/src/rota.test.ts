@@ -160,7 +160,7 @@ async function seasonHours(
     });
   });
 }
-async function specialDay(cfg: Cfg, name: string, date: string, closedAllDay = false) {
+async function specialDay(_cfg: Cfg, name: string, date: string, closedAllDay = false) {
   return tx(async (t) => {
     const [special] = await t
       .insert(specialDays)
@@ -173,7 +173,7 @@ async function specialDay(cfg: Cfg, name: string, date: string, closedAllDay = f
     return { id: special!.id, dateId: row!.id };
   });
 }
-async function addSeason(cfg: Cfg, name: string, startsOn: string) {
+async function addSeason(_cfg: Cfg, name: string, startsOn: string) {
   return tx(async (t) => {
     const [row] = await t.insert(seasons).values({ name, startsOn }).returning({ id: seasons.id });
     return row!.id;

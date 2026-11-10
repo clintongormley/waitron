@@ -43,7 +43,7 @@ async function seasonVenue() {
   return provisionSignedInTill(suite.db, {
     taxId: nextNif(),
     dayCutover: "06:00",
-    seed: async (tx, cfg) => {
+    seed: async (tx, _cfg) => {
       const restaurant = await createBareDepartment(tx, "Restaurant", SUNDAY_00_15);
       const diningRoomId = (await createServiceZone(tx, { name: "Sala", departmentId: restaurant }))
         .id;
@@ -67,12 +67,9 @@ async function seasonVenue() {
       const dinner = await period("Dinner", dinnerMenu.menuId);
       const lateBar = await period("Late bar", lateBarMenu.menuId);
       const seasonId = async (name: string) =>
-        (
-          await tx
-            .select({ id: seasons.id, name: seasons.name })
-            .from(seasons)
-            .where(eq(seasons.locationId, cfg.locationId))
-        ).find((season) => season.name === starterName(STARTER_SEASON_NAMES, name, "es"))!.id;
+        (await tx.select({ id: seasons.id, name: seasons.name }).from(seasons)).find(
+          (season) => season.name === starterName(STARTER_SEASON_NAMES, name, "es"),
+        )!.id;
       const saturday = (periodId: string) =>
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

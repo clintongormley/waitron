@@ -692,9 +692,7 @@ describe("saveSpecialDay", () => {
       params: {},
     });
     expect(await read(before.id)).toEqual(before);
-    expect(
-      await db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId)),
-    ).toHaveLength(1);
+    expect(await db.select().from(specialDays)).toHaveLength(1);
   });
 
   it("refuses an id it does not hold", async () => {
@@ -746,9 +744,7 @@ describe("saveSpecialDay", () => {
         code: "special_day.invalid",
         params: { field: "paint.0.ranges.0.startsAt", reason: "clock_skips", date: "2026-03-28" },
       });
-      expect(
-        await db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId)),
-      ).toEqual([]);
+      expect(await db.select().from(specialDays)).toEqual([]);
       // After it, the next occurrence is 2027-03-28, whose night (28 → 29 March) skips nothing.
       const saved = await save(null, skipping("2025-03-28", true, v), new Date("2026-04-01"));
       expect(saved.paint).toHaveLength(1);

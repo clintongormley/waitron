@@ -2,7 +2,7 @@ import type { Transaction } from "@waitron/db";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -28,7 +28,6 @@ import "./errors.js";
 const noopLog: Logger = () => {};
 let deviceId: string;
 let deviceCookie: string;
-let locationId: string;
 let me: string;
 let colleague: string;
 
@@ -42,7 +41,6 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    locationId = await venueLocationId(db);
     deviceId = await seedSessionDevice(db);
     deviceCookie = await deviceCookieForTest(db, deviceId);
     const [meRow] = await db
@@ -92,8 +90,7 @@ async function send(
 
 async function insertShift(personId: string, startsAt: string, endsAt: string): Promise<string> {
   const { rows: versions } = await suite.db.execute<{ id: string }>(sql`
-    select id from roster_versions where location_id=${locationId}
-      and period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
+    select id from roster_versions where period_start='2026-01-01' and period_end='2026-12-31' and status='published'`);
   let rosterVersionId = versions[0]?.id;
   if (rosterVersionId === undefined) {
     const [version] = await suite.db

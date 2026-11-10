@@ -6,11 +6,6 @@ import { convenioConfig } from "../src/schema/convenio-config.js";
  */
 export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/test/fixtures.js";
 
-/**
- * A `convenio_config` row for the location. With no overrides it is a DEFAULT row — only
- * location_id is set, so every rule takes its DB-default (the ET statutory floor /
- * today's default). Pass `workingDaysPerWeek` or `overtimeModel` to override a single rule.
- */
 export async function seedConvenioConfig(
   db: Database | Transaction,
   params: {
@@ -19,11 +14,8 @@ export async function seedConvenioConfig(
     overtimeModel?: "daily_accrual" | "period_net";
   },
 ): Promise<void> {
-  // Through drizzle rather than raw SQL: `id` and `created_at` take their value from the table's
-  // `$defaultFn`, which drizzle runs per insert; they are NOT SQL DEFAULTs. A rule column the caller
-  // did not override is left out of the statement, so it takes the column DEFAULT the migration
-  // declares.
   await db.insert(convenioConfig).values({
+    id: 1,
     ...(params.workingDaysPerWeek === undefined
       ? {}
       : { workingDaysPerWeek: params.workingDaysPerWeek }),

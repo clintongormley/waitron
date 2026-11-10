@@ -974,7 +974,7 @@ it("qualifies a captured pending bill at its saved instant when the retained out
   await pass();
   const { attendanceOperationFacts } = await import("@waitron/workforce");
   const [fact] = await suite.db.select().from(attendanceOperationFacts);
-  expect(fact).toMatchObject({ outcome: "qualifying", locationId, at: "2026-01-05T11:00:00.000Z" });
+  expect(fact).toMatchObject({ outcome: "qualifying", at: "2026-01-05T11:00:00.000Z" });
   expect(
     (await rows()).filter((r) => r.dirtyRevision !== r.evaluatedRevision).map((r) => r.businessDay),
   ).toEqual(["2026-01-05"]);

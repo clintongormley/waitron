@@ -38,7 +38,7 @@ export async function seedFloor(
 
   const { rows: defaults } = await tx.execute<{ department_id: string; zone_id: string }>(sql`
     select department_id, zone_id from zone_service_policies
-    where location_id = ${locationId} and is_counter_default
+    where is_counter_default
     limit 1`);
   const defaultPolicy = defaults[0];
   if (defaultPolicy === undefined) {

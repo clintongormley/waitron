@@ -25,7 +25,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const backend = new WorkforceBackend();
-let locationId: string, nodeId: string, personId: string, primary: boolean;
+let nodeId: string, personId: string, primary: boolean;
 const now = new Date("2026-01-07T09:00:00Z");
 const deps = () => ({ db: suite.db, nodeId, now: () => now, isPrimary: () => primary });
 beforeEach(async () => {
@@ -38,7 +38,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
+  await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   const [person] = await suite.db
     .insert(persons)

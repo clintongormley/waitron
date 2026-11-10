@@ -329,10 +329,7 @@ async function configureReceipt(
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.mode !== undefined) {
-      const scopedDepartments = await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(eq(departments.locationId, cfg.locationId));
+      const scopedDepartments = await tx.select({ id: departments.id }).from(departments);
       await tx
         .update(departmentSalePolicies)
         .set({ receiptPrintMode: opts.mode })
@@ -2187,9 +2184,7 @@ describe("receipt issuer", () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await withTransaction(suite.db, (tx) =>
-      tx.execute(
-        sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
-      ),
+      tx.execute(sql`update departments set trading_name = 'Deli Counter' `),
     );
     const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
@@ -2209,9 +2204,7 @@ describe("receipt issuer", () => {
     expect(original.indexOf("Deli Counter")).toBeLessThan(issuerAt(original));
 
     await withTransaction(suite.db, (tx) =>
-      tx.execute(
-        sql`update departments set trading_name = 'Renamed', active = 0 where location_id = ${cfg.locationId}`,
-      ),
+      tx.execute(sql`update departments set trading_name = 'Renamed', active = 0 `),
     );
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId));
     const jobs = await printJobsFor(cfg);

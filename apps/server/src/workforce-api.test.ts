@@ -388,8 +388,8 @@ describe("mountWorkforceApi — publish", () => {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(convenioConfig)
-        .values({})
-        .onConflictDoNothing({ target: convenioConfig.locationId });
+        .values({ id: 1 })
+        .onConflictDoNothing({ target: convenioConfig.id });
     });
   }
 
@@ -684,7 +684,7 @@ describe("roster warnings while planning", () => {
     return locationId;
   }
   async function version(
-    locationId: string,
+    _locationId: string,
     periodStart: string,
     status: "published" | "draft" | "superseded",
   ) {
@@ -701,7 +701,7 @@ describe("roster warnings while planning", () => {
     return row!.id;
   }
   async function planned(
-    locationId: string,
+    _locationId: string,
     startsAt: string,
     endsAt: string,
     rosterVersionId: string | null = null,

@@ -57,7 +57,7 @@ describe("durable attendance day work", () => {
       },
     ]);
   });
-  it("saves the venue's day from a day with no location", async () => {
+  it("saves the venue's day", async () => {
     await withTransaction(suite.db, (tx) =>
       enqueueAttendanceDay(tx, {
         businessDay: "2026-01-05",
@@ -66,7 +66,7 @@ describe("durable attendance day work", () => {
       }),
     );
     expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
-      { locationId, businessDay: "2026-01-05" },
+      { businessDay: "2026-01-05" },
     ]);
   });
   it("refuses changed saved historical bounds without altering the work", async () => {

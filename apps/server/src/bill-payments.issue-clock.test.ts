@@ -141,10 +141,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
-  const rows = await db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const rows = await db.select().from(departments);
   for (const department of rows)
     await db
       .insert(departmentReceipts)

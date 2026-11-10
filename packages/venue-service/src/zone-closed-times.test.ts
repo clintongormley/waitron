@@ -155,7 +155,7 @@ describe("zone closed times", () => {
     const seasonIds = await suite.db
       .select({ id: seasons.id })
       .from(seasons)
-      .where(eq(seasons.locationId, b.cfg.locationId))
+
       .orderBy(seasons.id);
     expect(seasonIds).toHaveLength(4);
     expect(

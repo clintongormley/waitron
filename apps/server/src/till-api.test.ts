@@ -233,8 +233,8 @@ const suite = useVenueDb({
           .returning({ id: floorZones.id });
         await tx.execute(sql`
         insert into zone_service_policies
-          (location_id, zone_id, department_id, is_counter_default)
-        values (${venueId}, ${zone!.id}, ${department!.id}, true)`);
+          (zone_id, department_id, is_counter_default)
+        values (${zone!.id}, ${department!.id}, true)`);
         await tx.execute(sql`
         insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
@@ -2219,8 +2219,8 @@ describe("zone-offer catalogue routes", () => {
       .values({ locationId: cfg.locationId, name: "Collect at counter" })
       .returning({ id: floorZones.id });
     await suite.db.execute(sql`
-      insert into zone_service_policies (location_id, zone_id, department_id)
-      select ${cfg.locationId}, ${second!.id}, department_id
+      insert into zone_service_policies (zone_id, department_id)
+      select ${second!.id}, department_id
       from zone_service_policies where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
       insert into zone_sale_policies (zone_id, order_start, paid_when) values (${second!.id}, 'counter', 'ticket_then_pay')`);
@@ -2308,8 +2308,8 @@ describe("zone-offer catalogue routes", () => {
       .returning({ id: floorZones.id });
     await suite.db.execute(sql`
       insert into zone_service_policies
-        (location_id, zone_id, department_id)
-      select ${cfg.locationId}, ${second!.id}, department_id
+        (zone_id, department_id)
+      select ${second!.id}, department_id
       from zone_service_policies
       where zone_id = ${counterZoneId}`);
     await suite.db.execute(sql`
@@ -4129,8 +4129,8 @@ describe("/api/zones + served route + /api/tables/state occupancy fields (FP-1, 
       .returning({ id: departments.id });
     await suite.db.execute(sql`
       insert into zone_service_policies
-        (location_id, zone_id, department_id)
-      values (${cfg.locationId}, ${zoneId}, ${department!.id})`);
+        (zone_id, department_id)
+      values (${zoneId}, ${department!.id})`);
     await suite.db.execute(
       sql`insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'table')`,
     );
@@ -4665,7 +4665,7 @@ describe("canonical modifier HTTP serialization", () => {
       })
       .returning({ id: departments.id });
     await suite.db.execute(
-      sql`insert into zone_service_policies (location_id,zone_id,department_id) values (${cfg.locationId},${zoneId},${modifierDepartment!.id})`,
+      sql`insert into zone_service_policies (zone_id, department_id) values (${zoneId}, ${modifierDepartment!.id})`,
     );
     await suite.db.execute(
       sql`insert into department_sale_policies (department_id, order_start) values (${modifierDepartment!.id}, 'table')`,

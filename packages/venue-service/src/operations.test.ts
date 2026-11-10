@@ -328,12 +328,8 @@ describe("new department service periods", () => {
     });
     return id;
   }
-  const terraces = async (id: string) =>
-    (
-      await db.execute(
-        sql`select name from departments where location_id = ${id} and name = 'Terrace'`,
-      )
-    ).rows;
+  const terraces = async (_id: string) =>
+    (await db.execute(sql`select name from departments where name = 'Terrace'`)).rows;
   const createTerrace = () =>
     scoped((tx) => createDepartment(tx, { name: "Terrace", orderStart: "counter" }));
 

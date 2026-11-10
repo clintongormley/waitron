@@ -28,10 +28,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 it("a trading boot without a fiscal description field accepts a department's empty receipt", async () => {
   const venue = await provisionBillVenue(suite.db);
   await suite.db.update(nodes).set({ filingModule: "none" }).where(eq(nodes.id, venue.cfg.nodeId));
-  const rows = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, venue.cfg.locationId));
+  const rows = await suite.db.select().from(departments);
   for (const row of rows)
     await suite.db.delete(departmentReceipts).where(eq(departmentReceipts.departmentId, row.id));
   await stampDeployment(suite.db, "preproduction");

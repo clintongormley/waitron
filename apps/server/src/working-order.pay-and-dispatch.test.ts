@@ -220,10 +220,7 @@ async function setupVenue(): Promise<SeededVenue> {
 
   const venueId = await venueLocationId(suite.db);
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
-  const [department] = await suite.db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const [department] = await suite.db.select().from(departments);
   await suite.db.insert(departmentReceipts).values({
     departmentId: department!.id,
     receipt: { operationDescription: "Venta en establecimiento" },
@@ -1868,9 +1865,7 @@ describe("prepare & collect — zone payment timing", () => {
 
   it("snapshots the department trading name when the quick sale is paid", async () => {
     const { cfg, coffee, zoneId } = await modeVenue("ticket_then_pay");
-    await suite.db.execute(
-      sql`update departments set trading_name = 'Deli Before Payment' where location_id = ${cfg.locationId}`,
-    );
+    await suite.db.execute(sql`update departments set trading_name = 'Deli Before Payment' `);
     const id = randomUUID();
     await parkOrder({ db: suite.db }, cfg, {
       id,
@@ -1891,9 +1886,7 @@ describe("prepare & collect — zone payment timing", () => {
       .from(sales)
       .where(eq(sales.workingOrderId, id));
     expect(sale).toBeDefined();
-    await suite.db.execute(
-      sql`update departments set trading_name = 'Renamed After Filing' where location_id = ${cfg.locationId}`,
-    );
+    await suite.db.execute(sql`update departments set trading_name = 'Renamed After Filing' `);
 
     const header = await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.readSaleReceiptHeader(tx, sale!.id),

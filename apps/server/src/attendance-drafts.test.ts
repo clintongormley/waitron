@@ -108,14 +108,9 @@ describe("accepted draft attendance capture", () => {
     expect(
       (await suite.db.select().from(orderDrafts)).map((d) => [d.id, d.state, d.revision]),
     ).toEqual([[draft.id, "open", draft.revision]]);
-    expect((await operations()).map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
-      [await eventKey(draft.id, "created"), OPERATOR, v.cfg.locationId, "2026-01-05T09:00:00.000Z"],
-      [
-        `${draft.id}:${draft.revision}:save`,
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-01-05T09:00:00.000Z",
-      ],
+    expect((await operations()).map((r) => [r.key, r.personId, r.at])).toEqual([
+      [await eventKey(draft.id, "created"), OPERATOR, "2026-01-05T09:00:00.000Z"],
+      [`${draft.id}:${draft.revision}:save`, OPERATOR, "2026-01-05T09:00:00.000Z"],
     ]);
   });
   it("a refused Finish reaches no close capture and retains the party, draft and attendance", async () => {
@@ -153,30 +148,10 @@ describe("accepted draft attendance capture", () => {
     const first = await save();
     vi.setSystemTime(new Date("2026-01-05T11:00:00Z"));
     const second = await save(first);
-    expect(
-      (await operations()).map((r) => [r.key, r.personId, r.locationId, r.at, r.outcome]),
-    ).toEqual([
-      [
-        await eventKey(first.id, "created"),
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-01-05T09:00:00.000Z",
-        "qualifying",
-      ],
-      [
-        `${first.id}:${first.revision}:save`,
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-01-05T09:00:00.000Z",
-        "qualifying",
-      ],
-      [
-        `${second.id}:${second.revision}:save`,
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-01-05T11:00:00.000Z",
-        "qualifying",
-      ],
+    expect((await operations()).map((r) => [r.key, r.personId, r.at, r.outcome])).toEqual([
+      [await eventKey(first.id, "created"), OPERATOR, "2026-01-05T09:00:00.000Z", "qualifying"],
+      [`${first.id}:${first.revision}:save`, OPERATOR, "2026-01-05T09:00:00.000Z", "qualifying"],
+      [`${second.id}:${second.revision}:save`, OPERATOR, "2026-01-05T11:00:00.000Z", "qualifying"],
     ]);
   });
   it("takeover credits the taker and taking one's own draft again creates no fact", async () => {
@@ -241,21 +216,11 @@ describe("accepted draft attendance capture", () => {
       }),
     );
     expect(await operations()).toEqual(before);
-    expect(before.map((r) => [r.key, r.personId, r.locationId, r.at])).toEqual([
-      [await eventKey(first.id, "created"), OPERATOR, v.cfg.locationId, "2026-01-05T09:00:00.000Z"],
-      [
-        `${first.id}:${first.revision}:save`,
-        OPERATOR,
-        v.cfg.locationId,
-        "2026-01-05T09:00:00.000Z",
-      ],
-      [await eventKey(first.id, "discarded"), other, v.cfg.locationId, "2026-01-05T14:00:00.000Z"],
-      [
-        `${first.id}:${first.revision + 1}:discard`,
-        other,
-        v.cfg.locationId,
-        "2026-01-05T14:00:00.000Z",
-      ],
+    expect(before.map((r) => [r.key, r.personId, r.at])).toEqual([
+      [await eventKey(first.id, "created"), OPERATOR, "2026-01-05T09:00:00.000Z"],
+      [`${first.id}:${first.revision}:save`, OPERATOR, "2026-01-05T09:00:00.000Z"],
+      [await eventKey(first.id, "discarded"), other, "2026-01-05T14:00:00.000Z"],
+      [`${first.id}:${first.revision + 1}:discard`, other, "2026-01-05T14:00:00.000Z"],
     ]);
   });
   it("a refused stale save creates no activity", async () => {

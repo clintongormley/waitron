@@ -205,10 +205,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });
-  const rows = await db
-    .select()
-    .from(departments)
-    .where(eq(departments.locationId, cfg.locationId));
+  const rows = await db.select().from(departments);
   for (const department of rows)
     await db
       .insert(departmentReceipts)
@@ -382,10 +379,7 @@ async function withDepartmentContact(
   const original = await inTx((tx) => tx.select().from(departmentReceipts));
   try {
     await inTx(async (tx) => {
-      const rows = await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(eq(departments.locationId, venue.cfg.locationId));
+      const rows = await tx.select({ id: departments.id }).from(departments);
       for (const { id } of rows) {
         await tx
           .insert(departmentReceipts)
@@ -2505,12 +2499,7 @@ describe("the invoice at full payment", () => {
           tx
             .select({ id: departments.id })
             .from(departments)
-            .where(
-              and(
-                eq(departments.locationId, venue.cfg.locationId),
-                eq(departments.isDefault, true),
-              ),
-            ),
+            .where(and(eq(departments.isDefault, true))),
         );
         expect(context!.departmentId).toBe(fallback!.id);
         const [own] = await inTx((tx) =>
@@ -3509,10 +3498,7 @@ describe("bill answer receipt presentation", () => {
 
 async function invoiceContactDepartment() {
   const rows = await inTx((tx) =>
-    tx
-      .select({ id: departments.id, isDefault: departments.isDefault })
-      .from(departments)
-      .where(eq(departments.locationId, venue.cfg.locationId)),
+    tx.select({ id: departments.id, isDefault: departments.isDefault }).from(departments),
   );
   return rows.find((row) => row.isDefault)!.id;
 }

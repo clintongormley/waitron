@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
@@ -565,7 +565,7 @@ it.each([
 
 it("exports credited work and raw pauses using the enabled agreement policy", async () => {
   await suite.db.insert(api.convenioConfig).values({
-    locationId: await venueLocationId(suite.db),
+    id: 1,
     breakThresholdMinutes: 300,
     splitMinSegmentMinutes: 180,
     splitMaxSegmentMinutes: 300,

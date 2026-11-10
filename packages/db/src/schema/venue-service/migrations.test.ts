@@ -247,15 +247,11 @@ describe("the venue-service tables carry no tenant column", () => {
     expect(shape).toEqual({
       departments: {
         primaryKey: ["id"],
-        foreignKeys: ["(location_id) -> locations(id)"],
+        foreignKeys: [],
       },
       zone_service_policies: {
         primaryKey: ["zone_id"],
-        foreignKeys: [
-          "(department_id) -> departments(id)",
-          "(location_id) -> locations(id)",
-          "(zone_id) -> floor_zones(id)",
-        ],
+        foreignKeys: ["(department_id) -> departments(id)", "(zone_id) -> floor_zones(id)"],
       },
       zone_extensions: {
         primaryKey: ["id"],
@@ -294,7 +290,6 @@ describe("the venue-service tables carry no tenant column", () => {
         primaryKey: ["id"],
         foreignKeys: [
           "(category_id) -> categories(id) on delete cascade",
-          "(location_id) -> locations(id)",
           "(product_id) -> products(id)",
           "(station_id) -> kitchen_stations(id)",
           "(zone_id) -> floor_zones(id)",
@@ -377,18 +372,15 @@ describe("the venue-service tables carry no tenant column", () => {
       },
       seasons: {
         primaryKey: ["id"],
-        foreignKeys: ["(location_id) -> locations(id)"],
+        foreignKeys: [],
       },
       special_days: {
         primaryKey: ["id"],
-        foreignKeys: ["(location_id) -> locations(id)"],
+        foreignKeys: [],
       },
       special_day_dates: {
         primaryKey: ["id"],
-        foreignKeys: [
-          "(location_id) -> locations(id)",
-          "(special_day_id) -> special_days(id) on delete cascade",
-        ],
+        foreignKeys: ["(special_day_id) -> special_days(id) on delete cascade"],
       },
       department_days: {
         primaryKey: ["id"],
@@ -435,18 +427,18 @@ describe("the venue-service tables carry no tenant column", () => {
       `"kitchen_notices"."acknowledged_at" is null`,
     );
     expect(columns("device_kitchen_screen_removals_device_idx")).toEqual(["device_id"]);
-    expect(columns("departments_location_name_key")).toEqual(["location_id", "name"]);
-    expect(columns("departments_one_default_per_location_key")).toEqual(["location_id"]);
-    expect(predicate("departments_one_default_per_location_key")).toBe(
-      `"departments"."is_default"`,
-    );
-    expect(columns("zone_service_policies_one_counter_default_key")).toEqual(["location_id"]);
+    expect(columns("departments_name_key")).toEqual(["name"]);
+    expect(columns("departments_one_default_key")).toEqual(["is_default"]);
+    expect(predicate("departments_one_default_key")).toBe(`"departments"."is_default"`);
+    expect(columns("zone_service_policies_one_counter_default_key")).toEqual([
+      "is_counter_default",
+    ]);
     expect(predicate("zone_service_policies_one_counter_default_key")).toBe(
       `"zone_service_policies"."is_counter_default"`,
     );
     for (const name of [
-      "departments_location_name_key",
-      "departments_one_default_per_location_key",
+      "departments_name_key",
+      "departments_one_default_key",
       "zone_service_policies_one_counter_default_key",
     ]) {
       expect(defs[name]?.unique, name).toBe(true);
@@ -475,7 +467,7 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     const [department] = await db
       .insert(departments)
       .values({
-        name: "Bar",
+        name: `Bar ${locationId}`,
         tradingName: "Bar",
       })
       .returning({ id: departments.id });
@@ -490,8 +482,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   async function orderStartPolicies() {
     const v = await venue();
-    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
-      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
+      values (${v.zoneId}, ${v.departmentId})`);
     return v;
   }
 
@@ -683,8 +675,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
 
   async function zoneWithPolicy() {
     const v = await venue();
-    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
-      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
+      values (${v.zoneId}, ${v.departmentId})`);
     return v;
   }
 
@@ -745,8 +737,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       values (${randomUUID()}, ${zoneId}, '2026-10-09', '23:30:00', '01:30:00')`;
     await refusal(extension(v.zoneId), "zone_extensions_zone_fk");
     await refusal(extension(randomUUID()), "zone_extensions_zone_fk");
-    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
-      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
+      values (${v.zoneId}, ${v.departmentId})`);
     await db.execute(extension(v.zoneId));
     expect(
       (
@@ -794,8 +786,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
       .values({ locationId: v.locationId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const cellId = randomUUID();
-    await db.execute(sql`insert into routing_cells (id, location_id, zone_id, station_id)
-      values (${cellId}, ${v.locationId}, ${v.zoneId}, ${station!.id})`);
+    await db.execute(sql`insert into routing_cells (id, zone_id, station_id)
+      values (${cellId}, ${v.zoneId}, ${station!.id})`);
     const periodId = randomUUID();
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
@@ -958,21 +950,15 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   it("refuses a department, zone or menu that does not exist", async () => {
     const v = await venue();
     const missing = "00000000-0000-4000-8000-00000000dead";
+
     await refusal(
-      // `id` and `created_at` are named, or the insert is refused as NOT NULL before the foreign
-      // key is reached.
-      sql`insert into departments (id, location_id, name, trading_name, created_at)
-        values (${randomUUID()}, ${missing}, 'X', 'X', ${new Date().toISOString()})`,
-      "departments_location_fk",
-    );
-    await refusal(
-      sql`insert into zone_service_policies (location_id, zone_id, department_id)
-        values (${v.locationId}, ${missing}, ${v.departmentId})`,
+      sql`insert into zone_service_policies (zone_id, department_id)
+        values (${missing}, ${v.departmentId})`,
       "zone_service_policies_zone_fk",
     );
     await refusal(
-      sql`insert into zone_service_policies (location_id, zone_id, department_id)
-        values (${v.locationId}, ${v.zoneId}, ${missing})`,
+      sql`insert into zone_service_policies (zone_id, department_id)
+        values (${v.zoneId}, ${missing})`,
       "zone_service_policies_department_fk",
     );
     await refusal(
@@ -987,8 +973,8 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     );
     await refusal(
       sql`insert into order_service_contexts
-          (working_order_id, location_id, zone_id, department_id, service_mode)
-        values (${missing}, ${v.locationId}, ${v.zoneId}, ${v.departmentId}, 'prepay')`,
+          (working_order_id, zone_id, department_id, service_mode)
+        values (${missing}, ${v.zoneId}, ${v.departmentId}, 'prepay')`,
       "order_service_contexts_order_fk",
     );
   });
@@ -996,14 +982,14 @@ describe("the venue-service foreign keys refuse a missing target", () => {
   it("a season row written without a colour takes grey, and the table takes any text there", async () => {
     const v = await venue();
     const plain = randomUUID();
-    await db.execute(sql`insert into seasons (id, location_id, name, starts_on)
-      values (${plain}, ${v.locationId}, 'Summer', '06-01')`);
+    await db.execute(sql`insert into seasons (id, name, starts_on)
+      values (${plain}, 'Summer', '06-01')`);
     expect((await db.execute(sql`select colour from seasons where id = ${plain}`)).rows).toEqual([
       { colour: "grey" },
     ]);
     const mauve = randomUUID();
-    await db.execute(sql`insert into seasons (id, location_id, name, starts_on, colour)
-      values (${mauve}, ${v.locationId}, 'Winter', '12-01', 'mauve')`);
+    await db.execute(sql`insert into seasons (id, name, starts_on, colour)
+      values (${mauve}, 'Winter', '12-01', 'mauve')`);
     expect((await db.execute(sql`select colour from seasons where id = ${mauve}`)).rows).toEqual([
       { colour: "mauve" },
     ]);
@@ -1015,16 +1001,16 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await db.execute(sql`insert into menu_periods (id, department_id, name, menu_id)
       values (${periodId}, ${v.departmentId}, 'Lunch', ${v.menuId})`);
     const seasonId = randomUUID();
-    await db.execute(sql`insert into seasons (id, location_id, name, starts_on)
-      values (${seasonId}, ${v.locationId}, 'Summer', '06-01')`);
+    await db.execute(sql`insert into seasons (id, name, starts_on)
+      values (${seasonId}, 'Summer', '06-01')`);
     const weekDayId = randomUUID();
     await db.execute(sql`insert into department_days (id, department_id, season_id, weekday)
       values (${weekDayId}, ${v.departmentId}, ${seasonId}, 6)`);
     await db.execute(sql`insert into department_day_ranges
         (id, day_id, department_id, period_id, starts_at, ends_at)
       values (${randomUUID()}, ${weekDayId}, ${v.departmentId}, ${periodId}, '12:00:00', '16:00:00')`);
-    await db.execute(sql`insert into zone_service_policies (location_id, zone_id, department_id)
-      values (${v.locationId}, ${v.zoneId}, ${v.departmentId})`);
+    await db.execute(sql`insert into zone_service_policies (zone_id, department_id)
+      values (${v.zoneId}, ${v.departmentId})`);
     const zoneDayId = randomUUID();
     await db.execute(sql`insert into zone_days (id, zone_id, season_id, weekday)
       values (${zoneDayId}, ${v.zoneId}, ${seasonId}, 6)`);
@@ -1049,11 +1035,11 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     ).toEqual([]);
 
     const specialDayId = randomUUID();
-    await db.execute(sql`insert into special_days (id, location_id, name)
-      values (${specialDayId}, ${v.locationId}, 'Fiesta')`);
+    await db.execute(sql`insert into special_days (id, name)
+      values (${specialDayId}, 'Fiesta')`);
     const dateId = randomUUID();
-    await db.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date)
-      values (${dateId}, ${specialDayId}, ${v.locationId}, '2026-08-15')`);
+    await db.execute(sql`insert into special_day_dates (id, special_day_id, date)
+      values (${dateId}, ${specialDayId}, '2026-08-15')`);
     const dateDayId = randomUUID();
     await db.execute(sql`insert into department_days (id, department_id, special_day_date_id)
       values (${dateDayId}, ${v.departmentId}, ${dateId})`);
@@ -1073,19 +1059,17 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     ).toEqual([]);
 
     const otherDayId = randomUUID();
-    await db.execute(sql`insert into special_days (id, location_id, name)
-      values (${otherDayId}, ${v.locationId}, 'Feria')`);
-    await db.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date)
-      values (${randomUUID()}, ${otherDayId}, ${v.locationId}, '2026-09-08')`);
+    await db.execute(sql`insert into special_days (id, name)
+      values (${otherDayId}, 'Feria')`);
+    await db.execute(sql`insert into special_day_dates (id, special_day_id, date)
+      values (${randomUUID()}, ${otherDayId}, '2026-09-08')`);
     const error = await captureError(() =>
       db.transaction((tx) =>
-        tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date)
-          values (${randomUUID()}, ${otherDayId}, ${v.locationId}, '2026-09-08')`),
+        tx.execute(sql`insert into special_day_dates (id, special_day_id, date)
+          values (${randomUUID()}, ${otherDayId}, '2026-09-08')`),
       ),
     );
-    expect(engineErrorMessage(error)).toContain(
-      "UNIQUE constraint failed: special_day_dates.location_id, special_day_dates.date",
-    );
+    expect(engineErrorMessage(error)).toContain("UNIQUE constraint failed: special_day_dates.date");
   });
 });
 

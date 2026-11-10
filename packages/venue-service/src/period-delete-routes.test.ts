@@ -212,8 +212,7 @@ async function stored(r: Routed) {
     .select({ period: menuPeriods.name })
     .from(routingCellPeriods)
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
-    .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId))
-    .where(eq(routingCells.locationId, r.locationId));
+    .innerJoin(menuPeriods, eq(menuPeriods.id, routingCellPeriods.periodId));
   const periods = await db
     .select({ name: menuPeriods.name })
     .from(menuPeriods)

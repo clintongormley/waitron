@@ -2302,10 +2302,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       const receipt = { email: "dining@example.test", phone: "910000000" };
       try {
         await inTx(async (tx) => {
-          const rows = await tx
-            .select({ id: departments.id })
-            .from(departments)
-            .where(eq(departments.locationId, venue.cfg.locationId));
+          const rows = await tx.select({ id: departments.id }).from(departments);
           for (const { id } of rows) {
             await tx
               .insert(departmentReceipts)

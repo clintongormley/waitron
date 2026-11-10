@@ -141,7 +141,7 @@ const saveDay = (
     ),
   );
 
-const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
+const dateSnapshot = (_f: Fixture, subject: HoursSubject, date: LocalDate) =>
   withTransaction(db, async (tx) => {
     const day = (await readCalendarDays(tx, date, date))[0]!;
     const named = (
@@ -154,7 +154,6 @@ const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
         })
         .from(specialDayDates)
         .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-        .where(eq(specialDayDates.locationId, f.cfg.locationId))
     ).find((row) => occursOn({ date: row.date, repeats: row.repeatsYearly }, date));
     const states = await stationStates(tx, new Date(`${date}T10:00:00Z`));
     return {
@@ -166,17 +165,17 @@ const dateSnapshot = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
     };
   });
 
-const storedDates = (f: Fixture) =>
+const storedDates = (_f: Fixture) =>
   withTransaction(db, async (tx) => ({
     days: await tx
       .select()
       .from(specialDays)
-      .where(eq(specialDays.locationId, f.cfg.locationId))
+
       .orderBy(asc(specialDays.name)),
     dates: await tx
       .select()
       .from(specialDayDates)
-      .where(eq(specialDayDates.locationId, f.cfg.locationId))
+
       .orderBy(asc(specialDayDates.date)),
   }));
 
@@ -644,7 +643,11 @@ describe("special-day station occurrences", () => {
   /** A special day "Navidad" closed all day, written straight to its tables. */
   async function closure(
     f: Fixture,
-    { date = "2026-12-25", repeats = true, locationId = f.cfg.locationId as string } = {},
+    {
+      date = "2026-12-25",
+      repeats = true,
+      locationId: _locationId = f.cfg.locationId as string,
+    } = {},
   ) {
     return withTransaction(db, async (tx) => {
       const [day] = await tx

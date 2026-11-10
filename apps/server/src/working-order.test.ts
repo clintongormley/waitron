@@ -237,15 +237,15 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       const createdAt = nowIso();
       await tx.execute(sql`
       insert into departments
-        (id, location_id, name, trading_name, created_at)
-      values (${departmentId}, ${locationId}, 'Restaurant', 'Restaurant', ${createdAt})`);
+        (id, name, trading_name, created_at)
+      values (${departmentId}, 'Restaurant', 'Restaurant', ${createdAt})`);
       await tx.execute(sql`
       insert into floor_zones (id, location_id, name, created_at)
       values (${zoneId}, ${locationId}, 'Counter', ${createdAt})`);
       await tx.execute(sql`
       insert into zone_service_policies
-        (location_id, zone_id, department_id, is_counter_default)
-      values (${locationId}, ${zoneId}, ${departmentId}, true)`);
+        (zone_id, department_id, is_counter_default)
+      values (${zoneId}, ${departmentId}, true)`);
       await tx.execute(sql`
       insert into department_sale_policies (department_id, order_start, paid_when)
       values (${departmentId}, 'counter', ${orderFlow === "ticket_then_pay" ? "ticket_then_pay" : "prepay"})`);
@@ -1052,7 +1052,7 @@ describe("seating from order start", () => {
     const tableId = randomUUID();
     await withTransaction(db, async (tx) => {
       await tx.execute(
-        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments )`,
       );
       await tx.execute(
         sql`insert into dining_tables (id, location_id, label, zone_id, created_at) values (${tableId}, ${cfg.locationId}, 'New table service', ${zoneId}, ${nowIso()})`,
@@ -1074,7 +1074,7 @@ describe("seating from order start", () => {
     async (zoneOverride) => {
       const { cfg, zoneId } = await setupVenue();
       await db.execute(
-        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+        sql`update department_sale_policies set order_start = 'table' where department_id in (select id from departments )`,
       );
       const tableId = randomUUID();
       await withTransaction(db, async (tx) => {
@@ -1084,7 +1084,7 @@ describe("seating from order start", () => {
           );
         } else {
           await tx.execute(
-            sql`update department_sale_policies set order_start = 'counter' where department_id in (select id from departments where location_id = ${cfg.locationId})`,
+            sql`update department_sale_policies set order_start = 'counter' where department_id in (select id from departments )`,
           );
         }
         await tx.execute(
@@ -1107,7 +1107,7 @@ describe("openTab service context", () => {
     const { cfg, zoneId, premiumCoffeeOfferId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+        where department_id in (select id from departments )`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Offer table', ${zoneId}, ${nowIso()})
@@ -1140,7 +1140,7 @@ describe("openTab service context", () => {
       ).rows;
       await insertRoute(tx, { zoneId, productId: offer!.product_id, stationId: station.id });
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+        where department_id in (select id from departments )`);
       const table = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Round table', ${zoneId}, ${nowIso()})
@@ -1163,15 +1163,15 @@ describe("openTab service context", () => {
     const { cfg, zoneId, premiumCoffeeOfferId, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const department = await tx.execute<{ id: string }>(sql`
-        select id from departments where location_id = ${cfg.locationId}`);
+        select id from departments `);
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+        where department_id in (select id from departments )`);
       const downstairsZone = await tx.execute<{ id: string }>(sql`
         insert into floor_zones (id, location_id, name, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${nowIso()}) returning id`);
       await tx.execute(sql`
-        insert into zone_service_policies (location_id, zone_id, department_id)
-        values (${cfg.locationId}, ${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
+        insert into zone_service_policies (zone_id, department_id)
+        values (${downstairsZone.rows[0]!.id}, ${department.rows[0]!.id})`);
       await tx.execute(
         sql`insert into zone_sale_policies (zone_id, order_start) values (${downstairsZone.rows[0]!.id}, 'table')`,
       );
@@ -1228,7 +1228,7 @@ describe("openTab service context", () => {
     const { cfg, zoneId, premiumCoffeeOfferId, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+        where department_id in (select id from departments )`);
       await setRoutingCell(
         tx,
         { row: { kind: "product", productId: coffeeId }, zoneId },
@@ -3755,7 +3755,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await setupVenue();
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`update department_sale_policies set order_start = 'table'
-        where department_id in (select id from departments where location_id = ${cfg.locationId})`);
+        where department_id in (select id from departments )`);
       const bar = await createStation(tx, { name: "Bar", isDefault: true });
       const kitchen = await createStation(tx, { name: "Kitchen" });
       const product = await tx.execute<{ category_id: string }>(sql`
@@ -3906,10 +3906,7 @@ describe("opening hours", () => {
       const drinks = await createCategory(tx, { name: "Drinks" });
       await routeCategory(tx, drinks.id, { kind: "station", stationId: upstairs.id });
       const product = await makeProduct(tx, catalogueId, { categoryId: drinks.id });
-      const departmentRows = await tx
-        .select({ id: departments.id })
-        .from(departments)
-        .where(eq(departments.locationId, cfg.locationId));
+      const departmentRows = await tx.select({ id: departments.id }).from(departments);
       expect(departmentRows.length).toBeGreaterThan(0);
       const closedWeek = WEEK_DISPLAY_ORDER.map((weekday) => ({ weekday, slots: [] }));
       for (const row of departmentRows)
@@ -4303,10 +4300,10 @@ describe("a sale on a Spanish public holiday", () => {
     const before = await Promise.all([recorded(holiday.parked), recorded(holiday.fired)]);
     const [specialDay, specialDate] = [randomUUID(), randomUUID()];
     await withTransaction(db, async (tx) => {
-      await tx.execute(sql`insert into special_days (id, location_id, name, repeats_yearly)
-        values (${specialDay}, ${cfg.locationId}, 'Upstairs closed', 0)`);
-      await tx.execute(sql`insert into special_day_dates (id, special_day_id, location_id, date, closed_all_day)
-        values (${specialDate}, ${specialDay}, ${cfg.locationId}, ${HOLIDAY}, 0)`);
+      await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
+        values (${specialDay}, 'Upstairs closed', 0)`);
+      await tx.execute(sql`insert into special_day_dates (id, special_day_id, date, closed_all_day)
+        values (${specialDate}, ${specialDay}, ${HOLIDAY}, 0)`);
     });
     await withTransaction(db, (tx) =>
       setStationToday(tx, upstairs.id, "closed", new Date(`${HOLIDAY}T10:00:00Z`), downstairs.id),

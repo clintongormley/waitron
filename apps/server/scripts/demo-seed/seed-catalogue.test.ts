@@ -258,14 +258,14 @@ describe("seedCatalogues", () => {
       }>(sql`
         select c.name as category, ks.name as station_name
         from categories c
-        join routing_cells sc on sc.category_id = c.id and sc.zone_id is null and sc.location_id = ${locationId}
+        join routing_cells sc on sc.category_id = c.id and sc.zone_id is null
         left join kitchen_stations ks on ks.id = sc.station_id
         where c.name in ('Cocktails', 'Wine and beer', 'Soft drinks', 'Coffee')
         order by c.name`);
       const { rows: charcuterieRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
-        join routing_cells sc on sc.category_id = c.id and sc.zone_id is null and sc.location_id = ${locationId}
+        join routing_cells sc on sc.category_id = c.id and sc.zone_id is null
         left join kitchen_stations ks on ks.id = sc.station_id
         where c.name = 'Charcuterie'`);
       const { rows: editorDemoRaw } = await tx.execute<{
