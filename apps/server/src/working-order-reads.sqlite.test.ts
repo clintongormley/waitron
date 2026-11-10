@@ -106,7 +106,6 @@ beforeAll(async () => {
     nodeId,
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

@@ -38,7 +38,6 @@ it("deletes through the real core seat when the optional bookings table was neve
     locationId: await venueLocationId(suite.db),
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",
-    invoiceLocales: ["en-GB"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

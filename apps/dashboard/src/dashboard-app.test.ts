@@ -5626,7 +5626,7 @@ describe("the floor plan editor inside the real page", () => {
     const alert = (id: string): AlertView => ({
       key: `incident:${id}`,
       kind: "event",
-      code: "payment.offline_forward_declined",
+      code: "payment.refund_unresolved",
       params: { amount: "12.50", paymentRef: `pi_${id}` },
       severity: "warning",
       since: "2026-09-14T12:00:00.000Z",
@@ -6149,7 +6149,7 @@ describe("alerts in the shell", () => {
   const alert = (id: string, severity: AlertView["severity"] = "warning"): AlertView => ({
     key: `incident:${id}`,
     kind: "event",
-    code: "payment.offline_forward_declined",
+    code: "payment.refund_unresolved",
     params: { amount: "12.50", paymentRef: `pi_${id}` },
     severity,
     since: "2026-09-14T12:00:00.000Z",
@@ -6496,7 +6496,7 @@ describe("alerts in the shell", () => {
 
   it("pops up a new alert, and opens the panel when the pop-up is pressed", async () => {
     const { el } = await mountWithPopup();
-    expect(toast(el).message).toContain("A card payment of €12.50 taken while offline");
+    expect(toast(el).message).toContain("A card refund of €12.50 has been waiting");
     expect(toast(el).tone).toBe("error");
     toastButton(el, "message").click();
     expect(panel(el).matches(":popover-open")).toBe(true);
@@ -6521,7 +6521,7 @@ describe("alerts in the shell", () => {
         widget.open();
         await flush(el);
         const item = () => widget.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-item]")!;
-        expect(item().textContent).toContain("A card payment of €12.50 taken while offline");
+        expect(item().textContent).toContain("A card refund of €12.50 has been waiting");
         if (closeFirst) {
           widget
             .shadowRoot!.querySelector<import("@waitron/ui").WtRowActions>("wt-row-actions")!
@@ -6533,7 +6533,7 @@ describe("alerts in the shell", () => {
         await widget.updateComplete;
         expect(panel(el).matches(":popover-open")).toBe(true);
         expect(item().textContent).toContain(
-          "Un pago con tarjeta de 12,50\u00a0€ cobrado sin conexión",
+          "Una devolución con tarjeta de 12,50\u00a0€ lleva más de una hora",
         );
         expect(item().textContent).toContain("Problema");
         expect(item().textContent).toContain("Pagos con tarjeta");
@@ -6542,7 +6542,7 @@ describe("alerts in the shell", () => {
         );
         emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
         await flush(el);
-        expect(item().textContent).toContain("A card payment of €12.50 taken while offline");
+        expect(item().textContent).toContain("A card refund of €12.50 has been waiting");
         expect(item().querySelector("[data-test=alert-handle]")!.textContent).toBe("Mark handled");
         expect(listAlerts).toHaveBeenCalledTimes(1);
       },
@@ -6571,11 +6571,11 @@ describe("alerts in the shell", () => {
         const message = () => toastButton(el, "message").textContent!.trim();
         const english =
           count === 1
-            ? "A card payment of €12.50 taken while offline was declined when it was sent on (reference pi_1). Collect the money another way."
+            ? "A card refund of €12.50 has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms. Later checks do not add to this alert while it is open, so there may be more."
             : "2 new alerts";
         const spanish =
           count === 1
-            ? "Un pago con tarjeta de 12,50\u00a0€ cobrado sin conexión se rechazó al enviarlo (referencia pi_1). Cobra el importe de otra forma."
+            ? "Una devolución con tarjeta de 12,50\u00a0€ lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más."
             : "2 avisos nuevos";
         expect(message()).toBe(english);
         emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });

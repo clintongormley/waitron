@@ -40,7 +40,6 @@ const sampleEnv: DevEnv = {
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_NODE_ID: "33333333-3333-3333-3333-333333333333",
-  WAITRON_TILL_LOCALE: "en-GB",
 };
 
 describe("renderEnvFile", () => {
@@ -56,13 +55,7 @@ describe("renderEnvFile", () => {
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
       "WAITRON_NODE_ID=33333333-3333-3333-3333-333333333333",
-      "WAITRON_TILL_LOCALE=en-GB",
     ]);
-  });
-
-  it("carries WAITRON_TILL_LOCALE so the till boots against the seeded locale", () => {
-    expect(sampleEnv.WAITRON_TILL_LOCALE).toBe("en-GB");
-    expect(parseEnvFile(renderEnvFile(sampleEnv)).WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
   it("round-trips exactly through parseEnvFile", () => {
@@ -97,9 +90,7 @@ describe("the demo login PIN + seed locale", () => {
   });
 });
 
-// The directory-backed `devSetup` suite runs only the English path, so the Spanish locale's route
-// into `WAITRON_TILL_LOCALE` is pinned here.
-describe("buildDevEnv carries the resolved seed locale into the env contract", () => {
+describe("buildDevEnv", () => {
   const ids = {
     nodeId: "33333333-3333-3333-3333-333333333333",
     seriesId: "44444444-4444-4444-4444-444444444444",
@@ -111,7 +102,6 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       venueDir: "/tmp/second-venue",
       credentialsKey: sampleEnv.WAITRON_CREDENTIALS_KEY,
       ids,
-      seedLocale: "en",
       httpPort: "8180",
     });
     expect(env.WAITRON_HTTP_PORT).toBe("8180");
@@ -122,7 +112,6 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       venueDir: "/var/lib/waitron/venue",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       ids,
-      seedLocale: "en",
     });
     expect(env.WAITRON_ENV).toBe("dev");
     expect(env.WAITRON_ONBOARDING_INTENT).toBe("demo");
@@ -133,27 +122,9 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       venueDir: "/var/lib/waitron/venue",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       ids,
-      seedLocale: "en",
     });
     expect(env.WAITRON_VENUE_DIR).toBe("/var/lib/waitron/venue");
   });
-
-  it.each([
-    ["en", "en-GB"],
-    ["es", "es-ES"],
-  ] as const)(
-    "maps bare seed locale %s into full-tag WAITRON_TILL_LOCALE and renders it into the .env text",
-    (seedLocale, expectedTillLocale) => {
-      const env = buildDevEnv({
-        venueDir: "/var/lib/waitron/venue",
-        credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
-        ids,
-        seedLocale,
-      });
-      expect(env.WAITRON_TILL_LOCALE).toBe(expectedTillLocale);
-      expect(parseEnvFile(renderEnvFile(env)).WAITRON_TILL_LOCALE).toBe(expectedTillLocale);
-    },
-  );
 });
 
 describe("devSetup against a real venue directory", () => {
@@ -205,8 +176,6 @@ describe("devSetup against a real venue directory", () => {
     }
     expect(first.env.WAITRON_VENUE_DIR).toBe(venueDir);
     expect(first.env.WAITRON_ENV).toBe("dev");
-    expect(written.WAITRON_TILL_LOCALE).toBe("en-GB");
-    expect(first.env.WAITRON_TILL_LOCALE).toBe("en-GB");
   });
 
   it("builds the venue as the Spain pack's demo business, and its seeded sales are filed under that tax ID", async () => {
@@ -535,7 +504,6 @@ describe("inspectVenues reads a migrated venue directory", () => {
         .values({ id: 1, country: "ES", taxId: "00000000T", legalName: "Inspection SL" });
       await seedVenue(store.venue, {
         name: "Inspection",
-        invoiceLocales: ["es-ES"],
         operationDescription: "Hospitality",
       });
       nodeId = await seedNode(store.venue);
@@ -680,7 +648,6 @@ describe("developer demo regions", () => {
                     province: "Madrid",
                     receipt: staff === "es" ? "es-ES" : "en-GB",
                   };
-          expect(first.env.WAITRON_TILL_LOCALE).toBe(expected.receipt);
           const store = await openVenueDatabase(opts.venueDir);
           try {
             const locations = store.venue.all(
@@ -749,7 +716,6 @@ describe("Valencian developer demo", () => {
         vi.stubEnv("WAITRON_SEED_SALES_DAYS", "0");
         const opts = { venueDir: join(root, "venue"), envPath: join(root, ".env"), stateDir: root };
         const first = await devSetup(opts);
-        expect(first.env.WAITRON_TILL_LOCALE).toBe("es-ES");
         const store = await openVenueDatabase(opts.venueDir);
         try {
           expect(
@@ -824,7 +790,6 @@ describe("Galician developer demo", () => {
         vi.stubEnv("WAITRON_SEED_SALES_DAYS", "0");
         const opts = { venueDir: join(root, "venue"), envPath: join(root, ".env"), stateDir: root };
         const first = await devSetup(opts);
-        expect(first.env.WAITRON_TILL_LOCALE).toBe("es-ES");
         const store = await openVenueDatabase(opts.venueDir);
         try {
           expect(

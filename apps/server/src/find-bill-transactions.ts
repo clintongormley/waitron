@@ -37,7 +37,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
   return sql`${scopeRelation()}, tender_methods as (
     select distinct t.sale_id, t.method, case when t.method = 'card' then p.card_last4 else null end as last4
     from tenders t left join payments p on t.method = 'card'
-      and p.state in ('captured','settled','accepted_offline','refunded','partially_refunded')
+      and p.state in ('captured','refunded','partially_refunded')
       and ((t.bill_payment_id is not null and p.bill_payment_id = t.bill_payment_id)
         or (t.bill_payment_id is null and p.bill_payment_id is null and p.sale_id = t.sale_id))
   ), order_labels as (

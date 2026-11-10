@@ -1,3 +1,5 @@
+import { findAdministrativeArea } from "@waitron/country";
+import { getCountryPack } from "@waitron/country-packs";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -141,7 +143,6 @@ it.each([undefined, ""])(
     const server = await startServer({
       ...env,
       WAITRON_NODE_ID: node,
-      WAITRON_TILL_LOCALE: "ca-ES",
     });
     let dispatcher: Agent | undefined;
     try {
@@ -191,31 +192,33 @@ it("otherwise identical trading without a latch refuses a missing node location"
 }, 60_000);
 
 it.each([
-  [undefined, "en-GB"],
-  ["", "en-GB"],
-  ["es-ES", "es-ES"],
-  ["zz-ZZ", "en-GB"],
-])(
-  "GB boot uses raw override rather than defaulted locale (%s)",
-  async (raw, expected) => {
-    await source.db
-      .insert(tenants)
-      .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
+  ["GB", "London", "GB123456789", "Europe/London", ["en-GB"], "en-GB"],
+  ["ES", "Madrid", "66000001Y", "Europe/Madrid", ["es-ES"], "es-ES"],
+  ["ES", "Barcelona", "66000001Y", "Europe/Madrid", ["ca-ES"], "es-ES"],
+] as const)(
+  "a %s venue in %s answers its own display language with no locale variable",
+  async (country, province, taxId, timeZone, invoiceLocales, expected) => {
+    await source.db.insert(tenants).values({ id: 1, country, taxId, legalName: "Test Ltd" });
     await source.db.insert(locations).values({
       id: LOCATION,
 
-      timeZone: "Europe/London",
+      timeZone,
 
       operationDescription: "Hospitality",
     });
     await seedVenueSettings(source.db, {
       name: "Counter",
-      province: "London",
-      invoiceLocales: ["en-GB"],
+      province,
+      invoiceLocales: [...invoiceLocales],
     });
     await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
-    const server = await startServer({ ...(await environment(true)), WAITRON_TILL_LOCALE: raw });
+    const server = await startServer(await environment(true));
     try {
+      if (province === "Barcelona") {
+        expect(findAdministrativeArea(getCountryPack("ES")!, "Barcelona")?.defaultLocale).toBe(
+          "ca-ES",
+        );
+      }
       const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
       expect(reply.status).toBe(200);
       expect(await reply.json()).toMatchObject({
@@ -225,6 +228,7 @@ it.each([
         simplifiedInvoiceLimit: null,
       });
       expect(observed.cfg).toMatchObject({
+        locale: expected,
         nodeId: NODE,
         simplifiedInvoiceLimit: null,
         operationDescriptionRequired: false,
@@ -260,7 +264,6 @@ it.each([
       ...(await environment(true)),
       WAITRON_ENV: "dev",
       WAITRON_ONBOARDING_INTENT: intent,
-      WAITRON_TILL_LOCALE: "en-GB",
     });
     try {
       const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
@@ -273,7 +276,6 @@ it.each([
       expect(observed.cfg).toMatchObject({
         nodeId: NODE,
         locale: "en-GB",
-        invoiceLocales: ["en-GB"],
         tipsEnabled: true,
         practiceMode,
         operationDescriptionRequired: false,

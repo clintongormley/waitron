@@ -11028,7 +11028,7 @@ describe("till-app", () => {
       expect(pay.mock.calls[1]![0]).toMatchObject({ id: c.store.id, guestCount: 3 });
     });
 
-    it("pays over the integrated terminal with the mapped lines(+tip+allowOffline), then shows the ticket", async () => {
+    it("pays over the integrated terminal with the mapped lines(+tip), then shows the ticket", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
@@ -11037,7 +11037,7 @@ describe("till-app", () => {
       await el.updateComplete;
       const workingOrderId = store.id; // the walk-up's stable id — the same pay-idempotency key
 
-      emit(c, "collect-card", { tip: "0.50", allowOffline: true });
+      emit(c, "collect-card", { tip: "0.50" });
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith({
@@ -11045,14 +11045,13 @@ describe("till-app", () => {
         id: workingOrderId,
         lines: [{ makeAt: null, menuItemId: "menu-item-cafe-0", quantity: "2" }],
         tip: "0.50",
-        allowOffline: true,
       });
       const view = ticket(el)!;
       expect(view).not.toBeNull();
       expect(view.result).toBe(saleResult);
     });
 
-    it("omits tip/allowOffline from the request when the event detail carries neither", async () => {
+    it("omits tip from the request when the event detail carries neither", async () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const { el } = await mountApp({ pay });
       const c = await toCounter(el);
@@ -24076,7 +24075,7 @@ describe("A767 card outcome belongs to its order", () => {
             const c = counter(el)!;
             emit(c, "retrieve-order", { id: "declined-order" });
             await flush(el);
-            emit(c, "collect-card", { readerId: "reader-41", tip: "0.50", allowOffline: true });
+            emit(c, "collect-card", { readerId: "reader-41", tip: "0.50" });
             await flush(el);
             expect(tenderPay(el).shadowRoot!.querySelector(".retry")).not.toBeNull();
             await page.screenshot({
@@ -24114,7 +24113,6 @@ describe("A767 card outcome belongs to its order", () => {
                 id: "declined-order",
                 readerId: "reader-41",
                 tip: "0.50",
-                allowOffline: true,
               }),
             );
           } finally {

@@ -37,7 +37,6 @@ const tables = [
   "payment_resolutions",
   "payment_holds",
   "payment_hold_outcomes",
-  "payment_policy",
   "card_readers",
   "device_card_readers",
   "device_profile_card_readers",
@@ -85,9 +84,6 @@ beforeEach(() => {
     );
     db.run(
       sql`insert into payment_hold_outcomes (id,hold_id,outcome,note,person_id,recorded_at) values ('outcome','hold','kept','Retained note','manager','2026-10-20T08:00:00.000Z')`,
-    );
-    db.run(
-      sql`insert into payment_policy (id,offline_mode,offline_amount_cap,created_at,updated_at) values (1,'cash_only',0,'2026-10-20T08:00:00.000Z','2026-10-20T08:00:00.000Z')`,
     );
     db.run(sql`insert into device_card_readers (device_id,reader_id) values ('device','reader')`);
     db.run(
@@ -261,7 +257,6 @@ it.each([
   ["payment_resolutions", "provider_status='changed'"],
   ["payment_holds", "provider_amount=1001"],
   ["payment_hold_outcomes", "note='Changed note'"],
-  ["payment_policy", "offline_amount_cap=101"],
   ["card_readers", "name='Changed reader'"],
   ["device_card_readers", "reader_id='other-reader'"],
   ["device_profile_card_readers", "position=1"],
@@ -323,17 +318,14 @@ it("allows a deleted reader to remain as payment history after disconnect", asyn
     db.run(sql`update card_readers set active=1,deleted_at='2026-10-21T08:00:00.000Z'`);
   expect(await run()).toEqual(passed);
 });
-it.each(["attempting", "accepted_offline", "initiated"])(
-  "keeps in-flight %s work as data",
-  async (state) => {
-    for (const db of [original.db, restored.db])
-      db.run(sql`update payments set state=${state},sale_id=null`);
-    expect(await run()).toEqual(passed);
-    expect(restored.db.all(sql`select state,sale_id from payments`)).toEqual([
-      { state, sale_id: null },
-    ]);
-  },
-);
+it.each(["attempting", "initiated"])("keeps in-flight %s work as data", async (state) => {
+  for (const db of [original.db, restored.db])
+    db.run(sql`update payments set state=${state},sale_id=null`);
+  expect(await run()).toEqual(passed);
+  expect(restored.db.all(sql`select state,sale_id from payments`)).toEqual([
+    { state, sale_id: null },
+  ]);
+});
 it.each(["payments.stripe", "payments.sumup"] as const)(
   "checks present %s payloads even with no active reader",
   async (purpose) => {
@@ -412,7 +404,6 @@ it.each([0, null])(
         "card_reader_holders",
         "device_profile_card_readers",
         "device_card_readers",
-        "payment_policy",
         "payment_hold_outcomes",
         "payment_holds",
         "payment_resolutions",
@@ -433,13 +424,17 @@ it("refuses a positive source schema with missing payment tables", async () => {
 });
 it("refuses a missing restored payment table", async () => {
   const definition = restored.db.all<{ sql: string }>(
-    sql`select sql from sqlite_schema where type='table' and name='payment_policy'`,
+    sql`select sql from sqlite_schema where type='table' and name='payment_hold_outcomes'`,
   )[0]!.sql;
-  restored.db.run(sql`drop table payment_policy`);
+  const triggers = restored.db.all<{ sql: string }>(
+    sql`select sql from sqlite_schema where type = 'trigger' and tbl_name = 'payment_hold_outcomes'`,
+  );
+  restored.db.run(sql`drop table payment_hold_outcomes`);
   try {
     expect(await run()).toMatchObject({ status: "invalid" });
   } finally {
     restored.db.run(sql.raw(definition));
+    for (const trigger of triggers) restored.db.run(sql.raw(trigger.sql));
   }
 });
 

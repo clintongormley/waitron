@@ -330,10 +330,6 @@ export const ALERT_MESSAGES: Readonly<
     en: "The AEAT certificate expired on {date:date}. Sales continue, but fiscal records wait until you install a new one in Venue settings.",
     es: "El certificado de la AEAT caducó el {date:date}. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo en Ajustes del local.",
   },
-  "payment.offline_forward_declined": {
-    en: "A card payment of {amount:money} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
-    es: "Un pago con tarjeta de {amount:money} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
-  },
   "payment.capture_mismatch": {
     en: "The card amount differs. Check the charge in the card provider's dashboard.",
     es: "El importe de la tarjeta no coincide. Comprueba el cobro en el panel del proveedor de pagos.",

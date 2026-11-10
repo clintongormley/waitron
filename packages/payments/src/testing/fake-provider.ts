@@ -1,7 +1,5 @@
 import { AppError, decimal } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { recordIncidentOnce } from "@waitron/core";
-import { jobOrigin, saleId as brandSaleId } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
@@ -23,20 +21,15 @@ import { recordAttemptResolution } from "../resolutions.js";
 import {
   assertReaderStartable,
   captureAttempting,
-  claimAcceptedOffline,
-  declineForwarded,
   failAttempting,
   findPaymentByRef,
   getPaymentByRef,
-  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
   recordRefund,
   recordVoid,
-  settleForwarded,
 } from "../store.js";
-import { getPaymentPolicy, resolveOfflineDecision } from "../policy.js";
 
 let counter = 0;
 const nextRef = (): string => `fake-${String(++counter).padStart(8, "0")}`;
@@ -82,7 +75,6 @@ export class FakePaymentProvider implements PaymentProvider {
   private holdNext: Promise<void> | null = null;
   /** Every `collect` call, in order, recorded as it starts. */
   readonly collectCalls: CollectParams[] = [];
-  private readonly declineForwardRefs = new Set<string>();
   private abandonedAnswer: AbandonedAttemptOutcome = { outcome: "unknown", reason: "unreachable" };
   /** Every `resolveAbandonedAttempt` call, in order. */
   readonly abandonedAttemptCalls: { paymentRef: string; now: Date }[] = [];
@@ -105,8 +97,6 @@ export class FakePaymentProvider implements PaymentProvider {
     this.failNext = true;
   }
 
-  /** Test affordance: makes the next `collect` simulate a network outage, so it exercises the
-   * offline gate instead of an online capture. One-shot. */
   offlineNextCollect(): void {
     this.offlineNext = true;
   }
@@ -131,11 +121,6 @@ export class FakePaymentProvider implements PaymentProvider {
       release = resolve;
     });
     return release;
-  }
-
-  /** Test affordance: the next `forward` DECLINES this payment ref instead of settling it. */
-  declineForwardFor(ref: string): void {
-    this.declineForwardRefs.add(ref);
   }
 
   /** Test affordance: what every later `resolveAbandonedAttempt` answers and does to the row, until
@@ -287,42 +272,6 @@ export class FakePaymentProvider implements PaymentProvider {
     };
   }
 
-  /**
-   * No network here, so claim + advance + incident share one transaction; a real adapter must not
-   * hold one across its processor call. The claim is this transaction, not a clause — see
-   * `claimAcceptedOffline` in `../store.ts`.
-   */
-  async forward(now: Date): Promise<ForwardResult> {
-    return withTransaction(this.db, async (tx) => {
-      const claimed = await claimAcceptedOffline(tx, this.provider);
-      let forwarded = 0;
-      let declined = 0;
-      let incidentsRaised = 0;
-      for (const p of claimed) {
-        const key = { provider: this.provider, paymentRef: p.paymentRef };
-        if (this.declineForwardRefs.has(p.paymentRef)) {
-          await declineForwarded(tx, key);
-          declined += 1;
-          const raised = await recordIncidentOnce(tx, {
-            origin: jobOrigin("payment_check"),
-            ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
-            error: new AppError("payment.offline_forward_declined", {
-              paymentRef: p.paymentRef,
-              amount: p.amount,
-            }),
-            severity: "error",
-            detectedAt: now,
-          });
-          if (raised) incidentsRaised += 1;
-        } else {
-          await settleForwarded(tx, key);
-          forwarded += 1;
-        }
-      }
-      return { nextDueAt: null, forwarded, declined, incidentsRaised };
-    });
-  }
-
   resolvePending(now: Date): Promise<ForwardResult> {
     void now;
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
@@ -397,40 +346,15 @@ export class FakePaymentProvider implements PaymentProvider {
     return this.toResult(ref, row);
   }
 
-  /** On "refuse" writes NOTHING and reports `network_unavailable`. */
   private async collectOffline(params: CollectParams, paymentRef: string): Promise<PaymentResult> {
     return withTransaction(this.db, async (tx) => {
       await assertReaderStartable(tx, params.origin, params.readerId);
-      const policy = await getPaymentPolicy(tx);
-      const decision = resolveOfflineDecision(policy, params.allowOffline ?? false, params.amount);
-      if (decision === "refuse") {
-        return {
-          provider: this.provider,
-          paymentRef,
-          state: "network_unavailable",
-          amount: params.amount,
-          settledAt: null,
-        };
-      }
-      const settledAt = new Date();
-      await insertAcceptedOffline(tx, {
-        origin: params.origin,
-        workingOrderId: params.workingOrderId,
-        nodeId: params.nodeId,
-        provider: this.provider,
-        paymentRef,
-        amount: params.amount,
-        settledAt,
-        billPaymentId: params.billPaymentId,
-        readerId: params.readerId,
-      });
       return {
         provider: this.provider,
         paymentRef,
-        state: "accepted_offline",
+        state: "network_unavailable",
         amount: params.amount,
-        settledAt,
-        offline: true,
+        settledAt: null,
       };
     });
   }

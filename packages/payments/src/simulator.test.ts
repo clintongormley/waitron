@@ -106,16 +106,9 @@ describe("SimulatorPaymentProvider", () => {
     ).rejects.toMatchObject({ code: "payment.not_found" });
   });
 
-  it("captures by default and has no asynchronous work to forward", async () => {
+  it("captures by default", async () => {
     const { provider, params } = await setup();
-
     await expect(provider.collect(params)).resolves.toMatchObject({ state: "captured" });
-    await expect(provider.forward(new Date())).resolves.toEqual({
-      nextDueAt: null,
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 0,
-    });
   });
 
   it("has no provider-side payment attempt for resolvePending to forward", async () => {

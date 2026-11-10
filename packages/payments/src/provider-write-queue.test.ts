@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId } from "@waitron/shared";
-import { freshNif, seedPaymentPolicy, seedWorkingOrder } from "../test/seed.js";
+import { freshNif, seedWorkingOrder } from "../test/seed.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { SimulatorPaymentProvider } from "./simulator.js";
 import { FakeAsyncProvider } from "./testing/fake-async-provider.js";
@@ -124,12 +124,9 @@ describe("fake reader writes behind an unrelated rollback", () => {
     { action: "attempting", state: "attempting", refunded: 0 },
     { action: "crash-captured", state: "captured", refunded: 0 },
     { action: "crash-attempting", state: "attempting", refunded: 0 },
-    { action: "offline", state: "accepted_offline", refunded: 0 },
     { action: "void", state: "voided", refunded: 0 },
     { action: "refund", state: "refunded", refunded: 1000 },
     { action: "partialRefund", state: "partially_refunded", refunded: 400 },
-    { action: "forward-settled", state: "settled", refunded: 0 },
-    { action: "forward-declined", state: "declined", refunded: 0 },
     { action: "resolve-captured", state: "captured", refunded: 0 },
     { action: "resolve-failed", state: "failed", refunded: 0 },
   ] as const)("retains $action", async ({ action, state, refunded }) => {
@@ -139,15 +136,10 @@ describe("fake reader writes behind an unrelated rollback", () => {
       workingOrderId: workingOrderId(seed.workingOrderId),
       nodeId: seed.nodeId,
       amount: decimal("10.00"),
-      allowOffline: true,
     };
     const provider = new FakePaymentProvider(suite.db);
     let paymentRef: string | undefined;
-    if (action === "offline" || action.startsWith("forward-")) {
-      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-      provider.offlineNextCollect();
-      if (action !== "offline") paymentRef = (await provider.collect(params)).paymentRef;
-    } else if (action.startsWith("resolve-")) {
+    if (action.startsWith("resolve-")) {
       provider.stallNextCollect();
       paymentRef = (await provider.collect(params)).paymentRef;
       provider.scriptAbandonedAttempt(
@@ -161,11 +153,9 @@ describe("fake reader writes behind an unrelated rollback", () => {
     else if (action === "attempting") provider.stallNextCollect();
     else if (action === "crash-captured") provider.crashNextCollect("captured");
     else if (action === "crash-attempting") provider.crashNextCollect("attempting");
-    if (action === "forward-declined") provider.declineForwardFor(paymentRef!);
     const now = new Date("2026-10-14T12:00:00Z");
     const manager = "00000000-0000-4000-8000-000000000001";
     await behindRollback(() => {
-      if (action.startsWith("forward-")) return provider.forward(now);
       if (action.startsWith("resolve-"))
         return provider.resolveAbandonedAttempt(paymentRef!, now, { personId: manager });
       if (action === "partialRefund") return provider.partialRefund(paymentRef!, decimal("4.00"));
@@ -207,9 +197,7 @@ describe("fake reader writes behind an unrelated rollback", () => {
           ]
         : [],
     );
-    expect((await suite.db.execute(sql`select code from incidents`)).rows).toEqual(
-      action === "forward-declined" ? [{ code: "payment.offline_forward_declined" }] : [],
-    );
+    expect((await suite.db.execute(sql`select code from incidents`)).rows).toEqual([]);
   });
 });
 

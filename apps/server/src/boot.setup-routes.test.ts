@@ -692,6 +692,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       expect(deviceRows.rows[0]!.n).toBe(0);
 
       const cfg: TradingContext = {
+        locale: "es-ES",
         ...loadNodeIdentity(trading),
         ...loadTillAppSettings(trading),
         simplifiedInvoiceLimit: null,

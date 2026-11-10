@@ -125,7 +125,7 @@ export async function provisionInvoiceCustomerVenue(db: Database): Promise<Invoi
         seriesId: brandSeriesId(customer ? fullSeriesId : venue.seriesId),
         workingOrderId: brandWorkingOrderId(billId),
         locale: venue.cfg.locale,
-        invoiceLocales: venue.cfg.invoiceLocales,
+        invoiceLocales: [venue.cfg.locale],
         ...(customer && {
           counterparty: {
             taxId: checkedTaxId(customer.taxId),

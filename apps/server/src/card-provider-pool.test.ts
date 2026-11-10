@@ -66,9 +66,6 @@ function fakeProvider(name: string): PaymentProvider {
     collect: () => {
       throw new Error("not used by the pool");
     },
-    forward: () => {
-      throw new Error("not used by the pool");
-    },
     resolvePending: () => {
       throw new Error("not used by the pool");
     },

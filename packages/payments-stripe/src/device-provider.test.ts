@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   compareDecimal,
   decimal,
   workingOrderId as brandWorkingOrderId,
   deviceOrigin,
-  jobOrigin,
 } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
@@ -15,7 +13,6 @@ import {
   insertAttempting,
   recordResolution,
 } from "@waitron/payments";
-import { openIncidents } from "@waitron/core";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
 import type { NodeId } from "@waitron/shared";
@@ -23,7 +20,6 @@ import {
   billPaymentOfRow,
   freshNif,
   seedBillPayment,
-  seedPaymentPolicy,
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
 
@@ -38,16 +34,12 @@ function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
   });
 }
 
-function collectParams(
-  s: { deviceId: string; workingOrderId: string; nodeId: NodeId },
-  allowOffline?: boolean,
-) {
+function collectParams(s: { deviceId: string; workingOrderId: string; nodeId: NodeId }) {
   return {
     origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     nodeId: s.nodeId,
     amount: decimal("10.00"),
-    ...(allowOffline === undefined ? {} : { allowOffline }),
   };
 }
 
@@ -94,26 +86,12 @@ describe("StripeOnDeviceProvider.collect", () => {
     expect(row?.externalRef).toMatch(/^pi_/);
   });
 
-  it("accepted_offline (policy allows, consent given, under cap) chains immediately with offline:true", async () => {
+  it("network unavailable writes nothing", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
     const client = new FakeStripeDevice();
     client.nextCollect("offline");
     const provider = providerFor(client);
-    const r = await provider.collect(collectParams(s, true));
-    expect(r.state).toBe("accepted_offline");
-    expect(r.offline).toBe(true);
-    expect(r.settledAt).not.toBeNull();
-  });
-
-  it("gate refuses offline (no policy) → device yields network_unavailable → nothing persisted", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    // No policy row → resolveOfflineDecision refuses → offlineAllowed=false is passed to the device →
-    // the offline scenario yields network_unavailable.
-    const client = new FakeStripeDevice();
-    client.nextCollect("offline");
-    const provider = providerFor(client);
-    const r = await provider.collect(collectParams(s, true));
+    const r = await provider.collect(collectParams(s));
     expect(r.state).toBe("network_unavailable");
     expect(r.settledAt).toBeNull();
     const row = await suite.db.transaction((tx) =>
@@ -184,138 +162,6 @@ describe("StripeOnDeviceProvider.resolvePending", () => {
   });
 });
 
-describe("StripeOnDeviceProvider.forward", () => {
-  it("settles a cleared offline payment and declines a refused one (+ one incident), empty queue = zeros", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const client = new FakeStripeDevice();
-    const provider = providerFor(client);
-
-    client.nextCollect("offline");
-    const a = await provider.collect(collectParams(s, true));
-    client.nextCollect("offline");
-    const b = await provider.collect(collectParams(s, true));
-
-    client.queueResult({ settled: [a.paymentRef], declined: [b.paymentRef] });
-    const result = await provider.forward(AT);
-    expect(result).toMatchObject({
-      forwarded: 1,
-      declined: 1,
-      incidentsRaised: 1,
-      nextDueAt: null,
-    });
-
-    const rowA = await suite.db.transaction((tx) =>
-      getPaymentByRef(tx, { provider: "stripe", paymentRef: a.paymentRef }),
-    );
-    const rowB = await suite.db.transaction((tx) =>
-      getPaymentByRef(tx, { provider: "stripe", paymentRef: b.paymentRef }),
-    );
-    expect(rowA?.state).toBe("settled");
-    expect(rowB?.state).toBe("declined");
-    const incidents = await suite.db.transaction((tx) =>
-      openIncidents(tx, jobOrigin("payment_check")),
-    );
-    expect(incidents).toHaveLength(1);
-    expect(incidents[0].code).toBe("payment.offline_forward_declined");
-
-    expect(await provider.forward(AT)).toEqual({
-      nextDueAt: null,
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 0,
-    });
-  });
-
-  it("reports a nextDueAt while a ref is still pending on the device", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const client = new FakeStripeDevice();
-    const provider = providerFor(client);
-
-    client.nextCollect("offline");
-    const a = await provider.collect(collectParams(s, true));
-    client.nextCollect("offline");
-    const b = await provider.collect(collectParams(s, true));
-
-    // The device says nothing about `b`: it has neither cleared nor been refused yet.
-    client.queueResult({ settled: [a.paymentRef], declined: [] });
-    const result = await provider.forward(AT);
-
-    // Precondition: `b` really is still outstanding.
-    const rowB = await suite.db.transaction((tx) =>
-      getPaymentByRef(tx, { provider: "stripe", paymentRef: b.paymentRef }),
-    );
-    expect(rowB?.state).toBe("accepted_offline");
-
-    // null means "nothing pending"; a host sleeping until nextDueAt would leave `b` accepted_offline
-    // for ever.
-    expect(result.nextDueAt).not.toBeNull();
-  });
-
-  it("opens no write when the device resolved none of the pending refs, and asks to come back", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const client = new FakeStripeDevice();
-    const provider = providerFor(client);
-    client.nextCollect("offline");
-    const a = await provider.collect(collectParams(s, true));
-
-    // The same database, counting how many transactions the provider opens on it.
-    let transactions = 0;
-    const counted = new Proxy(suite.db, {
-      get(target, prop) {
-        const value: unknown = Reflect.get(target, prop, target);
-        if (prop === "withWriteLock") {
-          return (fn: () => Promise<unknown>) => {
-            transactions += 1;
-            return target.withWriteLock(fn);
-          };
-        }
-        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
-      },
-    }) as Database;
-    const counting = new StripeOnDeviceProvider({ client, db: counted });
-
-    client.queueResult({ settled: [], declined: [] });
-    const result = await counting.forward(AT);
-
-    expect(result).toEqual({
-      nextDueAt: new Date(AT.getTime() + 5 * 60 * 1000),
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 0,
-    });
-    // Only the read of the pending payments; nothing to write, so no second transaction.
-    expect(transactions).toBe(1);
-    const row = await suite.db.transaction((tx) =>
-      getPaymentByRef(tx, { provider: "stripe", paymentRef: a.paymentRef }),
-    );
-    expect(row?.state).toBe("accepted_offline");
-  });
-
-  it("counts one incident when two declines on one till share an open incident", async () => {
-    const s = await seedWorkingOrder(suite.db, freshNif());
-    await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
-    const client = new FakeStripeDevice();
-    const provider = providerFor(client);
-    client.nextCollect("offline");
-    const a = await provider.collect(collectParams(s, true));
-    client.nextCollect("offline");
-    const b = await provider.collect(collectParams(s, true));
-
-    // Neither payment has a sale, so both declines key the same open incident (source, code).
-    client.queueResult({ settled: [], declined: [a.paymentRef, b.paymentRef] });
-    const result = await provider.forward(AT);
-
-    expect(result).toMatchObject({ forwarded: 0, declined: 2, incidentsRaised: 1 });
-    const incidents = await suite.db.transaction((tx) =>
-      openIncidents(tx, jobOrigin("payment_check")),
-    );
-    expect(incidents).toHaveLength(1);
-  });
-});
-
 describe("StripeOnDeviceProvider reversals", () => {
   it("refunds a captured payment; a Stripe-refused refund leaves state unchanged", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
@@ -368,18 +214,17 @@ describe("StripeOnDeviceProvider.collect for a bill payment", () => {
   it.each([
     ["online", "captured"],
     ["declined", "failed"],
-    ["offline", "accepted_offline"],
   ] as const)(
     "keys the PaymentIntent on the bill payment and names it on the %s row",
     async (scenario, state) => {
       const s = await seedWorkingOrder(suite.db, freshNif());
-      await seedPaymentPolicy(suite.db, "accept_offline", "50.00");
+
       const billPaymentId = await seedBillPayment(suite.db, s);
       const client = new FakeStripeDevice();
       client.nextCollect(scenario);
 
       const r = await providerFor(client).collect({
-        ...collectParams(s, true),
+        ...collectParams(s),
         billPaymentId,
       });
 

@@ -88,14 +88,6 @@ const typeTip = (el: TillTenderPay, text: string) => typeInput(el, ".tip-input",
 
 /** A real `click()` toggles `checked` before `change` fires, unlike a synthetic `change` event on an
  * unchanged checkbox. */
-async function toggleSwitch(el: TillTenderPay, selector: string): Promise<void> {
-  const sw = el.shadowRoot!.querySelector(selector) as HTMLElement & {
-    updateComplete: Promise<unknown>;
-  };
-  await sw.updateComplete;
-  sw.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
-  await el.updateComplete;
-}
 
 const query = (el: TillTenderPay, selector: string) => el.shadowRoot!.querySelector(selector);
 const click = (el: TillTenderPay, selector: string) =>
@@ -1467,22 +1459,7 @@ describe("till-tender-pay", () => {
       expect(query(manual, ".tip-input")).toBeNull();
     });
 
-    it("shows the offline-consent toggle only for stripe_on_device", async () => {
-      const store = new WorkingOrderStore();
-      const { el: onDevice } = await mountWidget<TillTenderPay>("till-tender-pay", {
-        store,
-        cardProvider: "stripe_on_device",
-      });
-      expect(query(onDevice, ".offline-consent")).not.toBeNull();
-
-      const { el: terminal } = await mountWidget<TillTenderPay>("till-tender-pay", {
-        store,
-        cardProvider: "stripe_terminal",
-      });
-      expect(query(terminal, ".offline-consent")).toBeNull();
-    });
-
-    it("reads the entered tip and offline-consent onto the emitted collect-card detail", async () => {
+    it("reads the entered tip onto the emitted collect-card detail", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -1491,14 +1468,13 @@ describe("till-tender-pay", () => {
         tipsEnabled: true,
       });
       await typeTip(el, "0.30");
-      await toggleSwitch(el, ".offline-consent");
       const spy = vi.fn();
       el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
       click(el, ".pay-card");
-      expect(spy).toHaveBeenCalledWith({ tip: "0.30", allowOffline: true });
+      expect(spy).toHaveBeenCalledWith({ tip: "0.30" });
     });
 
-    it("omits tip/allowOffline from the emitted detail when neither is entered/enabled", async () => {
+    it("omits tip from the emitted detail when none is entered", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -1508,7 +1484,7 @@ describe("till-tender-pay", () => {
       });
       const spy = vi.fn();
       el.addEventListener("collect-card", (e) => spy((e as CustomEvent).detail));
-      click(el, ".pay-card"); // no tip typed, offline-consent left off
+      click(el, ".pay-card"); // no tip typed
       expect(spy).toHaveBeenCalledWith({});
     });
 

@@ -969,8 +969,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     `src/i18n`). [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-618)
   - Test titles repeat claims the branch corrected (#616, `apps/till/src/widgets`). A courseless
     section the server held shows its lines greyed with no fire button (`#fireAction` in
-    `station-queue.ts`, from #131). `GET /api/till` never sends `stripe_on_device`, so the
-    offline-consent toggle cannot appear.
+    `station-queue.ts`, from #131).
     [Detail](backlog/till.md#test-titles-repeat-claims-the-branch-corrected-616)
   - The till always mounts the counter screen `embedded` (#614). In device mode the station
     screen's `#reload` swallows a `device.unauthorized`, so a device cookie revoked mid-session

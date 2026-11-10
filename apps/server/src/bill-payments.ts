@@ -1420,7 +1420,7 @@ export async function completeBillPayment(
     .where(eq(billPayments.id, billPaymentId));
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
   const actual =
-    provided !== undefined && ["captured", "accepted_offline", "settled"].includes(provided.state)
+    provided !== undefined && provided.state === "captured"
       ? decimalToCents(decimal(provided.amount))
       : undefined;
   const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
@@ -1473,7 +1473,6 @@ export async function failBillPayment(
 /** These outcomes leave no retained charge to allocate to the bill. */
 const NO_RETAINED_CHARGE: ReadonlySet<PaymentResultState> = new Set([
   "failed",
-  "declined",
   "network_unavailable",
   "refunded",
 ]);
@@ -1489,16 +1488,6 @@ const REFUSED_START: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Take a card on a reader against an open bill, in the three phases of design §5.3:
- *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
- *    applied amount, and registers it as live in this process;
- *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment; a
- *    refusal named in {@link REFUSED_START} fails the payment and is passed on, and any other
- *    throw leaves it pending for the loop;
- *  - P3 (transaction): a capture is {@link completeBillPayment}; a decline or a refusal to go
- *    offline fails it; any other answer leaves it pending, for the loop to settle from the
- *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
- *
  * A retry of a payment already taken, whose own sign-in is open on an active till (the first sign-in
  * or a later one), answers its state and never collects again.
  */
@@ -1512,7 +1501,7 @@ export async function takeReaderBillPayment(
   let release = (): void => {};
   try {
     // Read before the queue wait; `noted()` then catches a refusal noted while this payment waited.
-    // Awaited only while `since()` names a refusal: otherwise P1 enters the write
+    // Awaited only while `since()` names a refusal: otherwise payment preparation enters the write
     // queue in this turn.
     const preRead =
       deps.disk !== undefined && deps.disk.since() !== null && (await deps.disk.full());

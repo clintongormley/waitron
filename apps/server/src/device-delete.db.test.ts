@@ -555,9 +555,6 @@ describe("the device delete impact", () => {
       "refunded",
       "partially_refunded",
       "failed",
-      "accepted_offline",
-      "settled",
-      "declined",
     ];
     for (const state of settled) await cardPayment(await openOrder(s.venue), s.barTill, state);
     for (const state of ["received", "failed", "declined"] as const)

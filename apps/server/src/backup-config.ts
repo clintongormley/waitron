@@ -12,7 +12,7 @@ import {
 } from "./backup-settings-evidence.js";
 import { isUnset } from "./env-value.js";
 import { positiveInt } from "./config.js";
-import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+export const MIN_RECOVERY_KEY_LENGTH = 12;
 import type { BackupDestination } from "./storage-backend.js";
 import "./errors.js";
 
@@ -223,8 +223,8 @@ function parseDestinations(env: Env, venueId: string): BackupDestination[] {
 /** {@link loadRecoveryKey}'s check, for a key read from elsewhere. Unset or empty is `undefined`. */
 export function checkedRecoveryKey(recoveryKey: string | undefined): string | undefined {
   if (isUnset(recoveryKey)) return undefined;
-  if (recoveryKey.length < MIN_PASSPHRASE_LENGTH) {
-    throw new AppError("backup.recovery_key_too_short", { min: MIN_PASSPHRASE_LENGTH });
+  if (recoveryKey.length < MIN_RECOVERY_KEY_LENGTH) {
+    throw new AppError("backup.recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
   }
   return recoveryKey;
 }

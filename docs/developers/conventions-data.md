@@ -1062,8 +1062,8 @@ whenever a money column is added:
   `abc`. Not one of the four raised anything. A bare whole number succeeds and means cents. One
   instance was found and corrected while money was moving to cents: a fixture inserting
   `('cash_only', 50)` into `payment_policy` had meant an offline cap of fifty euros and silently
-  became fifty cents. It reads `('cash_only', 5000)` today —
-  `apps/server/src/configuration-transfer.test.ts` (its `payment_policy` insert). Whether that was
+  became fifty cents. It read `('cash_only', 5000)` until A1308 slice 4b deleted `payment_policy` and that insert
+  (`apps/server/src/configuration-transfer.test.ts`, 2026-11). Whether that was
   the only one in the tree is not established; what was run was a hand sweep, not a check anything
   re-runs.
 - Money held as strings inside a JSON document — `sales.vat_breakdown` and the hashed
@@ -1868,6 +1868,9 @@ a format-11 export is refused as outdated.
 **2026-11-10, A1308 slice 4a-ii:** format 15 removes the venue's extra-menu list
 (`location_catalogues`) from configuration exports; a format-14 export is refused as
 `setup.configuration_outdated`.
+
+**2026-11-10, A1308 slice 4b:** format 17 removes `payment_policy`; the payments module
+transfers no configuration tables. A format-16 export is refused as `setup.configuration_outdated`.
 
 **2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
 staff and booking tables and makes `convenio_config` a singleton with integer id 1.

@@ -82,7 +82,7 @@ describe("claims", () => {
       sources: [],
     });
     expect(claimFor(r, "payment.reconcile_drift").area).toBe("reconcile");
-    expect(claimFor(r, "payment.offline_forward_declined").area).toBe("payments");
+    expect(claimFor(r, "payment.refund_unresolved").area).toBe("payments");
     expect(claimFor(r, "printing.mystery")).toEqual(UNCLAIMED);
   });
 
@@ -122,7 +122,7 @@ describe("claims", () => {
 describe("readOpenAlerts", () => {
   it("shows a session only the areas it holds", async () => {
     const v = await seedVenueWithTill();
-    await raise(v, "payment.offline_forward_declined", "error", NOW);
+    await raise(v, "payment.refund_unresolved", "error", NOW);
     await raise(v, "fiscal.registro_rechazado", "error", NOW);
     await raise(v, "chain.verification_failed", "error", NOW);
     await raise(v, "printing.mystery", "warning", NOW);
@@ -130,19 +130,19 @@ describe("readOpenAlerts", () => {
     const paymentsOnly = await asApp((tx) =>
       readOpenAlerts(tx, deps, new Set(["hardware.manage"])),
     );
-    expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
+    expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.refund_unresolved"]);
     const all = await asApp((tx) => readOpenAlerts(tx, deps, EVERYTHING));
     expect(all.map((a) => [a.code, a.area]).sort()).toEqual([
       ["chain.verification_failed", "fiscal"],
       ["fiscal.registro_rechazado", "fiscal"],
-      ["payment.offline_forward_declined", "payments"],
+      ["payment.refund_unresolved", "payments"],
       ["printing.mystery", "diagnostics"],
     ]);
   });
 
   it("builds an event alert from the incident", async () => {
     const v = await seedVenueWithTill();
-    await raise(v, "payment.offline_forward_declined", "error", NOW);
+    await raise(v, "payment.refund_unresolved", "error", NOW);
     const [incident] = await asApp((tx) => listOpenIncidents(tx));
     const [alert] = await asApp((tx) =>
       readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
@@ -150,7 +150,7 @@ describe("readOpenAlerts", () => {
     expect(alert).toEqual({
       key: `incident:${incident!.id}`,
       kind: "event",
-      code: "payment.offline_forward_declined",
+      code: "payment.refund_unresolved",
       params: {},
       severity: "error",
       since: NOW.toISOString(),
@@ -214,7 +214,7 @@ describe("readOpenAlerts", () => {
 
   it("puts errors first, then the newest", async () => {
     const v = await seedVenueWithTill();
-    await raise(v, "payment.offline_forward_declined", "warning", new Date(NOW.getTime() - 1_000));
+    await raise(v, "payment.refund_unresolved", "warning", new Date(NOW.getTime() - 1_000));
     await raise(v, "fiscal.registro_rechazado", "error", new Date(NOW.getTime() - 5_000));
     await raise(v, "chain.verification_failed", "error", new Date(NOW.getTime() - 2_000));
     const alerts = await asApp((tx) =>
@@ -223,7 +223,7 @@ describe("readOpenAlerts", () => {
     expect(alerts.map((a) => a.code)).toEqual([
       "chain.verification_failed",
       "fiscal.registro_rechazado",
-      "payment.offline_forward_declined",
+      "payment.refund_unresolved",
     ]);
   });
 
@@ -379,14 +379,14 @@ describe("readOpenAlerts", () => {
       },
     };
     const r = createAlertRegistry({ claims: [], sources: [failing, healthy] });
-    await raise(v, "payment.offline_forward_declined", "warning", NOW);
+    await raise(v, "payment.refund_unresolved", "warning", NOW);
     const alerts = await asApp((tx) =>
       readOpenAlerts(tx, { registry: r, now: NOW, log }, new Set(["system.manage"])),
     );
     // This registry claims nothing, so the payment incident shows under diagnostics.
     expect(alerts.map((a) => a.code).sort()).toEqual([
       "alert.source_unavailable",
-      "payment.offline_forward_declined",
+      "payment.refund_unresolved",
       "printing.jobs_waiting",
     ]);
     expect(alerts.find((a) => a.code === "alert.source_unavailable")).toEqual({
@@ -513,7 +513,7 @@ describe("readHandledAlerts", () => {
         .returning({ id: persons.id });
       return p!.id;
     });
-    await raise(v, "payment.offline_forward_declined", "error", NOW);
+    await raise(v, "payment.refund_unresolved", "error", NOW);
     await raise(v, "fiscal.registro_rechazado", "error", NOW);
     await raise(v, "chain.verification_failed", "error", NOW);
     const open = await asApp((tx) => listOpenIncidents(tx));
@@ -527,7 +527,7 @@ describe("readHandledAlerts", () => {
         }),
       );
     const DAY = 24 * 60 * 60 * 1000;
-    await mark("payment.offline_forward_declined", person, 29 * DAY);
+    await mark("payment.refund_unresolved", person, 29 * DAY);
     await mark("fiscal.registro_rechazado", "00000000-0000-4000-8000-00000000abcd", DAY);
     await mark("chain.verification_failed", person, HANDLED_WINDOW_MS + DAY);
     const handled = await asApp((tx) =>
@@ -535,28 +535,28 @@ describe("readHandledAlerts", () => {
     );
     expect(handled.map((a) => [a.code, a.handledBy])).toEqual([
       ["fiscal.registro_rechazado", null],
-      ["payment.offline_forward_declined", "Ada"],
+      ["payment.refund_unresolved", "Ada"],
     ]);
     expect(handled[1]!.handledAt).toBe(new Date(NOW.getTime() - 29 * DAY).toISOString());
     const paymentsOnly = await asApp((tx) =>
       readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["hardware.manage"])),
     );
-    expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.offline_forward_declined"]);
+    expect(paymentsOnly.map((a) => a.code)).toEqual(["payment.refund_unresolved"]);
   });
 
   it("shows a handled event with no recorded handler as handled by nobody", async () => {
     const v = await seedVenueWithTill();
-    await raise(v, "payment.offline_forward_declined", "error", NOW);
+    await raise(v, "payment.refund_unresolved", "error", NOW);
     const handledAt = new Date(NOW.getTime() - 60_000).toISOString();
     await db
       .update(incidents)
       .set({ acknowledgedAt: handledAt, acknowledgedBy: null })
-      .where(eq(incidents.code, "payment.offline_forward_declined"));
+      .where(eq(incidents.code, "payment.refund_unresolved"));
     const handled = await asApp((tx) =>
       readHandledAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
     );
     expect(handled.map((a) => [a.code, a.handledAt, a.handledBy])).toEqual([
-      ["payment.offline_forward_declined", handledAt, null],
+      ["payment.refund_unresolved", handledAt, null],
     ]);
   });
 });

@@ -246,7 +246,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     nodeId: brandNodeId(provisioned.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

@@ -288,7 +288,7 @@ describe("Orders routes", () => {
           nodeId: venue.cfg.nodeId,
           seriesId: brandSeriesId(series!.id),
           locale: venue.cfg.locale,
-          invoiceLocales: venue.cfg.invoiceLocales,
+          invoiceLocales: [venue.cfg.locale],
           counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
           recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
           total: "12.10",

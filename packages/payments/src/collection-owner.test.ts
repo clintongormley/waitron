@@ -14,7 +14,6 @@ import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { recordManualCardPayment } from "./manual.js";
 import { SimulatorPaymentProvider } from "./simulator.js";
 import {
-  insertAcceptedOffline,
   insertAttempting,
   insertCapturedPayment,
   insertFailedPayment,
@@ -58,14 +57,6 @@ describe("a payment carries the node id of the box that started it", () => {
       insertCapturedPayment(tx, { ...common, paymentRef: "own-captured", settledAt: new Date() }),
     );
     expect(await storedNode("own-captured")).toBe(seeded.nodeId);
-  });
-
-  it("insertAcceptedOffline", async () => {
-    const { seeded, common } = await setup();
-    await withTransaction(suite.db, (tx) =>
-      insertAcceptedOffline(tx, { ...common, paymentRef: "own-offline", settledAt: new Date() }),
-    );
-    expect(await storedNode("own-offline")).toBe(seeded.nodeId);
   });
 
   it("insertFailedPayment", async () => {

@@ -65,7 +65,7 @@ import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 const MANAGER_EMAIL = "manager@x.com";
-// ≥ MIN_PASSPHRASE_LENGTH (12) and base64url-safe (survives the env-file round-trip).
+// ≥ MIN_RECOVERY_KEY_LENGTH (12) and base64url-safe (survives the env-file round-trip).
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
 const VENUE = "c0000000-0000-4000-8000-000000000002";
@@ -1252,7 +1252,7 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: "short", // storable, but under MIN_PASSPHRASE_LENGTH
+        recoveryKey: "short", // storable, but under MIN_RECOVERY_KEY_LENGTH
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),

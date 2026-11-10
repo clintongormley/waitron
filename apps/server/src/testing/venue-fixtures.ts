@@ -45,7 +45,6 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     // ticket_then_pay so `placeOrder` FIRES the lines to the kitchen (open → placed) without filing a

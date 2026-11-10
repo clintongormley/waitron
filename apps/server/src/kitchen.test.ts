@@ -60,7 +60,6 @@ async function setupVenue(): Promise<WithVenueRowId> {
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

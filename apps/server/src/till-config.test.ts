@@ -41,7 +41,7 @@ describe("loadNodeIdentity", () => {
     expect(loaded.nodeId).toBe(NODE);
   });
 
-  it("brands the node id from its env var and defaults locale to es-ES", () => {
+  it("brands the node id from its env var", () => {
     const config = loadNodeIdentity(base);
     // toEqual, not toMatchObject: it also asserts nothing extra — no `cardProvider`/`stripeReaderId`/
     // `sumupReaderId` key at all.
@@ -49,35 +49,8 @@ describe("loadNodeIdentity", () => {
       nodeId: NODE,
     });
     expect(loadTillAppSettings(base)).toEqual({
-      locale: "es-ES",
-      invoiceLocales: ["es-ES"],
       tipsEnabled: false,
     });
-  });
-
-  it("leaves localeOverride undefined when WAITRON_TILL_LOCALE is unset (while locale defaults to es-ES)", () => {
-    // An unset `WAITRON_TILL_LOCALE` leaves `localeOverride` undefined, so the country-pack resolver
-    // falls through to geography, even as `locale` defaults to `es-ES` beside it.
-    const config = loadTillAppSettings(base);
-    expect(config.localeOverride).toBeUndefined();
-    expect(config.locale).toBe("es-ES");
-  });
-
-  it("reads WAITRON_TILL_LOCALE and reflects it in invoiceLocales + localeOverride", () => {
-    const config = loadTillAppSettings({ ...base, WAITRON_TILL_LOCALE: "ca-ES" });
-    expect(config.locale).toBe("ca-ES");
-    expect(config.invoiceLocales).toEqual(["ca-ES"]);
-    // The raw env, carried through unchanged as the venue-default override.
-    expect(config.localeOverride).toBe("ca-ES");
-  });
-
-  it("treats an empty WAITRON_TILL_LOCALE as unset, defaulting to es-ES (and localeOverride undefined)", () => {
-    // An operator's `WAITRON_TILL_LOCALE=` line must not push an empty locale into `invoiceLocales`,
-    // nor an empty override into the venue-default derivation.
-    const config = loadTillAppSettings({ ...base, WAITRON_TILL_LOCALE: "" });
-    expect(config.locale).toBe("es-ES");
-    expect(config.invoiceLocales).toEqual(["es-ES"]);
-    expect(config.localeOverride).toBeUndefined();
   });
 
   describe("tips (WAITRON_TILL_TIPS)", () => {
@@ -180,8 +153,6 @@ describe("tryLoadNodeIdentity", () => {
       nodeId: NODE,
     });
     expect(loadTillAppSettings(base)).toEqual({
-      locale: "es-ES",
-      invoiceLocales: ["es-ES"],
       tipsEnabled: false,
     });
   });

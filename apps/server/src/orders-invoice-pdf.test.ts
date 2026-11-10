@@ -55,7 +55,7 @@ async function fullInvoice(seriesId = fullSeriesId): Promise<{ billId: string; s
       seriesId: brandSeriesId(seriesId),
       workingOrderId: brandWorkingOrderId(billId),
       locale: venue.cfg.locale,
-      invoiceLocales: venue.cfg.invoiceLocales,
+      invoiceLocales: [venue.cfg.locale],
       counterparty: { taxId: "12345678Z", legalName: "Cliente Mayorista SL", countryCode: "ES" },
       recipientAddress: "Calle Cliente 9, Madrid",
       total: "3.00",

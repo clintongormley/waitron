@@ -151,7 +151,6 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -841,7 +840,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   }
 
   it("re-keys bare `es` to full-tag `es-ES` — reading invoice_locales FRESH from the DB, not cfg", async () => {
-    // `cfg.invoiceLocales` is deliberately WRONG: a re-key that read cfg rather than the location
+    // `[cfg.locale]` is deliberately WRONG: a re-key that read cfg rather than the location
     // would produce `ca-ES`, which the trigger refuses.
     const { cfg, zoneId, menuItemId } = await setupBareVenue(["es-ES"], { es: "Café" });
     const driftedCfg = await deviceRequestCfg(suite.db, {

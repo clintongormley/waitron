@@ -1,3 +1,4 @@
+import { readVenueLocale } from "./venue-locale.js";
 import { addPortionRound } from "./testing/portion-bill.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
@@ -17,6 +18,7 @@ import {
   workingOrderLines,
   products,
   locations,
+  tenants,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -275,11 +277,11 @@ it("A964 language boundaries keep weighted units and all recorded presentation n
       .update(workingOrderLines)
       .set({
         name: "Staff roast",
-        descriptions: { [cfg.invoiceLocales[0]!]: "Diner roast" },
+        descriptions: { [v.cfg.locale]: "Diner roast" },
         kitchenName: "Pass roast",
         variantName: "Staff size",
         variantKitchenName: "Pass size",
-        variantDescriptions: { [cfg.invoiceLocales[0]!]: "Diner size" },
+        variantDescriptions: { [v.cfg.locale]: "Diner size" },
         unitName: { "de-DE": "DE-unit", en: "EN-unit" },
         optionSnapshots: [
           {
@@ -517,5 +519,43 @@ it.each(["en", "es"] as const)(
     expect(
       notices.filter((notice) => notice.kind === "void").map((notice) => notice.quantity),
     ).toEqual([2000]);
+  },
+);
+
+it.each([
+  ["GB", "EN-unit"],
+  ["ES", "ES-unit"],
+] as const)(
+  "a %s venue's kitchen ticket picks the unit in the venue's display language",
+  async (country, unit) => {
+    const v = await setupSplitExtrasVenue();
+    await suite.db.update(tenants).set({ country });
+    const cfg = { ...v.cfg, locale: await readVenueLocale(suite.db) };
+    await withTransaction(suite.db, async (tx) => {
+      const id = crypto.randomUUID();
+      const { lineRows } = await createOfferedOrder(tx, cfg, id, [
+        { productId: v.products.burger, quantity: "1" },
+      ]);
+      const lineId = lineRows[0]!.id!;
+      await tx
+        .update(workingOrderLines)
+        .set({
+          unitName:
+            country === "GB" ? { es: "ES-unit", en: "EN-unit" } : { en: "EN-unit", es: "ES-unit" },
+        })
+        .where(eq(workingOrderLines.id, lineId));
+      await tx.execute(
+        sql`update working_line_contexts set sold_in_each = 0 where working_order_line_id = ${lineId}`,
+      );
+      const lines = await tx
+        .select(fireableLineColumns)
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, lineId));
+      await fireLines(tx, cfg, id, lines);
+    });
+    const printed = await jobs();
+    expect(printed).toHaveLength(2);
+    for (const job of printed)
+      expect(printedLines(job.payload).join("\n")).toContain(`1 ${unit} x`);
   },
 );

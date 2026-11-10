@@ -172,7 +172,6 @@ async function setupVenue(): Promise<Seeded> {
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

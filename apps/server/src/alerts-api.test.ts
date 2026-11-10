@@ -161,7 +161,7 @@ describe("alert routes", () => {
 
   it("lists open alerts for a manager", async () => {
     const v = await seedVenueWithStaff();
-    await raise(v, "payment.offline_forward_declined");
+    await raise(v, "payment.refund_unresolved");
     await raise(v, "chain.verification_failed");
     const res = await get(appFor(), "/management-api/alerts", v.manager);
     expect(res.status).toBe(200);
@@ -169,20 +169,20 @@ describe("alert routes", () => {
     expect(body.visible).toBe(true);
     expect(body.alerts.map((a) => a.code).sort()).toEqual([
       "chain.verification_failed",
-      "payment.offline_forward_declined",
+      "payment.refund_unresolved",
     ]);
   });
 
   it("names a device alert's device and a job alert's source", async () => {
     const v = await seedVenueWithStaff();
-    await raise(v, "payment.offline_forward_declined");
+    await raise(v, "payment.refund_unresolved");
     await raise(v, "fiscal.registro_rechazado", "error", jobOrigin("fiscal_filing"));
     const app = appFor();
     const body = (await (await get(app, "/management-api/alerts", v.manager)).json()) as {
       alerts: { code: string; source?: string; deviceId?: string | null; deviceName?: string }[];
     };
     const byCode = new Map(body.alerts.map((a) => [a.code, a]));
-    expect(byCode.get("payment.offline_forward_declined")).toMatchObject({
+    expect(byCode.get("payment.refund_unresolved")).toMatchObject({
       source: "device",
       deviceId: v.deviceId,
       deviceName: "Till 1",
@@ -196,7 +196,7 @@ describe("alert routes", () => {
 
   it("still names a device that was revoked after the alert", async () => {
     const v = await seedVenueWithStaff();
-    await raise(v, "payment.offline_forward_declined");
+    await raise(v, "payment.refund_unresolved");
     await db.update(devices).set({ active: false }).where(eq(devices.id, v.deviceId));
     const body = (await (await get(appFor(), "/management-api/alerts", v.manager)).json()) as {
       alerts: { deviceName?: string }[];
@@ -206,7 +206,7 @@ describe("alert routes", () => {
 
   it("answers not visible and empty to a session holding no alert permission", async () => {
     const v = await seedVenueWithStaff();
-    await raise(v, "payment.offline_forward_declined");
+    await raise(v, "payment.refund_unresolved");
     const res = await get(appFor(), "/management-api/alerts", v.supervisor);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ visible: false, alerts: [] });
@@ -214,7 +214,7 @@ describe("alert routes", () => {
 
   it("marks an incident handled; it moves from open to handled with who and when", async () => {
     const v = await seedVenueWithStaff();
-    const id = await raise(v, "payment.offline_forward_declined");
+    const id = await raise(v, "payment.refund_unresolved");
     const app = appFor();
     const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
     expect(res.status).toBe(204);
@@ -243,7 +243,7 @@ describe("alert routes", () => {
 
   it("succeeds when the incident is already handled", async () => {
     const v = await seedVenueWithStaff();
-    const id = await raise(v, "payment.offline_forward_declined");
+    const id = await raise(v, "payment.refund_unresolved");
     const app = appFor();
     expect(
       (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
@@ -279,7 +279,7 @@ describe("alert routes", () => {
   it("shows and lets handle only payment alerts to a session holding hardware.manage alone", async () => {
     roleOverride.set("supervisor", ["hardware.manage"]);
     const v = await seedVenueWithStaff();
-    const payment = await raise(v, "payment.offline_forward_declined");
+    const payment = await raise(v, "payment.refund_unresolved");
     const others = [
       await raise(v, "fiscal.registro_rechazado"),
       await raise(v, "chain.verification_failed"),
@@ -291,7 +291,7 @@ describe("alert routes", () => {
       ((await (await get(app, path, v.supervisor)).json()) as { alerts: { code: string }[] }).alerts
         .map((a) => a.code)
         .sort();
-    expect(await codes("/management-api/alerts")).toEqual(["payment.offline_forward_declined"]);
+    expect(await codes("/management-api/alerts")).toEqual(["payment.refund_unresolved"]);
 
     const expected = ["fiscal.view", "fiscal.view", "fiscal.view", "system.manage"];
     for (const [i, id] of others.entries()) {
@@ -309,9 +309,7 @@ describe("alert routes", () => {
       expect(
         (await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager)).status,
       ).toBe(204);
-    expect(await codes("/management-api/alerts/handled")).toEqual([
-      "payment.offline_forward_declined",
-    ]);
+    expect(await codes("/management-api/alerts/handled")).toEqual(["payment.refund_unresolved"]);
     expect(
       (
         (await (await get(app, "/management-api/alerts/handled", v.manager)).json()) as {
@@ -807,7 +805,7 @@ describe("ongoing alert sources through the route", () => {
   it("answers with battery unavailable while a provider status remains held", async () => {
     const v = await seedVenueWithStaff();
     await seedLowReader();
-    await raise(v, "payment.offline_forward_declined");
+    await raise(v, "payment.refund_unresolved");
     let entered!: () => void;
     const started = new Promise<void>((resolve) => (entered = resolve));
     let release!: (status: ReaderStatus) => void;
@@ -835,7 +833,7 @@ describe("ongoing alert sources through the route", () => {
       await vi.advanceTimersByTimeAsync(50_000);
       expect(result.body?.alerts).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ code: "payment.offline_forward_declined" }),
+          expect.objectContaining({ code: "payment.refund_unresolved" }),
           expect.objectContaining({ code: "alert.source_unavailable", area: "card_reader" }),
         ]),
       );

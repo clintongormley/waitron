@@ -60,7 +60,6 @@ async function fixture(role: "manager" | "staff" = "manager", withFiscal = true)
     locationId: venueId,
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
-    invoiceLocales: ["gl-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

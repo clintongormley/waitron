@@ -9,16 +9,7 @@ import type { Decimal, DeviceOrigin, NodeId, WorkingOrderId } from "@waitron/sha
  * not yet paid; the inbound settlement advances it to `captured` or `failed`.
  */
 export type PaymentState =
-  | "attempting"
-  | "captured"
-  | "voided"
-  | "refunded"
-  | "partially_refunded"
-  | "failed"
-  | "accepted_offline"
-  | "settled"
-  | "declined"
-  | "initiated";
+  "attempting" | "captured" | "voided" | "refunded" | "partially_refunded" | "failed" | "initiated";
 
 /** A payment still waiting on its provider: `attempting` until it answers, `initiated` until a
  * hosted payment is paid or expires. */
@@ -28,8 +19,7 @@ export const IN_PROGRESS_PAYMENT_STATES = [
 ] as const satisfies readonly PaymentState[];
 
 /**
- * `network_unavailable` is reported but never persisted: it is returned when the network is down and
- * offline acceptance is refused, and nothing durable is written.
+ * `network_unavailable` is reported but never persisted: it is returned when the network is down, and nothing durable is written.
  */
 export type PaymentResultState = PaymentState | "network_unavailable";
 
@@ -55,9 +45,6 @@ export interface CollectParams {
    * Written on the provider's rows; the start is refused unless the origin device holds it and no
    * other device has a payment in progress on it. */
   readerId?: string;
-  /** Staff consent to accept this card offline if the network is down (default false). Even when
-   * true, the venue's policy must allow it and the amount be within its cap. */
-  allowOffline?: boolean;
   /** A local simulator result selected by the practice UI. The server only forwards this field to
    * the simulator; real payment adapters never receive a browser-selected outcome. */
   simulationOutcome?: "captured" | "declined" | "attempting";
@@ -83,8 +70,7 @@ export interface CardDetails {
 }
 
 /**
- * `settledAt` feeds `RecordSaleTender.settledAt`: non-null on a `captured` result and on an
- * `accepted_offline` one (the acceptance time, so the sale chains before `forward()` clears it);
+ * `settledAt` feeds `RecordSaleTender.settledAt`: non-null on a `captured` result;
  * null on `failed` and `network_unavailable`, where `recordSale` refuses. `paymentRef` is the
  * provider's opaque reference and the key that later associates the payment with the sale.
  */
@@ -95,8 +81,6 @@ export interface PaymentResult {
   /** The captured total on a successful `collect`, the requested total while pending or failed,
    * the captured total for `void`/`refund`, or the amount refunded for `partialRefund`. */
   amount: Decimal;
-  /** True only on an `accepted_offline` result, which awaits `forward()`. */
-  offline?: boolean;
   settledAt: Date | null;
   /** Present only on a `captured` result whose provider can supply the card facts. */
   card?: CardDetails;
@@ -251,11 +235,6 @@ export interface PaymentProvider {
    * charge their processor reported fails for a full disk; the on-device Stripe adapter and the
    * simulator do not. */
   collect(params: CollectParams): Promise<PaymentResult>;
-
-  /** One pass over this provider's `accepted_offline` rows: `settled` when the network cleared it,
-   * `declined` (+ one idempotent uncollected-receivable incident, no fiscal change) when it refused.
-   * A provider with no device-local offline queue answers all-zeros. */
-  forward(now: Date): Promise<ForwardResult>;
 
   /** Resolve uncertain rows owned by this box. Unresolved rows set `nextDueAt`; `forwarded` counts
    * captures and `declined` failures. An aborted pass leaves unasked rows for a later pass. */

@@ -17,8 +17,6 @@ const STATE_ROOT = "/opt/waitron/state";
 
 const EXPECTED_NODE = { nodeId: TILL_ENV.WAITRON_NODE_ID };
 const EXPECTED_TILL_APP = {
-  locale: "es-ES",
-  invoiceLocales: ["es-ES"],
   // No card fields: `toEqual` fails if one is materialised.
   tipsEnabled: false,
 };

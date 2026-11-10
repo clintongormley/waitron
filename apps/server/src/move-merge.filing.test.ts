@@ -80,7 +80,6 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

@@ -723,8 +723,7 @@ the start (`setup.workspace_unsupported`), and the page asks for Waitron to be r
   (`packages/provisioning/src/first-setup-start-again-note.ts`). It holds the last series name, the
   earliest moment a later name may be taken, and the module that gave it (2026-10-27, A1099: after
   Start again past a damaged name record it may hold no name, only the time floor). A write only ever replaces
-  it with a later moment, and no backup carries it: a restore archive or recovery bundle holding it
-  is refused.
+  it with a later moment, and no backup carries it: a restore archive holding it is refused.
 - **The floor:** first setup, a restore and a promotion all read the note as a
   time floor (the earliest moment a new name may be taken), so none of them issues a production
   series name before it.

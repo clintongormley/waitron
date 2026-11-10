@@ -100,7 +100,6 @@ async function setupStation(): Promise<{ cfg: WithVenueRowId; stationId: string 
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

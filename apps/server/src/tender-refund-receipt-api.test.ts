@@ -232,7 +232,7 @@ it("prints the refund time in UTC with a two-digit hour", async () => {
 });
 it("prints the stored English language and offered Spanish without changing the invoice", async () => {
   venue.cfg.locale = "en-GB";
-  venue.cfg.invoiceLocales = ["en-GB"];
+  [venue.cfg.locale] = ["en-GB"];
   const row = await target(),
     before = await immutable();
   expect((await print(row.id, { language: "en-GB" })).status).toBe(200);
@@ -429,7 +429,7 @@ it("A965 payment language defaults to the sale language with conflicting current
   const before = await immutable();
   const [saved] = await store.db.select().from(sales).where(eq(sales.id, row.saleId));
   venue.cfg.locale = "en-GB";
-  venue.cfg.invoiceLocales = ["en-GB"];
+  [venue.cfg.locale] = ["en-GB"];
   expect((await print(row.id)).status).toBe(200);
   const text = decodeTicket((await printed()).jobs.at(-1)!.payload);
   expect(text).toContain(receiptLabelsFor(saved!.locale).refundHeading);

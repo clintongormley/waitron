@@ -2,7 +2,7 @@ import type { ModuleHandoverContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { IN_PROGRESS_PAYMENT_STATES } from "./provider.js";
 
-const OPEN_PAYMENT_STATES = [...IN_PROGRESS_PAYMENT_STATES, "accepted_offline"] as const;
+const OPEN_PAYMENT_STATES = IN_PROGRESS_PAYMENT_STATES;
 export type OpenPaymentState = (typeof OPEN_PAYMENT_STATES)[number];
 
 export type OpenPayments = {
@@ -34,7 +34,7 @@ function nullableText(value: BackupValue | undefined): string | null {
 }
 
 /**
- * Each ordered by id, reading only: payments in `attempting`, `initiated` or `accepted_offline`;
+ * Each ordered by id, reading only: payments in `attempting` or `initiated`;
  * `tender_refunds` that are card and pending; every pending `bill_payment_refunds` row (only a
  * card refund is ever saved pending), with its bill payment's provider row when there is one.
  */

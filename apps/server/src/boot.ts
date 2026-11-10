@@ -386,7 +386,6 @@ import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-spa
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
-import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import {
@@ -2084,7 +2083,9 @@ async function bootServer(
   const operationDescriptionDefault = offeredOperationDescriptionDefault(
     enabledFiscal.venueFields?.defaults?.operationDescription,
   );
+  const venueLocale = await readVenueLocale(db);
   const tradingContext: TradingContext = {
+    locale: venueLocale,
     ...node,
     ...config.tillApp,
     simplifiedInvoiceLimit: nodeBackend.simplifiedInvoiceLimit,
@@ -2103,9 +2104,6 @@ async function bootServer(
   };
   // Interim: the venue row's id; removed by S18e or S28.
   const venueId = await venueLocationId(db);
-  // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
-  // defaulted `tradingContext.locale`, which would mask geography.
-  const venueLocale = await readVenueLocale(db, { override: tradingContext.localeOverride });
   const tradingAdmission = new TradingAdmission();
   health.readTradingAdmission = () => tradingAdmission.snapshot();
   const scope = { nodeId: tradingContext.nodeId };
@@ -3296,7 +3294,6 @@ async function bootServer(
     log,
   );
 
-  mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   const documentEvidence: RecoveryDocumentEvidence = (module) =>
     readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
   mountRecoveryPackApi(

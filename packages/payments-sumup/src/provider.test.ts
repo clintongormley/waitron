@@ -533,19 +533,6 @@ describe("SumUpCloudProvider default poll", () => {
   });
 });
 
-describe("SumUpCloudProvider.forward", () => {
-  it("forward is a no-op for the server-driven cloud provider (no device-local offline queue)", async () => {
-    // All-zeros without touching the database — the cloud reader has no store-and-forward queue.
-    const { provider } = await setup(suite);
-    expect(await provider.forward(new Date("2026-07-24T10:00:00Z"))).toEqual({
-      nextDueAt: null,
-      forwarded: 0,
-      declined: 0,
-      incidentsRaised: 0,
-    });
-  });
-});
-
 describe("SumUpCloudProvider.sendRefund and lookupRefund", () => {
   /** A captured SumUp transaction the refunds address. */
   async function refundable(tune?: Parameters<typeof setup>[1]) {

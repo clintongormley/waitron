@@ -14,7 +14,7 @@ import { exportConfigurationTables, importConfigurationTables } from "./configur
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-it("keeps hardware readers and their slip settings outside configuration bundles while payment policy round-trips", async () => {
+it("keeps hardware readers and their slip settings outside configuration bundles", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
   await applyVenue(
     planVenue(
@@ -46,22 +46,13 @@ it("keeps hardware readers and their slip settings outside configuration bundles
   await suite.db.execute(
     sql`insert into card_readers (id, provider, provider_ref, name, prints_own_slip_automatically, created_at) values ('00000000-0000-4000-8000-000000000123', 'sumup', 'hardware-source', 'Counter', 1, '2026-10-27T12:00:00Z')`,
   );
-  await suite.db.execute(
-    sql`insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at) values ('accept_offline', 2500, '2026-10-27T12:00:00Z', '2026-10-27T12:00:00Z')`,
-  );
   const readers = (await suite.db.execute(sql`select * from card_readers`)).rows;
   const exported = await exportConfigurationTables(suite.db, [payments]);
-  expect(Object.keys(exported.tables)).toEqual(["payment_policy"]);
-  expect(exported.tables.payment_policy).toHaveLength(1);
+  expect(Object.keys(exported.tables)).toEqual([]);
   const bundle = { ...configurationBundle(), modules: versions, tables: exported.tables };
-  const policy = await suite.db.execute(sql`select * from payment_policy`);
-  await suite.db.execute(
-    sql`update payment_policy set offline_mode = 'cash_only', offline_amount_cap = 123`,
-  );
   await withTransaction(suite.db, (tx) =>
     importConfigurationTables(tx, bundle, [payments], versions),
   );
-  expect((await suite.db.execute(sql`select * from payment_policy`)).rows).toEqual(policy.rows);
   expect((await suite.db.execute(sql`select * from card_readers`)).rows).toEqual(readers);
   await suite.db.execute(sql`delete from card_readers`);
   await withTransaction(suite.db, (tx) =>

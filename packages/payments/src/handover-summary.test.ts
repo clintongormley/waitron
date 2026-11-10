@@ -50,7 +50,7 @@ async function summarise(path?: string): Promise<OpenPayments> {
 }
 
 const ALL_STATES = paymentState.enumValues;
-const OPEN_STATES = ["attempting", "initiated", "accepted_offline"] as const;
+const OPEN_STATES = ["attempting", "initiated"] as const;
 
 async function payment(state: (typeof ALL_STATES)[number], provider: string, ref: string) {
   const [row] = await suite.db
@@ -151,7 +151,7 @@ async function billRefund(
 }
 
 describe("summariseOpenPayments", () => {
-  it("lists every payment in attempting, initiated and accepted_offline with its provider reference", async () => {
+  it("lists every payment in attempting and initiated with its provider reference", async () => {
     const expected = [];
     for (const [i, state] of OPEN_STATES.entries()) {
       const provider = i === 1 ? "stripe" : "sumup";

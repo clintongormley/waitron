@@ -362,7 +362,7 @@ async function fullSale() {
       nodeId: venue.cfg.nodeId,
       seriesId: series!.id as typeof venue.seriesId,
       locale: venue.cfg.locale,
-      invoiceLocales: venue.cfg.invoiceLocales,
+      invoiceLocales: [venue.cfg.locale],
       total: "1.00",
       lines: [
         {

@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-11-10, A1308 slice 4b: `WAITRON_TILL_LOCALE` is gone; kitchen-ticket units and the other `cfg.locale` readers follow the venue's display language (`readVenueLocale`). References below describe the earlier setting._
+
 > **2026-11-04 (A1009):** The five fake-backend demo scripts and their commands are retired.
 > Their scenarios are ordinary server tests in `catalogue-allergen-workflow.test.ts` and
 > `reporting-write-workflows.test.ts`. The [worked Spain VAT return](../../packages/reporting/examples/modelo-303.md)

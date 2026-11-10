@@ -15,6 +15,8 @@ export interface RequestEffects {
 
 export interface TradingContext
   extends NodeIdentityConfig, TillAppSettings, FiscalRuntimeContext, RequestEffects {
+  /** The venue's display language; receipts resolve their own language. */
+  locale: string;
   /** Fiscal values and hashes must not depend on this flag. */
   practiceMode?: boolean;
 }

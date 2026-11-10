@@ -120,7 +120,7 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   };
   const guestCount = readGuestCountChoice(body.guestCount);
   if (guestCount !== undefined) request.guestCount = guestCount;
-  const readerOnly = ["readerId", "allowOffline", "simulationOutcome"] as const;
+  const readerOnly = ["readerId", "simulationOutcome"] as const;
   if (request.method === "card") {
     request.entry = oneOf(body.entry, ["manual", "reader"] as const, "entry");
   } else if (body.entry !== undefined) {
@@ -135,10 +135,6 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     throw invalid("externalRef");
   }
   if (request.entry === "reader") {
-    // Design §11.9: a bill payment is never accepted offline until the Tap to Pay work enables it.
-    if (body.allowOffline !== undefined && body.allowOffline !== false) {
-      throw invalid("allowOffline");
-    }
     if (body.simulationOutcome !== undefined) {
       request.simulationOutcome = oneOf(
         body.simulationOutcome,

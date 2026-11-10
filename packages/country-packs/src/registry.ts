@@ -176,8 +176,7 @@ export function resolveInstalledStartingContentLanguages(
 }
 
 /** What a receipt prints in when the venue's country has no installed pack, and how a receipt in a
- * language the browser cannot format writes its amounts and dates: `loadTillAppSettings`'s default when
- * `WAITRON_TILL_LOCALE` is unset. */
+ * language the browser cannot format writes its amounts and dates. */
 export const FALLBACK_RECEIPT_LOCALE = SPAIN.defaultLocale;
 const FALLBACK_RECEIPT_LABELS: ReceiptLabels =
   SPAIN_RECEIPT_LABELS[SPAIN.defaultLocale as keyof typeof SPAIN_RECEIPT_LABELS];

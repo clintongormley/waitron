@@ -68,8 +68,7 @@ their full text.
   titles carry task numbers. `apps/till/README.md`
   says the held list is shared across the registers "on a node". Read, not run: a courseless
   section the server held shows its lines greyed with no fire button (`#fireAction` in
-  `station-queue.ts`, from #131); `GET /api/till` never sends `stripe_on_device`, so the
-  offline-consent toggle cannot appear; `ReaderOption.online` is never set outside tests;
+  `station-queue.ts`, from #131); `ReaderOption.online` is never set outside tests;
   the fixed handheld mount and table screen still need their redundant exit configuration audited;
   the tab shell and the supervisor dialog emit events not named `wt-*` (CLAUDE.md §3; not checked
   whether the rule reaches till widgets).
@@ -3726,8 +3725,8 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   and shows recognised provider reasons in English and Spanish. The owner-defined lost, stolen
   and pickup cases show a staff-only keep-card instruction without Retry. The current simulator
   toggle stays until A739. [Provider evidence and reproduction](../research/2026-10-16-card-reader-failure-reasons.md).
-- **Keep the card panel tied to its order.** A767 stores the outcome and Retry's reader, tip and
-  offline choice by order id. Moving the panel into the payment window must preserve that link:
+- **Keep the card panel tied to its order.** A767 stores the outcome and Retry's reader and
+  tip by order id. Moving the panel into the payment window must preserve that link:
   switching orders hides it, returning restores it, and a Retry control from the previous order
   cannot start a payment on the replacement. Browser cases: `till-app.test.ts`, “A767 card outcome”.
 - **No receipt screen after paying** (owner). The counter goes straight to a new order; a strip

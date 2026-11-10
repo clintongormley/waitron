@@ -183,7 +183,6 @@ export async function openBenchVenue(
       nodeId,
       locationId: await venueLocationId(db),
       locale: LOCALE,
-      invoiceLocales: [LOCALE],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };

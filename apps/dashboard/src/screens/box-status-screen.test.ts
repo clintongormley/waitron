@@ -97,7 +97,7 @@ const AGENT_ALERT = alert("agent.silent", "printing", {
   params: { agent: "Back office" },
   screen: "printers",
 });
-const OTHER_ALERT = alert("payment.offline_forward_declined", "payments", { kind: "event" });
+const OTHER_ALERT = alert("payment.refund_unresolved", "payments", { kind: "event" });
 
 const FREED: FreedSpaceView = {
   freedBytes: 45_000_000,

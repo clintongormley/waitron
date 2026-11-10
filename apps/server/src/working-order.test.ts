@@ -3284,7 +3284,7 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
   });
 
   // The line's customer text is keyed by the VENUE's invoice locales, read at pricing time —
-  // not by the till's `cfg.invoiceLocales`, which this case leaves at one locale.
+  // not by the till's `[cfg.locale]`, which this case leaves at one locale.
   it("keys each stored line's customer text by the venue's invoice locales", async () => {
     const { cfg, coffeeId } = await setupVenue();
     const offers = await counterOffers(cfg);

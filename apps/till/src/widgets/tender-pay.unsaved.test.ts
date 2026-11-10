@@ -282,23 +282,18 @@ it("busy entry controls do not discard or submit a staged reference", async () =
   expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("TX-007");
   expect(unload()).toBe(true);
 });
-it("tip and offline consent protect page leave but cash Cancel preserves them independently", async () => {
+it("the tip protects page leave but cash Cancel preserves it", async () => {
   const { app, form } = await mount();
   form.cardProvider = "stripe_on_device";
   form.tipsEnabled = true;
   await form.updateComplete;
   await fill(form, ".tip-input", "0.30");
-  const sw = form.shadowRoot!.querySelector("wt-switch")!;
-  await sw.updateComplete;
-  sw.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
-  await form.updateComplete;
   expect(unload()).toBe(true);
   await click(form, ".pay");
   await press(form, "5");
   await click(form, ".cancel");
   expect((await question(app)).open).toBe(false);
   expect(form.shadowRoot!.querySelector<WtInput>(".tip-input")!.value).toBe("0.30");
-  expect(form.shadowRoot!.querySelector("wt-switch")!.checked).toBe(true);
   expect(unload()).toBe(true);
   let left = 0;
   const leaving = app.leave.coordinator.request({
@@ -313,7 +308,7 @@ it("tip and offline consent protect page leave but cash Cancel preserves them in
   await leaving;
   expect(left).toBe(0);
   await click(form, ".pay-card");
-  expect(app.collects).toEqual([{ tip: "0.30", allowOffline: true }]);
+  expect(app.collects).toEqual([{ tip: "0.30" }]);
   expect(unload()).toBe(false);
   await click(form, ".cancel");
   expect((await question(app)).open).toBe(false);

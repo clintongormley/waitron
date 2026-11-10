@@ -266,7 +266,7 @@ async function saleWithNoRow(
       seriesId: brandSeriesId(series!.id),
       workingOrderId: brandWorkingOrderId(billId),
       locale: v.cfg.locale,
-      invoiceLocales: v.cfg.invoiceLocales,
+      invoiceLocales: [v.cfg.locale],
       total: price,
       lines: [
         {

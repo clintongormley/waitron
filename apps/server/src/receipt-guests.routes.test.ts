@@ -123,6 +123,7 @@ async function venue(db: Database): Promise<Venue> {
   );
   const venueId = await venueLocationId(db);
   const cfg = await deviceRequestCfg(db, {
+    locale: "es-ES",
     ...loadNodeIdentity({
       WAITRON_NODE_ID: allocated.nodeId,
     }),

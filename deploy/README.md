@@ -571,8 +571,8 @@ command against it treat that entrypoint differently:
   docker compose start app
   ```
 
-  The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …`, to
-  `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
+  The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …` and to
+  any bare `docker run` against this image.
 
 - **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
   file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`.

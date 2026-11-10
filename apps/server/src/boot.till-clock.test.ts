@@ -217,7 +217,6 @@ describe("clock handler absence with workforce absent", () => {
         cfg: {
           nodeId: nodeId("10000000-0000-4000-8000-000000000001"),
           locale: "en",
-          invoiceLocales: ["en"],
           tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },

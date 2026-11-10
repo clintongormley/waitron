@@ -503,7 +503,7 @@ Remaining Stripe qualification and maintenance.
 - **A placed order takes one card payment at a time** (A526, 2026-10-12; defaults sent to the owner
   as an FYI the same day and built). While a card payment of a placed order is in flight — running
   in this process, still `attempting` at its provider, or already charged and not yet
-  on a sale, including accepted or forwarded offline payments — a cash or hand-keyed card collect
+  on a sale — a cash or hand-keyed card collect
   of the order, a second card payment of it and an unpaid departure of the party it belongs to are refused `order.payment_in_flight`, writing
   nothing. Pressing Pay again to file a card that was already charged is never refused, even from
   another till and even while that card's own payment has not yet filed it: it files that charge and

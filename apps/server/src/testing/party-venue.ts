@@ -136,7 +136,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });

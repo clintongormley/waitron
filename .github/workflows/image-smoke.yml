@@ -274,7 +274,7 @@ jobs:
           set -euo pipefail
           app=$(docker compose ps -q app)
           agent=$(docker compose ps -q print-agent)
-          for bundle in server node-entry bin-restore bin-rejoin bin-break-glass bin-recovery; do
+          for bundle in server node-entry bin-restore bin-rejoin bin-break-glass; do
             docker exec "$app" test -s "/app/third-party/npm/server/$bundle.js.NOTICES.txt"
           done
           docker exec "$app" test -s /app/third-party/npm/till/THIRD-PARTY-NOTICES.txt

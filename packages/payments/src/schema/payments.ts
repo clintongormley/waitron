@@ -22,8 +22,7 @@ import { cardReaders } from "./card-readers.js";
 
 /**
  * Mirrors `PaymentState` in ../provider.ts. `attempting` is written before an integrated adapter's
- * network call and resolved after it; `accepted_offline` advances to `settled` or `declined` when
- * forwarded; `initiated` is a hosted payment minted but not yet paid.
+ * network call and resolved after it; `initiated` is a hosted payment minted but not yet paid.
  */
 export const paymentState = enumType([
   "attempting",
@@ -32,9 +31,6 @@ export const paymentState = enumType([
   "refunded",
   "partially_refunded",
   "failed",
-  "accepted_offline",
-  "settled",
-  "declined",
   "initiated",
 ]);
 
@@ -76,7 +72,6 @@ export const payments = table(
     amount: money("amount").notNull(),
     requestedAmount: money("requested_amount"),
     state: paymentState("state").notNull(),
-    /** Set when the payment is captured or accepted offline; feeds `RecordSaleTender.settledAt`. */
     settledAt: tsString("settled_at"),
     /** Stamped when the reconcile sweep ATTEMPTS to reverse an orphan, whether or not the
      * reversal succeeds, so one that cannot be refunded is not retried on every sweep. */

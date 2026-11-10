@@ -21,18 +21,14 @@ describe("independent node and app inputs", () => {
     expect(
       loadNodeIdentity({
         WAITRON_NODE_ID: NODE,
-        WAITRON_TILL_LOCALE: "ca-ES",
         WAITRON_TILL_TIPS: "1",
       }),
     ).toStrictEqual({ nodeId: NODE });
   });
 
   it("app settings do not establish node identity", () => {
-    const env = { WAITRON_TILL_LOCALE: "ca-ES", WAITRON_TILL_TIPS: "true" };
+    const env = { WAITRON_TILL_TIPS: "true" };
     expect(loadTillAppSettings(env)).toStrictEqual({
-      locale: "ca-ES",
-      invoiceLocales: ["ca-ES"],
-      localeOverride: "ca-ES",
       tipsEnabled: true,
     });
     expect(tryLoadNodeIdentity(env)).toBeUndefined();
@@ -78,19 +74,6 @@ describe("independent node and app inputs", () => {
     expect(tryLoadNodeIdentity(retired)).toBeUndefined();
     expect(loadNodeIdentity({ ...retired, WAITRON_NODE_ID: NODE })).toStrictEqual({ nodeId: NODE });
   });
-
-  it.each([undefined, "", "es-ES", "ca-ES", "zz-ZZ"])(
-    "keeps raw locale %s distinct from its default",
-    (raw) => {
-      const locale = raw === undefined || raw === "" ? "es-ES" : raw;
-      expect(loadTillAppSettings({ WAITRON_TILL_LOCALE: raw })).toStrictEqual({
-        locale,
-        invoiceLocales: [locale],
-        localeOverride: raw === "" ? undefined : raw,
-        tipsEnabled: false,
-      });
-    },
-  );
 
   it.each([undefined, "", "true", "1", "false", "0", "yes"])(
     "enables tips only for true or 1 (%s)",

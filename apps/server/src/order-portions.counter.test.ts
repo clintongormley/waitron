@@ -233,7 +233,6 @@ function cardDeps(charge: boolean): IntegratedPayDeps {
         settledAt,
       };
     },
-    forward: fail,
     resolvePending: fail,
     void: fail,
     refund: fail,

@@ -142,6 +142,8 @@ changing enforcement, keeping each legitimate mutation path.
 
 **2026-10-21:** `tenant_themes` was dropped by A841 slice 2 (`custom_themes` replaced it).
 
+**2026-11-10:** A1308 slice 4b dropped `payment_policy`; its row needs no decision.
+
 For `invoice_series`, inspect column-scoped updates and allocation separately; do not infer that
 number allocation should stop updating its counter. For `media_image_data`, deletion through the
 image's cascading foreign key is intentional (`packages/db/src/schema/media/images.ts`); the old

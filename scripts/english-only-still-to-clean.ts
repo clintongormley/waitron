@@ -519,7 +519,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/server/src/receipt-styles.test.ts",
   "apps/server/src/receipt-table.test.ts",
   "apps/server/src/receipt-ticket.test.ts",
-  "apps/server/src/recovery-bundle-api.test.ts",
   "apps/server/src/recovery-collection.fiscal.test.ts",
   "apps/server/src/recovery-module-operation.fiscal.test.ts",
   "apps/server/src/recovery-module-operation.test.ts",

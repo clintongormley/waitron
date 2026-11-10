@@ -44,7 +44,6 @@ it("signs in normally in a venue where workforce has never been migrated", async
       cfg: {
         nodeId: nodeId(node),
         locale: "en",
-        invoiceLocales: ["en"],
         tipsEnabled: false,
         simplifiedInvoiceLimit: null,
       },

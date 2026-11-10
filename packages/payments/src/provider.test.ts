@@ -27,19 +27,6 @@ describe("PaymentResult shape", () => {
     expect(r.settledAt).toBeNull();
   });
 
-  it("accepts an offline-accepted result carrying the offline flag", () => {
-    const r: PaymentResult = {
-      provider: "fake",
-      paymentRef: "pay-3",
-      state: "accepted_offline",
-      amount: decimal("10.00"),
-      settledAt: new Date("2026-07-22T10:00:00Z"),
-      offline: true,
-    };
-    expect(r.offline).toBe(true);
-    expect(r.settledAt).not.toBeNull();
-  });
-
   it("accepts a network_unavailable result (return-only, nothing settled)", () => {
     const r: PaymentResult = {
       provider: "fake",

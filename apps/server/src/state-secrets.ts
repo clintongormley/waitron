@@ -3,12 +3,12 @@ import { readArchiveStateFile, type ArchiveReadBudget } from "./archive-read-bud
 import { chmod, lstat, mkdir, readFile, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, resolve, sep } from "node:path";
 import { AppError } from "@waitron/shared";
-import { type BundleFiles } from "./recovery-bundle.js";
+export type StateSecretFiles = Record<string, string>;
 import { mkdirDurable, syncNewFolders, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 /**
- * The state-dir files a recovery bundle carries: the vault master key (`secrets.env`), the fiscal
+ * The state-dir files every backup archive carries: the vault master key (`secrets.env`), the fiscal
  * identity (`trading.env`), and the CA with its key, which already-trusting devices keep trusting
  * after a restore. Not the database. Cloud installation keys are excluded: a replacement pairs with
  * its own key.
@@ -22,12 +22,12 @@ export const RECOVERY_FILES = [
   "tls/server.key",
 ] as const;
 
-/** A missing file is `recovery.state_incomplete`: a bundle without the vault key is worthless. */
+/** A missing file is `recovery.state_incomplete`: a backup archive without the vault key is worthless. */
 export async function collectStateSecrets(
   stateDir: string,
   budget?: ArchiveReadBudget,
-): Promise<BundleFiles> {
-  const files: BundleFiles = {};
+): Promise<StateSecretFiles> {
+  const files: StateSecretFiles = {};
   for (const rel of RECOVERY_FILES) {
     try {
       files[rel] = budget
@@ -102,7 +102,7 @@ async function entryExists(path: string): Promise<boolean> {
  * wherever it points.
  */
 export async function unpackBundleToDir(
-  files: BundleFiles,
+  files: StateSecretFiles,
   destDir: string,
   // `false` for a copy that is thrown away: the backup verifier's runs under Node's permission
   // mode, which refuses every fsync.

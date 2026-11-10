@@ -111,7 +111,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       nodeId: brandNodeId(nodeId),
       locationId: locationId,
       locale: LOCALE,
-      invoiceLocales: [LOCALE],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };

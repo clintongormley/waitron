@@ -277,7 +277,6 @@ async function venue() {
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

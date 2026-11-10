@@ -78,7 +78,6 @@ async function setup() {
     nodeId: brandNodeId(nodeId),
     locationId,
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

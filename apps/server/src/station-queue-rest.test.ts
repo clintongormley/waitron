@@ -258,7 +258,6 @@ describe("station queue bump mode", () => {
     const cfg: TradingContext = {
       nodeId: brandNodeId(nodeId),
       locale: LOCALE,
-      invoiceLocales: [LOCALE],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };

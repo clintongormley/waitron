@@ -1,3 +1,4 @@
+import { readVenueLocale } from "./venue-locale.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
@@ -129,7 +130,6 @@ async function venueWith(
   db: Database,
   invoiceLocales: string[],
   place: typeof BARCELONA,
-  envLocale?: string,
 ): Promise<Venue> {
   const venue = await applyVenue(
     planVenue(
@@ -164,12 +164,9 @@ async function venueWith(
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadNodeIdentity({
       WAITRON_NODE_ID: venue.nodeId,
-      ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
-    ...loadTillAppSettings({
-      WAITRON_NODE_ID: venue.nodeId,
-      ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
-    }),
+    ...loadTillAppSettings({}),
+    locale: await readVenueLocale(db),
     locationId: venueId,
     simplifiedInvoiceLimit: null,
   });
@@ -328,7 +325,7 @@ const startsWith = (lines: string[], label: string) =>
   lines.some((line) => line === label || line.startsWith(`${label} `));
 
 describe("a receipt follows its location's saved language when its order saves none", () => {
-  it("prints a Barcelona location saved as Catalan in Catalan, with WAITRON_TILL_LOCALE unset", async () => {
+  it("prints a Barcelona location saved as Catalan in Catalan", async () => {
     const v = await venueWith(suite.db, ["ca-ES"], BARCELONA);
     expect(v.cfg.locale).toBe("es-ES");
     expect(await tillInvoiceLocale(v)).toBe("ca-ES");
@@ -377,9 +374,9 @@ describe("a receipt follows its location's saved language when its order saves n
     expect(duplicate).toContain("DUPLICADO");
   });
 
-  it("is not decided by WAITRON_TILL_LOCALE", async () => {
-    const v = await venueWith(suite.db, ["gl-ES"], MADRID, "ca-ES");
-    expect(v.cfg.locale).toBe("ca-ES");
+  it("is not decided by the venue's display language", async () => {
+    const v = await venueWith(suite.db, ["gl-ES"], MADRID);
+    expect(v.cfg.locale).toBe("es-ES");
     expect(await tillInvoiceLocale(v)).toBe("gl-ES");
 
     const sale = await sell(v, { method: "cash", amount: "5.00" });

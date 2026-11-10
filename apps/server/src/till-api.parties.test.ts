@@ -71,7 +71,6 @@ const suite = useVenueDb({
       nodeId: brandNodeId(nodeId),
       locationId: await venueLocationId(db),
       locale: "es-ES",
-      invoiceLocales: ["es-ES"],
       tipsEnabled: false,
       simplifiedInvoiceLimit: null,
     };

@@ -166,7 +166,6 @@ async function venue(): Promise<Venue> {
     nodeId: brandNodeId(result.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };

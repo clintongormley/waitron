@@ -236,7 +236,6 @@ COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/bin-restore.js \
   /src/apps/server/dist/bin-rejoin.js \
   /src/apps/server/dist/bin-break-glass.js \
-  /src/apps/server/dist/bin-recovery.js \
   /src/apps/server/dist/package.json \
   /app/
 COPY --from=build --chown=waitron:waitron /src/apps/server/dist/drizzle/ /app/drizzle/
@@ -255,7 +254,6 @@ COPY --from=build --chown=waitron:waitron \
   /src/apps/server/dist/bin-restore.js.NOTICES.txt \
   /src/apps/server/dist/bin-rejoin.js.NOTICES.txt \
   /src/apps/server/dist/bin-break-glass.js.NOTICES.txt \
-  /src/apps/server/dist/bin-recovery.js.NOTICES.txt \
   /app/third-party/npm/server/
 COPY --from=build --chown=waitron:waitron /src/apps/till/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/till/THIRD-PARTY-NOTICES.txt
 COPY --from=build --chown=waitron:waitron /src/apps/dashboard/dist/THIRD-PARTY-NOTICES.txt /app/third-party/npm/dashboard/THIRD-PARTY-NOTICES.txt

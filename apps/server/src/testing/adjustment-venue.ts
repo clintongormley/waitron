@@ -353,7 +353,6 @@ export async function provisionAdjustmentVenue(
     nodeId: brandNodeId(provisioned.nodeId),
     locationId: venueId,
     locale: LOCALE,
-    invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   });

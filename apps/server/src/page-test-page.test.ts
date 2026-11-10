@@ -88,7 +88,6 @@ async function venue(opts: { render?: Render } = {}) {
   const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locale: "es-ES",
-    invoiceLocales: ["es-ES"],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -420,7 +419,7 @@ describe("printing a test page", () => {
     const first = await requested(v, office);
     await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
     v.cfg.locale = "en-GB";
-    v.cfg.invoiceLocales = ["en-GB"];
+    [v.cfg.locale] = ["en-GB"];
     await suite.db.update(persons).set({ locale: "en-GB" });
     expect(await requested(v, office)).toEqual(first);
     const job = (await claim(v))!;

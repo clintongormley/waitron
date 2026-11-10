@@ -9,7 +9,12 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { staffPresentationName } from "@waitron/catalogue";
-import { AppError, thousandthsToDecimal, type OptionSnapshot } from "@waitron/shared";
+import {
+  AppError,
+  contentLanguageCode,
+  thousandthsToDecimal,
+  type OptionSnapshot,
+} from "@waitron/shared";
 import type { RequestEffects, TradingContext } from "./trading-context.js";
 import { requireLiveStation } from "./kitchen.js";
 import { extraLabel } from "./kitchen-print.js";
@@ -108,7 +113,7 @@ export async function readMadeHereItems(
           thousandthsToDecimal(row.lineQuantity),
           child.unitName === null || each.has(child.id)
             ? undefined
-            : (child.unitName[locale] ?? Object.values(child.unitName)[0]),
+            : (child.unitName[contentLanguageCode(locale)] ?? Object.values(child.unitName)[0]),
         ),
       ),
     note: row.note,

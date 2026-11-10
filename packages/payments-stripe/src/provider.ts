@@ -280,14 +280,6 @@ export class StripeTerminalProvider implements PaymentProvider {
     }
   }
 
-  /** Server-driven fixed-counter readers have no device-local offline queue, so a
-   * `StripeTerminalProvider` never holds `accepted_offline` payments to forward: the pass is always a
-   * no-op. */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- `now` is part of the interface; a no-op forward ignores it
-  forward(_now: Date): Promise<ForwardResult> {
-    return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
-  }
-
   async resolvePending(
     now: Date,
     owners: CollectionOwners,
