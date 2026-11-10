@@ -10,7 +10,9 @@ import "./errors.js";
 export interface MdnsQuerySocket {
   on(
     event: "response",
-    handler: (response: { answers: { name: string; type: string; data: unknown }[] }) => void,
+    handler: (response: {
+      answers: { name: string; type: string; data: unknown; ttl?: number }[];
+    }) => void,
   ): void;
   on(event: "error", handler: (err: Error) => void): void;
   query(query: { questions: { name: string; type: "A" }[] }): void;
@@ -22,6 +24,38 @@ export interface BoxLookupOptions {
   makeSocket?: () => MdnsQuerySocket;
   /** Addresses that are this box's own; an answer from one of them is never another box. */
   ownAddresses?: () => string[];
+  /** Where answers are kept for the lifetime their records give, so a name is asked once in it. */
+  remembered?: RememberedAnswers;
+}
+
+interface Heard {
+  address: string;
+  ttlSeconds: number | undefined;
+}
+
+/** Answers heard for each name, each kept until the shortest lifetime among its records ends. */
+export class RememberedAnswers {
+  private readonly kept = new Map<string, { addresses: string[]; untilMs: number }>();
+
+  constructor(private readonly now: () => number = Date.now) {}
+
+  recall(hostname: string): string[] | undefined {
+    const entry = this.kept.get(hostname.toLowerCase());
+    if (entry === undefined) return undefined;
+    if (this.now() < entry.untilMs) return entry.addresses;
+    this.kept.delete(hostname.toLowerCase());
+    return undefined;
+  }
+
+  keep(hostname: string, heard: readonly Heard[]): void {
+    const lifetimes = heard.map((h) => h.ttlSeconds);
+    if (heard.length === 0 || lifetimes.some((ttl) => ttl === undefined || ttl <= 0)) return;
+    const shortest = Math.min(...(lifetimes as number[]));
+    this.kept.set(hostname.toLowerCase(), {
+      addresses: heard.map((h) => h.address),
+      untilMs: this.now() + shortest * 1000,
+    });
+  }
 }
 
 const DEFAULT_TIMEOUT_MS = 2000;
@@ -33,11 +67,11 @@ const DEFAULT_TIMEOUT_MS = 2000;
  * answering for the venue's name it also answers for. A socket error rejects with that error: an
  * ask that could not be made heard nothing about who answers.
  */
-function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<string[]> {
+function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<Heard[]> {
   const own = new Set(opts.ownAddresses?.() ?? ownInterfaceAddresses());
   const wanted = hostname.toLowerCase();
   const socket = (opts.makeSocket ?? (() => multicastDns() as MdnsQuerySocket))();
-  const heard: string[] = [];
+  const heard: Heard[] = [];
   return new Promise((resolve, reject) => {
     let done = false;
     const finish = (failure?: Error) => {
@@ -52,8 +86,8 @@ function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<string[]>
         if (answer.type !== "A" || answer.name.toLowerCase() !== wanted) continue;
         const ip = answer.data;
         if (typeof ip !== "string" || isIP(ip) !== 4) continue;
-        if (own.has(ip) || isLoopbackHost(ip) || heard.includes(ip)) continue;
-        heard.push(ip);
+        if (own.has(ip) || isLoopbackHost(ip) || heard.some((h) => h.address === ip)) continue;
+        heard.push({ address: ip, ttlSeconds: answer.ttl });
       }
     });
     socket.on("error", finish);
@@ -74,9 +108,12 @@ export async function lookupBoxName(
     const found = await lookup(hostname, { all: true });
     return found.map((entry) => entry.address);
   }
-  const heard = await askNetwork(hostname, opts).catch(() => []);
+  const recalled = opts.remembered?.recall(hostname);
+  if (recalled !== undefined) return recalled;
+  const heard = await askNetwork(hostname, opts).catch((): Heard[] => []);
   if (heard.length === 0) throw new AppError("mirror.peer_unresolved", {});
-  return heard;
+  opts.remembered?.keep(hostname, heard);
+  return heard.map((h) => h.address);
 }
 
 /** Whether any box but this one answers for `hostname`; rejects when the ask could not be made. */

@@ -7,7 +7,12 @@ import { AppError } from "@waitron/shared";
 const systemLookup = vi.hoisted(() => vi.fn());
 vi.mock("node:dns/promises", () => ({ lookup: systemLookup }));
 
-import { askedAndHeardOthers, lookupBoxName, type MdnsQuerySocket } from "./box-lookup.js";
+import {
+  askedAndHeardOthers,
+  lookupBoxName,
+  RememberedAnswers,
+  type MdnsQuerySocket,
+} from "./box-lookup.js";
 
 const NAME = "box-a1b2.waitron.local";
 const OWN = "192.168.10.5";
@@ -16,6 +21,7 @@ interface Answer {
   name: string;
   type: string;
   data: unknown;
+  ttl?: number;
 }
 
 /** A socket whose `query` hands the queued answer packets back, one per event, in order. */
@@ -182,6 +188,62 @@ describe("lookupBoxName", () => {
     await expect(lookupBoxName("192.168.10.7", { makeSocket })).resolves.toEqual(["192.168.10.7"]);
     expect(systemLookup).not.toHaveBeenCalled();
     expect(makeSocket).not.toHaveBeenCalled();
+  });
+});
+
+describe("lookupBoxName keeping answers", () => {
+  const lived = (data: string, ttl: number | undefined): Answer => ({ ...a(data), ttl });
+
+  function keeping(packets: Answer[][]) {
+    let nowMs = 1_000_000;
+    const fake = fakeSocket(packets);
+    const remembered = new RememberedAnswers(() => nowMs);
+    return {
+      fake,
+      ask: () => lookupBoxName(NAME, { ...opts(fake), remembered }),
+      pass: (ms: number) => (nowMs += ms),
+    };
+  }
+
+  it("asks a name once while the shortest of its records lives, and again once it has ended", async () => {
+    const k = keeping([[lived("192.168.10.7", 120), lived("192.168.10.8", 60)]]);
+    const both = ["192.168.10.7", "192.168.10.8"];
+    await expect(k.ask()).resolves.toEqual(both);
+    k.pass(59_999);
+    await expect(k.ask()).resolves.toEqual(both);
+    expect(k.fake.queries).toHaveLength(1);
+    k.pass(1);
+    await expect(k.ask()).resolves.toEqual(both);
+    expect(k.fake.queries).toHaveLength(2);
+  });
+
+  it("keeps nothing from records that give no lifetime, or a lifetime of none", async () => {
+    for (const ttl of [undefined, 0]) {
+      const k = keeping([[lived("192.168.10.7", 120), lived("192.168.10.8", ttl)]]);
+      await k.ask();
+      await k.ask();
+      expect(k.fake.queries).toHaveLength(2);
+    }
+  });
+
+  it("keeps nothing for a name nobody answered", async () => {
+    const k = keeping([[lived(OWN, 120)]]);
+    await refusal(k.ask());
+    await refusal(k.ask());
+    expect(k.fake.queries).toHaveLength(2);
+  });
+
+  it("keeps a name's answers apart from another name's", async () => {
+    const fake = fakeSocket([[lived("192.168.10.7", 120)]]);
+    const remembered = new RememberedAnswers(() => 0);
+    await lookupBoxName(NAME, { ...opts(fake), remembered });
+    const other = fakeSocket([[{ ...a("192.168.10.9", VENUE), ttl: 120 }]]);
+    await expect(lookupBoxName(VENUE, { ...opts(other), remembered })).resolves.toEqual([
+      "192.168.10.9",
+    ]);
+    await expect(
+      lookupBoxName(NAME.toUpperCase(), { ...opts(other), remembered }),
+    ).resolves.toEqual(["192.168.10.7"]);
   });
 });
 

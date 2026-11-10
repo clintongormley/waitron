@@ -3,6 +3,7 @@ import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { signEnvelope, type HandoverState } from "@waitron/handover";
+import { AppError } from "@waitron/shared";
 import {
   acceptMembershipDocument,
   generateNodeKeyPair,
@@ -1519,5 +1520,18 @@ describe("askPeerStatus", () => {
     });
     expect(await real(PEER)).toBeNull();
     expect(onSilent).toHaveBeenCalledWith(SPARE, "not_verified");
+  });
+
+  it("reports a box no other box answers for apart from one it could not reach", async () => {
+    const onSilent = vi.fn();
+    const real = askPeerStatus({
+      sign: async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      publicKeyOf: (id) => keys[id],
+      fetch: () => Promise.reject(new AppError("mirror.peer_unresolved", {})),
+      onSilent,
+    });
+    expect(await real(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "unresolved");
   });
 });

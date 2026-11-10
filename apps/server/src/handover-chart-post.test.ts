@@ -327,6 +327,16 @@ describe("the new main box tells the old box its chart, once per start", () => {
     expect(events()).toEqual(["warn handover-activation.chart_post_failed"]);
   });
 
+  it("a failed post names the old box it was for", async () => {
+    const { m1, start, log } = await boxes({ sourceUrl: "https://localhost:1" });
+    await start().settled;
+    expect(log).toHaveBeenCalledWith(
+      "warn",
+      "handover-activation.chart_post_failed",
+      expect.objectContaining({ operationId: OP, sourceNodeId: m1 }),
+    );
+  });
+
   it("an answer that is not the route's is logged, and nothing throws", async () => {
     const { start, events } = await boxes({ respond: (_req, res) => res.end("<html>") });
     await start().settled;

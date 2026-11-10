@@ -4,9 +4,11 @@ import { X509Certificate } from "node:crypto";
 import { open, rename, rm } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
+import { isIP } from "node:net";
 import { dirname } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
+import { lookupBoxName, RememberedAnswers } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { reachDisk } from "./sync-path.js";
@@ -116,69 +118,146 @@ async function withinLimit<T>(timeoutMs: number, work: (signal: AbortSignal) => 
   }
 }
 
-/** One request to a box; `trust` applies to an https address, and plain http ignores it. */
-export function boxExchange(
+type BoxTrust = Pick<RequestOptions, "ca" | "rejectUnauthorized">;
+
+/** The addresses a host name answers to; the default asks the venue's network for a `.local` one. */
+export type BoxLookup = (hostname: string) => Promise<string[]>;
+
+const remembered = new RememberedAnswers();
+const askVenueNetwork: BoxLookup = (hostname) => lookupBoxName(hostname, { remembered });
+
+interface BoxRequest {
+  method: "GET" | "POST";
+  trust: BoxTrust;
+  signal: AbortSignal;
+  body?: string;
+  /** Milliseconds a connection may carry no byte before it is a failure. */
+  silenceLimitMs?: number;
+  lookup?: BoxLookup;
+  /** TCP connection, before any TLS handshake or response. */
+  onConnected?: () => void;
+}
+
+/** Thrown when a connection failed before its handshake finished, so another address may be tried. */
+class NotConnected extends Error {
+  constructor(readonly failure: unknown) {
+    super("not connected");
+  }
+}
+
+function openAt(
+  url: URL,
+  host: string,
+  address: string,
+  options: BoxRequest,
+): Promise<IncomingMessage> {
+  const https = url.protocol === "https:";
+  return new Promise((resolve, reject) => {
+    let connected = false;
+    const req = (https ? request : httpRequest)(
+      url,
+      {
+        method: options.method,
+        agent: false,
+        signal: options.signal,
+        hostname: address,
+        // The certificate is checked against the name asked for, not the address it answered at.
+        ...(https && isIP(host) === 0 ? { servername: host } : {}),
+        ...(options.silenceLimitMs === undefined ? {} : { timeout: options.silenceLimitMs }),
+        ...options.trust,
+        headers: {
+          host: url.host,
+          ...(options.body === undefined
+            ? {}
+            : {
+                "content-type": "application/json",
+                "content-length": Buffer.byteLength(options.body),
+              }),
+        },
+      },
+      resolve,
+    );
+    const onConnected = options.onConnected;
+    req.on("socket", (socket) => {
+      if (onConnected !== undefined) {
+        if (socket.connecting) socket.once("connect", onConnected);
+        else onConnected();
+      }
+      socket.once(https ? "secureConnect" : "connect", () => {
+        connected = true;
+      });
+    });
+    req.on("timeout", () => req.destroy(new Error("no bytes in time")));
+    req.on("error", (error) =>
+      reject(connected || options.signal.aborted ? error : new NotConnected(error)),
+    );
+    req.end(options.body);
+  });
+}
+
+/**
+ * Connects to each address `url`'s host answers to in turn, with the same trust, until one
+ * finishes its handshake; nothing is sent before that, so a false answer costs one connection. A
+ * failure on every address is the failure of the last one.
+ */
+async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMessage> {
+  const { signal } = options;
+  // An abort event never fires on a signal already aborted, so nothing below would end the request.
+  if (signal.aborted) throw new Error("no answer in time");
+  const host = url.hostname.replace(/^\[|\]$/g, "");
+  let stop = () => {};
+  const stopped = new Promise<never>((_, reject) => {
+    stop = () => reject(new Error("no answer in time"));
+    signal.addEventListener("abort", stop, { once: true });
+  });
+  let addresses: string[];
+  try {
+    addresses = await Promise.race([(options.lookup ?? askVenueNetwork)(host), stopped]);
+  } finally {
+    signal.removeEventListener("abort", stop);
+  }
+  let failure: unknown = new Error("no address");
+  for (const address of addresses) {
+    try {
+      return await openAt(url, host, address, options);
+    } catch (error) {
+      if (!(error instanceof NotConnected)) throw error;
+      failure = error.failure;
+    }
+  }
+  throw failure;
+}
+
+/**
+ * One request to a box; `trust` applies to an https address, and plain http ignores it. A
+ * `.local` host that no other box answers for is `mirror.peer_unresolved`, which names no host:
+ * the caller names the box it was asking.
+ */
+export async function boxExchange(
   url: URL,
   options: {
     method: "GET" | "POST";
-    trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
+    trust: BoxTrust;
     signal: AbortSignal;
     body?: string;
+    lookup?: BoxLookup;
     /** TCP connection, before any TLS handshake or response. */
     onConnected?: () => void;
   },
   maxBytes?: number,
 ): Promise<{ status: number; text: string }> {
-  return new Promise((resolve, reject) => {
-    // An abort event never fires on a signal already aborted, so nothing below would end the request.
-    if (options.signal.aborted) {
-      reject(new Error("no answer in time"));
-      return;
+  const res = await openBoxRequest(url, options);
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of res as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (maxBytes !== undefined && size > maxBytes) {
+      res.destroy();
+      throw new Error("answer too large");
     }
-    const req = (url.protocol === "http:" ? httpRequest : request)(
-      url,
-      {
-        method: options.method,
-        agent: false,
-        ...options.trust,
-        headers:
-          options.body === undefined
-            ? {}
-            : {
-                "content-type": "application/json",
-                "content-length": Buffer.byteLength(options.body),
-              },
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        res.on("data", (chunk: Buffer) => {
-          size += chunk.length;
-          if (maxBytes !== undefined && size > maxBytes) {
-            req.destroy(new Error("answer too large"));
-            return;
-          }
-          chunks.push(chunk);
-        });
-        res.on("end", () =>
-          resolve({ status: Number(res.statusCode), text: Buffer.concat(chunks).toString("utf8") }),
-        );
-        res.on("error", reject);
-      },
-    );
-    const onConnected = options.onConnected;
-    if (onConnected !== undefined)
-      req.on("socket", (socket) => {
-        if (socket.connecting) socket.once("connect", onConnected);
-        else onConnected();
-      });
-    options.signal.addEventListener("abort", () => {
-      reject(new Error("no answer in time"));
-      req.destroy();
-    });
-    req.on("error", reject);
-    req.end(options.body);
-  });
+    chunks.push(chunk);
+  }
+  return { status: Number(res.statusCode), text: Buffer.concat(chunks).toString("utf8") };
 }
 
 // A refusal is one short JSON error; anything far larger is not one.
@@ -216,32 +295,21 @@ async function refusalText(res: IncomingMessage): Promise<string> {
 export async function boxDownload(
   url: URL,
   options: {
-    trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
+    trust: BoxTrust;
     signal: AbortSignal;
     body: string;
     silenceLimitMs?: number;
+    lookup?: BoxLookup;
   },
   destinationPath: string,
 ): Promise<{ status: number; text: string }> {
-  const res = await new Promise<IncomingMessage>((resolve, reject) => {
-    const req = (url.protocol === "http:" ? httpRequest : request)(
-      url,
-      {
-        method: "POST",
-        agent: false,
-        signal: options.signal,
-        timeout: options.silenceLimitMs ?? DOWNLOAD_SILENCE_LIMIT_MS,
-        ...options.trust,
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(options.body),
-        },
-      },
-      resolve,
-    );
-    req.on("timeout", () => req.destroy(new Error("no bytes in time")));
-    req.on("error", reject);
-    req.end(options.body);
+  const res = await openBoxRequest(url, {
+    method: "POST",
+    trust: options.trust,
+    signal: options.signal,
+    body: options.body,
+    silenceLimitMs: options.silenceLimitMs ?? DOWNLOAD_SILENCE_LIMIT_MS,
+    lookup: options.lookup,
   });
   const status = Number(res.statusCode);
   if (status !== 200) return { status, text: await refusalText(res) };
@@ -280,7 +348,7 @@ export async function boxDownload(
  */
 export async function fetchPrimaryCertificate(
   primaryUrl: string,
-  { timeoutMs = CERTIFICATE_READ_LIMIT_MS }: RequestLimit = {},
+  { timeoutMs = CERTIFICATE_READ_LIMIT_MS, lookup }: RequestLimit & { lookup?: BoxLookup } = {},
 ): Promise<{ pem: string; fingerprint256: string } | null> {
   const base = assertSafePrimaryUrl(primaryUrl);
   if (base.protocol === "http:") return null;
@@ -294,7 +362,7 @@ export async function fetchPrimaryCertificate(
     answer = await withinLimit(timeoutMs, (signal) =>
       boxExchange(
         url,
-        { method: "GET", trust: { rejectUnauthorized: false }, signal },
+        { method: "GET", trust: { rejectUnauthorized: false }, signal, lookup },
         MAX_CERTIFICATE_BYTES,
       ),
     );

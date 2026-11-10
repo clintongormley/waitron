@@ -1,5 +1,4 @@
 import { randomBytes } from "node:crypto";
-import { firstCodeInCauseChain } from "@waitron/shared";
 import {
   HANDOVER_STATES,
   initialState,
@@ -24,6 +23,7 @@ import {
   type SignedMembershipDocument,
   type TrustSet,
 } from "@waitron/membership";
+import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
 import { boxExchange } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
@@ -250,6 +250,7 @@ export function persistingAccept(deps: {
 /** Why an ask has no answer to judge; logged by node id, never with the answer's contents. */
 export type SilentReason =
   | "unreachable"
+  | "unresolved"
   | "not_established"
   | "refused"
   | "not_json"
@@ -434,6 +435,8 @@ export function askPeerStatus(
       );
     } catch (error) {
       if (error instanceof PeerSilenceUnestablished) return silent("not_established");
+      if (isAppError(error) && hasCode(error, "mirror.peer_unresolved"))
+        return silent("unresolved");
       const code = firstCodeInCauseChain(error, () => true);
       const unreachable =
         ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"].includes(code ?? "") ||
