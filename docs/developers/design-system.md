@@ -794,6 +794,10 @@ the action's native button, so its disabled and loading states still refuse the 
 does nothing in this mode. A sole Remove or a mixed set of actions keeps the popup. When a row is renamed, update the
 disclosure’s `label` as well as the action’s `aria-label`.
 
+An opening `wt-disclosure` retargets as its assigned content grows until it settles. Its
+`whenSettled()` promise waits through retargeting and interrupted toggles; it also resolves when
+motion is reduced, an error exposes the body immediately, or the component is disconnected.
+
 A `wt-disclosure` with `ruled` draws a line under its title. Its named `summary` slot replaces
 the generated closed summary when assigned. The `section`, `header` and `summary` parts let
 you set spacing without replacing its error and folding behaviour.
@@ -2641,6 +2645,9 @@ menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new
 
 ### Forms
 
+Field errors wrap within the control's existing width without widening it. Long words may break
+across lines so narrow controls keep the whole message inside their width.
+
 `wt-button` has no `type` property. A `<button type="submit">` rendered inside a shadow root is
 **not form-associated** — clicking it produces zero native `submit` events, and the enclosing
 `<form>`'s `.elements` never lists any `wt-input`/`wt-button` inside a shadow root either. A `type`
@@ -4461,14 +4468,12 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   it invalid (with an image, its plate's edge turns `--wt-color-danger`) and puts the form's one
   message at the bottom (D9); any other logo refusal is the code's own message at the bottom, with
   no field marked; inside the name dialog, the code's own message shows at the dialog's bottom instead; a logo change clears it.
-- **"How it prints" closes the Logo field** (`apps/dashboard/src/widgets/theme-logo-print.ts`,
-  A841 slice 9b), after "For dark screens (optional)", while there is a main image: a paper box
-  (`paperGround`, a 1px `--wt-color-border` edge) holding the main image's 80 mm receipt picture at
-  its share of the paper's width, captioned in muted small text beside the box where the card has
-  room and under it where it has not. A picture with no black dots adds "This logo prints blank on
-  receipts." under the whole figure as a `warning` line with its icon. A failed read replaces the
-  figure with "Could not show how this logo prints." and a `secondary` Try again. Nothing is drawn
-  while the image library no longer holds the image. It changes nothing in the draft.
+- **"How it prints" closes the Logo field** (`apps/dashboard/src/widgets/theme-logo-print.ts`),
+  after "For dark screens (optional)", while there is a main image. Two paper boxes show the 80 mm
+  and 58 mm receipt pictures, each scaled to its share of that paper's printable width and captioned
+  with its width. Each picture with no black dots has its own warning naming that width. A failed
+  read replaces both with "Could not show how this logo prints." and a `secondary` Try again.
+  Nothing is drawn while the image library no longer holds the image. It changes nothing in the draft.
 - **Text size comes after Corners**: a `wt-slider` named `textScale`, 100 to 130 in steps of 5,
   with `marks` and `continuous`, so the draft and the preview follow it while it is dragged. Its
   value is drawn as a percentage and spoken as "{n} percent", its hint is "100% is Waitron's
@@ -4519,11 +4524,12 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
 - **A readability warning is drawn with the warning icon in `--wt-color-warning`, never as a field
   error**, and never disables Save. A brand-colour warning with a fix carries the fix as a button
   below it, and a fix taken shows its shade with Undo; two or more warnings with fixes add a Fix all
-  line. The "·" before Undo travels with Undo: when Undo wraps onto a line of its own the "·" is
+  line, with the button label kept on one line while the sentence wraps. The "·" before Undo travels with Undo: when Undo wraps onto a line of its own the "·" is
   clipped away, so no line starts with it.
 - **Under Brand colour's lines, the dark version's own button colour** (A841 slice 6, D13): while
   dark Main buttons is not set by hand, a link "Pick a different colour for dark screens" opens
-  Advanced at its Buttons section and focuses that value's code field, leaving the other sections as
+  Advanced at its Buttons section, waits for the opening to settle, then focuses and scrolls the
+  whole code field into view, leaving the other sections as
   they were; once set, the link gives way to "Buttons on dark
   screens: {colour}, set by hand · Use the brand colour", drawn with the Undo line's markup, and Use
   the brand colour is Use worked-out colour on that value. Both are disabled while a save is under

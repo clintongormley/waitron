@@ -377,10 +377,19 @@ const states: Record<
 /** The editor's "How it prints" answer: a normal picture of whichever image it asks about. */
 const printing = () => ({
   getThemeLogoPrint: vi.fn(async (image: string): Promise<ThemeLogoPrint> => ({
-    paperDots: 504,
     address: mediaTestRendition(image, "display"),
-    picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
-    blackDots: 8,
+    papers: {
+      "80mm": {
+        paperDots: 504,
+        picture: { widthDots: 16, heightDots: 1, data: "8A8=" },
+        blackDots: 8,
+      },
+      "58mm": {
+        paperDots: 360,
+        picture: { widthDots: 8, heightDots: 1, data: "8A==" },
+        blackDots: 4,
+      },
+    },
   })),
 });
 

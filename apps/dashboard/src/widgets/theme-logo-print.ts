@@ -5,7 +5,7 @@ import { watchMediaImage } from "@waitron/ui/src/live-media-image.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { fixLineStyles } from "./fix-line-styles.js";
 import { paperGround, rasterUrl } from "./print-paper.js";
@@ -14,12 +14,11 @@ type Shown =
   | { kind: "asking" }
   | { kind: "failed" }
   | { kind: "none" }
-  | { kind: "shown"; url: string; width: string; blank: boolean };
+  | {
+      kind: "shown";
+      papers: { paper: "80mm" | "58mm"; url: string; width: string; blank: boolean }[];
+    };
 
-/**
- * How the theme's logo prints on an 80 mm receipt, redrawn when the library reframes it, and not
- * drawn while the library no longer holds it.
- */
 @customElement("dashboard-theme-logo-print")
 export class ThemeLogoPrintFigure extends LitElement {
   static override styles = [
@@ -27,7 +26,8 @@ export class ThemeLogoPrintFigure extends LitElement {
     fixLineStyles,
     css`
       :host {
-        display: block;
+        display: grid;
+        gap: var(--wt-space-3);
       }
       figure {
         display: flex;
@@ -147,15 +147,20 @@ export class ThemeLogoPrintFigure extends LitElement {
     }
     if (generation !== this.#generation) return;
     this.#drawnFrom = print.address;
-    this.shown =
-      print.picture === null
-        ? { kind: "none" }
-        : {
-            kind: "shown",
-            url: rasterUrl(print.picture),
-            width: `${(print.picture.widthDots / print.paperDots) * 100}%`,
-            blank: print.blackDots === 0,
-          };
+    const papers = (["80mm", "58mm"] as const).flatMap((paper) => {
+      const { picture, paperDots, blackDots } = print.papers[paper];
+      return picture === null
+        ? []
+        : [
+            {
+              paper,
+              url: rasterUrl(picture),
+              width: `${(picture.widthDots / paperDots) * 100}%`,
+              blank: blackDots === 0,
+            },
+          ];
+    });
+    this.shown = papers.length === 0 ? { kind: "none" } : { kind: "shown", papers };
     const heard = this.#heard;
     if (typeof heard === "string" && heard !== print.address && heard !== basis) void this.#ask();
   }
@@ -170,24 +175,21 @@ export class ThemeLogoPrintFigure extends LitElement {
           >${t("appearance.logo_print_retry")}</wt-button
         >
       </p>`;
-    const picture = shown.kind === "shown" ? shown : undefined;
-    return html`<figure data-test="logo-print" aria-busy=${picture ? "false" : "true"}>
-        <div class="paper">
-          ${
-            picture
-              ? html`<img src=${picture.url} style=${`width:${picture.width}`} alt="" />`
-              : nothing
-          }
-        </div>
-        <figcaption>${t("appearance.logo_print")}</figcaption>
-      </figure>
-      ${
-        picture?.blank
-          ? html`<p class="warning" data-test="logo-print-blank">
-              <wt-icon name="warning"></wt-icon><span>${t("appearance.logo_print_blank")}</span>
-            </p>`
-          : nothing
-      }`;
+    return (["80mm", "58mm"] as const).map((paper) => {
+      const picture =
+        shown.kind === "shown" ? shown.papers.find((entry) => entry.paper === paper) : undefined;
+      if (shown.kind === "shown" && !picture) return nothing;
+      const width = paper === "80mm" ? "80" : "58";
+      return html`<div>
+        <figure data-test="logo-print" aria-busy=${picture ? "false" : "true"}>
+          <div class="paper">
+            ${picture ? html`<img src=${picture.url} style=${`width:${picture.width}`} alt="" />` : nothing}
+          </div>
+          <figcaption>${fill("appearance.logo_print", { width })}</figcaption>
+        </figure>
+        ${picture?.blank ? html`<p class="warning" data-test="logo-print-blank"><wt-icon name="warning"></wt-icon><span>${fill("appearance.logo_print_blank", { width })}</span></p>` : nothing}
+      </div>`;
+    });
   }
 }
 

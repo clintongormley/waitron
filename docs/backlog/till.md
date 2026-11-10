@@ -1684,13 +1684,6 @@ colour: Page, light screens"; "Brand colour" on Main buttons with Waitron's; and
 of the saved row's "set by hand".
 
 
-## The dark Main buttons code box sits at the window's bottom edge after Pick a different colour for dark screens (A841 slice 12's look check, [the plan](../superpowers/plans/2026-10-27-a841-12-advanced-sections.md)).
-
-In a 900 px tall window
-the link opens Advanced's Buttons section and the code box scrolls only just into view at the
-bottom. Readings: `~/waitron-campaign/a841-12-shots/look-report.md` (lane A's machine).
-
-
 ## The counter till's top bar and bill window at 130% (measured 2026-10-27, A841 slice 11b's look check).
 
 The bar's middle strip scrolls sideways (`.till-strip`, `apps/till/src/widgets/till-shell.ts`)
@@ -1702,41 +1695,6 @@ view); the device's own typeface at 130%, 921 / 917; Waitron's own look at 100%,
 48–64 px tall, less than one bill line, against 110 px for Waitron's look at 100%. Not measured on
 main, so whether the 1024 overflow predates slice 11 is unchecked. Readings:
 `~/waitron-campaign/a841-11b-shots/look-report-11b.md` (lane A's machine).
-
-
-## An error under a field in Advanced moves what sits beside it (measured 2026-10-27, A841 slice 11b).
-
-With a code-box error, a colour row's picker sits about 10 px off the box's centre and
-its "Set by hand" tag drops to its own line, even at 1280 px (`colourValueField`,
-`apps/dashboard/src/widgets/color-field.ts`); the Text rows' typeface and weight dropdowns widen
-to their error's width (a weight box from 74 to 190 px), moving the tag right. Slice 11b fixed the
-size rows only (the stepper held to its box's width, the row lined up by baseline,
-`apps/dashboard/src/widgets/theme-text.ts`); the same approach may fit both. Its cost: a size
-row's error now wraps at the number box's width, about 94 px, six short lines in Spanish at 130%;
-a wider message needs a change to `wt-number-stepper` itself (#2140's finish-branch).
-
-
-## A colour picked in Advanced within one animation frame of leaving the editor is lost, and nothing asks (A841 slice 6's review, 2026-10-23).
-
-A picker drag sends at most one change per
-frame (`dashboard-theme-advanced`'s `flush`); the Look card's own buttons, Save and Cancel send a
-waiting colour first, but the leave question reads the draft (`current: () => this.draft!` in
-`look-card.ts`) without sending it. A reviewer's probe, with frames held back, saw navigation go
-ahead and no unload warning; Edit on another theme reads the draft the same way (read, not
-tried). Sending the colour inside that read re-enters the draft scope while it reads, so the fix
-is likelier a hook the leave coordinator calls before it compares.
-
-
-## The Look card's Fix all button breaks onto two lines ("Fix / all") on a phone (A841 slice 5).
-
-It sits in the `.warning` line (`apps/dashboard/src/widgets/fix-line-styles.ts`), where nothing
-stops it shrinking beside the sentence (read, not tried); picture 15 keeps it on one line.
-Measured on the code slice 6 branched from (`de73c6144`, the Look card test rig, two fixable
-warnings): two lines in a card 300 px wide or narrower, one from 320 px. Slice 6's visual check
-saw it at a 390 px window, and slice 6 makes the line more common, since colours set by hand add
-warnings with fixes. The measurement is in slice 6's pull request. In slice 6's shots, slice 5's Undo after
-"Buttons on dark screens: …" wraps onto a line of its own at phone width and starts 12 px in
-(the link button's padding) rather than flush with the line above.
 
 
 ## WebKit in CI for A841's start-up checks (lane A ruling, 2026-10-21).
@@ -2268,40 +2226,6 @@ Printer identity is separate from the till route inventory.
   `apps/till/src/widgets/till-shell.ts`) and More repeats its actions, so nothing is lost, but
   buttons are scrolled out of view.
   [Detail](till.md#the-counter-tills-top-bar-and-bill-window-at-130-measured-2026-10-27-a841-slice-11bs-look-check)
-
-## Bundle: The Look card's small faults, including a lost colour
-
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The Look card's "How it prints" draws the 80 mm picture only (A841 slice 9, D5 of
-  [the plan](../superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).** A logo that prints blank at
-  80 mm but not at 58 mm, or the other way round, was not measured; the card says nothing about
-  58 mm paper.
-- **The dark Main buttons code box sits at the window's bottom edge after Pick a different colour
-  for dark screens (A841 slice 12's look check, [the
-  plan](../superpowers/plans/2026-10-27-a841-12-advanced-sections.md)).** In a 900 px tall window the
-  link opens Advanced's Buttons section and the code box scrolls only just into view at the bottom.
-  [Detail](till.md#the-dark-main-buttons-code-box-sits-at-the-windows-bottom-edge-after-pick-a-different-colour-for-dark-screens-a841-slice-12s-look-check-the-plan)
-- **Pick a different colour for dark screens, pressed while Advanced is still closing, ends with a
-  jump (A841 slice 12's finish-branch review).** With motion on and `reveal` called 450 ms after
-  closing Advanced, Advanced's opening aimed at 531 px and jumped to 873 px at its end: its body was
-  still drawn, so Buttons grew inside it. `reveal`, `apps/dashboard/src/widgets/theme-advanced.ts`.
-- **An error under a field in Advanced moves what sits beside it (measured 2026-10-27, A841 slice
-  11b).** With a code-box error, a colour row's picker sits about 10 px off the box's centre and its
-  "Set by hand" tag drops to its own line, even at 1280 px (`colourValueField`,
-  `apps/dashboard/src/widgets/color-field.ts`); the Text rows' typeface and weight dropdowns widen
-  to their error's width (a weight box from 74 to 190 px), moving the tag right.
-  [Detail](till.md#an-error-under-a-field-in-advanced-moves-what-sits-beside-it-measured-2026-10-27-a841-slice-11b)
-- **A colour picked in Advanced within one animation frame of leaving the editor is lost, and
-  nothing asks (A841 slice 6's review, 2026-10-23).** A picker drag sends at most one change per
-  frame (`dashboard-theme-advanced`'s `flush`); the Look card's own buttons, Save and Cancel send a
-  waiting colour first, but the leave question reads the draft (`current: () => this.draft!` in
-  `look-card.ts`) without sending it.
-  [Detail](till.md#a-colour-picked-in-advanced-within-one-animation-frame-of-leaving-the-editor-is-lost-and-nothing-asks-a841-slice-6s-review-2026-10-23)
-- **The Look card's Fix all button breaks onto two lines ("Fix / all") on a phone (A841 slice 5).**
-  It sits in the `.warning` line (`apps/dashboard/src/widgets/fix-line-styles.ts`), where nothing
-  stops it shrinking beside the sentence (read, not tried); picture 15 keeps it on one line.
-  [Detail](till.md#the-look-cards-fix-all-button-breaks-onto-two-lines-fix--all-on-a-phone-a841-slice-5)
 
 ## Bundle: Reopening a held order keeps its lines right
 

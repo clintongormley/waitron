@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { invalidateMediaImages } from "@waitron/ui/src/live-media-image.js";
 import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
 import { es } from "../i18n/strings.js";
-import { setLocale, t } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { ThemeLogoPrintFigure } from "./theme-logo-print.js";
 import "./theme-logo-print.js";
@@ -26,15 +26,30 @@ function presentation(version: string) {
 /** What the server answers for a picture drawn from `version`'s display address. */
 function drawn(version: string, blackDots: number): ThemeLogoPrint {
   return {
-    paperDots: 504,
     address: presentation(version).display,
-    picture: { widthDots: 16, heightDots: 1, data: blackDots === 0 ? "AAA=" : "8A8=" },
-    blackDots,
+    papers: {
+      "80mm": {
+        paperDots: 504,
+        picture: { widthDots: 16, heightDots: 1, data: blackDots === 0 ? "AAA=" : "8A8=" },
+        blackDots,
+      },
+      "58mm": {
+        paperDots: 360,
+        picture: { widthDots: 8, heightDots: 1, data: blackDots === 0 ? "AA==" : "8A==" },
+        blackDots: blackDots === 0 ? 0 : 4,
+      },
+    },
   };
 }
 const BLACK = drawn("1", 8);
 const BLANK = drawn("1", 0);
-const NO_PICTURE: ThemeLogoPrint = { paperDots: 504, address: null, picture: null, blackDots: 0 };
+const NO_PICTURE: ThemeLogoPrint = {
+  address: null,
+  papers: {
+    "80mm": { paperDots: 504, picture: null, blackDots: 0 },
+    "58mm": { paperDots: 360, picture: null, blackDots: 0 },
+  },
+};
 
 /** Answers every image asked for as `version`, as the library does for an image it holds. */
 function everyImageAs(version: string) {
@@ -96,7 +111,7 @@ it("while asking, shows an empty paper box marked busy and the caption", async (
   const el = await mount(libraryName());
   const figure = q(el, '[data-test="logo-print"]')!;
   expect(figure.getAttribute("aria-busy")).toBe("true");
-  expect(figure.textContent!.trim()).toBe(t("appearance.logo_print"));
+  expect(figure.textContent!.trim()).toBe(fill("appearance.logo_print", { width: "80" }));
   expect(figure.querySelector("img")).toBeNull();
 });
 
@@ -111,7 +126,9 @@ it("shows the picture and the caption", async () => {
   expect(img.getAttribute("src")!.startsWith("data:image/png")).toBe(true);
   expect(img.getAttribute("alt")).toBe("");
   expect(parseFloat(img.style.width)).toBeCloseTo((16 / 504) * 100, 3);
-  expect(figure.querySelector("figcaption")!.textContent!.trim()).toBe(t("appearance.logo_print"));
+  expect(figure.querySelector("figcaption")!.textContent!.trim()).toBe(
+    fill("appearance.logo_print", { width: "80" }),
+  );
   expect(q(el, '[data-test="logo-print-blank"]')).toBeNull();
   expect(getThemeLogoPrint).toHaveBeenCalledWith(image);
 });
@@ -121,9 +138,28 @@ it("says when the logo prints blank", async () => {
   const el = await mount(libraryName());
   await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
   expect(q(el, '[data-test="logo-print-blank"]')!.textContent!.trim()).toBe(
-    t("appearance.logo_print_blank"),
+    fill("appearance.logo_print_blank", { width: "80" }),
   );
   expect(q(el, '[data-test="logo-print"] img')).not.toBeNull();
+});
+
+it("shows both widths at their own scale and warns when only 58 mm is blank", async () => {
+  getThemeLogoPrint.mockResolvedValue({
+    ...BLACK,
+    papers: { ...BLACK.papers, "58mm": BLANK.papers["58mm"] },
+  });
+  const el = await mount(libraryName());
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("figure img").length).toBe(2));
+  const figures = [...el.shadowRoot!.querySelectorAll("figure")];
+  expect(figures.map((figure) => figure.querySelector("figcaption")!.textContent!.trim())).toEqual([
+    fill("appearance.logo_print", { width: "80" }),
+    fill("appearance.logo_print", { width: "58" }),
+  ]);
+  expect(parseFloat(figures[1]!.querySelector("img")!.style.width)).toBeCloseTo((8 / 360) * 100, 3);
+  const warnings = [...el.shadowRoot!.querySelectorAll("[data-test=logo-print-blank]")];
+  expect(warnings.map((warning) => warning.textContent!.trim())).toEqual([
+    fill("appearance.logo_print_blank", { width: "58" }),
+  ]);
 });
 
 it("draws nothing for an image the library does not have", async () => {
@@ -424,9 +460,11 @@ it("Spanish", async () => {
   getThemeLogoPrint.mockResolvedValue(BLANK);
   const el = await mount(libraryName());
   await vi.waitFor(() => expect(q(el, '[data-test="logo-print-blank"]')).not.toBeNull());
-  expect(q(el, "figcaption")!.textContent!.trim()).toBe(es["appearance.logo_print"]);
+  expect(q(el, "figcaption")!.textContent!.trim()).toBe(
+    es["appearance.logo_print"].replace("{width}", "80"),
+  );
   expect(q(el, '[data-test="logo-print-blank"]')!.textContent!.trim()).toBe(
-    es["appearance.logo_print_blank"],
+    es["appearance.logo_print_blank"].replace("{width}", "80"),
   );
 });
 
