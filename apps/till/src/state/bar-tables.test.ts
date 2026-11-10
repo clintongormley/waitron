@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TableParty, TableState, TableToday, UnsentDraft } from "../api/client.js";
-import { barTables, type LocalBill } from "./bar-tables.js";
+import { barBillToOpen, barTables, type LocalBill } from "./bar-tables.js";
 
 function draft(billId: string, ownerId: string, lineCount = 2): UnsentDraft {
   return {
@@ -414,5 +414,84 @@ describe("barTables", () => {
         opening: { tableId: "t3", onScreen: true },
       }),
     ).toEqual([{ tableId: "t3", name: "T3", unsent: false, current: true, held: true }]);
+  });
+});
+
+describe("barBillToOpen", () => {
+  const at = (billId: string, savedAt: string, over: Partial<UnsentDraft> = {}): UnsentDraft => ({
+    ...draft(billId, "ana"),
+    savedAt,
+    ...over,
+  });
+
+  it("opens the bill saved last, over a lower number", () => {
+    const p4 = party("p4", {
+      unsentDrafts: [at("b1", "2026-10-26T12:00:00.000Z"), at("b2", "2026-10-26T12:05:00.000Z")],
+    });
+    expect(barBillToOpen(p4, "ana", [])).toBe("b2");
+  });
+
+  it("gives a tie to the lower number, and an unnumbered bill last", () => {
+    const same = "2026-10-26T12:00:00.000Z";
+    const tie = party("p4", { unsentDrafts: [at("b3", same), at("b2", same)] });
+    expect(barBillToOpen(tie, "ana", [])).toBe("b2");
+    const unnumbered = party("p4", {
+      unsentDrafts: [at("bx", same, { billNumber: null }), at("b3", same)],
+    });
+    expect(barBillToOpen(unnumbered, "ana", [])).toBe("b3");
+  });
+
+  it("counts neither another person's draft nor one with no lines", () => {
+    const p4 = party("p4", {
+      unsentDrafts: [
+        at("b1", "2026-10-26T12:00:00.000Z"),
+        { ...at("b2", "2026-10-26T12:05:00.000Z"), ownerId: "sam" },
+        at("b3", "2026-10-26T12:06:00.000Z", { lineCount: 0 }),
+      ],
+    });
+    expect(barBillToOpen(p4, "ana", [])).toBe("b1");
+  });
+
+  it("counts a released record with lines as newer than any read, later records newer still", () => {
+    const p4 = party("p4", {
+      unsentDrafts: [at("b1", "2026-10-26T12:00:00.000Z"), at("b3", "2026-10-26T12:05:00.000Z")],
+    });
+    const released = [
+      bill({ partyId: "p4", tableId: "t4", billId: "b2", lines: 1 }),
+      bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: 2 }),
+    ];
+    expect(barBillToOpen(p4, "ana", released)).toBe("b1");
+    expect(barBillToOpen(p4, "ana", released.slice(0, 1))).toBe("b2");
+  });
+
+  it("ignores a released record of another party", () => {
+    const p4 = party("p4", { unsentDrafts: [at("b1", "2026-10-26T12:00:00.000Z")] });
+    const released = [bill({ partyId: "p9", tableId: "t9", billId: "b9", lines: 1 })];
+    expect(barBillToOpen(p4, "ana", released)).toBe("b1");
+  });
+
+  it("drops the read's draft for a released record with no lines, or one taken by another", () => {
+    const p4 = party("p4", {
+      unsentDrafts: [at("b1", "2026-10-26T12:00:00.000Z"), at("b2", "2026-10-26T12:05:00.000Z")],
+    });
+    const empty = [bill({ partyId: "p4", tableId: "t4", billId: "b2", lines: 0 })];
+    expect(barBillToOpen(p4, "ana", empty)).toBe("b1");
+    const taken = [
+      bill({ partyId: "p4", tableId: "t4", billId: "b2", lines: 3, takenByOther: true }),
+    ];
+    expect(barBillToOpen(p4, "ana", taken)).toBe("b1");
+  });
+
+  it("ignores a local record with no bill id", () => {
+    const p4 = party("p4", { unsentDrafts: [at("b1", "2026-10-26T12:00:00.000Z")] });
+    const unread = [bill({ partyId: "p4", tableId: "t4", billId: null, lines: 2 })];
+    expect(barBillToOpen(p4, "ana", unread)).toBe("b1");
+  });
+
+  it("names no bill when none holds this person's unsent dishes", () => {
+    expect(barBillToOpen(party("p4"), "ana", [])).toBeUndefined();
+    const p4 = party("p4", { unsentDrafts: [at("b1", "2026-10-26T12:00:00.000Z")] });
+    const empty = [bill({ partyId: "p4", tableId: "t4", billId: "b1", lines: 0 })];
+    expect(barBillToOpen(p4, "ana", empty)).toBeUndefined();
   });
 });

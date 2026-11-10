@@ -332,6 +332,7 @@ import {
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
 import {
+  barBillToOpen,
   barTables,
   type BarLocal,
   type BarTable,
@@ -11358,6 +11359,7 @@ export class TillApp extends LitElement {
       guestCount,
       withTableIds,
       fromBar = false,
+      billId,
     } = (
       event as CustomEvent<{
         tableId: string;
@@ -11365,6 +11367,7 @@ export class TillApp extends LitElement {
         guestCount?: number | null;
         withTableIds?: string[];
         fromBar?: boolean;
+        billId?: string;
       }>
     ).detail;
     const unassigned =
@@ -11408,6 +11411,7 @@ export class TillApp extends LitElement {
         carried,
         showAtOnce,
         fromBar,
+        billId,
       );
     } finally {
       unlock?.();
@@ -11423,7 +11427,8 @@ export class TillApp extends LitElement {
   }
 
   /** `guestCount` is `undefined` to resume a seated table, and a count or null to seat a free one,
-   * with each of `withTableIds` too when given. */
+   * with each of `withTableIds` too when given. A resumed table shows `billId` when given, else the
+   * floor's opening bill. */
   async #openTable(
     tableId: string,
     guestCount: number | null | undefined,
@@ -11433,6 +11438,7 @@ export class TillApp extends LitElement {
     carried?: { note: string | null; lines: OrderLine[]; carrier: string },
     shownEarly = false,
     fromBar = false,
+    billId?: string,
   ): Promise<void> {
     try {
       const session = this.#operatorSession;
@@ -11531,7 +11537,7 @@ export class TillApp extends LitElement {
       this.reprintSent = [];
       if (guestCount === undefined) {
         this.orderParty = table?.party ?? null;
-        this.activeTabId = this.orderParty?.openingBillId ?? undefined;
+        this.activeTabId = billId ?? this.orderParty?.openingBillId ?? undefined;
         await this.#savesOutFor(this.orderParty?.id);
         if (left() || session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         const [[, bills], opened] = await Promise.all([
@@ -11926,7 +11932,8 @@ export class TillApp extends LitElement {
   }
 
   /** D9: the held bill's button shows its order screen; any other opens its table as a Floor tap
-   * does. Both close an open overlay first. */
+   * does. Both close an open overlay first. Slice 11, D6–D7: either shows the bill this person
+   * saved last ({@link barBillToOpen}). */
   #onOpenBarTable({ tableId, held }: { tableId: string; held: boolean }): void {
     if (held) {
       if (
@@ -11935,15 +11942,44 @@ export class TillApp extends LitElement {
         this.counterOrderList === null
       )
         return;
-      this.#requestLeave(() => this.#onTabSelect("order"));
+      this.#requestLeave(() => {
+        this.#onTabSelect("order");
+        return this.#showHeldBarBill(tableId);
+      });
       return;
     }
+    const party = this.barFloor.find((table) => table.id === tableId)?.party;
+    const billId =
+      party == null
+        ? undefined
+        : barBillToOpen(
+            party,
+            this.#sessionPersonId,
+            this.#released.map((each) => each.bill),
+          );
     this.#requestLeave(() => {
       if (this.drill !== undefined) this.#popDrill();
       return this.#onOpenTable(
-        new CustomEvent("open-table", { detail: { tableId, seated: true, fromBar: true } }),
+        new CustomEvent("open-table", {
+          detail: { tableId, seated: true, fromBar: true, billId },
+        }),
       );
     });
+  }
+
+  /** Slice 11, D7: back at the held table, the held bill counts as this person's newest record, so
+   * another bill is shown only when the held one holds nothing of theirs unsent. */
+  async #showHeldBarBill(tableId: string): Promise<void> {
+    const party = this.barFloor.find((table) => table.id === tableId)?.party;
+    const held = this.#heldBill();
+    if (party == null || held === null) return;
+    const billId = barBillToOpen(party, this.#sessionPersonId, [
+      ...this.#released.map((each) => each.bill),
+      held,
+    ]);
+    if (billId === undefined || billId === this.activeTabId) return;
+    if (await this.#switchToBill(billId))
+      await Promise.all([this.#loadTabLines(), this.#loadBillBalance()]);
   }
 
   async #openDraft(session: number): Promise<OpenedDraft> {

@@ -910,6 +910,72 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
   });
 });
 
+describe("till-app: the bill a bar button opens (slice 11, D5–D7)", () => {
+  /** T4's party with Bill 1 (`wo-4`, the floor's opening bill) and Bill 2 (`wo-5`). */
+  const twoBills = {
+    getPartyBills: floorPartyBills(undefined, (id) => (id === "v1" ? ["wo-5"] : [])),
+  };
+  const t4Unsent = (...drafts: UnsentDraft[]) =>
+    table("t4", "T4", party({ billCount: 2, unsentDrafts: drafts }));
+  const savedAt = (draft: UnsentDraft, at: string, billNumber = 1): UnsentDraft => ({
+    ...draft,
+    savedAt: at,
+    billNumber,
+  });
+
+  it("opens T4 from another table on the bill this person saved last, not the floor's opening bill", async () => {
+    server.bills.add("wo-5");
+    const t4 = t4Unsent(
+      savedAt(unsent("wo-4", "p1"), "2026-10-26T12:00:00.000Z"),
+      savedAt(unsent("wo-5", "p1"), "2026-10-26T12:05:00.000Z", 2),
+    );
+    const { el } = await mountApp({
+      ...twoBills,
+      getTablesState: vi.fn().mockResolvedValue([t4, table9WithAnas]),
+    });
+    await openTable(el, "t9");
+    expect(tableOrder(el)?.orderId).toBe("wo-9");
+
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(selected(el)).toEqual(["T4"]);
+    expect(tableOrder(el)?.party?.id).toBe("v1");
+    expect(tableOrder(el)?.orderId).toBe("wo-5");
+  });
+
+  it("goes back to the held table and switches to the other bill holding this person's unsent dishes", async () => {
+    server.bills.add("wo-5");
+    const t4 = t4Unsent(savedAt(unsent("wo-5", "p1"), "2026-10-26T12:05:00.000Z", 2));
+    const { el } = await mountApp({ ...twoBills, getTablesState: vi.fn().mockResolvedValue([t4]) });
+    await openTable(el);
+    expect(tableOrder(el)?.orderId).toBe("wo-4");
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(selected(el)).toEqual(["T4"]);
+    expect(tableOrder(el)?.orderId).toBe("wo-5");
+  });
+
+  it("goes back to the held bill, with no switch, while it holds this person's unsent dishes", async () => {
+    server.bills.add("wo-5");
+    const t4 = t4Unsent(savedAt(unsent("wo-5", "p1"), "2026-10-26T12:05:00.000Z", 2));
+    const { el } = await mountApp({ ...twoBills, getTablesState: vi.fn().mockResolvedValue([t4]) });
+    await openTable(el);
+    await tap(el, "Beer");
+    const store = draft(el);
+    await toFloor(el);
+    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+
+    barButton(el, "t4").click();
+    await flush(el, 6);
+    expect(tableOrder(el)?.orderId).toBe("wo-4");
+    expect(draft(el)).toBe(store);
+    expect(draft(el).lines.map((line) => line.product.name)).toEqual(["Beer"]);
+  });
+});
+
 describe("till-app: a till's bar", () => {
   it("has no table buttons", async () => {
     const { el } = await mountApp(
