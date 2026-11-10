@@ -59,7 +59,7 @@ it("places this bill's Sent panel before its New order on the table screen", asy
   expect(inside(el, "[data-sent-toggle]").textContent).toContain("held");
   expect(panel(el).billId).toBe("wo-4");
   await click(el, "[data-held-toggle]");
-  expect(inside(el, '[data-held-line="l-flan"]').textContent).toContain("Cream ×2.000");
+  expect(inside(el, '[data-held-line="l-flan"]').textContent).toContain("Cream ×2");
   expect(panel(el).shadowRoot!.querySelector('[data-fired-line="l-pulpo"]')).toBeNull();
 });
 

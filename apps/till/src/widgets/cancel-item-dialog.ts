@@ -27,7 +27,7 @@ import type { AdjustmentReason } from "../api/client.js";
 import type { CancellationRead } from "../api/line-cancel-types.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { trimQuantity } from "./dish-format.js";
+import { quantityText, trimQuantity } from "./dish-format.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Outcome = "keep_charge" | "remove_charge" | "refund";
@@ -506,7 +506,7 @@ export class TillCancelItemDialog extends LitElement {
             : unavailable && !waitingForPreparation
               ? nothing
               : html`<p data-whole-quantity>
-                  ${t("adjust.quantity")}: ${trimQuantity(this.#remaining())}
+                  ${t("adjust.quantity")}: ${quantityText(this.#remaining())}
                 </p>`
         }
         ${

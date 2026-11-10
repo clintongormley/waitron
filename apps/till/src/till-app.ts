@@ -117,7 +117,7 @@ import {
 } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
-import { trimQuantity } from "./widgets/dish-format.js";
+import { quantityText, trimQuantity } from "./widgets/dish-format.js";
 import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
@@ -2292,7 +2292,7 @@ export class TillApp extends LitElement {
         ${copy.lines.map(
           (line) =>
             html`<li data-local-line>
-              ${trimQuantity(line.quantity)} × ${lineProductName(line.product)}
+              ${quantityText(line.quantity)} × ${lineProductName(line.product)}
               ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<div>${answer}</div>`)}
               ${(line.extras ?? []).map((extra) => html`<div>${extra.quantity} × ${extra.name}</div>`)}
               ${(line.notOfferedExtras ?? []).map((extra) => html`<div>${extra.quantity} × ${extra.name}</div>`)}

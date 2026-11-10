@@ -1,15 +1,14 @@
 import { resolveEnabledContentText, resolveSnapshotText } from "@waitron/shared";
-import { currentContentLanguages } from "@waitron/ui";
+import { currentContentLanguages, formatDecimalInput } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
-
-/**
- * Text is DATA keyed by locale and a quantity is a three-place decimal string, so neither is UI
- * chrome.
- */
 
 /** "2.000" → "2", "0.320" → "0.32"; a bare integer is untouched. */
 export function trimQuantity(quantity: string): string {
   return quantity.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+export function quantityText(quantity: string): string {
+  return formatDecimalInput(trimQuantity(quantity), currentLocale());
 }
 
 /** A line counted in Each shows no unit: "2× Croqueta". */
@@ -25,7 +24,7 @@ export function dishLine(
     line.unitName == null || line.soldInEach === true
       ? ""
       : ` ${snapshotDescriptionFor(line.unitName, "")}`;
-  return `${trimQuantity(line.quantity)}${unit}× ${name}`;
+  return `${quantityText(line.quantity)}${unit}× ${name}`;
 }
 
 /** Resolve live catalogue text against enabled languages and the configured content default. */

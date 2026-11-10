@@ -19,7 +19,7 @@ import type { AdjustmentReason } from "../api/client.js";
 import type { FinishCancellation, UnservedDish } from "../api/finish-table-types.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { trimQuantity } from "./dish-format.js";
+import { quantityText } from "./dish-format.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Choice = { lineId: string; preparationStarted: boolean | null; refund: boolean };
@@ -326,7 +326,7 @@ export class TillFinishTableDialog extends LitElement {
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.active}
-      .heading=${t("finish_table.unserved").replace("{n}", () => trimQuantity(count))}
+      .heading=${t("finish_table.unserved").replace("{n}", () => quantityText(count))}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
@@ -337,7 +337,7 @@ export class TillFinishTableDialog extends LitElement {
         ${this.dishes.map((dish, index) => {
           const choice = this.draft.choices[index];
           return html`<section class="dish" data-dish=${dish.lineId} aria-label=${dish.name}>
-            <p class="name">${trimQuantity(dish.quantity)} × ${dish.name}</p>
+            <p class="name">${quantityText(dish.quantity)} × ${dish.name}</p>
             ${
               this.#asks(dish)
                 ? html`<fieldset>

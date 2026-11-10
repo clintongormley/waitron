@@ -655,3 +655,10 @@ it("shows the main action as the request in flight after a cancel", async () => 
   expect(collectButton(el)!.variant).toBe("secondary");
   expect(collectButton(el)!.disabled).toBe(true);
 });
+
+it("localises the unserved total and dish quantity in Spanish", async () => {
+  setLocale("es-ES");
+  const el = await mount({ dishes: [{ ...dish("flan"), quantity: "0.500" }] });
+  expect(root(el).querySelector("wt-dialog")!.heading).toContain("0,5");
+  expect(root(el).querySelector(".name")!.textContent).toContain("0,5 × Flan");
+});

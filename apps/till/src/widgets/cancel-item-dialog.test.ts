@@ -206,13 +206,14 @@ it("offers only the active quantity after a charged cancellation", async () => {
   await click(el);
   expect(calls).toEqual([{ lineId: "dish-1", quantity: "1", outcome: "remove_charge", consent }]);
 });
-it("cancels a weighed dish only as its whole active quantity", async () => {
+it("localises a weighed cancellation while sending its canonical whole active quantity", async () => {
+  setLocale("es-ES");
   const consent = read();
   Object.assign(consent.context.components[0]!, { quantity: "1.250", cancelledQuantity: "0.500" });
   const el = await mount({ consent, unitPrecision: 3 });
   const calls = collect(el);
   expect(root(el).querySelector("wt-number-stepper")).toBeNull();
-  expect(root(el).textContent).toContain("0.75");
+  expect(root(el).textContent).toContain("0,75");
   await click(el);
   expect(calls).toEqual([
     { lineId: "dish-1", quantity: "0.750", outcome: "remove_charge", consent },

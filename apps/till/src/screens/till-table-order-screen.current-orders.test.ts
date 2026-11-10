@@ -344,15 +344,24 @@ describe("Current orders and Sent service", () => {
   });
 
   it("serves a weighed row whole, as there are no units to count", async () => {
-    const ham = row("l-jamon", "Jamón", "0.250", { unitPrecision: 3 });
-    const { el } = await mountSent({
-      currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [ham])] }),
-    });
-    const serves = capture(el, "serve-lines");
-    await chooseSentServing(el, "l-jamon");
-    expect(serves.map((event) => event.detail)).toEqual([
-      { items: [{ lineId: "l-jamon", quantity: "0.25" }] },
-    ]);
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const ham = row("l-jamon", "Jamón", "0.250", { unitPrecision: 3 });
+      const { el } = await mountSent({
+        currentOrders: current({ groups: [currentGroup("g1", 1, "fired", [ham])] }),
+      });
+      await openSentDish(el, "l-jamon");
+      expect(text(q(el, "[data-sent-line-dialog] .move-dish")!)).toContain(`${ham.name} ×0,25`);
+      await closeSentDish(el);
+      const serves = capture(el, "serve-lines");
+      await chooseSentServing(el, "l-jamon");
+      expect(serves.map((event) => event.detail)).toEqual([
+        { items: [{ lineId: "l-jamon", quantity: "0.25" }] },
+      ]);
+    } finally {
+      setLocale(previous);
+    }
   });
 
   it("takes back what was marked served: a row of one at once, more than one asking how many", async () => {
@@ -594,8 +603,8 @@ describe("Current orders and Sent service", () => {
         lineNo: 1,
         name: "Beer",
         productId: "beer",
-        quantity: "1.000",
-        unitPrecision: 0,
+        quantity: "0.750",
+        unitPrecision: 3,
         unitPriceGross: "3.00",
         servedAt: null,
         courseId: null,
@@ -613,11 +622,20 @@ describe("Current orders and Sent service", () => {
       lines,
       groups: [{ ...orderGroup("g1", 1, "fired"), lineIds: ["l-beer"] }],
     });
-    expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×1");
+    expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×0.75");
     expect(q(el, "[data-serve-row]")).toBeNull();
     expect(q(el, "[data-serve-group]")).toBeNull();
     expect(q(el, "[data-group-summary]")).toBeNull();
     expect(q(el, "[data-sent-fallback] wt-button")).toBeNull();
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×0,75");
+    } finally {
+      setLocale(previous);
+    }
   });
 });
 

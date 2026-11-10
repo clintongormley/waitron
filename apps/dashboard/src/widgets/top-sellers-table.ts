@@ -1,5 +1,6 @@
 import { type TemplateResult, css, html } from "lit";
 import { formatMoney } from "@waitron/shared";
+import { quantity } from "../quantity.js";
 import { currentLocale } from "../i18n/t.js";
 import type { TopSellerRow } from "../api/client.js";
 
@@ -40,7 +41,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
         const name = sellerWords(row.name);
         return html`<tr data-test=${`seller-row-${i}`}>
             <th scope="row" data-test="seller-name" title=${row.name}>${name}</th>
-            <td class="num">${row.quantity}</td>
+            <td class="num">${quantity(row.quantity)}</td>
             <td class="num">${formatMoney(row.total, currentLocale())}</td>
           </tr>
           ${row.variants.map(
@@ -52,7 +53,7 @@ export function renderTopSellers(rows: TopSellerRow[], labels: TopSellersLabels)
                     >${sellerWords(variant.name)}</span
                   >
                 </th>
-                <td class="num">${variant.quantity}</td>
+                <td class="num">${quantity(variant.quantity)}</td>
                 <td class="num">${formatMoney(variant.total, currentLocale())}</td>
               </tr>`,
           )}`;

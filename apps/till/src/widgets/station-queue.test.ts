@@ -196,7 +196,7 @@ describe("till-station-queue", () => {
         "En espera",
       );
       expect(section.querySelector('[data-elsewhere-item="other-steak"]')!.textContent).toContain(
-        "0.75 kg× Steak",
+        "0,75 kg× Steak",
       );
     } finally {
       setLocale(previousLocale);
@@ -3416,7 +3416,7 @@ describe("till-station-queue: the dishes-to-make line", () => {
     setLocale("es-ES");
     try {
       const spanishBoard = await mountWidget<TillStationQueue>("till-station-queue", board);
-      const spanish = `${t("station.to_make").replace("{n}", "5.5")} · ${t("station.late").replace("{n}", "1")}`;
+      const spanish = `${t("station.to_make").replace("{n}", "5,5")} · ${t("station.late").replace("{n}", "1")}`;
       expect(spanish).not.toBe("5.5 dishes to make · 1 late");
       expect(line(spanishBoard.el)).toBe(spanish);
     } finally {
@@ -5547,4 +5547,37 @@ describe("A773 fire paper: the cue on the station card", () => {
     expect(cardOf(plain.el, 7)).not.toBeNull();
     expect(cue(plain.el)).toBeNull();
   });
+});
+
+it("localises fractional kitchen lines, totals and overview counts in Spanish", async () => {
+  const previous = currentLocale();
+  setLocale("es-ES");
+  try {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        {
+          ...groupA,
+          items: [
+            { ...groupA.items[0]!, quantity: "0.375", unitName: { es: "kg" }, unitPrecision: 3 },
+            {
+              ...groupA.items[0]!,
+              id: "ti-bread",
+              name: "Bread",
+              quantity: "1.500",
+              soldInEach: true,
+            },
+          ],
+        },
+      ],
+      stationId: "st-1",
+      columns: { order: ["overview", "waiting", "preparing", "ready"], hidden: [], collapsed: [] },
+    });
+    expect(el.shadowRoot!.querySelector('[data-item="ti-1"]')!.textContent).toContain(
+      "0,375 kg× Paella",
+    );
+    expect(el.shadowRoot!.querySelector("[data-kitchen-counts]")!.textContent).toContain("2,5");
+    expect(el.shadowRoot!.querySelectorAll("[data-overview-making]")[1]!.textContent).toBe("1,5");
+  } finally {
+    setLocale(previous);
+  }
 });
