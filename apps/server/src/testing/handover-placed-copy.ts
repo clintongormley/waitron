@@ -159,11 +159,10 @@ export function placedSpareFixture(boxes: {
     await mainBox.db.insert(locations).values({
       id: venueId,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });
-    await seedVenueSettings(mainBox.db, { name: "Restaurant" });
+    await seedVenueSettings(mainBox.db, { name: "Restaurant", invoiceLocales: ["en"] });
     await mainBox.db.insert(nodes).values({
       id: primary.nodeId,
       locationId: venueId,
@@ -189,7 +188,6 @@ export function placedSpareFixture(boxes: {
     await spareBefore.db.insert(locations).values({
       id: venueId,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     });

@@ -58,8 +58,8 @@ it("durably completed ordinary trading needs no fresh outside consultation", asy
       state = await f.store.update(f.context.attemptId, state.revision, change);
     await suite.db
       .insert(locations)
-      .values([{ id: LOCATION, invoiceLocales: ["en"], operationDescription: "Hospitality" }]);
-    await seedVenueSettings(suite.db, { name: "Main" });
+      .values([{ id: LOCATION, operationDescription: "Hospitality" }]);
+    await seedVenueSettings(suite.db, { name: "Main", invoiceLocales: ["en"] });
     await suite.db
       .insert(nodes)
       .values({ id: f.context.binding.targetNodeId, locationId: LOCATION, name: "Box" });

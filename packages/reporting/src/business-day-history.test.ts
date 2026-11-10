@@ -21,12 +21,11 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: locationId,
 
-    invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     timeZone: "Europe/Madrid",
     dayCutover: "05:00:00",
   });
-  await seedVenueSettings(suite.db, { name: "Clock" });
+  await seedVenueSettings(suite.db, { name: "Clock", invoiceLocales: ["es"] });
 });
 afterEach(() => vi.useRealTimers());
 describe("complete reporting clock", () => {

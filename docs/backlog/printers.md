@@ -959,7 +959,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 - **A receipt prints in one language; the venue's is the default, and staff may choose another
   at the till (C113, owner 2026-09-30, #1014; amended by A497, owner 2026-10-11).** The venue's
-  receipt language is the first entry of its saved list (`locations.invoice_locales`); **in
+  receipt language is the first entry of its saved list (`settings.venue.invoiceLocales`); **in
   Catalonia it is fixed to Catalan**
   ([regional-language-rules.md](../compliance/regional-language-rules.md), Catalonia). A choice
   made at the till is saved on the order (`working_orders.receipt_locale`) and read by every path

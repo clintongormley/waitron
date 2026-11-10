@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   withTransaction,
@@ -29,7 +29,12 @@ import {
   publishMenu,
 } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenue,
+  seedVenueSettings,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import {
   uploadImage,
@@ -52,6 +57,7 @@ const suite = useVenueDb({
 /** A photo ready to store. A different width is a different photo (`testing/sample-image.ts`). */
 const prepare = (width: number): Promise<PreparedImage> => samplePreparedImage({ width });
 const photo = await prepare(8);
+beforeEach(() => seedVenueSettings(suite.db));
 
 describe("image library", () => {
   it("does not read the same image row again when counting its uses", async () => {
@@ -126,10 +132,10 @@ describe("unknown images and other refusals", () => {
     // reaches its re-throw. The table is dropped inside the transaction, which rolls it back.
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await tx.execute(sql`drop table content_languages`);
+        await tx.execute(sql`drop table settings`);
         return uploadImage(tx, { image: photo, names: { en: "Bread" } });
       }),
-    ).rejects.toThrow("no such table: content_languages");
+    ).rejects.toThrow("no such table: settings");
   });
 });
 
@@ -1176,6 +1182,7 @@ describe("relevance scores and tie-breaks", () => {
 
   it("sorts an image with no name in the listing's default language as an empty name", async () => {
     await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`delete from settings where module = 'venue'`);
       // No stored language settings, so each call's fallback is the default it validates against.
       const english = await uploadImage(
         tx,
@@ -1286,12 +1293,19 @@ describe("free default choice with incomplete catalogue and image text", () => {
       const snapshot = async () => {
         const tables = (
           await tx.execute<{ name: string }>(
-            sql`select name from sqlite_master where type = 'table' and name <> 'content_languages' order by name`,
+            sql`select name from sqlite_master where type = 'table' order by name`,
           )
         ).rows;
         const rows: Record<string, unknown> = {};
-        for (const { name } of tables)
-          rows[name] = (await tx.execute(sql`select * from ${sql.identifier(name)}`)).rows;
+        for (const { name } of tables) {
+          const query =
+            name === "settings"
+              ? sql`select module, version, case when module = 'venue' then null else revision end as revision, case when module = 'venue' then json_remove(doc, '$.contentLanguages', '$.defaultContentLanguage') else doc end as doc, case when module = 'venue' then null else updated_at end as updated_at, case when module = 'venue' then null else updated_by end as updated_by from settings`
+              : name === "activity_log"
+                ? sql`select * from activity_log where not (kind = 'settings.saved' and subject_id = 'venue')`
+                : sql`select * from ${sql.identifier(name)}`;
+          rows[name] = (await tx.execute(query)).rows;
+        }
         return rows;
       };
       expect((await listContentTranslationGaps(tx, "es")).map(({ kind }) => kind).sort()).toEqual([

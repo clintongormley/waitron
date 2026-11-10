@@ -9,7 +9,7 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, updateMenuDetails } from "./operations.js";
@@ -21,6 +21,7 @@ import { setIncludeFolder } from "./include-folder.js";
 import { folderPresentation } from "./include-folder-presentation.js";
 
 const fx = useCatalogueDb();
+beforeEach(() => seedVenueSettings(fx.db));
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, body);
 type Names = Record<string, string> | null;
 type Target = {

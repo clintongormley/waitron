@@ -763,6 +763,11 @@ triggers.
    developer Mac with `node:sqlite`, 2,001 rows in one transaction, not the real schema: 0.5 ms with no
    trigger, 5.9 ms reading a typed row, 6.9 ms reading a settings document (the ledger's run, 4 November);
    a second run, medians of 41, gave 0.4, 3.9 and 4.3 ms. Both triggers refused a wrong language.
+   **2026-11-10, real schema (watcher, Lane H questions.md 12:27):** Apple M5 Pro developer Mac,
+   Node v26.13.0 / SQLite 3.54.1, not the reference micro PC; medians of 41 transactions/2,001 lines:
+   current 82.996 ms, document 82.916 ms, four language triggers removed 64.834 ms. The watcher kept
+   the document because changing its source added no measured cost. Differing-lists controls
+   followed both directions in all 16 description/variant combinations (5c plan, Task 1 receipts).
 3. **Document upgrades vs backup verification.** Take a backup, raise a document's `version` with an
    upgrade-on-read, restore and verify. Failing result: verification refuses — then the read-time
    upgrade rule in §2.4 must be written into the central definition, or core's comparison must accept a
@@ -782,3 +787,6 @@ triggers.
 The owner settled D1 to D7 on 4 November 2026; each is stated in the body. Pack history under the master
 key goes to A1323's design (§1.8). The `box.*` events stay in `node.db` (§3). No question is open in this
 area.
+
+**2026-11-10, slice 5c:** the bundle carries `contentLanguages` and `holidayArea` at its top level,
+not inside `venue`, which keeps setup fields including `invoiceLocales` (5c plan, item 7).

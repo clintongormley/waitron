@@ -130,11 +130,10 @@ describe("seedNode", () => {
     const [loc] = await db
       .insert(locations)
       .values({
-        invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
-    await seedVenueSettings(db, { name: "Test location" });
+    await seedVenueSettings(db, { name: "Test location", invoiceLocales: ["es"] });
     const location = loc!.id;
     const node = await seedNode(db, location);
     const result = await db.execute<{ n: number }>(
@@ -147,7 +146,7 @@ describe("seedNode", () => {
     await seedVenue(db);
     const [second] = await db
       .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .values({ operationDescription: "Restaurant" })
       .returning({ id: locations.id });
     const node = await seedNode(db, second!.id);
     const [row] = await db
@@ -180,7 +179,6 @@ describe("seedKitchenStation", () => {
     const [loc] = await db
       .insert(locations)
       .values({
-        invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
@@ -225,7 +223,6 @@ describe("seedDevice", () => {
     const [loc] = await database
       .insert(locations)
       .values({
-        invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
@@ -281,7 +278,7 @@ describe("seedDevice", () => {
     await seedVenue(db);
     const [second] = await db
       .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Restaurant" })
+      .values({ operationDescription: "Restaurant" })
       .returning({ id: locations.id });
     const { deviceId } = await seedDevice(db, { locationId: second!.id });
     const [row] = await db

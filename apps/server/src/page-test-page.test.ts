@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { randomUUID } from "node:crypto";
@@ -8,7 +9,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   pagePrinters,
   printAgents,
   tenants,
@@ -416,15 +416,9 @@ describe("printing a test page", () => {
       },
     });
     const office = await printer(v, v.agentOne);
-    await suite.db
-      .update(locations)
-      .set({ invoiceLocales: ["ca-ES"] })
-      .where(eq(locations.id, v.locationId));
+    await seedVenueSettings(suite.db, { invoiceLocales: ["ca-ES"] });
     const first = await requested(v, office);
-    await suite.db
-      .update(locations)
-      .set({ invoiceLocales: ["es-ES"] })
-      .where(eq(locations.id, v.locationId));
+    await seedVenueSettings(suite.db, { invoiceLocales: ["es-ES"] });
     v.cfg.locale = "en-GB";
     v.cfg.invoiceLocales = ["en-GB"];
     await suite.db.update(persons).set({ locale: "en-GB" });

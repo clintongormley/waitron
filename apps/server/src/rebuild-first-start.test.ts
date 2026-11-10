@@ -81,10 +81,9 @@ beforeAll(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(suite.db, { name: "Local" });
+  await seedVenueSettings(suite.db, { name: "Local", invoiceLocales: ["es"] });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node 1" });
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, NODE);
 });

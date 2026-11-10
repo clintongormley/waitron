@@ -35,7 +35,13 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedKitchenStation, seedNode, seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedKitchenStation,
+  seedNode,
+  seedDevice,
+  seedVenue,
+  seedVenueSettings,
+} from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 /**
@@ -69,11 +75,11 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     const [location] = await db
       .insert(locations)
       .values({
-        invoiceLocales: venue.invoiceLocales,
         operationDescription: venue.operationDescription,
         dayCutover: venue.dayCutover,
       })
       .returning({ id: locations.id });
+    await seedVenueSettings(db, { invoiceLocales: venue.invoiceLocales });
     locationId = location!.id;
   }
   const { deviceId } = await seedDevice(db, { locationId });

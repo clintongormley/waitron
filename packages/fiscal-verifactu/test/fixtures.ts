@@ -55,10 +55,9 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
 
-      invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
-    await seedVenueSettings(db, { name: "Local principal" });
+    await seedVenueSettings(db, { name: "Local principal", invoiceLocales: ["es"] });
     venueId = TENANT_A.locationId;
   }
   await db.insert(nodes).values({ id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" });
@@ -113,7 +112,6 @@ export async function seedTenants(db: Database): Promise<void> {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
 
-      invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
     await seedVenueSettings(db, { name: "Local principal" });
@@ -134,7 +132,6 @@ export async function seedVenueNodes(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: TENANT_A.locationId,
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
   await seedVenueSettings(db, { name: "Local principal" });
@@ -255,7 +252,6 @@ async function insertLocationNodeSeries(
       : await tx
           .insert(locations)
           .values({
-            invoiceLocales: ["es-ES"],
             operationDescription: "Venta en establecimiento",
           })
           .returning({ id: locations.id });

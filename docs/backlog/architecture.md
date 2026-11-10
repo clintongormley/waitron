@@ -1103,9 +1103,7 @@ product failures.
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
     printer's boot lookup keeps its venue condition for `printers_local_key_key` (S10, #2396).
     S25 still needs to drop the node's venue foreign key (S4, #2388). Calendar rows still written
-    with a `location_id` take `venueLocationId` (S8, #2405). `saveHolidayArea` reads the venue row
-    twice (for the address, then for its id) because `readVenue`'s `Venue` carries no id; the
-    second read goes with `holiday_geographies.location_id` (S8, #2405). Until the schema slices
+    with a `location_id` take `venueLocationId` (S8, #2405). Until the schema slices
     drop the columns, the configuration import sets every column whose foreign key points at
     `locations` to the importing venue's row (`venueLocationId`); the export no longer carries
     `fire_control`, whose column goes with `locations` in S28 rather than in A773-2, since dropping
@@ -1263,7 +1261,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **The `authorized_by` comment on `drawer_opens` says only a manual open sets it**
   [Detail](architecture.md#the-authorized_by-comment-on-drawer_opens-says-only-a-manual-open-sets-it)
 - **`cadenas`: decide the remaining DELETE restriction (A805 follow-up).**
-- **`content_languages`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`locations`: decide the remaining DELETE restriction (A805 follow-up).**

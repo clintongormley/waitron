@@ -105,7 +105,7 @@ export async function seedCatalogues(
     country: taxpayer?.country,
     area: venue.province ?? undefined,
   });
-  await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, required);
+  await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, required, null);
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);
   const productsByImage = new Map<string, string>();
   const menuItemsByProduct = new Map<string, string>();

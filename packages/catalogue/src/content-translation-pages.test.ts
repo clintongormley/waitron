@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { countingSettingsReads } from "../test/fixtures.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
 import {
@@ -10,13 +11,14 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { listTranslationItems } from "./content-translation-pages.js";
 import type { TranslationQuery } from "./content-translation-types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 const context = { fallbackLanguage: "es", required: ["es"] };
 async function fixture(tx: Transaction) {
   await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
@@ -138,10 +140,11 @@ describe("multilingual item pages", () => {
         abbreviation: Object.fromEntries(languages.map((l, i) => [l, `abbr-${i}`])),
         precision: 3,
       });
+      const counting = countingSettingsReads(tx);
       const execute = vi.spyOn(tx, "execute");
       try {
         const page = await listTranslationItems(
-          tx,
+          counting.tx,
           {
             languages: [languages[0]!, languages[99]!, languages[199]!],
             missing: { mode: "all" },
@@ -157,7 +160,8 @@ describe("multilingual item pages", () => {
           [languages[199]!, "name", "name-199", "Kilogram"],
           [languages[199]!, "abbreviation", "abbr-199", "kg"],
         ]);
-        expect(execute).toHaveBeenCalledTimes(4);
+        expect(execute).toHaveBeenCalledTimes(3);
+        expect(counting.reads()).toBe(1);
         const outputs = await Promise.all(execute.mock.results.map((r) => r.value));
         expect(JSON.stringify(outputs)).not.toContain("name-150");
         expect(JSON.stringify(outputs)).not.toContain("abbr-150");

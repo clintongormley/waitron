@@ -256,9 +256,9 @@ describe("department name storage", () => {
   async function location(name: string) {
     const [row] = await suite.db
       .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Hospitality" })
+      .values({ operationDescription: "Hospitality" })
       .returning();
-    await seedVenueSettings(suite.db, { name });
+    await seedVenueSettings(suite.db, { name, invoiceLocales: ["es"] });
     return row!.id;
   }
   async function insert(_locationId: string, name: string) {

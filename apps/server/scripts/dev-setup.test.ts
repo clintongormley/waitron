@@ -684,7 +684,7 @@ describe("developer demo regions", () => {
           const store = await openVenueDatabase(opts.venueDir);
           try {
             const locations = store.venue.all(
-              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,invoice_locales from locations cross join settings on settings.module = 'venue'`,
+              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,json_extract(settings.doc, '$.invoiceLocales') as invoice_locales from locations cross join settings on settings.module = 'venue'`,
             );
             expect(locations).toEqual([
               {
@@ -754,7 +754,7 @@ describe("Valencian developer demo", () => {
         try {
           expect(
             store.venue.all(
-              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,invoice_locales from locations cross join settings on settings.module = 'venue'`,
+              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,json_extract(settings.doc, '$.invoiceLocales') as invoice_locales from locations cross join settings on settings.module = 'venue'`,
             ),
           ).toEqual([
             {
@@ -829,7 +829,7 @@ describe("Galician developer demo", () => {
         try {
           expect(
             store.venue.all(
-              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,invoice_locales from locations cross join settings on settings.module = 'venue'`,
+              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,json_extract(settings.doc, '$.invoiceLocales') as invoice_locales from locations cross join settings on settings.module = 'venue'`,
             ),
           ).toEqual([
             {

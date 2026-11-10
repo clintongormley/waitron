@@ -453,11 +453,11 @@ export async function seedSecondChain(
           await db
             .insert(locations)
             .values({
-              invoiceLocales: ["es"],
               operationDescription: "Venta en establecimiento",
             })
             .returning({ id: locations.id })
         )[0]!;
+  await seedVenueSettings(db, { invoiceLocales: ["es"] });
   if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala B" });
   const [node] = await db
     .insert(nodes)
@@ -508,7 +508,6 @@ export async function seedIndependentChain(
           await db
             .insert(locations)
             .values({
-              invoiceLocales: ["es"],
               operationDescription: "Venta en establecimiento",
             })
             .returning({ id: locations.id })
@@ -574,7 +573,6 @@ export async function seedPinnedChain(
           await db
             .insert(locations)
             .values({
-              invoiceLocales: ["es"],
               operationDescription: "Venta en establecimiento",
             })
             .returning({ id: locations.id })

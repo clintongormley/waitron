@@ -1,94 +1,64 @@
 import { sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Database } from "./client.js";
-import { refusalCode } from "./constraint-target.js";
-import { locations, tenants } from "./schema/tenants.js";
-import { CHECK_VIOLATION, type RefusalClass } from "./sql-state.js";
-import { engineErrorMessage } from "./testing/errors.js";
+import { describe, expect, it } from "vitest";
+import { triggerRaised } from "./constraint-target.js";
+import { settings } from "./schema/settings.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const insertDoc = async (doc: unknown, module = "venue") =>
+  suite.db.run(sql`
+  insert into settings (module, version, revision, doc, updated_at)
+  values (${module}, 1, 1, ${JSON.stringify(doc)}, '2026-11-10T10:00:00.000Z')
+`);
 
-// Each case gets empty mutable fixture tables while sharing the migrated database.
-afterEach(async () => {
-  await suite.db.execute(sql`delete from locations`);
-  await suite.db.execute(sql`delete from tenants`);
-});
-
-/**
- * Asserts that `promise` is refused by the engine, with `refusal`'s class and a message matching
- * `pattern`.
- *
- * Both halves are needed and each rules out a different wrong answer: the class alone also accepts
- * a sibling CHECK on the same table, and the message alone also accepts any error whose text
- * happens to name the constraint — a wrapper reproducing the failed SQL among them.
- *
- * Every case below rejects from an awaited drizzle query builder, which hands back the engine's own
- * error with no `.cause`; `db.run` would wrap it in drizzle's `DrizzleError` instead. Either is
- * read correctly: `refusalCode` walks the cause chain and `engineErrorMessage` falls back across
- * it.
- */
-async function rejectsWithRefusal(
-  promise: Promise<unknown>,
-  refusal: RefusalClass,
-  pattern: RegExp,
-): Promise<void> {
-  await promise.then(
-    () => {
-      throw new Error("expected promise to reject, but it resolved");
-    },
-    (err: unknown) => {
-      expect(err).toBeInstanceOf(Error);
-      expect(refusal).toContain(refusalCode(err));
-      expect(engineErrorMessage(err)).toMatch(pattern);
-    },
+async function refuses(action: () => unknown) {
+  await expect(Promise.resolve().then(action)).rejects.toSatisfy((error: unknown) =>
+    triggerRaised(error, "settings.invalid"),
   );
 }
 
-describe("invoice_locales", () => {
-  let db: Database;
-
-  beforeEach(async () => {
-    db = suite.db;
-    await db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B44444447", legalName: "Bar Gamma SL" });
-  });
-
-  const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {
-    return db.insert(locations).values({
-      invoiceLocales,
-      operationDescription: "Servicios de restauración",
-    });
-  };
-
+describe("receipt languages in the venue document", () => {
   it("accepts a single locale", async () => {
-    await expect(insertLocales(["es"])).resolves.toBeDefined();
+    await expect(insertDoc({ invoiceLocales: ["es"] })).resolves.toBeDefined();
   });
 
-  it("accepts two locales and preserves their order", async () => {
-    await insertLocales(["ca", "es"]);
-
-    const [row] = await db.select().from(locations).limit(1);
-
-    // ["ca","es"] and ["es","ca"] are different invoices, not the same invoice
-    // rendered differently. A set-valued column would lose that distinction.
-    expect(row?.invoiceLocales).toEqual(["ca", "es"]);
-  });
-
-  it("rejects an empty locale list", async () => {
-    // The trap this constraint exists for: a CHECK whose expression is NULL is SATISFIED, so a
-    // length function returning NULL on an empty list would let this row through.
-    // `json_array_length('[]')` is 0, not NULL.
-    await rejectsWithRefusal(insertLocales([]), CHECK_VIOLATION, /locations_invoice_locales_len/);
-  });
-
-  it("rejects three locales", async () => {
-    await rejectsWithRefusal(
-      insertLocales(["es", "ca", "en"]),
-      CHECK_VIOLATION,
-      /locations_invoice_locales_len/,
+  it("accepts two locales and preserves their order on insert and update", async () => {
+    await insertDoc({ invoiceLocales: ["ca", "es"] });
+    expect((await suite.db.select().from(settings))[0]!.doc).toEqual({
+      invoiceLocales: ["ca", "es"],
+    });
+    await suite.db.run(
+      sql`update settings set doc = '{"invoiceLocales":["es","ca"]}' where module = 'venue'`,
     );
+    expect((await suite.db.select().from(settings))[0]!.doc).toEqual({
+      invoiceLocales: ["es", "ca"],
+    });
+  });
+
+  it.each([[], ["es", "ca", "en"], "es", null].map((value) => [value]))(
+    "rejects an invalid locale list %j",
+    async (invoiceLocales) => {
+      await refuses(() => insertDoc({ invoiceLocales }));
+    },
+  );
+
+  it("refuses a venue document with no invoiceLocales key", async () => {
+    await refuses(() => insertDoc({ name: "V" }));
+  });
+
+  it("refuses an update emptying receipt languages", async () => {
+    await insertDoc({ invoiceLocales: ["es"] });
+    await refuses(() =>
+      suite.db.run(sql`update settings set doc = '{"invoiceLocales":[]}' where module = 'venue'`),
+    );
+    expect((await suite.db.select().from(settings))[0]!.doc).toEqual({ invoiceLocales: ["es"] });
+  });
+
+  it("does not impose the venue rule on another module", async () => {
+    await insertDoc({}, "other");
+    expect(() =>
+      suite.db.run(sql`update settings set doc = '{"invoiceLocales":[]}' where module = 'other'`),
+    ).not.toThrow();
   });
 });

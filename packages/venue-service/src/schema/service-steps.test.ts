@@ -159,9 +159,9 @@ describe("the service_step_completions table", () => {
     return withTransaction(db, async (tx) => {
       await tx
         .insert(locations)
-        .values({ invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+        .values({ operationDescription: "Hospitality" })
         .returning({ id: locations.id });
-      await seedVenueSettings(tx, { name });
+      await seedVenueSettings(tx, { name, invoiceLocales: ["en-GB"] });
       const [department] = await tx
         .insert(departments)
         .values({ name, tradingName: name })

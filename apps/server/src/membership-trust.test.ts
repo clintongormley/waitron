@@ -116,9 +116,9 @@ describe("the held document's check against the keys this box stores", () => {
     const { db, nodeId } = await box();
     const [loc] = await db
       .insert(locations)
-      .values({ invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+      .values({ operationDescription: "Venta" })
       .returning({ id: locations.id });
-    await seedVenueSettings(db, { name: "Terraza" });
+    await seedVenueSettings(db, { name: "Terraza", invoiceLocales: ["es-ES"] });
     const otherId = await seedNode(db, loc!.id);
     const other = generateNodeKeyPair();
     await setNodePublicKey(db, otherId, other.publicKey);
@@ -146,7 +146,7 @@ describe("the held document's check against the keys this box stores", () => {
       const { db, nodeId } = await box();
       const [loc] = await db
         .insert(locations)
-        .values({ invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+        .values({ operationDescription: "Venta" })
         .returning({ id: locations.id });
       const mainId = await seedNode(db, loc!.id);
       await pinMainBoxKey(suite.node, nodeId, { nodeId: mainId, publicKey: MAIN.publicKey });

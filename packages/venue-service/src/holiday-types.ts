@@ -30,7 +30,6 @@ export interface HolidayRead {
 }
 
 export interface HolidayGeography {
-  id: string;
   country: string;
   provinceCode: string;
   city: string;

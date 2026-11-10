@@ -143,7 +143,9 @@ describe("A964 venue language", () => {
   it("uses English without a saved setting even with a Spanish formatter", async () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(suite.db, async (tx) => {
-      await tx.run("delete from content_languages");
+      await tx.run(
+        "update settings set doc = json_set(doc, '$.contentLanguages', null, '$.defaultContentLanguage', null) where module = 'venue'",
+      );
       await fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "1" }]);
     });
     const id = (await suite.db.select().from(ticketItems))[0]!.workingOrderId;

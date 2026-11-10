@@ -39,10 +39,9 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
-  await seedVenueSettings(suite.db, { name: "Old location" });
+  await seedVenueSettings(suite.db, { name: "Old location", invoiceLocales: ["es-ES"] });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
   scratch = await mkdtemp(join(tmpdir(), "w41s6-public-boot-"));
 });

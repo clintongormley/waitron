@@ -192,25 +192,16 @@ FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'descriptions must carry exactly the venue locales')
   WHERE NOT exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-       WHERE wo.id = new.working_order_id
+      SELECT 1 FROM settings WHERE module = 'venue'
     )
     OR exists (
       SELECT 1 FROM json_each(new.descriptions) supplied
        WHERE supplied."key" NOT IN (
-         SELECT configured.value FROM working_orders wo
-           JOIN locations l ON l.id = wo.location_id
-           JOIN json_each(l.invoice_locales) configured
-          WHERE wo.id = new.working_order_id
+         SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
        )
     )
     OR exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-        JOIN json_each(l.invoice_locales) configured
-       WHERE wo.id = new.working_order_id
-         AND configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
+      SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
     );
 END;
 --> statement-breakpoint
@@ -221,25 +212,16 @@ WHEN new.descriptions IS NOT old.descriptions OR new.working_order_id IS NOT old
 BEGIN
   SELECT raise(abort, 'descriptions must carry exactly the venue locales')
   WHERE NOT exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-       WHERE wo.id = new.working_order_id
+      SELECT 1 FROM settings WHERE module = 'venue'
     )
     OR exists (
       SELECT 1 FROM json_each(new.descriptions) supplied
        WHERE supplied."key" NOT IN (
-         SELECT configured.value FROM working_orders wo
-           JOIN locations l ON l.id = wo.location_id
-           JOIN json_each(l.invoice_locales) configured
-          WHERE wo.id = new.working_order_id
+         SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
        )
     )
     OR exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-        JOIN json_each(l.invoice_locales) configured
-       WHERE wo.id = new.working_order_id
-         AND configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
+      SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
     );
 END;
 --> statement-breakpoint
@@ -251,25 +233,16 @@ BEGIN
   WHERE new.variant_descriptions IS NOT NULL
     AND (
       NOT exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-         WHERE wo.id = new.working_order_id
+        SELECT 1 FROM settings WHERE module = 'venue'
       )
       OR exists (
         SELECT 1 FROM json_each(new.variant_descriptions) supplied
          WHERE supplied."key" NOT IN (
-           SELECT configured.value FROM working_orders wo
-             JOIN locations l ON l.id = wo.location_id
-             JOIN json_each(l.invoice_locales) configured
-            WHERE wo.id = new.working_order_id
+           SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
          )
       )
       OR exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-          JOIN json_each(l.invoice_locales) configured
-         WHERE wo.id = new.working_order_id
-           AND configured.value NOT IN (
+        SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (
              SELECT supplied."key" FROM json_each(new.variant_descriptions) supplied
            )
       )
@@ -285,25 +258,16 @@ BEGIN
   WHERE new.variant_descriptions IS NOT NULL
     AND (
       NOT exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-         WHERE wo.id = new.working_order_id
+        SELECT 1 FROM settings WHERE module = 'venue'
       )
       OR exists (
         SELECT 1 FROM json_each(new.variant_descriptions) supplied
          WHERE supplied."key" NOT IN (
-           SELECT configured.value FROM working_orders wo
-             JOIN locations l ON l.id = wo.location_id
-             JOIN json_each(l.invoice_locales) configured
-            WHERE wo.id = new.working_order_id
+           SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
          )
       )
       OR exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-          JOIN json_each(l.invoice_locales) configured
-         WHERE wo.id = new.working_order_id
-           AND configured.value NOT IN (
+        SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (
              SELECT supplied."key" FROM json_each(new.variant_descriptions) supplied
            )
       )
@@ -847,4 +811,25 @@ BEGIN
     AND exists (
       SELECT 1 FROM section_members WHERE folder_overrides ->> '$.image' = old.filename
     );
+END;
+
+--> statement-breakpoint
+CREATE TRIGGER settings_venue_invoice_locales_insert
+BEFORE INSERT ON settings
+FOR EACH ROW
+WHEN new.module = 'venue'
+  AND (json_type(new.doc, '$.invoiceLocales') IS NOT 'array'
+       OR json_array_length(new.doc, '$.invoiceLocales') NOT BETWEEN 1 AND 2)
+BEGIN
+  SELECT raise(abort, 'settings.invalid');
+END;
+--> statement-breakpoint
+CREATE TRIGGER settings_venue_invoice_locales_update
+BEFORE UPDATE OF doc ON settings
+FOR EACH ROW
+WHEN new.module = 'venue'
+  AND (json_type(new.doc, '$.invoiceLocales') IS NOT 'array'
+       OR json_array_length(new.doc, '$.invoiceLocales') NOT BETWEEN 1 AND 2)
+BEGIN
+  SELECT raise(abort, 'settings.invalid');
 END;

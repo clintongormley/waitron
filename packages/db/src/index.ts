@@ -398,7 +398,6 @@ export { challengePurpose } from "./schema/identity/webauthn.js";
 export {
   catalogueSettings,
   categoryDetails,
-  contentLanguages,
   contentSuggestionJobs,
   contentSuggestions,
   extraListItems,
@@ -457,7 +456,6 @@ export {
   deviceProfileZones,
   deviceZoneSelections,
   deviceZoneSelectionZones,
-  holidayGeographies,
   kitchenNoticeKind,
   kitchenNotices,
   menuPeriods,
@@ -502,6 +500,7 @@ export { settings } from "./schema/settings.js";
 
 export {
   defineSettingsDocument,
+  decodeSettingsRow,
   readSettings,
   saveSettings,
   replaceTransferredSettings,

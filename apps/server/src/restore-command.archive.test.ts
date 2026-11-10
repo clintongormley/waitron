@@ -121,10 +121,9 @@ beforeAll(async () => {
     await tx.insert(locations).values({
       id: ids.location,
 
-      invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
-    await seedVenueSettings(tx, { name: "Archive location" });
+    await seedVenueSettings(tx, { name: "Archive location", invoiceLocales: ["es"] });
     await tx.insert(nodes).values({ id: ids.node, locationId: ids.location, name: "Archive node" });
     await tx.insert(invoiceSeries).values({
       id: ids.series,

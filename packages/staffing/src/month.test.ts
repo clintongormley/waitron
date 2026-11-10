@@ -245,7 +245,7 @@ describe("readStaffingMonth", () => {
     });
     expect(month.days.find((d) => d.date === "2026-04-18")!.specialDay).toBeNull();
     expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
-    for (const holidayTable of ["tenants", "holiday_geographies"])
+    for (const holidayTable of ["tenants", "settings"])
       expect(tables.filter((table) => table === holidayTable)).toHaveLength(1);
     const watched: readonly string[] = QUERY_DEPENDENCIES["staffing-month"];
     expect(

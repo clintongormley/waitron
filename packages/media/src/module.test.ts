@@ -57,7 +57,6 @@ describe("the media module descriptor", () => {
     const validate = transfer?.kind === "tables" ? transfer.validate : undefined;
     const bytes = Buffer.from([0xff, 0xd8, 0xff, 1]);
     const bundle = (filename: string) => ({
-      content_languages: [{ default_language: "en" }],
       media_images: [
         {
           id: "image-a",
@@ -67,9 +66,18 @@ describe("the media module descriptor", () => {
       ],
       media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
     });
+    const context = {
+      createdAt: new Date("2026-10-20T12:00:00Z"),
+      country: "GB",
+      area: null,
+      timeZone: "Europe/London",
+      dayCutover: "05:00",
+      contentLanguages: { defaultLanguage: "en", languages: ["en"] },
+      holidayArea: null,
+    };
     const matching = `${createHash("sha256").update(bytes).digest("hex")}.jpg`;
-    expect(() => validate?.(bundle(matching))).not.toThrow();
-    expect(() => validate?.(bundle(`${"0".repeat(64)}.jpg`))).toThrow(
+    expect(() => validate?.(bundle(matching), context)).not.toThrow();
+    expect(() => validate?.(bundle(`${"0".repeat(64)}.jpg`), context)).toThrow(
       expect.objectContaining({ code: "image.invalid_metadata" }),
     );
   });

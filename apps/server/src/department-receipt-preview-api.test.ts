@@ -1,10 +1,10 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { locations, printJobs, sales } from "@waitron/db";
+import { printJobs, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { contentLanguages } from "@waitron/catalogue";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -28,13 +28,11 @@ beforeEach(async () => {
     .update(departmentSalePolicies)
     .set(policy)
     .where(eq(departmentSalePolicies.departmentId, departmentId));
-  await suite.db
-    .update(locations)
-    .set({ invoiceLocales: ["gl-ES"] })
-    .where(eq(locations.id, venue.cfg.locationId));
-  await suite.db
-    .update(contentLanguages)
-    .set({ defaultLanguage: "es", languages: ["es", "ca", "en"] });
+  await seedVenueSettings(suite.db, { invoiceLocales: ["gl-ES"] });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "en"],
+  });
   await suite.db
     .insert(departmentReceipts)
     .values({ departmentId, receipt: { footerMessage: { "eu-ES": "Hidden Basque" } } })

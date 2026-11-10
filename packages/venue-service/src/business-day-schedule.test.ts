@@ -118,12 +118,11 @@ async function fixture(
     await tx.insert(locations).values({
       id: loc,
 
-      invoiceLocales: ["en"],
       operationDescription: "Restaurant",
       timeZone: before.timeZone,
       dayCutover: "05:00:00",
     });
-    await seedVenueSettings(tx, { name: "Clock venue" });
+    await seedVenueSettings(tx, { name: "Clock venue", invoiceLocales: ["en"] });
     const departmentId = randomUUID();
     const [otherDepartment] = await tx
       .select({ id: departments.id })
@@ -2142,7 +2141,6 @@ async function busyCalendar(count: number, run = 0) {
     await tx.insert(locations).values({
       id: loc,
 
-      invoiceLocales: ["en"],
       operationDescription: "Restaurant",
       timeZone: before.timeZone,
       dayCutover: "05:00:00",

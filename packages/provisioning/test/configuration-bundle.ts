@@ -2,7 +2,9 @@ import type { ConfigurationBundle } from "../src/configuration-transfer.js";
 
 export function configurationBundle(): ConfigurationBundle {
   return {
-    version: 15,
+    version: 16,
+    contentLanguages: null,
+    holidayArea: null,
     settings: {},
     createdAt: "2026-10-16T11:40:00Z",
     sourceOperatorId: "source-admin",

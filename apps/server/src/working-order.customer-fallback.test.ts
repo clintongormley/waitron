@@ -1,9 +1,10 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as cataloguePricing from "@waitron/catalogue";
-import { locations, products, withTransaction, workingOrderLines } from "@waitron/db";
+import { products, withTransaction, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -34,10 +35,7 @@ beforeEach(async () => {
 async function arrange() {
   return withTransaction(venue.db, async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es", "fr"] });
-    await tx
-      .update(locations)
-      .set({ invoiceLocales: ["es-ES", "en-GB"] })
-      .where(eq(locations.id, venue.cfg.locationId));
+    await seedVenueSettings(tx, { invoiceLocales: ["es-ES", "en-GB"] });
     const catalogue = await createCatalogue(tx, { name: "Fallback catalogue" });
     await assignCatalogueToVenue(tx, catalogue.id);
     const [unit] = await tx

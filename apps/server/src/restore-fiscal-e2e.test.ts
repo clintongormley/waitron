@@ -80,10 +80,9 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
   await db.insert(locations).values({
     id: F.locationId,
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
-  await seedVenueSettings(db, { name: "Local principal" });
+  await seedVenueSettings(db, { name: "Local principal", invoiceLocales: ["es"] });
   await seedDevice(db, { locationId: F.locationId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db

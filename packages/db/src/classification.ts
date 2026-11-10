@@ -315,7 +315,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   // catalogue
   classify("category_details", "state", MENU_STATE),
   classify("catalogue_settings", "state", MENU_STATE),
-  classify("content_languages", "state", MENU_STATE),
   classify("unit_seed_states", "state", MENU_STATE),
   classify("units", "state", MENU_STATE),
   classify("product_units", "state", MENU_STATE),
@@ -388,7 +387,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "each bill number a seated party has given, so none is given twice",
   ),
-  classify("holiday_geographies", "state", SERVICE_STATE),
   classify("seasons", "state", SERVICE_STATE),
   classify("special_days", "state", SERVICE_STATE),
   classify("special_day_dates", "state", SERVICE_STATE),

@@ -35,10 +35,9 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     await db.insert(locations).values({
       id: LOCATION_A2,
 
-      invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await seedVenueSettings(db, { name: "Loc A2" });
+    await seedVenueSettings(db, { name: "Loc A2", invoiceLocales: ["es"] });
     courseA = await seedCourse(LOCATION_A, "Starters");
     const [cat] = await db
       .insert(catalogues)

@@ -89,11 +89,10 @@ cannot be restored or imported." (rules §2).
      (`docs/developers/conventions-data.md:1830-1855`; `CLAIM_VENUE_FIELDS`,
      `apps/setup/src/setup-app.ts:195-206`). The pull request corrects tables-venuebox §2.4 and
      tables-menu §2's "The two fields join the bundle's `venue` field" with a dated note.
-   - **The export's `venue` cannot carry them by accident, decided:** `readVenue` builds `Venue` by
-     naming each field (`venue.ts:31-52` today), never by spreading the document, and `Venue` gains no
-     content-language, holiday or Cloud field; so `{ …fields }` at
-     `packages/provisioning/src/configuration-transfer.ts:112-137` holds only `Venue`'s fields. A case
-     pins it (Task 5).
+   - **The export's `venue` holds only setup fields:** `venueRow` names the name/address fields
+     and `invoiceLocales`, keeping the other fields from `locations` (Task 5 pins the keys).
+     **2026-11-10 correction (Lane H questions.md, 12:22):** 5b spreads the document (`venue.ts:77`); watcher 12:22
+     cleared the explicit projection, proved first by the failing export-keys case.
    - `content_languages` and `holiday_geographies` leave the transfer lists
      (`packages/catalogue/src/configuration-transfer.ts:208`, `packages/venue-service/src/configuration-transfer.ts:725`).
    - The module contract's `validate(tables, bundle?)` context (`packages/module/src/module.ts:1477-1486`)

@@ -17,6 +17,9 @@ import {
 } from "@waitron/shared";
 import {
   readVenue,
+  readVenueSettings,
+  saveVenueFields,
+  VENUE_SETTINGS,
   readVenueClock,
   venueLocationId,
   type Database,
@@ -116,17 +119,14 @@ export async function buildConfigurationBundle(
     rectificativeSeriesCode,
   } = row;
   const { defaultCatalogueId, ...fields } = await readVenue(db);
-  // The column's JSON read mapping checks no element types.
-  if (fields.invoiceLocales.some((locale: unknown) => typeof locale !== "string")) {
-    throw new AppError("setup.request_invalid", { field: "venue" });
-  }
+  const { doc } = await readVenueSettings(db);
   const clock = await readVenueClock(db);
   const businessDay = businessDayAt(clock, now);
   if (clock.cutoverChanges.some((change) => change.effectiveBusinessDay > businessDay))
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 15,
+    version: 16,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -142,6 +142,11 @@ export async function buildConfigurationBundle(
     },
     defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
+    contentLanguages:
+      doc.contentLanguages === null
+        ? null
+        : { defaultLanguage: doc.defaultContentLanguage!, languages: doc.contentLanguages },
+    holidayArea: doc.holidayArea,
     settings: await exportSettingsDocuments(db, modules),
     // A trading box's versions also name its switched-off modules, which setup refuses.
     modules: Object.fromEntries(
@@ -164,13 +169,20 @@ export async function applyPreparedVenue(
 }
 
 export interface ConfigurationBundle {
-  version: 15;
+  version: 16;
   settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
   defaultCatalogueId: string | null;
   privacyContact: PrivacyContact;
+  contentLanguages: { defaultLanguage: string; languages: string[] } | null;
+  holidayArea: {
+    country: string;
+    provinceCode: string;
+    cityKey: string;
+    areaKey: string | null;
+  } | null;
   modules: Record<string, number>;
   tables: Record<string, Array<Record<string, unknown>>>;
   reconnect: string[];
@@ -541,10 +553,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 15) {
+  if (typeof value.version === "number" && value.version > 16) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 15) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 16) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;
@@ -601,6 +613,25 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     )
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
+  }
+  const policy = value.contentLanguages;
+  if (
+    policy !== null &&
+    (!isRecord(policy) ||
+      typeof policy.defaultLanguage !== "string" ||
+      !Array.isArray(policy.languages))
+  )
+    throw new AppError("content.languages_invalid", {});
+  const parsed = VENUE_SETTINGS.parse({
+    ...VENUE_SETTINGS.defaults(),
+    name: "Configuration",
+    contentLanguages: policy === null ? null : policy.languages,
+    defaultContentLanguage: policy === null ? null : policy.defaultLanguage,
+    holidayArea: value.holidayArea,
+  });
+  if (!parsed.ok) {
+    if (parsed.field === "contentLanguages") throw new AppError("content.languages_invalid", {});
+    throw new AppError("setup.request_invalid", { field: "holidayArea" });
   }
   requireCountryTimeZone(venue.country as string, venue.timeZone);
   return value as unknown as ConfigurationBundle;
@@ -691,6 +722,8 @@ export function validateConfigurationBundle(
     dayCutover: bundle.venue.dayCutover.slice(0, 5),
     country: bundle.venue.country,
     area: bundle.venue.province,
+    contentLanguages: bundle.contentLanguages,
+    holidayArea: bundle.holidayArea,
   };
   for (const module of modules) {
     const contribution = module.configurationTransfer;
@@ -708,7 +741,16 @@ export async function importConfigurationTables(
   validateConfigurationBundle(bundle, modules, targetVersions);
   for (const module of modules) {
     const contribution = module.configurationTransfer;
-    if (contribution?.kind === "tables") await contribution.beforeImport?.(tx, bundle.tables);
+    if (contribution?.kind === "tables")
+      await contribution.beforeImport?.(tx, bundle.tables, {
+        createdAt: new Date(bundle.createdAt),
+        timeZone: bundle.venue.timeZone,
+        dayCutover: bundle.venue.dayCutover.slice(0, 5),
+        country: bundle.venue.country,
+        area: bundle.venue.province,
+        contentLanguages: bundle.contentLanguages,
+        holidayArea: bundle.holidayArea,
+      });
   }
   const incoming = checkedRows(bundle, modules);
   const incomingStations =
@@ -884,6 +926,15 @@ export async function importConfigurationTables(
     privacyEmail:
       privacyEmail === null ? null : privacyContactChecked("privacyEmail", privacyEmail),
   });
+  await saveVenueFields(
+    tx,
+    {
+      contentLanguages: bundle.contentLanguages?.languages ?? null,
+      defaultContentLanguage: bundle.contentLanguages?.defaultLanguage ?? null,
+      holidayArea: bundle.holidayArea,
+    },
+    null,
+  );
   await importSettingsDocuments(tx, bundle.settings, modules);
   for (const module of modules) {
     const contribution = module.configurationTransfer;

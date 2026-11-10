@@ -47,7 +47,7 @@ its import compares such a date with the others in its first year only (`validat
   Venue-service's old `0038_clammy_klaw.sql` dropped `local_holidays`; it was deleted with the
   frozen history on 2026-11-07 (A1422), and
   `git show f519799de0:scripts/fixtures/a760-history/venue-service/0038_clammy_klaw.sql` reads it.
-- `holiday_geographies` in `packages/db/src/schema/venue-service/holidays.ts` retains the
+- `holidayArea` in `settings.venue` retains the
   holiday-area choice for an address. `readHolidayAreaModel` and `saveHolidayArea` in
   `packages/venue-service/src/holidays.ts` read and write that choice; the area control is in the
   Year. The routes in `packages/venue-service/src/routes.ts` require `venue.view` for reads and
@@ -62,7 +62,7 @@ territorial choice, choose it in the Year; until then, only facts certain for th
 are shown. The 2026 territorial source notes remain in the archived sources README.
 
 An area's identity uses country, province and normalized city. Changing the address stops using
-that area's choice, but keeps it stored for a later matching address. `holidayCityKey` normalizes
+that area's choice; choosing another area replaces it. `holidayCityKey` normalizes
 Unicode, trims and collapses spaces, and lowercases; accents and punctuation still count.
 Special days are not filtered by that identity, and you can add them without a recognized holiday
 address or country calendar.
@@ -98,12 +98,12 @@ it against a municipal list.
 ## What a configuration transfer carries
 
 `VENUE_SERVICE_CONFIGURATION_TRANSFER` in `packages/venue-service/src/configuration-transfer.ts`
-carries retained holiday-area geographies, seasons with their department and zone weeks (see
+carries the top-level holiday-area choice and seasons with their department and zone weeks (see
 "Seasons and season weeks" in [conventions-data.md](conventions-data.md)), and special days with
 their dates, holiday names and paint (see "Special days" there). Public facts, source hashes and
 shipped data versions come from the receiving build's pack.
 
-`validateHolidayConfiguration` validates geographies and area choices against the receiving packs;
+`validateHolidayConfiguration` validates the saved area choice against the receiving packs;
 `validateSeasonWeeks` validates special days, their dates and their paint. The cases are in
 `packages/venue-service/src/configuration-transfer.test.ts`.
 
@@ -195,6 +195,8 @@ These steps assume Spain; another country follows the same shape with its own of
    local-table receipt below is historical.
 
 ### Earlier data-revision receipt
+
+**2026-11-10, A1308 5c:** the holiday_geographies table is dropped; the area choice below is settings.venue.holidayArea.
 
 **2026-10-09, A366 slice 2:** the 2026-10-06 data-revision experiment described here used
 `local_holidays`, which the slice now retires. It is not evidence about today's named-day writes.

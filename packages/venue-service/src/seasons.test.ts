@@ -119,9 +119,9 @@ describe("ensureDefaultSeasons", () => {
     };
     if (tenant) await seedVenue(db, venue);
     else {
-      const { name, province, ...columns } = venue;
+      const { name, province, invoiceLocales, ...columns } = venue;
       await db.insert(locations).values(columns);
-      await seedVenueSettings(db, { name, province });
+      await seedVenueSettings(db, { name, province, invoiceLocales });
     }
     const venueId = await venueLocationId(db);
     return venueId;

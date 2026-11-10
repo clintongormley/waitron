@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { contentSuggestionJobs, contentSuggestions, products } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue } from "./operations.js";
 import {
@@ -90,6 +90,7 @@ it("a new job has no collect position and nothing accounted for", async () => {
 
 it("counts a variant but not its complete product, which travels only as context", async () => {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   const { water, small } = await app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "ca", languages: ["ca", "es", "en"] });
     const menu = await createCatalogue(tx, {

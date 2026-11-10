@@ -482,7 +482,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       (
         await db.execute(sql`
           select
-            (select count(*) from holiday_geographies) as geographies,
+            (select count(*) from settings where module = 'venue' and json_type(doc, '$.holidayArea') = 'object') as geographies,
             (select count(*) from special_days) as entries`)
       ).rows[0];
 

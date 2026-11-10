@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
@@ -16,8 +17,6 @@ import { seedDevice, seedNode, seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { saleLines, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations } from "./tenants.js";
-import { venueLocationId } from "../venue.js";
 
 /**
  * What this file does NOT check:
@@ -29,7 +28,6 @@ import { venueLocationId } from "../venue.js";
  *    matches the key's column.
  */
 
-let LOCATION_A: string;
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
@@ -42,7 +40,6 @@ async function seed(db: Database): Promise<void> {
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });
-  LOCATION_A = await venueLocationId(db);
   nodeA = await seedNode(db);
   const [a] = await db
     .insert(invoiceSeries)
@@ -394,14 +391,11 @@ describe("sales — locale snapshot", () => {
     expect(row!.invoiceLocales).toEqual(["es", "ca"]);
   });
 
-  it("does not change an existing sale when locations.invoice_locales changes", async () => {
+  it("does not change an existing sale when the venue receipt languages change", async () => {
     // A receipt reprinted a year later must read identically to the one the customer took, and
     // corrective invoices inherit the ORIGINAL list.
     const id = await recordCompleteSale(suite.db);
-    await suite.db
-      .update(locations)
-      .set({ invoiceLocales: ["en"] })
-      .where(eq(locations.id, LOCATION_A));
+    await seedVenueSettings(suite.db, { invoiceLocales: ["en"] });
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, id));
     expect(row!.invoiceLocales).toEqual(["es", "ca"]);
     expect(row!.locale).toBe("es");

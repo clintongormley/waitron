@@ -1,6 +1,7 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { contentLanguages, CORE_MIGRATIONS, units, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, units, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createUnit, getUnit, updateUnit, EACH_UNIT } from "./units.js";
 
@@ -16,6 +17,17 @@ const run = <T>(action: (tx: Parameters<typeof createUnit>[0]) => Promise<T> | T
   withTransaction(suite.db, async (tx) => action(tx));
 
 describe("explicit unit staff identity", () => {
+  it("reads enabled languages from the venue document when editing a unit", async () => {
+    await seedVenueSettings(suite.db);
+    await suite.db.run(sql`update settings set doc = json_set(doc,
+      '$.contentLanguages', json('["en","es"]'), '$.defaultContentLanguage', 'en') where module = 'venue'`);
+    const saved = await run((tx) => createUnit(tx, input(), "en"));
+    const changed = await run((tx) =>
+      updateUnit(tx, saved.id, { name: { es: "Weight ES" } }, "en"),
+    );
+    expect(changed.name).toEqual({ es: "Weight ES" });
+  });
+
   it("stores and returns independent staff fields with no translations", async () => {
     const saved = await run((tx) => createUnit(tx, input(), "en"));
     expect(saved).toEqual({ id: expect.any(String), ...input() });
@@ -32,9 +44,10 @@ describe("explicit unit staff identity", () => {
   });
 
   it("retains authored disabled-language text on create while refusing later disabled edits", async () => {
-    await suite.db
-      .insert(contentLanguages)
-      .values({ defaultLanguage: "es", languages: ["es", "en"] });
+    await seedVenueSettings(suite.db, {
+      defaultContentLanguage: "es",
+      contentLanguages: ["es", "en"],
+    });
     const saved = await run((tx) =>
       createUnit(
         tx,
@@ -52,9 +65,10 @@ describe("explicit unit staff identity", () => {
   });
 
   it("clears enabled translations, preserves disabled text and keeps PATCH omissions", async () => {
-    await suite.db
-      .insert(contentLanguages)
-      .values({ defaultLanguage: "en", languages: ["en", "es"] });
+    await seedVenueSettings(suite.db, {
+      defaultContentLanguage: "en",
+      contentLanguages: ["en", "es"],
+    });
     const saved = await run((tx) =>
       createUnit(
         tx,
@@ -62,7 +76,7 @@ describe("explicit unit staff identity", () => {
         "en",
       ),
     );
-    await suite.db.update(contentLanguages).set({ languages: ["en"] });
+    await seedVenueSettings(suite.db, { contentLanguages: ["en"] });
     const cleared = await run((tx) =>
       updateUnit(tx, saved.id, { name: {}, abbreviation: {} }, "en"),
     );

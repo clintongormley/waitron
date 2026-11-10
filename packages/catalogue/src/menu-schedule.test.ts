@@ -170,7 +170,6 @@ const DRAFT_TABLES = [
   "catalogues",
   "categories",
   "category_details",
-  "content_languages",
   "extra_list_items",
   "extra_lists",
   "menu_details",

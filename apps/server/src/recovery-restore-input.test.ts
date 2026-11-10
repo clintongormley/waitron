@@ -99,10 +99,9 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(suite.db, { name: "Original" });
+  await seedVenueSettings(suite.db, { name: "Original", invoiceLocales: ["es"] });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Restored" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: NODE, code: "A", purpose: "standard" },

@@ -31,7 +31,6 @@ CREATE TABLE `settings` (
 --> statement-breakpoint
 CREATE TABLE `locations` (
 	`id` text PRIMARY KEY NOT NULL,
-	`invoice_locales` text NOT NULL,
 	`operation_description` text NOT NULL,
 	`fiscal_territory` text DEFAULT 'ES-common' NOT NULL,
 	`time_zone` text DEFAULT 'Europe/Madrid' NOT NULL,
@@ -40,7 +39,6 @@ CREATE TABLE `locations` (
 	`fire_control` text DEFAULT 'waiter' NOT NULL,
 	`catalogue_id` text,
 	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "locations_invoice_locales_len" CHECK(json_array_length("locations"."invoice_locales") between 1 and 2),
 	CONSTRAINT "locations_bump_mode_ck" CHECK("locations"."bump_mode" in ('line', 'ticket')),
 	CONSTRAINT "locations_fire_control_ck" CHECK("locations"."fire_control" in ('waiter', 'kitchen', 'expo'))
 );
@@ -1841,15 +1839,6 @@ CREATE TABLE `webauthn_credentials` (
 --> statement-breakpoint
 CREATE INDEX `webauthn_credentials_person_idx` ON `webauthn_credentials` (`person_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `webauthn_credentials_credential_id_uq` ON `webauthn_credentials` (`credential_id`);--> statement-breakpoint
-CREATE TABLE `content_languages` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`default_language` text NOT NULL,
-	`languages` text NOT NULL,
-	CONSTRAINT "content_languages_singleton_ck" CHECK("content_languages"."id" = 1),
-	CONSTRAINT "content_languages_default_ck" CHECK(instr("content_languages"."languages", '"' || "content_languages"."default_language" || '"') > 0),
-	CONSTRAINT "content_languages_list_ck" CHECK(json_array_length("content_languages"."languages") between 1 and 200)
-);
---> statement-breakpoint
 CREATE TABLE `menu_details` (
 	`menu_id` text PRIMARY KEY NOT NULL,
 	`root_section_id` text NOT NULL,
@@ -2453,19 +2442,6 @@ CREATE TABLE `station_day_states` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `station_day_states_day_key` ON `station_day_states` (`station_id`,`business_day`);--> statement-breakpoint
-CREATE TABLE `holiday_geographies` (
-	`id` text PRIMARY KEY NOT NULL,
-	`location_id` text NOT NULL,
-	`country` text NOT NULL,
-	`province_code` text NOT NULL,
-	`city` text NOT NULL,
-	`city_key` text NOT NULL,
-	`area_key` text,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "holiday_geographies_city_ck" CHECK(trim("holiday_geographies"."city") <> '' and "holiday_geographies"."city_key" <> '')
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `holiday_geographies_location_place_key` ON `holiday_geographies` (`location_id`,`country`,`province_code`,`city_key`);--> statement-breakpoint
 CREATE TABLE `menu_period_staff_menus` (
 	`period_id` text NOT NULL,
 	`department_id` text NOT NULL,
@@ -3234,25 +3210,16 @@ FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'descriptions must carry exactly the venue locales')
   WHERE NOT exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-       WHERE wo.id = new.working_order_id
+      SELECT 1 FROM settings WHERE module = 'venue'
     )
     OR exists (
       SELECT 1 FROM json_each(new.descriptions) supplied
        WHERE supplied."key" NOT IN (
-         SELECT configured.value FROM working_orders wo
-           JOIN locations l ON l.id = wo.location_id
-           JOIN json_each(l.invoice_locales) configured
-          WHERE wo.id = new.working_order_id
+         SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
        )
     )
     OR exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-        JOIN json_each(l.invoice_locales) configured
-       WHERE wo.id = new.working_order_id
-         AND configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
+      SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
     );
 END;
 --> statement-breakpoint
@@ -3263,25 +3230,16 @@ WHEN new.descriptions IS NOT old.descriptions OR new.working_order_id IS NOT old
 BEGIN
   SELECT raise(abort, 'descriptions must carry exactly the venue locales')
   WHERE NOT exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-       WHERE wo.id = new.working_order_id
+      SELECT 1 FROM settings WHERE module = 'venue'
     )
     OR exists (
       SELECT 1 FROM json_each(new.descriptions) supplied
        WHERE supplied."key" NOT IN (
-         SELECT configured.value FROM working_orders wo
-           JOIN locations l ON l.id = wo.location_id
-           JOIN json_each(l.invoice_locales) configured
-          WHERE wo.id = new.working_order_id
+         SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
        )
     )
     OR exists (
-      SELECT 1 FROM working_orders wo
-        JOIN locations l ON l.id = wo.location_id
-        JOIN json_each(l.invoice_locales) configured
-       WHERE wo.id = new.working_order_id
-         AND configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
+      SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (SELECT supplied."key" FROM json_each(new.descriptions) supplied)
     );
 END;
 --> statement-breakpoint
@@ -3293,25 +3251,16 @@ BEGIN
   WHERE new.variant_descriptions IS NOT NULL
     AND (
       NOT exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-         WHERE wo.id = new.working_order_id
+        SELECT 1 FROM settings WHERE module = 'venue'
       )
       OR exists (
         SELECT 1 FROM json_each(new.variant_descriptions) supplied
          WHERE supplied."key" NOT IN (
-           SELECT configured.value FROM working_orders wo
-             JOIN locations l ON l.id = wo.location_id
-             JOIN json_each(l.invoice_locales) configured
-            WHERE wo.id = new.working_order_id
+           SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
          )
       )
       OR exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-          JOIN json_each(l.invoice_locales) configured
-         WHERE wo.id = new.working_order_id
-           AND configured.value NOT IN (
+        SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (
              SELECT supplied."key" FROM json_each(new.variant_descriptions) supplied
            )
       )
@@ -3327,25 +3276,16 @@ BEGIN
   WHERE new.variant_descriptions IS NOT NULL
     AND (
       NOT exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-         WHERE wo.id = new.working_order_id
+        SELECT 1 FROM settings WHERE module = 'venue'
       )
       OR exists (
         SELECT 1 FROM json_each(new.variant_descriptions) supplied
          WHERE supplied."key" NOT IN (
-           SELECT configured.value FROM working_orders wo
-             JOIN locations l ON l.id = wo.location_id
-             JOIN json_each(l.invoice_locales) configured
-            WHERE wo.id = new.working_order_id
+           SELECT configured.value FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured
          )
       )
       OR exists (
-        SELECT 1 FROM working_orders wo
-          JOIN locations l ON l.id = wo.location_id
-          JOIN json_each(l.invoice_locales) configured
-         WHERE wo.id = new.working_order_id
-           AND configured.value NOT IN (
+        SELECT 1 FROM json_each((SELECT doc FROM settings WHERE module = 'venue'), '$.invoiceLocales') configured WHERE configured.value NOT IN (
              SELECT supplied."key" FROM json_each(new.variant_descriptions) supplied
            )
       )
@@ -3889,4 +3829,25 @@ BEGIN
     AND exists (
       SELECT 1 FROM section_members WHERE folder_overrides ->> '$.image' = old.filename
     );
+END;
+
+--> statement-breakpoint
+CREATE TRIGGER settings_venue_invoice_locales_insert
+BEFORE INSERT ON settings
+FOR EACH ROW
+WHEN new.module = 'venue'
+  AND (json_type(new.doc, '$.invoiceLocales') IS NOT 'array'
+       OR json_array_length(new.doc, '$.invoiceLocales') NOT BETWEEN 1 AND 2)
+BEGIN
+  SELECT raise(abort, 'settings.invalid');
+END;
+--> statement-breakpoint
+CREATE TRIGGER settings_venue_invoice_locales_update
+BEFORE UPDATE OF doc ON settings
+FOR EACH ROW
+WHEN new.module = 'venue'
+  AND (json_type(new.doc, '$.invoiceLocales') IS NOT 'array'
+       OR json_array_length(new.doc, '$.invoiceLocales') NOT BETWEEN 1 AND 2)
+BEGIN
+  SELECT raise(abort, 'settings.invalid');
 END;

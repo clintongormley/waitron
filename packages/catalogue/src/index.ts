@@ -86,7 +86,6 @@ export * from "./media.js";
 export {
   catalogueSettings,
   categoryDetails,
-  contentLanguages,
   contentSuggestionJobs,
   contentSuggestions,
   extraListItems,

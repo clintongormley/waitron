@@ -1,10 +1,10 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { TranslationTarget } from "./content-translation-targets.js";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   catalogues,
-  contentLanguages,
   extraLists,
   menuDetails,
   optionLabels,
@@ -48,6 +48,7 @@ const kinds = [
 ] as const;
 async function fixture() {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] });
     const menu = await createCatalogue(tx, {
@@ -317,7 +318,7 @@ describe("atomic content translations", () => {
         .update(products)
         .set({ unitPrice: 475, customerName: { ca: "CLIENT CA bread", es: "CLIENT ES bread" } })
         .where(eq(products.id, ids.product));
-      await tx.update(contentLanguages).set({ languages: ["en", "es", "ca"] });
+      await seedVenueSettings(tx, { contentLanguages: ["en", "es", "ca"] });
     });
     request.edits = request.edits.map((edit) => ({
       ...edit,
@@ -406,7 +407,7 @@ describe("atomic content translations", () => {
             .where(eq(sections.id, ids.section));
           break;
         case "configuration":
-          await tx.update(contentLanguages).set({ defaultLanguage: "ca" });
+          await seedVenueSettings(tx, { defaultContentLanguage: "ca" });
           break;
         case "required":
           break;
@@ -593,7 +594,10 @@ describe("atomic content translations", () => {
     "menu, section and folder writes keep enabled maps optional with %s configuration",
     async (mode) => {
       const ids = await fixture();
-      if (mode === "unset") await app((tx) => tx.delete(contentLanguages));
+      if (mode === "unset")
+        await app((tx) =>
+          seedVenueSettings(tx, { contentLanguages: null, defaultContentLanguage: null }),
+        );
       for (const writer of [
         () => app((tx) => updateMenuDetails(tx, ids.menuId, { names: { ca: "CA only" } })),
         () => app((tx) => updateSection(tx, ids.section, { names: { ca: "CA only" } }, "es")),
@@ -736,12 +740,27 @@ describe("atomic content translations", () => {
       }));
       await app(async (tx) => {
         const spy = vi.spyOn(tx, "execute");
+        const select = vi.spyOn(tx, "select");
+        const session = (
+          tx as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
         let result;
         try {
           result = await saveContentTranslations(tx, request, context);
-          expect(spy).toHaveBeenCalledTimes(4);
+          expect(spy).toHaveBeenCalledTimes(3);
+          expect(select).toHaveBeenCalledTimes(1);
+          expect(
+            prepared.mock.calls
+              .map(([query]) => (query as { sql: string }).sql)
+              .filter((statement) => /from "settings"/.test(statement)),
+          ).toEqual([
+            'select "module", "version", "revision", "doc", "updated_at", "updated_by" from "settings" where "settings"."module" = ?',
+          ]);
         } finally {
           spy.mockRestore();
+          select.mockRestore();
+          prepared.mockRestore();
         }
         expect(result.saved).toHaveLength(selected.length);
         expect(result.saved.every((row) => row.text === `English ${row.id}`)).toBe(true);

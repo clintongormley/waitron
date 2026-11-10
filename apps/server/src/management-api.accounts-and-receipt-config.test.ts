@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createStaffApp } from "./cloud-remote.js";
 import {
   departments,
@@ -5,7 +6,7 @@ import {
   departmentSalePolicies,
   readPrintedDepartmentReceipt,
 } from "@waitron/venue-service";
-import { locations, venueLocationId } from "@waitron/db";
+import { venueLocationId } from "@waitron/db";
 /**
  * The dashboard's sign-in and staff-administration routes end to end — login, logout, the roster
  * and its gate, invitations, password reset, Google linking, degenerate bodies answering 4xx rather
@@ -21,7 +22,6 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import { withTransaction } from "@waitron/db";
-import { contentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -2209,7 +2209,7 @@ describe("Management API — a credential change checks the current password bef
 const departmentReceiptPath = (id: string) =>
   `/management-api/venue-service/departments/${id}/receipt`;
 async function departmentFixture(active = true): Promise<string> {
-  await suite.db.update(contentLanguages).set({ languages: ["es", "ca", "gl", "eu"] });
+  await seedVenueSettings(suite.db, { contentLanguages: ["es", "ca", "gl", "eu"] });
   const [row] = await suite.db
     .insert(departments)
     .values({
@@ -2246,10 +2246,7 @@ describe("independent department receipt routes", () => {
     const app = mountApp();
     const cookie = await login(app, MANAGER_EMAIL);
     const id = await departmentFixture();
-    await suite.db
-      .update(locations)
-      .set({ invoiceLocales: ["ca-ES", "es-ES"] })
-      .where(eq(locations.id, venueCfg!.locationId));
+    await seedVenueSettings(suite.db, { invoiceLocales: ["ca-ES", "es-ES"] });
     const response = await app.request(departmentReceiptPath(id), { headers: { cookie } });
     expect(response.status).toBe(200);
     const body = await response.json();

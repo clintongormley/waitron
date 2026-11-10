@@ -44,10 +44,9 @@ describe("devices schema (columns, FKs, unique)", () => {
     await db.insert(locations).values({
       id: LOCATION_B,
 
-      invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await seedVenueSettings(db, { name: "Loc B" });
+    await seedVenueSettings(db, { name: "Loc B", invoiceLocales: ["es"] });
     await db.insert(deviceProfiles).values([
       { id: KDS_PROFILE_A, name: "KDS A", formFactor: "kds" },
       { id: KDS_PROFILE_B, name: "KDS B", formFactor: "kds" },

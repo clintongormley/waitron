@@ -76,7 +76,7 @@ function rows<T>(query: ReturnType<typeof sql>): T[] {
 const language = () =>
   JSON.parse(
     rows<{ invoice_locales: string }>(
-      sql`select invoice_locales from locations where id = ${venue.cfg.locationId}`,
+      sql`select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where module = 'venue'`,
     )[0]!.invoice_locales,
   ) as string[];
 const statusOf = (orderId: string) =>
@@ -104,7 +104,7 @@ function reset(): void {
   venue.db.run(sql`update parties set state = 'closed', closed_at = '2026-01-01T00:00:00.000Z',
                    closed_by = ${venue.operatorId} where state = 'open'`);
   venue.db.run(
-    sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+    sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES"]')) where module = 'venue'`,
   );
   venue.db.run(sql`update working_order_lines set sent_at = '2026-01-01T00:00:00.000Z'
                    where sent_at is null and working_order_id in
@@ -541,7 +541,7 @@ describe("a receipt-language change while orders are open", () => {
     const party = await seatedWith(venue, "Paella", "Tarta");
     const before = dishLines(party.tabId);
     venue.db.run(
-      sql`update locations set invoice_locales = '["gl-ES"]' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["gl-ES"]')) where module = 'venue'`,
     );
     const split = await till(
       "POST",

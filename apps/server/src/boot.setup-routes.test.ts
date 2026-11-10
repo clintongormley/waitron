@@ -1873,7 +1873,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
       });
       await source.store.venue.execute(
-        sql`update locations set invoice_locales = '["es-ES","en-GB"]'`,
+        sql`update settings set doc = json_set(doc, '$.invoiceLocales', json('["es-ES","en-GB"]')) where module = 'venue'`,
       );
       const [exporter] = await source.store.venue.select({ id: persons.id }).from(persons);
       const artifact = encodeConfigurationBundle(
@@ -1961,7 +1961,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         ),
       ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
       expect(
-        target.store.venue.all(sql`select operation_description, invoice_locales from locations`),
+        target.store.venue.all(
+          sql`select operation_description, json_extract(doc, '$.invoiceLocales') as invoice_locales from locations cross join settings where settings.module = 'venue'`,
+        ),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);
       const imported = await withTransaction(target.store.venue, (tx) =>
         readContentLanguages(tx, "es"),

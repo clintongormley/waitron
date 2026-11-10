@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   catalogues,
+  persons,
+  settings,
+  readVenueSettings,
   CORE_MIGRATIONS,
   extraLists,
   menuDetails,
@@ -14,7 +17,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   readContentLanguages,
   writeContentLanguages,
@@ -32,8 +35,28 @@ import { createUnit } from "./units.js";
 // `$defaultFn` rather than from a SQL default. The serialisation cases are in
 // content-languages.concurrency.test.ts.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 
 describe("site content languages", () => {
+  it("saves a normalized policy in the venue document, preserving its other fields and naming the saver", async () => {
+    await seedVenueSettings(suite.db, { name: "Harbour" });
+    const [person] = await suite.db.insert(persons).values({ displayName: "Owner" }).returning();
+    await withTransaction(suite.db, (tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }, [], person!.id),
+    );
+    expect((await readVenueSettings(suite.db)).doc).toMatchObject({
+      name: "Harbour",
+      invoiceLocales: ["es"],
+      contentLanguages: ["fr", "en"],
+      defaultContentLanguage: "fr",
+    });
+    expect((await suite.db.select().from(settings))[0]!.updatedBy).toBe(person!.id);
+    expect(await readContentLanguages(suite.db, "es")).toEqual({
+      defaultLanguage: "fr",
+      languages: ["fr", "en"],
+    });
+  });
+
   it("reports a variant's missing customer name without copying the product's staff name", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {

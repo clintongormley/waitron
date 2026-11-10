@@ -4,7 +4,7 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "sections",
     "section_members",
-    "content_languages",
+    "settings.venue",
     "menu_publications",
     "menu_version_images",
     "menu_scheduled_publications",

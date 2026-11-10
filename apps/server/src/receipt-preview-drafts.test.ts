@@ -1,9 +1,10 @@
-import { contentLanguages } from "@waitron/catalogue";
+import { readVenueSettings } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { locations, sales, printJobs } from "@waitron/db";
+import { sales, printJobs } from "@waitron/db";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -21,9 +22,10 @@ let venue: Venue;
 let departmentId: string;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
-  await suite.db
-    .update(contentLanguages)
-    .set({ defaultLanguage: "es", languages: ["es", "ca", "gl", "eu"] });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "gl", "eu"],
+  });
   [{ id: departmentId }] = await suite.db.select({ id: departments.id }).from(departments);
 });
 function ask(body: unknown, cookie = venue.managerCookie) {
@@ -73,11 +75,7 @@ describe("POST receipt draft preview", () => {
     expect(answer.marks.headerSubtitle).not.toBeNull();
     expect(answer.marks.footerMessage).not.toBeNull();
     expect(answer.marks.address).toBeNull();
-    const saved = await suite.db
-      .select()
-      .from(locations)
-      .where(eq(locations.id, venue.cfg.locationId));
-    expect(saved[0]!.invoiceLocales).toEqual(["es-ES"]);
+    expect((await readVenueSettings(suite.db)).doc.invoiceLocales).toEqual(["es-ES"]);
   });
   it("falls back to the current department language, then nothing, never a third map entry", async () => {
     const current = await drawn({

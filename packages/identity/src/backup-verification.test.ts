@@ -71,10 +71,8 @@ const passed = {
 
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await suite.db
-      .insert(locations)
-      .values({ id: location, invoiceLocales: ["en"], operationDescription: "Sale" });
-    await seedVenueSettings(suite.db, { name: "Main" });
+    await suite.db.insert(locations).values({ id: location, operationDescription: "Sale" });
+    await seedVenueSettings(suite.db, { name: "Main", invoiceLocales: ["en"] });
     await suite.db
       .insert(deviceProfiles)
       .values({ id: profile, name: "Till", formFactor: "till", capabilities: [] });

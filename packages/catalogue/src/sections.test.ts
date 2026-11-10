@@ -3,7 +3,7 @@ import type { SectionInput, MemberRef, SectionMember } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createCategory, createProduct, listMenuOffers } from "./operations.js";
 import { addShortcut, readMenuHome } from "./menu-home.js";
@@ -27,6 +27,7 @@ import {
 // Section authoring and member writes. The cases with two transactions started together, and the
 // constraint experiments on the tables themselves, are in sections.db.test.ts.
 const fx = useCatalogueDb();
+beforeEach(() => seedVenueSettings(fx.db));
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const product = (productId: string): MemberRef => ({ kind: "product", productId });

@@ -123,11 +123,10 @@ async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void>
     .values({
       id: TILL_LOCATION_ID,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["en"] });
   await db
     .insert(nodes)
     .values({
@@ -355,7 +354,6 @@ async function seedMirrorIdentity(
     .values({
       id: MIRROR_LOCATION_ID,
 
-      invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();

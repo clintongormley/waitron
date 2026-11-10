@@ -89,10 +89,9 @@ beforeAll(async () => {
   await db.insert(locations).values({
     id: LOCATION_ID,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["en"] });
   await db.insert(nodes).values({ id: NODE_ID, locationId: LOCATION_ID, name: "Node" });
   await db.insert(invoiceSeries).values({ id: SERIES_ID, nodeId: NODE_ID, code: "A" });
   await establishNodeIdentity({ ownerDb: db, node, ring: RING }, NODE_ID);

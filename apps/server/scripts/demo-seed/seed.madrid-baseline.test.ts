@@ -83,6 +83,8 @@ const REMOVED_TABLES = [
   "mirror_config",
   "node_roles",
   "pass_item_marks",
+  "content_languages",
+  "holiday_geographies",
 ];
 // The baseline rebuild moves these columns before the named anchor, retaining their metadata.
 const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
@@ -293,36 +295,81 @@ for (const locale of ["en", "es"] as const) {
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       const at = "2026-10-08T10:00:00.000Z";
+      const venueMetadata = {
+        module: "venue",
+        version: 1,
+        revision: phase === "seeded" ? 3 : 2,
+        updatedAt: at,
+        updatedBy: null,
+      };
       expected[phase] = madridWithDocument(
         expected[phase],
         "locations",
         {
           name: "name",
+          invoice_locales: "invoiceLocales",
           address_line1: "addressLine1",
           address_line2: "addressLine2",
           postal_code: "postalCode",
           city: "city",
           province: "province",
         },
-        { module: "venue", version: 1, revision: 1, updatedAt: at, updatedBy: null },
+        {
+          ...venueMetadata,
+          defaults: { contentLanguages: null, defaultContentLanguage: null, holidayArea: null },
+        },
       );
+      for (const [table, fields, targetField] of [
+        [
+          "content_languages",
+          { default_language: "defaultContentLanguage", languages: "contentLanguages" },
+          undefined,
+        ],
+        [
+          "holiday_geographies",
+          {
+            country: "country",
+            province_code: "provinceCode",
+            city_key: "cityKey",
+            area_key: "areaKey",
+          },
+          "holidayArea",
+        ],
+      ] as const) {
+        expect(Object.keys(expected[phase].tables[table]!.rows)).toHaveLength(
+          phases[phase]![table]!,
+        );
+        expected[phase] = madridWithDocument(expected[phase], table, fields, {
+          ...venueMetadata,
+          mode: "row",
+          targetField,
+        });
+        phases[phase]![table] = 0;
+      }
       phases[phase]!.settings = phase === "before" ? 0 : 1;
-      const activityId = `@activity_log:${stable(["settings.saved", "venue", at, '{"revision":1}'])}`;
-      const activity = {
-        id: activityId,
-        at,
-        kind: "settings.saved",
-        subject_kind: "settings",
-        subject_id: "venue",
-        person_id: null,
-        device_id: null,
-        data: { revision: 1 },
-      };
+      const revisions = phase === "before" ? [] : phase === "seeded" ? [1, 2, 3] : [1, 2];
       expected[phase].tables.activity_log = {
         ...structuredClone(canonical[phase].tables.activity_log!),
-        rows: phase === "before" ? {} : { [activityId]: activity },
+        rows: Object.fromEntries(
+          revisions.map((revision) => {
+            const id = `@activity_log:${stable(["settings.saved", "venue", at, JSON.stringify({ revision })])}`;
+            return [
+              id,
+              {
+                id,
+                at,
+                kind: "settings.saved",
+                subject_kind: "settings",
+                subject_id: "venue",
+                person_id: null,
+                device_id: null,
+                data: { revision },
+              },
+            ];
+          }),
+        ),
       };
-      phases[phase]!.activity_log = phase === "before" ? 0 : 1;
+      phases[phase]!.activity_log = revisions.length;
       for (const name of ADDED_TABLES) {
         const added = canonical[phase].tables[name];
         expect(added, `${phase}/${name}`).toBeDefined();

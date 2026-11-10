@@ -107,11 +107,10 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     const [other] = await suite.db
       .insert(locations)
       .values({
-        invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       })
       .returning({ id: locations.id });
-    await seedVenueSettings(suite.db, { name: "Loc B" });
+    await seedVenueSettings(suite.db, { name: "Loc B", invoiceLocales: ["es"] });
     const first = await seedZone(LOCATION_A, "Shared");
     const second = await seedZone(other!.id, "Shared");
     expect(second).not.toBe(first);

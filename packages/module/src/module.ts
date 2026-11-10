@@ -1473,6 +1473,24 @@ export interface ConfigurationTransferTable {
   readonly reconnect?: boolean;
 }
 
+interface ConfigurationTransferContext {
+  readonly createdAt: Date;
+  readonly timeZone: string;
+  readonly dayCutover: string;
+  readonly country: string;
+  readonly area: string | null;
+  readonly contentLanguages: {
+    readonly defaultLanguage: string;
+    readonly languages: readonly string[];
+  } | null;
+  readonly holidayArea: {
+    readonly country: string;
+    readonly provinceCode: string;
+    readonly cityKey: string;
+    readonly areaKey: string | null;
+  } | null;
+}
+
 /** Every module declares either its transferable configuration or that it has none. */
 export type ModuleConfigurationTransfer =
   | { readonly kind: "none" }
@@ -1481,18 +1499,13 @@ export type ModuleConfigurationTransfer =
       readonly tables: readonly ConfigurationTransferTable[];
       readonly validate?: (
         tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
-        bundle?: {
-          readonly createdAt: Date;
-          readonly timeZone: string;
-          readonly dayCutover: string;
-          readonly country: string;
-          readonly area: string | null;
-        },
+        bundle?: ConfigurationTransferContext,
       ) => void;
       /** Validate against the destination's current rows before any transferred table is replaced. */
       readonly beforeImport?: (
         tx: Transaction,
         tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
+        bundle?: ConfigurationTransferContext,
       ) => Promise<void>;
       /** Runs in the import's transaction after every module's rows are inserted, each module's in
        * module order, to set what the module derives from those rows, or to remove imported rows

@@ -420,10 +420,12 @@ describe("runStagedReset", () => {
         const store = await openVenueDatabase(box.venueDir);
         try {
           await store.venue.insert(locations).values({
-            invoiceLocales: ["es-ES"],
             operationDescription: "Venta en establecimiento",
           });
-          await seedVenueSettings(store.venue, { name: "Sala principal" });
+          await seedVenueSettings(store.venue, {
+            name: "Sala principal",
+            invoiceLocales: ["es-ES"],
+          });
         } finally {
           await store.close();
         }

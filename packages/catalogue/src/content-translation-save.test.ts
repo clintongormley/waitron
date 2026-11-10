@@ -1,10 +1,10 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { contentLanguageChoices } from "@waitron/shared";
 import {
   CORE_MIGRATIONS,
   catalogues,
-  contentLanguages,
   contentSuggestions,
   extraLists,
   menuDetails,
@@ -42,6 +42,7 @@ const kinds = [
 ] as const;
 async function fixture() {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   return app(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en", "ca"] });
     const menu = await createCatalogue(tx, { name: "STAFF menu", names: { es: "CLIENT menu" } });
@@ -405,16 +406,14 @@ describe("atomic multilingual cell saves", () => {
           .set({ active: false })
           .where(eq(optionLists.id, ids.option_list));
       else
-        await suite.db
-          .update(contentLanguages)
-          .set(
-            change === "default"
-              ? { defaultLanguage: "ca" }
-              : change === "disabled"
-                ? { languages: ["es", "ca"] }
-                : { languages: ["es", "en", "ca", "de"] },
-          )
-          .where(eq(contentLanguages.id, 1));
+        await seedVenueSettings(
+          suite.db,
+          change === "default"
+            ? { defaultContentLanguage: "ca" }
+            : change === "disabled"
+              ? { contentLanguages: ["es", "ca"] }
+              : { contentLanguages: ["es", "en", "ca", "de"] },
+        );
       const before = await snapshot();
       await expect(save(batch)).rejects.toMatchObject({
         code:

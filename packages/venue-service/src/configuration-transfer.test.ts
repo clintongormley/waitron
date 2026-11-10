@@ -78,147 +78,65 @@ delete (WITHOUT_CALENDAR as { holidayCalendar?: unknown }).holidayCalendar;
 const packs = (limit: number) => (country: string) =>
   country === "ZZ" ? holidayPack(limit) : country === "ZY" ? WITHOUT_CALENDAR : undefined;
 
-const NORTH = "g-north";
-const ISLE = "g-isle";
-
-/**
- * Two geographies of one venue, as an export carries them: the North one, and a retained Isle one
- * with its area chosen. Each has two entries in 2026 and one in 2027.
- */
-function holidayTables(): Tables {
-  return {
-    holiday_geographies: [
-      {
-        id: NORTH,
-        location_id: "location",
-        country: "ZZ",
-        province_code: "10",
-        city: "Villa  Real",
-        city_key: "villa real",
-        area_key: null,
-      },
-      {
-        id: ISLE,
-        location_id: "location",
-        country: "ZZ",
-        province_code: "30",
-        city: "Puerto Ísla",
-        city_key: "puerto ísla",
-        area_key: "isle-a",
-      },
-    ],
-  };
-}
+const holidayArea = (): Row => ({
+  country: "ZZ",
+  provinceCode: "30",
+  cityKey: "villa real",
+  areaKey: "isle-a",
+});
 
 describe("validateHolidayConfiguration", () => {
-  it("accepts holiday area geographies and a bundle with no holiday tables", () => {
-    expect(() => validateHolidayConfiguration(holidayTables(), packs(2))).not.toThrow();
-    expect(() => validateHolidayConfiguration({}, packs(2))).not.toThrow();
+  it("accepts a chosen area and an absent holiday area", () => {
+    expect(() => validateHolidayConfiguration(holidayArea(), packs(2))).not.toThrow();
+    expect(() => validateHolidayConfiguration(null, packs(2))).not.toThrow();
   });
-
-  it("accepts a geography with no entries whose country has no holiday capability", () => {
-    const tables: Tables = {
-      holiday_geographies: [{ ...holidayTables().holiday_geographies![0]!, country: "ZY" }],
-    };
-    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
+  it("accepts a place with no choice when its country has no holiday capability", () => {
+    expect(() =>
+      validateHolidayConfiguration({ ...holidayArea(), country: "ZY", areaKey: null }, packs(2)),
+    ).not.toThrow();
   });
-
-  it.each<[string, (tables: Tables) => void, string]>([
-    [
-      "a geography id used twice",
-      (t) => (t.holiday_geographies![1]!.id = NORTH),
-      "holiday_geographies.id",
-    ],
-    [
-      "a country no installed pack knows",
-      (t) => (t.holiday_geographies![0]!.country = "QQ"),
-      "holiday_geographies.country",
-    ],
-    [
-      "a country not spelled as its pack's code",
-      (t) => (t.holiday_geographies![0]!.country = "zz"),
-      "holiday_geographies.country",
-    ],
-    [
-      "a province the pack does not list",
-      (t) => (t.holiday_geographies![0]!.province_code = "99"),
-      "holiday_geographies.province_code",
-    ],
-    [
-      "a province given by name rather than code",
-      (t) => (t.holiday_geographies![0]!.province_code = "Northshire"),
-      "holiday_geographies.province_code",
-    ],
-    ["a blank city", (t) => (t.holiday_geographies![0]!.city = "  "), "holiday_geographies.city"],
-    [
-      "a city with the spaces around it the writer trims",
-      (t) => (t.holiday_geographies![0]!.city = "  Villa  Real "),
-      "holiday_geographies.city",
-    ],
-    [
-      "a city key that is not the city's normalized form",
-      (t) => (t.holiday_geographies![0]!.city_key = "Villa  Real"),
-      "holiday_geographies.city_key",
-    ],
-    [
-      "two geographies for one place",
-      (t) => {
-        t.holiday_geographies![1]!.province_code = "10";
-        t.holiday_geographies![1]!.city = "VILLA REAL";
-        t.holiday_geographies![1]!.city_key = "villa real";
-        t.holiday_geographies![1]!.area_key = null;
-      },
-      "holiday_geographies.city_key",
-    ],
-    [
-      "an area nobody sourced for its province",
-      (t) => (t.holiday_geographies![1]!.area_key = "isle-z"),
-      "holiday_geographies.area_key",
-    ],
-    [
-      "an area on a province that has none",
-      (t) => (t.holiday_geographies![0]!.area_key = "isle-a"),
-      "holiday_geographies.area_key",
-    ],
-    [
-      "an area of a country with no holiday capability",
-      (t) => {
-        t.holiday_geographies![1]!.country = "ZY";
-      },
-      "holiday_geographies.area_key",
-    ],
-  ])("refuses %s", (_, edit, field) => {
-    const tables = holidayTables();
-    edit(tables);
-    expect(() => validateHolidayConfiguration(tables, packs(2))).toThrowError(refusal(field));
+  it.each<[string, Row, string]>([
+    ["an unknown country", { country: "QQ" }, "country"],
+    ["a country not spelled as its pack's code", { country: "zz" }, "country"],
+    ["an unknown province", { provinceCode: "99" }, "provinceCode"],
+    ["a province name instead of code", { provinceCode: "Northshire" }, "provinceCode"],
+    ["an unknown area", { areaKey: "isle-z" }, "areaKey"],
+    ["an area on a province that has none", { provinceCode: "10" }, "areaKey"],
+    ["an area of a country without a holiday capability", { country: "ZY" }, "areaKey"],
+  ])("refuses %s", (_name, fields, field) => {
+    expect(() =>
+      validateHolidayConfiguration({ ...holidayArea(), ...fields }, packs(2)),
+    ).toThrowError(refusal(`holidayArea.${field}`));
   });
-
-  it("accepts a city of any length, as setup stores one and the writer copies it", () => {
-    const tables = holidayTables();
-    tables.holiday_geographies![0]!.city = "V".repeat(5000);
-    tables.holiday_geographies![0]!.city_key = "v".repeat(5000);
-    expect(() => validateHolidayConfiguration(tables, packs(2))).not.toThrow();
+  it("accepts a city key of any length", () => {
+    expect(() =>
+      validateHolidayConfiguration({ ...holidayArea(), cityKey: "v".repeat(5000) }, packs(2)),
+    ).not.toThrow();
   });
-
   it("is run by the venue-service transfer's validate callback", () => {
     const { validate } = VENUE_SERVICE_CONFIGURATION_TRANSFER;
-    const both = holidayTables();
-    // The installed packs know no country ZZ.
-    expect(() => validate(both)).toThrowError(refusal("holiday_geographies.country"));
-    for (const row of both.holiday_geographies!) row.country = "ES";
-    both.holiday_geographies![0]!.province_code = "41";
-    both.holiday_geographies![1]!.province_code = "25";
-    both.holiday_geographies![1]!.area_key = "aran";
-    expect(() => validate(both)).not.toThrow();
+    const context = {
+      createdAt: new Date("2026-11-10T10:00:00Z"),
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      holidayArea: holidayArea(),
+    };
+    expect(() => validate({}, context)).toThrowError(refusal("holidayArea.country"));
+    expect(() =>
+      validate(
+        {},
+        {
+          ...context,
+          holidayArea: { country: "ES", provinceCode: "25", cityKey: "vielha", areaKey: "aran" },
+        },
+      ),
+    ).not.toThrow();
   });
-
-  it("declares holiday geographies and excludes the retired local entries", () => {
+  it("excludes holiday geographies and the retired local entries from transferred tables", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names.slice(-2)).toEqual(["zone_day_ranges", "holiday_geographies"]);
+    expect(names.at(-1)).toBe("zone_day_ranges");
+    expect(names).not.toContain("holiday_geographies");
     expect(names).not.toContain("local_holidays");
-    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({
-      name: "holiday_geographies",
-    });
   });
 });
 

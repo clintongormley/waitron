@@ -131,10 +131,9 @@ describe("working_orders state machine (enforce_transition)", () => {
     await db.insert(locations).values({
       id: LOCATION_B,
 
-      invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });
-    await seedVenueSettings(db, { name: "Fixture Location B" });
+    await seedVenueSettings(db, { name: "Fixture Location B", invoiceLocales: ["es", "ca"] });
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })

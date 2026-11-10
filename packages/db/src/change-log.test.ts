@@ -18,8 +18,8 @@ import { useVenueDb } from "./testing/venue-db.js";
 async function insertLocation(tx: Transaction): Promise<string> {
   const id = randomUUID();
   await tx.execute(sql`
-    insert into locations (id, invoice_locales, operation_description)
-    values (${id}, '["es"]', 'Hostelería')`);
+    insert into locations (id, operation_description)
+    values (${id}, 'Hostelería')`);
   return id;
 }
 

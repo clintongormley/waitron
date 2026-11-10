@@ -1,6 +1,5 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { AppError } from "@waitron/shared";
-import { holidayCityKey } from "./holiday-rules.js";
 import type { PackLookup } from "./holidays.js";
 import { isLocalDate, weekdayOf } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
@@ -66,34 +65,22 @@ function isActive(row: Row, table: string): boolean {
 }
 
 export function validateHolidayConfiguration(
-  tables: Tables,
+  area: Readonly<Record<string, unknown>> | null | undefined,
   findPack: PackLookup = getCountryPack,
 ): void {
-  const geographyIds = new Set<unknown>();
-  const places = new Set<string>();
-  for (const row of tables.holiday_geographies ?? []) {
-    if (typeof row.id !== "string" || geographyIds.has(row.id)) refuse("holiday_geographies.id");
-    const pack = typeof row.country === "string" ? findPack(row.country) : undefined;
-    if (pack === undefined || pack.countryCode !== row.country)
-      refuse("holiday_geographies.country");
-    const province = row.province_code;
-    if (!pack.administrativeAreas.some(({ code }) => code === province))
-      refuse("holiday_geographies.province_code");
-    if (typeof row.city !== "string" || row.city.trim() === "" || row.city !== row.city.trim())
-      refuse("holiday_geographies.city");
-    if (row.city_key !== holidayCityKey(row.city)) refuse("holiday_geographies.city_key");
-    const place = JSON.stringify([row.country, province, row.city_key]);
-    if (places.has(place)) refuse("holiday_geographies.city_key");
-    places.add(place);
-    const calendar = pack.holidayCalendar;
-    const area = row.area_key ?? null;
-    if (
-      area !== null &&
-      !(calendar?.areasForProvince(province as string) ?? []).some(({ key }) => key === area)
+  if (area === null || area === undefined) return;
+  const pack = typeof area.country === "string" ? findPack(area.country) : undefined;
+  if (pack === undefined || pack.countryCode !== area.country) refuse("holidayArea.country");
+  const province = area.provinceCode;
+  if (!pack.administrativeAreas.some(({ code }) => code === province))
+    refuse("holidayArea.provinceCode");
+  if (
+    area.areaKey !== null &&
+    !(pack.holidayCalendar?.areasForProvince(province as string) ?? []).some(
+      ({ key }) => key === area.areaKey,
     )
-      refuse("holiday_geographies.area_key");
-    geographyIds.add(row.id);
-  }
+  )
+    refuse("holidayArea.areaKey");
 }
 
 export function validateMenuTimetables(tables: Tables): void {
@@ -678,14 +665,19 @@ function validateServiceSteps(tables: Tables): void {
 
 function validateVenueServiceConfiguration(
   tables: Tables,
-  bundle?: { readonly createdAt: Date; readonly timeZone: string; readonly dayCutover: string },
+  bundle?: {
+    readonly createdAt: Date;
+    readonly timeZone: string;
+    readonly dayCutover: string;
+    readonly holidayArea?: Readonly<Record<string, unknown>> | null;
+  },
 ): void {
   validateReceiptModes(tables);
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
   validateServiceSteps(tables);
   validateReceiptFields(tables);
-  validateHolidayConfiguration(tables);
+  validateHolidayConfiguration(bundle?.holidayArea);
   validateMenuTimetables(tables);
   validateSeasonWeeks(tables, bundle);
   validateDepartmentTransfers(tables);
@@ -721,7 +713,6 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "department_day_ranges" },
     { name: "zone_days" },
     { name: "zone_day_ranges" },
-    { name: "holiday_geographies" },
   ],
   validate: validateVenueServiceConfiguration,
 } as const;

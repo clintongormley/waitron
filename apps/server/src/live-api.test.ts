@@ -315,9 +315,9 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const { location, zone } = await withTransaction(suite.db, async (tx) => {
     const [location] = await tx
       .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "probe" })
+      .values({ operationDescription: "probe" })
       .returning({ id: locations.id });
-    await seedVenueSettings(tx, { name: "Before probe" });
+    await seedVenueSettings(tx, { name: "Before probe", invoiceLocales: ["es"] });
     const [zone] = await tx
       .insert(floorZones)
       .values({ locationId: location!.id, name: "Probe tables" })
@@ -332,9 +332,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   const reader = response.body!.getReader();
   try {
     await reader.read();
-    await suite.db
-      .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "probe" });
+    await suite.db.insert(locations).values({ operationDescription: "probe" });
     await suite.db
       .insert(diningTables)
       .values({ locationId: location!.id, zoneId: zone!.id, label: "T9" });

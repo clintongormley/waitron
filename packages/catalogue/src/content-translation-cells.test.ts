@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { countingSettingsReads } from "../test/fixtures.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -13,7 +14,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { addMember } from "./sections.js";
@@ -24,6 +25,7 @@ import { resolveTranslationCells } from "./content-translation-cells.js";
 import type { TranslationCellRef } from "./content-translation-types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(() => seedVenueSettings(suite.db));
 const context = { fallbackLanguage: "es", required: ["es"] };
 
 async function fixture(tx: Transaction) {
@@ -176,10 +178,11 @@ describe("bounded translation field reads", () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const ids = await fixture(tx);
+      const counting = countingSettingsReads(tx);
       const execute = vi.spyOn(tx, "execute");
       try {
         const result = await resolveTranslationCells(
-          tx,
+          counting.tx,
           [
             cell("product", ids.product),
             cell("unit", ids.unit, "es", "abbreviation"),
@@ -224,7 +227,8 @@ describe("bounded translation field reads", () => {
             unavailableReason: "language_disabled",
           },
         ]);
-        expect(execute).toHaveBeenCalledTimes(2);
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(counting.reads()).toBe(1);
         const rows = await Promise.all(execute.mock.results.map((r) => r.value));
         expect(JSON.stringify(rows)).not.toContain("UNREQUESTED Bread");
         expect(JSON.stringify(result)).not.toContain("UNREQUESTED Bread");
@@ -470,10 +474,11 @@ describe("bounded translation field reads", () => {
 
   it("accepts 100 distinct retained cells in a bounded pair of database reads", async () => {
     await withTransaction(suite.db, async (tx) => {
+      const counting = countingSettingsReads(tx);
       const execute = vi.spyOn(tx, "execute");
       try {
         const result = await resolveTranslationCells(
-          tx,
+          counting.tx,
           Array.from({ length: 100 }, (_, i) => cell("unit", `missing-${i}`, "es", "abbreviation")),
           context,
         );
@@ -481,7 +486,8 @@ describe("bounded translation field reads", () => {
         expect(
           result.cells.every((c) => c.unavailableReason === "missing" && c.staffText === null),
         ).toBe(true);
-        expect(execute).toHaveBeenCalledTimes(2);
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(counting.reads()).toBe(1);
       } finally {
         execute.mockRestore();
       }

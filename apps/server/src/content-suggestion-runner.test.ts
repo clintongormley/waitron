@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   contentSuggestionJobs,
   contentSuggestions,
@@ -50,6 +50,7 @@ async function connected(): Promise<Fake> {
 /** A venue in Spanish and English with one complete menu and a product per staff name, each missing English. */
 async function venue(staffNames: readonly string[]): Promise<string[]> {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   return inTx(async (tx) => {
     await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] });
     const menu = await createCatalogue(tx, {
@@ -936,6 +937,7 @@ it("an empty job, past Cloud's 20 languages, ends failed as a request Cloud refu
   const f = await connected();
   try {
     await seedTenant(suite.db);
+    await seedVenueSettings(suite.db);
     await inTx(async (tx) => {
       const menu = await createCatalogue(tx, { name: "STAFF Lunch" });
       await addOversizedFamily(tx, menu.id);

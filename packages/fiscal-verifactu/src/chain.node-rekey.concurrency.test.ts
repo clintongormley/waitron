@@ -159,11 +159,10 @@ describe("currentSif resolves per node", () => {
       const [loc] = await tx
         .insert(locations)
         .values({
-          invoiceLocales: ["es"],
           operationDescription: "Venta en establecimiento",
         })
         .returning({ id: locations.id });
-      await seedVenueSettings(tx, { name: "Sala sib" });
+      await seedVenueSettings(tx, { name: "Sala sib", invoiceLocales: ["es"] });
       const [nodeRow] = await tx
         .insert(nodes)
         .values({ locationId: loc!.id, name: "Node sib" })

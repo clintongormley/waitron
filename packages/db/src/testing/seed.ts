@@ -25,6 +25,10 @@ export async function seedVenueSettings(
       db,
       {
         name: "Test venue",
+        invoiceLocales: ["es"],
+        contentLanguages: null,
+        defaultContentLanguage: null,
+        holidayArea: null,
         addressLine1: null,
         addressLine2: null,
         postalCode: null,
@@ -75,6 +79,7 @@ export async function seedVenue(
   await seedTenant(db);
   const {
     defaultCatalogueId,
+    invoiceLocales,
     name,
     addressLine1,
     addressLine2,
@@ -84,7 +89,6 @@ export async function seedVenue(
     ...columns
   } = overrides;
   await db.insert(locations).values({
-    invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     ...columns,
     ...(defaultCatalogueId === undefined ? {} : { catalogueId: defaultCatalogueId }),
@@ -92,6 +96,7 @@ export async function seedVenue(
   const doc: Partial<VenueSettings> = {};
   for (const [key, value] of Object.entries({
     name,
+    invoiceLocales,
     addressLine1,
     addressLine2,
     postalCode,

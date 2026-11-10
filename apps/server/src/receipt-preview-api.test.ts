@@ -1,17 +1,11 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
-import {
-  devices,
-  locations,
-  printers,
-  readTenant,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { devices, printers, readTenant, withTransaction, type Database } from "@waitron/db";
 import { mediaImages, uploadImage, prepareImage, saveImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -24,7 +18,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
-import { contentLanguages } from "@waitron/catalogue";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
@@ -50,9 +43,10 @@ beforeAll(async () => {
     .update(departmentSalePolicies)
     .set({ printTradingName: false })
     .where(eq(departmentSalePolicies.departmentId, departmentId));
-  await suite.db
-    .update(contentLanguages)
-    .set({ defaultLanguage: "es", languages: ["es", "ca", "gl", "eu"] });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "gl", "eu"],
+  });
   taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
 });
 
@@ -132,9 +126,7 @@ function printedLines(result: ReceiptPreviewResponse): string[] {
 }
 
 function setLocationLanguages(invoiceLocales: string[]): Promise<unknown> {
-  return withTransaction(suite.db, (tx) =>
-    tx.update(locations).set({ invoiceLocales }).where(eq(locations.id, venue.cfg.locationId)),
-  );
+  return withTransaction(suite.db, (tx) => seedVenueSettings(tx, { invoiceLocales }));
 }
 
 /** Each row is one device of the location, on its own new receipt printer. */

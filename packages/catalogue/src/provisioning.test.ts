@@ -1,8 +1,10 @@
+import { readSavedContentLanguages } from "./content-languages.js";
+import { readVenueInvoiceLocales } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   catalogues,
-  contentLanguages,
   CORE_MIGRATIONS,
   locations,
   menuDetails,
@@ -44,12 +46,10 @@ async function venue(country: string, province: string, receipt: string | string
 }
 
 async function storedLanguages() {
-  return suite.db
-    .select({
-      default_language: contentLanguages.defaultLanguage,
-      languages: contentLanguages.languages,
-    })
-    .from(contentLanguages);
+  const saved = await readSavedContentLanguages(suite.db);
+  return saved === undefined
+    ? []
+    : [{ default_language: saved.defaultLanguage, languages: saved.languages }];
 }
 
 async function storedUnits() {
@@ -139,11 +139,7 @@ describe("catalogue provisioning", () => {
       const node = await venue(country, province, receipt);
       await withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
       expect(await storedLanguages()).toEqual([{ default_language: language, languages }]);
-      const location = await suite.db
-        .select({ invoice_locales: locations.invoiceLocales })
-        .from(locations)
-        .where(eq(locations.id, node.locationId));
-      expect(location).toEqual([{ invoice_locales: [receipt] }]);
+      expect(await readVenueInvoiceLocales(suite.db)).toEqual([receipt]);
     },
   );
 
@@ -151,7 +147,10 @@ describe("catalogue provisioning", () => {
     const node = await venue("ES", "Madrid", "es-ES");
     const run = () => withTransaction(suite.db, (tx) => CATALOGUE_PROVISIONING.seed!.run(tx, node));
     await expect(run()).resolves.toBe("initial menu ready");
-    await suite.db.update(contentLanguages).set({ defaultLanguage: "fr", languages: ["fr", "de"] });
+    await seedVenueSettings(suite.db, {
+      defaultContentLanguage: "fr",
+      contentLanguages: ["fr", "de"],
+    });
     await run();
     expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
     const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(catalogues);

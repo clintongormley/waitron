@@ -137,7 +137,7 @@ describe("provisionVenue", () => {
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
-        (select cast(count(*) as int) from holiday_geographies) as geographies,
+        (select cast(count(*) as int) from settings where module = 'venue' and json_type(doc, '$.holidayArea') = 'object') as geographies,
         (select cast(count(*) as int) from special_days) as entries`);
     expect(rows[0]).toEqual({ geographies: 0, entries: 0 });
     const read = await withTransaction(db, async (tx) => ({
@@ -480,7 +480,7 @@ describe("clearProvisionFixture", () => {
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
         (select cast(count(*) as int) from special_days) as entries,
-        (select cast(count(*) as int) from holiday_geographies) as geographies,
+        (select cast(count(*) as int) from settings where module = 'venue' and json_type(doc, '$.holidayArea') = 'object') as geographies,
         (select cast(count(*) as int) from locations) as locations`);
     expect(rows[0]).toEqual({ entries: 0, geographies: 0, locations: 0 });
   });

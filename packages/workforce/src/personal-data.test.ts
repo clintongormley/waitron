@@ -151,11 +151,10 @@ async function seedRota(db: Database, people: Awaited<ReturnType<typeof seedAll>
   const [loc] = await db
     .insert(locations)
     .values({
-      invoiceLocales: ["en"],
       operationDescription: "Sale on premises",
     })
     .returning({ id: locations.id });
-  await seedVenueSettings(db, { name: "Harbour Terrace" });
+  await seedVenueSettings(db, { name: "Harbour Terrace", invoiceLocales: ["en"] });
   const locationId = loc!.id;
   const publishedVersion = await insertRosterVersion(db, { locationId });
   await db

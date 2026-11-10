@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { contentLanguages } from "@waitron/catalogue";
+import {} from "@waitron/catalogue";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -14,21 +14,14 @@ async function read(receiptLanguage: string, languages?: string[], country: stri
       .insert(tenants)
       .values({ id: 1, country, taxId: "B12345678", legalName: "Venue SL" });
   await suite.db.insert(locations).values({
-    invoiceLocales: [receiptLanguage],
     operationDescription: "Bootstrap",
   });
-  await seedVenueSettings(suite.db, { name: randomUUID() });
+  await seedVenueSettings(suite.db, { name: randomUUID(), invoiceLocales: [receiptLanguage] });
   if (languages !== undefined) {
-    await suite.db
-      .insert(contentLanguages)
-      .values({
-        defaultLanguage: languages[0]!,
-        languages,
-      })
-      .onConflictDoUpdate({
-        target: contentLanguages.id,
-        set: { defaultLanguage: languages[0]!, languages },
-      });
+    await seedVenueSettings(suite.db, {
+      defaultContentLanguage: languages[0]!,
+      contentLanguages: languages,
+    });
   }
   return withTransaction(suite.db, (tx) => departmentReceiptLanguages(tx));
 }

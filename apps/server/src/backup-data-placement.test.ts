@@ -78,9 +78,8 @@ const suite = useVenueDb({
       id: location,
 
       operationDescription: "Sale",
-      invoiceLocales: ["en"],
     });
-    await seedVenueSettings(db, { name: "Placement location" });
+    await seedVenueSettings(db, { name: "Placement location", invoiceLocales: ["en"] });
     await db.insert(nodes).values({ id: node, locationId: location, name: "Placement node" });
     await db.insert(invoiceSeries).values({
       id: "30000000-0000-4000-8000-000000000003",
@@ -433,10 +432,8 @@ it("refuses a copy holding two venue rows before moving the database", async () 
     const copy = new DatabaseSync(validated.databasePath);
     try {
       copy
-        .prepare(
-          "insert into locations (id, operation_description, invoice_locales) values (?, ?, ?)",
-        )
-        .run("10000000-0000-4000-8000-000000000099", "Sale", '["en"]');
+        .prepare("insert into locations (id, operation_description) values (?, ?)")
+        .run("10000000-0000-4000-8000-000000000099", "Sale");
     } finally {
       copy.close();
     }

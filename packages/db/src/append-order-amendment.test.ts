@@ -66,10 +66,9 @@ describe("order_amendments append helper", () => {
     await admin.insert(locations).values({
       id: LOCATION_B,
 
-      invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await seedVenueSettings(admin, { name: "Fixture Location B" });
+    await seedVenueSettings(admin, { name: "Fixture Location B", invoiceLocales: ["es"] });
     nodeB = await seedNode(admin, LOCATION_B);
   });
 

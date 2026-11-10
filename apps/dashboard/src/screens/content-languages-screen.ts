@@ -201,7 +201,7 @@ export class ContentLanguagesScreen extends LitElement {
       setContentLanguages(config);
     } else {
       // A configuration read during the save may predate it or follow it; only a fresh read can say.
-      this.api.liveData.invalidate([{ type: "content_languages" }]);
+      this.api.liveData.invalidate([{ type: "settings.venue" }]);
     }
   }
 

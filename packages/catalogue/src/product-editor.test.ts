@@ -1,13 +1,7 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import {
-  contentLanguages,
-  kitchenCourses,
-  products,
-  withTransaction,
-  venueLocationId,
-} from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import { kitchenCourses, products, withTransaction, venueLocationId } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createCatalogue, listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
@@ -17,6 +11,7 @@ import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
 import {
+  countingSettingsReads,
   plantStoredCategory,
   plantStoredUnit,
   storedUnitId,
@@ -109,27 +104,6 @@ it("round-trips cereal and nut kinds through the editor and stored published dec
     manualAllergens: allergens,
   });
 });
-
-/** `tx`, counting the `select … from content_languages` queries built on it. */
-function countingSettingsReads(tx: Transaction): { tx: Transaction; reads: () => number } {
-  let reads = 0;
-  const counted = new Proxy(tx, {
-    get(target, prop) {
-      const value: unknown = Reflect.get(target, prop, target);
-      if (prop !== "select") return typeof value === "function" ? value.bind(target) : value;
-      return (...args: Parameters<Transaction["select"]>) => {
-        const builder = target.select(...args);
-        const from = builder.from.bind(builder);
-        builder.from = ((source: Parameters<typeof from>[0]) => {
-          if (source === contentLanguages) reads += 1;
-          return from(source);
-        }) as typeof builder.from;
-        return builder;
-      };
-    },
-  });
-  return { tx: counted, reads: () => reads };
-}
 
 describe("one save builds one query on the content-language setting", () => {
   const named = (name: string) => ({
@@ -291,7 +265,7 @@ it("saves a product with exactly one variant, or none", async () => {
 describe("a removed variant in the parent's editor", () => {
   beforeEach(async () => {
     await withTransaction(fx.db, (tx) =>
-      tx.insert(contentLanguages).values({ defaultLanguage: "en", languages: ["en", "es"] }),
+      seedVenueSettings(tx, { defaultContentLanguage: "en", contentLanguages: ["en", "es"] }),
     );
   });
   const save = (productId: string | null, body: unknown) =>
@@ -1067,9 +1041,9 @@ describe("optional product customer translations", () => {
 
   beforeEach(async () => {
     await withTransaction(fx.db, (tx) =>
-      tx.insert(contentLanguages).values({
-        defaultLanguage: "es",
-        languages: ["es", "en"],
+      seedVenueSettings(tx, {
+        defaultContentLanguage: "es",
+        contentLanguages: ["es", "en"],
       }),
     );
   });

@@ -104,6 +104,8 @@ const EXPECTED_TRIGGERS = [
   "products_variant_parent_fixed_update",
   "sale_settlements_check_coverage",
   "tenders_reject_post_settlement",
+  "settings_venue_invoice_locales_insert",
+  "settings_venue_invoice_locales_update",
   "working_order_lines_check_locales_insert",
   "working_order_lines_check_locales_update",
   "working_order_lines_check_variant_locales_insert",
@@ -246,7 +248,7 @@ function tender(id, saleId, amount, tip = 0) {
   );
 }
 
-/** A line's two maps, keyed to `["es","ca"]`, the list `loc-relocale-text` later drops `ca` from. */
+/** The recorded maps before the venue drops its second receipt language. */
 const OLD_TEXT = '{"es":"Plato","ca":"Plat"}';
 const OLD_VARIANT = '{"es":"Grande","ca":"Gran"}';
 
@@ -264,8 +266,8 @@ function seed(connection) {
   const statements = [
     // Venue: one location with TWO invoice locales, so "exactly the venue locales" has a set to be
     // wrong about in both directions.
-    `insert into locations (id, invoice_locales, operation_description) ` +
-      `values ('loc', '["es","ca"]', 'Restaurante')`,
+    `insert into locations (id, operation_description) values ('loc', 'Restaurant')`,
+    `insert into settings (module,version,revision,doc,updated_at) values ('venue',1,1,'{"invoiceLocales":["es","ca"]}','${STAMP}')`,
 
     // Working orders, one per case that changes an order's state.
     workingOrder("wo-open", "open"),
@@ -280,8 +282,6 @@ function seed(connection) {
     workingOrder("wo-lines-update", "open"),
     workingOrder("wo-lines-delete", "open"),
     workingOrder("wo-orphaned-parent", "open"),
-    // A location that does not exist, so the order resolves to no location.
-    workingOrder("wo-orphan", "open", { locationId: "ghost-location" }),
 
     // Lines written while their parent is still open, for the update and delete cases.
     line("line-open", "wo-open", '{"es":"Plato","ca":"Plat"}'),
@@ -332,23 +332,11 @@ function seed(connection) {
       `values ('dp-drift', 'Caja que deriva', 'till', '${STAMP}', '${STAMP}')`,
     device("dev-off", "dp-drift", "Caja 4", false),
 
-    // An order at a venue invoicing in Spanish alone, opened on `dev-active`, whose own venue `loc`
-    // invoices in two: the locale triggers must read the order's location, not its device's.
-    `insert into locations (id, invoice_locales, operation_description) ` +
-      `values ('loc-es-only', '["es"]', 'Restaurante')`,
-    workingOrder("wo-es-only", "open", { locationId: "loc-es-only" }),
-
-    // Lines for the served exception, written while their orders are open; the orders leave open
-    // below. `loc-relocale` is a venue of its own so its invoice locales can change without moving
-    // what any other case reads; its orders are opened on a device of `loc`, so a trigger reading
-    // the device's location instead of the order's would see the other venue's list.
-    `insert into locations (id, invoice_locales, operation_description) ` +
-      `values ('loc-relocale', '["es","ca"]', 'Restaurante')`,
     workingOrder("wo-served-placed", "open"),
     workingOrder("wo-served-settled", "open"),
     workingOrder("wo-served-orphan", "open"),
     workingOrder("wo-served-open", "open"),
-    workingOrder("wo-served-relocale", "open", { locationId: "loc-relocale" }),
+    workingOrder("wo-served-relocale", "open"),
     line("line-served-placed", "wo-served-placed", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-settled", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-frozen", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
@@ -400,12 +388,10 @@ function seed(connection) {
     // A venue whose invoice locales change once every line below is written, as a receipt-language
     // change leaves them. Lines carrying a variant map reach both locale triggers; the `plain` ones
     // reach only the descriptions trigger, so its refusal is the one that comes back.
-    `insert into locations (id, invoice_locales, operation_description) ` +
-      `values ('loc-relocale-text', '["es","ca"]', 'Restaurante')`,
-    workingOrder("wo-text-a", "open", { locationId: "loc-relocale-text" }),
-    workingOrder("wo-text-b", "open", { locationId: "loc-relocale-text" }),
-    workingOrder("wo-text-paid", "open", { locationId: "loc-relocale-text" }),
-    workingOrder("wo-text-placed", "open", { locationId: "loc-relocale-text" }),
+    workingOrder("wo-text-a", "open"),
+    workingOrder("wo-text-b", "open"),
+    workingOrder("wo-text-paid", "open"),
+    workingOrder("wo-text-placed", "open"),
     line("line-text-paid-served", "wo-text-paid", OLD_TEXT, OLD_VARIANT),
     line("line-text-paid-sent", "wo-text-paid", OLD_TEXT, OLD_VARIANT),
     line("line-text-placed", "wo-text-placed", OLD_TEXT, OLD_VARIANT),
@@ -416,7 +402,6 @@ function seed(connection) {
     line("line-text-variant-move", "wo-text-a", OLD_TEXT, OLD_VARIANT),
     `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-text-paid'`,
     `update working_orders set status = 'placed' where id = 'wo-text-placed'`,
-    `update locations set invoice_locales = '["es"]' where id = 'loc-relocale-text'`,
   ];
   for (const statement of statements) connection.exec(statement);
 }
@@ -435,6 +420,14 @@ async function migratedDatabase() {
 }
 
 const connection = await migratedDatabase();
+const relocaled = await migratedDatabase();
+relocaled.exec(
+  `update settings set doc = json_set(doc, '$.invoiceLocales', json('["es"]')) where module = 'venue'`,
+);
+afterAll(() => {
+  connection.close();
+  relocaled.close();
+});
 
 describe("the behavioural triggers a migrated venue file carries", () => {
   it("creates exactly the triggers this file pins, and no others", () => {
@@ -883,12 +876,9 @@ describe("working_order_lines_require_open_parent", () => {
     );
   });
 
-  // TWO rules refuse this write: an order that does not exist is also an order whose location
-  // cannot be resolved. SQLite does not fix the order several triggers on one event fire in, so
-  // which message comes back is not pinned — only that the write is refused with one of the two.
   it("refuses a line inserted under an order that does not exist", () => {
-    expect([OPEN_PARENT_REFUSAL, LOCALES_REFUSAL]).toContain(
-      refusalFor(connection, line("line-ghost", "ghost-order", '{"es":"a","ca":"b"}')),
+    expect(refusalFor(connection, line("line-ghost", "ghost-order", '{"es":"a","ca":"b"}'))).toBe(
+      OPEN_PARENT_REFUSAL,
     );
   });
 
@@ -1044,10 +1034,9 @@ describe("working_order_lines_require_open_parent_update's served exception", ()
   });
 
   it("accepts a served mark on a settled line once its venue's invoice locales changed", () => {
-    connection.exec(`update locations set invoice_locales = '["es"]' where id = 'loc-relocale'`);
     expect(
       refusalFor(
-        connection,
+        relocaled,
         `update working_order_lines set served_quantity = 1000, served_at = '${STAMP}' ` +
           `where id = 'line-served-relocale'`,
       ),
@@ -1292,6 +1281,23 @@ describe("working_order_lines_require_open_parent_update moving a line between o
 });
 
 describe("working_order_lines_check_locales", () => {
+  it("takes the configured language set from the venue document", async () => {
+    const separate = await migratedDatabase();
+    try {
+      separate.exec(`insert into settings (module,version,revision,doc,updated_at)
+        values ('venue',1,1,'{"invoiceLocales":["es"]}','${STAMP}')
+        on conflict (module) do update set doc=excluded.doc`);
+      expect(
+        refusalFor(separate, line("document-only", "wo-open", '{"es":"Dish"}')),
+      ).toBeUndefined();
+      expect(
+        refusalFor(separate, line("old-location", "wo-open", '{"es":"Dish","ca":"Dish"}')),
+      ).toBe(LOCALES_REFUSAL);
+    } finally {
+      separate.close();
+    }
+  });
+
   it("refuses a description map missing one of the venue's locales", () => {
     expect(refusalFor(connection, line("line-short", "wo-open", '{"es":"Plato"}'))).toBe(
       LOCALES_REFUSAL,
@@ -1312,12 +1318,16 @@ describe("working_order_lines_check_locales", () => {
     ).toBeUndefined();
   });
 
-  // A line whose order resolves to no location deliberately gets the same refusal: from a caller's
-  // side it is the same fault.
-  it("refuses a line whose order resolves to no location, in the same words", () => {
-    expect(refusalFor(connection, line("line-orphan", "wo-orphan", '{"es":"a","ca":"b"}'))).toBe(
-      LOCALES_REFUSAL,
-    );
+  it("refuses a line on a box with no venue document, in the same words", async () => {
+    const empty = await migratedDatabase();
+    try {
+      empty.exec("delete from settings where module = 'venue'");
+      expect(refusalFor(empty, line("line-orphan", "wo-open", '{"es":"a","ca":"b"}'))).toBe(
+        LOCALES_REFUSAL,
+      );
+    } finally {
+      empty.close();
+    }
   });
 
   it("refuses an update that breaks the locale set", () => {
@@ -1326,15 +1336,6 @@ describe("working_order_lines_check_locales", () => {
         connection,
         `update working_order_lines set descriptions = '{"es":"Plato"}' where id = 'line-open'`,
       ),
-    ).toBe(LOCALES_REFUSAL);
-  });
-
-  it("reads the order's location, not its device's, when the two differ", () => {
-    expect(
-      refusalFor(connection, line("line-es-only", "wo-es-only", '{"es":"Plato"}')),
-    ).toBeUndefined();
-    expect(
-      refusalFor(connection, line("line-es-only-ca", "wo-es-only", '{"es":"Plato","ca":"Plat"}')),
     ).toBe(LOCALES_REFUSAL);
   });
 });
@@ -1365,21 +1366,6 @@ describe("working_order_lines_check_variant_locales", () => {
     ).toBeUndefined();
   });
 
-  it("reads the order's location, not its device's, when the two differ", () => {
-    expect(
-      refusalFor(
-        connection,
-        line("line-var-es-only", "wo-es-only", '{"es":"Plato"}', '{"es":"Grande"}'),
-      ),
-    ).toBeUndefined();
-    expect(
-      refusalFor(
-        connection,
-        line("line-var-es-only-ca", "wo-es-only", '{"es":"Plato"}', '{"es":"Grande","ca":"Gran"}'),
-      ),
-    ).toBe(VARIANT_LOCALES_REFUSAL);
-  });
-
   it("refuses an update that breaks the variant locale set", () => {
     expect(
       refusalFor(
@@ -1391,6 +1377,7 @@ describe("working_order_lines_check_variant_locales", () => {
 });
 
 describe("working_order_lines_check_locales_update and its variant twin once a venue's invoice locales changed", () => {
+  const connection = relocaled;
   it("accepts a served mark, its undo and a first sent stamp on a paid line", () => {
     expect(
       refusalFor(

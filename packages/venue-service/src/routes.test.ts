@@ -71,9 +71,9 @@ async function fixture(
   await seedTenant(db);
   const [location] = await db
     .insert(locations)
-    .values({ invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+    .values({ operationDescription: "Hospitality" })
     .returning({ id: locations.id });
-  await seedVenueSettings(db, { name: "Venue" });
+  await seedVenueSettings(db, { name: "Venue", invoiceLocales: ["en-GB"] });
   const scopedLocationId = location!.id;
   const [zone] = await db
     .insert(floorZones)

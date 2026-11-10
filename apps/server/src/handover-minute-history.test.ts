@@ -169,11 +169,10 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: TENANT_A.locationId,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant" });
+  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["en"] });
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,

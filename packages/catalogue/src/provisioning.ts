@@ -1,7 +1,6 @@
 import {
   catalogues,
   catalogueSettings,
-  contentLanguages,
   readTenant,
   readVenue,
   units,
@@ -16,6 +15,7 @@ import {
   starterNames,
 } from "@waitron/country-packs";
 import type { VatClass } from "@waitron/shared";
+import { readSavedContentLanguages, writeContentLanguages } from "./content-languages.js";
 import { createMenuShell } from "./menu-structure.js";
 import { assignCatalogueToVenue } from "./operations.js";
 import { STARTER_MENU_NAMES, STARTER_UNIT_NAMES } from "./starter-content.js";
@@ -78,10 +78,8 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
       // `id`, `created_at` and `updated_at` are supplied by `$defaultFn` in JavaScript
       // (`packages/db/src/schema/columns.ts`), so a raw `insert into catalogues (name)` writes a
       // null id and is refused.
-      await tx
-        .insert(contentLanguages)
-        .values({ defaultLanguage, languages: [...languages] })
-        .onConflictDoNothing({ target: contentLanguages.id });
+      if ((await readSavedContentLanguages(tx)) === undefined)
+        await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, [], null);
       // The id is stated rather than left out: this table's only column IS the key, and drizzle
       // renders a values object with no columns in it as `insert into … () values ()`, which
       // SQLite refuses. `1` is the value the column defaults to and the singleton check demands.

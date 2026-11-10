@@ -137,13 +137,13 @@ it("warns when the receipt language is not a content language, following a live 
   const el = await mount(r.api);
   expect(q(el, "[data-test=receipt-language-warning]")).toBeNull();
   r.state.content = { defaultLanguage: "ca", languages: ["ca"] };
-  r.liveData.invalidate([{ type: "content_languages" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => text(q(el, "[data-test=receipt-language-warning]"))).toContain("Spanish");
   expect(q(el, "[data-test=receipt-language-warning]")!.closest("section.settings-card")).toBe(
     q(el, "section.settings-card"),
   );
   r.state.content = { defaultLanguage: "es", languages: ["es"] };
-  r.liveData.invalidate([{ type: "content_languages" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(() => q(el, "[data-test=receipt-language-warning]")).toBeNull();
 });
 
@@ -898,7 +898,7 @@ it("in Edit the content warning follows the staged language and goes once its co
     t("receipt_language.warning").replace("{receipt}", "Galician").replace("{default}", "Spanish"),
   );
   r.state.content = { defaultLanguage: "es", languages: ["es", "gl"] };
-  r.liveData.invalidate([{ type: "content_languages" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect.poll(warning).toBeNull();
   expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
   expect(r.api.putVenueDefaults).not.toHaveBeenCalled();
@@ -915,7 +915,7 @@ it("a failed content read blocks nothing and shows no warning; its recovery brin
   expect(text(q(el, "[data-test=saved-receiptLanguage]"))).toBe("Galician");
   expect(q(el, "[role=alert]")).toBeNull();
   expect(q(el, "[data-test=receipt-language-warning]")).toBeNull();
-  r.liveData.invalidate([{ type: "content_languages" }]);
+  r.liveData.invalidate([{ type: "settings.venue" }]);
   await expect
     .poll(() => text(q(el, "[data-test=receipt-language-warning]")))
     .toContain("Galician");

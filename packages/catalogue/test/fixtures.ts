@@ -2,6 +2,7 @@ import { expect } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  settings,
   categories,
   categoryDetails,
   invoiceSeries,
@@ -270,4 +271,25 @@ export async function racePair<A, B>(
   }
   const [a, b] = await settled;
   return [a as PromiseSettledResult<A>, b as PromiseSettledResult<B>];
+}
+
+/** `tx`, counting the `select … from settings` queries built on it. */
+export function countingSettingsReads(tx: Transaction): { tx: Transaction; reads: () => number } {
+  let reads = 0;
+  const counted = new Proxy(tx, {
+    get(target, prop) {
+      const value: unknown = Reflect.get(target, prop, target);
+      if (prop !== "select") return typeof value === "function" ? value.bind(target) : value;
+      return (...args: Parameters<Transaction["select"]>) => {
+        const builder = target.select(...args);
+        const from = builder.from.bind(builder);
+        builder.from = ((source: Parameters<typeof from>[0]) => {
+          if (source === settings) reads += 1;
+          return from(source);
+        }) as typeof builder.from;
+        return builder;
+      };
+    },
+  });
+  return { tx: counted, reads: () => reads };
 }

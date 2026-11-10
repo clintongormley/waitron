@@ -16,6 +16,10 @@ const doc = {
   postalCode: "10001",
   city: "Harbour",
   province: "Coast",
+  invoiceLocales: ["en", "es"],
+  contentLanguages: null,
+  defaultContentLanguage: null,
+  holidayArea: null,
 };
 
 describe("the venue document", () => {
@@ -30,6 +34,10 @@ describe("the venue document", () => {
       postalCode: null,
       city: null,
       province: null,
+      invoiceLocales: ["es"],
+      contentLanguages: null,
+      defaultContentLanguage: null,
+      holidayArea: null,
     });
     expect(api.VENUE_SETTINGS.parse(api.VENUE_SETTINGS.defaults())).toEqual({
       ok: false,
@@ -54,18 +62,62 @@ describe("the venue document", () => {
     });
   });
 
+  it.each([[], ["es", "ca", "en"], ["es", "es"], [""], "es"].map((value) => [value]))(
+    "refuses invalid receipt languages %j",
+    (invoiceLocales) => {
+      const result = api.VENUE_SETTINGS.parse({ ...doc, invoiceLocales });
+      expect(result).toEqual({ ok: false, field: "invoiceLocales" });
+    },
+  );
+
+  it("parses the optional content languages and holiday area", () => {
+    const fields = {
+      contentLanguages: ["en", "fr"],
+      defaultContentLanguage: "fr",
+      holidayArea: { country: "ZZ", provinceCode: "30", cityKey: "villa real", areaKey: "isle-a" },
+    };
+    expect(api.VENUE_SETTINGS.parse({ ...doc, ...fields })).toEqual({
+      ok: true,
+      doc: { ...doc, ...fields },
+    });
+  });
+
+  it.each([
+    { contentLanguages: [], defaultContentLanguage: "en" },
+    { contentLanguages: ["en", "en"], defaultContentLanguage: "en" },
+    { contentLanguages: ["en"], defaultContentLanguage: "fr" },
+    { contentLanguages: ["en"], defaultContentLanguage: null },
+    { contentLanguages: null, defaultContentLanguage: "en" },
+    {
+      contentLanguages: Array.from({ length: 201 }, (_, i) => `language-${i}`),
+      defaultContentLanguage: "language-0",
+    },
+  ])("refuses an invalid content-language policy %j", (fields) => {
+    const result = api.VENUE_SETTINGS.parse({ ...doc, ...fields });
+    expect(result).toEqual({ ok: false, field: "contentLanguages" });
+  });
+
+  it.each([
+    {},
+    [],
+    "area",
+    { country: "ZZ", provinceCode: "30", cityKey: "", areaKey: null },
+    { country: "ZZ", provinceCode: "30", cityKey: "villa real", areaKey: 5 },
+  ])("refuses an invalid holiday area %j", (holidayArea) => {
+    const result = api.VENUE_SETTINGS.parse({ ...doc, holidayArea });
+    expect(result).toEqual({ ok: false, field: "holidayArea" });
+  });
+
   it("keeps the interim location identity independent of the venue document", async () => {
     const [row] = await suite.db
       .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Meals" })
+      .values({ operationDescription: "Meals" })
       .returning({ id: locations.id });
     expect(await api.venueLocationId(suite.db)).toBe(row!.id);
   });
 
   it("refuses a locations row without its venue document", async () => {
-    await suite.db
-      .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Meals" });
+    await suite.db.insert(locations).values({ operationDescription: "Meals" });
     await expect(withTransaction(suite.db, api.readVenue)).rejects.toMatchObject({
       code: "venue.not_found",
       params: {},
@@ -74,14 +126,18 @@ describe("the venue document", () => {
 
   it("merges document fields with the remaining location fields and reads place in the clock query", async () => {
     await suite.db.insert(locations).values({
-      invoiceLocales: ["en", "es"],
       operationDescription: "Meals",
       timeZone: "Europe/London",
       dayCutover: "04:00:00",
     });
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     expect(await withTransaction(suite.db, api.readVenue)).toEqual({
-      ...doc,
+      name: doc.name,
+      addressLine1: doc.addressLine1,
+      addressLine2: doc.addressLine2,
+      postalCode: doc.postalCode,
+      city: doc.city,
+      province: doc.province,
       invoiceLocales: ["en", "es"],
       operationDescription: "Meals",
       fiscalTerritory: "ES-common",
@@ -92,7 +148,13 @@ describe("the venue document", () => {
     expect((await withTransaction(suite.db, api.readVenueClockAndPlace)).place).toEqual({
       province: "Coast",
       city: "Harbour",
+      holidayArea: null,
     });
+  });
+
+  it("reads receipt languages from the document without a locations row", async () => {
+    await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
+    expect(await api.readVenueInvoiceLocales(suite.db)).toEqual(["en", "es"]);
   });
 
   it("keeps unspecified fields and records the saver and next revision", async () => {
@@ -124,6 +186,10 @@ describe("the venue document", () => {
         postalCode: null,
         city: null,
         province: null,
+        invoiceLocales: ["es"],
+        contentLanguages: null,
+        defaultContentLanguage: null,
+        holidayArea: null,
       },
       revision: 1,
     });
@@ -136,9 +202,7 @@ describe("the venue document", () => {
   });
 
   it("the joined clock read refuses the same invalid document version as the settings reader", async () => {
-    await suite.db
-      .insert(locations)
-      .values({ invoiceLocales: ["es"], operationDescription: "Meals" });
+    await suite.db.insert(locations).values({ operationDescription: "Meals" });
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await suite.db.update(settings).set({ version: 2 }).where(eq(settings.module, "venue"));
     for (const read of [api.readVenueSettings, api.readVenueClockAndPlace])

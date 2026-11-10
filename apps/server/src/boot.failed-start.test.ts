@@ -244,10 +244,9 @@ async function seedVenueWithNode(directory: string): Promise<void> {
     await db.insert(locations).values({
       id: TILL_LOCATION_ID,
 
-      invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    await seedVenueSettings(db, { name: "Barra" });
+    await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["es-ES"] });
     await db.insert(nodes).values({
       id: TILL_ENV.WAITRON_NODE_ID,
       locationId: TILL_LOCATION_ID,

@@ -41,7 +41,6 @@ describe("QUERY_DEPENDENCIES", () => {
       "locations",
       "settings.venue",
       "location_day_cutover_changes",
-      "holiday_geographies",
       "seasons",
       "special_days",
       "special_day_dates",

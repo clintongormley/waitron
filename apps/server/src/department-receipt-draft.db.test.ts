@@ -1,10 +1,11 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { contentLanguages } from "@waitron/catalogue";
+import {} from "@waitron/catalogue";
 import { persons, startManagementSession } from "@waitron/identity";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { type DepartmentReceiptWrite } from "@waitron/shared";
@@ -29,10 +30,10 @@ async function fixture(role: "manager" | "staff" = "manager") {
     invoiceLocales: ["gl-ES"],
     operationDescription: "Bootstrap",
   });
-  await suite.db
-    .insert(contentLanguages)
-    .values({ defaultLanguage: "es", languages: ["es", "ca", "en"] })
-    .onConflictDoNothing({ target: contentLanguages.id });
+  await seedVenueSettings(suite.db, {
+    defaultContentLanguage: "es",
+    contentLanguages: ["es", "ca", "en"],
+  });
   const [department] = await suite.db
     .insert(departments)
     .values({ name: randomUUID(), tradingName: "Deli" })
@@ -173,7 +174,7 @@ describe("checked department receipt write", () => {
       receipt: { operationDescription: "Deli meals", footerMessage: { "ca-ES": "Benvinguts" } },
     });
     await check(f, input);
-    await suite.db.update(contentLanguages).set({ languages: ["es", "en"] });
+    await seedVenueSettings(suite.db, { contentLanguages: ["es", "en"] });
     await expect(save(f, input)).rejects.toMatchObject({
       code: "receipt.invalid",
       params: { reason: "invalid_language", field: "footerMessage", language: "ca-ES" },

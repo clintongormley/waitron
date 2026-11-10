@@ -131,10 +131,9 @@ beforeEach(async () => {
     await db.insert(locations).values({
       id: LOCATION,
 
-      invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
-    await seedVenueSettings(db, { name: "Restaurant" });
+    await seedVenueSettings(db, { name: "Restaurant", invoiceLocales: ["es"] });
     await db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
     await db.insert(deployment).values({ id: 1, environment: "preproduction" });
     await withTransaction(db, (tx) =>

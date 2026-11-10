@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, products, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   persons,
   startManagementSession,
@@ -44,6 +44,7 @@ let staffCookie: string;
 let http: Hono;
 beforeEach(async () => {
   await seedTenant(suite.db);
+  await seedVenueSettings(suite.db);
   await app(async (tx) => {
     for (const role of ["manager", "staff"] as const) {
       const [person] = await tx.insert(persons).values({ displayName: role, role }).returning();

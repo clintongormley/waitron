@@ -415,10 +415,9 @@ describe("comparison immediately before real archive placement", () => {
     await suite.db.insert(locations).values({
       id: locationId,
 
-      invoiceLocales: ["en"],
       operationDescription: "Meal",
     });
-    await seedVenueSettings(suite.db, { name: "Test room" });
+    await seedVenueSettings(suite.db, { name: "Test room", invoiceLocales: ["en"] });
     await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Test node" });
     const sourceDir = await mkdtemp(join(tmpdir(), "qualified-source-"));
     roots.push(sourceDir);

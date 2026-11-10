@@ -5,7 +5,6 @@ import {
   catalogues,
   categoryDetails,
   CHECK_VIOLATION,
-  contentLanguages,
   CORE_MIGRATIONS,
   extraListItems,
   extraLists,
@@ -41,7 +40,6 @@ beforeAll(() => {
 
 const TABLES = [
   "catalogue_settings",
-  "content_languages",
   "menu_details",
   "menu_items",
   "category_details",
@@ -179,7 +177,6 @@ describe("the catalogue tables carry no tenant column", () => {
 
     expect(primaryKeys).toEqual({
       catalogue_settings: "id",
-      content_languages: "id",
       menu_details: "menu_id",
       menu_items: "id",
       category_details: "category_id",
@@ -236,13 +233,6 @@ describe("the catalogue tables carry no tenant column", () => {
     expect(checks).toEqual({
       catalogue_settings_singleton_ck: `"catalogue_settings"."id" = 1`,
       catalogue_settings_vat_class_ck: `"catalogue_settings"."default_product_vat_class" in ('general', 'reduced', 'super_reduced', 'zero')`,
-      content_languages_singleton_ck: `"content_languages"."id" = 1`,
-      // The list is JSON text, and the membership test matches the QUOTED token so one code cannot
-      // match a prefix of a longer one.
-      content_languages_default_ck: `instr("content_languages"."languages", '"' || "content_languages"."default_language" || '"') > 0`,
-      // This does not refuse a NULL ENTRY in the list; `packages/db/src/schema/catalogue/menu.ts`
-      // says what does.
-      content_languages_list_ck: `json_array_length("content_languages"."languages") between 1 and 200`,
       menu_items_gross_price_ck: `"menu_items"."gross_price" >= 0`,
       units_precision_ck: `"units"."precision" between 0 and 3`,
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
@@ -367,20 +357,6 @@ describe("core's set keeps no variant table of its own", () => {
 });
 
 describe("the one-row catalogue tables hold at most one row", () => {
-  it("refuses a second content-language policy", async () => {
-    await db.insert(contentLanguages).values({ defaultLanguage: "en", languages: ["en"] });
-    const second = await captureError(() =>
-      db.insert(contentLanguages).values({ id: 2, defaultLanguage: "es", languages: ["es"] }),
-    );
-    expect(isRefusal(second, CHECK_VIOLATION)).toBe(true);
-    // A CHECK is the one refusal class SQLite still names.
-    expect(engineErrorMessage(second)).toContain("content_languages_singleton_ck");
-    const duplicate = await captureError(() =>
-      db.insert(contentLanguages).values({ defaultLanguage: "es", languages: ["es"] }),
-    );
-    expect(isRefusal(duplicate, UNIQUE_VIOLATION)).toBe(true);
-  });
-
   it("refuses a second unit-seed marker", async () => {
     await db.insert(unitSeedStates).values({ id: 1 });
     const second = await captureError(() => db.insert(unitSeedStates).values({ id: 2 }));

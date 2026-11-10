@@ -587,9 +587,13 @@ it("keeps English working names through fresh Live publication with Spanish rece
     expect(db.prepare("select name from service_steps order by position").all()).toEqual(
       ["Set up", "Take order", "Anything else?"].map((name) => ({ name })),
     );
-    expect(db.prepare("select invoice_locales from locations").all()).toEqual([
-      { invoice_locales: '["es-ES"]' },
-    ]);
+    expect(
+      db
+        .prepare(
+          "select json_extract(doc, '$.invoiceLocales') as invoice_locales from settings where module = 'venue'",
+        )
+        .all(),
+    ).toEqual([{ invoice_locales: '["es-ES"]' }]);
   } finally {
     db.close();
   }

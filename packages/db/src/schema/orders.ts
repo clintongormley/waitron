@@ -149,7 +149,7 @@ export const workingOrders = table(
  *
  * `descriptions` is a locale→string map holding exactly the location's invoice locales as they
  * were when the line was written or last moved, checked by trigger against
- * locations.invoice_locales; every key holds the text of the venue's default content language at the
+ * settings.venue.invoiceLocales; every key holds the text of the venue's default content language at the
  * time the line was written, or another stored language's where the default had none.
  */
 export const workingOrderLines = table(

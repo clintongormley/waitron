@@ -202,10 +202,8 @@ it("a pending allocated adoption refuses without creating a selling identity and
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Synthetic SL" });
-  await suite.db
-    .insert(locations)
-    .values({ id: LOCATION, invoiceLocales: ["es"], operationDescription: "Venta" });
-  await seedVenueSettings(suite.db, { name: "Venue" });
+  await suite.db.insert(locations).values({ id: LOCATION, operationDescription: "Venta" });
+  await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["es"] });
   await suite.db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
   const pending: PendingAdoption = {
     originNodeId: PRIMARY,

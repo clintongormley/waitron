@@ -10,6 +10,9 @@ export function madridWithDocument(
     revision: number;
     updatedAt: string;
     updatedBy: string | null;
+    mode?: "row";
+    targetField?: string;
+    defaults?: Readonly<Record<string, unknown>>;
   },
 ): CanonicalMadridSemantics {
   const result = structuredClone(original);
@@ -46,18 +49,34 @@ export function madridWithDocument(
     ],
     rows: {},
   };
-  if (rows.length === 1) {
+  const previous = Object.values(result.tables.settings.rows).find(
+    (row) => row.module === metadata.module,
+  );
+  const moved =
+    rows.length === 0
+      ? {}
+      : Object.fromEntries(Object.entries(fields).map(([column, key]) => [key, rows[0]![column]]));
+  if (rows.length === 1 || previous !== undefined) {
     const row = {
       module: metadata.module,
       version: metadata.version,
       revision: metadata.revision,
-      doc: Object.fromEntries(
-        Object.entries(fields).map(([column, key]) => [key, rows[0]![column]]),
-      ),
+      doc: {
+        ...metadata.defaults,
+        ...(previous?.doc as Record<string, unknown> | undefined),
+        ...(metadata.targetField === undefined
+          ? moved
+          : { [metadata.targetField]: rows.length === 0 ? null : moved }),
+      },
       updated_at: metadata.updatedAt,
       updated_by: metadata.updatedBy,
     };
+    if (previous !== undefined) delete result.tables.settings.rows[stable(previous)];
     result.tables.settings.rows[stable(row)] = row;
+  }
+  if (metadata.mode === "row") {
+    source.rows = {};
+    return result;
   }
   source.columns = source.columns.filter((column) => !Object.hasOwn(fields, column.name));
   source.rows = Object.fromEntries(

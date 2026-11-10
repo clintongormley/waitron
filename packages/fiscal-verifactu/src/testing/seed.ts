@@ -74,11 +74,10 @@ async function insertLocation(tx: Transaction, label: string): Promise<string> {
   const [locationRow] = await tx
     .insert(locations)
     .values({
-      invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  await seedVenueSettings(tx, { name: "Sala " + label });
+  await seedVenueSettings(tx, { name: "Sala " + label, invoiceLocales: ["es"] });
   if (locationRow === undefined) throw new Error("seedNode: location insert returned no row");
   return locationRow.id;
 }

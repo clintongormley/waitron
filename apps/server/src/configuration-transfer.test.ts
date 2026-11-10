@@ -59,6 +59,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   catalogues,
+  saveVenueFields,
+  readVenueSettings,
   categories,
   deviceProfiles,
   devices,
@@ -388,7 +390,9 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 15,
+  version: 16,
+  contentLanguages: null,
+  holidayArea: null,
   settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
@@ -507,6 +511,51 @@ describe("configuration transfer archive", () => {
 });
 
 describe("configuration transfer database path", () => {
+  it("exports the venue setup fields exactly and carries languages and holiday area at the top level", async () => {
+    const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const holidayArea = { country: "ES", provinceCode: "28", cityKey: "madrid", areaKey: null };
+    await withTransaction(suite.db, (tx) =>
+      saveVenueFields(
+        tx,
+        {
+          contentLanguages: ["es", "en"],
+          defaultContentLanguage: "es",
+          holidayArea,
+        },
+        null,
+      ),
+    );
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-11-10T10:00:00Z"),
+      versions,
+    );
+    expect(Object.keys(exported.venue).sort()).toEqual(Object.keys(bundle.venue).sort());
+    expect(exported.contentLanguages).toEqual({ defaultLanguage: "es", languages: ["es", "en"] });
+    expect(exported.holidayArea).toEqual(holidayArea);
+    expect(exported.tables).not.toHaveProperty("content_languages");
+    expect(exported.tables).not.toHaveProperty("holiday_geographies");
+    await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
+    });
+    expect((await readVenueSettings(targetSuite.db)).doc).toMatchObject({
+      contentLanguages: ["es", "en"],
+      defaultContentLanguage: "es",
+      holidayArea,
+    });
+  });
+
   it("imports the first venue's explicit agreement limits with the other rule defaults", async () => {
     const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
       db: suite.db,
@@ -5479,7 +5528,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(15);
+  expect(exported.version).toBe(16);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6163,16 +6212,13 @@ describe("public holidays in a configuration transfer", () => {
     await withTransaction(db, (tx) => seedVenueSettings(tx, { province, city }));
   }
 
-  /** Geographies and entries with ids replaced by the city they belong to, to compare venues. */
   async function holidaysByCity(db: typeof suite.db) {
-    const geographies = await db.execute<Record<string, string | null>>(sql`
-      select country, province_code, city, city_key, area_key
-      from holiday_geographies order by city_key`);
+    const { doc } = await readVenueSettings(db);
     const entries = await db.execute<{ city: string; date: string; name: string }>(sql`
       select (select json_extract(doc, '$.city') from settings where module = 'venue') as city, d.date, s.name from special_day_dates d
       join special_days s on s.id = d.special_day_id order by d.date, s.name`);
     return {
-      geographies: geographies.rows,
+      area: doc.holidayArea,
       entries: entries.rows.map((row) => ({
         city: row.city?.trim().toLowerCase(),
         date: row.date,
@@ -6188,9 +6234,6 @@ describe("public holidays in a configuration transfer", () => {
     });
     const cfg = scope({ locationId: await venueLocationId(suite.db) });
     await withTransaction(suite.db, async (tx) => {
-      await tx.execute(
-        sql`insert into holiday_geographies (id, location_id, country, province_code, city, city_key) values (${randomUUID()}, ${cfg.locationId}, 'ES', '28', 'Madrid', 'madrid')`,
-      );
       await insertSpecialDay(tx, cfg, {
         date: "2026-01-06",
         name: "Three Kings",
@@ -6210,20 +6253,16 @@ describe("public holidays in a configuration transfer", () => {
     return { source, versions, transferred };
   }
 
-  it("carries holiday areas and named holidays under fresh ids without retired local entries", async () => {
+  it("carries the chosen holiday area and named holidays under fresh ids without retired local entries", async () => {
     const { versions, transferred } = await preparedWithHolidays("B45001122");
-    expect(transferred.tables.holiday_geographies).toHaveLength(2);
+    expect(transferred.tables).not.toHaveProperty("holiday_geographies");
     expect(transferred.tables.local_holidays).toBeUndefined();
-    for (const row of transferred.tables.holiday_geographies!)
-      expect(Object.keys(row).sort()).toEqual([
-        "area_key",
-        "city",
-        "city_key",
-        "country",
-        "id",
-        "location_id",
-        "province_code",
-      ]);
+    expect(transferred.holidayArea).toEqual({
+      country: "ES",
+      provinceCode: "25",
+      cityKey: "vielha e mijaran",
+      areaKey: "aran",
+    });
 
     const text = JSON.stringify(transferred);
     expect(text).not.toContain("shipped:");
@@ -6238,35 +6277,15 @@ describe("public holidays in a configuration transfer", () => {
     const targetVenueId = await venueLocationId(targetSuite.db);
 
     const expected = await holidaysByCity(suite.db);
-    expect(expected.geographies).toEqual([
-      {
-        country: "ES",
-        province_code: "28",
-        city: "Madrid",
-        city_key: "madrid",
-        area_key: null,
-      },
-      {
-        country: "ES",
-        province_code: "25",
-        city: "Vielha e Mijaran",
-        city_key: "vielha e mijaran",
-        area_key: "aran",
-      },
-    ]);
+    expect(expected.area).toEqual({
+      country: "ES",
+      provinceCode: "25",
+      cityKey: "vielha e mijaran",
+      areaKey: "aran",
+    });
     expect(expected.entries).toEqual([{ city: "madrid", date: "2026-01-06", name: "Three Kings" }]);
     expect(await holidaysByCity(targetSuite.db)).toEqual(expected);
 
-    const sourceIds = new Set(transferred.tables.holiday_geographies!.map((row) => row.id));
-    const imported = await targetSuite.db.execute<{ id: string; owner: string }>(sql`
-      select id, location_id as owner from holiday_geographies
-`);
-    expect(imported.rows).toHaveLength(2);
-    for (const row of imported.rows) {
-      expect(sourceIds.has(row.id)).toBe(false);
-      expect(row.id).toMatch(UUID);
-      expect(row.owner).toBe(targetVenueId);
-    }
     expect(targetVenueId).not.toBe(await venueLocationId(suite.db));
 
     const read = () =>
@@ -6322,27 +6341,16 @@ describe("public holidays in a configuration transfer", () => {
     expect((await read()).model.chosen).toEqual(inMadrid.model.chosen);
   });
 
-  it.each<[string, (tables: ConfigurationBundle["tables"]) => void, string]>([
-    [
-      "a second geography for the same place",
-      (t) =>
-        t.holiday_geographies!.push({
-          ...t.holiday_geographies!.find((row) => row.city === "Madrid")!,
-          id: randomUUID(),
-          city: "madrid",
-        }),
-      "holiday_geographies.city_key",
-    ],
+  it.each<[string, (bundle: ConfigurationBundle) => void, string]>([
     [
       "an area the data does not offer for the province",
-      (t) => (t.holiday_geographies!.find((row) => row.area_key === "aran")!.area_key = "tenerife"),
-      "holiday_geographies.area_key",
+      (bundle) => (bundle.holidayArea!.areaKey = "tenerife"),
+      "holidayArea.areaKey",
     ],
   ])("refuses an edited bundle with %s, and writes no venue", async (_, edit, field) => {
     const { versions, transferred } = await preparedWithHolidays("B45002211");
-    const tables = structuredClone(transferred.tables);
-    edit(tables);
-    const edited: ConfigurationBundle = { ...transferred, tables };
+    const edited = structuredClone(transferred);
+    edit(edited);
     const refusal = { code: "setup.request_invalid", params: { field } };
     expect(() => validateConfigurationBundle(edited, ALL_MODULES, versions)).toThrowError(
       expect.objectContaining(refusal),
@@ -6358,7 +6366,7 @@ describe("public holidays in a configuration transfer", () => {
     const persisted = await targetSuite.db.execute<Record<string, number>>(sql`
       select
         (select cast(count(*) as int) from tenants where tax_id = ${target.taxId}) as tenants,
-        (select cast(count(*) as int) from holiday_geographies) as geographies,
+        (select cast(count(*) as int) from settings where module = 'venue') as geographies,
         (select cast(count(*) as int) from special_days) as entries,
         (select cast(count(*) as int) from special_day_dates) as special_day_dates`);
     expect(persisted.rows[0]).toEqual({

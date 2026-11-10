@@ -75,10 +75,9 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
-  await seedVenueSettings(suite.db, { name: "Venue" });
+  await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
   await suite.db.insert(nodes).values({
     id: PRIMARY,
     locationId: LOCATION,
@@ -157,7 +156,6 @@ it("the pending-adoption start answers the main box's signed query", async () =>
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
   await suite.db.insert(nodes).values({

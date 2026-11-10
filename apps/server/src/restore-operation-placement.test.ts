@@ -60,10 +60,9 @@ beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: LOCATION,
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant" });
+  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["es"] });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Restored node" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: NODE, code: "A", purpose: "standard" },
@@ -259,7 +258,6 @@ async function secondVenueRow(): Promise<void> {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000099",
 
-    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
 }
