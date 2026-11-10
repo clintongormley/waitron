@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -1642,5 +1643,39 @@ describe("session proof routes", () => {
         error: { code: "management_session.required" },
       });
     }
+  });
+  it("answers 409 when the signed-in person asks for passkey options with none registered", async () => {
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName: "No Passkey", pinHash: hashPin("6666"), role: "staff" })
+      .returning({ id: persons.id });
+    const response = await send(
+      mountApp(),
+      "POST",
+      "/management-api/session/me/fresh-sign-in/passkey-options",
+      { cookie: await cookieFor(row!.id), body: {} },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
+  });
+  it("answers 404 when the passkey the path names does not exist", async () => {
+    const [row] = await suite.db
+      .insert(persons)
+      .values({
+        displayName: "Unknown Passkey",
+        email: "unknown-passkey@example.com",
+        pinHash: hashPin("7777"),
+        role: "staff",
+        passwordHash: hashPassword("current password"),
+      })
+      .returning({ id: persons.id });
+    const response = await send(
+      mountApp(),
+      "DELETE",
+      `/management-api/session/me/passkeys/${randomUUID()}`,
+      { cookie: await cookieFor(row!.id), body: { currentPassword: "current password" } },
+    );
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
   });
 });
