@@ -673,6 +673,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     const sup = await supervisor(() => cfg, logs, 100, undefined, {
       buildBackend: (dest) => {
         const backend = buildBackupBackend(dest);
+        if (throwOnList && dest.id === "local") backend.list = async () => [];
         if (throwOnList && dest.id === "remote")
           backend.list = () => {
             throw new AppError("backup.destination_key_invalid", { field: "prefix" });
