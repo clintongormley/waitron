@@ -1047,3 +1047,36 @@ was never put to the owner: cancelling such an order still files the stored spli
 | S5 reports | ~25 | ~75 (fixtures ~5) |
 | S6 records | 0 | 0 |
 | **In all** | **~170** | **~285** |
+
+### Plan review (2026-11-10) — changes that override the steps above
+
+A fresh-context review of these steps (no critical findings) ran the per-rate move: core 224 of 224
+and the four fiscal-verifactu correction suites 17 of 17 passed with the check moved; with it
+deleted, `partial-correction-breakdown.test.ts:293`, `:294` and `:297` failed. Changes:
+
+1. **S2 table, two more rows (rate given twice, all-zero group).** On a moved invoice the
+   lines-against-split check does not run, and the per-rate loop checks each group alone, so a split
+   with one rate twice could pass each group's budget and file double at that rate. Add one moved row
+   with a rate given twice and one with a 0.00/0.00 group, each `sale.correction_breakdown_invalid`;
+   deleting each explicit refusal in `checkPartialCorrectionBreakdown` fails its row.
+2. **An earlier corrective counted at its fixed figures (spec section A's critical case).** S2 gains
+   a row: the invoice unmoved (21% 10.00/2.10); an earlier €6.05 corrective stored at 21%
+   −5.00/−1.05 and answered at 21% −5.01/−1.04; then the remaining €6.05 at 21% −4.99/−1.06 with the
+   line −5.00/−6.05 files that split (counting the corrective's stored split, the base rule expects
+   −5.00 and refuses). S3 gains one amount preview on the same figures: €6.05 previews
+   `[21.00, 4.99, 1.06]`. Either fails if the writer or the preview reads the corrective's stored split.
+3. **The writer refuses an unanswered fix itself.** On the exact-split path, any `differs` (newest
+   filed version is not the measured one) refuses `sale.correction_not_admitted { reason:
+   "filed_figures_unanswered" }`, as the preview does (Q3). The administrator's corrective route never
+   sends `partialVatBreakdown` (`packages/fiscal-verifactu/src/record-remedy-corrective-http.ts:80`
+   allows only `seriesId, total, operationDescription, wholeInvoice, lines`), so this does not touch
+   that path, and slice 4 no longer depends on running the preview in the same transaction. S2 row 2
+   now expects `sale.correction_not_admitted` `filed_figures_unanswered`.
+4. **Reason name.** The scope refusal for naming dishes on a moved invoice is
+   `sale.correction_scope_invalid { reason: "filed_split_changed" }`, not `filed_figures_changed`, so
+   no reason string means two things.
+5. S2's deletion proof names `:293`, `:294` and `:297`.
+6. **Point 5** (cancelling an issued order whose invoice was fixed still files the stored split) is
+   put to the owner as a question; this slice does not build it unless the owner says so.
+
+Size after these: about 175 production and 320 test lines.
