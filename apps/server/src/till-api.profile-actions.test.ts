@@ -1077,7 +1077,10 @@ describe("a shared kitchen display", () => {
     const answer = await send(cookie, "POST", `/api/device/ticket-items/${id}/advance`, {
       to: "ready",
     });
-    expect(answer.body.error?.code).toBe("ticket.invalid_transition");
+    expect({ status: answer.status, code: answer.body.error?.code }).toEqual({
+      status: 404,
+      code: "ticket_item.not_found",
+    });
   });
 });
 

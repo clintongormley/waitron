@@ -251,7 +251,7 @@ describe("the join window's holds", () => {
       `/management-api/pairing-mode/holds/${randomUUID()}/renew`,
       { cookie: venue.managerCookie },
     );
-    expect(unknown.status).toBe(409);
+    expect(unknown.status).toBe(404);
     expect(await errorOf(unknown)).toEqual({ code: "device.pairing_hold_lapsed", params: {} });
   });
 
@@ -265,7 +265,7 @@ describe("the join window's holds", () => {
     const res = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
       cookie: venue.managerCookie,
     });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(404);
     expect((await errorOf(res)).code).toBe("device.pairing_hold_lapsed");
     expect(mode.isOpen()).toBe(false);
   });
@@ -278,7 +278,7 @@ describe("the join window's holds", () => {
     const res = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
       cookie: venue.managerCookie,
     });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(404);
     expect((await errorOf(res)).code).toBe("device.pairing_hold_lapsed");
   });
 
@@ -905,7 +905,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount()).toBe(1);
   });
 
-  it("an unknown profile is 404 and the request survives", async () => {
+  it("an unknown profile is 400 and the request survives", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
@@ -919,7 +919,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         body: { name: "Bar till", profileId: randomUUID() },
       },
     );
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("device_profile.not_found");
     expect(await pendingCount()).toBe(1);
   });
@@ -1458,7 +1458,7 @@ describe("device pairing: check, claim, approve", () => {
       choice: "42",
       holdId: randomUUID(),
     });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await errorOf(res)).toEqual({ code: "device.pairing_hold_lapsed", params: {} });
     expect(await pendingCount()).toBe(1);
   });
@@ -1473,7 +1473,7 @@ describe("device pairing: check, claim, approve", () => {
     const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
     offset += PAIRING_HOLD_MS;
     const res = await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId });
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(400);
     expect(await errorOf(res)).toEqual({ code: "device.pairing_hold_lapsed", params: {} });
     expect(await pendingCount()).toBe(1);
   });

@@ -1716,7 +1716,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(garbage.status).toBe(401);
   });
 
-  it("advance refuses a bad transition and a malformed item id with 409 ticket.invalid_transition", async () => {
+  it("advance refuses a bad transition 409 and an unknown or malformed item id 404 ticket_item.not_found", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
@@ -1731,14 +1731,19 @@ describe("Device API — the device-guarded routes", () => {
       error: { code: "ticket.invalid_transition" },
     });
 
-    const malformed = await send(app, "POST", "/api/device/ticket-items/not-a-uuid/advance", {
-      cookie: jar,
-      body: { to: "preparing" },
-    });
-    expect(malformed.status).toBe(409);
+    for (const id of [randomUUID(), "not-a-uuid"]) {
+      const unknown = await send(app, "POST", `/api/device/ticket-items/${id}/advance`, {
+        cookie: jar,
+        body: { to: "preparing" },
+      });
+      expect({ status: unknown.status, body: await unknown.json() }).toEqual({
+        status: 404,
+        body: { error: { code: "ticket_item.not_found", params: { ticketItemId: id } } },
+      });
+    }
   });
 
-  it("advance with an EMPTY, MALFORMED, or null body degrades to 409 ticket.invalid_transition, never a 500", async () => {
+  it("advance with an EMPTY, MALFORMED, or null body is 400 management.request_invalid on `to`, never a 500", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { items } = await fireOrder(venue);
@@ -1748,20 +1753,29 @@ describe("Device API — the device-guarded routes", () => {
       method: "POST",
       headers: { cookie: jar },
     });
-    expect(empty.status).toBe(409);
+    expect({ status: empty.status, body: await empty.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "to" } } },
+    });
 
     const malformedBody = await app.request(`/api/device/ticket-items/${items[0]}/advance`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: jar },
       body: "{",
     });
-    expect(malformedBody.status).toBe(409);
+    expect({ status: malformedBody.status, body: await malformedBody.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "to" } } },
+    });
 
     const nullBody = await send(app, "POST", `/api/device/ticket-items/${items[0]}/advance`, {
       cookie: jar,
       body: null,
     });
-    expect(nullBody.status).toBe(409);
+    expect({ status: nullBody.status, body: await nullBody.json() }).toEqual({
+      status: 400,
+      body: { error: { code: "management.request_invalid", params: { field: "to" } } },
+    });
   });
 });
 
@@ -2324,7 +2338,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       name: "Renamed",
       profileId: randomUUID(),
     });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_found" } });
     expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
     expect(await labelOf(deviceId)).toBe("Till");
@@ -3170,7 +3184,7 @@ describe("PATCH /management-api/devices/:id (hardware.manage)", () => {
       .where(eq(kitchenStations.id, off.id));
 
     const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "station.not_found" } });
     expect(await labelOf(deviceId)).toBe("Till");
   });
@@ -4100,7 +4114,7 @@ describe("a device's approved profiles and switching its active one", () => {
         name: "Renamed",
         approvedProfileIds: [a, randomUUID()],
       });
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_found" } });
       expect(await approved(t.deviceId)).toEqual([t.profileId]);
       const [row] = await suite.db
@@ -4116,7 +4130,7 @@ describe("a device's approved profiles and switching its active one", () => {
       const t = await till(app, venue);
       const res = await manage(app, venue, t.deviceId, { approvedProfileIds: [randomUUID()] });
       expect({ status: res.status, body: await res.json() }).toEqual({
-        status: 404,
+        status: 400,
         body: {
           error: { code: "device_profile.not_found", params: { field: "approvedProfileIds" } },
         },

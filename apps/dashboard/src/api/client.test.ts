@@ -1758,7 +1758,7 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse({ error: { code: "device.pairing_hold_lapsed" } }, false, 409),
+        jsonResponse({ error: { code: "device.pairing_hold_lapsed" } }, false, 404),
       );
     const api = new DashboardApi("", fetchImpl);
     await expect(api.renewPairingHold("h1")).rejects.toMatchObject({
