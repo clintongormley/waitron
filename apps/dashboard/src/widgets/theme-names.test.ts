@@ -15,7 +15,7 @@ describe.each([
 ] as const)("copyName in $locale", ({ locale, suffix }) => {
   it("adds the copy words to a short name", () => {
     setLocale(locale);
-    expect(copyName("Bar Lucía")).toBe(`Bar Lucía${suffix}`);
+    expect(copyName("River Bar")).toBe(`River Bar${suffix}`);
     expect(copyName("Waitron")).toBe(`Waitron${suffix}`);
     expect(checkThemeName(copyName("Waitron")).ok).toBe(true);
   });

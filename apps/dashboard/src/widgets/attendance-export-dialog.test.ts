@@ -94,8 +94,8 @@ it("offers manager Everyone or one person and representatives CSV", async () => 
   const { el, request, clicked } = await fixture({
     mode: "manager",
     people: [
-      { personId: "one", displayName: "María" },
-      { personId: "two", displayName: "José" },
+      { personId: "one", displayName: "Mary" },
+      { personId: "two", displayName: "Joseph" },
     ],
     personId: "two",
   });
@@ -292,7 +292,7 @@ it("does not read or submit until its session scope exists", async () => {
 it("does not download a selected person removed from the supplied scope while the request waits", async () => {
   const held = deferred<Blob>();
   const { el, created, clicked } = await fixture(
-    { mode: "manager", personId: "one", people: [{ personId: "one", displayName: "María" }] },
+    { mode: "manager", personId: "one", people: [{ personId: "one", displayName: "Mary" }] },
     () => held.promise,
   );
   await send(el);

@@ -342,10 +342,10 @@ describe("renaming", () => {
     const api = stubApi();
     const { el } = await mount(api);
     await openRename(el, "c2");
-    await typeName(el, "Principales");
+    await typeName(el, "Main courses");
     leaveField(el);
     await settle(el);
-    expect(api.updateCourse).toHaveBeenCalledWith("c2", { name: "Principales" });
+    expect(api.updateCourse).toHaveBeenCalledWith("c2", { name: "Main courses" });
     expect(field(el)).toBeNull();
   });
 
@@ -432,11 +432,11 @@ describe("renaming", () => {
     const api = stubApi({ updateCourse: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
     const { el } = await mount(api);
     await openRename(el, "c2");
-    await typeName(el, "Principales");
+    await typeName(el, "Main courses");
     await press(el, "Enter");
     await settle(el);
     expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("connection.failed"));
-    expect(field(el)!.value).toBe("Principales");
+    expect(field(el)!.value).toBe("Main courses");
     expect(field(el)!.error).toBe("");
   });
 
@@ -529,9 +529,9 @@ describe("renaming", () => {
     const { el } = await mount(api);
     await openRename(el, "c2");
     field(el)!.shadowRoot!.querySelector("input")!.select();
-    await userEvent.keyboard("Principales");
+    await userEvent.keyboard("Main courses");
     await el.updateComplete;
-    expect(field(el)!.value).toBe("Principales");
+    expect(field(el)!.value).toBe("Main courses");
     expect(api.updateCourse).not.toHaveBeenCalled();
   });
 
@@ -992,7 +992,7 @@ describe("reordering", () => {
     );
     await el.updateComplete;
     await openRename(el, "c2");
-    await typeName(el, "Principales");
+    await typeName(el, "Main courses");
     await press(el, "Enter");
     answerRename();
     await settle(el);
@@ -1030,7 +1030,7 @@ describe("reordering", () => {
     });
     const { el } = await mount(api);
     await openRename(el, "c2");
-    await typeName(el, "Principales");
+    await typeName(el, "Main courses");
     await press(el, "Enter");
     async function key(name: string): Promise<void> {
       q(el, '[data-test="drag-c1"]')!.dispatchEvent(
@@ -1055,7 +1055,7 @@ describe("reordering", () => {
       ["c1", 1],
     ]);
     expect(rowIds(el)).toEqual(["c2", "c1", "c3"]);
-    expect(nameButton(el, "c2")!.textContent!.trim()).toBe("Principales");
+    expect(nameButton(el, "c2")!.textContent!.trim()).toBe("Main courses");
   });
 
   /** Presses on a course's grip, crosses the rows named in `over` one by one, then lets go. */

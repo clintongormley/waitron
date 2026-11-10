@@ -50,7 +50,7 @@ const LUCIA: ThemeChoices = {
   textScale: 100,
   text: {},
 };
-const lucia = theme("t-lucia", "Bar Lucía", LUCIA);
+const lucia = theme("t-lucia", "River Bar", LUCIA);
 const xmas = theme("t-xmas", "Christmas", {
   ...WAITRON_CHOICES,
   brandColor: "#7a1f2b",
@@ -251,7 +251,7 @@ describe("dashboard-themes-card actions", () => {
     const { el, changes, createTheme, getVenueTheme } = await mount(four);
     await choose(el, "t-lucia", "copy");
     const dialog = await nameDialog(el);
-    expect(input(dialog).value).toBe("Bar Lucía (copy)");
+    expect(input(dialog).value).toBe("River Bar (copy)");
     expect(toggle(dialog)!.checked).toBe(false);
     await type(el, dialog, "Christmas");
     const closed = dialogClosed(dialog);
@@ -531,9 +531,9 @@ describe("dashboard-themes-card actions", () => {
     const { el, changes, deleteTheme, getVenueTheme } = await mount(four);
     await choose(el, "t-lucia", "delete");
     let dialog = await deleteDialog(el);
-    expect(dialog.shadowRoot!.querySelector("[data-target]")!.textContent).toBe("Bar Lucía");
+    expect(dialog.shadowRoot!.querySelector("[data-target]")!.textContent).toBe("River Bar");
     expect(endsOf(dialog)).toEqual([
-      "Bar Lucía is in use on every screen. Deleting it puts Waitron's theme on every screen.",
+      "River Bar is in use on every screen. Deleting it puts Waitron's theme on every screen.",
     ]);
     await userEvent.click(confirmDelete(dialog));
     expect(deleteTheme).toHaveBeenCalledTimes(1);

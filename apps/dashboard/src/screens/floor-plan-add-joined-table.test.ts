@@ -341,7 +341,7 @@ it("speaks Spanish", async () => {
     "1 plaza",
   ]);
   expect(madeOf(el).countLabel(3)).toBe("3 mesas");
-  await set(el, "table-name", "Mesa larga");
+  await set(el, "table-name", "Long table");
   await pressAdd(el);
   expect(errors(el)).toEqual(["", "Escribe de 1 a 999.", "Elige al menos 2 mesas."]);
   const none = await openAdd({ draft: { tables: [] } });

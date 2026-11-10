@@ -38,7 +38,7 @@ function theme(id: string, name: string, choices: ThemeChoices): ThemeView {
   };
 }
 
-const lucia = theme("t-lucia", "Bar Lucía", {
+const lucia = theme("t-lucia", "River Bar", {
   brandColor: "#1e5b3a",
   brandFix: { dark: true },
   background: "tinted",
@@ -163,7 +163,7 @@ const states: Record<
       return "dashboard-theme-logo-field";
     },
   },
-  "editing Bar Lucía": { list: inUse(lucia), reach: async () => "[data-test=brand-fixed-dark]" },
+  "editing River Bar": { list: inUse(lucia), reach: async () => "[data-test=brand-fixed-dark]" },
   "the lemon warning": {
     list: inUse(lucia),
     reach: async (el) => {

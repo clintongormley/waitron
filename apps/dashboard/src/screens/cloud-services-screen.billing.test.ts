@@ -20,7 +20,7 @@ const connected = (overrides: Record<string, unknown> = {}) => ({
   configured: true,
   isPrimary: true,
   code: "",
-  legalBusinessName: "Sol SL",
+  legalBusinessName: "Sun SL",
   accountUrl: `${ORIGIN}/account`,
   installation: {
     state: "active",

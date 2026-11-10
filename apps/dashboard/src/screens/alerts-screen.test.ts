@@ -206,7 +206,7 @@ describe("dashboard-alerts-screen", () => {
       ...open,
       source: "device",
       deviceId: "d1",
-      deviceName: "Caja 1",
+      deviceName: "Till 1",
     };
     const fromFiling: AlertView = {
       ...open,
@@ -227,7 +227,7 @@ describe("dashboard-alerts-screen", () => {
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api });
     await flush(el);
     const [deviceRow, jobRow] = rows(el, "open-alerts-table");
-    expect(deviceRow!.textContent).toContain("Caja 1");
+    expect(deviceRow!.textContent).toContain("Till 1");
     // The area column also reads "Tax filing", so only the alert cell shows the source.
     expect(jobRow!.querySelector('[part="alert-message"]')!.textContent).toContain("· Tax filing");
     expect(jobRow!.textContent).not.toContain("fiscal_filing");

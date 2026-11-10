@@ -327,7 +327,7 @@ it("still fills from a chosen address when only the venue name was edited meanwh
   const { resolving, answers } = deferredProvider();
   const el = await editing(apiFor(), resolving);
   await startChoosing(el);
-  await typeInto(el, "venueName", "Casa Nueva");
+  await typeInto(el, "venueName", "New House");
   answers[0]!(MADRID);
   await vi.waitFor(() => expect(field(el, "addressLine1").value).toBe("Calle Mayor 2"));
 });
@@ -350,7 +350,7 @@ it("drops a chosen address still on its way when a save begins, even if the save
   api.patchVenueDetails.mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
   const el = await editing(api, resolving);
   await startChoosing(el);
-  await typeInto(el, "venueName", "Casa Nueva");
+  await typeInto(el, "venueName", "New House");
   await click(el, "[data-test=acknowledge]");
   await click(el, "[data-test=save]");
   expect(lookup(el)!.disabled).toBe(true);

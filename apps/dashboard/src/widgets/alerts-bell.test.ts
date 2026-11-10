@@ -83,7 +83,7 @@ const jobsWaiting: AlertView = {
   key: "printer.jobs_waiting:barra",
   kind: "ongoing",
   code: "printer.jobs_waiting",
-  params: { printer: "Barra", count: 2 },
+  params: { printer: "Counter", count: 2 },
   severity: "warning",
   since: "2026-09-14T12:00:00.000Z",
   area: "printing",
@@ -323,7 +323,7 @@ describe("dashboard-alerts-bell", () => {
     const item = qa(el, "li")[0]!.textContent!;
     // Real wording from its params, not the generic fallback or the raw code.
     expect(item).toContain("print job(s) are stuck at");
-    expect(item).toContain("Barra");
+    expect(item).toContain("Counter");
     expect(item).not.toContain("Something needs attention");
     expect(item).not.toContain("printer.jobs_waiting");
     // Without the screen's permission there is no way to reach it.

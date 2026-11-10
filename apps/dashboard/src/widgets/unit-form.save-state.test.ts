@@ -155,7 +155,7 @@ it("a changed unit's press sends what the form holds", async () => {
 it("a changed new unit that fails its own checks shows its errors after a press and holds Save until fixed", async () => {
   const el = await mount(null);
   const submit = submissions(el);
-  await type(el, "staffName", "litro");
+  await type(el, "staffName", "litre");
   expect(await saveState(el)).toEqual(ready);
   await press(el);
   expect(submit).not.toHaveBeenCalled();

@@ -51,11 +51,11 @@ function api(state: "empty" | "populated" | "failed"): DashboardApi {
     listExtraLists: lists([extraList]),
     listOptionLists: lists([optionList]),
     getExtraListDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: "Café" }],
-      menus: [{ id: "mn1", name: "Tostada", menuName: "Desayuno" }],
+      products: [{ id: "p1", name: "Coffee" }],
+      menus: [{ id: "mn1", name: "Toast", menuName: "Breakfast" }],
     }),
     getOptionListDependants: vi.fn().mockResolvedValue({
-      products: [{ id: "p1", name: "Solomillo" }],
+      products: [{ id: "p1", name: "Tenderloin" }],
     }),
   } as unknown as DashboardApi;
 }

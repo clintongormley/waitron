@@ -202,7 +202,7 @@ it("shows Spanish replacement approval status and keeps a non-primary from check
         state: "awaiting_owner",
         oldInstallationId: "old-installation",
         organisationName: "Org",
-        legalBusinessName: "Negocio",
+        legalBusinessName: "Business",
       },
     }),
   );
@@ -227,8 +227,8 @@ it("offers explicit start, check and final confirmation; uses the offered busine
     requestId,
     organisationId,
     legalBusinessId,
-    organisationName: "Café Sol",
-    legalBusinessName: "Sol SL",
+    organisationName: "Sun Cafe",
+    legalBusinessName: "Sun SL",
     openCloudUrl: `https://cloud.example/connect#request=${requestId}`,
     expiresAt: "2099-01-01T12:00:00Z",
   };
@@ -259,7 +259,7 @@ it("offers explicit start, check and final confirmation; uses the offered busine
   expect(calls.some((c) => c.url.endsWith("/complete"))).toBe(false);
   click(el, "check");
   await flush(el);
-  await expect.poll(() => el.shadowRoot!.textContent).toContain("Sol SL");
+  await expect.poll(() => el.shadowRoot!.textContent).toContain("Sun SL");
   expect(calls.some((c) => c.url.endsWith("/complete"))).toBe(false);
   click(el, "confirm");
   await flush(el);
@@ -392,7 +392,7 @@ for (const locale of ["en", "es"] as const)
       configured: true,
       isPrimary: true,
       code: "",
-      legalBusinessName: "Sol SL",
+      legalBusinessName: "Sun SL",
       installation: {
         state: "active",
         revision: 2,
@@ -566,7 +566,7 @@ for (const shown of ["complete", "awaiting_cloud"] as const)
               configured: true,
               isPrimary: true,
               code: "",
-              legalBusinessName: "Sol SL",
+              legalBusinessName: "Sun SL",
               installation: {
                 state: "active",
                 revision: 2,
@@ -712,8 +712,8 @@ it("keeps the screen the person acted on while their action runs, whatever a bac
         state: "awaiting_local",
         organisationId,
         legalBusinessId,
-        organisationName: "Café Sol",
-        legalBusinessName: "Sol SL",
+        organisationName: "Sun Cafe",
+        legalBusinessName: "Sun SL",
       });
     }
     if (++statusReads === 2) {
@@ -735,7 +735,7 @@ it("keeps the screen the person acted on while their action runs, whatever a bac
   expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
   releaseCheck();
   await expect.poll(() => el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
-  expect(el.shadowRoot!.textContent).toContain("Sol SL");
+  expect(el.shadowRoot!.textContent).toContain("Sun SL");
 });
 
 it("takes a failed opening read's message away when Retry then loads the status", async () => {
@@ -771,8 +771,8 @@ it("keeps what the person's action showed when a status read started before it a
         state: "awaiting_local",
         organisationId,
         legalBusinessId,
-        organisationName: "Café Sol",
-        legalBusinessName: "Sol SL",
+        organisationName: "Sun Cafe",
+        legalBusinessName: "Sun SL",
       });
     if (++statusReads === 2) {
       await new Promise<void>((resolve) => (releaseRead = resolve));
@@ -790,7 +790,7 @@ it("keeps what the person's action showed when a status read started before it a
   await flush(el);
   await flush(el);
   expect(el.shadowRoot!.querySelector("#confirm")).not.toBeNull();
-  expect(el.shadowRoot!.textContent).toContain("Sol SL");
+  expect(el.shadowRoot!.textContent).toContain("Sun SL");
 });
 
 it("asks again before stopping Cloud access after a background read saw it stopped and then active", async () => {
@@ -802,7 +802,7 @@ it("asks again before stopping Cloud access after a background read saw it stopp
       configured: true,
       isPrimary: true,
       code: "",
-      legalBusinessName: "Sol SL",
+      legalBusinessName: "Sun SL",
       installation: {
         state: installationState,
         revision: 2,
@@ -846,7 +846,7 @@ for (const [locale, label] of [
           configured: true,
           isPrimary: true,
           code: "",
-          legalBusinessName: "Sol SL",
+          legalBusinessName: "Sun SL",
           installation: {
             state: "active",
             revision: 1,

@@ -154,7 +154,7 @@ it.each([
         invoiceType: "F1",
         recipient: {
           taxId: "12345678Z",
-          legalName: "María Ejemplo",
+          legalName: "Mary Sample",
           countryCode: "ES",
           address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
         },
@@ -174,7 +174,7 @@ it.each([
   for (const value of [
     label,
     customer,
-    "María Ejemplo",
+    "Mary Sample",
     "12345678Z",
     "Calle Mayor 2, 28013 Madrid, Madrid, España",
   ])
