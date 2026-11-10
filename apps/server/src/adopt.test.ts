@@ -1,5 +1,7 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
@@ -35,6 +37,11 @@ import type { PendingAdoption } from "./finish-adoption.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { tlsSetMatches } from "./testing/box-tls.js";
+import { runStagedReset, stageResetRequest } from "./reset-request.js";
+import { createSetupOperationStore } from "./setup-operation.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -82,7 +89,7 @@ const RESERVED: ReservedIdentity = {
 // The main box's ring, distinct from the spare's own `RING`.
 // Same version as `RING`, so opening under the wrong one fails on the key, not the version.
 const BUNDLE_RING = { key: Buffer.alloc(32, 0x6b).toString("base64"), version: 1 };
-const CA_KEY_PEM = "-----BEGIN PRIVATE KEY-----\nfake-authority\n-----END PRIVATE KEY-----\n";
+const CA_KEY_PEM = MAIN_AUTHORITY.caKeyPem;
 
 function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
   return {
@@ -91,7 +98,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",
     boxHostname: "waitron.local",
-    boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+    boxCaPem: MAIN_AUTHORITY.caCertPem,
     relayUrl: "https://relay.test:9000/",
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
@@ -160,6 +167,8 @@ function deps(
       extra.persistCredentialsRing ?? ((ring) => writeCredentialsRing(stateDir, ring)),
     stateDir,
     database: "mirror_db",
+    listIpv4: () => [],
+    now: () => new Date(),
   };
 }
 
@@ -575,14 +584,87 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     });
   });
 
-  it("keeps the main box's authority certificate and key as venue-ca files, 0600", async () => {
+  it("installs the main box's authority as this box's own, 0600, with a leaf it signed", async () => {
     await adoptFromPrimary(deps(), REQ, NO_HOOKS);
-    const crt = join(stateDir, "tls", "venue-ca.crt");
-    const key = join(stateDir, "tls", "venue-ca.key");
-    expect(await readFile(crt, "utf8")).toBe(makeBundle().boxCaPem);
-    expect(await readFile(key, "utf8")).toBe(CA_KEY_PEM);
-    expect((await stat(crt)).mode & 0o777).toBe(0o600);
-    expect((await stat(key)).mode & 0o777).toBe(0o600);
+    const tls = join(stateDir, "tls");
+    expect(await readFile(join(tls, "ca.crt"), "utf8")).toBe(makeBundle().boxCaPem);
+    expect(await readFile(join(tls, "ca.key"), "utf8")).toBe(CA_KEY_PEM);
+    for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
+      expect((await stat(join(tls, name))).mode & 0o777).toBe(0o600);
+    }
+    expect(await tlsSetMatches(stateDir)).toBe(true);
+    const leaf = new X509Certificate(await readFile(join(tls, "server.crt"), "utf8"));
+    expect(leaf.subjectAltName).toContain("DNS:box-aaaa.waitron.local");
+  });
+
+  it("the joined marker is written before the main box's key ring", async () => {
+    let markedWhenRingWritten: boolean | undefined;
+    await adoptFromPrimary(
+      deps({
+        persistCredentialsRing: async (ring) => {
+          markedWhenRingWritten = existsSync(join(stateDir, "tls", "joined.json"));
+          await writeCredentialsRing(stateDir, ring);
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(markedWhenRingWritten).toBe(true);
+    expect(JSON.parse(await readFile(join(stateDir, "tls", "joined.json"), "utf8"))).toEqual({
+      originNodeId: DESIGNATED.nodeId,
+    });
+  });
+
+  it("a join stopped just after the key ring was written leaves the marker, so the staged reset removes the ring", async () => {
+    const venueDir = join(stateDir, "venue");
+    await mkdir(venueDir);
+    const operations = createSetupOperationStore(stateDir);
+    const joinAndStage = async (stopBeforeFirstWrite: boolean) => {
+      const stopped = await operations
+        .run("adopt", "a-request", (operation) =>
+          adoptFromPrimary(
+            deps({
+              persistCredentialsRing: async (ring) => {
+                await writeCredentialsRing(stateDir, ring);
+                throw new Error("stopped after the ring");
+              },
+            }),
+            REQ,
+            {
+              beforeFirstWrite: async () => {
+                if (stopBeforeFirstWrite) throw new Error("stopped");
+                await operation.advance("venue_committed", { resetProof: {} });
+              },
+            },
+          ),
+        )
+        .catch((e: unknown) => e);
+      expect(stopped).toBeInstanceOf(Error);
+      const record = await operations.read();
+      if (record !== null) await stageResetRequest(stateDir, record.id);
+      return record;
+    };
+
+    const record = await joinAndStage(false);
+    expect(parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8"))).toMatchObject({
+      WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
+    });
+    expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(true);
+    expect(record?.phase).toBe("venue_committed");
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+    expect(await readdir(join(stateDir, "tls"))).toEqual([]);
+
+    // Control: a join stopped before its first write leaves no marker, and no record past "started",
+    // so the reset route offers no reset.
+    await rm(join(stateDir, "setup-operation.json"), { force: true });
+    const own = "WAITRON_CREDENTIALS_KEY=b3du\nWAITRON_CREDENTIALS_KEY_VERSION=1\n";
+    await writeFile(join(stateDir, "secrets.env"), own, { mode: 0o600 });
+    const control = await joinAndStage(true);
+    expect(control).toBeNull();
+    expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(false);
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(false);
+    expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(own);
   });
 
   it("pins the main box's public key", async () => {
@@ -673,6 +755,24 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       await writtenNothing();
     },
   );
+
+  it("refuses a bundle whose authority certificate and key are from different authorities, writing nothing", async () => {
+    const other = mintSelfSignedServerCert({
+      hostnames: ["waitron.local"],
+      ipAddresses: [],
+      now: new Date(),
+    });
+    const beforeFirstWrite = vi.fn(async () => {});
+    const error = await adoptFromPrimary(
+      deps({ fetchBundle: async () => makeBundle({ boxCaKeyPem: other.caKeyPem }) }),
+      REQ,
+      { beforeFirstWrite },
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+    expect(isAppError(error) && error.params).toEqual({});
+    expect(beforeFirstWrite).not.toHaveBeenCalled();
+    await writtenNothing();
+  });
 
   it("refuses mirror.vault_not_empty, writing nothing", async () => {
     await suite.db

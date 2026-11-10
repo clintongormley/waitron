@@ -9,19 +9,38 @@ import {
   reissueServerLeaf,
   type SelfSignedMaterial,
 } from "./self-signed-cert.js";
-import { needsConnectionBootstrap, serveRecovery } from "./recovery-listener.js";
+import {
+  needsConnectionBootstrap,
+  serveRecovery,
+  type RecoveryServeOptions,
+} from "./recovery-listener.js";
+import { installVenueAuthority } from "./box-tls-install.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
+import { tlsFile, tlsSetMatches } from "./testing/box-tls.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { runEntry, type EntryDeps } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 
+const { renameMock } = vi.hoisted(() => ({ renameMock: vi.fn() }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  renameMock.mockImplementation(actual.rename);
+  return { ...actual, rename: renameMock };
+});
+
 let material: SelfSignedMaterial;
+let venueSet: SelfSignedMaterial;
 beforeAll(() => {
   material = mintSelfSignedServerCert({
     hostnames: ["waitron.local", "localhost"],
     ipAddresses: ["127.0.0.1"],
+    now: new Date(),
+  });
+  venueSet = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: [],
     now: new Date(),
   });
 });
@@ -615,3 +634,101 @@ it("keeps a hostname-valid box on HTTPS after its network address changes", asyn
   expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(material.caCertPem);
   expect(await readFile(join(f.stateDir, "tls/server.crt"), "utf8")).toBe(material.serverCertPem);
 });
+
+/** A healthy box whose install of another authority stopped after `renamed` of its four moves. */
+async function halfInstalled(renamed: number) {
+  const f = await fixture();
+  await writeFile(join(f.stateDir, "tls/server.key"), material.serverKeyPem);
+  const rename = renameMock.getMockImplementation()!;
+  // The first rename puts the install's list in place; the next `renamed` move working files.
+  for (let done = 0; done <= renamed; done++) renameMock.mockImplementationOnce(rename);
+  renameMock.mockImplementationOnce(async () => {
+    throw new Error("power lost");
+  });
+  await expect(
+    installVenueAuthority({
+      stateDir: f.stateDir,
+      authority: { certPem: venueSet.caCertPem, keyPem: venueSet.caKeyPem },
+      hostnames: ["waitron.local", "localhost"],
+      listIpv4: () => ["127.0.0.1"],
+      now: () => new Date(),
+    }),
+  ).rejects.toThrow("power lost");
+  return f;
+}
+
+/** The four files on disk belong together and are the venue's authority's. */
+async function venueSetInstalled(stateDir: string): Promise<boolean> {
+  return (
+    (await tlsFile(stateDir, "ca.crt")) === venueSet.caCertPem && (await tlsSetMatches(stateDir))
+  );
+}
+
+it.each([1, 2, 3])(
+  "the supervised entry finishes an authority install stopped after %i of its moves instead of asking for connection repair",
+  async (renamed) => {
+    const f = await halfInstalled(renamed);
+    const [port] = (await freePorts(1)) as [number];
+    const past = vi.fn(async () => {
+      throw new Error("past the connection check");
+    });
+    const served: { bootstrapOnly?: boolean }[] = [];
+    await runEntry({
+      ...f,
+      args: [],
+      baseEnv: {
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      spareBytes: 0,
+      readRecoveryState: async () => ({ ...FRESH, level: "normal" }),
+      writeRecoveryState: past,
+      loadBoxEnv: past,
+      runStagedRestore: past,
+      runStagedReset: past,
+      clearReplacedDatabases: past,
+      assertNotAhead: past,
+      startServer: past,
+      serveRecovery: async (_app, options) => {
+        served.push(options);
+      },
+      installShutdownHandlers: () => {},
+      scheduleStayedUp: () => {},
+      log: () => {},
+      exit: () => {},
+    }).catch(() => {});
+    expect(served.filter((options) => options.bootstrapOnly === true)).toEqual([]);
+    expect(await venueSetInstalled(f.stateDir)).toBe(true);
+  },
+);
+
+it.each([1, 2, 3])(
+  "the direct entry finishes an authority install stopped after %i of its moves instead of asking for connection repair",
+  async (renamed) => {
+    const f = await halfInstalled(renamed);
+    const [port] = (await freePorts(1)) as [number];
+    const served: RecoveryServeOptions[] = [];
+    const started = vi.fn(async () => ({ close: async () => {} }));
+    const handle = await startServerOrFirstSetupResolution(
+      {
+        WAITRON_STATE_DIR: f.stateDir,
+        WAITRON_VENUE_DIR: f.venueDir,
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      {},
+      {
+        startServer: started,
+        serveResolution: async (_app, options) => {
+          served.push(options);
+          return { close: async () => {} };
+        },
+      },
+    );
+    closes.push(handle.close);
+    expect(served.filter((options) => options.bootstrapOnly === true)).toEqual([]);
+    expect(await venueSetInstalled(f.stateDir)).toBe(true);
+  },
+);

@@ -1601,6 +1601,12 @@ before `stampDeployment` and `persistCredentialsRing` at `:172-173`: `markJoined
 `backup-optional-state.ts:14-15` (drop `tls/venue-ca.*`). Tests `box-tls-install.test.ts` (new),
 `adopt.test.ts`, `archive-entries.test.ts`, `backup-data-placement.test.ts`,
 `backup-verification.installed.test.ts`, `backup-optional-state.test.ts`.
+**2026-11-10 (A947 3b-3):** `bootServer` no longer calls `finishTlsInstall`; `node-entry.ts` and
+`first-setup-launch.ts` do. It deletes every working file of the set and of the list, `<name>.tmp`,
+and a leaf reissue uses the same list.
+**2026-11-10 (A947 3b-3), later:** `adoptFromPrimary` now refuses a mismatched authority key before
+its first write (`assertAuthorityKeyMatches`), so the stopped-join test stops the join with a
+`persistCredentialsRing` stand-in that writes the ring and then throws.
 **2026-11-10 (Fable review), finding 10:** state-folder names live in
 `packages/store/src/state-layout.ts` (CLAUDE.md §3). Declare `TLS_JOINED_FILE = "tls/joined.json"`
 and `TLS_INSTALL_FILE = "tls/install.json"` beside `TLS_DIR` (`:48`), as `records/` names its

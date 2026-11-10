@@ -432,7 +432,7 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the Start-again records
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate (unless the box joined another server) and the Start-again records
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
@@ -442,10 +442,10 @@ re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue da
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
   certificate signed by it. Because that folder survives, a device that has already been told to
-  trust this box does not need to trust it again after a plain `reset`. Two files in it go:
-  `venue-ca.crt` and `venue-ca.key`, the other server's certificate authority that joining it as a
-  spare left on this box, together with their working copies `venue-ca.crt.tmp` and
-  `venue-ca.key.tmp`, which a join stopped while writing them can leave.
+  trust this box does not need to trust it again after a plain `reset`. The exception is a box that
+  joined another server as a spare (its `tls/` holds `joined.json`): joining replaced this box's
+  certificate authority with that server's, so a plain `reset` empties `tls/` there, and the box
+  mints a new authority on its next boot. Devices then have to trust it again.
 - `records/`, the record of each Keep or Move choice made at Start again (`records/choices/`)
   and the files a Move set aside (`records/set-aside/`). Each Move's folder also holds
   `secrets.env`, a copy of the box's key ring file as it was at the Move, because the moved
@@ -483,10 +483,11 @@ A box whose join to another server stopped partway can also be reset from the se
 a terminal, given the admin login the join used; the server refuses it in any other state. The box
 restarts and, before the server opens the database, removes the venue's databases (`venue.db`,
 `node.db` and their side files, and Litestream's folder beside them), `modules.json`,
-`pending-adoption.json`, the record of the stopped join, the other server's certificate authority
-the join left in `tls/` (`venue-ca.crt` and `venue-ca.key`, and their `.tmp` working copies) and,
-last, its own request file, `reset-request.json`; everything else, including the box's own certificate files in `tls/`,
-`secrets.env` and `backup.env`, is kept. It does nothing if the box has meanwhile got a `trading.env` or
+`pending-adoption.json`, the record of the stopped join and, last, its own request file,
+`reset-request.json`. If the join got far enough to write `tls/joined.json`, the box may already
+hold the other server's certificate authority and key ring, so it also removes everything in `tls/`
+and `secrets.env`, and the next boot makes a new set; devices then have to trust the box again.
+Otherwise the box's own files in `tls/` and `secrets.env` are kept. `backup.env` is always kept. It does nothing if the box has meanwhile got a `trading.env` or
 holds a venue. It does not remove this box from the other server's list of machines, nor release
 the installation number reserved for it there. To take the box off that list, open the other
 server's dashboard, then Settings, then Servers, and in the box's row menu choose Remove and then

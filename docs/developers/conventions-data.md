@@ -3565,6 +3565,54 @@ This receipt covers that initializer boundary, not every possible duty failure.
 name — it covers only the duties it names, so a new one that forgets is seen by nothing. Removing
 `await loop` still passes, so not every stop is proven to finish before the store closes.
 
+## A box that joined another holds that venue's authority as its own, and both resets remove it
+
+**The rule.** When a spare joins a main box, `adoptFromPrimary` (`apps/server/src/adopt.ts`)
+first writes `tls/joined.json` (`TLS_JOINED_FILE`, `packages/store/src/state-layout.ts`), holding
+the main box's node id, before `stampDeployment` and before the main box's key ring replaces
+`secrets.env`. It then installs the main box's certificate authority, and a leaf that authority
+signs for this box's names, as this box's own `tls/ca.*` and `tls/server.*`
+(`installVenueAuthority`, `apps/server/src/box-tls-install.ts`): four working files (each
+`<name>.tmp`, `stagedPath`), then a durable `tls/install.json` (`TLS_INSTALL_FILE`) naming them,
+then the renames, then the list is removed. `adoptFromPrimary` refuses a bundle whose authority
+certificate's key is not the one it carries (`mirror.bundle_fetch_failed`) before it writes
+anything, and `installVenueAuthority` refuses such a pair through the same check
+(`assertAuthorityKeyMatches`). A leaf reissue
+(`reissueBoxLeaf`, `apps/server/src/box-secrets.ts`) writes `server.crt` and `server.key` the same
+way. `finishTlsInstall` finishes a listed install and deletes every other working file of the set
+and of the list, before `tls/` is first read: in `node-entry.ts` (the image's entry point) and in
+`first-setup-launch.ts` (what `bin.ts` runs); a test or script that calls `startServer` directly
+does not run it. No box keeps a second authority beside its own.
+
+Both resets of a box holding `tls/joined.json` empty `tls/` and remove `secrets.env`, the marker
+last, so a reset cut short runs again: the staged reset (`apps/server/src/reset-request.ts`, which
+removes them before the operation record it re-runs from) and `waitron.sh reset`. `tls/` and `secrets.env` hold
+the other venue's secrets: the authority every one of its tills trusts, and the key ring that opens
+its sealed credentials. A box with an empty `tls/` and no `secrets.env` mints a fresh set at its
+next setup start (`ensureBoxSecrets`). A box that never joined keeps its `tls/` under both resets. A spare
+later promoted keeps the marker, so a plain reset of it also empties `tls/`, and its devices must
+trust it again. While a staged reset that will empty `tls/` is pending (`stagedResetEmptiesTls`),
+the image's start (`runEntry`) skips its connection check, which would otherwise send a
+part-emptied `tls/` to connection repair before the reset re-runs; with no such reset pending, the
+same `tls/` still goes to repair.
+
+**Every start checks its leaf.** `ensureLeaf` (`apps/server/src/box-secrets.ts`) reissues the
+leaf when it lacks one of the box's names or a current address, does not verify under
+`tls/ca.crt`, or is not the certificate of `tls/server.key`, and otherwise leaves it byte for
+byte. A start that refuses, and a box another box has fenced, leave `tls/` as it was; a failed
+reissue logs `tls.leaf_reissue_failed` and the start carries on, because a wrong name is no
+reason to stop selling.
+
+**Guards.** `apps/server/src/box-tls-install.test.ts` (every crash point of the install),
+`box-secrets.test.ts` (a stop between the reissue's two renames),
+`reset-request.test.ts` and `scripts/waitron-sh.test.mjs` (the joined and never-joined resets and
+the marker-last order; `reset-request.test.ts` also starts the real entry after a reset cut short
+in `tls/`), `connection-bootstrap.entry.test.ts` (both entries finish a cut-short install before
+their connection check), `box-leaf-names.test.ts`, the start-up reissue cases in `boot.test.ts` and
+`boot.mirror.test.ts`, and the refused-restore and fenced cases in
+`boot.restore.test.ts` and `boot.reconcile.test.ts`. Weaker than the rule: nothing checks that a
+NEW entry point which reads `tls/` calls `finishTlsInstall` first.
+
 ## The box's spare file
 
 **The rule.** The box keeps `<state>/spare-space` (`SPARE_SPACE_FILE`, `@waitron/provisioning`;
@@ -5366,7 +5414,8 @@ read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 ## One state-folder layout
 
 `packages/store/src/state-layout.ts` declares the box's top-level state names and each entry's
-plain-reset fate. Only `tls/` and `records/` are kept. The root guard reads definitions as text:
+plain-reset fate. Only `tls/` and `records/` are kept. On a box that joined another, a plain reset keeps the `tls/`
+folder but empties it (see "A box that joined another holds that venue's authority as its own"). The root guard reads definitions as text:
 a constant holding a complete distinctive name, or a `join` whose first argument ends in
 `stateDir`. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
 report a spare-file declaration and a TLS join, while accepting comments and format-item literals.

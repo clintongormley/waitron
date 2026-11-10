@@ -9,7 +9,6 @@ import {
 import { afterEach, expect, it } from "vitest";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
 import type { BackupManifest } from "./backup-manifest.js";
-import { writeVenueAuthority } from "./box-secrets.js";
 import { ALL_MODULES } from "./modules.js";
 import { restoreSecrets } from "./restore.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -86,30 +85,15 @@ async function collectAndRestore(stateDir: string): Promise<{ names: string[]; r
   return { names: entries.map((entry) => entry.name), restored };
 }
 
-it("a joined spare's backup carries the venue's authority beside its own, and restores both apart", async () => {
+it("a box's own authority is backed up and restored", async () => {
   const stateDir = await stateWithRecoveryFiles();
-  await writeVenueAuthority(stateDir, { certPem: "venue-ca-cert", keyPem: "venue-ca-key" });
 
   const { names, restored } = await collectAndRestore(stateDir);
 
-  expect(names).toContain("secrets/tls/venue-ca.crt");
-  expect(names).toContain("secrets/tls/venue-ca.key");
+  expect(names).toContain("secrets/tls/ca.crt");
+  expect(names).toContain("secrets/tls/ca.key");
   expect(await readFile(join(restored, "tls/ca.crt"), "utf8")).toBe("tls/ca.crt-contents");
   expect(await readFile(join(restored, "tls/ca.key"), "utf8")).toBe("tls/ca.key-contents");
-  expect(await readFile(join(restored, "tls/venue-ca.crt"), "utf8")).toBe("venue-ca-cert");
-  expect(await readFile(join(restored, "tls/venue-ca.key"), "utf8")).toBe("venue-ca-key");
-});
-
-it("a box that never joined another is backed up and restored without a venue authority", async () => {
-  const stateDir = await stateWithRecoveryFiles();
-
-  const { names, restored } = await collectAndRestore(stateDir);
-
-  expect(names.filter((name) => name.includes("venue-ca"))).toEqual([]);
-  expect(await readFile(join(restored, "tls/ca.key"), "utf8")).toBe("tls/ca.key-contents");
-  await expect(readFile(join(restored, "tls/venue-ca.key"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
 });
 
 it("a failing state read waits for the node copy to finish before it rejects", async () => {

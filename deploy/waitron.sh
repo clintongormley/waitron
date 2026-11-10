@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
 #   sudo bash waitron.sh install            # published main image
 #   sudo bash waitron.sh install <ref>      # build and run a branch or commit on the box
-#   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate, the start-again records and the files a Move set aside)
+#   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate unless the box joined another, the start-again records and the files a Move set aside)
 #   sudo bash waitron.sh --reset install [ref]   # build or pull the ref's images, wipe the box, start it on them
 #
 # Operating this file is deploy/README.md. It replaces the old install.sh / prepare.sh /
@@ -28,8 +28,9 @@ waitron.sh: usage:
   waitron.sh install [ref]     install or upgrade the box (ref defaults to main)
   waitron.sh update [ref]      same as install
   waitron.sh status            show each running Waitron image and its build time
-  waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate, the start-again
-                               records and the files a Move set aside; --all drops them too)
+  waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate unless the box
+                               joined another, the start-again records and the files a Move set
+                               aside; --all drops them too)
   waitron.sh --reset [--all] [--yes] [--force-production] install [ref]
                                build or pull ref's images, then wipe the box as reset does and start it
                                on them
@@ -845,10 +846,12 @@ wipe_box() {
   if [ "$RESET_ALL" -eq 1 ]; then
     rm_volume waitron_state
   else
-    # A plain reset keeps tls/ and records/.
+    # A plain reset keeps tls/ and records/, except that a box that joined another (tls/joined.json)
+    # holds that venue's authority in tls/, so it is emptied there too, the marker last; secrets.env
+    # goes either way.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
       --entrypoint sh app \
-      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name records -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key" "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt.tmp" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key.tmp"'
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name records -exec rm -rf {} + && if [ -e "${WAITRON_STATE_DIR:?}/tls/joined.json" ]; then find "${WAITRON_STATE_DIR:?}/tls/" -mindepth 1 -maxdepth 1 -name joined.json -prune -o -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/joined.json"; fi'
   fi
 }
 

@@ -10,7 +10,7 @@ import forge from "node-forge";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
   hasBoxCaConstraints,
-  isPermittedLeafIpv4,
+  leafIpv4s,
   mintSelfSignedServerCert,
   reissueServerLeaf,
   type SelfSignedMaterial,
@@ -42,9 +42,6 @@ const refused = () => new AppError("setup.not_ready", {});
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 const tlsDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_DIR);
 const pendingPath = (deps: BoxTlsRepairDeps) => join(tlsDir(deps), "repair-pending.json");
-function addresses(deps: BoxTlsRepairDeps) {
-  return [...new Set(["127.0.0.1", ...deps.listIpv4()])].filter(isPermittedLeafIpv4);
-}
 function current(cert: X509Certificate, now: Date) {
   return Date.parse(cert.validFrom) <= now.getTime() && Date.parse(cert.validTo) > now.getTime();
 }
@@ -168,7 +165,7 @@ function healthy(
       return false;
     if (
       deps.hostnames.some((name) => leaf.checkHost(name) !== name) ||
-      (checkAddresses && addresses(deps).some((ip) => leaf.checkIP(ip) !== ip))
+      (checkAddresses && leafIpv4s(deps.listIpv4).some((ip) => leaf.checkIP(ip) !== ip))
     )
       return false;
     const usage = forge.pki
@@ -276,7 +273,7 @@ function readCandidate(value: unknown, deps: BoxTlsRepairDeps): SelfSignedMateri
           caCertPem: m.caCertPem,
           caKeyPem: m.caKeyPem,
           hostnames: deps.hostnames,
-          ipAddresses: addresses(deps),
+          ipAddresses: leafIpv4s(deps.listIpv4),
           now: deps.now(),
         }),
       };
@@ -345,13 +342,13 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
                 caCertPem: s["ca.crt"]!.toString("utf8"),
                 caKeyPem: s["ca.key"]!.toString("utf8"),
                 hostnames: deps.hostnames,
-                ipAddresses: addresses(deps),
+                ipAddresses: leafIpv4s(deps.listIpv4),
                 now: deps.now(),
               }),
             }
           : mintSelfSignedServerCert({
               hostnames: deps.hostnames,
-              ipAddresses: addresses(deps),
+              ipAddresses: leafIpv4s(deps.listIpv4),
               now: deps.now(),
             });
       readCandidate(m, deps);

@@ -23,6 +23,7 @@ import {
 } from "./finish-adoption.js";
 import { mountSetup } from "./setup-api.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -57,7 +58,7 @@ function bundle(): MirrorBundle {
     primaryNode: { name: "Primary", filingModule: "fiscal-verifactu", taxModule: null },
     environment: "preproduction",
     boxHostname: "waitron.local",
-    boxCaPem: "synthetic-public-ca",
+    boxCaPem: MAIN_AUTHORITY.caCertPem,
     relayUrl: "https://relay.test/",
     accountKey: Buffer.alloc(32, 3).toString("base64"),
     reservedIdentity: {
@@ -68,7 +69,7 @@ function bundle(): MirrorBundle {
     moduleOverrides: {},
     primaryPublicKey: PRIMARY_KEYS.publicKey,
     credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
-    boxCaKeyPem: "synthetic-ca-key",
+    boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
   };
 }
 function deps(value = bundle()) {
@@ -104,6 +105,8 @@ function deps(value = bundle()) {
       writeCredentialsRing(stateDir, ring),
     stateDir,
     database: "synthetic-spare",
+    listIpv4: () => [],
+    now: () => new Date(),
   };
 }
 const request = { primaryUrl: "https://primary.test", credential };

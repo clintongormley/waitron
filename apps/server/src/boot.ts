@@ -354,12 +354,13 @@ import {
 } from "./mdns.js";
 import type { MdnsQuerySocket } from "./box-lookup.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
-import { BOX_HOSTNAME, boxHostnameFor } from "./box-name.js";
+import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
 import {
   ensureBoxSecrets,
+  ensureLeaf,
   mintedBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
@@ -495,9 +496,6 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  * SECRETS.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
-
-/** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
-export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
 
 /**
  * The upper bound on a single product-image upload, in bytes: how large an upload the server will
@@ -1616,6 +1614,8 @@ async function bootServer(
               },
               stateDir: config.stateDir,
               database: ownerDatabaseName,
+              listIpv4: boxAddresses,
+              now,
             },
             req,
             hooks,
@@ -1700,6 +1700,26 @@ async function bootServer(
   const ownHostname = boxHostnameFor(config.node.nodeId);
   const ownNameOnly: readonly string[] = [ownHostname];
   const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
+  const leafHostnames = leafHostnamesFor(config.node.nodeId);
+  // Called only once a start is past its refusals and not fenced, so a start that refuses, or a
+  // fenced box, leaves `tls/` as it was. Logged rather than thrown, as above: the old leaf still
+  // serves the tills that trust it.
+  const checkLeaf = async () => {
+    if (config.tls !== undefined) return;
+    try {
+      await ensureLeaf({
+        stateDir: config.stateDir,
+        hostnames: leafHostnames,
+        listIpv4: boxAddresses,
+        now,
+      });
+    } catch (error: unknown) {
+      log("warn", "tls.leaf_reissue_failed", {
+        errno: errnoOf(error) ?? null,
+        errorCode: codeOf(error),
+      });
+    }
+  };
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
@@ -1716,6 +1736,7 @@ async function bootServer(
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
     undoOnFailure.push(() => finishWorker.catch(() => {}));
+    await checkLeaf();
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
@@ -2015,7 +2036,7 @@ async function bootServer(
         ring,
         nodeId: config.node.nodeId,
         advertisedOrigin: config.advertisedOrigin,
-        hostnames: BOX_LEAF_HOSTNAMES,
+        hostnames: leafHostnames,
         listIpv4: boxAddresses,
         now,
         log,
@@ -2113,6 +2134,7 @@ async function bootServer(
       await validateRetainedZoneClock(tx, scope, context.savedZone.timeZone, now());
     return context;
   });
+  if (!fenced) await checkLeaf();
   if (context.savedZone.kind !== "valid") {
     tradingAdmission.repairOnly(context.savedZone.kind);
     app.use("*", zoneRepairGate(tradingAdmission));

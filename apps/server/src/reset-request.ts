@@ -2,14 +2,15 @@ import { MODULES_FILE, SETUP_OPERATION_FILE } from "@waitron/store";
 import { RESET_REQUEST_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed } from "@waitron/provisioning";
 import { existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
 import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisioning";
-import { VENUE_FILE } from "@waitron/store";
+import { SECRETS_ENV_FILE, TLS_DIR, TLS_JOINED_FILE, VENUE_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
-import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
+import { writeFileAtomic } from "./fs-atomic.js";
+import { joinedAnotherBox } from "./box-tls-install.js";
 import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
@@ -78,6 +79,22 @@ async function refusal(deps: StagedResetDeps, raw: string): Promise<string | nul
 }
 
 /**
+ * Whether a staged reset passes `refusal`'s marker, `trading.env` and operation-record checks and
+ * will empty `tls/` because this box joined another; `runStagedReset` repeats those, and the rest,
+ * under the venue lock.
+ */
+export async function stagedResetEmptiesTls(stateDir: string): Promise<boolean> {
+  const raw = await readFile(join(stateDir, MARKER), "utf8").catch(() => null);
+  const operationId = raw === null ? null : stagedOperationId(raw);
+  return (
+    operationId !== null &&
+    !existsSync(join(stateDir, TRADING_ENV_FILE)) &&
+    (await recordMatches(stateDir, operationId)) &&
+    (await joinedAnotherBox(stateDir))
+  );
+}
+
+/**
  * Carry out a staged reset of an adopt that stopped partway; the caller runs it before anything in
  * this process opens the venue database. Every check runs under the venue lock, and any that fails
  * discards the request having deleted nothing. Returns true only when the reset ran.
@@ -104,17 +121,20 @@ export async function runStagedReset(
       return false;
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
-    // The join's copy of the other venue's authority goes with the join, with the working copies
-    // a join stopped before their rename leaves.
-    for (const file of [
-      PENDING_ADOPTION_FILE,
-      MODULES_FILE,
-      SETUP_OPERATION_FILE,
-      "tls/venue-ca.crt",
-      "tls/venue-ca.key",
-      stagedPath("tls/venue-ca.crt"),
-      stagedPath("tls/venue-ca.key"),
-    ]) {
+    // The other venue's authority and key ring may be here, so the box's own go with them and the
+    // next setup start mints a fresh set. Before the operation record, whose removal makes a re-run
+    // discard; the joined record goes last of them, so a re-run still finds this box joined.
+    if (await joinedAnotherBox(deps.stateDir)) {
+      await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
+      const tlsDir = join(deps.stateDir, TLS_DIR);
+      for (const name of await readdir(tlsDir)) {
+        if (join(TLS_DIR, name) !== TLS_JOINED_FILE) {
+          await rm(join(tlsDir, name), { recursive: true, force: true });
+        }
+      }
+      await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
+    }
+    for (const file of [PENDING_ADOPTION_FILE, MODULES_FILE, SETUP_OPERATION_FILE]) {
       await rm(join(deps.stateDir, file), { force: true });
     }
     // Last, so a start cut short re-runs the reset; once the record is gone a re-run discards.

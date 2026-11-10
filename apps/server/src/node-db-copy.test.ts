@@ -39,6 +39,7 @@ import { mintBreakGlassSecret } from "./break-glass.js";
 import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 
 // No module reserves anything for the standby, so A's bundle needs no module operation.
 vi.mock("./modules.js", () => ({ ALL_MODULES: [] }));
@@ -103,8 +104,8 @@ beforeAll(async () => {
   const aState = await mkdtemp(join(tmpdir(), "waitron-copy-a-state-"));
   scratch.push(aState);
   await mkdir(join(aState, "tls"));
-  await writeFile(join(aState, "tls", "ca.crt"), "public-test-ca");
-  await writeFile(join(aState, "tls", "ca.key"), "public-test-ca-key");
+  await writeFile(join(aState, "tls", "ca.crt"), MAIN_AUTHORITY.caCertPem);
+  await writeFile(join(aState, "tls", "ca.key"), MAIN_AUTHORITY.caKeyPem);
   const aStore = await openStore(aDir);
   await stampDeployment(aStore.venue, "preproduction");
   await seedVenue(aStore.venue, {
@@ -134,6 +135,8 @@ beforeAll(async () => {
       advertisedOrigin: "https://spare.test",
       environment: "preproduction",
       database: "spare",
+      listIpv4: () => [],
+      now: () => new Date(),
       stateDir: bState,
       persistTrading: async (args) => {
         bId = args.nodeId;

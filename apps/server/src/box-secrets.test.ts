@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { X509Certificate, createPrivateKey } from "node:crypto";
-import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSecureContext } from "node:tls";
@@ -9,13 +9,18 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { chmod, lstat, symlink, writeFile, mkdir, type FileHandle } from "node:fs/promises";
 import {
   ensureBoxSecrets,
+  ensureLeaf,
   mintedBoxLeaf,
   reissueBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
-  writeVenueAuthority,
 } from "./box-secrets.js";
+import { finishTlsInstall } from "./box-tls-install.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import {
+  syncsAndRenames as recordSyncsAndRenames,
+  writtenDurably,
+} from "./testing/durable-writes.js";
 
 // `access`, `copyFile`, `mkdir`, `open` and `rename` are wrapped so a test can inject a failure for
 // a single path or record a call; every other call forwards to the real implementation.
@@ -67,47 +72,8 @@ const deps = (stateDir: string) => ({
   listIpv4: () => ["192.168.1.50"],
 });
 
-/** Each sync of an opened file or folder, each rename and each `mkdir` that created a folder, in
- * order, while `run` runs. */
-async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
-  const events: string[] = [];
-  const mkdirThrough = mkdirMock.getMockImplementation()!;
-  mkdirMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
-    const created = await (mkdirThrough as (...a: unknown[]) => Promise<unknown>)(p, ...rest);
-    if (created !== undefined) events.push(`mkdir ${String(p)}`);
-    return created;
-  });
-  const openThrough = openMock.getMockImplementation()!;
-  const renameThrough = renameMock.getMockImplementation()!;
-  openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
-    const handle = (await (openThrough as (...a: unknown[]) => unknown)(p, ...rest)) as FileHandle;
-    const realSync = handle.sync.bind(handle);
-    handle.sync = async () => {
-      events.push(`sync ${String(p)}`);
-      return realSync();
-    };
-    return handle;
-  });
-  renameMock.mockImplementation(async (from: string, to: string) => {
-    events.push(`rename ${from} ${to}`);
-    return renameThrough(from, to);
-  });
-  try {
-    await run();
-  } finally {
-    mkdirMock.mockImplementation(mkdirThrough);
-    openMock.mockImplementation(openThrough);
-    renameMock.mockImplementation(renameThrough);
-  }
-  return events;
-}
-
-/** Whether `file`'s working copy was synced before it was renamed into place, and its folder after. */
-function writtenDurably(events: string[], file: string, folder: string): boolean {
-  const synced = events.indexOf(`sync ${file}.tmp`);
-  const renamed = events.indexOf(`rename ${file}.tmp ${file}`);
-  return synced !== -1 && renamed > synced && events.indexOf(`sync ${folder}`, renamed) > renamed;
-}
+const syncsAndRenames = (run: () => Promise<unknown>) =>
+  recordSyncsAndRenames({ mkdir: mkdirMock, open: openMock, rename: renameMock }, run);
 
 describe("ensureBoxSecrets", () => {
   it("syncs every new file before it is renamed into place, and its folder after", async () => {
@@ -344,30 +310,6 @@ describe("ensureBoxSecrets", () => {
   });
 });
 
-describe("writeVenueAuthority", () => {
-  it("syncs the state folder after creating tls in it", async () => {
-    const d = await newDir();
-    const events = await syncsAndRenames(() =>
-      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
-    );
-    const created = events.indexOf(`mkdir ${join(d, "tls")}`);
-    expect(created).not.toBe(-1);
-    expect(events.indexOf(`sync ${d}`, created)).toBeGreaterThan(created);
-  });
-
-  it("syncs both files before they are renamed into place, and the folder after", async () => {
-    const d = await newDir();
-    const tls = join(d, "tls");
-    const events = await syncsAndRenames(() =>
-      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
-    );
-    expect(writtenDurably(events, join(tls, "venue-ca.crt"), tls)).toBe(true);
-    expect(writtenDurably(events, join(tls, "venue-ca.key"), tls)).toBe(true);
-    expect(await readFile(join(tls, "venue-ca.key"), "utf8")).toBe("key");
-    expect((await stat(join(tls, "venue-ca.key"))).mode & 0o777).toBe(0o600);
-  });
-});
-
 describe("reissueBoxLeaf", () => {
   const reissue = (stateDir: string) =>
     reissueBoxLeaf({
@@ -577,6 +519,39 @@ describe("reissueBoxLeaf", () => {
     expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
     expect(await readFile(join(tls, "server.crt.previous"), "utf8")).toBe(before.cert);
     expect((await readdir(tls)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("a process stop between the two renames leaves a pair the next start finishes", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const stopped = await newDir();
+    const passthrough = renameMock.getMockImplementation()!;
+    renameMock.mockImplementation(async (from: string, to: string) => {
+      await passthrough(from, to);
+      // What the disk holds if the process stops right after the certificate's rename.
+      if (to === join(d, "tls", "server.crt")) {
+        await cp(join(d, "tls"), join(stopped, "tls"), { recursive: true });
+      }
+    });
+    try {
+      await reissue(d);
+    } finally {
+      renameMock.mockImplementation(passthrough);
+    }
+
+    expect(await finishTlsInstall(stopped)).toBe("finished");
+    const after = await pairOf(stopped);
+    expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
+    expect(() => createSecureContext(after)).not.toThrow();
+    expect(after).toEqual(await pairOf(d));
+    expect(
+      await ensureLeaf({
+        stateDir: stopped,
+        hostnames: ["waitron.local", "localhost"],
+        now: () => new Date("2026-09-23T10:00:00Z"),
+        listIpv4: () => ["192.168.1.77"],
+      }),
+    ).toBe("kept");
   });
 });
 

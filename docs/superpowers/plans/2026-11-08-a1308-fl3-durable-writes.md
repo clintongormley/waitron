@@ -208,6 +208,9 @@ Rules §5, plus:
   (a download into scratch), `packages/fiscal-verifactu/src/emergency-attempt.ts` (flushes; item 64),
   and `apps/print-agent/src/*` (another program). Plus `"writeFileAtomic does not exist"`.
   Refusal and acceptance controls on inline text.
+  **2026-11-10 (A947 3b-3):** the `sync`/`rename` recorder `box-secrets.test.ts:70-86` held moved to
+  `apps/server/src/testing/durable-writes.ts`, and `apps/server/src/box-tls-install.ts` renames its
+  install's working files into place after flushing them: the map needs it too.
 - [ ] **Step 2:** Run it; fix any unlisted hit by converting it, not by listing it, unless it is one
   of the categories above. Commit.
 

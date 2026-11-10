@@ -32,6 +32,7 @@ import { writeModuleConfig } from "./module-config.js";
 import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -56,13 +57,13 @@ const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",
   boxHostname: "waitron.local",
-  boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+  boxCaPem: MAIN_AUTHORITY.caCertPem,
   relayUrl: "https://relay.example/",
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,
   credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
-  boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n",
+  boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
 };
 
 const dirs: string[] = [];
@@ -123,6 +124,8 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
           persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
           stateDir,
           database: venueDir,
+          listIpv4: () => [],
+          now: () => new Date(),
         },
         req,
         hooks,

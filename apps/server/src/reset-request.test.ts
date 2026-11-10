@@ -1,6 +1,6 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -19,7 +19,8 @@ import { AppError } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
-import { writeCredentialsRing } from "./box-secrets.js";
+import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
+import { markJoined } from "./box-tls-install.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { parseEnvFile } from "./env-file.js";
 import { PENDING_ADOPTION_FILE, type PendingAdoption } from "./finish-adoption.js";
@@ -30,6 +31,9 @@ import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { mountSetup } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { writeTradingEnv } from "./trading-config.js";
+import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { runEntry } from "./node-entry.js";
+import { FRESH } from "./recovery-state.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -40,6 +44,32 @@ vi.mock("./modules.js", async (importOriginal) => {
     ),
   };
 });
+
+const { rmMock, actualRm } = vi.hoisted(() => ({
+  rmMock: vi.fn(),
+  actualRm: { current: undefined as undefined | typeof import("node:fs/promises").rm },
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  actualRm.current = actual.rm;
+  rmMock.mockImplementation(actual.rm);
+  return { ...actual, rm: rmMock };
+});
+
+/** Records every removal, and fails the first removal of `failing`, if named. */
+function watchRemovals(failing?: string): string[] {
+  const removed: string[] = [];
+  let failOnce = failing;
+  rmMock.mockImplementation(async (path: string, options?: object) => {
+    removed.push(path);
+    if (path === failOnce) {
+      failOnce = undefined;
+      throw Object.assign(new Error("power lost"), { code: "EIO" });
+    }
+    return actualRm.current!(path, options);
+  });
+  return removed;
+}
 
 const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PRIMARY_NODE_ID = "22222222-2222-4222-8222-222222222222";
@@ -57,7 +87,7 @@ const BUNDLE: MirrorBundle = {
   primaryNode: { name: "Caja 1", filingModule: "fiscal-verifactu", taxModule: null },
   environment: "preproduction",
   boxHostname: "waitron.local",
-  boxCaPem: "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+  boxCaPem: MAIN_AUTHORITY.caCertPem,
   relayUrl: "https://relay.example/",
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
@@ -75,19 +105,23 @@ const BUNDLE: MirrorBundle = {
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,
   credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
-  boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n",
+  boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
 };
 
 const dirs: string[] = [];
 afterEach(async () => {
+  rmMock.mockImplementation(actualRm.current!);
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
 const migrate = (venueDir: string) =>
   applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
-/** A box whose adopt wrote its rows and files and then stopped, as `adoptFromPrimary` leaves it. */
-async function halfAdoptedBox(): Promise<{
+/**
+ * A box whose adopt wrote its rows and files and then stopped, as `adoptFromPrimary` leaves it.
+ * `joined`: the adopt got as far as its marker, so the main box's ring and authority may be here.
+ */
+async function halfAdoptedBox(joined = false): Promise<{
   stateDir: string;
   venueDir: string;
   operationId: string;
@@ -117,11 +151,7 @@ async function halfAdoptedBox(): Promise<{
   await writeFile(join(stateDir, PENDING_ADOPTION_FILE), "{}");
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "ca");
-  await writeFile(join(stateDir, "tls", "venue-ca.crt"), "venue ca");
-  await writeFile(join(stateDir, "tls", "venue-ca.key"), "venue ca key");
-  // A join stopped between writing the working copies and renaming them leaves these.
-  await writeFile(join(stateDir, "tls", "venue-ca.crt.tmp"), "venue ca");
-  await writeFile(join(stateDir, "tls", "venue-ca.key.tmp"), "venue ca key");
+  if (joined) await markJoined(stateDir, PRIMARY_NODE_ID);
   await writeFile(join(stateDir, "secrets.env"), "S=1\n");
   await writeFile(join(stateDir, "backup.env"), "B=1\n");
 
@@ -151,10 +181,8 @@ async function snapshot(stateDir: string): Promise<string[]> {
     PENDING_ADOPTION_FILE,
     "setup-operation.json",
     "trading.env",
-    "tls/venue-ca.crt",
-    "tls/venue-ca.key",
-    "tls/venue-ca.crt.tmp",
-    "tls/venue-ca.key.tmp",
+    "tls/ca.crt",
+    "secrets.env",
   ];
   return Promise.all(
     paths.map(async (path) => {
@@ -228,10 +256,6 @@ describe("runStagedReset", () => {
       PENDING_ADOPTION_FILE,
       "setup-operation.json",
       "reset-request.json",
-      "tls/venue-ca.crt",
-      "tls/venue-ca.key",
-      "tls/venue-ca.crt.tmp",
-      "tls/venue-ca.key.tmp",
     ]) {
       expect(existsSync(join(stateDir, gone)), gone).toBe(false);
     }
@@ -252,6 +276,69 @@ describe("runStagedReset", () => {
     } finally {
       await store.close();
     }
+  });
+
+  it("a staged reset of a box that joined leaves no authority, leaf, client certificate or key ring", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const tls = join(stateDir, "tls");
+    for (const name of ["ca.key", "server.crt", "server.key", "client.crt", "server.key.tmp"]) {
+      await writeFile(join(tls, name), name);
+    }
+    await stageResetRequest(stateDir, operationId);
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+    expect(await readdir(tls)).toEqual([]);
+    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe("B=1\n");
+    // A setup start can mint a fresh set: nothing of the old one is left to refuse it.
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.crt", "server.key"]);
+    expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
+  });
+
+  it("a staged reset of a box that joined, cut short before the key ring went, leaves nothing of the other venue when it runs again", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const tls = join(stateDir, "tls");
+    await writeFile(join(tls, "ca.key"), "ca.key");
+    await stageResetRequest(stateDir, operationId);
+    watchRemovals(join(stateDir, "secrets.env"));
+    const { log, events } = capturingLog();
+
+    await expect(runStagedReset({ stateDir, venueDir, log })).rejects.toThrow("power lost");
+    expect(await runStagedReset({ stateDir, venueDir, log })).toBe(true);
+
+    expect(events.map(([, event]) => event)).toEqual(["setup.reset_done"]);
+    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+    expect(await readdir(tls)).toEqual([]);
+    expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("a staged reset of a box that joined removes its joined record after everything else in tls, and its request last", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const tls = join(stateDir, "tls");
+    for (const name of ["ca.key", "server.crt", "server.key"]) {
+      await writeFile(join(tls, name), name);
+    }
+    await stageResetRequest(stateDir, operationId);
+    const removed = watchRemovals();
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+    const joinedAt = removed.indexOf(join(tls, "joined.json"));
+    const others = ["ca.crt", "ca.key", "server.crt", "server.key"].map((name) =>
+      removed.indexOf(join(tls, name)),
+    );
+    for (const at of [...others, removed.indexOf(join(stateDir, "secrets.env"))]) {
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(at).toBeLessThan(joinedAt);
+    }
+    expect(removed.at(-1)).toBe(join(stateDir, "reset-request.json"));
   });
 
   it("lets the real adopt run to completion where before the reset it was refused", async () => {
@@ -301,6 +388,8 @@ describe("runStagedReset", () => {
             persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
             stateDir,
             database: venueDir,
+            listIpv4: () => [],
+            now: () => new Date(),
           },
           req,
           hooks,
@@ -513,5 +602,116 @@ describe("runStagedReset", () => {
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
     expect(existsSync(join(stateDir, "setup-operation.json"))).toBe(false);
     expect(existsSync(join(stateDir, "reset-request.json"))).toBe(false);
+  });
+});
+
+describe("a start after a reset of a box that joined was cut short in tls/", () => {
+  /** A joined box with a healthy set, whose staged reset stopped while it emptied `tls/`. */
+  async function cutShortInTls(): Promise<{ stateDir: string; venueDir: string }> {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    await rm(join(stateDir, "tls"), { recursive: true, force: true });
+    await rm(join(stateDir, "secrets.env"));
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local", "localhost"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    await markJoined(stateDir, PRIMARY_NODE_ID);
+    await stageResetRequest(stateDir, operationId);
+    watchRemovals(join(stateDir, "tls", "server.key"));
+    await expect(runStagedReset({ stateDir, venueDir, log: () => {} })).rejects.toThrow(
+      "power lost",
+    );
+    rmMock.mockImplementation(actualRm.current!);
+    expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(true);
+    return { stateDir, venueDir };
+  }
+
+  async function start(box: { stateDir: string; venueDir: string }) {
+    const served: Array<{ bootstrapOnly?: boolean }> = [];
+    const reset = vi.fn(runStagedReset);
+    await runEntry({
+      ...box,
+      args: [],
+      baseEnv: {
+        WAITRON_HTTP_HOST: "127.0.0.1",
+        WAITRON_HTTP_PORT: "7443",
+        WAITRON_HTTP_LANDING_PORT: "0",
+      },
+      spareBytes: 0,
+      freeSpaceFloor: 0,
+      readRecoveryState: async () => ({ ...FRESH, level: "normal" }),
+      writeRecoveryState: async () => {},
+      loadBoxEnv: async (base) => base,
+      runStagedRestore: async () => false,
+      runStagedReset: reset,
+      assertNotAhead: async () => {},
+      clearReplacedDatabases: async () => {},
+      startServer: async () => {
+        throw new Error("past the reset");
+      },
+      serveRecovery: async (_app, options) => {
+        served.push(options);
+      },
+      installShutdownHandlers: () => {},
+      scheduleStayedUp: () => {},
+      log: () => {},
+      exit: () => {},
+    }).catch((error: Error) => {
+      if (error.message !== "past the reset") throw error;
+    });
+    return { served, reset };
+  }
+
+  it("finishes the reset instead of asking for connection repair", async () => {
+    const box = await cutShortInTls();
+
+    const { served, reset } = await start(box);
+
+    expect(served).toEqual([]);
+    expect(await reset.mock.results[0]?.value).toBe(true);
+    expect(await readdir(join(box.stateDir, "tls"))).toEqual([]);
+    expect(existsSync(join(box.stateDir, "secrets.env"))).toBe(false);
+    expect(existsSync(join(box.stateDir, "reset-request.json"))).toBe(false);
+  });
+
+  it("still asks for connection repair when no reset is staged", async () => {
+    const box = await cutShortInTls();
+    await rm(join(box.stateDir, "reset-request.json"));
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("still asks for connection repair on a box that never joined, whose reset keeps tls/", async () => {
+    const box = await cutShortInTls();
+    await rm(join(box.stateDir, "tls", "joined.json"));
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
+  it("still asks for connection repair when the box holds trading settings", async () => {
+    const box = await cutShortInTls();
+    await writeFile(join(box.stateDir, "trading.env"), "T=1\n");
+
+    const { served } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+  });
+
+  it("still asks for connection repair when the staged reset names another operation", async () => {
+    const box = await cutShortInTls();
+    await stageResetRequest(box.stateDir, "00000000-0000-4000-8000-000000000000");
+
+    const { served, reset } = await start(box);
+
+    expect(served.map((options) => options.bootstrapOnly)).toEqual([true]);
+    expect(reset).not.toHaveBeenCalled();
   });
 });
