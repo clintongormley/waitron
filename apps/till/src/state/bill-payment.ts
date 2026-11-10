@@ -112,7 +112,11 @@ export function paymentAsk(
 /** How a card is charged: on a terminal the till does not drive, or on a reader. */
 export type CardEntry =
   | { entry: "manual"; externalRef?: string }
-  | { entry: "reader"; readerId?: string; simulationOutcome?: "captured" | "declined" };
+  | {
+      entry: "reader";
+      readerId?: string;
+      simulationOutcome?: "captured" | "declined" | "attempting";
+    };
 
 /** A payment as confirmed, before it has a submission id. */
 export type Confirmation = Omit<BillPaymentRequest, "submissionId">;

@@ -73,7 +73,7 @@ export interface ParkOrderDetail {
 export interface CollectCardDetail extends ReceiptGuestsDetail {
   tip?: string;
   allowOffline?: boolean;
-  simulationOutcome?: "captured" | "declined";
+  simulationOutcome?: "captured" | "declined" | "attempting";
   /** Absent when the operator never picked one — the server then falls back to the paying
    * device's chosen reader, else its profile's default. */
   readerId?: string;
@@ -126,7 +126,11 @@ const CARD_FAILURE_MESSAGES = new Map<string, StringKey>([
 const ZERO = decimal("0");
 
 type EntryDraft = { entry: string; label: string; ref: string };
-type CardDraft = { tip: string; offline: boolean; simulation: "captured" | "declined" };
+type CardDraft = {
+  tip: string;
+  offline: boolean;
+  simulation: "captured" | "declined" | "attempting";
+};
 
 type View = "idle" | "paying" | "weighing" | "holding" | "card" | "collecting" | "card_outcome";
 
@@ -327,7 +331,7 @@ export class TillTenderPay extends LitElement {
   @state() private guestsAttempted = false;
   #guestsOrderId?: string;
   @state() private allowOffline = false;
-  @state() private simulationOutcome: "captured" | "declined" = "captured";
+  @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
   /** Replayed by `#retryCard`: the idle screen's tip and offline fields are gone by the time
    * Retry is tapped. */
   #lastCollectDetail: CollectCardDetail = {};
@@ -1136,6 +1140,18 @@ export class TillTenderPay extends LitElement {
                   }}
                 >
                   ${t("card.simulation_declined")}
+                </button>
+                <button
+                  type="button"
+                  class="option"
+                  data-test="simulation-attempting"
+                  aria-pressed=${this.simulationOutcome === "attempting"}
+                  @click=${() => {
+                    this.simulationOutcome = "attempting";
+                    this.#extrasScope?.changed();
+                  }}
+                >
+                  ${t("card.simulation_attempting")}
                 </button>
               </div>`
             : nothing

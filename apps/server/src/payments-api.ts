@@ -32,6 +32,7 @@ import {
   cardReaders,
   DEMO_READER_ID,
   deviceCardReaders,
+  SimulatorPaymentProvider,
   deviceProfileCardReaders,
   findPaymentByBillPayment,
   IN_PROGRESS_PAYMENT_STATES,
@@ -127,8 +128,6 @@ export interface PaymentsApiDeps {
   environment: DeploymentEnvironment;
   pool: CardProviderPool;
   providers: readonly CardProviderContribution[];
-  /** The practice simulator, when this installation built one: a bill refund it took is resolved
-   * through it. */
   simulator?: PaymentProvider;
   fetch?: typeof fetch;
   /** Injected by tests; production gets one `createPinThrottle()` per mount. */
@@ -440,7 +439,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     personId: string,
     notStuck: () => AppError,
   ): Promise<{ provider: PaymentProvider; resolved: AbandonedAttemptOutcome; now: Date }> => {
-    const provider = await deps.pool.get(attempt.provider);
+    const provider =
+      attempt.provider === "simulator"
+        ? new SimulatorPaymentProvider(deps.db)
+        : await deps.pool.get(attempt.provider);
     if (provider.resolveAbandonedAttempt === undefined) {
       throw new AppError("payment.resolve_unsupported", { providerId: attempt.provider });
     }
@@ -1137,7 +1139,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         }
         // The sale is filed under the device that started the payment, never the dashboard.
         const origin = storedDeviceOrigin(row);
-        await requireConnected(tx, cardProviderById(deps.providers, row.provider));
+        if (row.provider !== "simulator")
+          await requireConnected(tx, cardProviderById(deps.providers, row.provider));
         const attendanceKey = await pendingIntegratedAttendanceKey(
           tx,
           deps.attendance,
@@ -1265,9 +1268,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }),
   );
 
-  // Settles one from its provider's own record: a Stripe attempt through `resolveAbandonedAttempt`,
-  // then the bill's P3 on a capture. Never a whole-order pay, which would invoice the bill from one
-  // payment of it.
   app.post("/management-api/payments/bill-payments/:id/resolve", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1276,7 +1276,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         await refuseWhileClockBehind(tx);
         await requireStuckBillPayment(tx, id);
         const provided = await findPaymentByBillPayment(tx, id);
-        if (provided?.state === "attempting") {
+        if (provided?.state === "attempting" && provided.provider !== "simulator") {
           await requireConnected(tx, cardProviderById(deps.providers, provided.provider));
         }
         return { provided, personId };

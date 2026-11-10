@@ -142,7 +142,7 @@ interface PaymentDraft {
   cardTip: string;
   externalRef: string;
   readerId: string | undefined;
-  simulationOutcome: "captured" | "declined";
+  simulationOutcome: "captured" | "declined" | "attempting";
 }
 interface TipDraft {
   mode: TipMode;
@@ -519,7 +519,7 @@ export class TillBillPayDialog extends LitElement {
   @state() private tipAttempted = false;
   /** Unset, the server uses the device's own reader. */
   @state() private chosenReaderId?: string;
-  @state() private simulationOutcome: "captured" | "declined" = "captured";
+  @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
   /** The refusal still shown: it goes when the field it names changes, or at the next request. */
   @state() private shownRefusal: PayRefusal | null = null;
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
@@ -1824,11 +1824,11 @@ export class TillBillPayDialog extends LitElement {
       <legend>${t("card.simulation_result")}</legend>
       <p class="muted">${t("card.simulation_help")}</p>
       <div class="options">
-        ${(["captured", "declined"] as const).map((outcome) =>
+        ${(["captured", "declined", "attempting"] as const).map((outcome) =>
           this.#radio(
             "simulation",
             outcome,
-            t(outcome === "captured" ? "card.simulation_captured" : "card.simulation_declined"),
+            t(`card.simulation_${outcome}`),
             this.simulationOutcome === outcome,
             () => (this.simulationOutcome = outcome),
           ),

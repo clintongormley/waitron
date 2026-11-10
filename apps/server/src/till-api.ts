@@ -1885,7 +1885,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (
         body.simulationOutcome !== undefined &&
         (deps.cardProvider?.provider !== "simulator" ||
-          (body.simulationOutcome !== "captured" && body.simulationOutcome !== "declined"))
+          (body.simulationOutcome !== "captured" &&
+            body.simulationOutcome !== "declined" &&
+            body.simulationOutcome !== "attempting"))
       ) {
         throw new AppError("management.request_invalid", { field: "simulationOutcome" });
       }

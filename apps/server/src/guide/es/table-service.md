@@ -1,5 +1,12 @@
 # Servicio en mesa
 
+En Demostración o Preparación, elige **Simulador inmediato** y selecciona **Aprobar**, **Rechazar**
+o **Sin respuesta** antes de pulsar **Tarjeta**. No se cobra ninguna tarjeta real. **Sin respuesta**
+mantiene el pago bloqueado para que puedas practicar su recuperación. En **Pagos** del panel,
+un encargado elige **Consultar con el proveedor de pagos** para un pago del pedido completo,
+o **Consultar al proveedor** para un pago parcial de una cuenta, y confirma. Así termina el intento
+de práctica sin registrar un cobro.
+
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
 
 Si al cancelar un pedido se indica que hay un pago con tarjeta pendiente, espera a que termine el

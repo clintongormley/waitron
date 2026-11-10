@@ -6423,7 +6423,7 @@ without editing the optional field. The action and list use Park and Parked orde
 unpaid Counter order uses Send. Course and group Held remains distinct.
 
 The payment card still offers Cash and Card and retains its existing full-invoice, receipt-language,
-simulator and post-payment receipt behavior. A739 owns their replacement. Cash, Card and Park use
+post-payment receipt behavior. In practice, the instant simulator offers Approve, Decline and No answer before Card; No answer leaves recovery to a manager. The bill-payment dialog offers the same three results. A739 owns the remaining replacement. Cash, Card and Park use
 the shared medium button size; Send fills its own row when the zone offers sending before payment.
 
 ### Departments and zones

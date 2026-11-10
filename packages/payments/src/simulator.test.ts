@@ -1,3 +1,4 @@
+import { withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
@@ -78,6 +79,45 @@ describe("SimulatorPaymentProvider", () => {
       findPaymentByRef(tx, "simulator", result.paymentRef),
     );
     expect(row?.state).toBe("failed");
+  });
+
+  it("honours the practice decline even when the old demo reader is selected", async () => {
+    const { provider, params } = await setup();
+    const collecting = provider.collect({
+      ...params,
+      readerRef: "waitron-demo-reader",
+      simulationOutcome: "declined",
+    });
+    // Complete the old channel too so a regression fails without leaving collect waiting.
+    for (const pending of provider.pendingDemoReaderPayments())
+      provider.decideDemoReaderPayment(pending.id, "captured");
+    await expect(collecting).resolves.toMatchObject({ state: "failed", settledAt: null });
+  });
+
+  it("keeps a no-answer practice attempt until a manager ends it, including after restart", async () => {
+    const { provider, params } = await setup();
+    const result = await provider.collect({ ...params, simulationOutcome: "attempting" });
+    expect(result).toMatchObject({ state: "attempting", settledAt: null });
+    const restarted = new SimulatorPaymentProvider(suite.db);
+    await restarted.resolvePending(new Date());
+    expect(
+      await withTransaction(suite.db, (tx) => findPaymentByRef(tx, "simulator", result.paymentRef)),
+    ).toMatchObject({ state: "attempting" });
+    const manager = { id: "00000000-0000-4000-8000-000000000123" };
+    const now = new Date("2026-11-10T10:00:00Z");
+    await expect(
+      restarted.resolveAbandonedAttempt(result.paymentRef, now, { personId: manager!.id }),
+    ).resolves.toEqual({ outcome: "failed", cancelledAtProvider: false });
+    expect(
+      await withTransaction(suite.db, (tx) => findPaymentByRef(tx, "simulator", result.paymentRef)),
+    ).toMatchObject({ state: "failed" });
+    expect(
+      (await suite.db.execute(sql`select person_id, outcome, resolved_at from payment_resolutions`))
+        .rows,
+    ).toEqual([{ person_id: manager!.id, outcome: "failed", resolved_at: now.toISOString() }]);
+    await expect(
+      restarted.resolveAbandonedAttempt(result.paymentRef, now, { personId: manager!.id }),
+    ).rejects.toMatchObject({ code: "payment.not_found" });
   });
 
   it("captures by default and has no asynchronous work to forward", async () => {

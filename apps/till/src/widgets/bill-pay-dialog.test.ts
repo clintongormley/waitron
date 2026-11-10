@@ -1086,6 +1086,15 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(asked[0]!.card).toEqual({ entry: "reader", simulationOutcome: "declined" });
   });
 
+  it("sends No answer from the practice bill dialog to the payment preview", async () => {
+    const el = await card({ cardReader: "simulator", readers });
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    expect(root(el).querySelector('input[name="simulation"][value="attempting"]')).not.toBeNull();
+    await pick(el, "simulation", "attempting");
+    await click(el, "[data-pay-continue]");
+    expect(asked[0]!.card).toEqual({ entry: "reader", simulationOutcome: "attempting" });
+  });
+
   it("sends a bill payment to the pretend reader without a browser-chosen result", async () => {
     const readerId = "00000000-0000-4000-8000-000000000247";
     const el = await card({

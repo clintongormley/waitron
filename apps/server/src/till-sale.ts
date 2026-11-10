@@ -609,7 +609,7 @@ export interface IntegratedPayRequest {
    *  device-local offline queue. */
   allowOffline?: boolean;
   /** Test result selected by the practice UI. Only a server-mounted simulator may receive it. */
-  simulationOutcome?: "captured" | "declined";
+  simulationOutcome?: "captured" | "declined" | "attempting";
   /** One pretend-reader attempt, shared with its cancellation request. */
   demoAttemptId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */

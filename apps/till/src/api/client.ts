@@ -1138,7 +1138,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   externalRef?: string;
   readerId?: string;
   /** The practice simulator only. */
-  simulationOutcome?: "captured" | "declined";
+  simulationOutcome?: "captured" | "declined" | "attempting";
   allowOffline?: false;
   guestCount?: number | null;
 }
@@ -3014,7 +3014,7 @@ export class TillApi {
     zoneId?: string;
     tip?: string;
     allowOffline?: boolean;
-    simulationOutcome?: "captured" | "declined";
+    simulationOutcome?: "captured" | "declined" | "attempting";
     readerId?: string;
     demoAttemptId?: string;
     receiptLanguage?: string;

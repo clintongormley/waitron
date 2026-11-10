@@ -1224,6 +1224,23 @@ describe("till-tender-pay", () => {
       expect(collect).toHaveBeenCalledWith({ simulationOutcome: "declined" });
     });
 
+    it("sends a no-answer practice result when Card is pressed", async () => {
+      const store = new WorkingOrderStore();
+      store.addProduct(coffee, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        cardProvider: "simulator",
+      });
+      const collect = vi.fn();
+      el.addEventListener("collect-card", (event) => collect((event as CustomEvent).detail));
+      const choice = el.shadowRoot!.querySelector<HTMLElement>("[data-test=simulation-attempting]");
+      expect(choice).not.toBeNull();
+      choice!.click();
+      await el.updateComplete;
+      click(el, ".pay-card");
+      expect(collect).toHaveBeenCalledWith({ simulationOutcome: "attempting" });
+    });
+
     it("offers the pretend reader beside the instant simulator and clears it on Cancel", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(coffee, "1");

@@ -142,7 +142,7 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     if (body.simulationOutcome !== undefined) {
       request.simulationOutcome = oneOf(
         body.simulationOutcome,
-        ["captured", "declined"] as const,
+        ["captured", "declined", "attempting"] as const,
         "simulationOutcome",
       );
     }

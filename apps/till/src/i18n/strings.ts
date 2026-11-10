@@ -477,6 +477,7 @@ export const en = {
   "card.simulation_help": "No card will be charged. Choose the result for this test payment.",
   "card.simulation_captured": "Approve",
   "card.simulation_declined": "Decline",
+  "card.simulation_attempting": "No answer",
   // Numeric keypad (accessible names for the non-alphanumeric keys)
   "pad.decimal": "Decimal point",
   "pad.backspace": "Backspace",
@@ -2456,6 +2457,7 @@ export const es: Record<StringKey, string> = {
     "No se cobrará ninguna tarjeta. Elige el resultado de este pago de prueba.",
   "card.simulation_captured": "Aprobar",
   "card.simulation_declined": "Rechazar",
+  "card.simulation_attempting": "Sin respuesta",
   "pad.decimal": "Punto decimal",
   "pad.backspace": "Borrar",
   "label.change": "Cambio",
