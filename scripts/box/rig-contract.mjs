@@ -40,6 +40,7 @@ export const RIG_CASES = Object.freeze([
   "preboot-headless",
   "preboot-two-boxes",
   "preboot-tamper",
+  "recipe-setup",
 ]);
 
 const OPTIONS = /** @type {const} */ ({ "--case": "caseName", "--run-dir": "runDir" });

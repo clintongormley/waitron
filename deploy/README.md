@@ -35,6 +35,12 @@ A box installed before the box ran its own database server was retired also carr
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
 `reset`. Once such a box has been upgraded, `docker volume rm waitron_db` reclaims the space.
 
+## Development image rehearsal
+
+You can [build a development root and open setup in an emulator](../bench/box-installer/README.md).
+That rehearsal stops at Prepare’s administrator form; the USB installer and physical-box
+checks remain B3 work.
+
 ## Setting up a box
 
 Once per box, by whoever prepares it — never by the restaurant. From nothing but a fresh
