@@ -864,7 +864,7 @@ export class MenuPublicationsPanel extends LitElement {
           variant="secondary"
           data-test="schedule-close"
           ?disabled=${this.scheduleBusy}
-          @click=${() => void this.#scheduleDialog().requestClose("cancel")}
+          @click=${() => void this.#scheduleDialog().requestClose("navigation")}
           >${t("action.close")}</wt-button
         >
         <wt-button

@@ -126,7 +126,7 @@ for (const kind of ["menu", "section"] as const) {
       } else {
         await expect.poll(() => form.busy).toBe(false);
         expect(atCommit).toBeUndefined();
-        form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+        await userEvent.keyboard("{Escape}");
         await app.updateComplete;
         const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
         await q.updateComplete;

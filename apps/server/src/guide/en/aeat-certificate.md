@@ -22,7 +22,7 @@ asks you to confirm ownership again before you continue.
 If replacing a certificate fails with an HTTP error or an unexpected check failure, the current
 certificate stays installed. Check the internet connection, or choose another file or certificate
 type in the dialog. Select **Save** to check again. Select **Cancel** to stop without replacing
-the current certificate; if asked about unsaved changes, choose **Discard changes** to close.
+the current certificate.
 An HTTP status alone does not tell you whether waiting will help.
 
 ## Find out what a check observed {#diagnosis}

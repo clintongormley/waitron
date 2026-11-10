@@ -117,7 +117,7 @@ async function choose(app: PrinterPairLeaveApp, decision: "keep" | "discard") {
   await expect.poll(() => question.open).toBe(false);
 }
 
-for (const route of ["cancel", "escape", "parent"] as const) {
+for (const route of ["escape", "parent"] as const) {
   it(`Bluetooth proof ${route} keeps the exact PIN and focus until Discard`, async () => {
     const { app, screen } = await mount();
     change(screen, " 8A? ");
@@ -125,13 +125,10 @@ for (const route of ["cancel", "escape", "parent"] as const) {
     await field(screen).updateComplete;
     const input = field(screen).shadowRoot!.querySelector("input")!;
     input.focus();
-    const dismiss = async () =>
-      route === "escape"
-        ? userEvent.keyboard("{Escape}")
-        : q(
-            screen,
-            route === "parent" ? "[data-test=cancel-new-printer]" : "[data-test=cancel-pair]",
-          )!.click();
+    const dismiss = async () => {
+      if (route === "parent") q(screen, "[data-test=cancel-new-printer]")!.click();
+      else await userEvent.keyboard("{Escape}");
+    };
     await dismiss();
     await choose(app, "keep");
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -166,14 +163,14 @@ it("discarding a Bluetooth proof leaves the parent's edited manual address", asy
     new CustomEvent("wt-change", { detail: { value: "192.168.20.247" } }),
   );
   change(screen, "8472");
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect((q(screen, "[data-test=probe-host]") as HTMLElementTagNameMap["wt-input"]).value).toBe(
     "192.168.20.247",
   );
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => q(screen, "[data-test=new-printer-modal]")).toBeNull();
   expect(unload()).toBe(false);
@@ -181,21 +178,21 @@ it("discarding a Bluetooth proof leaves the parent's edited manual address", asy
 it("Bluetooth proof replacement and disconnect abort old questions and detached input", async () => {
   const { app, screen } = await mount();
   change(screen, "8472");
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   await open(screen, other.localKey!);
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(field(screen)?.value).toBe("");
   expect(unload()).toBe(false);
   const old = field(screen);
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => modal(screen)).toBeNull();
   await open(screen, address);
   old.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "old proof" } }));
   await screen.updateComplete;
   expect(field(screen)?.value).toBe("");
   change(screen, "8472");
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -212,10 +209,10 @@ it("a refused Bluetooth request retains its exact dirty proof", async () => {
   await expect.poll(() => field(screen).invalid).toBe(true);
   expect(field(screen)?.value).toBe("A?8");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`submitted Bluetooth request retains its existing ${route} and late command result`, async () => {
     let finish!: (value: { command: typeof command }) => void;
     let received: unknown;
@@ -259,7 +256,7 @@ it("Bluetooth success commits its submitted proof without clearing the parent ad
   expect(received).toEqual(["a1", address, "A?8"]);
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => q(screen, "[data-test=new-printer-modal]")).toBeNull();
   expect(unload()).toBe(false);
@@ -284,11 +281,11 @@ it("a newer delivered PIN stays dirty against the accepted submitted proof", asy
   expect(field(screen)?.value).toBe("next proof");
   expect(unload()).toBe(true);
   expect(calls).toBe(1);
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   change(screen, "A?8");
   expect(unload()).toBe(false);
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => modal(screen)).toBeNull();
 });
 for (const result of ["success", "refusal"] as const) {
@@ -316,7 +313,7 @@ for (const result of ["success", "refusal"] as const) {
     expect(field(screen)?.disabled).toBe(false);
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     expect(unload()).toBe(true);
-    q(screen, "[data-test=cancel-pair]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
   });
 }
@@ -373,7 +370,7 @@ it("a submitted Bluetooth request still protects the parent's independent addres
   change(screen, "A?8");
   q(screen, "[data-test=confirm-pair]")!.click();
   await expect.poll(() => field(screen)?.disabled).toBe(true);
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect((q(screen, "[data-test=probe-host]") as HTMLElementTagNameMap["wt-input"]).value).toBe(
     "192.168.20.247",
@@ -398,7 +395,7 @@ it("Bluetooth success clears its proof before the native close report arrives", 
 it("replacing discovery clears the old Bluetooth question and proof", async () => {
   const { app, screen } = await mount();
   change(screen, "A?8");
-  q(screen, "[data-test=cancel-pair]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   q(screen, "[data-test=open-add-printer]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();

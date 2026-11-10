@@ -305,7 +305,7 @@ export class TillAdjustmentDialog extends LitElement {
   #cancel(): void {
     if (!this.isConnected || !this.active || this.busy) return;
     if (this.#scope) {
-      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation");
     } else this.#emit("adjust-close");
   }
 

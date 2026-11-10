@@ -56,7 +56,7 @@ async function choose(el: TillApp, decision: "keep" | "discard") {
   );
 }
 
-it.each(["cancel", "escape"])(
+it.each(["escape"])(
   "the host retains the allergy editor through %s and Keep, then Discard closes",
   async (action) => {
     const { el, form, input } = await editing();

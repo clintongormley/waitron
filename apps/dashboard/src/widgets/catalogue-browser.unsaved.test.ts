@@ -125,13 +125,14 @@ async function cancel(f: Fixture, route: "cancel" | "escape") {
   else await userEvent.keyboard("{Escape}");
   await f.browser.updateComplete;
 }
+
 for (const operation of ["move", "delete"] as const) {
-  for (const route of ["cancel", "escape"] as const) {
+  for (const route of ["escape"] as const) {
     it(`${operation} ${route} retains its staged choice until explicit local Discard`, async () => {
       const f = await fixture(operation);
       await edit(f);
       expect(protectedUnload()).toBe(true);
-      await cancel(f, route);
+      await userEvent.keyboard("{Escape}");
       expect((await question(f)).open).toBe(true);
       expect(f.modal.open).toBe(true);
       await choose(f, "keep");
@@ -141,7 +142,7 @@ for (const operation of ["move", "delete"] as const) {
           () => f.modal.querySelector("wt-button[slot=cancel]")!.shadowRoot!.activeElement?.tagName,
         )
         .toBe("BUTTON");
-      await cancel(f, route);
+      await userEvent.keyboard("{Escape}");
       await choose(f, "discard");
       await expect.poll(() => f.browser.shadowRoot!.querySelector("wt-modal")).toBeNull();
       expect(f.api.moveCatalogueItems).not.toHaveBeenCalled();
@@ -191,7 +192,7 @@ for (const operation of ["move", "delete"] as const) {
     f.modal.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await expect.poll(() => f.modal.querySelector("[role=alert]")?.textContent).toBeTruthy();
     expect(protectedUnload()).toBe(true);
-    await cancel(f, "cancel");
+    await userEvent.keyboard("{Escape}");
     expect((await question(f)).open).toBe(true);
     await choose(f, "keep");
     expect(value(f)).toBe(operation === "move" ? "f" : "delete");
@@ -200,7 +201,7 @@ for (const operation of ["move", "delete"] as const) {
 it("disconnect invalidates a question and reconnect keeps the original move baseline", async () => {
   const f = await fixture("move");
   await edit(f);
-  await cancel(f, "cancel");
+  await userEvent.keyboard("{Escape}");
   const stale = (await question(f)).shadowRoot!.querySelector<HTMLElement>(
     "[data-choice=discard]",
   )!;
@@ -211,7 +212,7 @@ it("disconnect invalidates a question and reconnect keeps the original move base
   await f.browser.updateComplete;
   expect(value(f)).toBe("f");
   expect(protectedUnload()).toBe(true);
-  await cancel(f, "escape");
+  await userEvent.keyboard("{Escape}");
   expect((await question(f)).open).toBe(true);
 });
 it("a child close report cannot remove the operation", async () => {
@@ -236,7 +237,7 @@ for (const operation of ["move", "delete"] as const) {
         .mockReturnValue(pending),
     });
     await edit(f);
-    await cancel(f, "cancel");
+    await userEvent.keyboard("{Escape}");
     const stale = (await question(f)).shadowRoot!.querySelector<HTMLElement>(
       "[data-choice=discard]",
     )!;
@@ -252,7 +253,7 @@ for (const operation of ["move", "delete"] as const) {
         .querySelector<HTMLInputElement>("input[value=move_up]")!
         .dispatchEvent(new Event("change"));
     stale.click();
-    expect(await f.modal.requestClose("cancel")).toBe(false);
+    expect(await f.modal.requestClose("escape")).toBe(false);
     expect(value(f)).toBe(operation === "move" ? "f" : "delete");
     refuse({ code: "category.name_taken" });
     await expect.poll(() => f.modal.querySelector("[role=alert]")?.textContent).toBeTruthy();
@@ -291,7 +292,7 @@ it("a deletion-count refresh keeps the staged disposition protected", async () =
   expect(f.api.deleteCatalogueItems).not.toHaveBeenCalled();
   expect(value(f)).toBe("delete");
   expect(protectedUnload()).toBe(true);
-  await cancel(f, "cancel");
+  await userEvent.keyboard("{Escape}");
   expect((await question(f)).open).toBe(true);
 });
 

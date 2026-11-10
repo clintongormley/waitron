@@ -864,7 +864,7 @@ export class PaymentsScreen extends LitElement {
       !id ||
       !(await this.renderRoot
         .querySelector<WtDialog>("[data-test=reader-discovery]")
-        ?.requestClose("cancel"))
+        ?.requestClose("navigation"))
     )
       return;
     if (!this.isConnected) return;
@@ -958,7 +958,7 @@ export class PaymentsScreen extends LitElement {
     if (
       await this.renderRoot
         .querySelector<WtDialog>("[data-test=reader-editor]")
-        ?.requestClose("cancel")
+        ?.requestClose(editor?.mode === "details" ? "navigation" : "cancel")
     ) {
       if (this.editor === editor) await this.#closeEditor();
     }

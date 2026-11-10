@@ -76,7 +76,7 @@ for (const decision of ["keep", "discard"] as const) {
     let proceeded = 0;
     const pending = app.leave.coordinator.request({
       scopes: [scope.id],
-      reason: "cancel",
+      reason: "navigation",
       proceed() {
         proceeded++;
       },
@@ -101,7 +101,7 @@ test("a committed draft aborts its question and leaves the next question indepen
   const ask = () =>
     app.leave.coordinator.request({
       scopes: [scope.id],
-      reason: "cancel",
+      reason: "navigation",
       proceed() {
         proceeded++;
       },
@@ -128,7 +128,7 @@ test("disconnect aborts the pending question and reconnect supplies a fresh coor
   const old = app.leave.coordinator;
   const pending = old.request({
     scopes: [scope.id],
-    reason: "cancel",
+    reason: "navigation",
     proceed() {
       throw new Error("stale leave");
     },
@@ -141,7 +141,7 @@ test("disconnect aborts the pending question and reconnect supplies a fresh coor
   await app.updateComplete;
   expect(ui.leaveCoordinatorFor(field)).not.toBe(old);
   expect(ui.leaveCoordinatorFor(field)?.isDirty()).toBe(false);
-  expect(await old.request({ scopes: [], reason: "cancel", proceed() {} })).toBe("stale");
+  expect(await old.request({ scopes: [], reason: "navigation", proceed() {} })).toBe("stale");
 });
 
 test("native Escape keeps the draft without leaking choice events outside the shell", async () => {
@@ -175,7 +175,7 @@ test("security reset drops drafts without restoring them and tolerates a detache
   const coordinator = app.leave.coordinator;
   const pending = coordinator.request({
     scopes: [scope.id],
-    reason: "cancel",
+    reason: "navigation",
     proceed() {
       throw new Error("late security answer");
     },
@@ -196,7 +196,7 @@ test("security reset drops drafts without restoring them and tolerates a detache
 
 test("a removed renderer cannot answer a later leave question", async () => {
   const { app, field, scope } = await draft();
-  const old = app.leave.coordinator.request({ scopes: [scope.id], reason: "cancel", proceed() {} });
+  const old = app.leave.coordinator.request({ scopes: [scope.id], reason: "navigation", proceed() {} });
   const oldQuestion = await question(app);
   scope.commit("Edited");
   expect(await old).toBe("stale");
@@ -209,7 +209,7 @@ test("a removed renderer cannot answer a later leave question", async () => {
   let left = 0;
   const next = app.leave.coordinator.request({
     scopes: [scope.id],
-    reason: "cancel",
+    reason: "navigation",
     proceed() {
       left++;
     },
@@ -273,7 +273,7 @@ test("a form inside an application gets its coordinator, and a dirty draft still
   expect(scope.isDirty()).toBe(true);
   expect(coordinator!.isDirty([form])).toBe(true);
   expect(unloadPrevented()).toBe(true);
-  const pending = coordinator!.request({ scopes: [form], reason: "cancel", proceed() {} });
+  const pending = coordinator!.request({ scopes: [form], reason: "navigation", proceed() {} });
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();

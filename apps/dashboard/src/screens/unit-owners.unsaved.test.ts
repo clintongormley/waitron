@@ -125,7 +125,7 @@ for (const succeeds of [true, false]) {
       expect((await question(app)).open).toBe(false);
     } else {
       await expect.poll(() => form.busy).toBe(false);
-      form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+      await userEvent.keyboard("{Escape}");
       expect((await question(app)).open).toBe(true);
       expect(form.open).toBe(true);
     }
@@ -205,6 +205,6 @@ it("Related Unit Save commits the child before attaching its id and leaves the P
   expect(product.currentValue).toMatchObject({ name: "Parent draft", unitId: "new-unit" });
   expect(app.leave.coordinator.isDirty([product])).toBe(true);
   await closeReportsDelivered();
-  product.shadowRoot!.querySelector<HTMLElement>('[slot="cancel"]')!.click();
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });

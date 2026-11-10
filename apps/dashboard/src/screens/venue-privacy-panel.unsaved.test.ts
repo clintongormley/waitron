@@ -121,14 +121,14 @@ it("a draft that only added spaces around the stored web page leaves without ask
   expect(await leave(app)).toBe("proceeded");
 });
 
-it("Cancel asks with a changed draft: Keep stays, Discard returns to view mode", async () => {
+it("navigation Keep retains the draft and Cancel returns to view mode without asking", async () => {
   const { app, panel, writes } = await mount();
   await type(panel, "privacyEmail", "typed@example.com");
-  click(panel, "cancel");
+  void leave(app);
   await choose(app, "keep");
   expect(field(panel, "privacyEmail")!.value).toBe("typed@example.com");
   click(panel, "cancel");
-  await choose(app, "discard");
+  await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => viewing(panel)).toBe(true);
   expect(writes).toEqual([]);
   expect(unload()).toBe(false);

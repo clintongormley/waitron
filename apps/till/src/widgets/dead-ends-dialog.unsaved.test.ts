@@ -88,13 +88,12 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`dead-end ${action} keeps destinations and removals, then discards without continuing`, async () => {
     const { app, form } = await mount();
     await choose(form, "0", "Kitchen");
     await remove(form, "1");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -104,7 +103,7 @@ for (const action of ["Cancel", "Escape"]) {
     expect(section(form).choices.get("0")).toBe("kitchen");
     expect(section(form).shadowRoot!.querySelector('[data-dead-end="1"]')).toBeNull();
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -143,7 +142,7 @@ it("Continue commits its local choices directly and invalidates an earlier disca
   const { app, form } = await mount();
   await choose(form, "0", "Kitchen");
   await remove(form, "1");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -175,7 +174,7 @@ it("after Continue, reverting choices in a different insertion order stays clean
 it("background answer updates preserve the draft and pending warning", async () => {
   const { app, form } = await mount();
   await choose(form, "0", "Kitchen");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   app.answer = { ...answer, stations: [...answer.stations].reverse() };
   app.requestUpdate();
@@ -191,7 +190,7 @@ it("background answer updates preserve the draft and pending warning", async () 
 it("disconnection invalidates the warning and reconnect preserves the initial baseline", async () => {
   const { app, form } = await mount();
   await choose(form, "0", "Kitchen");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -204,7 +203,7 @@ it("disconnection invalidates the warning and reconnect preserves the initial ba
   discard.click();
   await app.updateComplete;
   expect(app.closes).toBe(0);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("departed dialog controls cannot change, continue or close a replacement", async () => {

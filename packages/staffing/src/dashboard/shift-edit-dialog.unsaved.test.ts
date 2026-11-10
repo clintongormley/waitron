@@ -48,7 +48,7 @@ it("asks before closing an edited shift, keeps it on Keep, then discards on conf
     await confirm.updateComplete;
     confirm.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${choice}]`)!.click();
   };
-  const keep = modal.requestClose("cancel");
+  const keep = modal.requestClose("escape");
   await choose("keep");
   expect(await keep).toBe(false);
   expect(el.open).toBe(true);

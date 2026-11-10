@@ -86,12 +86,12 @@ it("a typed name asks before Escape, and Keep keeps it", async () => {
   expect(renameTaxpayer).not.toHaveBeenCalled();
 });
 
-it("a typed name asks before Cancel, and Discard closes without renaming", async () => {
+it("a typed name asks before Escape, and Discard closes without renaming", async () => {
   const { app, dialog, input, renameTaxpayer } = await fixture();
   input.shadowRoot!.querySelector("input")!.focus();
   await userEvent.keyboard("{End} 2");
   await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
-  dialog.querySelector<HTMLElement>("wt-button[data-test=cancel-legal-name]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(async () => (await question(app)).open).toBe(true);
   expect(dialog.open).toBe(true);
   const closed = dialogClosed(dialog);

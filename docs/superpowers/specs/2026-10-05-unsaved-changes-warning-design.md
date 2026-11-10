@@ -1,5 +1,9 @@
 # Warn before you lose unsaved changes
 
+> **2026-11-10, A657:** explicit Cancel now discards without asking, including page Cancel.
+> Close, Back, Skip, Escape and navigation remain guarded. See the
+> [current contract](../../developers/design-system.md#protect-an-edited-dialog-before-closing-it).
+
 You should be able to close an editor without losing work by accident. W69 adds one shared warning for edited forms across the dashboard, till, setup wizard and contributed management screens. When you try to leave, **Keep editing** preserves the form and receives initial focus; **Discard changes** explicitly abandons only the drafts that the requested action would leave.
 
 This follows the owner's W69 instructions of 2026-10-04 and 2026-10-05, including protection when leaving any page and the changed-test-check rule. The source baseline is `5597e06923b64acacf9df54ed6e8fb42e7fa411e`. The [audit](../plans/2026-10-05-unsaved-changes-audit.md) records observed owners and proposed treatment; the [plan](../plans/2026-10-05-unsaved-changes-warning.md) covers the entire item, optionally in two PRs. Source inspection is not runtime verification.

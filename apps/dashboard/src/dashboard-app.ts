@@ -2900,7 +2900,7 @@ export class DashboardApp extends LitElement {
             slot="cancel"
             data-test="close-profile"
             @click=${(event: Event) =>
-              void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
+              void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("navigation")}
             >${t("action.close")}</wt-button
           >
           ${

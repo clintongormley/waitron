@@ -98,13 +98,13 @@ async function question(app: ModifierApp) {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
+
 for (const kind of ["extras", "options"] as const) {
-  for (const route of ["cancel", "escape"] as const) {
+  for (const route of ["escape"] as const) {
     it(`${kind} ${route} keeps edits until Discard and reports cancellation once`, async () => {
       const { app, form } = await mount(kind);
       await edit(form, "name", "Draft list");
-      if (route === "cancel") cancel(form);
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
       const q = await question(app);
       expect(q.open).toBe(true);
       expect(app.cancelled).toBe(0);
@@ -117,7 +117,7 @@ for (const kind of ["extras", "options"] as const) {
       expect(
         form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.value,
       ).toBe("Draft list");
-      cancel(form);
+      await userEvent.keyboard("{Escape}");
       await question(app);
       q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
       await expect.poll(() => app.cancelled).toBe(1);
@@ -145,7 +145,7 @@ for (const kind of ["extras", "options"] as const) {
     });
     form.fieldErrors = { name: "Refused" };
     await form.updateComplete;
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
     expect(app.cancelled).toBe(0);
   });
@@ -176,7 +176,7 @@ it("a dirty option label blocks its clean ancestor and Keep retains the label te
       .value,
   ).toBe("Child draft");
 });
-it("option label Cancel protects the child and Discard leaves parent edits intact", async () => {
+it("option label Escape protects the child and Discard leaves parent edits intact", async () => {
   const { app, form } = await mount("options");
   await edit(form, "name", "Parent draft");
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=open-label-0]")!.click();
@@ -184,7 +184,7 @@ it("option label Cancel protects the child and Discard leaves parent edits intac
   const label = form.shadowRoot!.querySelector("dashboard-option-label-form")!;
   await label.updateComplete;
   await edit(label, "label-name", "Child draft");
-  cancel(label);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
@@ -202,7 +202,7 @@ for (const kind of ["extras", "options"] as const) {
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     const submitted = app.submitted[0]!;
     await edit(form, "name", "Newer draft");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     if (kind === "extras")
@@ -218,7 +218,7 @@ for (const kind of ["extras", "options"] as const) {
     expect(app.leave.coordinator.isDirty()).toBe(true);
     await edit(form, "name", "Saved name");
     expect(app.leave.coordinator.isDirty()).toBe(false);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await expect.poll(() => app.cancelled).toBe(1);
   });
   it(`${kind} replacement invalidates its old question while a same-id refresh retains edits`, async () => {
@@ -231,7 +231,7 @@ for (const kind of ["extras", "options"] as const) {
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="name"]')!.value,
     ).toBe("Draft");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     app.value = { ...app.value!, id: "replacement", name: "Replacement" };
@@ -267,7 +267,7 @@ it("saving an option label commits only that child and the parent submits the ch
     kitchenName: "R",
     available: true,
   });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("option order and default choice each keep their submitted meaning", async () => {
@@ -339,7 +339,7 @@ it("a same-label background value does not overwrite typed names or abort a pend
   const label = form.shadowRoot!.querySelector("dashboard-option-label-form")!;
   await label.updateComplete;
   await edit(label, "label-name", "Draft label");
-  cancel(label);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   label.value = { ...label.value!, name: "Background name" };
@@ -384,7 +384,7 @@ it("extras keep positional rows distinct after a move and restore them on Discar
       row.getAttribute("data-item"),
     ),
   ).toEqual(["two", "one"]);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
@@ -401,12 +401,12 @@ for (const kind of ["extras", "options"] as const) {
     await reattachAfterDetachedUpdate(form);
     await edit(form, "name", "Draft list");
     expect(app.leave.coordinator.isDirty()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
     expect(app.cancelled).toBe(0);
   });
 }
-it("an option label put back after a detached update still asks before Cancel discards an edit", async () => {
+it("an option label put back after a detached update still asks before Escape discards an edit", async () => {
   const { app, form } = await mount("options");
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=open-label-0]")!.click();
   await form.updateComplete;
@@ -415,7 +415,7 @@ it("an option label put back after a detached update still asks before Cancel di
   await reattachAfterDetachedUpdate(label);
   await typeInLabel(label, "Child draft");
   expect(app.leave.coordinator.isDirty([label])).toBe(true);
-  cancel(label);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(label.open).toBe(true);
 });
@@ -488,7 +488,7 @@ for (const kind of ["extras", "options"] as const) {
       await form.updateComplete;
     };
     for (const how of ["at once", "after a detached update"] as const) {
-      for (const route of ["cancel", "escape"] as const) {
+      for (const route of ["escape"] as const) {
         it(`${mode} ${kind}: an edit made before it was taken out still counts when put back ${how}, ${route}`, async () => {
           const { app, form } = await mount(kind, opened);
           await edit(form, "name", "Draft list");
@@ -496,8 +496,7 @@ for (const kind of ["extras", "options"] as const) {
           expect(field(form, "name").value).toBe("Draft list");
           expect(app.leave.coordinator.isDirty()).toBe(true);
           expectSaveChanged(form);
-          if (route === "cancel") cancel(form);
-          else await userEvent.keyboard("{Escape}");
+          await userEvent.keyboard("{Escape}");
           const q = await question(app);
           expect(q.open).toBe(true);
           expect(app.cancelled).toBe(0);
@@ -596,7 +595,7 @@ for (const mode of ["edit", "create"] as const) {
       expect(app.leave.coordinator.isDirty([label])).toBe(true);
       expect(app.leave.coordinator.isDirty()).toBe(true);
       expectSaveChanged(label);
-      cancel(label);
+      await userEvent.keyboard("{Escape}");
       const q = await question(app);
       expect(q.open).toBe(true);
       expect(label.open).toBe(true);
@@ -654,7 +653,7 @@ for (const mode of ["edit", "create"] as const) {
       parentInput.focus();
       expect(parentInput.matches(":focus")).toBe(false);
       await typeInLabel(label, "Child draft");
-      cancel(label);
+      await userEvent.keyboard("{Escape}");
       const q = await question(app);
       expect(q.open).toBe(true);
       const closed = dialogClosed(label.shadowRoot!.querySelector("wt-modal")!);

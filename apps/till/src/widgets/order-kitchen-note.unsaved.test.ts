@@ -53,7 +53,7 @@ async function question(app: KitchenNoteLeaveApp) {
   return dialog;
 }
 
-it.each(["cancel", "escape"])(
+it.each(["escape"])(
   "protects an edited kitchen note on %s and Keep editing preserves text",
   async (action) => {
     const { app, note } = await mount();

@@ -160,15 +160,15 @@ it("a reverted draft leaves without asking", async () => {
   expect(await leave(app)).toBe("proceeded");
 });
 
-it("Cancel asks with a changed draft: Keep stays, Discard returns to the saved rows", async () => {
+it("navigation Keep retains the draft and Cancel returns to saved rows without asking", async () => {
   const { app, card, saveTheme } = await mount();
   await square(card);
-  q(card, "[data-test=cancel]")!.click();
+  void leave(app);
   await choose(app, "keep");
   expect(editing(card)).toBe(true);
   expect(corners(card).value).toBe("square");
   q(card, "[data-test=cancel]")!.click();
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => editing(card)).toBe(false);
   expect(saveTheme).not.toHaveBeenCalled();
   expect(unload()).toBe(false);
@@ -360,8 +360,8 @@ describe("leaving with Advanced", () => {
     expect(saveTheme).not.toHaveBeenCalled();
   });
 
-  it("Cancel just after a pick still waiting for its frame asks, and Keep keeps the pick", async () => {
-    const { app, card } = await mount();
+  it("Cancel discards a pick still waiting for its frame without asking", async () => {
+    const { app, card, saveTheme } = await mount();
     await openAdvanced(card);
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
@@ -379,9 +379,10 @@ describe("leaving with Advanced", () => {
     await card.updateComplete;
     for (const frame of frames.splice(0)) frame(performance.now());
     vi.restoreAllMocks();
-    await choose(app, "keep");
-    expect(editing(card)).toBe(true);
-    expect(advanced(card).draft.choices.handSet.light).toEqual({ bg: "#f8f1e1" });
+    await expect.poll(() => editing(card)).toBe(false);
+    expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+    expect(saveTheme).not.toHaveBeenCalled();
+    expect(unload()).toBe(false);
   });
 
   it("Pick a different colour for dark screens alone asks nothing", async () => {

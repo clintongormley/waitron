@@ -123,7 +123,7 @@ describe.each(["en", "es"])("Periods discard (%s)", (locale) => {
     await change(editor);
     expect(unload()).toBe(true);
     const modal = editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
-    const keep = modal.requestClose("cancel");
+    const keep = modal.requestClose("escape");
     await choose("keep");
     expect(await keep).toBe(false);
     expect(

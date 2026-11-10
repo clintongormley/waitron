@@ -82,11 +82,11 @@ it("a typed address asks before Escape, and Keep keeps it", async () => {
   expect(requestOrderEmailDelivery).not.toHaveBeenCalled();
 });
 
-it("a typed address asks before Cancel, and Discard closes without sending", async () => {
+it("a typed address asks before Escape, and Discard closes without sending", async () => {
   const { app, dialog, input, requestOrderEmailDelivery } = await fixture();
   await typeAddress(input);
   await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
-  dialog.querySelector<HTMLElement>("wt-button[data-test=cancel-email]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(async () => (await question(app)).open).toBe(true);
   expect(dialog.open).toBe(true);
   const closed = dialogClosed(dialog);

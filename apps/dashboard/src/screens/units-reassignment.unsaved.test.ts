@@ -122,13 +122,14 @@ async function cancel(f: Fixture, route: "cancel" | "escape") {
     await userEvent.keyboard("{Escape}");
   }
 }
-for (const route of ["cancel", "escape"] as const) {
+
+for (const route of ["escape"] as const) {
   it(`${route} keeps reassignment selections and target until explicit local Discard`, async () => {
     const f = await fixture();
     await select(f);
     await target(f);
     expect(unloadProtected()).toBe(true);
-    await cancel(f, route);
+    await userEvent.keyboard("{Escape}");
     expect((await question(f.app)).open).toBe(true);
     expect(f.modal.open).toBe(true);
     await choose(f, "keep");
@@ -141,7 +142,7 @@ for (const route of ["cancel", "escape"] as const) {
             .shadowRoot!.activeElement?.tagName,
       )
       .toBe("BUTTON");
-    await cancel(f, route);
+    await userEvent.keyboard("{Escape}");
     await choose(f, "discard");
     await expect.poll(() => f.modal.open).toBe(false);
     expect(f.api.reassignProductsUnit).not.toHaveBeenCalled();
@@ -160,7 +161,7 @@ for (const changed of ["selection", "target"] as const) {
     if (changed === "selection") await select(f);
     else await target(f, "__each__");
     expect(unloadProtected()).toBe(true);
-    await cancel(f, "cancel");
+    await userEvent.keyboard("{Escape}");
     expect((await question(f.app)).open).toBe(true);
     await choose(f, "keep");
     expect(f.modal.open).toBe(true);
@@ -206,7 +207,7 @@ for (const succeeds of [true, false]) {
       .poll(() => f.modal.querySelector("[data-test=change-unit]")!.hasAttribute("disabled"))
       .toBe(succeeds);
     expect(unloadProtected()).toBe(!succeeds);
-    await cancel(f, "cancel");
+    await userEvent.keyboard("{Escape}");
     if (succeeds) {
       await expect.poll(() => f.modal.open).toBe(false);
       expect(unloadProtected()).toBe(false);
@@ -233,7 +234,7 @@ it("a busy reassignment invalidates an old Discard and ignores departed controls
   });
   await select(f);
   await target(f);
-  await cancel(f, "cancel");
+  await userEvent.keyboard("{Escape}");
   const q = await question(f.app);
   expect(q.open).toBe(true);
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -242,7 +243,7 @@ it("a busy reassignment invalidates an old Discard and ignores departed controls
   await f.modal.updateComplete;
   await expect.poll(() => q.open).toBe(false);
   oldDiscard.click();
-  await cancel(f, "escape");
+  await userEvent.keyboard("{Escape}");
   expect(f.modal.open).toBe(true);
   expect(f.modal.querySelector("wt-data-table")!.selected).toEqual(["p1"]);
   const oldTarget = f.modal.querySelector("wt-combobox")!;
@@ -352,7 +353,7 @@ it("disconnecting a dirty owner cancels its question and reconnects with the ret
   const f = await fixture();
   await select(f);
   await target(f);
-  await cancel(f, "cancel");
+  await userEvent.keyboard("{Escape}");
   const q = await question(f.app);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   f.screen.remove();
@@ -365,7 +366,7 @@ it("disconnecting a dirty owner cancels its question and reconnects with the ret
   expect(f.modal.querySelector("wt-data-table")!.selected).toEqual(["p1"]);
   expect(f.modal.querySelector("wt-combobox")!.value).toBe("u2");
   expect(unloadProtected()).toBe(true);
-  await cancel(f, "escape");
+  await userEvent.keyboard("{Escape}");
   expect((await question(f.app)).open).toBe(true);
   expect(f.api.reassignProductsUnit).not.toHaveBeenCalled();
   expect(f.api.deleteUnit).not.toHaveBeenCalled();

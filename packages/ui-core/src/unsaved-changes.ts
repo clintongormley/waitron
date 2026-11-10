@@ -1,3 +1,4 @@
+/** Only an explicit Cancel discards silently; Close, Back and switching use navigation. */
 export type LeaveReason = "cancel" | "escape" | "backdrop" | "navigation" | "signout";
 export type LeaveDecision = "keep" | "discard";
 export type LeaveOutcome = "proceeded" | "kept" | "busy" | "stale";
@@ -211,7 +212,7 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
       try {
         const affected = selected(attempt.roots, attempt.except);
         const dirty = affected.filter((owner) => owner.dirty());
-        if (dirty.length) {
+        if (dirty.length && request.reason !== "cancel") {
           const aborted = new Promise<"stale">((resolve) => {
             onAbort = () => resolve("stale");
             attempt.controller.signal.addEventListener("abort", onAbort, { once: true });
@@ -225,11 +226,12 @@ export function createLeaveCoordinator(confirm: ConfirmLeave, target: Window): L
           ]);
           if (attempt.controller.signal.aborted) return "stale";
           if (answer === "keep") return "kept";
-          attempt.deciding = false;
+        }
+        attempt.deciding = false;
+        if (dirty.length) {
           for (const owner of dirty) owner.restore();
           refreshUnload();
         }
-        attempt.deciding = false;
         await request.proceed();
         return "proceeded";
       } finally {

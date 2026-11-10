@@ -55,7 +55,7 @@ it("the actual floor keeps a typed seating count on Keep, discards without openi
   };
   const { form, input } = await tap();
   await userEvent.fill(page.elementLocator(input), "3");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-seat-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await q.updateComplete;
@@ -65,7 +65,7 @@ it("the actual floor keeps a typed seating count on Keep, discards without openi
   await expect.poll(() => q.open).toBe(false);
   expect(floor.shadowRoot!.querySelector("till-seat-dialog")).toBe(form);
   expect(input.value).toBe("3");
-  form.shadowRoot!.querySelector<HTMLElement>("[data-seat-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => floor.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();

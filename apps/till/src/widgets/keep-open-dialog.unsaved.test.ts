@@ -68,7 +68,7 @@ describe("zone draft", () => {
   function cancel(form: TillKeepOpenDialog) {
     form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
   }
-  it.each(["Cancel", "Escape"])(
+  it.each(["Escape"])(
     "an edited %s asks to keep or discard without submitting",
     async (action) => {
       const { app, form } = await mount();
@@ -109,14 +109,14 @@ describe("zone draft", () => {
     expect(unload()).toBe(false);
     field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
     form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect(app.confirmed).toEqual([]);
     expect(app.closes).toBe(0);
     app.shadowRoot!.prepend(form);
     await form.updateComplete;
     expect(field.value).toBe("14:30");
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
   });
   it("successful commit invalidates an old discard and retains an independent parent draft", async () => {
@@ -152,7 +152,7 @@ describe("zone draft", () => {
     await form.updateComplete;
     expect(form.shadowRoot!.querySelector("wt-combobox")!.value).toBe("14:30");
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
   });
 });

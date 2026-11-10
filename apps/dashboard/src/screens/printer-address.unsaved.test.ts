@@ -107,7 +107,7 @@ async function choose(app: PrinterAddressLeaveApp, decision: "keep" | "discard")
   question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => question.open).toBe(false);
 }
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`manual printer address ${route} preserves values and focus until Discard`, async () => {
     const { app, screen } = await mount();
     change(screen, "host", "192.168.20.247");
@@ -117,9 +117,7 @@ for (const route of ["cancel", "escape"] as const) {
     const input = field(screen, "host").shadowRoot!.querySelector("input")!;
     input.focus();
     const close = async () =>
-      route === "escape"
-        ? userEvent.keyboard("{Escape}")
-        : q(screen, "[data-test=cancel-new-printer]")!.click();
+      userEvent.keyboard("{Escape}");
     await close();
     await choose(app, "keep");
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -163,7 +161,7 @@ it("closing a nested name leaves the edited address, while discovery Discard cov
   await screen.updateComplete;
   const name = q(screen, "[name=new-printer-name]") as HTMLElementTagNameMap["wt-input"];
   name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Changed kitchen" } }));
-  q(screen, "[data-test=cancel-printer-name]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => q(screen, "[data-test=name-printer-modal]")).toBeNull();
   expect(field(screen, "host").value).toBe("192.168.20.247");
@@ -173,7 +171,7 @@ it("closing a nested name leaves the edited address, while discovery Discard cov
   (q(screen, "[name=new-printer-name]") as HTMLElementTagNameMap["wt-input"]).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "New name" } }),
   );
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "discard");
   await expect.poll(() => modal(screen)).toBeNull();
   expect(q(screen, "[data-test=name-printer-modal]")).toBeNull();
@@ -182,13 +180,13 @@ it("closing a nested name leaves the edited address, while discovery Discard cov
 it("address replacement and disconnect invalidate the old discard question and detached input", async () => {
   const { app, screen } = await mount();
   change(screen, "host", "192.168.20.247");
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   q(screen, "[data-test=open-add-printer]")!.click();
   await screen.updateComplete;
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   const old = field(screen, "host");
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => modal(screen)).toBeNull();
   q(screen, "[data-test=open-add-printer]")!.click();
   await screen.updateComplete;
@@ -197,7 +195,7 @@ it("address replacement and disconnect invalidate the old discard question and d
   expect(field(screen, "host").value).toBe("");
   expect(unload()).toBe(false);
   change(screen, "host", "192.168.20.247");
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -223,7 +221,7 @@ it("a successful address check submits normalized values and keeps the registrat
     .toContain(t("printers.probe_found"));
   expect(submitted).toEqual({ host: "192.168.20.247", port: 9100 });
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(field(screen, "host").value).toBe(" 192.168.20.247 ");
 });
@@ -289,7 +287,7 @@ it("refused registration retains the address and name for one parent question", 
     )
     .toBe(false);
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-new-printer]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(field(screen, "host").value).toBe("192.168.20.247");
   expect(q(screen, "[data-test=name-printer-modal]")).not.toBeNull();
@@ -313,7 +311,7 @@ it("a later address edit remains dirty after the submitted registration succeeds
   change(screen, "host", " 192.168.20.247 ");
   expect(unload()).toBe(false);
 });
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`submitted registration permits discovery ${route} and reloads without reopening it`, async () => {
     let finish!: (result: { id: string }) => void;
     let reads = 0;

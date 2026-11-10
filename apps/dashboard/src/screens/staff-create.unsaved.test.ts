@@ -98,13 +98,13 @@ it("a pending staff write blocks close, then a refusal retains the same details 
   await screen.updateComplete;
   await form.updateComplete;
   expect(form.busy).toBe(true);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(form.open).toBe(true);
   refuse({ code: "connection.failed" });
   await expect.poll(() => form.busy).toBe(false);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await q.updateComplete;
@@ -136,7 +136,7 @@ it("a delivered field change during staff creation survives the submitted-value 
       .value,
   ).toBe("+44 20");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await q.updateComplete;

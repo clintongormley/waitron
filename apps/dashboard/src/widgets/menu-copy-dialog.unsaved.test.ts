@@ -65,11 +65,11 @@ async function choice(app: CopyLeaveApp, decision: "keep" | "discard") {
 it("keeps typed input on Keep editing, then discards it without copying", async () => {
   const { app, form } = await mount();
   await edit(form);
-  button(form, "cancel").click();
+  await userEvent.keyboard("{Escape}");
   await choice(app, "keep");
   expect(form.open).toBe(true);
   expect(field(form).value).toBe("Weekday lunch");
-  button(form, "cancel").click();
+  await userEvent.keyboard("{Escape}");
   await choice(app, "discard");
   await expect.poll(() => form.open).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
@@ -97,14 +97,14 @@ it("a successful copy commits before its close and a failed refresh cannot resto
   expect(dirtyAtClose).toBe(false);
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
-it("a refusal retains the draft and still asks before cancelling", async () => {
+it("a refusal retains the draft and still asks before pressing Escape", async () => {
   const { app, form } = await mount();
   app.api.duplicateCatalogue.mockRejectedValue({ code: "catalogue.not_found" });
   await edit(form);
   button(form, "copy").click();
   await expect.poll(() => form.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  button(form, "cancel").click();
+  await userEvent.keyboard("{Escape}");
   await choice(app, "keep");
   expect(field(form).value).toBe("Weekday lunch");
 });

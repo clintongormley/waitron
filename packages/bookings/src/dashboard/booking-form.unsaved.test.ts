@@ -189,7 +189,7 @@ it("compares table selection and restores no table after discard", async () => {
   table.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "table-one" } }));
   await form.updateComplete;
   expect(unload()).toBe(true);
-  const closing = dialog(form).requestClose("cancel");
+  const closing = dialog(form).requestClose("escape");
   await choose("discard");
   expect(await closing).toBe(true);
   await expect.poll(() => form.open).toBe(false);
@@ -305,7 +305,7 @@ it("invalidates a pending answer and detached controls when the booking identity
   const oldField = input(form, "notes");
   const oldSave = form.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!;
   const oldDialog = dialog(form);
-  const closing = oldDialog.requestClose("cancel");
+  const closing = oldDialog.requestClose("escape");
   const oldQuestion = await question();
   form.booking = {
     ...booked,
@@ -336,7 +336,7 @@ it("disconnect disposes a dirty scope and cancels its question", async () => {
   const { screen } = await mount();
   const form = await open(screen);
   await field(form, "notes", "Unsubmitted");
-  const closing = dialog(form).requestClose("cancel");
+  const closing = dialog(form).requestClose("escape");
   expect((await question()).open).toBe(true);
   screen.remove();
   expect(await closing).toBe(false);
@@ -382,7 +382,7 @@ it("a successful write makes a prior discard answer inert", async () => {
   const { screen } = await mount();
   const form = await open(screen);
   await field(form, "notes", "Accepted note");
-  const closing = dialog(form).requestClose("cancel");
+  const closing = dialog(form).requestClose("escape");
   const oldQuestion = await question();
   expect(oldQuestion.open).toBe(true);
   await save(form);

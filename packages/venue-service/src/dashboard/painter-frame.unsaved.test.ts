@@ -107,7 +107,6 @@ function closed(frame: PainterFrame) {
 
 it.each([
   ["the close button", (frame: PainterFrame) => button(frame, "dismiss").click()],
-  ["Cancel", (frame: PainterFrame) => button(frame, "cancel").click()],
   [
     "Escape",
     async (frame: PainterFrame) => {
@@ -132,6 +131,19 @@ it.each([
   expect(frame.open).toBe(false);
   expect(painter.draft).toBe("a");
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(opener);
+});
+
+it("Cancel restores and closes without asking", async () => {
+  const { painter, frame } = await mount();
+  painter.edit("b");
+  await painter.updateComplete;
+  await frame.updateComplete;
+  const close = closed(frame);
+  button(frame, "cancel").click();
+  await close;
+  expect(question().open).toBe(false);
+  expect(painter.draft).toBe("a");
+  expect(frame.open).toBe(false);
 });
 
 it("an unchanged draft closes without asking", async () => {

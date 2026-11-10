@@ -83,7 +83,7 @@ it("asks before closing a changed draft, and Keep keeps the rows", async () => {
   expect(unload()).toBe(false);
   await change(el, 0, "Deep winter");
   expect(unload()).toBe(true);
-  const close = modal(el).requestClose("cancel");
+  const close = modal(el).requestClose("escape");
   await choose("keep");
   expect(await close).toBe(false);
   expect(modal(el).open).toBe(true);

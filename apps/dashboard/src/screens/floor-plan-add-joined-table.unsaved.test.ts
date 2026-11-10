@@ -130,12 +130,12 @@ it("a typed short name asks before Escape, and Keep keeps it", async () => {
   expect(app.changes).toEqual([]);
 });
 
-it("chosen tables ask before Cancel, and Discard closes without adding", async () => {
+it("chosen tables ask before Escape, and Discard closes without adding", async () => {
   const { app, panel, dialog } = await fixture();
   await chooseOptions(field(dialog, "made-of"), ["c3", "c4"]);
   await panel.updateComplete;
   expect(app.leave.coordinator.isDirty()).toBe(true);
-  dialog.querySelector<HTMLElement>("wt-button[data-action=add-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(dialog.open).toBe(true);
   await choose(app, "discard");

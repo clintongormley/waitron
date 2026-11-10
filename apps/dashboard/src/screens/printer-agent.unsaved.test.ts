@@ -106,7 +106,7 @@ async function choose(app: AgentLeaveApp, decision: "keep" | "discard") {
   await expect.poll(() => question.open).toBe(false);
 }
 
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`agent ${route} keeps the name until Discard closes once`, async () => {
     const { app, screen } = await mount();
     change(screen, "New box");
@@ -117,8 +117,7 @@ for (const route of ["cancel", "escape"] as const) {
     let closes = 0;
     modal(screen)!.addEventListener("wt-close", () => closes++);
     const dismiss = async () => {
-      if (route === "cancel") q(screen, "[data-test=cancel-edit-agent]")!.click();
-      else await userEvent.keyboard("{Escape}");
+      await userEvent.keyboard("{Escape}");
     };
     await dismiss();
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
@@ -162,14 +161,14 @@ it("agent pending save blocks native dismissal and inputs; refusal preserves the
   expect(input(screen).disabled).toBe(true);
   expect(modal(screen)!.dismissible).toBe(false);
   await userEvent.keyboard("{Escape}");
-  q(screen, "[data-test=cancel-edit-agent]")!.click();
+  await userEvent.keyboard("{Escape}");
   expect(modal(screen)!.open).toBe(true);
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   refuse({ code: "connection.failed" });
   await expect.poll(() => input(screen).disabled).toBe(false);
   expect(input(screen).value).toBe("New box");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-agent]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
 it("agent success clears its warning before a refused refresh", async () => {
@@ -246,7 +245,7 @@ for (const result of ["success", "refusal"] as const) {
 it("replacing an agent cancels the old discard question", async () => {
   const { app, screen } = await mount();
   change(screen, "New box");
-  q(screen, "[data-test=cancel-edit-agent]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   await open(screen, "a2");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -257,7 +256,7 @@ it("disconnect removes agent unload protection and the question", async () => {
   const { app, screen } = await mount();
   change(screen, "New box");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-edit-agent]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   screen.remove();
   expect(unload()).toBe(false);

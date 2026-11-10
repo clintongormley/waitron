@@ -131,10 +131,10 @@ it("a typed short name asks before Escape, and Keep keeps it", async () => {
   expect(app.changes).toEqual([]);
 });
 
-it("a changed count asks before Cancel, and Discard closes without adding", async () => {
+it("a changed count asks before Escape, and Discard closes without adding", async () => {
   const { app, panel, dialog } = await fixture();
   await set(panel, field(dialog, "table-count"), "3");
-  dialog.querySelector<HTMLElement>("wt-button[data-action=add-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(dialog.open).toBe(true);
   await choose(app, "discard");

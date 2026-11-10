@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
@@ -132,7 +133,7 @@ it("after ✕ and Discard, the next save sends the clock revision the model now 
   app.requestUpdate();
   await app.updateComplete;
   await settle(painter);
-  dismiss(painter);
+  await userEvent.keyboard("{Escape}");
   await choose("discard");
   await expect.poll(() => painter.open).toBe(false);
   painter.open = true;

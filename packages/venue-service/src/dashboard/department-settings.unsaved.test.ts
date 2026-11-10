@@ -192,13 +192,13 @@ it("Cancel asks, Keep retains and Discard restores the whole form", async () => 
   expect(unload()).toBe(false);
   await change("Draft");
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choice("keep");
   expect(
     (el.shadowRoot!.querySelector("[name=name]")! as HTMLElementTagNameMap["wt-input"]).value,
   ).toBe("Draft");
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choice("discard");
   await el.updateComplete;
   expect(
@@ -222,7 +222,7 @@ it("reconnect retains the draft against its original baseline", async () => {
       .value,
   ).toBe("Draft");
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choice("keep");
   expect(unload()).toBe(true);
 });
@@ -352,7 +352,7 @@ it("destination deactivation retains other drafts against their original baselin
   await el.updateComplete;
   expect(name.value).toBe("Name draft");
   expect(unload()).toBe(true);
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choice("discard");
   await el.updateComplete;
   expect(name.value).toBe("Restaurant");
@@ -612,7 +612,7 @@ it("keeps native edits made during Save dirty against the submitted Settings sna
       .toBe(false);
     expect(native.value).toBe("Newer name");
     expect(unload()).toBe(true);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+    await userEvent.keyboard("{Escape}");
     await choice("keep");
     expect(native.value).toBe("Newer name");
     await userEvent.fill(page.elementLocator(native), " Submitted name ");
@@ -756,7 +756,7 @@ it("Settings left out of the page for a tick protects its retained native draft"
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(unload()).toBe(true);
   expect(field.shadowRoot!.querySelector("input")!.value).toBe("Retained draft");
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-editor]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choice("keep");
   expect(field.shadowRoot!.querySelector("input")!.value).toBe("Retained draft");
   expect(unload()).toBe(true);

@@ -90,7 +90,7 @@ Nada más en la página, ni ninguna otra pantalla, cambia hasta que guardas. **U
 Waitron** quita el logotipo y devuelve todas las elecciones a las de Waitron: el color de marca de
 Waitron, Neutro, esquinas Estándar, tamaño del texto 100 % y nada fijado a mano. No guarda
 nada por sí solo, y aparece desactivado mientras no hay logotipo y las elecciones ya son el aspecto
-de Waitron. **Cancelar** cierra el editor sin guardar. Si has cambiado algo, Cancelar, salir de la
+de Waitron. **Cancelar** cierra el editor sin guardar ni preguntar. Si has cambiado algo, salir de la
 página y abrir otro tema desde la tarjeta Temas te lo preguntan antes.
 
 ## Agranda el texto {#text-size}

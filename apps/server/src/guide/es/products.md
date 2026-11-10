@@ -281,8 +281,8 @@ secciones de una carta se crean en **Productos y cartas → Cartas**.
 Si tu próxima carta se parece a una que ya tienes, empieza con una copia. En **Productos y
 cartas → Cartas**, abre el ⋮ de la carta y elige **Copiar…**. Introduce un nombre nuevo y pulsa
 **Copiar**. El nombre no puede estar usado por otra carta; las mayúsculas y las minúsculas cuentan
-como el mismo nombre. **Cancelar** no crea nada. Si ya has escrito un nombre, al cerrar la ventana
-puedes seguir editándolo o descartarlo.
+como el mismo nombre. **Cancelar** descarta el nombre sin preguntar y no crea nada. Si ya has
+escrito un nombre, Escape te pregunta si quieres seguir editándolo o descartarlo.
 
 Usa un nombre diferente también al crear o renombrar una carta. Si otra carta ya lo tiene, el
 mensaje aparece debajo de Nombre. Los espacios al principio y al final y las mayúsculas no

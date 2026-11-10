@@ -140,7 +140,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
       this.pin = "";
     };
     if (this.#scope) {
-      void this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
+      void this.#leave!.request({ scopes: [this], reason: "navigation", proceed });
     } else proceed();
   }
 

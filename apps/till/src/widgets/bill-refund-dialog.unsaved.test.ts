@@ -103,15 +103,14 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`refund ${action} retains amount and reason until Discard without issuing a refund`, async () => {
     const { app, form } = await mount();
     await part(form);
     await fill(form, "amount", "12.50");
     await choose(form, "Other");
     const input = await fill(form, "note", "  Charged twice  ");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -123,7 +122,7 @@ for (const action of ["Cancel", "Escape"]) {
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=amount]")!.value,
     ).toBe("12.50");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -179,7 +178,7 @@ it("invalid refund input remains protected and submission keeps the exact reques
   form.refusal = { code: "network" };
   await form.updateComplete;
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("busy refund entry cannot dismiss, resubmit or ask on Escape", async () => {
@@ -198,7 +197,7 @@ it("busy refund entry cannot dismiss, resubmit or ask on Escape", async () => {
 it("disconnect aborts a refund question and reconnect retains the original baseline", async () => {
   const { app, form } = await mount();
   await choose(form, "Too much");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -245,7 +244,7 @@ it("departed refund controls cannot submit, dismiss or edit the retained draft",
 it("successful refund close invalidates an outstanding Discard before host teardown", async () => {
   const { app, form } = await mount();
   await choose(form, "Charged twice");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -269,6 +268,6 @@ it("terminal confirmation keeps the reason protected until actual acceptance", a
   ]);
   expect((await question(app)).open).toBe(false);
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });

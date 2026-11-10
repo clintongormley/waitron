@@ -160,7 +160,7 @@ for (const kind of ["cash", "weight", "label", "reference"] as const) {
       input = await fill(form, ".ref-input", "  TX-007  ");
     }
     expect(unload()).toBe(true);
-    await click(form, ".cancel");
+    await userEvent.keyboard("{Escape}");
     expect((await question(app)).open).toBe(true);
     await choose(app, "keep");
     if (input) {
@@ -170,7 +170,7 @@ for (const kind of ["cash", "weight", "label", "reference"] as const) {
       expect(form.shadowRoot!.querySelector("till-numeric-pad")!.value).toBe(
         kind === "cash" ? "5." : "1.",
       );
-    await click(form, ".cancel");
+    await userEvent.keyboard("{Escape}");
     await choose(app, "discard");
     await expect.poll(() => form.shadowRoot!.querySelector(".pay") !== null).toBe(true);
     expect(app.payments).toEqual([]);
@@ -234,7 +234,7 @@ it("disconnect aborts a pending Cancel and reconnect keeps the opening baseline"
   const { app, form } = await mount();
   await click(form, ".hold");
   const input = await fill(form, ".label-input", "Guest");
-  await click(form, ".cancel");
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.remove();
@@ -246,7 +246,7 @@ it("disconnect aborts a pending Cancel and reconnect keeps the opening baseline"
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector<WtInput>(".label-input")!.value).toBe("Guest");
   expect(unload()).toBe(true);
-  await click(form, ".cancel");
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   await choose(app, "discard");
   expect(app.parks).toEqual([]);
@@ -259,7 +259,7 @@ it("busy entry controls do not discard or submit a staged reference", async () =
   const confirm = form.shadowRoot!.querySelector<HTMLElement>(".confirm")!;
   form.busy = true;
   await form.updateComplete;
-  cancel.click();
+  await userEvent.keyboard("{Escape}");
   confirm.click();
   input.value = "busy";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -269,7 +269,7 @@ it("busy entry controls do not discard or submit a staged reference", async () =
   form.busy = false;
   await form.updateComplete;
   expect(form.shadowRoot!.querySelector<WtInput>(".ref-input")!.value).toBe("TX-007");
-  await click(form, ".cancel");
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("tip and offline consent protect page leave but cash Cancel preserves them independently", async () => {
@@ -312,7 +312,7 @@ it("successful explicit submission invalidates an older Cancel answer", async ()
   const { app, form } = await mount();
   await click(form, ".pay-card");
   await fill(form, ".ref-input", "TX-007");
-  await click(form, ".cancel");
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   await click(form, ".confirm");

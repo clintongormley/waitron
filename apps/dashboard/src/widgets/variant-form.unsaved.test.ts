@@ -92,9 +92,7 @@ async function saveButton(form: HTMLElementTagNameMap["dashboard-variant-form"])
   await save.updateComplete;
   return { variant: save.variant, disabled: save.disabled };
 }
-function cancel(form: HTMLElement) {
-  form.shadowRoot!.querySelector<HTMLElement>("[data-test=variant-cancel]")!.click();
-}
+
 
 it("a variant put back after a detached update still asks before Escape discards an edit", async () => {
   const { app, form } = await mount();
@@ -113,7 +111,7 @@ it("a variant keeps an edit made before it was taken out and put back, and still
   expect(nameField(form).value).toBe("Media ración");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(await saveButton(form)).toEqual({ variant: "primary", disabled: false });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(form.open).toBe(true);
   expect(app.cancels).toBe(0);

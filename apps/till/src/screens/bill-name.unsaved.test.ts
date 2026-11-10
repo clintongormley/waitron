@@ -81,7 +81,7 @@ it("the table screen protects a refused bill name against the bill's stored name
   await expect.poll(() => question.open).toBe(false);
   expect(input.value).toBe("Luis");
   expect(screen.shadowRoot!.querySelector("till-bill-name-dialog")).toBe(form);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   await question.updateComplete;
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();

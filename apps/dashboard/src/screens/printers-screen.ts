@@ -2962,7 +2962,7 @@ export class PrintersScreen extends LitElement {
     return html`<wt-button
       data-test="printer-details-close"
       @click=${(event: Event) =>
-        void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("cancel")}
+        void (event.currentTarget as HTMLElement).closest("wt-modal")?.requestClose("navigation")}
       >${t("action.close")}</wt-button
     >`;
   }
@@ -3905,7 +3905,7 @@ export class PrintersScreen extends LitElement {
       return;
     }
     if (id === "edit-printer-modal" && this.#calibrationLeave) {
-      await modal.requestClose("cancel");
+      await modal.requestClose("navigation");
       return;
     }
     if (id === "new-printer-modal") this.#endScan();

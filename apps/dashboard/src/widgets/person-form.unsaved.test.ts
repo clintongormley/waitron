@@ -63,12 +63,12 @@ async function question(app: PersonFormApp) {
 function cancel(form: HTMLElement) {
   form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
 }
-for (const route of ["cancel", "escape"] as const) {
+
+for (const route of ["escape"] as const) {
   it(`Add staff ${route} keeps entered details until one explicit Discard`, async () => {
     const { app, form } = await mount();
     await edit(form, "first-names", "Ada");
-    if (route === "cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -81,7 +81,7 @@ for (const route of ["cancel", "escape"] as const) {
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=first-names]")!
         .value,
     ).toBe("Ada");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -136,7 +136,7 @@ it("a refused Add staff request retains its normalized submitted values and warn
   ]);
   form.error = "connection.failed";
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closes).toBe(0);
 });
@@ -200,7 +200,7 @@ it("Add staff keeps an edit made before it was taken out and put back, and still
   expect(firstNamesField(form).value).toBe("Ada");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   expect(await confirmButton(form)).toEqual({ variant: "primary", disabled: false });
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(form.open).toBe(true);
   expect(app.closes).toBe(0);

@@ -391,7 +391,8 @@ export class RecoveryPackDialog extends LitElement {
   }
 
   #footer(): TemplateResult {
-    const leave = () => void this.#dialog()?.requestClose("cancel");
+    const leave = () =>
+      void this.#dialog()?.requestClose(this.step === "form" ? "cancel" : "navigation");
     if (this.step === "key-failed")
       return html`<wt-form-actions slot="footer">
         <wt-button data-test="close-pack" variant="primary" @click=${leave}

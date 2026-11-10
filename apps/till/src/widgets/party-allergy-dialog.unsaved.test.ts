@@ -63,7 +63,7 @@ async function choice(app: AllergyLeaveApp, answer: "keep" | "discard") {
     ),
   );
 }
-it.each(["cancel", "escape"])(
+it.each(["escape"])(
   "protects staged allergy edits on %s, then Discard closes",
   async (reason) => {
     const { app, el } = await mount();

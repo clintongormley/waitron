@@ -25,7 +25,7 @@ scope.changed();
 let leaves = 0;
 const kept = await coordinator.request({
   scopes: [id],
-  reason: "cancel",
+  reason: "navigation",
   proceed: () => {
     leaves++;
   },

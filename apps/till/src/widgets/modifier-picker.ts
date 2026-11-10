@@ -680,7 +680,7 @@ export class TillModifierPicker extends LitElement {
     event.stopPropagation();
     if (!this.isConnected || !this.active) return;
     if (this.#leave) {
-      void this.shadowRoot!.querySelector<WtDialog>("wt-modal")!.requestClose("cancel");
+      void this.shadowRoot!.querySelector<WtDialog>("wt-modal")!.requestClose(this.lineDetails ? "navigation" : "cancel");
       return;
     }
     this.#reportCancel();

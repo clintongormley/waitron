@@ -123,9 +123,7 @@ for (const route of ["cancel", "escape", "parent"] as const) {
     let closes = 0;
     modal(screen)!.addEventListener("wt-close", () => closes++);
     const dismiss = async () => {
-      if (route === "escape") await userEvent.keyboard("{Escape}");
-      else if (route === "parent") q(screen, "[data-test=cancel-new-printer]")!.click();
-      else q(screen, "[data-test=cancel-printer-name]")!.click();
+      await userEvent.keyboard("{Escape}");
     };
     await dismiss();
     await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
@@ -175,10 +173,10 @@ it("a refused registration keeps the disabled-while-writing name dirty", async (
   await expect.poll(() => input(screen).disabled).toBe(false);
   expect(input(screen).value).toBe("New kitchen");
   expect(unload()).toBe(true);
-  q(screen, "[data-test=cancel-printer-name]")!.click();
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
-for (const route of ["cancel", "escape"] as const) {
+for (const route of ["escape"] as const) {
   it(`registration in flight retains its existing ${route} and completed result`, async () => {
     let finish!: (value: { id: string }) => void;
     const { app, screen } = await mount({
@@ -256,7 +254,7 @@ it("newer delivered input stays dirty against registered name without repeating 
 it("changing the named printer invalidates the old decision", async () => {
   const { app, screen } = await mount();
   change(screen, "New kitchen");
-  q(screen, "[data-test=cancel-printer-name]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(true);
   await open(screen, "SN-2");
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);

@@ -54,7 +54,7 @@ function unload() {
   return event.defaultPrevented;
 }
 
-for (const action of ["Cancel", "Escape"] as const) {
+for (const action of ["Escape"] as const) {
   it(`${action} protects an edited time response; Keep retains it and Discard closes without a response`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "Forgot to clock");

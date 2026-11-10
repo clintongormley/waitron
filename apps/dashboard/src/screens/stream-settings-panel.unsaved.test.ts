@@ -132,17 +132,17 @@ async function fill(panel: Panel) {
   await type(panel, "secret-access-key", "synthetic secret");
 }
 
-it("Cancel keeps the edited native fields until Discard is chosen", async () => {
+it("navigation Keep retains edited native fields and Cancel discards without asking", async () => {
   const { app, panel } = await mount();
   await type(panel, "prefix", "draft-folder");
-  click(panel, "cancel");
+  void leave(app);
   await choose(app, "keep");
   expect(input(panel, "prefix").shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(
     "draft-folder",
   );
   expect(unload()).toBe(true);
   click(panel, "cancel");
-  await choose(app, "discard");
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   await expect.poll(() => panel.shadowRoot!.querySelector("wt-input")).toBeNull();
   expect(unload()).toBe(false);
   click(panel, "change");
@@ -164,7 +164,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
         const cancel = panel
           .shadowRoot!.querySelector("[data-test=cancel]")!
           .shadowRoot!.querySelector("button")!;
-        await userEvent.click(cancel);
+        void leave(app);
         const warning = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
         await expect.poll(() => warning.open).toBe(true);
         await warning.updateComplete;
@@ -177,7 +177,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
         await expect.poll(() => warning.open).toBe(false);
         expect(native.value).toBe("draft-folder");
         expect(unload()).toBe(true);
-        await userEvent.click(cancel);
+        void leave(app);
         await expect.poll(() => warning.open).toBe(true);
         await userEvent.click(
           warning
@@ -188,13 +188,15 @@ for (const locale of ["en-GB", "es-ES"] as const)
         expect(native.value).toBe("draft-folder");
         await commands.parkPointer();
         await expectNoA11yViolations(host);
-        await userEvent.click(cancel);
+        void leave(app);
         await expect.poll(() => warning.open).toBe(true);
         await userEvent.click(
           warning
             .shadowRoot!.querySelector("[data-choice=discard]")!
             .shadowRoot!.querySelector("button")!,
         );
+        await expect.poll(() => warning.open).toBe(false);
+        await userEvent.click(cancel);
         await expect.poll(() => panel.shadowRoot!.querySelector("wt-input")).toBeNull();
         expect(unload()).toBe(false);
       });

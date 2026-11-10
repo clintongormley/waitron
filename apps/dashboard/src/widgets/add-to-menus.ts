@@ -259,7 +259,7 @@ export class AddToMenus extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    if (this.#leave) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("navigation");
     else this.#emitCancel();
   }
 

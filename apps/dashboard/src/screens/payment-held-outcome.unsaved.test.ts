@@ -48,6 +48,7 @@ function value(screen: PaymentsScreen, field: string) {
 function cancel(screen: PaymentsScreen) {
   dialog(screen)!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
 }
+
 function unload() {
   return !window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
 }
@@ -99,7 +100,7 @@ for (const [field, edited] of [
     const { app, screen } = await mount();
     change(screen, field!, edited!);
     expect(unload()).toBe(true);
-    cancel(screen);
+    await userEvent.keyboard("{Escape}");
     await choose(app, "keep");
     expect(dialog(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
     expect(value(screen, field!)).toBe(edited);
@@ -139,7 +140,7 @@ it("a refused record keeps the draft and still asks before leaving", async () =>
     )
     .not.toBe("");
   expect(unload()).toBe(true);
-  cancel(screen);
+  await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   expect(value(screen, "note")).toBe("  Owed by the guest  ");
   expect(value(screen, "pin")).toBe("1234");

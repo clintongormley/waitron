@@ -248,7 +248,7 @@ it.each(cases)(
 );
 
 it.each(
-  cases.flatMap((dialog) => (["cancel", "escape"] as const).map((method) => ({ dialog, method }))),
+  cases.flatMap((dialog) => (["escape"] as const).map((method) => ({ dialog, method }))),
 )(
   "$dialog.kind native $method preserves Keep and discards without a write",
   async ({ dialog, method }) => {
@@ -294,7 +294,7 @@ it("disconnecting a dialog with a pending leave question closes the question and
   const el = await mount(cases[0]!);
   await change(el, "Unsaved rename");
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
-  const closing = modal.requestClose("cancel");
+  const closing = modal.requestClose("escape");
   const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
   await expect.poll(() => question.open).toBe(true);
   el.remove();

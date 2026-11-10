@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
@@ -114,14 +115,14 @@ it("closing with a choice asks first", async () => {
   const { app, form } = await mount();
   await choose(form, ["c4", "c5"]);
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
   expect(form.shadowRoot!.querySelector("wt-combobox")!.values).toEqual(["c4", "c5"]);
   expect(app.closes).toBe(0);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => app.closes).toBe(1);
@@ -159,7 +160,7 @@ it("closing a group's window with a table ticked asks first", async () => {
   const { app, form } = await mount({ joined: bar, parts: [bar, c3], name: "Bar+Counter 3" });
   await choose(form, ["bar"]);
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closes).toBe(0);
 });

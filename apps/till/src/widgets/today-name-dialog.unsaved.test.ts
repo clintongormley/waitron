@@ -68,19 +68,18 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`${action} keeps the typed name, then discards without renaming`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "Window");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
     await expect.poll(() => q.open).toBe(false);
     expect(input.value).toBe("Window");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -111,7 +110,7 @@ it("a too-long name stays protected after the window refuses it", async () => {
   expect(app.submitted).toEqual([]);
   expect(form.shadowRoot!.querySelector("wt-input")!.error).toBe(t("table.name_too_long"));
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -155,7 +154,7 @@ it("while busy, neither Cancel nor Escape closes the window or asks", async () =
 it("disconnect aborts a leave decision; reconnect keeps the name typed before it left", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "Window");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
@@ -168,7 +167,7 @@ it("disconnect aborts a leave decision; reconnect keeps the name typed before it
   await form.updateComplete;
   expect(input.value).toBe("Window");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("retained departed controls cannot submit, cancel or replace the draft", async () => {
@@ -193,7 +192,7 @@ it("retained departed controls cannot submit, cancel or replace the draft", asyn
 it("a parent rerender does not reset the typed name or a pending warning", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "Window");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.heading = "Rename Counter 4";

@@ -5280,7 +5280,7 @@ describe("application unsaved changes renderer", () => {
         let left = 0;
         const pending = coordinator!.request({
           scopes: [scope.id],
-          reason: "cancel",
+          reason: "navigation",
           proceed() {
             left++;
           },

@@ -36,7 +36,7 @@ class AttendanceManagerLeaveApp extends LitElement {
 }
 customElements.define("attendance-manager-leave-test-app", AttendanceManagerLeaveApp);
 afterEach(cleanupWidgets);
-it("navigation and Cancel use the app's leave choice for the manager's edited proposal", async () => {
+it("navigation and Escape use the app's leave choice for the manager's edited proposal", async () => {
   const { el: app } = await mountWidget<AttendanceManagerLeaveApp>(
     "attendance-manager-leave-test-app",
     {},
@@ -82,7 +82,7 @@ it("navigation and Cancel use the app's leave choice for the manager's edited pr
   expect(await leaving).toBe("kept");
   expect(proceeded).toBe(false);
   expect(reason.value).toBe("Forgot the whole shift");
-  await userEvent.click(form.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   await choice.updateComplete;
   expect(choice.open).toBe(true);

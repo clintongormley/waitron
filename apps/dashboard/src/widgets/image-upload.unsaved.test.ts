@@ -87,12 +87,10 @@ async function question(app: ImagePickerLeaveApp) {
   await q.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return q;
 }
-it("enclosing picker Cancel keeps an edited image child until Discard, preserving the Product draft", async () => {
+it("enclosing picker Escape keeps an edited image child until Discard, preserving the Product draft", async () => {
   const { app, upload, library } = await mount();
   app.parentValue = "Edited product";
-  const cancel = () =>
-    upload.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
-  cancel();
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(upload.shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
@@ -102,7 +100,7 @@ it("enclosing picker Cancel keeps an edited image child until Discard, preservin
   expect(
     library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-es]")!.value,
   ).toBe("Pan editado");
-  cancel();
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => upload.shadowRoot!.querySelector("media-image-picker")).toBeNull();
@@ -115,7 +113,7 @@ it("closing a parent scope sees an edited nested image through picker ancestry",
   let left = false;
   const pending = app.leave.coordinator.request({
     scopes: [app],
-    reason: "cancel",
+    reason: "navigation",
     proceed() {
       left = true;
     },

@@ -69,19 +69,18 @@ function unload() {
   return event.defaultPrevented;
 }
 
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`${action} with a typed address asks first: Keep keeps it, Discard closes without sending`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "ana@example.com");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
     await expect.poll(() => q.open).toBe(false);
     expect(input.value).toBe("ana@example.com");
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -108,7 +107,7 @@ it("a malformed address stays protected after the form refuses it", async () => 
   await form.updateComplete;
   expect(app.sent).toEqual([]);
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 
@@ -122,7 +121,7 @@ it("a sent address cannot be closed away while the answer is awaited, and stays 
   await app.updateComplete;
   await form.updateComplete;
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(false);
   await userEvent.keyboard("{Escape}");
   await form.updateComplete;
@@ -135,7 +134,7 @@ it("a sent address cannot be closed away while the answer is awaited, and stays 
   await app.updateComplete;
   await form.updateComplete;
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -157,7 +156,7 @@ it("once the owner closes the form after a send, nothing is left to protect", as
 it("taken out and put back, the form keeps the typed address and still asks", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "ana@example.com");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.remove();
@@ -167,7 +166,7 @@ it("taken out and put back, the form keeps the typed address and still asks", as
   await form.updateComplete;
   expect(input.value).toBe("ana@example.com");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 

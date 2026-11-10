@@ -62,12 +62,11 @@ function unload() {
   window.dispatchEvent(event);
   return event.defaultPrevented;
 }
-for (const action of ["Cancel", "Escape"]) {
+for (const action of ["Escape"]) {
   it(`recipient ${action} keeps the edited value and focus, then discards once`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "legalName", "Ana García");
-    if (action === "Cancel") cancel(form);
-    else await userEvent.keyboard("{Escape}");
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -80,7 +79,7 @@ for (const action of ["Cancel", "Escape"]) {
         input.getRootNode() instanceof ShadowRoot &&
           (input.getRootNode() as ShadowRoot).activeElement,
       ).toBe(input);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     await question(app);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => app.closes).toBe(1);
@@ -105,7 +104,7 @@ for (const name of ["taxId", "legalName", "address", "postalCode", "locality", "
 it("a refusal rerender retains the recipient draft and pending decision", async () => {
   const { app, form } = await mount();
   const input = await fill(form, "taxId", "12345678A");
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   form.refusal = "Check customer details";
@@ -162,7 +161,7 @@ it("a successful recipient choice commits normalized submitted fields and invali
     },
   ]);
   const accepted = completion(form);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(accepted()).toBe(true);
@@ -193,7 +192,7 @@ it("a refused recipient choice remains dirty without a second submission on Keep
   submit(form);
   form.refusal = "Save refused";
   await form.updateComplete;
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -212,7 +211,7 @@ it("reconnecting a retained recipient keeps its opening baseline and invalidates
   await form.updateComplete;
   expect(unload()).toBe(true);
   expect(accepted()).toBe(false);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 it("detached Save and Enter controls cannot submit an otherwise valid recipient", async () => {
@@ -254,7 +253,7 @@ it("a recipient left detached for a moment still asks before discarding once rea
   app.shadowRoot!.appendChild(form);
   await form.updateComplete;
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
 });
 
@@ -308,7 +307,7 @@ it("a changed delivery choice asks before discarding, Keep keeps it, and choosin
   expect(unload()).toBe(false);
   await chooseDelivery(form, "a4");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -317,7 +316,7 @@ it("a changed delivery choice asks before discarding, Keep keeps it, and choosin
   expect(app.closes).toBe(0);
   await chooseDelivery(form, "receipt");
   expect(unload()).toBe(false);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await expect.poll(() => app.closes).toBe(1);
 });
 
@@ -366,7 +365,7 @@ it("a saved A4 opened on the current printer instead counts as a change: Cancel 
   });
   expect(deliveryField(form).value).toBe("a4");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   expect((await question(app)).open).toBe(true);
   expect(app.closes).toBe(0);
 });
@@ -386,7 +385,7 @@ it("a typed email address asks before discarding, and stops counting once anothe
   expect(unload()).toBe(false);
   await chooseDelivery(form, "email");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
@@ -430,7 +429,7 @@ for (const [field, value] of [
       );
     await form.updateComplete;
     expect(unload()).toBe(true);
-    cancel(form);
+    await userEvent.keyboard("{Escape}");
     const q = await question(app);
     expect(q.open).toBe(true);
     q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
@@ -476,14 +475,14 @@ it("a chosen address asks before discarding, Keep keeps what it filled and Disca
   );
   await form.updateComplete;
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   expect(app.closes).toBe(0);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
   expect(addressFields(form)).toEqual(["Calle Mayor 1", "28013", "Madrid", "Madrid"]);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => app.closes).toBe(1);

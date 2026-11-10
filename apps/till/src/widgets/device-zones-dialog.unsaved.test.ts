@@ -69,7 +69,7 @@ async function question(app: ZonesLeaveApp) {
   await question.shadowRoot!.querySelector("wt-modal")!.updateComplete;
   return question;
 }
-for (const way of ["Cancel", "Escape"] as const) {
+for (const way of ["Escape"] as const) {
   it(`${way} keeps the draft until Discard, without writing`, async () => {
     const { app, form } = await mount();
     if (way === "Escape") await userEvent.keyboard("{Escape}");

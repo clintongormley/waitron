@@ -59,7 +59,7 @@ it("the table screen protects a refused count against the stored count and disca
   await expect.poll(() => question.open).toBe(false);
   expect(input.value).toBe("1000");
   expect(screen.shadowRoot!.querySelector("till-party-guests-dialog")).toBe(form);
-  form.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+  await userEvent.keyboard("{Escape}");
   await app.updateComplete;
   await question.updateComplete;
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();

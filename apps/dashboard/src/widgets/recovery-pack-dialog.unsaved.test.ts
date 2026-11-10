@@ -78,11 +78,11 @@ it("an untouched dialog closes on Escape without asking", async () => {
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it("a ticked box alone asks before Cancel", async () => {
+it("a ticked box alone asks before Escape", async () => {
   const { app, host, dialog } = await fixture();
   host.shadowRoot!.querySelector<HTMLInputElement>("input[name=new-server-key]")!.click();
   await expect.poll(() => app.leave.coordinator.isDirty()).toBe(true);
-  host.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=cancel-pack]")!.click();
+  await userEvent.keyboard("{Escape}");
   await expect.poll(async () => (await question(app)).open).toBe(true);
   expect(dialog.open).toBe(true);
   const closed = dialogClosed(dialog);

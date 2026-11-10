@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
@@ -111,14 +112,14 @@ it("closing with seats typed asks first", async () => {
   const { app, form } = await mount();
   await typeSeats(form, "8");
   expect(unload()).toBe(true);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   const q = await question(app);
   expect(q.open).toBe(true);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
   await expect.poll(() => q.open).toBe(false);
   expect(form.shadowRoot!.querySelector("wt-number-stepper")!.value).toBe("8");
   expect(app.closes).toBe(0);
-  cancel(form);
+  await userEvent.keyboard("{Escape}");
   await question(app);
   q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await expect.poll(() => app.closes).toBe(1);
