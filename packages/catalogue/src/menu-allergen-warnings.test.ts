@@ -9,7 +9,7 @@ import {
 } from "@waitron/db";
 import { useCatalogueDb } from "../test/fixtures.js";
 import { menusFixture, product, type MenusFixture } from "../test/menus-fixture.js";
-import { applyRecipeDerivation, createProduct, updateProduct } from "./operations.js";
+import { createProduct, updateProduct } from "./operations.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
@@ -71,28 +71,6 @@ describe("unreviewed offered allergens", () => {
       },
     ]);
     await app((tx) => updateProduct(tx, f.lemonade, { allergens: {} }));
-    expect(await warnings(f)).toEqual([]);
-    await app((tx) => updateProduct(tx, f.lemonade, { allergens: { milk: {} } }));
-    await app((tx) =>
-      applyRecipeDerivation(tx, f.lemonade, { allergens: { sesame: {} }, pending: true }),
-    );
-    expect(await warnings(f)).toEqual([
-      {
-        kind: "allergens_unreviewed",
-        products: [
-          unknown(f.lemonade, "Lemonade"),
-          unknown(f.large, "Large", "Lemonade"),
-          unknown(
-            (await app((tx) => listProductVariants(tx, f.lemonade)))[1]!.id,
-            "Reviewed",
-            "Lemonade",
-          ),
-        ],
-      },
-    ]);
-    await app((tx) =>
-      applyRecipeDerivation(tx, f.lemonade, { allergens: { sesame: {} }, pending: false }),
-    );
     expect(await warnings(f)).toEqual([]);
     expect(JSON.stringify(await warnings(f))).not.toContain(inactive);
   });

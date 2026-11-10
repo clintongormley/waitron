@@ -135,12 +135,6 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("staff", "purchase.manage")).toBe(false);
     expect(roleHasPermission("supervisor", "purchase.manage")).toBe(false);
   });
-  it("grants recipe.manage to manager and admin only (recipe authoring)", () => {
-    expect(roleHasPermission("manager", "recipe.manage")).toBe(true);
-    expect(roleHasPermission("admin", "recipe.manage")).toBe(true);
-    expect(roleHasPermission("staff", "recipe.manage")).toBe(false);
-    expect(roleHasPermission("supervisor", "recipe.manage")).toBe(false);
-  });
   it("grants report.export to manager and admin only (modelo 303 DR303 export)", () => {
     expect(roleHasPermission("manager", "report.export")).toBe(true);
     expect(roleHasPermission("admin", "report.export")).toBe(true);

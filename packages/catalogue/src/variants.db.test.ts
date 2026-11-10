@@ -110,7 +110,7 @@ async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
     select id, parent_id, catalogue_id, variant_order, active, available, ordering, unit_price,
       vat_class, pricing_unit, dietary_declarations, diet, description, category_id,
-      course_id, image, allergens, manual_allergens, recipe_derivation, diet_derivation,
+      course_id, image, allergens, manual_allergens, diet_derivation,
       diet_override
     from products where parent_id = ${parentId} order by variant_order`);
   return rows;
@@ -128,7 +128,6 @@ const INHERITING = {
   image: null,
   allergens: null,
   manual_allergens: null,
-  recipe_derivation: null,
   diet_derivation: null,
   diet_override: null,
 };

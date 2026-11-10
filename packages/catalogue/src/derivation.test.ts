@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Kind, ProductAllergens } from "@waitron/shared";
-import { mergeAllergenMaps, republish } from "./derivation.js";
+import { mergeAllergenMaps, publishedAllergens } from "./derivation.js";
 
 describe("mergeAllergenMaps", () => {
   const gluten = (...kinds: Kind[]): ProductAllergens => ({ gluten: { kinds } });
@@ -40,39 +40,21 @@ describe("mergeAllergenMaps", () => {
   });
 });
 
-describe("republish", () => {
-  it("does not repeat a manual kind the derived floor already lists", () => {
-    expect(
-      republish(
-        { gluten: { kinds: ["barley"] } },
-        { allergens: { gluten: { kinds: ["barley", "rye"] } }, pending: false },
-      ),
-    ).toEqual({ gluten: { kinds: ["barley", "rye"] } });
+describe("publishedAllergens", () => {
+  it("is null when nothing is reviewed", () => {
+    expect(publishedAllergens(null)).toBeNull();
   });
-  it("is PENDING (null) when nothing is reviewed", () => {
-    expect(republish(null, null)).toBeNull();
-  });
-  it("is PENDING (null) when the recipe has an unreviewed ingredient", () => {
-    expect(
-      republish({ nuts: { kinds: ["almonds"] } }, { allergens: {}, pending: true }),
-    ).toBeNull();
-  });
-  it("returns the manual map when there is no recipe", () => {
-    expect(republish({ gluten: { kinds: ["wheat"] } }, null)).toEqual({
+  it("returns the declaration", () => {
+    expect(publishedAllergens({ gluten: { kinds: ["wheat"] } })).toEqual({
       gluten: { kinds: ["wheat"] },
     });
   });
   it("returns {} for a product reviewed with no allergens", () => {
-    expect(republish({}, null)).toEqual({});
+    expect(publishedAllergens({})).toEqual({});
   });
-  it("unions the derived floor with manual additions (add-only)", () => {
-    expect(
-      republish({ nuts: { kinds: ["almonds"] } }, { allergens: { eggs: {} }, pending: false }),
-    ).toEqual({ eggs: {}, nuts: { kinds: ["almonds"] } });
-  });
-  it("publishes a complete recipe with no manual overlay", () => {
-    expect(republish(null, { allergens: { eggs: {} }, pending: false })).toEqual({
-      eggs: {},
+  it("sorts and de-duplicates kinds", () => {
+    expect(publishedAllergens({ nuts: { kinds: ["walnuts", "almonds", "almonds"] } })).toEqual({
+      nuts: { kinds: ["almonds", "walnuts"] },
     });
   });
 });

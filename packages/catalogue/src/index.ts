@@ -20,7 +20,6 @@ export {
   addCatalogueToVenue,
   addProductToMenu,
   applyDietDerivation,
-  applyRecipeDerivation,
   assignCatalogueToVenue,
   catalogueExists,
   createCatalogue,

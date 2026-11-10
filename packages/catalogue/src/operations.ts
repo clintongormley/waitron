@@ -3,7 +3,7 @@ import { includedMenus, placesOf } from "./menu-inclusion.js";
 import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import {
   AppError,
   centsToDecimal,
@@ -42,7 +42,7 @@ export { createCategory, listCategories, updateCategory } from "./categories.js"
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for the `catalogue.*`/`product.*`/`menu_*` codes thrown below
-import { republish, type RecipeDerivation } from "./derivation.js";
+import { publishedAllergens } from "./derivation.js";
 import type {
   PricingUnit,
   ProductOrdering,
@@ -897,24 +897,11 @@ export async function deactivateCatalogue(tx: Transaction, id: string): Promise<
   await tx.update(catalogues).set({ active: false, updatedAt: now() }).where(eq(catalogues.id, id));
 }
 
-/**
- * Republish the computed `allergens` and/or `diet` of product `id` and of each variant of it with an
- * overlay of its own for that column. A missing diet derivation folds as "no recipe": empty origins
- * but PENDING, so vegan and vegetarian read "unknown" rather than a positive claim.
- *
- * A variant both of whose overlays for a column are blank stores that column blank, so its read
- * falls back to the parent's published value rather than a copy the parent's next change would
- * leave stale. An id that names no row is a silent no-op.
- */
 async function republishOverlays(
   tx: Transaction,
   id: string,
   columns: { allergens: boolean; diet: boolean },
 ): Promise<void> {
-  const overridden = [
-    ...(columns.allergens ? [products.manualAllergens, products.recipeDerivation] : []),
-    ...(columns.diet ? [products.dietDerivation, products.dietOverride] : []),
-  ].map((column) => isNotNull(column));
   const rows = await tx
     .select({
       id: products.id,
@@ -922,25 +909,19 @@ async function republishOverlays(
       allergens: products.allergens,
       diet: products.diet,
       ownManual: products.manualAllergens,
-      ownRecipe: products.recipeDerivation,
       ownDietDerivation: products.dietDerivation,
       ownDietOverride: products.dietOverride,
-      manual: effective.manualAllergens,
-      recipe: effective.recipeDerivation,
-      dietDerivation: effective.dietDerivation,
-      dietOverride: effective.dietOverride,
+      dietDerivation: products.dietDerivation,
+      dietOverride: products.dietOverride,
     })
     .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(or(eq(products.id, id), and(eq(products.parentId, id), or(...overridden))));
+    .where(eq(products.id, id));
   for (const row of rows) {
     const inherits = row.parentId !== null;
     const changed: { allergens?: ProductAllergens | null; diet?: typeof row.diet } = {};
     if (columns.allergens) {
       const allergens =
-        inherits && row.ownManual === null && row.ownRecipe === null
-          ? null
-          : republish(row.manual, row.recipe);
+        inherits && row.ownManual === null ? null : publishedAllergens(row.ownManual);
       if (!isDeepStrictEqual(allergens, row.allergens)) changed.allergens = allergens;
     }
     if (columns.diet) {
@@ -960,16 +941,10 @@ async function republishOverlays(
   }
 }
 
-/**
- * A variant has no recipe of its own (`setProductRecipe`, packages/recipes/src/recipes.ts, refuses
- * one), so a variant's id is refused as an id naming no product. An id naming no row at all is a
- * silent no-op.
- */
 async function applyDerivation(
   tx: Transaction,
   productId: string,
-  derivation:
-    { recipeDerivation: RecipeDerivation | null } | { dietDerivation: DietDerivation | null },
+  derivation: { dietDerivation: DietDerivation | null },
   columns: { allergens: boolean; diet: boolean },
 ): Promise<void> {
   const [written] = await tx
@@ -988,31 +963,6 @@ async function applyDerivation(
   await republishOverlays(tx, productId, columns);
 }
 
-/**
- * Set a product's recipe-derived overlay and republish its declaration, and that of each variant
- * that sets its own allergens. The seam `@waitron/recipes` calls when a recipe or its ingredients
- * change; `null` clears the derivation (no recipe), after which the published declaration reverts to
- * the manual overlay alone.
- */
-export async function applyRecipeDerivation(
-  tx: Transaction,
-  productId: string,
-  derivation: RecipeDerivation | null,
-): Promise<void> {
-  await applyDerivation(
-    tx,
-    productId,
-    { recipeDerivation: derivation },
-    { allergens: true, diet: false },
-  );
-}
-
-/**
- * Set a product's recipe-derived diet overlay and republish its diet profile, and that of each
- * variant that sets its own diet — the diet twin of {@link applyRecipeDerivation}. `null` clears the
- * derivation (no recipe), after which the published profile reverts to the override overlaid on the
- * empty, PENDING derived profile.
- */
 export async function applyDietDerivation(
   tx: Transaction,
   productId: string,
@@ -1065,8 +1015,6 @@ async function insertProduct(
     // Any other legacy `pricingUnit` value is rejected at the boundary, not silently treated as weight.
     throw new AppError("product.invalid", { field: "pricingUnit" });
   }
-  // Created top-level with no recipe, so the published values are the two staff overlays over empty
-  // derivations — computed as `republishOverlays` would.
   const allergens = input.allergens === undefined ? null : validateAllergens(input.allergens);
   const dietOverride = validateDietOverride(input.dietOverride ?? null);
   const values = {
@@ -1084,7 +1032,7 @@ async function insertProduct(
     available: input.available ?? true,
     ordering: input.ordering ?? "public",
     manualAllergens: allergens,
-    allergens: republish(allergens, null),
+    allergens: publishedAllergens(allergens),
     dietOverride,
     diet: overlayDietProfile(deriveDietProfile({ origins: [], pending: true }), dietOverride),
     image: input.image ?? null,

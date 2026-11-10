@@ -105,7 +105,6 @@
   "src/schema/printers.ts": 73.2,
   "src/schema/purchase-invoices.ts": 77.8,
   "src/schema/receipt-reprints.ts": 33.9,
-  "src/schema/recipes.ts": 33.7,
   "src/schema/recovery-packs.ts": 21.9,
   "src/schema/sale-receipt-guests.ts": 20.3,
   "src/schema/sale-voids.ts": 29.1,

@@ -143,8 +143,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("location_catalogues", "state", STATE),
   classify("categories", "state", STATE),
   classify("products", "state", STATE),
-  classify("ingredients", "state", STATE),
-  classify("recipe_lines", "state", STATE),
   classify("floor_zones", "state", STATE),
   classify("dining_tables", "state", STATE),
   classify("floor_plan_sets", "state", STATE),

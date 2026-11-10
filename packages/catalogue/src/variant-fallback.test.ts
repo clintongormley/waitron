@@ -51,12 +51,10 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 
 const PARENT_ALLERGENS = { sulphites: {} };
 const PARENT_DIET_DERIVATION = { origins: ["plant"], pending: false };
-const PARENT_RECIPE_DERIVATION = { allergens: PARENT_ALLERGENS, pending: false };
 // 175 ml's own value for every inherited field, each different from the parent's, so a read that
 // takes the parent's where the variant has its own fails.
 const W175_PUBLISHED_ALLERGENS = { milk: {} };
 const W175_MANUAL_ALLERGENS = { eggs: {} };
-const W175_RECIPE_DERIVATION = { allergens: W175_MANUAL_ALLERGENS, pending: true };
 const W175_DIET_DERIVATION = { origins: ["dairy"], pending: true };
 const W175_DIET_OVERRIDE = { vegetarian: "yes" as const };
 const W175_DIET = { vegan: "no" as const, vegetarian: "yes" as const, contains: ["dairy"] };
@@ -134,7 +132,6 @@ beforeEach(async () => {
       .set({
         courseId: course!.id,
         dietDerivation: PARENT_DIET_DERIVATION,
-        recipeDerivation: PARENT_RECIPE_DERIVATION,
         color: "#256bb1",
       })
       .where(eq(products.id, parent.id));
@@ -174,7 +171,6 @@ beforeEach(async () => {
         courseId: ownCourse!.id,
         allergens: W175_PUBLISHED_ALLERGENS,
         manualAllergens: W175_MANUAL_ALLERGENS,
-        recipeDerivation: W175_RECIPE_DERIVATION,
         dietDerivation: W175_DIET_DERIVATION,
         dietOverride: W175_DIET_OVERRIDE,
         diet: W175_DIET,
@@ -767,7 +763,6 @@ describe("INHERITED_KEYS", () => {
         "image",
         "manualAllergens",
         "pricingUnit",
-        "recipeDerivation",
         "unitPrice",
         "vatClass",
       ].sort(),

@@ -72,19 +72,19 @@ describe("allergen kinds", () => {
 
   it("unions codes and kinds without losing either overlay or changing inputs", () => {
     const manual: ProductAllergens = { gluten: { kinds: ["wheat", "barley"] }, milk: {} };
-    const recipe: ProductAllergens = {
+    const other: ProductAllergens = {
       gluten: { kinds: ["rye", "wheat"] },
       nuts: { kinds: ["almonds"] },
     };
-    const original = structuredClone({ manual, recipe });
+    const original = structuredClone({ manual, other });
     const expected = {
       gluten: { kinds: ["barley", "rye", "wheat"] },
       milk: {},
       nuts: { kinds: ["almonds"] },
     };
-    expect(mergeAllergenMaps(manual, recipe)).toEqual(expected);
-    expect(mergeAllergenMaps(recipe, manual)).toEqual(expected);
-    expect({ manual, recipe }).toEqual(original);
+    expect(mergeAllergenMaps(manual, other)).toEqual(expected);
+    expect(mergeAllergenMaps(other, manual)).toEqual(expected);
+    expect({ manual, other }).toEqual(original);
   });
 });
 

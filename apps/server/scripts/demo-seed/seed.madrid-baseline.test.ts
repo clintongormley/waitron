@@ -73,6 +73,8 @@ const ADDED_TABLES = [
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
 const REMOVED_TABLES = [
+  "ingredients",
+  "recipe_lines",
   "attendance_mail",
   "membership_clearances",
   "membership_removals",
@@ -335,6 +337,9 @@ for (const locale of ["en", "es"] as const) {
         on_delete: "NO ACTION",
         match: "NONE",
       });
+      const products = expected[phase].tables.products!;
+      products.columns = products.columns.filter((column) => column.name !== "recipe_derivation");
+      for (const row of Object.values(products.rows)) delete row.recipe_derivation;
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");

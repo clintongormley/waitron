@@ -200,6 +200,7 @@ describe("staged configuration import", () => {
     ["A756 pre-station-changes export without it", { version: 7 }],
     ["A980 pre-privacy-contact export with the key", { version: 8 }],
     ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
+    ["A1308 4a-i pre-recipe-removal export", { version: 11 }],
     ["old version", { version: 1 }],
     ["A1308 pre-location-column export", { version: 11 }],
     ["future version", { version: 13 }],

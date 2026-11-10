@@ -3528,7 +3528,6 @@ jobs:
           set -- "$@" --filter "!@waitron/dashboard-kit"
           set -- "$@" --filter "!@waitron/credentials"
           set -- "$@" --filter "!@waitron/catalogue"
-          set -- "$@" --filter "!@waitron/recipes"
           set -- "$@" --filter "!@waitron/workforce-es"
           set -- "$@" --filter "!@waitron/layouts"
           set -- "$@" --filter "!@waitron/printing"
