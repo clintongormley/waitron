@@ -159,6 +159,30 @@ RUN set -eux; \
   test "$(/usr/local/bin/litestream version)" = "${version}"
 
 # ---------------------------------------------------------------------------
+# versitygw stage — the pinned S3 server a spare box runs as the store the main
+# box streams to. Shaped like the Litestream stage, for the same reasons. The
+# sums are the ones scripts/setup-s3-test-server.mjs checks;
+# scripts/versitygw-pin.test.ts holds them and the version equal to it and
+# apps/server/src/testing/s3-test-server.ts.
+# `release`, not `version`: scripts/litestream-pin.test.ts reads `version=` file-wide.
+# ---------------------------------------------------------------------------
+FROM node:26 AS versitygw
+ARG TARGETARCH
+RUN set -eux; \
+  release=1.8.0; \
+  case "${TARGETARCH}" in \
+    amd64) name="versitygw_v${release}_Linux_x86_64"; sum="2ba2c734d10d2c4e651d03182cb4b246656bc735a2f282db7b0b73fba6073467" ;; \
+    arm64) name="versitygw_v${release}_Linux_arm64"; sum="b34051d33f5a9c457f790896acb7bd7d7e15ad8d92efb70616b924f37e401910" ;; \
+    *) echo "no pinned versitygw ${release} for '${TARGETARCH}'" >&2; exit 1 ;; \
+  esac; \
+  curl -fsSL --retry 2 --connect-timeout 15 --max-time 120 -o /tmp/versitygw.tar.gz \
+    "https://github.com/versity/versitygw/releases/download/v${release}/${name}.tar.gz"; \
+  echo "${sum}  /tmp/versitygw.tar.gz" | sha256sum -c -; \
+  tar --no-same-owner -xzf /tmp/versitygw.tar.gz -C /usr/local/bin --strip-components=1 "${name}/versitygw"; \
+  rm /tmp/versitygw.tar.gz; \
+  test "$(/usr/local/bin/versitygw --version | sed -nE 's/^Version *: ([0-9.]+)$/\1/p')" = "${release}"
+
+# ---------------------------------------------------------------------------
 # Runtime stage — the build outputs and a non-root user.
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS runtime
@@ -181,6 +205,9 @@ RUN setcap cap_net_bind_service=+ep /usr/local/bin/node
 # The pinned Litestream (the `litestream` stage), on PATH, where the server's default
 # WAITRON_LITESTREAM_BIN (`litestream`) finds it.
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
+
+# The pinned versitygw (the `versitygw` stage); only a spare box runs it.
+COPY --from=versitygw /usr/local/bin/versitygw /usr/local/bin/versitygw
 
 RUN groupadd --system --gid 10001 waitron \
   && useradd --system --uid 10001 --gid 10001 --home-dir /var/lib/waitron \
