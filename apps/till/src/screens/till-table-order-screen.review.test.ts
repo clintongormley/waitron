@@ -106,18 +106,22 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
       .toBeInTheDocument();
   });
 
-  it("the switch only below the width", async () => {
+  it("the switch only below the width, as a group named Menu or order", async () => {
     const { el, host } = await mount();
     host.style.width = `${DRAFT_SIDE_BY_SIDE_MIN_WIDTH - 1}px`;
     await resized(el);
     expect(shown(viewSwitch(el))).toBe(true);
+    expect(t("table.view_switch")).toBe("Menu or order");
+    await expect
+      .element(page.getByRole("group", { name: t("table.view_switch"), exact: true }))
+      .toBe(viewSwitch(el));
 
     host.style.width = `${DRAFT_SIDE_BY_SIDE_MIN_WIDTH}px`;
     await resized(el);
     expect(viewSwitch(el)).toBeNull();
   });
 
-  it("Spanish: Carta and Pedido · 3", async () => {
+  it("Spanish: Carta and Pedido · 3, in a group named Carta o pedido", async () => {
     setLocale("es");
     try {
       expect(t("table.view_menu")).not.toBe("Menu");
@@ -133,6 +137,8 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
         t("table.view_menu"),
       );
       expect(orderButton(el)!.textContent!.trim()).toBe(`${t("table.view_order")} · 3`);
+      expect(t("table.view_switch")).toBe("Carta o pedido");
+      expect(viewSwitch(el)!.getAttribute("aria-label")).toBe(t("table.view_switch"));
     } finally {
       setLocale("en");
     }

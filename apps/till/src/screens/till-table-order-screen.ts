@@ -3109,7 +3109,12 @@ export class TillTableOrderScreen extends LitElement {
   /** The count's " · " is hidden from screen readers, so Order's name reads "Order 3". */
   #viewSwitch(draft: WorkingOrderStore, onOrder: boolean): TemplateResult {
     const items = newOrderItems(draft.lines);
-    return html`<div class="view-switch" data-view-switch>
+    return html`<div
+      class="view-switch"
+      data-view-switch
+      role="group"
+      aria-label=${t("table.view_switch")}
+    >
       <button
         type="button"
         class="option"
@@ -4223,10 +4228,17 @@ export class TillTableOrderScreen extends LitElement {
     if (this.view === "order") return;
     const scroller = this.#scroller();
     this.#browsingScroll = { scroller, top: scroller.scrollTop };
+    const focused = (this.renderRoot as ShadowRoot).activeElement;
     this.view = "order";
     scroller.scrollTop = 0;
     await this.updateComplete;
     this.#clearOrderTopOfDock();
+    // The control that opened Order, such as the New order bar, can be hidden with Menu; focus
+    // would then fall to the page.
+    if (focused !== null && !focused.checkVisibility())
+      this.renderRoot
+        .querySelector<HTMLElement>("[data-view=order]")
+        ?.focus({ preventScroll: true });
   }
 
   #clearTopDue = false;

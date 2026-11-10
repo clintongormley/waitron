@@ -465,6 +465,22 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     }
   });
 
+  it("after sending everything, a phone whose floor read then fails stays on Order and says the amounts could not be read", async () => {
+    try {
+      const el = await sendAllFromT9(phone, 390, 844, "[data-menu-send-all]", () => {
+        api.getTablesState!.mockRejectedValue(new Error("offline after send"));
+      });
+      await flush(el, 10);
+      expect(api.submitDraft).toHaveBeenCalledTimes(1);
+      expect(activeScreen(el)).toBe("order");
+      expect(el.shadowRoot!.querySelector(".error")?.textContent?.trim()).toBe(
+        "The order was updated, but the table could not be read again. Open the table again to check its amounts.",
+      );
+    } finally {
+      await resetPage();
+    }
+  });
+
   it("a tablet stays on its table, side by side", async () => {
     try {
       const el = await sendAllFromT9(

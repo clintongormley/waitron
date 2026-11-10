@@ -98,6 +98,32 @@ describe("till-table-order-screen: the Menu's New order bar", () => {
     expect(shown(el.shadowRoot!.querySelector("[data-draft-pane]"))).toBe(true);
   });
 
+  it("the Menu's New order bar: opening Order from the words by keyboard puts focus on the switch's Order", async () => {
+    const { el } = await phone();
+    await tap(el, "Croquettes");
+
+    summary(el).focus();
+    expect(el.shadowRoot!.activeElement).toBe(summary(el));
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+
+    expect(shownView(el)).toBe("order");
+    expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("[data-view=order]"));
+  });
+
+  it("the Menu / Order switch: its Order keeps focus when pressed", async () => {
+    const { el } = await phone();
+    await tap(el, "Croquettes");
+    const order = el.shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!;
+
+    order.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+
+    expect(shownView(el)).toBe("order");
+    expect(el.shadowRoot!.activeElement).toBe(order);
+  });
+
   it("the Menu's New order bar: Send all shows Order as the send starts", async () => {
     const { el } = await phone();
     const seen = sends(el);
