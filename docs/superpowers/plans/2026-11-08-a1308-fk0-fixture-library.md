@@ -97,8 +97,13 @@ line is a stop (rules §5.2).
 
 ## Needs
 
-- Nothing in this area; it can start as soon as the lane is free. It does not need 1a (no
-  migration), and it needs none of batch 1 except that the files it rewrites exist.
+- The library and fk1's script-string tests can start independently. The `seedZone` helper and
+  its tree rewrite need 5e to remove `floor_zones.location_id`, as the area's build-order table
+  requires. No migration is made here.
+
+**2026-11-10, watcher clearance at 17:47 in Lane E questions.md:** build Tasks 1 and 3 first;
+leave Task 2 until 5e lands. The first part supplies tested rewrite tooling, with no test-tree or
+product change. Its proportional forecast is about 360 lines: 230 code and 130 tests.
 
 ## Global constraints
 
