@@ -1903,10 +1903,10 @@ async function bootServer(
         node: store.node,
         recheck: checkPeers,
         intervalMs: seams.waitingStart?.intervalMs ?? WAIT_RECHECK_MS,
-        listen: (waitingApp) => {
+        listen: (waitingApp, steppingDown) => {
           const server = startTradingListener(config, waitingApp, now, log);
           const mdns = startMdnsResponder({
-            names: () => ownAndVenueNames,
+            names: () => (steppingDown() ? ownNameOnly : ownAndVenueNames),
             makeSocket: seams.mdnsSocket,
             devMode: config.devMode,
             httpHost: config.httpHost,

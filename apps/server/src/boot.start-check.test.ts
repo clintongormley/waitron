@@ -838,6 +838,74 @@ describe("the start check on a real start", () => {
       });
       await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
     }, 60_000);
+
+    it("a waiting box that steps down stops answering the venue's name at once, while an admitted request is still held, and keeps its own", async () => {
+      const mdns = fakeMdnsSocket();
+      let answerReask!: () => void;
+      const peerCheck = vi
+        .fn<() => Promise<StartPeerCheckOutcome>>()
+        .mockResolvedValueOnce(WAIT_ON_SPARE)
+        .mockReturnValueOnce(new Promise((done) => (answerReask = () => done(WAIT_ON_SPARE))))
+        .mockRejectedValue(new Error("asked after the wait ended"));
+      let entered!: () => void;
+      const inside = new Promise<void>((resolve) => (entered = resolve));
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        httpHost: "0.0.0.0",
+        seams: {
+          ...seams(peerCheck),
+          mdnsSocket: () => mdns.socket,
+          waitingStart: {
+            intervalMs: 5,
+            secure: () => {
+              entered();
+              return true;
+            },
+          },
+        },
+      });
+      expect(booted.acceptingSales).toBe(false);
+      const own = boxHostnameFor(booted.nodeId);
+      const base = `http://127.0.0.1:${httpPort()}`;
+      mdns.query("waitron.local");
+      expect(mdns.answered()).toEqual(["waitron.local"]);
+      // A carry-on waits for the re-ask in flight, so it stays inside the gate until that answers.
+      await vi.waitFor(() => expect(peerCheck).toHaveBeenCalledTimes(2));
+      const holding = fetch(`${base}/carry-on`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          email: "owner@example.test",
+          password: "dashPass123",
+          switchedOff: "yes",
+          noOtherRecovery: "yes",
+        }),
+      });
+      try {
+        await inside;
+        const sent = await fetch(`${base}/api/node/membership`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            document: spareChart(2, [
+              [booted.nodeId, "sell-only", OWN_URL],
+              [SPARE.nodeId, "serving-primary", "https://spare.example"],
+            ]),
+          }),
+        });
+        expect(await sent.json()).toEqual({ accepted: true });
+        mdns.clear();
+        mdns.query("waitron.local");
+        mdns.query(own);
+        expect(mdns.answered()).toEqual([own]);
+        expect(restart).not.toHaveBeenCalled();
+      } finally {
+        answerReask();
+        await (await holding).text();
+      }
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
+    }, 60_000);
   });
 
   it("a waiting box answers the venue's name and its own", async () => {
