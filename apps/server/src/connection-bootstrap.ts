@@ -17,7 +17,8 @@ export interface ConnectionBootstrapDeps extends BoxTlsRepairDeps {
   reachUrls: string[];
   onRepaired: () => Promise<void>;
   log: Logger;
-  /** A function decides each connection write by its request; the page shows the repair as offered. */
+  /** A function decides, per request, whether the page offers the repair and a write is answered;
+   * the certificate downloads follow only whether a repair is offered at all. */
   repairAllowed?: boolean | ((c: Context) => boolean);
   continuationRequired?: boolean;
 }
@@ -55,6 +56,8 @@ export function mountConnectionBootstrap(
   bootstrapOnly = true,
 ): void {
   const offered = deps.repairAllowed !== false;
+  const offeredTo = (c: Context) =>
+    typeof deps.repairAllowed === "function" ? deps.repairAllowed(c) : offered;
   let transitioning = false;
   let transitionFailed = false;
   const publicPaths = bootstrapOnly
@@ -85,6 +88,7 @@ export function mountConnectionBootstrap(
         connection: {
           ...status,
           repairAllowed: offered,
+          serverOnly: offered && !offeredTo(c),
           continuationRequired: bootstrapOnly || transitionFailed || deps.continuationRequired,
         },
         locale: connectionLocale(c.req.query("lang") ?? c.req.header("accept-language")),
@@ -115,7 +119,7 @@ export function mountConnectionBootstrap(
     const origin = request.headers.get("origin");
     const host = request.headers.get("host");
     if (
-      (typeof deps.repairAllowed === "function" ? !deps.repairAllowed(c) : !offered) ||
+      !offeredTo(c) ||
       origin !== url.origin ||
       !deps.origins.includes(url.origin) ||
       (host !== null && host !== url.host) ||

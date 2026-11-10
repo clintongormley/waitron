@@ -10,7 +10,12 @@ export const CA_FILENAME = "waitron-ca.crt";
 
 export interface TrustPageInput {
   caCertificate?: string;
-  connection?: BoxTlsInspection & { repairAllowed?: boolean; continuationRequired?: boolean };
+  connection?: BoxTlsInspection & {
+    repairAllowed?: boolean;
+    /** The repair is offered, but only to a request from the server itself, and this is not one. */
+    serverOnly?: boolean;
+    continuationRequired?: boolean;
+  };
   locale?: "en" | "es";
   reachUrls: string[];
   caAvailable: boolean;

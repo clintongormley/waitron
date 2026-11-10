@@ -401,6 +401,42 @@ it.each(["en", "es"] as const)(
   },
 );
 
+it.each([
+  ["en", "repair-required", false],
+  ["es", "repair-required", false],
+  ["en", "healthy", true],
+] as const)(
+  "a repair offered only on the server itself is explained, not offered (%s, %s)",
+  async (locale, state, continuationRequired) => {
+    const page = await browser!.newPage();
+    try {
+      let writes = 0;
+      const status = { ...retained, state, continuationRequired, serverOnly: true };
+      await open(
+        page,
+        status,
+        async () => {
+          writes++;
+          return { status: 403, body: { error: "connection.refused" } };
+        },
+        { locale, connection: status },
+      );
+      expect(await page.locator("#connection-status").textContent()).toBe(
+        locale === "en"
+          ? "On a standby server, the secure connection can be set up only on the server itself."
+          : CONNECTION_TEXT.es.serverOnly,
+      );
+      expect(await page.locator("#connection-repair, #connection-reconnect").count()).toBe(0);
+      expect(await page.locator("#connection-certificate").isVisible()).toBe(true);
+      expect(await page.locator("#connection-check").isVisible()).toBe(true);
+      expect(await page.locator("#connection-stop").isVisible()).toBe(true);
+      expect(writes).toBe(0);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
 it.each(["repair", "reconnect"] as const)(
   "waits for a pending %s before allowing check or stop",
   async (action) => {

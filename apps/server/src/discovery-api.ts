@@ -21,7 +21,7 @@ export interface DiscoveryDeps {
   discoveryEnabled?: boolean;
   /** False when the listener presents operator TLS, even if a fallback CA exists on disk. */
   serveBoxCa?: boolean;
-  /** Asked for each connection write; never asked when `serveBoxCa` is false, which refuses them. */
+  /** Asked for each connection page and write; never asked when `serveBoxCa` is false, which refuses them. */
   repairAllowed?: (c: Context) => boolean;
   /** Injected for tests. */
   listIpv4?: () => string[];

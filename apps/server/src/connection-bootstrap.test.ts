@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
+import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 
 const now = new Date("2026-10-21T00:00:00Z");
 let material: SelfSignedMaterial;
@@ -22,7 +23,10 @@ const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
-async function fixture(healthy = false) {
+async function fixture(
+  healthy = false,
+  repairAllowed?: Parameters<typeof mountConnectionBootstrap>[1]["repairAllowed"],
+) {
   const stateDir = await mkdtemp(join(tmpdir(), "public-connection-"));
   dirs.push(stateDir);
   await mkdir(join(stateDir, "tls"));
@@ -44,6 +48,7 @@ async function fixture(healthy = false) {
     reachUrls: ["https://waitron.local:8080"],
     onRepaired,
     log: () => {},
+    repairAllowed,
   });
   return { stateDir, app, onRepaired };
 }
@@ -182,6 +187,30 @@ it("operator TLS refuses box repair without modifying the managed material", asy
   await expect(readFile(join(f.stateDir, "tls/server.pem"))).rejects.toMatchObject({
     code: "ENOENT",
   });
+});
+
+it("a repair decided per request is offered on the page only to a request it would answer", async () => {
+  const f = await fixture(false, (c) => c.req.header("x-test-from-box") === "1");
+  const page = "http://waitron.local:8080/setup/connection";
+  const elsewhere = await (await f.app.request(page)).text();
+  expect(elsewhere).not.toContain('id="connection-repair"');
+  const statusOf = (html: string) => /<p id="connection-status"[^>]*>([^<]*)<\/p>/.exec(html)?.[1];
+  expect(statusOf(elsewhere)).toBe(CONNECTION_TEXT.en.serverOnly);
+  expect(statusOf(await (await f.app.request(`${page}?lang=es`)).text())).toBe(
+    CONNECTION_TEXT.es.serverOnly,
+  );
+  expect(elsewhere).toContain("BEGIN CERTIFICATE");
+  expect(await (await f.app.request("/ca.crt")).text()).toBe(material.caCertPem);
+  const refused = await f.app.request(url, { method: "POST", headers: allowed });
+  expect(refused.status).toBe(403);
+  const fromBox = await (await f.app.request(page, { headers: { "x-test-from-box": "1" } })).text();
+  expect(fromBox).toContain('id="connection-repair"');
+  expect(statusOf(fromBox)).toBe(CONNECTION_TEXT.en.needed);
+  const answered = await f.app.request(url, {
+    method: "POST",
+    headers: { ...allowed, "x-test-from-box": "1" },
+  });
+  expect(answered.status).toBe(200);
 });
 
 it("offers one public repair action, retains installed trust and omits private controls", async () => {

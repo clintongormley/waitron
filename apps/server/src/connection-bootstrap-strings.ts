@@ -17,6 +17,8 @@ export const CONNECTION_TEXT = {
       "The connection could not be set up. Choose Set up secure connection to retry. If it keeps failing, stop here: this page cannot fix every certificate problem.",
     operator:
       "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate.",
+    serverOnly:
+      "On a standby server, the secure connection can be set up only on the server itself.",
     javascript: "Enable JavaScript in your browser, then reload this page to use these choices.",
     check: "Check again",
     stop: "Stop",
@@ -55,6 +57,8 @@ export const CONNECTION_TEXT = {
       "No se ha podido configurar la conexión. Elige Configurar conexión segura para reintentar. Si sigue fallando, detente aquí: esta página no puede reparar todos los problemas de certificados.",
     operator:
       "Este servidor usa un certificado instalado por separado. Comprueba la dirección HTTPS de abajo. Si muestra un aviso del certificado, detente: esta página no puede sustituirlo.",
+    serverOnly:
+      "En un servidor en espera, la conexión segura solo se puede configurar en el propio servidor.",
     javascript: "Activa JavaScript en tu navegador y recarga esta página para usar estas opciones.",
     check: "Comprobar de nuevo",
     stop: "Detener",
