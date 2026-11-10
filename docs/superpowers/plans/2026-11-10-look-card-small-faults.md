@@ -1,6 +1,6 @@
 # Look card’s six small faults — implementation plan
 
-Codex wrote this plan from Lane D’s queued bundle (watcher, 2026-11-10 12:59). Claude review and watcher clearance are pending. No owner approval of the design is recorded. Claude’s two reads are complete; the corrections below await watcher clearance.
+Codex wrote this plan from Lane D’s queued bundle (watcher, 2026-11-10 12:59). Claude reviewed the plan in two reads (383/189 seconds); the watcher cleared it with these corrections at 2026-11-10 15:01, recorded in Lane D’s questions.md. No owner approval of the design is recorded.
 
 **Finish line:** staff keep a colour picked just before leaving; see both receipt widths and their blank warnings; reach dark Main buttons after motion; reopen Advanced without a jump; read field errors without moving neighbouring controls; and see Fix all on one line at Spanish phone width. One PR, within three active hours to opening it.
 
@@ -20,4 +20,4 @@ Path prefixes: D = `apps/dashboard/src`, S = `apps/server/src`, U = `packages/ui
 
 **Forecast:** production +180/−60; tests +300/−40; support +0/−0; docs +45/−100, plus this plan: about 750 changed lines. Stop before material growth beyond 1.5× and ask the watcher for the smallest cut.
 
-**Checks and delivery:** run named changed files, guide-content.test.ts, guide-links.test.ts and affected token/accessibility guards; read Tests counts. Inspect EN/ES, both themes, desktop and 320/390 px after motion/errors settle. No whole-package local run. Then finish-branch’s two run-it angles and fixes read, the normal hook, current-head CI and locked landing. Implementation waits for watcher clearance; no third plan read.
+**Checks and delivery:** run named changed files, guide-content.test.ts, guide-links.test.ts and affected token/accessibility guards; read Tests counts. Inspect EN/ES, both themes, desktop and 320/390 px after motion/errors settle. No whole-package local run. Then finish-branch’s two run-it angles and fixes read, the normal hook, current-head CI and locked landing. Build under that watcher clearance; no third plan read.

@@ -755,14 +755,27 @@ describe("one pick per frame", () => {
     const el = await mount(CREAM);
     await open(el);
     const seen = actions(el);
+    const pending: unknown[] = [];
+    el.addEventListener("hand-pending", (event) =>
+      pending.push([el.pendingPick, event.bubbles, event.composed]),
+    );
     const before = frames.length;
     pick(el, "#111111");
     pick(el, "#222222");
     pick(el, "#333333");
+    expect(pending).toEqual(
+      ["#111111", "#222222", "#333333"].map((colour) => [
+        { mode: "light", key: "bg", colour },
+        false,
+        false,
+      ]),
+    );
     expect(seen).toEqual([]);
     expect(frames.length).toBe(before + 1);
     runFrame(frames.length);
     expect(seen).toEqual([{ kind: "pick", mode: "light", key: "bg", colour: "#333333" }]);
+    expect(el.pendingPick).toBeUndefined();
+    expect(pending).toHaveLength(3);
     pick(el, "#444444");
     expect(frames.length).toBe(before + 2);
   });
@@ -804,6 +817,21 @@ describe("one pick per frame", () => {
       { kind: "pick", mode: "light", key: "bg", colour: "#111111" },
       { kind: "pick", mode: "dark", key: "surface", colour: "#223344" },
     ]);
+  });
+
+  it("discards a pending pick without another notification or a later delivery", async () => {
+    const el = await mount(CREAM);
+    await open(el);
+    const seen = actions(el);
+    const pending = vi.fn();
+    el.addEventListener("hand-pending", pending);
+    pick(el, "#111111");
+    const id = frames.length;
+    el.discardPending();
+    runFrame(id);
+    expect(el.pendingPick).toBeUndefined();
+    expect(seen).toEqual([]);
+    expect(pending).toHaveBeenCalledTimes(1);
   });
 
   it("cancels a waiting frame when removed", async () => {

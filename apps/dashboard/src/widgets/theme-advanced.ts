@@ -189,6 +189,14 @@ export class ThemeAdvanced extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.discardPending();
+  }
+
+  get pendingPick(): Readonly<{ mode: Mode; key: ThemeColour; colour: string }> | undefined {
+    return this.#waitingPick;
+  }
+
+  discardPending(): void {
     if (this.#frame !== undefined) cancelAnimationFrame(this.#frame);
     this.#frame = undefined;
     this.#waitingPick = undefined;
@@ -223,6 +231,7 @@ export class ThemeAdvanced extends LitElement {
     const waiting = this.#waitingPick;
     if (waiting !== undefined && (waiting.mode !== mode || waiting.key !== key)) this.#flushPick();
     this.#waitingPick = { mode, key, colour };
+    this.dispatchEvent(new CustomEvent("hand-pending", { detail: this.pendingPick }));
     this.#frame ??= requestAnimationFrame(() => {
       this.#frame = undefined;
       this.#sendPick();
