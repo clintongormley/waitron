@@ -88,8 +88,11 @@ async function collectAndRestore(stateDir: string): Promise<{ names: string[]; r
 it("a box's own authority is backed up and restored", async () => {
   const stateDir = await stateWithRecoveryFiles();
 
-  const { restored } = await collectAndRestore(stateDir);
+  const { names, restored } = await collectAndRestore(stateDir);
 
+  expect(names).toContain("secrets/tls/ca.crt");
+  expect(names).toContain("secrets/tls/ca.key");
+  expect(await readFile(join(restored, "tls/ca.crt"), "utf8")).toBe("tls/ca.crt-contents");
   expect(await readFile(join(restored, "tls/ca.key"), "utf8")).toBe("tls/ca.key-contents");
 });
 
