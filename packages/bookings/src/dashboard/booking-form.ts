@@ -1,4 +1,4 @@
-import { LitElement, type PropertyValues, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   submitOnEnter,

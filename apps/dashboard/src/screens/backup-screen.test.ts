@@ -187,8 +187,6 @@ const archiveAlertText = (el: BackupScreen) =>
   el
     .shadowRoot!.querySelector("[data-test=apply-actions], [data-test=settings-actions]")
     ?.shadowRoot?.querySelector("[role=alert]")?.textContent;
-const errorKey = (el: BackupScreen): string | null =>
-  (el as unknown as { errorKey: string | null }).errorKey;
 
 async function configurationBottom(el: BackupScreen): Promise<string | null> {
   const actions = q(el, "[data-test=configuration-actions]") as HTMLElement & {
