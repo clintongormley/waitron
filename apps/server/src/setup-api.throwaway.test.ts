@@ -238,16 +238,22 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     expect(throwawayLines()).toEqual([]);
   });
 
-  it("never marks a production Live request that carries initialOperations", async () => {
-    const { post, received } = harness(PREPRODUCTION_BOX);
+  it.each<[string, Box]>([
+    ["a production box", PRODUCTION_BOX],
+    ["a preproduction box", PREPRODUCTION_BOX],
+  ])(
+    "never marks a production Live request that carries initialOperations on %s",
+    async (_l, box) => {
+      const { post, received } = harness(box);
 
-    expect(
-      (await post({ ...liveProductionBody(), initialOperations: INITIAL_OPERATIONS })).status,
-    ).toBe(200);
+      expect(
+        (await post({ ...liveProductionBody(), initialOperations: INITIAL_OPERATIONS })).status,
+      ).toBe(200);
 
-    expect(received[0].environment).toBe("production");
-    expect(received[0]).not.toHaveProperty("initialAllocation");
-  });
+      expect(received[0].environment).toBe("production");
+      expect(received[0]).not.toHaveProperty("initialAllocation");
+    },
+  );
 
   it("ignores a forged initialAllocation field on a Live body from a non-dev box", async () => {
     const { post, received, throwawayLines } = harness(PREPRODUCTION_BOX);
