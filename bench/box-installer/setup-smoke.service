@@ -1,0 +1,12 @@
+[Unit]
+Description=Waitron development recipe rehearsal
+Wants=docker.service NetworkManager.service
+After=docker.service NetworkManager.service
+
+[Service]
+Type=oneshot
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
+ExecStart=/bin/bash -ec 'echo @PAYLOAD@ | base64 -d | bash -e'
+TimeoutStartSec=600

@@ -1,0 +1,8 @@
+FROM node:26-trixie@sha256:438603bbb5cda404b9416f0b5c8026f61501ab911760d861ec28c36b5d675725
+RUN timeout -k 10 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update \
+ && DEBIAN_FRONTEND=noninteractive timeout -k 10 300 apt-get -o Acquire::Retries=3 install -y --no-install-recommends \
+    mkosi=25.3-7 qemu-system-x86 e2fsprogs cpio curl ca-certificates jq openssl procps \
+ && npm install --global pnpm@9.15.0
+WORKDIR /source
+RUN mkdir /work
+CMD ["sleep", "10800"]

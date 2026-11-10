@@ -107,6 +107,13 @@ async function settleOrRelease(promise, fifo, ms = 2000) {
 }
 
 describe("parseRigArgs", () => {
+  it("admits the recipe setup boot", () => {
+    expect(parseRigArgs(["--case", "recipe-setup", "--run-dir", "/tmp/recipe"])).toEqual({
+      caseName: "recipe-setup",
+      runDir: "/tmp/recipe",
+    });
+  });
+
   it("parses --case layout --run-dir <abs> in either order", () => {
     expect(parseRigArgs(["--case", "layout", "--run-dir", "/tmp/run-1"])).toEqual({
       caseName: "layout",
@@ -131,6 +138,7 @@ describe("parseRigArgs", () => {
       "preboot-headless",
       "preboot-two-boxes",
       "preboot-tamper",
+      "recipe-setup",
     ]);
     for (const caseName of RIG_CASES)
       expect(parseRigArgs(["--case", caseName, "--run-dir", "/tmp/r"]).caseName).toBe(caseName);
