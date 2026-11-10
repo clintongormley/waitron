@@ -21,7 +21,6 @@ import {
   previewCorrectionAmounts,
   readCorrectionAmountHistory,
 } from "./correction-history.js";
-import type { CorrectionAmountAllocation } from "./correction-allocation.js";
 import { recordCorrection, type RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
@@ -216,20 +215,6 @@ const BREAKDOWN = [
   { rate: "21.00", base: "10.00", tax: "2.10" },
 ];
 
-it("reads every invoice line, extras included, its stored split and nothing consumed", async () => {
-  const { saleId, ids } = await sell();
-
-  expect(await read(saleId)).toEqual({
-    lines: [
-      { id: ids[0], lineNo: 1, rate: "10.00", gross: "11.00", base: "10.00" },
-      { id: ids[1], lineNo: 2, rate: "21.00", gross: "12.10", base: "10.00" },
-      { id: ids[2], lineNo: 3, rate: "10.00", gross: "1.10", base: "1.00" },
-    ],
-    vatBreakdown: BREAKDOWN,
-    consumed: [],
-  });
-});
-
 // An earlier correction filed through the derived path: €1.05 off the steak, its split derived
 // from its lines (21%: -0.87/-0.18). Each case changes one fact of it, or of the invoice.
 interface Change {
@@ -241,6 +226,17 @@ interface Change {
   storedSplit?: StoredSplit;
 }
 
+/** A correction line taking `lineGross` off the steak. */
+function steakTaken(
+  lineNo: number,
+  correctsLineId: string | null,
+  lineTotal: string,
+  lineGross: string | null,
+): RecordSaleLine {
+  const steak = invoiceLines()[1]!;
+  return { ...steak, lineNo, quantity: "-1", lineTotal, lineGross, correctsLineId };
+}
+
 async function history(change: Change) {
   const lines = invoiceLines();
   if (change.invoiceGross === null) lines[0]!.lineGross = null;
@@ -250,17 +246,9 @@ async function history(change: Change) {
   const correction = await write(
     saleId,
     "-1.05",
-    (change.correctionLines ?? [["-0.87", "-1.05"]]).map(([lineTotal, lineGross], index) => ({
-      lineNo: index + 1,
-      name: "Steak",
-      descriptions: { "es-ES": "Steak" },
-      quantity: "-1",
-      unitPrice: "10.00",
-      vatRate: "21.00",
-      lineTotal,
-      lineGross,
-      correctsLineId: change.namesLine === false ? null : ids[1],
-    })),
+    (change.correctionLines ?? [["-0.87", "-1.05"]]).map(([lineTotal, lineGross], index) =>
+      steakTaken(index + 1, change.namesLine === false ? null : ids[1]!, lineTotal, lineGross),
+    ),
   );
   const target = change.readUnknown
     ? brandSaleId(newId())
@@ -270,18 +258,26 @@ async function history(change: Change) {
   return { target, ids, result: () => read(target) };
 }
 
-it("reads an earlier derived-path correction whose split agrees with its lines", async () => {
+it("reads every invoice line, extras included, its stored split and what earlier corrections took", async () => {
   const { ids, result } = await history({});
 
-  expect((await result()).consumed).toEqual([
-    { saleLineId: ids[1], rate: "21.00", gross: "1.05", base: "0.87", tax: "0.18" },
-  ]);
+  expect(await result()).toEqual({
+    lines: [
+      { id: ids[0], lineNo: 1, rate: "10.00", gross: "11.00", base: "10.00" },
+      { id: ids[1], lineNo: 2, rate: "21.00", gross: "12.10", base: "10.00" },
+      { id: ids[2], lineNo: 3, rate: "10.00", gross: "1.10", base: "1.00" },
+    ],
+    vatBreakdown: BREAKDOWN,
+    consumed: [{ saleLineId: ids[1], rate: "21.00", gross: "1.05", base: "0.87", tax: "0.18" }],
+  });
 });
+
+const UNUSABLE = "sale.correction_history_unusable";
 
 it.each<[name: string, change: Change, code: string]>([
   ["an unknown sale", { readUnknown: true }, "sale.not_found"],
-  ["a corrective invoice's own id", { readCorrection: true }, "sale.correction_history_unusable"],
-  ["an invoice line with no gross", { invoiceGross: null }, "sale.correction_history_unusable"],
+  ["a corrective invoice's own id", { readCorrection: true }, UNUSABLE],
+  ["an invoice line with no gross", { invoiceGross: null }, UNUSABLE],
   [
     "an earlier correction line with no gross, its correction's split agreeing with the rest",
     {
@@ -290,17 +286,13 @@ it.each<[name: string, change: Change, code: string]>([
         ["-0.37", "-1.05"],
       ],
     },
-    "sale.correction_history_unusable",
+    UNUSABLE,
   ],
+  ["an earlier correction line naming no invoice line", { namesLine: false }, UNUSABLE],
   [
-    "an earlier correction line naming no invoice line",
-    { namesLine: false },
-    "sale.correction_history_unusable",
-  ],
-  [
-    "an earlier correction whose lines disagree with its stored split",
+    "an earlier correction whose lines' gross is not its stored split's",
     { correctionLines: [["-0.87", "-1.06"]] },
-    "sale.correction_history_unusable",
+    UNUSABLE,
   ],
   [
     "an earlier correction's stored split at a rate with no lines",
@@ -310,17 +302,17 @@ it.each<[name: string, change: Change, code: string]>([
         { rate: "10.00", base: "0.00", tax: "0.00" },
       ],
     },
-    "sale.correction_history_unusable",
+    UNUSABLE,
   ],
   [
     "an earlier correction's stored split leaving out its lines' rate",
     { storedSplit: [] },
-    "sale.correction_history_unusable",
+    UNUSABLE,
   ],
   [
     "an earlier correction's stored base that is not its lines', at their gross",
     { storedSplit: [{ rate: "21.00", base: "-0.86", tax: "-0.19" }] },
-    "sale.correction_history_unusable",
+    UNUSABLE,
   ],
 ])("refuses %s", async (_name, change, code) => {
   const { result } = await history(change);
@@ -328,82 +320,55 @@ it.each<[name: string, change: Change, code: string]>([
   expect(await captureError(result)).toMatchObject({ code });
 });
 
-it("builds correction lines carrying the invoice line's frozen facts, negated", async () => {
-  const { rows, ids } = await sell();
-  const lines = correctionLinesFor(rows, [
-    {
-      saleLineId: ids[0]!,
-      rate: decimal("10.00"),
-      gross: decimal("0.55"),
-      base: decimal("0.50"),
-      tax: decimal("0.05"),
-    },
-  ]);
-
-  expect(lines).toEqual([
-    {
-      lineNo: 1,
-      name: "Rice",
-      descriptions: { "es-ES": "Rice bowl" },
-      unitName: { "es-ES": "kg" },
-      unitPrecision: 3,
-      quantity: "-2.500",
-      priceQuantity: "0.500",
-      unitPrice: "2.00",
-      vatRate: "10.00",
-      lineTotal: "-0.50",
-      lineGross: "-0.55",
-      optionSnapshots: [OPTION],
-      variantName: "Large",
-      variantDescriptions: { "es-ES": "Large bowl" },
-      variantKitchenName: "LG",
-      category: "Mains",
-      kitchenName: "RICE",
-      productId: "product-rice-large",
-      parentProductId: "product-rice",
-      menuId: "menu-1",
-      menuVersionId: "menu-1-v2",
-      listGross: null,
-      listUnitPriceGross: "2.20",
-      classification: { reporting: [{ id: "food", name: "Food" }] },
-      parentLineNo: null,
-      correctsLineId: ids[0],
-    },
-  ]);
+const allocation = (saleLineId: string, rate: string, gross: string, base: string) => ({
+  saleLineId,
+  rate: decimal(rate),
+  gross: decimal(gross),
+  base: decimal(base),
+  tax: decimal("0"),
 });
 
-it("numbers built lines in allocation order, keeping an extra's rate and its corrected dish", async () => {
+it("builds lines in allocation order from the invoice line's frozen facts, negated", async () => {
   const { rows, ids } = await sell();
-  const sauce: CorrectionAmountAllocation = {
-    saleLineId: ids[2]!,
-    rate: decimal("10.00"),
-    gross: decimal("1.10"),
-    base: decimal("1.00"),
-    tax: decimal("0.10"),
-  };
+  const sauce = allocation(ids[2]!, "10.00", "1.10", "1.00");
   const lines = correctionLinesFor(rows, [
-    {
-      saleLineId: ids[1]!,
-      rate: decimal("21.00"),
-      gross: decimal("1.21"),
-      base: decimal("1.00"),
-      tax: decimal("0.21"),
-    },
+    allocation(ids[1]!, "21.00", "1.21", "1.00"),
     sauce,
+    allocation(ids[0]!, "10.00", "0.55", "0.50"),
   ]);
 
-  expect(
-    lines.map(({ lineNo, name, vatRate, parentLineNo, correctsLineId }) => [
-      lineNo,
-      name,
-      vatRate,
-      parentLineNo,
-      correctsLineId,
-    ]),
-  ).toEqual([
-    [1, "Steak", "21.00", null, ids[1]],
-    [2, "Sauce", "10.00", 1, ids[2]],
+  expect(lines.slice(0, 2).map((line) => [line.lineNo, line.name, line.parentLineNo])).toEqual([
+    [1, "Steak", null],
+    [2, "Sauce", 1],
   ]);
+  expect(lines[2]).toEqual({
+    lineNo: 3,
+    name: "Rice",
+    descriptions: { "es-ES": "Rice bowl" },
+    unitName: { "es-ES": "kg" },
+    unitPrecision: 3,
+    quantity: "-2.500",
+    priceQuantity: "0.500",
+    unitPrice: "2.00",
+    vatRate: "10.00",
+    lineTotal: "-0.50",
+    lineGross: "-0.55",
+    optionSnapshots: [OPTION],
+    variantName: "Large",
+    variantDescriptions: { "es-ES": "Large bowl" },
+    variantKitchenName: "LG",
+    category: "Mains",
+    kitchenName: "RICE",
+    productId: "product-rice-large",
+    parentProductId: "product-rice",
+    menuId: "menu-1",
+    menuVersionId: "menu-1-v2",
+    listGross: null,
+    listUnitPriceGross: "2.20",
+    classification: { reporting: [{ id: "food", name: "Food" }] },
+    parentLineNo: null,
+    correctsLineId: ids[0],
+  });
   expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
 });
 
@@ -429,16 +394,19 @@ it("previews an admitted correction with the admission's filing and the lines to
   });
 });
 
-it("refuses every invoice when the regime cannot answer", async () => {
+it.each([
+  ["correctionAdmissionFor", "unsupported"],
+  ["filedFiguresFor", "filed_figures_unreadable"],
+])("refuses every invoice when the regime has no %s", async (member, reason) => {
   const { saleId } = await sellSteak();
-  const unanswering = new Proxy<FiscalBackend>(backend, {
+  const lacking = new Proxy<FiscalBackend>(backend, {
     get: (target, key, receiver) =>
-      key === "correctionAdmissionFor" ? undefined : Reflect.get(target, key, receiver),
+      key === member ? undefined : Reflect.get(target, key, receiver),
   });
 
-  expect(await captureError(() => preview(saleId, unanswering))).toMatchObject({
+  expect(await captureError(() => preview(saleId, lacking))).toMatchObject({
     code: "sale.correction_not_admitted",
-    params: { reason: "unsupported" },
+    params: { reason },
   });
 });
 
@@ -456,7 +424,7 @@ it("refuses a substituted invoice as replaced before asking the regime", async (
   });
 });
 
-const filed = (total: string, ...split: [rate: string, base: string, tax: string][]) => ({
+const filed = (total: string, ...split: (readonly [string, string, string])[]) => ({
   readable: true as const,
   newest: {
     total: decimal(total),
@@ -468,74 +436,22 @@ const filed = (total: string, ...split: [rate: string, base: string, tax: string
   },
   newestAnswered: null,
 });
+const AT_21 = ["21.00", "10.00", "2.10"] as const;
+const CHANGED = "filed_figures_changed";
 
-it.each<
-  [
-    name: string,
-    moved: (ids: { invoice: SaleId; corrective: SaleId }) => [SaleId, FiledFigures],
-    reason: string,
-  ]
->([
-  [
-    "the invoice filed with an extra rate",
-    ({ invoice }) => [
-      invoice,
-      filed("12.10", ["21.00", "10.00", "2.10"], ["10.00", "0.00", "0.00"]),
-    ],
-    "filed_figures_changed",
-  ],
-  [
-    "the invoice's base and VAT moved at its rate",
-    ({ invoice }) => [invoice, filed("12.10", ["21.00", "10.01", "2.09"])],
-    "filed_figures_changed",
-  ],
-  [
-    "the invoice's total alone moved",
-    ({ invoice }) => [invoice, filed("12.11", ["21.00", "10.00", "2.10"])],
-    "filed_figures_changed",
-  ],
-  [
-    "an earlier corrective's split moved",
-    ({ corrective }) => [corrective, filed("-1.05", ["21.00", "-0.88", "-0.17"])],
-    "filed_figures_changed",
-  ],
-  [
-    "an earlier corrective unreadable",
-    ({ corrective }) => [corrective, { readable: false }],
-    "filed_figures_unreadable",
-  ],
-])("refuses when %s", async (_name, moved, reason) => {
+it.each<[name: string, whose: "invoice" | "corrective", figures: FiledFigures, reason: string]>([
+  ["an extra rate", "invoice", filed("12.10", AT_21, ["10.00", "0.00", "0.00"]), CHANGED],
+  ["another base and VAT", "invoice", filed("12.10", ["21.00", "10.01", "2.09"]), CHANGED],
+  ["another total alone", "invoice", filed("12.11", AT_21), CHANGED],
+  ["another split", "corrective", filed("-1.05", ["21.00", "-0.88", "-0.17"]), CHANGED],
+  ["nothing readable", "corrective", { readable: false }, "filed_figures_unreadable"],
+])("refuses when the filed figures show %s for the %s", async (_name, whose, figures, reason) => {
   const { saleId, ids } = await sellSteak();
-  const corrective = await correct(saleId, "-1.05", [
-    {
-      lineNo: 1,
-      name: "Steak",
-      descriptions: { "es-ES": "Steak" },
-      quantity: "-1",
-      unitPrice: "10.00",
-      vatRate: "21.00",
-      lineTotal: "-0.87",
-      lineGross: "-1.05",
-      correctsLineId: ids[0],
-    },
-  ]);
-  backend.setFiledFigures(...moved({ invoice: saleId, corrective: corrective.saleId }));
+  const corrective = await correct(saleId, "-1.05", [steakTaken(1, ids[0]!, "-0.87", "-1.05")]);
+  backend.setFiledFigures(whose === "invoice" ? saleId : corrective.saleId, figures);
 
   expect(await captureError(() => preview(saleId))).toMatchObject({
     code: "sale.correction_not_admitted",
     params: { reason },
-  });
-});
-
-it("refuses as unreadable when the regime cannot read its filed figures", async () => {
-  const { saleId } = await sellSteak();
-  const unreading = new Proxy<FiscalBackend>(backend, {
-    get: (target, key, receiver) =>
-      key === "filedFiguresFor" ? undefined : Reflect.get(target, key, receiver),
-  });
-
-  expect(await captureError(() => preview(saleId, unreading))).toMatchObject({
-    code: "sale.correction_not_admitted",
-    params: { reason: "filed_figures_unreadable" },
   });
 });

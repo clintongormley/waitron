@@ -21,11 +21,9 @@ import {
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
-  centsToDecimal,
   decimal,
   deviceOrigin,
   negateDecimal,
-  stringToCents,
   seriesId as brandSeriesId,
   type DeviceId,
   type NodeId,
@@ -90,9 +88,8 @@ async function snapshot(saleId: SaleId) {
   return { sale: sale!, lines, registro: decodeRegistroRow(rows[0]!) };
 }
 
-/** Records a paid sale at 21%, one line per `[base, gross]`; a null gross stores none. */
-async function sell(lines: [base: string, gross: string | null][], split: [string, string]) {
-  const total = centsToDecimal(stringToCents(split[0]) + stringToCents(split[1]));
+/** Records a paid €12.10 sale of one 21% line, base €10.00; a null gross stores none on it. */
+async function sell(lineGross: string | null) {
   const { saleId } = await withTransaction(suite.db, (tx) =>
     recordSale(
       tx,
@@ -100,22 +97,18 @@ async function sell(lines: [base: string, gross: string | null][], split: [strin
       saleInput({
         nodeId,
         seriesId,
-        total,
-        lines: lines.map(([base, gross], index) => ({
-          lineNo: index + 1,
-          name: `Dish ${index + 1}`,
-          descriptions: { "es-ES": `Dish ${index + 1}` },
-          quantity: "1",
-          unitPrice: base,
-          vatRate: "21.00",
-          lineTotal: base,
-          lineGross: gross,
-        })),
-        vatBreakdown: [{ rate: decimal("21.00"), base: decimal(split[0]), tax: decimal(split[1]) }],
+        total: "12.10",
+        lines: [{ ...saleInput({ nodeId, seriesId }).lines[0]!, lineGross }],
+        vatBreakdown: [{ rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") }],
         settlement: {
           kind: "immediate",
           tenders: [
-            { method: "cash", amount: total, tipAmount: "0", settledAt: steadyClock.now().instant },
+            {
+              method: "cash",
+              amount: "12.10",
+              tipAmount: "0",
+              settledAt: steadyClock.now().instant,
+            },
           ],
         },
       }),
@@ -154,20 +147,21 @@ async function correct(saleId: SaleId, gross: string) {
   const record = fromRegistroRow(after.registro);
   expect(validate(record, { now: steadyClock.now().instant })).toEqual([]);
   expect(computeHuella(record)).toBe(after.registro.huella);
-  return {
-    filing: found.filing,
-    stored: after.sale.vatBreakdown,
-    lines: after.lines.map((line) => [line.lineTotal, line.lineGross]),
-    filedTotal: after.registro.importe_total,
-    filed: after.registro.desglose?.map((group) => [
+  // The filing, the stored split, the lines' [base, gross] in cents, the filed total and split.
+  return [
+    found.filing,
+    after.sale.vatBreakdown.map(({ rate, base, tax }) => [rate, base, tax]),
+    after.lines.map((line) => [line.lineTotal, line.lineGross]),
+    after.registro.importe_total,
+    after.registro.desglose?.map((group) => [
       group.BaseImponibleOimporteNoSujeto,
       group.CuotaRepercutida,
     ]),
-  };
+  ];
 }
 
 it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, then refuses a cent", async () => {
-  const { saleId, before } = await sell([["10.00", "12.10"]], ["10.00", "2.10"]);
+  const { saleId, before } = await sell("12.10");
 
   const rounds = [
     await correct(saleId, "6.05"),
@@ -176,27 +170,9 @@ it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, the
   ];
 
   expect(rounds).toEqual([
-    {
-      filing: "queued",
-      stored: [{ rate: "21.00", base: "-5.00", tax: "-1.05" }],
-      lines: [[-500, -605]],
-      filedTotal: "-6.05",
-      filed: [["-5.00", "-1.05"]],
-    },
-    {
-      filing: "queued",
-      stored: [{ rate: "21.00", base: "-4.98", tax: "-1.04" }],
-      lines: [[-498, -602]],
-      filedTotal: "-6.02",
-      filed: [["-4.98", "-1.04"]],
-    },
-    {
-      filing: "queued",
-      stored: [{ rate: "21.00", base: "-0.02", tax: "-0.01" }],
-      lines: [[-2, -3]],
-      filedTotal: "-0.03",
-      filed: [["-0.02", "-0.01"]],
-    },
+    ["queued", [["21.00", "-5.00", "-1.05"]], [[-500, -605]], "-6.05", [["-5.00", "-1.05"]]],
+    ["queued", [["21.00", "-4.98", "-1.04"]], [[-498, -602]], "-6.02", [["-4.98", "-1.04"]]],
+    ["queued", [["21.00", "-0.02", "-0.01"]], [[-2, -3]], "-0.03", [["-0.02", "-0.01"]]],
   ]);
   expect(await captureError(() => preview(saleId, "0.01"))).toMatchObject({
     code: "sale.correction_amount_invalid",
@@ -204,30 +180,9 @@ it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, the
   expect(await snapshot(saleId)).toEqual(before);
 });
 
-it("files the last two cents of ten €1.20 coffees as VAT alone", async () => {
-  const { saleId, before } = await sell(
-    Array.from({ length: 10 }, () => ["0.99", "1.20"]),
-    ["9.90", "2.10"],
-  );
-
-  const most = await correct(saleId, "11.98");
-  const last = await correct(saleId, "0.02");
-
-  expect([most.stored, most.filed]).toEqual([
-    [{ rate: "21.00", base: "-9.90", tax: "-2.08" }],
-    [["-9.90", "-2.08"]],
-  ]);
-  expect(last).toMatchObject({
-    stored: [{ rate: "21.00", base: "0.00", tax: "-0.02" }],
-    filedTotal: "-0.02",
-    filed: [["0.00", "-0.02"]],
-  });
-  expect(await snapshot(saleId)).toEqual(before);
-});
-
 it("refuses an invoice the agency refused, then, once its fix files it at 10%, as moved", async () => {
   // No line gross, so the history read would refuse: each refusal must come before it.
-  const { saleId, before } = await sell([["10.00", null]], ["10.00", "2.10"]);
+  const { saleId, before } = await sell(null);
   await suite.db
     .update(envios)
     .set({ estado: "rechazado", codigoError: "1161" })

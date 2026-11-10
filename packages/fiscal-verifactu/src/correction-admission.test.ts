@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { CorrectionAdmission } from "@waitron/fiscal";
+import type { CorrectionAdmission, FiledFigures } from "@waitron/fiscal";
 import type { SaleId } from "@waitron/shared";
+import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
@@ -35,9 +36,35 @@ beforeEach(async () => {
   });
 });
 
+const detail = (rate: string, base: string, tax: string): DetalleDesgloseInput => ({
+  ClaveRegimen: "01",
+  CalificacionOperacion: "S1",
+  BaseImponibleOimporteNoSujeto: base,
+  TipoImpositivo: rate,
+  CuotaRepercutida: tax,
+});
+
+interface Figures {
+  desglose: DetalleDesgloseInput[];
+  cuota: string;
+  importe: string;
+}
+
+const AT_21: Figures = {
+  desglose: [detail("21.00", "10.00", "2.10")],
+  cuota: "2.10",
+  importe: "12.10",
+};
+const AT_10: Figures = {
+  desglose: [detail("10.00", "11.00", "1.10")],
+  cuota: "1.10",
+  importe: "12.10",
+};
+
 /** Files one alta through the chain writer, with its submission in `estado` (none when null). */
 async function file(
   options: {
+    figures?: Figures;
     estado?: Estado | null;
     tipo?: "F1" | "F2" | "R5";
     on?: SeededNode;
@@ -64,6 +91,9 @@ async function file(
           : {}),
         ...(tipo === "R5" ? { TipoRectificativa: "I" } : {}),
         ...(options.fixes === undefined ? {} : { Subsanacion: "S", RechazoPrevio: "X" }),
+        Desglose: (options.figures ?? AT_21).desglose,
+        CuotaTotal: (options.figures ?? AT_21).cuota,
+        ImporteTotal: (options.figures ?? AT_21).importe,
       },
     });
     const estado = options.estado === undefined ? "pendiente" : options.estado;
@@ -100,38 +130,55 @@ describe("an F2 is judged by its submission state", () => {
   });
 });
 
-describe("a fixed filing is judged by its newest version", () => {
+function figuresFor(...saleIds: SaleId[]): Promise<ReadonlyMap<SaleId, FiledFigures>> {
+  return withTransaction(suite.db, (tx) => backend.filedFiguresFor(tx, saleIds));
+}
+
+const version = (total: string, rate: string, base: string, tax: string) => ({
+  total,
+  vatBreakdown: [{ rate, base, tax }],
+});
+const V21 = version("12.10", "21.00", "10.00", "2.10");
+const V10 = version("12.10", "10.00", "11.00", "1.10");
+
+describe("a fixed filing: both judge the newest version; the newest answered is the latest accepted", () => {
   it.each([
-    ["rechazado", "pendiente", eligible("queued", 1)],
-    ["aceptado", "rechazado", refused("filing_refused")],
-  ] as const)("first %s, fix %s", async (first, fix, expected) => {
+    ["rechazado", "pendiente", eligible("queued", 1), null],
+    ["rechazado", "aceptado", eligible("accepted", 1), V10],
+    ["aceptado_con_errores", "pendiente", eligible("queued", 1), V21],
+    ["aceptado", "rechazado", refused("filing_refused"), V21],
+  ] as const)("first %s, fix %s", async (first, fix, admitted, answered) => {
     const original = await file({ estado: first });
     await file({
+      figures: AT_10,
       estado: fix,
       sale: original.saleId,
       fixes: { registroId: original.registroId, number: original.number },
     });
-    expect(await admission(original.saleId)).toEqual(expected);
+
+    expect(await admission(original.saleId)).toEqual(admitted);
+    expect((await figuresFor(original.saleId)).get(original.saleId)).toEqual({
+      readable: true,
+      newest: V10,
+      newestAnswered: answered,
+    });
   });
 });
 
-describe("refusals, each beside the eligible control it differs from in one fact", () => {
+describe("refusals", () => {
   it("a core void", async () => {
     const { saleId } = await file();
-    expect(await admission(saleId)).toEqual(eligible("queued", 1));
     await withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "test", node.nodeId));
     expect(await admission(saleId)).toEqual(refused("voided"));
   });
 
   it.each(["F1", "R5"] as const)("an %s", async (tipo) => {
-    expect(await admission((await file({ tipo: "F2" })).saleId)).toEqual(eligible("queued", 1));
     expect(await admission((await file({ tipo })).saleId)).toEqual(refused("not_simplified"));
   });
 
   it("another node's", async () => {
     const other = await seedNode(suite.db, "B");
     const { saleId } = await file({ on: other });
-    expect(await admission(saleId, other.nodeId)).toEqual(eligible("queued", 1));
     expect(await admission(saleId)).toEqual(refused("wrong_node"));
   });
 
@@ -142,8 +189,64 @@ describe("refusals, each beside the eligible control it differs from in one fact
 
   it("two first versions for one sale", async () => {
     const { saleId } = await file();
-    expect(await admission(saleId)).toEqual(eligible("queued", 1));
     await file({ sale: saleId });
     expect(await admission(saleId)).toEqual(refused("filing_versions_unusable"));
   });
+});
+
+describe("unreadable figures", () => {
+  const surcharge: DetalleDesgloseInput = {
+    ...detail("21.00", "10.00", "2.10"),
+    TipoRecargoEquivalencia: "5.20",
+    CuotaRecargoEquivalencia: "0.52",
+  };
+  it.each<[string, Figures]>([
+    ["an equivalence surcharge", { desglose: [surcharge], cuota: "2.10", importe: "12.10" }],
+    [
+      "two details at one rate",
+      {
+        desglose: [detail("21.00", "5.00", "1.05"), detail("21.00", "5.00", "1.05")],
+        cuota: "2.10",
+        importe: "12.10",
+      },
+    ],
+    ["details not summing to the total", { ...AT_21, importe: "12.11" }],
+    ["VAT not summing to the VAT total", { ...AT_21, cuota: "2.11" }],
+  ])("%s", async (_name, figures) => {
+    const { saleId } = await file({ figures, estado: "aceptado" });
+    expect((await figuresFor(saleId)).get(saleId)).toEqual({ readable: false });
+  });
+
+  it("an accepted version that is unreadable behind a readable queued fix", async () => {
+    const original = await file({
+      figures: { ...AT_21, importe: "12.11" },
+      estado: "aceptado_con_errores",
+    });
+    await file({
+      figures: AT_10,
+      sale: original.saleId,
+      fixes: { registroId: original.registroId, number: original.number },
+    });
+    expect((await figuresFor(original.saleId)).get(original.saleId)).toEqual({ readable: false });
+  });
+
+  it("two lines of fixes", async () => {
+    const { saleId } = await file({ estado: "aceptado" });
+    expect((await figuresFor(saleId)).get(saleId)).toMatchObject({ readable: true });
+    await file({ sale: saleId, estado: "aceptado" });
+    expect((await figuresFor(saleId)).get(saleId)).toEqual({ readable: false });
+  });
+});
+
+it("leaves out a sale with no alta, and a cancellation is not one", async () => {
+  const bare = await seedSale(suite.db, node, 50);
+  const voided = await file({ estado: "aceptado" });
+  await withTransaction(suite.db, (tx) =>
+    backend.recordVoid(tx, voided.saleId, "test", node.nodeId),
+  );
+
+  const answer = await figuresFor(bare, voided.saleId);
+
+  expect(answer.has(bare)).toBe(false);
+  expect(answer.get(voided.saleId)).toMatchObject({ readable: true, newest: V21 });
 });

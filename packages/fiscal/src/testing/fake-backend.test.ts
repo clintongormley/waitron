@@ -419,40 +419,40 @@ describe("filedFiguresFor", () => {
       .insert(invoiceSeries)
       .values({ nodeId: node, code: "T1", purpose: "standard", nextNumber: 1 })
       .returning({ id: invoiceSeries.id });
-    const sold = (invoiceNumber: number) =>
-      suite.db
-        .insert(sales)
-        .values({
-          source: "device",
-          deviceId,
-          nodeId: node,
-          seriesId: series!.id,
-          invoiceNumber,
-          issuedAt: "2027-03-14T11:00:00+01:00",
-          issuedOffsetMinutes: 60,
-          total: 1210,
-          vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
-          locale: "es",
-          invoiceLocales: ["es"],
-          fiscalBackend: "fake",
-          fiscalState: "recorded",
-        })
-        .returning({ id: sales.id })
-        .then(([row]) => saleId(row!.id));
-    const [first, second] = [await sold(1), await sold(2)];
+    const [row] = await suite.db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId,
+        nodeId: node,
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        issuedAt: "2027-03-14T11:00:00+01:00",
+        issuedOffsetMinutes: 60,
+        total: 1210,
+        vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+        locale: "es",
+        invoiceLocales: ["es"],
+        fiscalBackend: "fake",
+        fiscalState: "recorded",
+      })
+      .returning({ id: sales.id });
+    const sold = saleId(row!.id);
     const unknown = saleId("00000000-0000-0000-0000-000000000000");
-    backend.setFiledFigures(second, { readable: false });
-
-    const answer = await suite.db.transaction((tx) =>
-      (backend as FiscalBackend).filedFiguresFor!(tx, [first, second, unknown]),
-    );
-
+    const ask = () =>
+      suite.db.transaction((tx) =>
+        (backend as FiscalBackend).filedFiguresFor!(tx, [sold, unknown]),
+      );
     const stored = {
       total: "12.10",
       vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
     };
-    expect(answer.get(first)).toEqual({ readable: true, newest: stored, newestAnswered: stored });
-    expect(answer.get(second)).toEqual({ readable: false });
+
+    const answer = await ask();
+    backend.setFiledFigures(sold, { readable: false });
+
+    expect(answer.get(sold)).toEqual({ readable: true, newest: stored, newestAnswered: stored });
     expect(answer.has(unknown)).toBe(false);
+    expect((await ask()).get(sold)).toEqual({ readable: false });
   });
 });
