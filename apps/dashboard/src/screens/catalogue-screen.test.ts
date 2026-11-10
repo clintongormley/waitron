@@ -46,11 +46,11 @@ class PlacementLeaveHost extends LitElement {
 customElements.define("placement-leave-test-host", PlacementLeaveHost);
 
 const catalogues: CatalogueSummary[] = [
-  { id: "cat-a", name: "Comida", active: true, version: 1 },
+  { id: "cat-a", name: "Dishes", active: true, version: 1 },
   { id: "cat-b", name: "ES drinks", active: true, version: 1 },
 ];
 const categories: CategorySummary[] = [
-  { id: "c1", name: "Entrantes", parentId: null, color: null },
+  { id: "c1", name: "Appetizers", parentId: null, color: null },
 ];
 const units: Unit[] = [
   {
@@ -67,9 +67,9 @@ const units: Unit[] = [
 const extraLists: ExtraList[] = [
   {
     id: "ex-1",
-    name: "Salsas",
+    name: "Sauces",
     customerName: { es: "Elige una salsa" },
-    kitchenName: "SALSA",
+    kitchenName: "SAUCE",
     minPicks: 0,
     maxPicks: null,
     active: true,
@@ -81,7 +81,7 @@ const optionLists: OptionList[] = [
     id: "opt-list-1",
     name: "Cooking",
     customerName: { es: "Cooking de la carne" },
-    kitchenName: "PUNTO",
+    kitchenName: "DONENESS",
     defaultLabelId: null,
     active: true,
     labels: [],
@@ -97,7 +97,7 @@ const extraInput: ExtraListInput = {
   items: [],
 };
 const optionInput: OptionListInput = {
-  name: "Corte",
+  name: "Cut",
   customerName: null,
   kitchenName: null,
   defaultLabelId: null,
@@ -148,7 +148,7 @@ const value: ProductEditorValue = {
   name: "Croquettes",
   customerName: { es: "Homemade ham croquettes" },
   description: { es: "Cremosas" },
-  kitchenName: "CROQUETAS",
+  kitchenName: "CROQUETTES",
   image: null,
   unitId: "u1",
   unitPrice: "8.50",
@@ -251,9 +251,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listExtraLists: vi.fn().mockResolvedValue(extraLists),
     listOptionLists: vi.fn().mockResolvedValue(optionLists),
     createExtraList: vi.fn().mockResolvedValue({ ...extraLists[0], id: "ex-new", name: "Breades" }),
-    createOptionList: vi
-      .fn()
-      .mockResolvedValue({ ...optionLists[0], id: "opt-new", name: "Corte" }),
+    createOptionList: vi.fn().mockResolvedValue({ ...optionLists[0], id: "opt-new", name: "Cut" }),
     updateExtraList: vi.fn().mockResolvedValue(extraLists[0]),
     updateOptionList: vi.fn().mockResolvedValue(optionLists[0]),
     listStations: vi.fn().mockResolvedValue([]),
@@ -335,7 +333,7 @@ function emit(source: Element, type: string, detail: unknown): void {
 /** One change in the open editor, so its Save has something to send. */
 async function editKitchenName(el: CatalogueScreen): Promise<void> {
   emit(editor(el).shadowRoot!.querySelector('[name="kitchen-name"]')!, "wt-change", {
-    value: "CROQUETAS FRITAS",
+    value: "FRIED CROQUETTES",
   });
   await editor(el).updateComplete;
 }
@@ -1107,7 +1105,7 @@ describe("catalogue-screen", () => {
     const product = editor(el);
     await userEvent.fill(
       product.shadowRoot!.querySelector('[name="name"]')!.shadowRoot!.querySelector("input")!,
-      "Croquettes fritas",
+      "Fried croquettes",
     );
     await userEvent.fill(
       product.shadowRoot!.querySelector('[name="unit-price"]')!.shadowRoot!.querySelector("input")!,
@@ -1119,7 +1117,7 @@ describe("catalogue-screen", () => {
       return { name, unitPrice, modifiers };
     };
     const expected = {
-      name: "Croquettes fritas",
+      name: "Fried croquettes",
       unitPrice: "9.75",
       modifiers: [{ kind: "options", id: "opt-list-1" }],
     };
@@ -1838,8 +1836,8 @@ describe("catalogue-screen", () => {
         ...value,
         courseId: "k1",
         variants: [
-          { ...variant, id: "v1", name: "Media" },
-          { ...variant, id: "v2", name: "Entera" },
+          { ...variant, id: "v1", name: "Half serving" },
+          { ...variant, id: "v2", name: "Full serving" },
         ],
       };
       const api = stubApi({
@@ -1967,8 +1965,8 @@ describe("catalogue-screen", () => {
       ...value,
       name: "Croquettes",
       variants: [
-        { ...variantRow, id: "v1", name: "Media" },
-        { ...variantRow, id: "v2", name: "Entera" },
+        { ...variantRow, id: "v1", name: "Half serving" },
+        { ...variantRow, id: "v2", name: "Full serving" },
       ],
     };
     async function refuse(field: string) {
@@ -1976,7 +1974,7 @@ describe("catalogue-screen", () => {
         getProductEditor: vi.fn().mockResolvedValue(sent),
         updateProductEditor: vi.fn().mockRejectedValue({
           code: "product.name_taken",
-          params: { field, name: "Entera" },
+          params: { field, name: "Full serving" },
           status: 409,
         }),
       });
@@ -2038,7 +2036,7 @@ describe("catalogue-screen", () => {
   it("marks the variant whose translation the save refused, and reaches its window", async () => {
     const variants = [
       {
-        name: "Media",
+        name: "Half serving",
         customerName: { en: "Half", es: "Media" },
         kitchenName: null,
         image: null,
@@ -2047,7 +2045,7 @@ describe("catalogue-screen", () => {
         active: true,
       },
       {
-        name: "Entera",
+        name: "Full serving",
         customerName: { es: "Portion entera" },
         kitchenName: null,
         image: null,
@@ -2104,8 +2102,8 @@ describe("catalogue-screen", () => {
     const product = {
       ...value,
       variants: [
-        { ...variant, id: "v1", name: "Media", active: false },
-        { ...variant, name: "Entera", active: true },
+        { ...variant, id: "v1", name: "Half serving", active: false },
+        { ...variant, name: "Full serving", active: true },
       ],
     };
     const api = stubApi({
@@ -2115,7 +2113,7 @@ describe("catalogue-screen", () => {
         params: {
           field: "variants.1.active",
           extraLists: [
-            { id: "ex-1", name: "Salsas" },
+            { id: "ex-1", name: "Sauces" },
             { id: "ex-2", name: "Toppings" },
           ],
         },
@@ -2135,7 +2133,7 @@ describe("catalogue-screen", () => {
     await table.updateComplete;
     const error = table.shadowRoot!.querySelector("[data-test=error-1]")?.textContent ?? "";
     expect(error).toContain(codeMessage("product.offered_as_extra"));
-    expect(error).toContain("Salsas");
+    expect(error).toContain("Sauces");
     expect(error).toContain("Toppings");
     expect(table.shadowRoot!.querySelector("[data-test=error-0]")).toBeNull();
   });
@@ -2159,7 +2157,7 @@ describe("catalogue-screen", () => {
     await flush(el);
     emit(list(el), "add-product", { categoryId: null });
     await el.updateComplete;
-    const before = { ...editor(el).currentValue, name: "Borrador" };
+    const before = { ...editor(el).currentValue, name: "Draft" };
     (editor(el) as unknown as { draft: ProductEditorInput }).draft = before;
     emit(editor(el), "wt-create-related", { kind: "unit" });
     await el.updateComplete;
@@ -2167,7 +2165,7 @@ describe("catalogue-screen", () => {
     expect(form.open).toBe(true);
     emit(form, "wt-submit", { value: { name: { es: "portion" }, precision: 2 } });
     await flush(el);
-    expect(editor(el).currentValue.name).toBe("Borrador");
+    expect(editor(el).currentValue.name).toBe("Draft");
     expect(editor(el).currentValue.unitId).toBe("u2");
   });
 
@@ -2175,7 +2173,7 @@ describe("catalogue-screen", () => {
     const venueCourses: Course[] = [
       {
         id: "k1",
-        name: "Entrantes",
+        name: "Appetizers",
         displayOrder: 0,
         active: true,
         inUse: false,
@@ -2183,7 +2181,7 @@ describe("catalogue-screen", () => {
       },
       {
         id: "k2",
-        name: "Principales",
+        name: "Main dishes",
         displayOrder: 1,
         active: true,
         inUse: false,
@@ -2267,7 +2265,7 @@ describe("catalogue-screen", () => {
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
       emit(editor(el).shadowRoot!.querySelector('[name="name"]')!, "wt-change", {
-        value: "Croquettes sin guardar",
+        value: "Unsaved croquettes",
       });
       await editor(el).updateComplete;
       const kitchen = editor(el).shadowRoot!.querySelector<LitElement & { open: boolean }>(
@@ -2340,14 +2338,14 @@ describe("catalogue-screen", () => {
     it("selects a course added in the window once Done closes it, keeping the product's unsaved edits", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
-      await addCourse(el, "Postres");
+      await addCourse(el, "Desserts");
       await done(el);
       expect(coursesWindow(el).open).toBe(false);
       expect(editor(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k-new");
-      expect(editor(el).currentValue.name).toBe("Croquettes sin guardar");
+      expect(editor(el).currentValue.name).toBe("Unsaved croquettes");
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
-      expect(await shownCourse(el)).toBe("Postres");
+      expect(await shownCourse(el)).toBe("Desserts");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
@@ -2355,13 +2353,13 @@ describe("catalogue-screen", () => {
       const api = courseApi({}, true);
       const create = vi.mocked(api.createCourse);
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Postres");
+      await typeNewCourse(el, "Desserts");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       await vi.waitFor(() => expect(coursesWindow(el).open).toBe(false));
       await vi.waitFor(() => expect(editor(el).currentValue.courseId).toBe("k-new"));
-      expect(create).toHaveBeenCalledExactlyOnceWith({ name: "Postres", displayOrder: 2 });
+      expect(create).toHaveBeenCalledExactlyOnceWith({ name: "Desserts", displayOrder: 2 });
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
-      expect(await shownCourse(el)).toBe("Postres");
+      expect(await shownCourse(el)).toBe("Desserts");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
@@ -2370,7 +2368,7 @@ describe("catalogue-screen", () => {
       let added = false;
       const postres: Course = {
         id: "k-new",
-        name: "Postres",
+        name: "Desserts",
         displayOrder: 2,
         active: true,
         inUse: false,
@@ -2391,7 +2389,7 @@ describe("catalogue-screen", () => {
         listCourses: vi.fn(courses),
       });
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Postres");
+      await typeNewCourse(el, "Desserts");
       const reads = vi.mocked(api.listCourses).mock.calls.length;
       const doneButton = el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!;
       await userEvent.click(doneButton);
@@ -2405,7 +2403,7 @@ describe("catalogue-screen", () => {
       // The list's own read after the add, then the window's one on closing.
       expect(api.listCourses).toHaveBeenCalledTimes(reads + 2);
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k1", "k2", "k-new"]);
-      expect(await shownCourse(el)).toBe("Postres");
+      expect(await shownCourse(el)).toBe("Desserts");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
@@ -2419,7 +2417,7 @@ describe("catalogue-screen", () => {
                 (resolve) =>
                   (answerRemoval = () =>
                     resolve({
-                      target: { id, name: "Principales" },
+                      target: { id, name: "Main dishes" },
                       refusals: [],
                       ends: [],
                       removes: [],
@@ -2430,7 +2428,7 @@ describe("catalogue-screen", () => {
         true,
       );
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Postres");
+      await typeNewCourse(el, "Desserts");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       await deleteInWindow(el, "k2");
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
@@ -2454,7 +2452,7 @@ describe("catalogue-screen", () => {
         return create(input);
       });
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Postres");
+      await typeNewCourse(el, "Desserts");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       inList(el, '[data-test="remove-k2"]').click();
@@ -2496,7 +2494,7 @@ describe("catalogue-screen", () => {
         ),
       });
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Entrantes");
+      await typeNewCourse(el, "Appetizers");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       const field = () =>
         inList(el, 'wt-input[name="course-name"]') as unknown as { error: string } | null;
@@ -2519,7 +2517,7 @@ describe("catalogue-screen", () => {
       const api = courseApi({}, true);
       const create = vi.mocked(api.createCourse);
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Postres");
+      await typeNewCourse(el, "Desserts");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       emit(list(el), "edit-product", { productId: "p1" });
       await flush(el);
@@ -2539,7 +2537,7 @@ describe("catalogue-screen", () => {
         createCourse: vi.fn(() => new Promise<{ id: string }>((resolve) => (answer = resolve))),
       });
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Postres");
+      await typeNewCourse(el, "Desserts");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       await vi.waitFor(() => expect(api.createCourse).toHaveBeenCalledOnce());
       emit(list(el), "edit-product", { productId: "p1" });
@@ -2578,7 +2576,7 @@ describe("catalogue-screen", () => {
       const options = [...box.shadowRoot!.querySelectorAll("li[role=option]")].map((option) =>
         option.textContent!.trim(),
       );
-      expect(options).toContain("Principales");
+      expect(options).toContain("Main dishes");
       expect(options).not.toContain("Brunch");
     });
 
@@ -2589,7 +2587,7 @@ describe("catalogue-screen", () => {
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k2"]')).toBeNull());
       await done(el);
       expect(editor(el).currentValue.courseId).toBeNull();
-      expect(editor(el).currentValue.name).toBe("Croquettes sin guardar");
+      expect(editor(el).currentValue.name).toBe("Unsaved croquettes");
       expect(await shownCourse(el)).toBe(t("product.no_course"));
     });
 
@@ -2601,14 +2599,14 @@ describe("catalogue-screen", () => {
       await done(el);
       expect(editor(el).currentValue.courseId).toBe("k2");
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k2"]);
-      expect(await shownCourse(el)).toBe("Principales");
+      expect(await shownCourse(el)).toBe("Main dishes");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
     it("does not select a course added in the window and then removed there", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
-      await addCourse(el, "Postres");
+      await addCourse(el, "Desserts");
       await deleteInWindow(el, "k-new");
       await vi.waitFor(() => expect(inList(el, '[data-test="name-k-new"]')).toBeNull());
       await done(el);
@@ -2618,7 +2616,7 @@ describe("catalogue-screen", () => {
     it("closes on Escape the same way, leaving the product editor open", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
-      await addCourse(el, "Postres");
+      await addCourse(el, "Desserts");
       let closes = 0;
       coursesWindow(el).addEventListener("wt-close", () => closes++);
       const closed = dialogClosed(coursesWindow(el));
@@ -2630,7 +2628,7 @@ describe("catalogue-screen", () => {
       expect(coursesWindow(el).open).toBe(false);
       expect(editor(el).open).toBe(true);
       expect(editor(el).currentValue.courseId).toBe("k-new");
-      expect(editor(el).currentValue.name).toBe("Croquettes sin guardar");
+      expect(editor(el).currentValue.name).toBe("Unsaved croquettes");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
@@ -2714,7 +2712,7 @@ describe("catalogue-screen", () => {
     it("leaves alone a product opened while the closing window's refresh was in flight", async () => {
       const api = courseApi();
       const el = await openCourses(api, "k1");
-      await addCourse(el, "Postres");
+      await addCourse(el, "Desserts");
       let answer!: (rows: Course[]) => void;
       vi.mocked(api.listCourses).mockImplementationOnce(
         () => new Promise<Course[]>((resolve) => (answer = resolve)),
@@ -2728,7 +2726,7 @@ describe("catalogue-screen", () => {
         ...venueCourses,
         {
           id: "k-new",
-          name: "Postres",
+          name: "Desserts",
           displayOrder: 2,
           active: true,
           inUse: false,
@@ -2830,7 +2828,7 @@ describe("catalogue-screen", () => {
         variants: [
           {
             id: "v1",
-            name: "Media portion",
+            name: "Half portion",
             customerName: { es: "Half portion of croquettes" },
             kitchenName: "1/2 CROQ",
             image: null,
@@ -2854,7 +2852,7 @@ describe("catalogue-screen", () => {
       ...value,
       id: "v1",
       parentId: "p1",
-      name: "Media portion",
+      name: "Half portion",
       customerName: { es: "Half portion of croquettes" },
       kitchenName: "1/2 CROQ",
       description: null,
@@ -3085,7 +3083,7 @@ describe("catalogue-screen", () => {
       el.requestUpdate();
       await el.updateComplete;
       try {
-        expect(dialog.getAttribute("heading")).toBe("Archive Media portion");
+        expect(dialog.getAttribute("heading")).toBe("Archive Half portion");
         expect(dialog.textContent).toContain(
           "This can't be undone. The till stops offering the variant, and it cannot be brought back. Its past sales are kept.",
         );
@@ -3097,7 +3095,7 @@ describe("catalogue-screen", () => {
         setLocale("es");
         el.requestUpdate();
         await el.updateComplete;
-        expect(dialog.getAttribute("heading")).toBe("Archivar Media portion");
+        expect(dialog.getAttribute("heading")).toBe("Archivar Half portion");
         expect(dialog.textContent).toContain(
           "No se puede deshacer. La caja deja de ofrecer la variante y no se puede recuperar. Sus ventas pasadas se conservan.",
         );
@@ -3170,7 +3168,7 @@ describe("catalogue-screen", () => {
       const api = variantApi();
       vi.mocked(api.updateProductEditor).mockRejectedValue({
         code: "product.offered_as_extra",
-        params: { field: "active", extraLists: [{ id: "ex-1", name: "Salsas" }] },
+        params: { field: "active", extraLists: [{ id: "ex-1", name: "Sauces" }] },
         status: 409,
       });
       await archivedRowOffersView(api, "v1");
@@ -3185,7 +3183,7 @@ describe("catalogue-screen", () => {
         params: {
           field: "active",
           extraLists: [
-            { id: "ex-1", name: "Salsas" },
+            { id: "ex-1", name: "Sauces" },
             { id: "ex-2", name: "Toppings" },
           ],
         },
@@ -3202,7 +3200,7 @@ describe("catalogue-screen", () => {
       expect(editor(el).open).toBe(true);
       await editor(el).updateComplete;
       expect(await bottomOf(editor(el))).toBe(
-        `${codeMessage("product.offered_as_extra")} Salsas, Toppings`,
+        `${codeMessage("product.offered_as_extra")} Sauces, Toppings`,
       );
       expect((el as unknown as { busy: boolean }).busy).toBe(false);
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
@@ -3312,9 +3310,9 @@ describe("catalogue-screen", () => {
       const text = step(el).shadowRoot!.textContent!;
       expect(step(el).productName).toBe("Croquettes");
       expect(step(el).shadowRoot!.querySelector("wt-modal")!.getAttribute("heading")).not.toMatch(
-        /caseras|CROQUETAS/,
+        /caseras|CROQUETTES/,
       );
-      expect(text).toContain("Comida");
+      expect(text).toContain("Dishes");
       expect(text).toContain("ES drinks");
       expect(text).toContain("Drinks list");
       expect(text).toContain("Beer list");
@@ -3688,7 +3686,7 @@ it("paints All products' square, an uncategorised product and a new product's in
   const loose: Product = {
     ...products[0]!,
     id: "p2",
-    name: "Agua",
+    name: "Artesian water",
     categoryId: null,
     primaryCategoryId: null,
   };
