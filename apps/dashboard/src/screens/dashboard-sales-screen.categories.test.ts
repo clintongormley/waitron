@@ -389,10 +389,10 @@ describe("dashboard-sales-screen — category report", () => {
         grossComplete: true,
         linesWithoutGross: 0,
       }) satisfies CategorySalesDto;
-    // Today's tree renamed Lunch to Midday, so each mode's rows name their own parents.
+    // Today's tree renamed Early lunch to Midday, so each mode's rows name their own parents.
     const twoBranches = (mode: CategorySalesDto["mode"]): CategorySalesDto => {
       const food = mains("c-food-mains", "c-food", "House food", mode);
-      const lunchName = mode === "current" ? "Midday" : "Lunch";
+      const lunchName = mode === "current" ? "Midday" : "Early lunch";
       const lunch = mains("c-lunch-mains", "c-lunch", lunchName, mode);
       return { ...food, tree: [...lunch.tree, ...food.tree], gross: "20.00", net: "18.00" };
     };
@@ -410,8 +410,8 @@ describe("dashboard-sales-screen — category report", () => {
         return copy.textContent!.replace(/\s+/g, " ").trim();
       });
     expect(shown()).toEqual([
-      "Lunch",
-      "Lunch › House mains",
+      "Early lunch",
+      "Early lunch › House mains",
       "House food",
       "House food › House mains",
     ]);
