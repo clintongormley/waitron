@@ -1,5 +1,5 @@
-import { asc, count, eq, inArray, sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { and, asc, count, eq, exists, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { deployment, invoiceSeries, readTenant, type Transaction } from "@waitron/db";
 import { readActiveConflicts } from "./conflict-evidence.js";
 import type {
   ActiveConflictEvidence,
@@ -14,14 +14,18 @@ import type {
   FilingProgress,
   InvoiceIdView,
   LookupEvidenceView,
+  MissingHistory,
   ReplyEvidenceView,
   SystemView,
 } from "./filing-overview-types.js";
 import { ENVIO_STATES, type EnvioState } from "./handover-summary.js";
+import { fiscalAllocations } from "./schema/allocations.js";
 import { fiscalConflictEvidence } from "./schema/conflict-evidence.js";
 import { envios } from "./schema/envios.js";
 import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
 import { registrosFacturacion } from "./schema/registros.js";
+import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
+import { registroSif } from "./schema/sif.js";
 
 /**
  * What the Fiscal filing screen shows, read in the caller's one transaction by a fixed number of
@@ -59,6 +63,7 @@ export async function readFilingOverview(
     .orderBy(sql`${fiscalLookupConflicts}.rowid`);
   const held = await heldRecords(tx);
   const active = scope.nodeId === null ? [] : await readActiveConflicts(tx, scope.nodeId);
+  const missingHistory = await readMissingHistory(tx);
 
   const heldByCase = new Map<string, number>();
   let heldWithoutCase = 0;
@@ -111,7 +116,124 @@ export async function readFilingOverview(
       observedAt: conflict.observedAt,
       evidence: activeEvidence(conflict.evidence),
     })),
+    missingHistory,
   };
+}
+
+async function readMissingHistory(tx: Transaction): Promise<MissingHistory> {
+  const tenant = await readTenant(tx);
+  const [stamp] = await tx
+    .select({ environment: deployment.environment })
+    .from(deployment)
+    .where(eq(deployment.id, 1));
+  const environment = stamp?.environment;
+  if (tenant === null || environment === undefined)
+    return { notIssuedHere: [], identityChanges: [] };
+  const notIssuedHere = await tx
+    .select({
+      seriesCode: invoiceSeries.code,
+      recordedAt: fiscalSeriesConflicts.recordedAt,
+      evidence: fiscalSeriesConflicts.evidence,
+    })
+    .from(fiscalSeriesConflicts)
+    .innerJoin(registroSif, eq(registroSif.id, fiscalSeriesConflicts.sifId))
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId))
+    .where(
+      and(
+        eq(registroSif.nif, tenant.taxId),
+        isNotNull(invoiceSeries.retiredAt),
+        or(
+          exists(
+            tx
+              .select({ one: sql`1` })
+              .from(fiscalAllocations)
+              .where(
+                and(
+                  eq(fiscalAllocations.sifId, registroSif.id),
+                  eq(fiscalAllocations.environment, environment),
+                ),
+              ),
+          ),
+          exists(
+            tx
+              .select({ one: sql`1` })
+              .from(registrosFacturacion)
+              .where(
+                and(
+                  eq(registrosFacturacion.sifId, registroSif.id),
+                  eq(registrosFacturacion.entorno, environment),
+                ),
+              ),
+          ),
+        ),
+      ),
+    )
+    .orderBy(sql`${fiscalSeriesConflicts}.rowid`);
+  return {
+    notIssuedHere: notIssuedHere.map((row) => ({
+      seriesCode: row.seriesCode,
+      recordedAt: row.recordedAt.toISOString(),
+      ...lookupEvidence(row.evidence),
+    })),
+    identityChanges: await readIdentityChanges(tx, tenant.taxId, environment),
+  };
+}
+
+/**
+ * Identities are ordered by `registro_sif` insertion (`rowid`), never by a stored time: an
+ * activation writes its identity and its `fiscal_allocations` row in one transaction, so the
+ * identity inserted before a new one is the one it replaced, whatever either box's clock said.
+ */
+async function readIdentityChanges(
+  tx: Transaction,
+  taxId: string,
+  environment: string,
+): Promise<MissingHistory["identityChanges"]> {
+  const rows = await tx.execute<{
+    installation: string;
+    activated_at: string;
+    earlier_installation: string;
+    num_serie_factura: string;
+    fecha_expedicion_factura: string;
+  }>(sql`
+    with held as (
+      select s.rowid as position, s.numero_instalacion as installation, (
+        select r.id from registros_facturacion r
+        where r.node_id = s.node_id and r.sif_id = s.id and r.entorno = ${environment}
+        order by r.secuencia desc limit 1
+      ) as last_id
+      from registro_sif s
+      where s.nif = ${taxId}
+    ),
+    changes as (
+      select a.rowid as position, a.activated_at, n.numero_instalacion as installation, (
+        select h.position from held h
+        where h.last_id is not null and h.position < n.rowid
+        order by h.position desc limit 1
+      ) as earlier
+      from fiscal_allocations a join registro_sif n on n.id = a.sif_id
+      where a.taxpayer_nif = ${taxId} and a.environment = ${environment}
+        and not (
+          json_extract(a.approval, '$.version') = 2
+          and json_type(a.approval, '$.oldMachineRelinquished') = 'true'
+        )
+    )
+    select c.installation, c.activated_at, h.installation as earlier_installation,
+      r.num_serie_factura, r.fecha_expedicion_factura
+    from changes c
+    join held h on h.position = c.earlier
+    join registros_facturacion r on r.id = h.last_id
+    order by c.position
+  `);
+  return rows.rows.map((row) => ({
+    installationName: row.installation,
+    earlierInstallationName: row.earlier_installation,
+    lastHeldInvoice: {
+      numSerieFactura: row.num_serie_factura,
+      fechaExpedicionFactura: row.fecha_expedicion_factura,
+    },
+    activatedAt: new Date(row.activated_at).toISOString(),
+  }));
 }
 
 async function readProgress(tx: Transaction): Promise<FilingProgress> {

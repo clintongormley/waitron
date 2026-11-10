@@ -91,6 +91,7 @@ export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOvervi
         },
       },
     ],
+    missingHistory: { notIssuedHere: [], identityChanges: [] },
     filing: true,
     awaitingCertificate: false,
     ...over,

@@ -105,6 +105,26 @@ export interface ActiveConflictView {
   evidence: ReplyEvidenceView | LookupEvidenceView | null;
 }
 
+/** AEAT holds this invoice under a series this box has retired, and this box did not issue it. */
+export interface NotIssuedHereView extends LookupObservationView {
+  seriesCode: string;
+}
+
+/** A new fiscal identity activated other than by a handover, after an earlier one with records. */
+export interface IdentityChangeView {
+  installationName: string;
+  earlierInstallationName: string;
+  /** The earlier identity's record with the highest chain position that this box holds. */
+  lastHeldInvoice: { numSerieFactura: string; fechaExpedicionFactura: string };
+  /** A label only: no clock reading decides which changes are listed or their order. */
+  activatedAt: string;
+}
+
+export interface MissingHistory {
+  notIssuedHere: NotIssuedHereView[];
+  identityChanges: IdentityChangeView[];
+}
+
 export interface FilingOverview {
   readAt: string;
   progress: FilingProgress;
@@ -113,6 +133,8 @@ export interface FilingOverview {
   totalCases: number;
   heldWithoutCase: number;
   activeConflicts: ActiveConflictView[];
+  /** Scoped to the venue's taxpayer and this database's environment; empty when either is unset. */
+  missingHistory: MissingHistory;
 }
 
 /** The answer of `GET /management-api/fiscal-filing`. */
