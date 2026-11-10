@@ -930,13 +930,12 @@ describe("/management-api/tables", () => {
           managerCookie,
         );
         expect(response.status).toBe(state === "active" ? 400 : 404);
-        if (state === "active")
-          expect(await response.json()).toMatchObject({
-            error: {
-              code: "department.not_found",
-              params: { departmentId: destination.departmentId },
-            },
-          });
+        expect(await response.json()).toMatchObject({
+          error:
+            state === "active"
+              ? { code: "department.not_found", params: { departmentId: destination.departmentId } }
+              : { code: "service_zone.not_found", params: { zoneId: source.zoneId } },
+        });
         const stored = await suite.db.execute<{ department_id: string; active: number }>(
           sql`select p.department_id, z.active from zone_service_policies p join floor_zones z on z.id = p.zone_id where z.id = ${source.zoneId}`,
         );
