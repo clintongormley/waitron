@@ -1,9 +1,10 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { locations, nodes, readVenue } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedNode, seedNodesForSifContention } from "./testing/seed.js";
-import { seedTenantNodeSif, seedTenants, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, seedTenantWithSif, seedTenants, TENANT_A } from "../test/fixtures.js";
 import {
   seedIndependentChain,
   seedPendingEnvios,
@@ -29,12 +30,12 @@ it.each([
   const [venue] = await suite.db
     .insert(locations)
     .values({
-      name: "Retained venue",
       timeZone: "Europe/Rome",
       invoiceLocales: ["es"],
       operationDescription: "Restaurant",
     })
     .returning({ id: locations.id });
+  await seedVenueSettings(suite.db, { name: "Retained venue" });
   const before = await readVenue(suite.db);
   await seed(suite.db);
   expect(await readVenue(suite.db)).toEqual(before);
@@ -55,4 +56,12 @@ it("adds independent fiscal chains at the existing venue", async () => {
   });
   expect(await readVenue(suite.db)).toEqual(before);
   expect(await suite.db.select().from(nodes)).toHaveLength(4);
+});
+
+it("keeps a configured venue's fields when adding a write-path fixture", async () => {
+  await seedNode(suite.db);
+  await seedVenueSettings(suite.db, { name: "Retained venue", city: "Retained city" });
+  const before = await readVenue(suite.db);
+  await seedTenantWithSif(suite.db);
+  expect(await readVenue(suite.db)).toEqual(before);
 });

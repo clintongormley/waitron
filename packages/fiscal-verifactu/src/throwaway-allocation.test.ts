@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, afterEach, vi } from "vitest";
@@ -38,10 +39,11 @@ async function seedStampedVenue(stamp: "preproduction" | "production") {
     .values({ id: 1, country: "ES", taxId: TAXPAYER, legalName: "Real Restaurant S.L." });
   await suite.db.insert(locations).values({
     id: node.locationId,
-    name: "Casa Real",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
+  await seedVenueSettings(suite.db, { name: "Casa Real" });
   await suite.db
     .insert(nodes)
     .values({ id: node.nodeId, locationId: node.locationId, name: "Node 1" });

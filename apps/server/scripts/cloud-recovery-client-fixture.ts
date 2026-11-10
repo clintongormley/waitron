@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
-import { locations, nodes, openVenueDatabase } from "@waitron/db";
+import { locations, nodes, openVenueDatabase, readVenue } from "@waitron/db";
 import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { createCloudReplacement } from "../src/cloud-replacement.js";
@@ -117,11 +117,8 @@ else if (request.command === "stage") {
   await client.markRestored(marker.managedCloud);
   const store = await openVenueDatabase(venueDir);
   try {
-    const venue = await store.venue.select({ name: locations.name }).from(locations);
-    assert.deepEqual(
-      venue.map((row) => row.name),
-      [request.expectedVenue],
-    );
+    const venue = await readVenue(store.venue);
+    assert.equal(venue.name, request.expectedVenue);
   } finally {
     await store.close();
   }

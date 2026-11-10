@@ -712,7 +712,9 @@ describe("the Opening hours month read", () => {
         prepared.mockRestore();
       }
     });
-    expect([...new Set(tables)].sort()).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
+    expect(
+      [...new Set(tables.map((table) => (table === "settings" ? "settings.venue" : table)))].sort(),
+    ).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
   });
 
   it("reads the location once when a repeating special day follows a public holiday, and places it by that holiday", async () => {

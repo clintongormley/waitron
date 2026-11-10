@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -457,8 +458,9 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await seedTenant(db);
     const [location] = await db
       .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
+      .values({ invoiceLocales: ["en"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
+    await seedVenueSettings(db, { name: "Venue" });
     const locationId = location!.id;
     const [zone] = await db
       .insert(floorZones)

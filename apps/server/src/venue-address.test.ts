@@ -1,6 +1,7 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+
+import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import * as venueAddress from "./venue-address.js";
@@ -93,16 +94,18 @@ describe("readReceiptAddress", () => {
   );
 
   it("reads the venue's address, and none when the receipt switches it off", async () => {
-    const venue = await setupVenue(suite.db);
+    await setupVenue(suite.db);
     const read = (receipt: { printAddress?: boolean }) =>
       withTransaction(suite.db, (tx) => readReceiptAddress(tx, receipt));
     expect(await read({})).toEqual(["Calle Mayor 1", "28013 Madrid"]);
     expect(await read({ printAddress: true })).toEqual(["Calle Mayor 1", "28013 Madrid"]);
     expect(await read({ printAddress: false })).toEqual([]);
-    await suite.db
-      .update(locations)
-      .set({ addressLine1: null, postalCode: null, city: null, province: null })
-      .where(eq(locations.id, venue.cfg.locationId));
+    await seedVenueSettings(suite.db, {
+      addressLine1: null,
+      postalCode: null,
+      city: null,
+      province: null,
+    });
     expect(await read({})).toEqual([]);
   });
 });

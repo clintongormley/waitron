@@ -215,7 +215,7 @@ describe("devSetup against a real venue directory", () => {
         sql`select legal_name, tax_id from tenants`,
       );
       const { rows: location } = await db.execute<{ name: string }>(
-        sql`select name from locations`,
+        sql`select json_extract(settings.doc, '$.name') as name from locations cross join settings on settings.module = 'venue'`,
       );
       const { rows: departments } = await db.execute<{ trading_name: string }>(
         sql`select trading_name from departments order by trading_name`,
@@ -239,7 +239,7 @@ describe("devSetup against a real venue directory", () => {
   it("stores English operation and street examples in a new developer venue", async () => {
     const rows = await readVenue(async (db) => {
       const result = await db.execute<{ operation_description: string; address_line1: string }>(
-        sql`select operation_description, address_line1 from locations`,
+        sql`select operation_description, json_extract(settings.doc, '$.addressLine1') as address_line1 from locations cross join settings on settings.module = 'venue'`,
       );
       return result.rows;
     });
@@ -684,7 +684,7 @@ describe("developer demo regions", () => {
           const store = await openVenueDatabase(opts.venueDir);
           try {
             const locations = store.venue.all(
-              sql`select name,postal_code,province,invoice_locales from locations`,
+              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,invoice_locales from locations cross join settings on settings.module = 'venue'`,
             );
             expect(locations).toEqual([
               {
@@ -753,7 +753,9 @@ describe("Valencian developer demo", () => {
         const store = await openVenueDatabase(opts.venueDir);
         try {
           expect(
-            store.venue.all(sql`select name,postal_code,province,invoice_locales from locations`),
+            store.venue.all(
+              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,invoice_locales from locations cross join settings on settings.module = 'venue'`,
+            ),
           ).toEqual([
             {
               name: VALENCIA_DEMO_TEXT.venueName,
@@ -826,7 +828,9 @@ describe("Galician developer demo", () => {
         const store = await openVenueDatabase(opts.venueDir);
         try {
           expect(
-            store.venue.all(sql`select name,postal_code,province,invoice_locales from locations`),
+            store.venue.all(
+              sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.postalCode') as postal_code,json_extract(settings.doc, '$.province') as province,invoice_locales from locations cross join settings on settings.module = 'venue'`,
+            ),
           ).toEqual([
             {
               name: GALICIA_DEMO_TEXT.venueName,

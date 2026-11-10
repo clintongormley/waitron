@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -106,11 +107,11 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     const [other] = await suite.db
       .insert(locations)
       .values({
-        name: "Loc B",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       })
       .returning({ id: locations.id });
+    await seedVenueSettings(suite.db, { name: "Loc B" });
     const first = await seedZone(LOCATION_A, "Shared");
     const second = await seedZone(other!.id, "Shared");
     expect(second).not.toBe(first);

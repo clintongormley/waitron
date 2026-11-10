@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { departments, departmentReceipts } from "@waitron/venue-service";
@@ -371,14 +372,16 @@ describe("receipt language", () => {
   };
   /** The shared location placed in `province` with `invoiceLocales`, put back afterwards. */
   async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
+    await seedVenueSettings(suite.db, { province });
     await suite.db.execute(
-      sql`update locations set province = ${province}, invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
+      sql`update locations set invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
     );
     try {
       await fn();
     } finally {
+      await seedVenueSettings(suite.db, { province: "Madrid" });
       await suite.db.execute(
-        sql`update locations set province = 'Madrid', invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+        sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
       );
     }
   }
@@ -580,14 +583,16 @@ describe("venue defaults", () => {
   const untouched = () => ({ languages: ["es-ES"], vatClass: initialVatClass });
   /** The shared location placed in `province` with `invoiceLocales`; both values put back afterwards. */
   async function at(province: string, invoiceLocales: string[], fn: () => Promise<void>) {
+    await seedVenueSettings(suite.db, { province });
     await suite.db.execute(
-      sql`update locations set province = ${province}, invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
+      sql`update locations set invoice_locales = ${JSON.stringify(invoiceLocales)} where id = ${venue.cfg.locationId}`,
     );
     try {
       await fn();
     } finally {
+      await seedVenueSettings(suite.db, { province: "Madrid" });
       await suite.db.execute(
-        sql`update locations set province = 'Madrid', invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
+        sql`update locations set invoice_locales = '["es-ES"]' where id = ${venue.cfg.locationId}`,
       );
       await suite.db.execute(
         sql`update catalogue_settings set default_product_vat_class = ${initialVatClass}`,

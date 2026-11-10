@@ -34,6 +34,7 @@ import {
   workingOrderLines,
   workingOrders,
   venueLocationId,
+  locations,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -3148,10 +3149,7 @@ describe("the invoice at full payment", () => {
         // The venue's row, which the slips' print jobs are filed under, is read once for both slips.
         expect(
           selects.mock.calls.filter(
-            ([fields]) =>
-              fields !== undefined &&
-              "operationDescription" in fields &&
-              "fiscalTerritory" in fields,
+            ([fields]) => fields !== undefined && "id" in fields && fields.id === locations.id,
           ),
         ).toHaveLength(1);
       } finally {

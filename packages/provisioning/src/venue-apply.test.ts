@@ -287,6 +287,34 @@ it("keeps starter options out of an operation without a preparation seat", async
   expect((calls[0]![2] as { input: unknown }).input).toBe(input);
 });
 
+it("first setup writes the venue document and an identical reapply keeps its revision", async () => {
+  const plan = planVenue(request("B10000002"), ALL_MODULES);
+  const first = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  const read = () =>
+    suite.db.all(
+      sql`select version, revision, doc, updated_by from settings where module = 'venue'`,
+    );
+  const expected = [
+    {
+      version: 1,
+      revision: 1,
+      doc: JSON.stringify({
+        name: "Mostrador",
+        addressLine1: "Calle Mayor 1",
+        addressLine2: null,
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+      }),
+      updated_by: null,
+    },
+  ];
+  expect(read()).toEqual(expected);
+  const second = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  expect(second.nodeId).toBe(first.nodeId);
+  expect(read()).toEqual(expected);
+});
+
 describe("applyVenue: the one taxpayer row", () => {
   it("stores the taxpayer domicile without copying the location address", async () => {
     await applyVenue(
@@ -301,7 +329,7 @@ describe("applyVenue: the one taxpayer row", () => {
       sql`select taxpayer_domicile from tenants where id = 1`,
     );
     const location = await suite.db.execute<{ address_line1: string }>(
-      sql`select address_line1 from locations`,
+      sql`select json_extract(doc, '$.addressLine1') as address_line1 from settings where module = 'venue'`,
     );
     expect(tenant.rows).toEqual([{ taxpayer_domicile: "Calle Fiscal 8, 28013 Madrid" }]);
     expect(location.rows).toEqual([{ address_line1: "Calle Mayor 1" }]);
@@ -730,8 +758,8 @@ describe("applyVenue", () => {
         modules: ALL_MODULES,
       });
       await suite.db.execute(sql`
-        insert into locations (id, name, invoice_locales, operation_description)
-        values ('00000000-0000-4000-8000-0000000000ff', 'Terraza', '["es-ES"]', 'venta')`);
+        insert into locations (id, invoice_locales, operation_description)
+        values ('00000000-0000-4000-8000-0000000000ff', '["es-ES"]', 'venta')`);
 
       await expect(
         applyVenue(planVenue(request("B13131313"), ALL_MODULES), {

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/catalogue";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
@@ -3679,10 +3680,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .set({ receipt: { headerSubtitle: { "es-ES": "Current subtitle" } } })
       .where(eq(departmentReceipts.departmentId, departmentId));
     await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
-    await suite.db
-      .update(locations)
-      .set({ addressLine1: "Current street" })
-      .where(eq(locations.id, cfg.locationId));
+    await seedVenueSettings(suite.db, { addressLine1: "Current street" });
     const replay = await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
@@ -3758,10 +3756,7 @@ describe("department receipt presentation on thermal jobs", () => {
       .set({ receipt: { headerSubtitle: { "es-ES": "After edit" }, printAddress: true } })
       .where(eq(departmentReceipts.departmentId, departmentId));
     await suite.db.update(tenantReceipts).set({ receipt: { footerMessage: "New venue footer" } });
-    await suite.db
-      .update(locations)
-      .set({ addressLine1: "New current address" })
-      .where(eq(locations.id, cfg.locationId));
+    await seedVenueSettings(suite.db, { addressLine1: "New current address" });
     await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, ticket, id));
     const text = (await documents()).map((job) => decodeTicket(job.payload));
     expect(text[0]).toContain("Before edit");

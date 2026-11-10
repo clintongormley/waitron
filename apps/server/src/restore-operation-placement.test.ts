@@ -1,3 +1,5 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -57,10 +59,11 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-    name: "Restaurant",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  await seedVenueSettings(suite.db, { name: "Restaurant" });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Restored node" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: NODE, code: "A", purpose: "standard" },
@@ -168,7 +171,7 @@ it("admits an existing resumed database and preserves its rows instead of replac
   await writeFile(join(f.deps.venueDir, "node.db"), f.validated.nodeDump);
   const placed = await openVenueDatabase(f.deps.venueDir);
   try {
-    await placed.venue.update(locations).set({ name: "Already placed" });
+    await seedVenueSettings(placed.venue, { name: "Already placed" });
     await placed.venue.update(invoiceSeries).set({ nextNumber: 777 });
   } finally {
     await placed.close();
@@ -177,7 +180,7 @@ it("admits an existing resumed database and preserves its rows instead of replac
   const runner = f.deps.withModuleOperations!;
   runner.checkBeforePlacement = async ({ db }) => {
     admitted = true;
-    expect((await db.select().from(locations))[0]!.name).toBe("Already placed");
+    expect((await readVenue(db)).name).toBe("Already placed");
   };
   await expect(
     writeValidated(f.validated, { ...f.deps, resumeOperation: binding }),
@@ -186,7 +189,7 @@ it("admits an existing resumed database and preserves its rows instead of replac
   expect(checked).toBe(true);
   const resumed = await openVenueDatabase(f.deps.venueDir);
   try {
-    expect((await resumed.venue.select().from(locations))[0]!.name).toBe("Already placed");
+    expect((await readVenue(resumed.venue)).name).toBe("Already placed");
     expect((await resumed.venue.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual(
       [777, 777, 777],
     );
@@ -205,7 +208,7 @@ it("authenticates against the placed database and keeps the scoped authority ali
       expect(readOperationAuthority(operation!.authority, binding)).toEqual({
         operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "restore-42" },
       });
-      await tx.update(locations).set({ name: "Restored through authority" });
+      await seedVenueSettings(tx, { name: "Restored through authority" });
       return { report: "restored" };
     }),
   );
@@ -213,9 +216,7 @@ it("authenticates against the placed database and keeps the scoped authority ali
   expect(readOperationAuthority(held!.authority, binding)).toBeUndefined();
   const opened = await openVenueDatabase(f.deps.venueDir);
   try {
-    expect((await opened.venue.select().from(locations))[0]!.name).toBe(
-      "Restored through authority",
-    );
+    expect((await readVenue(opened.venue)).name).toBe("Restored through authority");
     expect((await opened.venue.select().from(invoiceSeries)).map((row) => row.code).sort()).toEqual(
       ["A", "FF", "R"],
     );
@@ -257,7 +258,7 @@ it("the admission check's folder holds the backup's node copy, not an empty node
 async function secondVenueRow(): Promise<void> {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000099",
-    name: "Second venue",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
@@ -354,7 +355,7 @@ it("rolls authentication and earlier hook writes back together when a later modu
   const f = await fixture(
     regime(async (tx) => {
       expect((await tx.select().from(nodes))[0]!.name).toBe("authentication write");
-      await tx.update(locations).set({ name: "hook write" });
+      await seedVenueSettings(tx, { name: "hook write" });
       return { report: "first" };
     }),
   );
@@ -388,7 +389,7 @@ it("rolls authentication and earlier hook writes back together when a later modu
   });
   const opened = await openVenueDatabase(f.deps.venueDir);
   try {
-    expect((await opened.venue.select().from(locations))[0]!.name).toBe("Restaurant");
+    expect((await readVenue(opened.venue)).name).toBe("Restaurant");
     expect((await opened.venue.select().from(nodes))[0]!.name).toBe("Restored node");
   } finally {
     await opened.close();
@@ -424,7 +425,7 @@ it("snapshots operation inputs issued by the host before an earlier restore hook
     regime(async (tx, _node, operation) => {
       expect(operation!.binding).toEqual(binding);
       expect(operation!.input).toEqual(input);
-      await tx.update(locations).set({ name: "Snapshot kept" });
+      await seedVenueSettings(tx, { name: "Snapshot kept" });
       return { report: "restored" };
     }),
   );
@@ -459,7 +460,7 @@ it("snapshots operation inputs issued by the host before an earlier restore hook
   ).resolves.toBeUndefined();
   const opened = await openVenueDatabase(f.deps.venueDir);
   try {
-    expect((await opened.venue.select().from(locations))[0]!.name).toBe("Snapshot kept");
+    expect((await readVenue(opened.venue)).name).toBe("Snapshot kept");
   } finally {
     await opened.close();
   }
@@ -471,7 +472,7 @@ it.each(["archive", "stream"] as const)(
     const f = await fixture(
       regime(async (tx, _node, operation) => {
         expect(operation).toBeDefined();
-        await tx.update(locations).set({ name: "Staged with authority" });
+        await seedVenueSettings(tx, { name: "Staged with authority" });
         return { report: "restored" };
       }),
     );
@@ -525,7 +526,7 @@ it.each(["archive", "stream"] as const)(
     ).toBe(true);
     const opened = await openVenueDatabase(f.deps.venueDir);
     try {
-      expect((await opened.venue.select().from(locations))[0]!.name).toBe("Staged with authority");
+      expect((await readVenue(opened.venue)).name).toBe("Staged with authority");
     } finally {
       await opened.close();
     }
@@ -538,7 +539,7 @@ it.each(["archive", "bucket"] as const)(
     const f = await fixture(
       regime(async (tx, _node, operation) => {
         expect(operation).toBeDefined();
-        await tx.update(locations).set({ name: "CLI with authority" });
+        await seedVenueSettings(tx, { name: "CLI with authority" });
         return { report: "restored" };
       }),
     );
@@ -579,7 +580,7 @@ it.each(["archive", "bucket"] as const)(
     ).toBe(0);
     const opened = await openVenueDatabase(f.deps.venueDir);
     try {
-      expect((await opened.venue.select().from(locations))[0]!.name).toBe("CLI with authority");
+      expect((await readVenue(opened.venue)).name).toBe("CLI with authority");
     } finally {
       await opened.close();
     }
@@ -591,7 +592,7 @@ it("carries the runner through real stream validation and placement", async () =
   const f = await fixture(
     regime(async (tx, _node, operation) => {
       expect(operation).toBeDefined();
-      await tx.update(locations).set({ name: "Stream with authority" });
+      await seedVenueSettings(tx, { name: "Stream with authority" });
       return { report: "restored" };
     }),
   );
@@ -606,7 +607,7 @@ it("carries the runner through real stream validation and placement", async () =
   });
   const opened = await openVenueDatabase(f.deps.venueDir);
   try {
-    expect((await opened.venue.select().from(locations))[0]!.name).toBe("Stream with authority");
+    expect((await readVenue(opened.venue)).name).toBe("Stream with authority");
   } finally {
     await opened.close();
   }
@@ -616,7 +617,7 @@ it("carries the runner through encrypted file validation and placement with a se
   const f = await fixture(
     regime(async (tx, _node, operation) => {
       expect(operation).toBeDefined();
-      await tx.update(locations).set({ name: "Archive with authority" });
+      await seedVenueSettings(tx, { name: "Archive with authority" });
       return { report: "restored" };
     }),
   );
@@ -637,7 +638,7 @@ it("carries the runner through encrypted file validation and placement with a se
   await restoreFromArtifactFile({ ...f.deps, artifactPath, recoveryKey });
   const opened = await openVenueDatabase(f.deps.venueDir);
   try {
-    expect((await opened.venue.select().from(locations))[0]!.name).toBe("Archive with authority");
+    expect((await readVenue(opened.venue)).name).toBe("Archive with authority");
   } finally {
     await opened.close();
   }

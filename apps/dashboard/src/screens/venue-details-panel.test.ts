@@ -370,7 +370,7 @@ it("keeps the opening read generation separate from a reopened panel", async () 
   complete(venueDetailsFixture({ name: "Old generation" }));
   await flush(el);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Reopened");
-  expect(api.liveData!.interests).toHaveLength(7);
+  expect(api.liveData!.interests).toHaveLength(8);
   el.remove();
   expect(api.liveData!.interests).toEqual([]);
 });

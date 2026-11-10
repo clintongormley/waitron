@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -10,7 +11,6 @@ import {
   deviceProfiles,
   floorZones,
   kitchenCourses,
-  locations,
   printers,
   printJobs,
   stationPrinters,
@@ -1908,10 +1908,11 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   it("GET /api/till keeps current address, authored trim and raster changes out of boot", async () => {
     const raster = { widthDots: 8, heightDots: 1, data: "/w==" };
     const logo = `${"a".repeat(64)}.png`;
-    await suite.db
-      .update(locations)
-      .set({ addressLine1: "Calle Mayor 1", postalCode: "28013", city: "Madrid" })
-      .where(eq(locations.id, cfg.locationId));
+    await seedVenueSettings(suite.db, {
+      addressLine1: "Calle Mayor 1",
+      postalCode: "28013",
+      city: "Madrid",
+    });
     try {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
@@ -1931,10 +1932,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(await boot()).not.toHaveProperty("venueAddress");
     } finally {
       await suite.db.execute(sql`delete from tenant_receipts`);
-      await suite.db
-        .update(locations)
-        .set({ addressLine1: null, postalCode: null, city: null })
-        .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(suite.db, { addressLine1: null, postalCode: null, city: null });
     }
   });
 

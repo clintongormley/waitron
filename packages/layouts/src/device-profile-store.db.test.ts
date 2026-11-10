@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
@@ -74,8 +74,9 @@ async function purgeProfiles(): Promise<void> {
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
   const [location] = await suite.db
     .insert(locations)
-    .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
+    .values({ invoiceLocales: ["es"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
+  await seedVenueSettings(suite.db, { name: "Loc" });
   const [device] = await suite.db
     .insert(devices)
     .values({

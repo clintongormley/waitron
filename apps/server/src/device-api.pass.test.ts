@@ -14,7 +14,7 @@ import {
   workingOrders,
   withTransaction,
 } from "@waitron/db";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { endSession, loginWithPin, persons } from "@waitron/identity";
@@ -355,11 +355,11 @@ describe("the pass screen's device routes", () => {
     const [foreignLocation] = await suite.db
       .insert(locations)
       .values({
-        name: "Other venue",
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       })
       .returning({ id: locations.id });
+    await seedVenueSettings(suite.db, { name: "Other venue" });
     const foreignNode = await seedNode(suite.db, foreignLocation!.id);
     const [foreignStation] = await suite.db
       .insert(kitchenStations)

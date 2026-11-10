@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -129,10 +130,11 @@ beforeEach(async () => {
     });
     await db.insert(locations).values({
       id: LOCATION,
-      name: "Restaurant",
+
       invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
+    await seedVenueSettings(db, { name: "Restaurant" });
     await db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
     await db.insert(deployment).values({ id: 1, environment: "preproduction" });
     await withTransaction(db, (tx) =>

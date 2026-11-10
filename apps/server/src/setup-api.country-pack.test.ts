@@ -320,9 +320,11 @@ describe("persisted Demo name ownership", () => {
         venue: { ...body, taxId: "B00000000", legalName: "Waitron Demo S.L." },
       });
       expect(response.status).toBe(200);
-      expect(suite.db.all(sql`select name,province from locations`)).toEqual([
-        { name: want, province: "Barcelona" },
-      ]);
+      expect(
+        suite.db.all(
+          sql`select json_extract(settings.doc, '$.name') as name,json_extract(settings.doc, '$.province') as province from locations cross join settings on settings.module = 'venue'`,
+        ),
+      ).toEqual([{ name: want, province: "Barcelona" }]);
       expect(suite.db.all(sql`select legal_name,tax_id from tenants`)).toEqual([
         { legal_name: "Waitron Demo S.L.", tax_id: "B00000000" },
       ]);

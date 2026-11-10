@@ -19,7 +19,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS],
@@ -159,8 +159,9 @@ describe("the service_step_completions table", () => {
     return withTransaction(db, async (tx) => {
       await tx
         .insert(locations)
-        .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+        .values({ invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
         .returning({ id: locations.id });
+      await seedVenueSettings(tx, { name });
       const [department] = await tx
         .insert(departments)
         .values({ name, tradingName: name })

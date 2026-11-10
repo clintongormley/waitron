@@ -1,7 +1,8 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import {
   deploymentTableExists,
-  locations,
   nodes,
   readDeploymentEnvironment,
   stampDeployment,
@@ -84,7 +85,7 @@ it("carries host-selected identities and opaque input into the real initial CLI 
             operatorId: ADMIN,
           });
           expect(operation!.input).toEqual({ approvedLocationName: "From supplied allocation" });
-          await tx.update(locations).set({
+          await seedVenueSettings(tx, {
             name: (operation!.input as { approvedLocationName: string }).approvedLocationName,
           });
           return "initial-42";
@@ -132,9 +133,7 @@ it("carries host-selected identities and opaque input into the real initial CLI 
   expect(await runCli(args, deps), lines.join("\n")).toBe(0);
   expect((await suite.db.select().from(nodes)).map((row) => row.id)).toEqual([NODE]);
   expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
-  expect((await suite.db.select().from(locations)).map((row) => row.name)).toEqual([
-    "From supplied allocation",
-  ]);
+  expect([(await readVenue(suite.db)).name]).toEqual(["From supplied allocation"]);
   expect(readOperationAuthority(held!.authority, held!.binding)).toBeUndefined();
   expect(lines.join("\n")).not.toContain("dashPass123");
 });

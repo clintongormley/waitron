@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { sql } from "drizzle-orm";
 import { venueLocationId } from "@waitron/db";
@@ -188,7 +189,7 @@ describe("seedInstalledDemo", () => {
 it.each(["Barcelona", "Balears, Illes"])(
   "seeds from stored %s geography rather than stale request geography",
   async (province) => {
-    await suite.db.execute(sql`update locations set province=${province} where id=${venueId}`);
+    await seedVenueSettings(suite.db, { province });
     await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
     expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-ca");
     expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
@@ -200,7 +201,7 @@ it.each([
   VALENCIA_DEMO_TEXT.castellonProvince,
   VALENCIA_DEMO_TEXT.province,
 ])("selects Valencian demo from stored %s even with a stale Madrid request", async (province) => {
-  await suite.db.execute(sql`update locations set province=${province} where id=${venueId}`);
+  await seedVenueSettings(suite.db, { province });
   await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
   expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-valencia");
   expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
@@ -209,7 +210,7 @@ it.each([
 it.each(GALICIA_DEMO_TEXT.provinces)(
   "selects Galician demo from stored %s even with a stale Madrid request",
   async (province) => {
-    await suite.db.execute(sql`update locations set province=${province} where id=${venueId}`);
+    await seedVenueSettings(suite.db, { province });
     await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
     expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-gl");
     expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");

@@ -266,6 +266,7 @@ export class DepartmentReceiptEditor extends LitElement {
             { type: "departments" },
             { type: "department_sale_policies" },
             { type: "locations" },
+            { type: "settings.venue" },
             { type: "content_languages" },
           ],
           read: () => {

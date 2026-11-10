@@ -240,6 +240,37 @@ async function prepareSale(observeClock?: () => void) {
 }
 
 describe("venue detail edits", () => {
+  it("a name save records the authenticated saver in the venue document", async () => {
+    const initial = await read();
+    const app = new Hono();
+    mountVenueSettingsApi(
+      app,
+      { db: suite.db, fiscal: venueFiscalSelection(ALL_MODULES, "ES-common").contribution! },
+      () => {},
+    );
+    const [person] = suite.db.all<{ id: string }>(
+      sql`select id from persons where role = 'manager' limit 1`,
+    );
+    const session = await withTransaction(suite.db, (tx) =>
+      startManagementSession(tx, { personId: person!.id }),
+    );
+    const response = await app.request("/management-api/venue-details", {
+      method: "PATCH",
+      headers: {
+        cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ expected: initial.details, changes: { name: "New trading name" } }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).model.details.name).toBe("New trading name");
+    expect(
+      suite.db.all(
+        sql`select json_extract(doc, '$.name') as name, updated_by, revision from settings where module = 'venue'`,
+      ),
+    ).toEqual([{ name: "New trading name", updated_by: person!.id, revision: 2 }]);
+  });
+
   it("reads the deployed address, issuer and history independently", async () => {
     const model = await read();
     expect(model.details).toEqual({
@@ -291,7 +322,7 @@ describe("venue detail edits", () => {
   it("refuses a stale changed field and preserves the newer address", async () => {
     const initial = await read();
     await suite.db.execute(
-      sql`update locations set name = 'Another editor', city = 'Alcalá de Henares' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.name', 'Another editor', '$.city', 'Alcalá de Henares') where module = 'venue'`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -313,7 +344,7 @@ describe("venue detail edits", () => {
   });
   it("clears only optional line two and retains unrelated location settings", async () => {
     await suite.db.execute(
-      sql`update locations set address_line2 = 'Upstairs' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.addressLine2', 'Upstairs') where module = 'venue'`,
     );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
@@ -335,7 +366,10 @@ describe("venue detail edits", () => {
   });
   it("serves empty and canonical equivalent patches without rewriting stored bytes", async () => {
     await suite.db.execute(
-      sql`update locations set name = '  Main room  ', province = 'Madrid', time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.name', '  Main room  ', '$.province', 'Madrid') where module = 'venue'`,
+    );
+    await suite.db.execute(
+      sql`update locations set time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
     );
     const initial = await read();
     for (const changes of [{}, { name: "Main room", province: "28", dayCutover: "05:00:00" }]) {
@@ -347,7 +381,12 @@ describe("venue detail edits", () => {
         ).changed,
       ).toBe(false);
     }
-    expect((await read()).details.name).toBe("  Main room  ");
+    expect(
+      suite.db.all(
+        sql`select json_extract(doc, '$.name') as name from settings where module = 'venue'`,
+      ),
+    ).toEqual([{ name: "  Main room  " }]);
+    expect((await read()).details.name).toBe("Main room");
   });
   it.each(["country", "legalName", "taxId", "fiscalTerritory"])(
     "refuses read-only %s even with a matching value",
@@ -556,8 +595,10 @@ describe("venue history locks", () => {
     );
     expect(saved.model.details.name).toBe("Current display");
   });
-  it("permits a time-zone override before operational history and retains the initial start", async () => {
+  it("permits a time-zone override before operational history without saving the venue document", async () => {
     const initial = await read();
+    const document = suite.db.all(sql`select * from settings where module = 'venue'`);
+    const activity = suite.db.all(sql`select * from activity_log where kind = 'settings.saved'`);
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
@@ -566,6 +607,10 @@ describe("venue history locks", () => {
     );
     expect(saved.model.details.timeZone).toBe("UTC");
     expect(saved.model.details.dayCutover).toBe("05:00");
+    expect(suite.db.all(sql`select * from settings where module = 'venue'`)).toEqual(document);
+    expect(suite.db.all(sql`select * from activity_log where kind = 'settings.saved'`)).toEqual(
+      activity,
+    );
     const { rows } = await suite.db.execute(
       sql`select day_cutover from locations where id = ${venue.cfg.locationId}`,
     );
@@ -604,7 +649,7 @@ describe("crafted detail bodies and legacy values", () => {
   });
   it("keeps unset legacy geography out of a name-only change", async () => {
     await suite.db.execute(
-      sql`update locations set address_line1 = null, postal_code = null, province = null, city = null where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.addressLine1', null, '$.postalCode', null, '$.province', null, '$.city', null) where module = 'venue'`,
     );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
@@ -648,7 +693,10 @@ describe("crafted detail bodies and legacy values", () => {
   });
   it("keeps exact invalid legacy values as no-ops without normalizing other fields", async () => {
     await suite.db.execute(
-      sql`update locations set time_zone = 'legacy-invalid', province = 'Unknown legacy province' where id = ${venue.cfg.locationId}`,
+      sql`update locations set time_zone = 'legacy-invalid' where id = ${venue.cfg.locationId}`,
+    );
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.province', 'Unknown legacy province') where module = 'venue'`,
     );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
@@ -666,7 +714,7 @@ describe("crafted detail bodies and legacy values", () => {
   it("does not issue an UPDATE for empty or equivalent retries", async () => {
     const initial = await read();
     await suite.db.execute(
-      sql`create trigger detail_probe_no_update before update on locations begin select raise(abort, 'detail probe update'); end`,
+      sql`create trigger detail_probe_no_update before update on settings begin select raise(abort, 'detail probe update'); end`,
     );
     try {
       for (const changes of [{}, { name: " Main room ", province: "28", dayCutover: "05:00:00" }]) {
@@ -870,7 +918,7 @@ describe("venue details preserve committed history", () => {
       await suite.db.execute(sql`drop trigger detail_sale_rollback`);
     }
   });
-  it("notifies the old and new location resource and stays silent on equivalent and empty retries after sales", async () => {
+  it("notifies the venue document and activity resources and stays silent on equivalent and empty retries after sales", async () => {
     await (
       await prepareSale()
     )();
@@ -886,9 +934,13 @@ describe("venue details preserve committed history", () => {
         }),
       );
       expect(saved.changed).toBe(true);
+      const [activity] = suite.db.all<{ id: string }>(
+        sql`select id from activity_log where kind = 'settings.saved' and subject_id = 'venue' and json_extract(data, '$.revision') = 2`,
+      );
       expect(events).toEqual([
-        { resources: [{ type: "locations", id: venue.cfg.locationId }] },
-        { resources: [{ type: "locations", id: venue.cfg.locationId }] },
+        { resources: [{ type: "settings.venue" }] },
+        { resources: [{ type: "settings.venue" }] },
+        { resources: [{ type: "activity_log", id: activity!.id }] },
       ]);
       events.length = 0;
       for (const changes of [
@@ -1638,7 +1690,7 @@ describe("reviewed legacy geography and clock repairs", () => {
     "does not offer postcode edits without a resolved province: %s",
     async (province) => {
       await suite.db.execute(
-        sql`update locations set province = ${province} where id = ${venue.cfg.locationId}`,
+        sql`update settings set doc = json_set(doc, '$.province', ${province}) where module = 'venue'`,
       );
       const model = await read();
       expect(model.policy.postalCode).toEqual({

@@ -421,6 +421,7 @@ it.each([
       "sale_voids",
       "sale_substitutions",
       "locations",
+      "settings.venue",
       "products",
       "categories",
       "category_details",
@@ -439,6 +440,7 @@ it.each([
       "sale_voids",
       "sale_substitutions",
       "locations",
+      "settings.venue",
       "location_business_day_settings",
       "location_day_cutover_changes",
     ],
@@ -659,6 +661,7 @@ it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
     const query = dashboardQuery(api, "getVenueDetails", []);
     expect(query.dependencies).toEqual([
       { type: "locations" },
+      { type: "settings.venue" },
       { type: "tenants" },
       { type: "sales" },
       { type: "working_orders" },
@@ -779,10 +782,11 @@ it("subscribes catalogue defaults to their stored settings", async () => {
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
 
-it("subscribes the venue defaults to the location and the catalogue settings alone", () => {
+it("subscribes the venue defaults to the location, venue document and catalogue settings", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "locations" },
+    { type: "settings.venue" },
     { type: "catalogue_settings" },
   ]);
 });
@@ -908,6 +912,7 @@ it("scopes department receipt subscriptions by department and refreshes passivel
     { type: "department_sale_policies" },
     { type: "departments" },
     { type: "locations" },
+    { type: "settings.venue" },
     { type: "content_languages" },
   ]);
   const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
@@ -948,6 +953,7 @@ it("department receipt, policy, content and address refresh through the departme
       "department_sale_policies",
       "content_languages",
       "locations",
+      "settings.venue",
       "department_receipts",
       "departments",
     ].entries()) {

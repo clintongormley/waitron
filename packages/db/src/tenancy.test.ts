@@ -58,7 +58,6 @@ describe("invoice_locales", () => {
 
   const insertLocales = async (invoiceLocales: string[]): Promise<unknown> => {
     return db.insert(locations).values({
-      name: `locales-${invoiceLocales.join("-") || "empty"}`,
       invoiceLocales,
       operationDescription: "Servicios de restauración",
     });
@@ -71,10 +70,7 @@ describe("invoice_locales", () => {
   it("accepts two locales and preserves their order", async () => {
     await insertLocales(["ca", "es"]);
 
-    const [row] = await db
-      .select()
-      .from(locations)
-      .where(sql`${locations.name} = 'locales-ca-es'`);
+    const [row] = await db.select().from(locations).limit(1);
 
     // ["ca","es"] and ["es","ca"] are different invoices, not the same invoice
     // rendered differently. A set-valued column would lose that distinction.

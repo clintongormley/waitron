@@ -1,3 +1,5 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -38,10 +40,11 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
   await suite.db.insert(locations).values({
     id: target.locationId,
-    name: "Restaurant",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  await seedVenueSettings(suite.db, { name: "Restaurant" });
   await suite.db
     .insert(nodes)
     .values({ id: target.nodeId, locationId: target.locationId, name: "Restored node" });
@@ -66,14 +69,14 @@ it("collects outside evidence before restore hooks open their write transaction"
   const module = regime(
     async (operation, run) => {
       await withTransaction(suite.db, (tx) =>
-        tx.update(locations).set({ name: "outside-source-collected" }),
+        seedVenueSettings(tx, { name: "outside-source-collected" }),
       );
       return run({ ...operation, input: "collected" });
     },
     async (tx, _node, operation) => {
       expect(operation?.input).toBe("collected");
-      expect((await tx.select().from(locations))[0]?.name).toBe("outside-source-collected");
-      await tx.update(locations).set({ name: "restore-committed" });
+      expect((await readVenue(tx)).name).toBe("outside-source-collected");
+      await seedVenueSettings(tx, { name: "restore-committed" });
       return { report: "restored with current evidence" };
     },
   );
@@ -88,7 +91,7 @@ it("collects outside evidence before restore hooks open their write transaction"
     }),
   );
   expect(result.reports).toEqual(["test-regime: restored with current evidence"]);
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("restore-committed");
+  expect((await readVenue(suite.db)).name).toBe("restore-committed");
 });
 
 it("leaves restore rows unchanged when the outside source refuses", async () => {
@@ -115,7 +118,7 @@ it("leaves restore rows unchanged when the outside source refuses", async () => 
     ).rejects.toThrow("outside-source-refused");
   });
   expect(entered).toBe(false);
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("Restaurant");
+  expect((await readVenue(suite.db)).name).toBe("Restaurant");
 });
 
 it("names the expired earlier module when a later hook finishes", async () => {
@@ -130,7 +133,7 @@ it("names the expired earlier module when a later hook finishes", async () => {
   const first = regime(
     async (operation, run) => run(operation),
     async (tx) => {
-      await tx.update(locations).set({ name: "first-uncommitted" });
+      await seedVenueSettings(tx, { name: "first-uncommitted" });
       return { report: "first" };
     },
   );
@@ -161,7 +164,7 @@ it("names the expired earlier module when a later hook finishes", async () => {
     code: "restore.hook_failed",
     params: { module: binding.module, code: "module.operation_invalid" },
   });
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("Restaurant");
+  expect((await readVenue(suite.db)).name).toBe("Restaurant");
 });
 
 it("rolls back hook writes when authority expires while a hook awaits", async () => {
@@ -176,7 +179,7 @@ it("rolls back hook writes when authority expires while a hook awaits", async ()
   const module = regime(
     async (operation, run) => run(operation),
     async (tx) => {
-      await tx.update(locations).set({ name: "uncommitted" });
+      await seedVenueSettings(tx, { name: "uncommitted" });
       written();
       await wait;
       return { report: "unexpected" };
@@ -210,5 +213,5 @@ it("rolls back hook writes when authority expires while a hook awaits", async ()
     params: { module: binding.module, code: "module.operation_invalid" },
   });
   expect(laterRan).toBe(false);
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("Restaurant");
+  expect((await readVenue(suite.db)).name).toBe("Restaurant");
 });

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -442,10 +443,7 @@ describe("station times on a public holiday", () => {
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
       .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-    await tx
-      .update(locations)
-      .set({ province: "Sevilla", city: "Sevilla" })
-      .where(eq(locations.id, f.cfg.locationId));
+    await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
     return f;
   }
 

@@ -1,3 +1,5 @@
+import { madridWithDocument } from "./testing/madrid-documents.js";
+import { stable } from "./testing/madrid-semantics.js";
 import {
   madridWithDroppedColumns,
   type MadridColumnDrops,
@@ -49,7 +51,6 @@ const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "g
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
   "outgoing_mail",
-  "activity_log",
   "adjustment_lines",
   "bill_identities",
   "bill_number_allocations",
@@ -67,7 +68,6 @@ const ADDED_TABLES = [
   "order_portions",
   "recovery_packs",
   "sale_line_portions",
-  "settings",
   "transfer_closures",
   "working_line_portions",
 ];
@@ -291,6 +291,37 @@ for (const locale of ["en", "es"] as const) {
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
     const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
+      const at = "2026-10-08T10:00:00.000Z";
+      expected[phase] = madridWithDocument(
+        expected[phase],
+        "locations",
+        {
+          name: "name",
+          address_line1: "addressLine1",
+          address_line2: "addressLine2",
+          postal_code: "postalCode",
+          city: "city",
+          province: "province",
+        },
+        { module: "venue", version: 1, revision: 1, updatedAt: at, updatedBy: null },
+      );
+      phases[phase]!.settings = phase === "before" ? 0 : 1;
+      const activityId = `@activity_log:${stable(["settings.saved", "venue", at, '{"revision":1}'])}`;
+      const activity = {
+        id: activityId,
+        at,
+        kind: "settings.saved",
+        subject_kind: "settings",
+        subject_id: "venue",
+        person_id: null,
+        device_id: null,
+        data: { revision: 1 },
+      };
+      expected[phase].tables.activity_log = {
+        ...structuredClone(canonical[phase].tables.activity_log!),
+        rows: phase === "before" ? {} : { [activityId]: activity },
+      };
+      phases[phase]!.activity_log = phase === "before" ? 0 : 1;
       for (const name of ADDED_TABLES) {
         const added = canonical[phase].tables[name];
         expect(added, `${phase}/${name}`).toBeDefined();

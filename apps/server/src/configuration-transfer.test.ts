@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
 import { deleteStation } from "./station-delete.js";
@@ -389,7 +390,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 13,
+  version: 14,
   settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
@@ -5480,7 +5481,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(13);
+  expect(exported.version).toBe(14);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6160,15 +6161,8 @@ describe("public holidays in a configuration transfer", () => {
     locationId: located.locationId,
   });
 
-  async function moveTo(
-    db: typeof suite.db,
-    located: { locationId: string },
-    province: string,
-    city: string,
-  ) {
-    await withTransaction(db, (tx) =>
-      tx.update(locations).set({ province, city }).where(eq(locations.id, located.locationId)),
-    );
+  async function moveTo(db: typeof suite.db, province: string, city: string) {
+    await withTransaction(db, (tx) => seedVenueSettings(tx, { province, city }));
   }
 
   /** Geographies and entries with ids replaced by the city they belong to, to compare venues. */
@@ -6177,7 +6171,7 @@ describe("public holidays in a configuration transfer", () => {
       select country, province_code, city, city_key, area_key
       from holiday_geographies order by city_key`);
     const entries = await db.execute<{ city: string; date: string; name: string }>(sql`
-      select (select city from locations) as city, d.date, s.name from special_day_dates d
+      select (select json_extract(doc, '$.city') from settings where module = 'venue') as city, d.date, s.name from special_day_dates d
       join special_days s on s.id = d.special_day_id order by d.date, s.name`);
     return {
       geographies: geographies.rows,
@@ -6205,16 +6199,11 @@ describe("public holidays in a configuration transfer", () => {
         closedAllDay: true,
       });
     });
-    await moveTo(
-      suite.db,
-      { locationId: await venueLocationId(suite.db) },
-      "Lleida",
-      "Vielha e Mijaran",
-    );
+    await moveTo(suite.db, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
       await saveHolidayArea(tx, { areaKey: "aran" });
     });
-    await moveTo(suite.db, { locationId: await venueLocationId(suite.db) }, "Madrid", "  MADRID ");
+    await moveTo(suite.db, "Madrid", "  MADRID ");
     const versions = await schemaVersionsByModule(
       { venue: suite.db, node: suite.node },
       ALL_MODULES,
@@ -6323,12 +6312,7 @@ describe("public holidays in a configuration transfer", () => {
       special.rows[0]!.id,
     );
 
-    await moveTo(
-      targetSuite.db,
-      { locationId: await venueLocationId(targetSuite.db) },
-      "Lleida",
-      "Vielha e Mijaran",
-    );
+    await moveTo(targetSuite.db, "Lleida", "Vielha e Mijaran");
     const inVielha = await read();
     expect(inVielha.model.areaRequired).toBe(false);
     expect(inVielha.aran.facts.map(({ scope, name }) => ({ scope, name }))).toEqual([
@@ -6336,12 +6320,7 @@ describe("public holidays in a configuration transfer", () => {
     ]);
     expect(inVielha.epiphany.facts.map(({ scope }) => scope)).toEqual(["national"]);
 
-    await moveTo(
-      targetSuite.db,
-      { locationId: await venueLocationId(targetSuite.db) },
-      "Madrid",
-      "Madrid",
-    );
+    await moveTo(targetSuite.db, "Madrid", "Madrid");
     expect((await read()).model.chosen).toEqual(inMadrid.model.chosen);
   });
 

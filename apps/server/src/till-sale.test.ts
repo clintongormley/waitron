@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
@@ -8,7 +9,6 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
-  locations,
   tenantReceipts,
   products,
   saleLines,
@@ -2961,10 +2961,7 @@ describe("per-answer receipt presentation", () => {
       await suite.db
         .update(tenantReceipts)
         .set({ receipt: { headerSubtitle: "New venue subtitle", printAddress: false } });
-      await suite.db
-        .update(locations)
-        .set({ addressLine1: "Current street" })
-        .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(suite.db, { addressLine1: "Current street" });
       const replay = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
       expect(replay).toMatchObject({
         receiptTrim: {

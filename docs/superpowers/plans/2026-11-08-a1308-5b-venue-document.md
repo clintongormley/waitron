@@ -120,6 +120,12 @@ differs on `main` is a stop (rules §5.1).
    `"locations"` gains `"settings.venue"` beside it — `"locations"` stays until 5d, which still writes
    the clock there.
 
+> Watcher, 2026-11-10 05:54: `readVenueClockAndPlace` joins settings and uses a small shared decoder extracted from `settings.ts`, preserving its one-SELECT assertion; this is the exception to every reader using `readVenueSettings`.
+
+> Watcher, 2026-11-10 06:00/06:10: add `venue-settings-api.ts` only to pass the authorised saver, and `seed-catalogue.ts` to replace its raw province read. The padded-name case checks original stored bytes and a trimmed read; the live-event case checks `settings.venue` plus the saved activity row, retaining all no-op assertions.
+
+> Watcher, 2026-11-10 06:47: bump configuration format 12 to 13 in `configuration-transfer.ts`, adapt its existing fixtures/version tests, and update the design-system format sentence; the unchanged migration-set row counts alone do not refuse an old export.
+
 ## What it leaves out
 
 | Left out | Taken by |
@@ -220,6 +226,8 @@ Reason: the columns leave `locations` for `settings.venue` (tables-venuebox §2.
 3. `apps/server/src/first-fiscal-setup.e2e.test.ts`'s `claimFrom: "preview"` row fails: the bundle's
    `venue` must keep exactly its keys (CLAUDE.md §3).
 4. The Madrid test compares `settings.updated_at` or `updated_by` literally (item 7).
+
+> Watcher, 2026-11-10 06:35/06:37/06:42: up to 1,600 authored non-generated additions, excluding script output. The schema inventory now requires moved columns absent, keeping territory/clock checks. Staffing maps the physical settings read to the declared venue resource; hours live-event checks follow that resource. All read budgets and refresh/no-op assertions stay.
 
 ## Assertions that change, by design
 

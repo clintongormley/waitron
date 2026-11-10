@@ -17,7 +17,7 @@ import {
   zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
@@ -256,8 +256,9 @@ describe("department name storage", () => {
   async function location(name: string) {
     const [row] = await suite.db
       .insert(locations)
-      .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
+      .values({ invoiceLocales: ["es"], operationDescription: "Hospitality" })
       .returning();
+    await seedVenueSettings(suite.db, { name });
     return row!.id;
   }
   async function insert(_locationId: string, name: string) {

@@ -1,3 +1,5 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { readVenueSettings } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import {
   catalogues,
@@ -84,6 +86,7 @@ export async function prepareStandbyDatabase(
     await target.insert(catalogues).values(catalogue);
   }
   await target.insert(locations).values(location);
+  await seedVenueSettings(target, (await readVenueSettings(source)).doc);
   await target.insert(nodes).values(node);
   await target.insert(deployment).values({ id: 1, environment: "preproduction" });
   await target.insert(registroSif).values(sif);

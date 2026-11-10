@@ -4,6 +4,7 @@ import {
   locationBusinessDaySettings,
   readTenant,
   readVenue,
+  saveVenueFields,
   venueLocationId,
   type Transaction,
 } from "@waitron/db";
@@ -156,6 +157,7 @@ export async function writeVenueDetails(
   tx: Transaction,
   input: VenueDetailWrite,
   at: Date = new Date(),
+  personId: string | null = null,
 ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
   const body = object(input, "body");
   keys(body, ["changes", "expected"], "body");
@@ -251,9 +253,26 @@ export async function writeVenueDetails(
     Object.assign(delta, { [field]: normalized });
   }
   if (Object.keys(delta).length === 0) return { changed: false, model };
-  const venueId = await venueLocationId(tx);
-  await tx.update(locations).set(delta).where(eq(locations.id, venueId));
-  if (delta.timeZone !== undefined) {
+  const venueFields: Partial<
+    Pick<
+      VenueDetailValues,
+      "name" | "addressLine1" | "addressLine2" | "postalCode" | "city" | "province"
+    >
+  > = {};
+  for (const field of [
+    "name",
+    "addressLine1",
+    "addressLine2",
+    "postalCode",
+    "city",
+    "province",
+  ] as const)
+    if (delta[field] !== undefined) Object.assign(venueFields, { [field]: delta[field] });
+  const { timeZone } = delta;
+  if (Object.keys(venueFields).length > 0) await saveVenueFields(tx, venueFields, personId);
+  if (timeZone !== undefined) {
+    const venueId = await venueLocationId(tx);
+    await tx.update(locations).set({ timeZone }).where(eq(locations.id, venueId));
     const revision = model.businessDayClock.revision + 1;
     await tx
       .insert(locationBusinessDaySettings)

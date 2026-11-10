@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -43,12 +44,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-    name: "Selected venue",
+
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     timeZone: "Europe/Madrid",
   });
+  await seedVenueSettings(suite.db, { name: "Selected venue" });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected box" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });

@@ -110,7 +110,7 @@ it.each([
 it("refuses a configuration format newer than this box's as newer software", () => {
   const artifact = encryptArtifact(
     packArchive([
-      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 14 })) },
+      { name: "configuration.json", bytes: Buffer.from(JSON.stringify({ version: 15 })) },
     ]),
     passphrase,
   );
@@ -122,6 +122,8 @@ it("refuses a configuration format newer than this box's as newer software", () 
 it.each([
   {},
   { version: 2 },
+  { ...configurationBundle(), version: 13 },
+  { ...configurationBundle(), version: 12 },
   { ...configurationBundle(), version: 10 },
   { ...configurationBundle(), version: 8 },
 ])("refuses an obsolete configuration format: %j", (value) => {

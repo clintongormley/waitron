@@ -1,3 +1,5 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -132,7 +134,7 @@ it("collects the standby's current outside input before the promotion transactio
   const scope = { ...binding, action: "promote" };
   const deps = await mirror(async (tx, node, operation) => {
     expect(operation?.input).toEqual({ collected: "current-standby" });
-    expect((await tx.select().from(locations))[0]?.name).toBe("outside-confirmed");
+    expect((await readVenue(tx)).name).toBe("outside-confirmed");
     await activateSeries(tx, node);
   });
   const prepared = {
@@ -143,7 +145,7 @@ it("collects the standby's current outside input before the promotion transactio
         run: (ready: ModuleOperationInput) => Promise<T>,
       ) {
         await withTransaction(suite.db, (tx) =>
-          tx.update(locations).set({ name: "outside-confirmed" }),
+          seedVenueSettings(tx, { name: "outside-confirmed" }),
         );
         return run({ ...operation, input: { collected: "current-standby" } });
       },
@@ -678,7 +680,7 @@ describe("opaque authenticated standby carriers", () => {
     });
     modules.push(
       regime(async (tx) => {
-        await tx.update(locations).set({ name: "Changed" });
+        await seedVenueSettings(tx, { name: "Changed" });
         enter();
         await released;
         return { state: { reserved: true } };
@@ -692,7 +694,7 @@ describe("opaque authenticated standby carriers", () => {
     const refused = expect(pending).rejects.toMatchObject({ code: "module.operation_invalid" });
     release();
     await refused;
-    expect((await suite.db.select().from(locations))[0]!.name).toBe("Restaurant");
+    expect((await readVenue(suite.db)).name).toBe("Restaurant");
   });
 
   it("rolls back establishment writes when authority expires during its await", async () => {
@@ -710,7 +712,7 @@ describe("opaque authenticated standby carriers", () => {
       regime(
         async () => ({ state: {} }),
         async (tx) => {
-          await tx.update(locations).set({ name: "Changed" });
+          await seedVenueSettings(tx, { name: "Changed" });
           enter();
           await released;
         },
@@ -727,7 +729,7 @@ describe("opaque authenticated standby carriers", () => {
     const refused = expect(pending).rejects.toMatchObject({ code: "module.operation_invalid" });
     release();
     await refused;
-    expect((await suite.db.select().from(locations))[0]!.name).toBe("Restaurant");
+    expect((await readVenue(suite.db)).name).toBe("Restaurant");
     expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual(
       [],
     );
@@ -806,16 +808,14 @@ it("collects the outside reservation before entering the bundle's write transact
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, PRIMARY);
   const module = regime(async (tx, _primary, _standby, operation) => {
     expect(operation?.input).toEqual({ prepared: "reservation" });
-    expect((await tx.select().from(locations))[0]?.name).toBe("Source checked");
+    expect((await readVenue(tx)).name).toBe("Source checked");
     return { state: { reserved: true } };
   });
   modules.push({
     ...module,
     operations: {
       async prepare(operation, run) {
-        await withTransaction(suite.db, (tx) =>
-          tx.update(locations).set({ name: "Source checked" }),
-        );
+        await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { name: "Source checked" }));
         return run({ ...operation, input: { prepared: "reservation" } });
       },
     },
@@ -833,7 +833,7 @@ it("collects outside establishment evidence before sealing the spare's key", asy
     async () => ({ state: {} }),
     async (tx, _node, _state, operation) => {
       expect(operation?.input).toEqual({ prepared: "establishment" });
-      expect((await tx.select().from(locations))[0]?.name).toBe("Source checked");
+      expect((await readVenue(tx)).name).toBe("Source checked");
     },
   );
   modules.push({
@@ -843,9 +843,7 @@ it("collects outside establishment evidence before sealing the spare's key", asy
         expect(
           await tryGetCredential(suite.db, RING, { purpose: "membership.node_key" }),
         ).toBeNull();
-        await withTransaction(suite.db, (tx) =>
-          tx.update(locations).set({ name: "Source checked" }),
-        );
+        await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { name: "Source checked" }));
         return run({ ...operation, input: { prepared: "establishment" } });
       },
     },
@@ -1020,7 +1018,7 @@ it.each(["reserve", "establish"])(
       release = resolve;
     });
     const change = async (tx: Transaction) => {
-      await tx.update(locations).set({ name: "Partial write" });
+      await seedVenueSettings(tx, { name: "Partial write" });
     };
     modules.push(
       regime(
@@ -1070,7 +1068,7 @@ it.each(["reserve", "establish"])(
     });
     release();
     await rejected;
-    expect((await suite.db.select().from(locations))[0]?.name).toBe("Restaurant");
+    expect((await readVenue(suite.db)).name).toBe("Restaurant");
     if (action === "establish") {
       expect(await suite.db.select().from(nodes).where(eq(nodes.id, args.standby.nodeId))).toEqual(
         [],

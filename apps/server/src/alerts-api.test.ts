@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import {
@@ -720,8 +720,9 @@ async function seedLowReader(name = "Card reader"): Promise<void> {
 async function seedStuckPrintJob(): Promise<void> {
   const [loc] = await db
     .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+    .values({ invoiceLocales: ["es-ES"], operationDescription: "Retail" })
     .returning({ id: locations.id });
+  await seedVenueSettings(db, { name: "Bar" });
   const [printer] = await db
     .insert(printers)
     .values({

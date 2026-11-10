@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { HoursSubject } from "./testing/legacy-station-types.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -8,7 +9,6 @@ import {
   catalogues,
   departments,
   kitchenStations,
-  locations,
   specialDayDates,
   specialDays,
   tenants,
@@ -508,10 +508,7 @@ describe("Hours with the holiday store", () => {
         .insert(tenants)
         .values({ id: 1, country: "ZZ", taxId: "X0000000", legalName: "Invented SL" })
         .onConflictDoUpdate({ target: tenants.id, set: { country: "ZZ" } });
-      await tx
-        .update(locations)
-        .set({ province: "Northshire", city: "Villa Real" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await seedVenueSettings(tx, { province: "Northshire", city: "Villa Real" });
     });
     return f;
   }
@@ -607,10 +604,7 @@ describe("Hours on a real Spanish public holiday", () => {
         .insert(tenants)
         .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
         .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-      await tx
-        .update(locations)
-        .set({ province: "Sevilla", city: "Sevilla" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
     });
     return f;
   }

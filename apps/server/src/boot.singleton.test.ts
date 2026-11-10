@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,11 +90,12 @@ async function seedIdentity(db: Database): Promise<void> {
     .insert(locations)
     .values({
       id: TILL_LOCATION_ID,
-      name: "Loc",
+
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
+  await seedVenueSettings(db, { name: "Loc" });
   await db
     .insert(nodes)
     .values({

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -1499,8 +1500,9 @@ describe("a sale files in the receipt language saved on its order", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(locations)
-        .set({ invoiceLocales: locales, province: "Barcelona", city: "Barcelona" })
+        .set({ invoiceLocales: locales })
         .where(eq(locations.id, venue.cfg.locationId));
+      await seedVenueSettings(tx, { province: "Barcelona", city: "Barcelona" });
       await tx.execute(
         sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca"]')
             on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,

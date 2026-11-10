@@ -1,10 +1,11 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   deploymentTableExists,
-  locations,
   nodes,
   readDeploymentEnvironment,
   stampDeployment,
@@ -96,7 +97,7 @@ function deps(lines: string[], path: string | undefined): CliDeps {
             sourceId: "paper-42",
             targetNodeId: NODE,
           });
-          await tx.update(locations).set({
+          await seedVenueSettings(tx, {
             name: (operation.input as { approvedLocationName: string }).approvedLocationName,
           });
           return "file-setup-complete";
@@ -147,9 +148,7 @@ it("applies the same planned identities and opaque input read from the configure
     expect(await runCli(args, deps(lines, path)), lines.join("\n")).toBe(0);
     expect((await suite.db.select().from(nodes)).map((row) => row.id)).toEqual([NODE]);
     expect((await suite.db.select().from(persons)).map((row) => row.id)).toEqual([ADMIN]);
-    expect((await suite.db.select().from(locations)).map((row) => row.name)).toEqual([
-      "From supplied file",
-    ]);
+    expect([(await readVenue(suite.db)).name]).toEqual(["From supplied file"]);
     expect(lines.join("\n")).toContain("file-setup-complete");
     expect(lines.join("\n")).not.toContain("dashPass123");
   });

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -37,10 +38,11 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Old venue" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-    name: "Old location",
+
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
+  await seedVenueSettings(suite.db, { name: "Old location" });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
   scratch = await mkdtemp(join(tmpdir(), "w41s6-public-boot-"));
 });

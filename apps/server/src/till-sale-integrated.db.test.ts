@@ -101,7 +101,7 @@ import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import {
   seedSessionDevice,
   openTillSession,
@@ -3863,8 +3863,9 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       );
       suite.db.run(sql`update tenant_receipts set receipt = '{"printAddress":false}'`);
       suite.db.run(
-        sql`update locations set invoice_locales = '["es-ES"]', address_line1 = 'Current street' where id = ${cfg.locationId}`,
+        sql`update locations set invoice_locales = '["es-ES"]' where id = ${cfg.locationId}`,
       );
+      await seedVenueSettings(suite.db, { addressLine1: "Current street" });
       const replay = await payWorkingOrderIntegrated(deps, cfg, req);
       expect(replay.outcome).toBe("captured");
       if (replay.outcome !== "captured") throw new Error("Expected replay");

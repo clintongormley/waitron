@@ -11,7 +11,7 @@ import {
   mediaImages,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
 import type { ReceiptLogoRasters } from "@waitron/shared";
 import { DEFAULT_FRAMING } from "./framing.js";
@@ -391,8 +391,9 @@ describe("edit validation", () => {
 async function attachLogo(filename: string, active: boolean) {
   await suite.db
     .insert(locations)
-    .values({ name: "Place", invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })
+    .values({ invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })
     .returning();
+  await seedVenueSettings(suite.db, { name: "Place" });
   const [department] = await suite.db
     .insert(departments)
     .values({

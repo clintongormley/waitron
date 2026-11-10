@@ -1,3 +1,4 @@
+import { readVenue } from "@waitron/db";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -220,12 +221,8 @@ async function shutDown(booted: Booted): Promise<void> {
   if (booted.scratch !== undefined) await rm(booted.scratch, { recursive: true, force: true });
 }
 
-async function venueName(venue: Awaited<ReturnType<typeof setupVenue>>): Promise<string> {
-  const [location] = await suite.db
-    .select({ name: locations.name })
-    .from(locations)
-    .where(eq(locations.id, venue.cfg.locationId));
-  return location!.name;
+async function venueName(): Promise<string> {
+  return (await readVenue(suite.db)).name;
 }
 
 describe("the running server's managers' email check", () => {
@@ -268,7 +265,7 @@ describe("the running server's managers' email check", () => {
                   mode === "smtp"
                     ? {
                         url: "smtp://smtp.example.test:2525",
-                        from: { name: await venueName(venue), address: "venue@example.test" },
+                        from: { name: await venueName(), address: "venue@example.test" },
                       }
                     : {
                         url: "smtp://127.0.0.1:1025",
@@ -426,7 +423,7 @@ describe("the running server's managers' email check", () => {
                 mode: "smtp",
                 smtp: {
                   url: "smtp://smtp.example.test:2525",
-                  from: { name: await venueName(venue), address: "venue@example.test" },
+                  from: { name: await venueName(), address: "venue@example.test" },
                 },
               };
         expect(holder.smtp.slice(-2).map(({ url, from }) => ({ url, from }))).toEqual([
@@ -460,10 +457,7 @@ describe("the running server's managers' email check", () => {
         .select({ locale: persons.locale })
         .from(persons)
         .where(eq(persons.email, "owner@example.test"));
-      const [location] = await suite.db
-        .select({ name: locations.name })
-        .from(locations)
-        .where(eq(locations.id, venue.cfg.locationId));
+      const location = await readVenue(suite.db);
       const venueLocale = await readVenueLocale(suite.db, {});
       // The admin has no language of their own, so the email takes the venue's.
       expect(admin!.locale).toBeNull();
@@ -623,7 +617,7 @@ describe("the running server's managers' email check", () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
     try {
-      const name = await venueName(venue);
+      const name = await venueName();
       // Before the server starts, so the test writes only while it is down.
       await createBackupRoomHooks({
         db: suite.db,

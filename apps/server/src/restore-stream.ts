@@ -211,11 +211,17 @@ async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<
   if (tenant === undefined) throw new AppError("restore.identity_unknown", { nodeId });
   let venue;
   try {
+    const table = store.venue.execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name = 'settings'`,
+    );
+    if (table.rows.length === 0) throw new AppError("restore.identity_unknown", { nodeId });
     venue = await readVenue(store.venue);
   } catch (error) {
     if (
       isAppError(error) &&
-      (hasCode(error, "venue.not_found") || hasCode(error, "provisioning.second_venue"))
+      (hasCode(error, "venue.not_found") ||
+        hasCode(error, "provisioning.second_venue") ||
+        hasCode(error, "settings.invalid"))
     ) {
       throw new AppError("restore.identity_unknown", { nodeId });
     }

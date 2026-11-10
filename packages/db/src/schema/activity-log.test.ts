@@ -47,7 +47,12 @@ describe("activity log storage", () => {
     expect(named).toMatchObject({ personId, deviceId, at: new Date("2026-11-08T10:00:00.000Z") });
     expect(named!.data).toEqual({ term: 3, contactUrl: "https://a.example" });
     expect(anonymous).toMatchObject({ personId: null, deviceId: null });
-    expect(await suite.db.select().from(activityLog)).toHaveLength(2);
+    expect(
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.kind, "membership.node_removed")),
+    ).toHaveLength(2);
   });
   it.each(["person", "device"])(
     "refuses an entry naming a %s who does not exist",
@@ -59,7 +64,12 @@ describe("activity log storage", () => {
         ),
       );
       expect(FOREIGN_KEY_VIOLATION).toContain((error as { errcode: number }).errcode);
-      expect(await suite.db.select().from(activityLog)).toEqual([]);
+      expect(
+        await suite.db
+          .select()
+          .from(activityLog)
+          .where(eq(activityLog.kind, "membership.node_removed")),
+      ).toEqual([]);
     },
   );
   it("refuses deleting a person an entry names", async () => {
@@ -88,6 +98,11 @@ describe("activity log storage", () => {
     );
     expect(triggerRaised(changed, "activity_log is append-only")).toBe(true);
     expect(triggerRaised(removed, "activity_log is append-only")).toBe(true);
-    expect(await suite.db.select().from(activityLog)).toEqual([row]);
+    expect(
+      await suite.db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.kind, "membership.node_removed")),
+    ).toEqual([row]);
   });
 });

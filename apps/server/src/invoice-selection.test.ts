@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -25,11 +26,11 @@ async function bill(full = false) {
     const [location] = await tx
       .insert(locations)
       .values({
-        name: "Selector",
         invoiceLocales: ["es-ES"],
         operationDescription: "Restaurant",
       })
       .returning();
+    await seedVenueSettings(tx, { name: "Selector" });
     const [node] = await tx
       .insert(nodes)
       .values({ locationId: location!.id, name: "Selector" })

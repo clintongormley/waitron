@@ -30,11 +30,10 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     await suite.db.insert(locations).values([
       {
         id: LOCATION_A2,
-        name: "Loc A2",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
-      { id: LOCATION_B, name: "Loc B", invoiceLocales: ["es"], operationDescription: "Hostelería" },
+      { id: LOCATION_B, invoiceLocales: ["es"], operationDescription: "Hostelería" },
     ]);
   });
 
@@ -223,7 +222,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
     await suite.db.insert(locations).values({
       id: probeLocation,
-      name: "Loc A3",
+
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });

@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -186,10 +187,11 @@ export function useBackupVerificationFixture() {
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Fixture restaurant" });
     await suite.db.insert(locations).values({
       id: verificationNode.locationId,
-      name: "Fixture location",
+
       invoiceLocales: ["en"],
       operationDescription: "Restaurant service",
     });
+    await seedVenueSettings(suite.db, { name: "Fixture location" });
     await suite.db.insert(nodes).values({
       id: verificationNode.nodeId,
       locationId: verificationNode.locationId,

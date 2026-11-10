@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "../test/sif-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -158,11 +159,11 @@ describe("currentSif resolves per node", () => {
       const [loc] = await tx
         .insert(locations)
         .values({
-          name: "Sala sib",
           invoiceLocales: ["es"],
           operationDescription: "Venta en establecimiento",
         })
         .returning({ id: locations.id });
+      await seedVenueSettings(tx, { name: "Sala sib" });
       const [nodeRow] = await tx
         .insert(nodes)
         .values({ locationId: loc!.id, name: "Node sib" })

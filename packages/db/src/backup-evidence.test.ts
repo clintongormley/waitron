@@ -223,7 +223,10 @@ describe("core backup source binding", () => {
         sql`insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`,
       );
       db.run(
-        sql`insert into locations (id, name, invoice_locales, operation_description) values ('venue', 'Fixture venue', '["en"]', 'Restaurant')`,
+        sql`insert into locations (id, invoice_locales, operation_description) values ('venue', '["en"]', 'Restaurant')`,
+      );
+      db.run(
+        sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
       );
       db.run(
         sql`insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,
@@ -306,7 +309,7 @@ describe("core backup source binding", () => {
     seed();
     for (const db of [before.db, after.db])
       db.run(
-        sql`insert into locations (id, name, invoice_locales, operation_description) values ('second-venue', 'Second venue', '["en"]', 'Restaurant')`,
+        sql`insert into locations (id, invoice_locales, operation_description) values ('second-venue', '["en"]', 'Restaurant')`,
       );
     expect(await verify()).toBe(false);
   });
@@ -669,7 +672,10 @@ describe("backup membership private/public identity", () => {
   function seed(key: string | null = publicKey) {
     for (const suite of [before, after]) {
       suite.db.run(
-        sql`insert into locations (id,name,invoice_locales,operation_description) values ('venue','Fixture venue','["en"]','Restaurant')`,
+        sql`insert into locations (id, invoice_locales, operation_description) values ('venue', '["en"]', 'Restaurant')`,
+      );
+      suite.db.run(
+        sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
       );
       suite.db.run(
         sql`insert into nodes (id,location_id,name,public_key,created_at) values ('source','venue','Source',${key},'2026-10-20T00:00:00Z')`,

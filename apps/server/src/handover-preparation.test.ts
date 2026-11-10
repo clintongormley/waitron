@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { Socket } from "node:net";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -161,11 +162,12 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
   await suite.db.insert(locations).values({
     id: venueId,
-    name: "Restaurant",
+
     invoiceLocales: ["en"],
     operationDescription: "Hospitality",
     timeZone: "Europe/Madrid",
   });
+  await seedVenueSettings(suite.db, { name: "Restaurant" });
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,

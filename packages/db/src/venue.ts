@@ -4,8 +4,40 @@ import "./errors.js";
 import type { Transaction } from "./client.js";
 import { locationDayCutoverChanges } from "./schema/business-day-clock.js";
 import { locations } from "./schema/tenants.js";
+import { settings } from "./schema/settings.js";
+import { decodeSettingsRow, readSettings, saveSettings, type SettingsRead } from "./settings.js";
+import { VENUE_SETTINGS, type VenueSettings } from "./venue-settings.js";
 
-/** The venue's settings, as stored. */
+function requireVenue(read: SettingsRead<VenueSettings>): SettingsRead<VenueSettings> {
+  if (read.revision === 0) throw new AppError("venue.not_found", {});
+  return read;
+}
+
+export async function readVenueSettings(tx: Transaction): Promise<SettingsRead<VenueSettings>> {
+  return requireVenue(await readSettings(tx, VENUE_SETTINGS));
+}
+
+export async function createVenueSettings(
+  tx: Transaction,
+  doc: VenueSettings,
+  personId: string | null,
+): Promise<void> {
+  await saveSettings(tx, VENUE_SETTINGS, { doc, expectedRevision: 0, personId });
+}
+
+export async function saveVenueFields(
+  tx: Transaction,
+  fields: Partial<VenueSettings>,
+  personId: string | null,
+): Promise<void> {
+  const current = await readVenueSettings(tx);
+  await saveSettings(tx, VENUE_SETTINGS, {
+    doc: { ...current.doc, ...fields },
+    expectedRevision: current.revision,
+    personId,
+  });
+}
+
 export interface Venue {
   name: string;
   invoiceLocales: string[];
@@ -32,15 +64,9 @@ async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> 
   const rows = await tx
     .select({
       id: locations.id,
-      name: locations.name,
       invoiceLocales: locations.invoiceLocales,
       operationDescription: locations.operationDescription,
       fiscalTerritory: locations.fiscalTerritory,
-      addressLine1: locations.addressLine1,
-      addressLine2: locations.addressLine2,
-      postalCode: locations.postalCode,
-      city: locations.city,
-      province: locations.province,
       timeZone: locations.timeZone,
       dayCutover: locations.dayCutover,
       defaultCatalogueId: locations.catalogueId,
@@ -48,7 +74,7 @@ async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> 
     .from(locations)
     .limit(2);
   const { id, ...venue } = theOneRow(rows);
-  return { id, venue };
+  return { id, venue: { ...venue, ...(await readVenueSettings(tx)).doc } };
 }
 
 function theOneRow<T>(rows: T[]): T {
@@ -83,12 +109,17 @@ export async function readVenueClockAndPlace(
       id: locations.id,
       timeZone: locations.timeZone,
       dayCutover: locations.dayCutover,
-      province: locations.province,
-      city: locations.city,
       effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
       changedCutover: locationDayCutoverChanges.dayCutover,
+      settings: {
+        module: settings.module,
+        version: settings.version,
+        revision: settings.revision,
+        doc: settings.doc,
+      },
     })
     .from(locations)
+    .leftJoin(settings, eq(settings.module, "venue"))
     .leftJoin(locationDayCutoverChanges, eq(locationDayCutoverChanges.locationId, locations.id))
     .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
   const venue = rows[0];
@@ -96,6 +127,7 @@ export async function readVenueClockAndPlace(
   if (rows.some((row) => row.id !== venue.id)) {
     throw new AppError("provisioning.second_venue", {});
   }
+  const place = requireVenue(decodeSettingsRow(venue.settings ?? undefined, VENUE_SETTINGS)).doc;
   return {
     clock: {
       timeZone: venue.timeZone,
@@ -111,7 +143,7 @@ export async function readVenueClockAndPlace(
             ],
       ),
     },
-    place: { province: venue.province, city: venue.city },
+    place: { province: place.province, city: place.city },
   };
 }
 
@@ -121,5 +153,5 @@ export async function readVenueClock(tx: Transaction): Promise<BusinessDayClock>
 
 /** Interim, until the schema stops keying rows by location: the one `locations` row's id. */
 export async function venueLocationId(tx: Transaction): Promise<string> {
-  return (await venueRow(tx)).id;
+  return theOneRow(await tx.select({ id: locations.id }).from(locations).limit(2)).id;
 }

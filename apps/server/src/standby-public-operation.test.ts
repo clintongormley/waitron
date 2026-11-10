@@ -1,3 +1,5 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +9,6 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   nodes,
   stampDeployment,
   venueLocationId,
@@ -104,7 +105,7 @@ beforeEach(async () => {
           collected.push(operation.binding.action);
           // A separate writer must finish before the operation opens its write transaction.
           await withTransaction(suite.db, (tx) =>
-            tx.update(locations).set({ name: "Source collected" }),
+            seedVenueSettings(tx, { name: "Source collected" }),
           );
           if (replaceKey) await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, TARGET);
           return run({ ...operation, input: { current: "independent" } });
@@ -124,7 +125,7 @@ beforeEach(async () => {
               operatorId: ADMIN,
             });
             expect(operation.input).toEqual({ current: "independent" });
-            expect((await tx.select().from(locations))[0]?.name).toBe("Source collected");
+            expect((await readVenue(tx)).name).toBe("Source collected");
             return { state: { identity: "P000042", eventId: "public-event", operatorId: ADMIN } };
           },
           async establish() {},

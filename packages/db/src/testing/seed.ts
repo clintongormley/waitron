@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -9,7 +9,36 @@ import { nodes } from "../schema/nodes.js";
 import { workingOrders } from "../schema/orders.js";
 import { locations } from "../schema/tenants.js";
 import { nowIso } from "../schema/columns.js";
-import { venueLocationId, type Venue } from "../venue.js";
+import { settings } from "../schema/settings.js";
+import type { VenueSettings } from "../venue-settings.js";
+
+export async function seedVenueSettings(
+  db: Database | Transaction,
+  overrides: Partial<VenueSettings> = {},
+): Promise<void> {
+  const [row] = await db
+    .select({ module: settings.module })
+    .from(settings)
+    .where(eq(settings.module, "venue"));
+  if (row === undefined) {
+    await createVenueSettings(
+      db,
+      {
+        name: "Test venue",
+        addressLine1: null,
+        addressLine2: null,
+        postalCode: null,
+        city: null,
+        province: null,
+        ...overrides,
+      },
+      null,
+    );
+  } else {
+    await saveVenueFields(db, overrides, null);
+  }
+}
+import { createVenueSettings, saveVenueFields, venueLocationId, type Venue } from "../venue.js";
 
 // The taxpayer row is a singleton keyed on id = 1, so a suite has at most one NIF in play and a
 // second seed is a no-op. The counter survives because other fixtures still mint their own NIFs for
@@ -44,14 +73,33 @@ export async function seedVenue(
   const [existing] = await db.select({ id: locations.id }).from(locations).limit(1);
   if (existing) throw new Error(`seedVenue: a venue row already exists (${existing.id})`);
   await seedTenant(db);
-  const { defaultCatalogueId, ...columns } = overrides;
+  const {
+    defaultCatalogueId,
+    name,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    province,
+    ...columns
+  } = overrides;
   await db.insert(locations).values({
-    name: "Test venue",
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     ...columns,
     ...(defaultCatalogueId === undefined ? {} : { catalogueId: defaultCatalogueId }),
   });
+  const doc: Partial<VenueSettings> = {};
+  for (const [key, value] of Object.entries({
+    name,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    province,
+  }))
+    if (value !== undefined) Object.assign(doc, { [key]: value });
+  await seedVenueSettings(db, doc);
 }
 
 /** Seeds one node and returns its id: at the venue unless `location` is given. */

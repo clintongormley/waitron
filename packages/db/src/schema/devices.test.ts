@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -42,10 +43,11 @@ describe("devices schema (columns, FKs, unique)", () => {
     LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_B,
-      name: "Loc B",
+
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    await seedVenueSettings(db, { name: "Loc B" });
     await db.insert(deviceProfiles).values([
       { id: KDS_PROFILE_A, name: "KDS A", formFactor: "kds" },
       { id: KDS_PROFILE_B, name: "KDS B", formFactor: "kds" },

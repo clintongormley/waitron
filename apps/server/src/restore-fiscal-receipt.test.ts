@@ -18,7 +18,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import { restoreDatabase } from "./restore.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
 
 const LEDGER_TABLE = "registros_facturacion";
 
@@ -43,10 +43,11 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await db.insert(locations).values({
     id: F.locationId,
-    name: "Local principal",
+
     invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
+  await seedVenueSettings(db, { name: "Local principal" });
   await seedDevice(db, { locationId: F.locationId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: F.seriesId, nodeId: F.nodeId, code: "A" });

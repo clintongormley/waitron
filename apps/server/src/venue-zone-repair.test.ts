@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -307,10 +308,7 @@ describe("atomic unusable-zone confirmation", () => {
     ).toEqual([]);
   });
   it("uses the country area's normalized code for the suggestion only", async () => {
-    await suite.db
-      .update(locations)
-      .set({ province: " 35 " })
-      .where(eq(locations.id, scope.locationId));
+    await seedVenueSettings(suite.db, { province: " 35 " });
     expect(await read()).toMatchObject({ suggestion: "Atlantic/Canary", eligible: true });
     expect((await suite.db.select().from(locations))[0]!.timeZone).toBe(RAW);
   });
@@ -332,10 +330,7 @@ describe("atomic unusable-zone confirmation", () => {
   });
   it("offers the pack's default when no province was saved without silently saving it", async () => {
     await suite.db.execute(sql`update tenants set country = 'GB'`);
-    await suite.db
-      .update(locations)
-      .set({ province: null })
-      .where(eq(locations.id, scope.locationId));
+    await seedVenueSettings(suite.db, { province: null });
     const before = snapshot();
     expect(await read()).toMatchObject({
       province: null,

@@ -1,12 +1,7 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  locations,
-  withTransaction,
-  type Transaction,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction, venueLocationId } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -517,7 +512,7 @@ describe("attendance_question queue owner", () => {
   );
   it("sends a reminder naming the venue without being told a location", async () => {
     await seedMissing();
-    await suite.db.update(locations).set({ name: "Sevilla" }).where(eq(locations.id, locationId));
+    await seedVenueSettings(suite.db, { name: "Sevilla" });
     expect(await pass()).toMatchObject({ processed: true });
     expect(send).toHaveBeenCalledOnce();
     expect(sent()[0]).toMatchObject(

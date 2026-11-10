@@ -1,3 +1,5 @@
+import { readVenue } from "@waitron/db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -65,11 +67,11 @@ describe("economic transaction admission", () => {
         withTransaction(suite.db, async (tx) => {
           await requireEconomicWrite(tx, scope, admission);
           write();
-          await tx.update(locations).set({ name: "Changed" });
+          await seedVenueSettings(tx, { name: "Changed" });
         }),
       ).rejects.toMatchObject({ code: "venue.time_zone_not_ready", params: { reason } });
       expect(write).not.toHaveBeenCalled();
-      expect((await suite.db.select().from(locations))[0]!.name).toBe("Test venue");
+      expect((await readVenue(suite.db)).name).toBe("Test venue");
     },
   );
   it.each([
@@ -93,8 +95,8 @@ describe("economic transaction admission", () => {
     admission.admit();
     await withTransaction(suite.db, async (tx) => {
       await requireEconomicWrite(tx, scope, admission);
-      await tx.update(locations).set({ name: "Changed" });
+      await seedVenueSettings(tx, { name: "Changed" });
     });
-    expect((await suite.db.select().from(locations))[0]!.name).toBe("Changed");
+    expect((await readVenue(suite.db)).name).toBe("Changed");
   });
 });

@@ -146,7 +146,9 @@ it.each([false, true])(
         },
       ]);
       expect(
-        store.venue.all(sql`select operation_description, address_line1 from locations`),
+        store.venue.all(
+          sql`select operation_description, json_extract(settings.doc, '$.addressLine1') as address_line1 from locations cross join settings on settings.module = 'venue'`,
+        ),
       ).toEqual([{ operation_description: "Test sale", address_line1: "1 Main Street" }]);
       expect(store.venue.all(sql`select environment from deployment`)).toEqual([
         { environment: "preproduction" },

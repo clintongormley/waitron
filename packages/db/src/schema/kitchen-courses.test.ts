@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -33,10 +34,11 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_A2,
-      name: "Loc A2",
+
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
+    await seedVenueSettings(db, { name: "Loc A2" });
     courseA = await seedCourse(LOCATION_A, "Starters");
     const [cat] = await db
       .insert(catalogues)

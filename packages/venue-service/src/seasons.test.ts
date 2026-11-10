@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -117,7 +118,11 @@ describe("ensureDefaultSeasons", () => {
       operationDescription: "Hospitality",
     };
     if (tenant) await seedVenue(db, venue);
-    else await db.insert(locations).values(venue);
+    else {
+      const { name, province, ...columns } = venue;
+      await db.insert(locations).values(columns);
+      await seedVenueSettings(db, { name, province });
+    }
     const venueId = await venueLocationId(db);
     return venueId;
   };
