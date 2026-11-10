@@ -364,11 +364,11 @@ it("widens the chosen filter when a category is added beneath it", async () => {
   });
   await filterBy(el, "c-drinks");
   expect(listed(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
-  el.categories = [...categories, category("c-cider", "Cider", "c-drinks")];
+  el.categories = [...categories, category("c-cider", "Ciders", "c-drinks")];
   await el.updateComplete;
   expect(listed(el)).toEqual(["p-cider", "p-ipa", "p-lager", "p-lemonade"]);
   expect(categoryBox(el).options.find((option) => option.value === "c-cider")!.label).toBe(
-    "Drinks › Cider",
+    "Drinks › Ciders",
   );
 });
 

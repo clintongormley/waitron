@@ -51,7 +51,7 @@ for (const locale of ["en", "es"] as const) {
           {
             kind: "printer",
             itemId: "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b",
-            name: "Impresora de terraza",
+            name: "Terrace printer",
           },
           theme,
         );

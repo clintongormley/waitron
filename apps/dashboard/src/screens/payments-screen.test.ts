@@ -1877,7 +1877,7 @@ describe("the readers table at phone width", () => {
     {
       id: "r-2",
       provider: "acme",
-      name: "Terminal-de-la-barra-de-la-terraza-junto-a-la-puerta",
+      name: "Terminal-at-the-terrace-bar-beside-the-exterior-door",
       active: true,
       canEnable: true,
       printsOwnSlipAutomatically: false,
