@@ -6,7 +6,7 @@ import { mkdirDurable, syncFolderHolding, writeFileDurable } from "./fs-atomic.j
 import { withRecoveryLock } from "./recovery-lock.js";
 import { reissueServerLeaf } from "./self-signed-cert.js";
 
-const INSTALLED = ["ca.crt", "ca.key", "server.crt", "server.key"] as const;
+const INSTALLED = ["ca.key", "ca.crt", "server.key", "server.crt"] as const;
 
 const workingName = (name: string) => `${name}.install`;
 

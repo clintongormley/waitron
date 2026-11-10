@@ -190,6 +190,10 @@ describe("installVenueAuthority", () => {
       events.indexOf(`rename ${join(tls, `${name}.install`)} ${join(tls, name)}`),
     );
     for (const moved of moves) expect(moved).toBeGreaterThan(listWritten);
+    const moveOrder = events
+      .filter((event) => event.startsWith(`rename ${tls}/`) && event.includes(".install "))
+      .map((event) => event.split(" ")[2]!.slice(tls.length + 1));
+    expect(moveOrder).toEqual(["ca.key", "ca.crt", "server.key", "server.crt"]);
     // One sync before the list is removed and one after it.
     const syncsAfterMoves = events
       .slice(Math.max(...moves))
