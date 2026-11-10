@@ -41,3 +41,5 @@ Both cuts update S/guide/{en,es}/{table-service,kitchen-service}.md, docs/develo
 | 4 | 235/25 | 260/20 | 0/0 | 0/0 | 15/5 | 560 / 840 |
 
 Each independently usable PR has three hours; report changed-test results and ask the watcher before 1.5× growth or a material deviation. The revised total is 1,005 lines, 90 fewer than the reviewed proposal. Exclude durable intent, boot recovery, new protocol/journal/deadline, native print controls, compatibility, fiscal calls and chooser/email work. Physical printer/reader qualification remains unverified; no product tests were run for this plan.
+
+**Publication update, 10 November 20:15:** watcher reports #2736 landed at `4189506dc2` and releases cut 3 for rebase and publication. The earlier publication dependency is met; cut 4 still follows cut 3.
