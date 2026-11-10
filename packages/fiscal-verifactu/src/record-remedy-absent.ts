@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { readTenant, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -8,6 +8,7 @@ import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { recordCaseEvent } from "./filing-cases.js";
 import { admitRecordRemedy, isInHistory, type RemedyKind } from "./record-remedy.js";
+import type { RegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
@@ -111,16 +112,14 @@ export async function applyAbsentOriginalCancellation(
   ) {
     throw new AppError("fiscal.remedy_invalid", { registroId });
   }
-  const [issued] = await tx
-    .select({ source: registrosFacturacion.source, deviceId: registrosFacturacion.deviceId })
-    .from(registrosFacturacion)
-    .where(
-      and(
-        eq(registrosFacturacion.saleId, target.saleId),
-        eq(registrosFacturacion.tipoRegistro, "alta"),
-        isNull(registrosFacturacion.correctsRegistroId),
-      ),
-    );
+  const {
+    rows: [issued],
+  } = await tx.execute<Pick<RegistroRow, "source" | "device_id">>(sql`
+    select source, device_id
+    from registros_facturacion indexed by registros_sale_idx
+    where sale_id = ${target.saleId} and tipo_registro = 'alta'
+      and corrects_registro_id is null
+  `);
   if (issued === undefined) throw new AppError("fiscal.remedy_invalid", { registroId });
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
@@ -133,7 +132,7 @@ export async function applyAbsentOriginalCancellation(
     {
       tipo: "anulacion",
       saleId: saleId(target.saleId),
-      origin: readSaleOrigin(issued.source, issued.deviceId),
+      origin: readSaleOrigin(issued.source, issued.device_id),
       entorno: generation.environment,
       nombreRazonEmisor: target.nombreRazonEmisor,
       input: {

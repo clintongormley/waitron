@@ -390,7 +390,7 @@ export class VerifactuBackend implements FiscalBackend {
   async filedReceiptFor(tx: Transaction, saleId: SaleId): Promise<FiledReceipt | undefined> {
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
       select *
-      from registros_facturacion
+      from registros_facturacion indexed by registros_sale_idx
       where sale_id = ${saleId} and tipo_registro = 'alta'
         and corrects_registro_id is null
       limit 1
@@ -440,7 +440,7 @@ export class VerifactuBackend implements FiscalBackend {
     const { rows } = await tx.execute<OriginalAlta>(sql`
       select source, device_id, id_emisor_factura, num_serie_factura,
         fecha_expedicion_factura
-      from registros_facturacion
+      from registros_facturacion indexed by registros_sale_idx
       where sale_id = ${saleId} and tipo_registro = 'alta'
         and corrects_registro_id is null
       limit 1

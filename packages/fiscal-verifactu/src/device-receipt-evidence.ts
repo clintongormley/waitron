@@ -11,7 +11,7 @@ export async function readDeviceReceiptEvidence(
     select id_emisor_factura as taxpayerId, entorno as environment,
       num_serie_factura as invoiceNumber, fecha_expedicion_factura as issuedDate,
       huella as recordEvidence
-    from registros_facturacion
+    from registros_facturacion indexed by registros_sale_idx
     where sale_id = ${saleId} and tipo_registro = 'alta'
       and corrects_registro_id is null and entorno is not null
     limit 1
