@@ -7957,6 +7957,8 @@ export interface QueueModifier {
   perDish?: number;
   /** A measured extra's amount on each dish, in its unit. */
   amount?: string;
+  /** The measured extra's unit abbreviation by language, sent with `amount`. */
+  unitName?: Record<string, string>;
   /** The extra's OWN allergens, shown beside the dish's own, never folded into them. */
   addAllergens?: ProductAllergens | null;
 
@@ -8164,7 +8166,7 @@ async function readQueueSubItems(
       descriptions: child.descriptions,
       ...(child.unitName == null || counted.has(child.id)
         ? { perDish: perDishOptionQuantity(quantity, dishes) }
-        : { amount: divideDecimal(quantity, dishes, QUANTITY_SCALE) }),
+        : { amount: divideDecimal(quantity, dishes, QUANTITY_SCALE), unitName: child.unitName }),
       addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
       suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
     });

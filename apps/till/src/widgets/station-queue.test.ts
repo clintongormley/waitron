@@ -4971,6 +4971,27 @@ describe("A803 portion grouping: the station queue", () => {
     ).toEqual(["+ Queso", "+ Queso x2"]);
   });
 
+  it("A1202 draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        order([
+          portion("p1", {
+            modifiers: [
+              { descriptions: { "es-ES": "Jamón" }, amount: "150.000", unitName: { "es-ES": "g" } },
+              { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+            ],
+          }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-item] .modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Jamón 150 g", "+ Queso 0.250 kg"]);
+  });
+
   it("A803 portion grouping: a portion in another state shows apart", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order([portion("p1"), portion("p2", { state: "preparing" })])],

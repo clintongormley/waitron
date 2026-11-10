@@ -3,9 +3,17 @@ import type { TemplateResult } from "lit";
 import type { QueueCrossRef } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { extraNutrition } from "./diet-badges.js";
+import { snapshotDescriptionFor } from "./dish-format.js";
 
-/** An extra's count per dish as the kitchen reads it, " x2", or nothing for one. */
-export function extraCount(extra: { perDish?: number }): string {
+/** An extra's amount per dish as the kitchen ticket prints it: " 150 g", " 0.250 kg", " x2", or
+ *  nothing for one. */
+export function extraCount(extra: {
+  perDish?: number;
+  amount?: string;
+  unitName?: Record<string, string>;
+}): string {
+  if (extra.amount !== undefined && extra.unitName !== undefined)
+    return ` ${extra.amount.replace(/\.0+$/, "")} ${snapshotDescriptionFor(extra.unitName, "")}`;
   return extra.perDish !== undefined && extra.perDish > 1 ? ` x${extra.perDish}` : "";
 }
 
@@ -23,9 +31,9 @@ export function queueCrossRefs(
           : ref.stationName === null
             ? "station.crossref_for_no_prep"
             : "station.crossref_for";
-      const wording = t(key)
-        .replace("{name}", name)
-        .replace("{station}", ref.stationName ?? "");
+      const wording = t(key).replace(/\{(name|station)\}/g, (_, placeholder: string) =>
+        placeholder === "name" ? name : (ref.stationName ?? ""),
+      );
       return html`<span class="crossref" data-crossref
         >${wording}${
           ref.kind === "with"

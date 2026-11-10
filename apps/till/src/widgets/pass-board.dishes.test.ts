@@ -87,6 +87,42 @@ describe("A773 pass board widget: dishes", () => {
     expect(item.innerHTML.indexOf("Cortado")).toBeLessThan(item.innerHTML.indexOf("Kitchen large"));
   });
 
+  it("A1202 draws a measured extra with its amount and unit, as the paper ticket prints it", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "toast",
+        modifiers: [
+          {
+            descriptions: { "es-ES": "Jamón" },
+            amount: "150.000",
+            unitName: { "en-GB": "gr", "es-ES": "g" },
+          },
+          { descriptions: { "es-ES": "Queso" }, amount: "0.250", unitName: { "es-ES": "kg" } },
+        ],
+      }),
+    ]);
+    expect(
+      [...itemOf(el, "toast").querySelectorAll(".modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Jamón 150 gr", "+ Queso 0.250 kg"]);
+  });
+
+  it.each(["Tea $& $' $`", "Tea {station}"])(
+    "A1006 shows a dish and station named %s exactly as typed in a cross-reference",
+    async (name) => {
+      const el = await inProgress([
+        passItem({
+          id: "with",
+          crossRefs: [{ kind: "with", name, stationName: `Bar ${name}` }],
+        }),
+      ]);
+      expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+        `with ${name} from Bar ${name}`,
+      );
+    },
+  );
+
   it("draws no option sub-text on a dish with none", async () => {
     const el = await inProgress([passItem()]);
     expect(el.shadowRoot!.querySelectorAll(".item-modifiers")).toHaveLength(0);
@@ -178,6 +214,24 @@ describe("A773 pass board widget: dishes", () => {
       setLocale("es-ES");
     });
     afterEach(() => setLocale(previous));
+
+    it("A1202 draws a measured extra's unit in Spanish", async () => {
+      const el = await inProgress([
+        passItem({
+          id: "toast",
+          modifiers: [
+            {
+              descriptions: { "es-ES": "Jamón" },
+              amount: "150.000",
+              unitName: { "en-GB": "gr", "es-ES": "g" },
+            },
+          ],
+        }),
+      ]);
+      expect(itemOf(el, "toast").querySelector(".modifier")!.textContent!.trim()).toBe(
+        "+ Jamón 150 g",
+      );
+    });
 
     it("words extras made at another station in Spanish", async () => {
       const el = await inProgress([

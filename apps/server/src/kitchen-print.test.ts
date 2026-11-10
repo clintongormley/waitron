@@ -50,7 +50,14 @@ import {
   updateCourse,
   updateStation,
 } from "./kitchen.js";
-import { createOpenOrder, fireOrderLines, fireLines, listStationQueue } from "./working-order.js";
+import {
+  createOpenOrder,
+  fireOrderLines,
+  fireLines,
+  listStationQueue,
+  readPassRows,
+  type QueueModifier,
+} from "./working-order.js";
 import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/venue-service";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -1531,6 +1538,61 @@ describe("dish extras on kitchen tickets", () => {
       [{ perDish: undefined, amount: "50.000" }],
       [{ perDish: undefined, amount: "150.000" }],
     ]);
+  });
+
+  it("gives the station queue and the pass a measured extra's unit, and an Each extra none", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { queue, pass } = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, { name: "Kitchen", isDefault: true });
+      const dish = await makeProduct(tx, catalogueId, "Toast", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Cheese", customerName: "Mature cheddar", kitchenName: "CHEESE", maxQuantity: 2 },
+        { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
+      ]);
+      const [cheese, ham] = productIds as [string, string];
+      const [gram] = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "gramo" },
+          abbreviation: { es: "g" },
+          precision: 0,
+          hardwareUnit: "g",
+        })
+        .returning({ id: units.id });
+      await assignProductUnit(tx, ham, gram!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50000, max_quantity = 3
+        where list_id = ${listId} and product_id = ${ham}`);
+      const orderId = await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "1",
+          extras: [
+            {
+              listId,
+              picks: [
+                { productId: cheese, quantity: 2 },
+                { productId: ham, quantity: 3 },
+              ],
+            },
+          ],
+        },
+      ]);
+      return {
+        queue: (await listStationQueue(tx, station.id)).flatMap((group) => group.items),
+        pass: await readPassRows(tx, sql`${workingOrders.id} = ${orderId}`, Date.now()),
+      };
+    });
+
+    const shape = (modifiers: QueueModifier[]) =>
+      modifiers.map(({ perDish, amount, unitName }) => ({ perDish, amount, unitName }));
+    const expected = [
+      { perDish: 2, amount: undefined, unitName: undefined },
+      { perDish: undefined, amount: "150.000", unitName: { es: "g" } },
+    ];
+    expect(queue.map((item) => shape(item.modifiers))).toEqual([expected]);
+    expect(pass.map((row) => shape(row.item.modifiers))).toEqual([expected]);
   });
 
   it.each(["grouped", "portions"] as const)(
