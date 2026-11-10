@@ -1879,23 +1879,57 @@ describe("waitron.sh reset", () => {
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
 
-  /** Runs the reset's state clean-up over a state folder whose tls/ holds `tlsFiles`. */
-  function resetStateWith(tlsFiles) {
-    const match = readFileSync(SCRIPT, "utf8").match(
-      /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
-    );
-    expect(match).not.toBeNull();
+  /** A state folder whose tls/ holds `tlsFiles`, beside the box's key ring. */
+  function stateWith(tlsFiles) {
     const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
     dirs.push(state);
     mkdirSync(join(state, "tls"));
     for (const name of tlsFiles) writeFileSync(join(state, "tls", name), name);
     writeFileSync(join(state, "secrets.env"), "WAITRON_CREDENTIALS_KEY=x\n");
-    const r = spawnSync("sh", ["-c", match[1]], {
+    return state;
+  }
+
+  /**
+   * Runs the reset's state clean-up over `state`. With `blocked`, a stand-in `rm` removes every
+   * path it is handed but the one ending in `/<blocked>`, then fails, as a power cut part-way would.
+   */
+  function cleanUp(state, blocked) {
+    const match = readFileSync(SCRIPT, "utf8").match(
+      /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
+    );
+    expect(match).not.toBeNull();
+    let path = process.env.PATH;
+    if (blocked !== undefined) {
+      const realRm = spawnSync("sh", ["-c", "command -v rm"], { encoding: "utf8" }).stdout.trim();
+      const bin = mkdtempSync(join(tmpdir(), "waitron-sh-rm-"));
+      dirs.push(bin);
+      writeFileSync(
+        join(bin, "rm"),
+        [
+          "#!/bin/sh",
+          "flags=; met=0",
+          'for a in "$@"; do case "$a" in -*) flags="$flags $a" ;; esac; done',
+          'for a in "$@"; do',
+          '  case "$a" in -*) continue ;; */"$BLOCKED") met=1; continue ;; esac',
+          `  ${realRm} $flags "$a" || exit 1`,
+          "done",
+          '[ "$met" -eq 0 ]',
+          "",
+        ].join("\n"),
+      );
+      chmodSync(join(bin, "rm"), 0o755);
+      path = `${bin}${delimiter}${path}`;
+    }
+    return spawnSync("sh", ["-c", match[1]], {
       encoding: "utf8",
-      env: { PATH: process.env.PATH, WAITRON_STATE_DIR: state },
+      env: { PATH: path, WAITRON_STATE_DIR: state, BLOCKED: blocked ?? "" },
       timeout: 10_000,
-    });
-    expect(r.status).toBe(0);
+    }).status;
+  }
+
+  function resetStateWith(tlsFiles) {
+    const state = stateWith(tlsFiles);
+    expect(cleanUp(state)).toBe(0);
     return state;
   }
 
@@ -1910,6 +1944,15 @@ describe("waitron.sh reset", () => {
       "joined.json",
     ]);
     expect(readdirSync(state)).toEqual(["tls"]);
+    expect(readdirSync(join(state, "tls"))).toEqual([]);
+  });
+
+  it("a reset of a box that joined, cut short in tls/, keeps its joined record, so the next reset empties tls/", () => {
+    const state = stateWith(["ca.crt", "ca.key", "server.crt", "server.key", "joined.json"]);
+    expect(cleanUp(state, "server.key")).not.toBe(0);
+    expect(readdirSync(join(state, "tls")).sort()).toEqual(["joined.json", "server.key"]);
+
+    expect(cleanUp(state)).toBe(0);
     expect(readdirSync(join(state, "tls"))).toEqual([]);
   });
 
