@@ -131,10 +131,6 @@ Vitest 4.1.11 reads it.
 
 ## What the landing-port fix (A80, PR #740) left open
 
-`freePorts(n)` (`apps/server/src/testing/free-ports.ts`) holds every probe until the last
-port is drawn, then releases them. A different worker can take a released port before its
-intended server binds. The normal `WAITRON_HTTP_PORT` parser refuses `"0"`.
-
 The remaining work includes in-process setup/recovery suites outside the migrated `boot*`
 siblings, such as `setup-tool-download.boot.test.ts`.
 Audit each case's origin and listener-release assertions before choosing the bind-time fixture.
@@ -153,8 +149,6 @@ to that listener's address. `boot.failed-start.test.ts` retains its configured-p
 checks. Explicit configured-port, tunnel-target, advertised-origin and paired landing-listener
 cases retain the configured binding, including an unused peer drawn alongside the HTTP port. A907's
 existing clock-listener fixture already selects at bind time. None changes production validation.
-
-9 November 2026: [PR #2666, CI 42692866626](https://github.com/clintongormley/waitron/actions/runs/42692866626/job/129417436629), server shard 11, hit `EADDRINUSE` at `127.0.0.1:40845` in `boot.failed-start.test.ts`'s “handles the staff entrance while waiting”; its later local pass is not a repair.
 
 7 November 2026: A951-S removes the retired TCP relay's tunnel-target case. The remaining
 configured-binding checks above still apply.

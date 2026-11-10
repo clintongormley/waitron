@@ -433,25 +433,26 @@ failure above took. The rule was briefly pruned from `CLAUDE.md` §4 on 2026-09-
 no PACKAGE fixture binds a port — true, and narrower than "the tree" — and restored with that hedge
 the same day; moved here 2026-10-07.
 
-## Draw every port a test needs in one `freePorts(n)` call, before binding any of them.
+## `freePorts(n)` draws from below the automatic port range, in a slice per test worker.
 
-A suite that needs a released configured port picks it by binding port 0, reading the number the system
-chose, and releasing it, because `WAITRON_HTTP_PORT` refuses `"0"`. Drawing two ports that way one after the
-other can return the same number twice on Linux, and did in CI run 36317643554: the boot's HTTPS
-server took port 40141 and its landing listener was then refused `EADDRINUSE` on 40141 in the same
-start. Measured 2026-09-27 in `node:24-slim` (Node v24.21.0, kernel 6.12): 9 repeats in 50,000
-pairs drawn one after the other, 0 with both probes held until both were drawn; macOS (Node
-v26.7.0) repeated 0 times in 20,000 pairs, so local runs did not show it. `freePorts(n)` in
-`apps/server/src/testing/free-ports.ts` holds every probe until the last port is drawn, which rules
-out a repeat within one call. It does not cover a port another worker takes between the release and
-the test's own bind, nor a port drawn to stay unused (an "unreachable peer") that another worker
-later binds. Nor does it know about rows an earlier test left naming a port
-([below](#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered)).
-Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
-server is the one caller that recovers from a port taken in that gap, because versitygw exits when
-its port is already bound and so can be started again on another (the stream loop test's section
-below, "The S3 test server knows its own server"). A Waitron server using its configured port is not retried:
-a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
+A suite that needs a released configured port takes it from `freePorts(n)` in
+`apps/server/src/testing/free-ports.ts`, because `WAITRON_HTTP_PORT` refuses `"0"`. The helper used
+to bind port 0 and release what the system chose, so its ports came from the range every port-0 bind
+and outgoing connection draws from, and another Vitest worker took one before the test bound it
+(`EADDRINUSE` in `boot.failed-start.test.ts`, CI runs 42692866626 and 42736079093). It now draws
+from 20000–32499, below Linux's default automatic range (32768–60999) and macOS's (49152–65535),
+and each worker walks its own slice of 500 ports chosen by `VITEST_POOL_ID` modulo 25, skipping any
+port already in use. Successive calls in one process return different ports until the slice wraps.
+
+Limits: two separate Vitest runs on one machine share slice numbers, so a port can still be taken
+between the check and the test's bind; a port drawn to stay unused (an "unreachable peer") is free
+until something binds it; and the helper does not know about rows an earlier test left naming a
+port ([below](#a-drawn-port-can-be-one-an-earlier-test-in-the-same-database-already-registered)).
+Nothing checks that a new suite uses the helper rather than its own copy. The S3 test server
+recovers from a taken port, because versitygw exits when its port is already bound and so can be
+started again on another (the stream loop test's section below, "The S3 test server knows its own
+server"). A Waitron server using its configured port is not retried: a taken HTTP port is
+`server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
 
 ### Keep a process fixture’s socket bound through handoff
 
