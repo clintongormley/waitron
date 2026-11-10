@@ -859,10 +859,7 @@ export type LandingListenerConfig = Pick<
 > & { connection?: import("./connection-bootstrap.js").ConnectionBootstrapDeps };
 
 /** A spare's landing pages are for its own screen only. */
-function landingHostFor<T extends Pick<ServerConfig, "httpHost">>(
-  config: T,
-  { spare }: { spare: boolean },
-): T {
+function landingHostFor(config: LandingListenerConfig, spare: boolean): LandingListenerConfig {
   return spare ? { ...config, httpHost: "127.0.0.1" } : config;
 }
 
@@ -1798,7 +1795,7 @@ async function bootServer(
         closePools: () => store.close(),
       },
       mdns,
-      startLandingListener(landingHostFor(config, { spare: true }), log),
+      startLandingListener(landingHostFor(config, true), log),
     );
   }
 
@@ -2326,7 +2323,7 @@ async function bootServer(
         closePools: () => store.close(),
       },
       { stop: () => Promise.resolve() },
-      startLandingListener(landingHostFor(config, { spare: isMirror }), log),
+      startLandingListener(landingHostFor(config, isMirror), log),
     );
   }
   tradingAdmission.admit();
@@ -4136,7 +4133,7 @@ async function bootServer(
       closePools: () => store.close(),
     },
     mdns,
-    startLandingListener(landingHostFor(config, { spare: isMirror }), log),
+    startLandingListener(landingHostFor(config, isMirror), log),
     // Decided once at boot: a box exposes one in-process promote, never both.
     isMirror
       ? { kind: "mirror" as const, run: promoteMirrorRun }
