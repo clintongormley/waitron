@@ -25,12 +25,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import {
-  MAX_DELIVERY_ATTEMPTS,
-  PRINTER_DELETED,
-  deactivatePrinter,
-  updatePrinter,
-} from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED, createPrinter } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -43,7 +38,6 @@ import {
 } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
-import { endDeactivatedInvoicePrintDeliveries } from "./invoice-print.js";
 import { resolveDevicePrinterId } from "@waitron/layouts";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 import { deleteDevice } from "./device-delete.js";
@@ -640,10 +634,18 @@ describe("deleting a printer", () => {
     expect(await snapshot()).toEqual(afterDelete(before, v.P, LIVE(v), NOW));
   });
 
-  it("clears every matching choice and link, including an inactive device's, and promotes no other default", async () => {
+  it("keeps every cleared choice and link empty after Add, including an inactive device's, without promoting a default", async () => {
     const v = await seedVenueWithPrinters();
 
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
+    const restored = await withTransaction(suite.db, (tx) =>
+      createPrinter(tx, {
+        name: "Scanned printer",
+        transport: "network_tcp",
+        host: "counter-printer.test",
+      }),
+    );
+    expect(restored.id).toBe(v.P);
 
     const choices = await suite.db
       .select({
@@ -852,37 +854,5 @@ describe("deleting a printer", () => {
       removeChangeFeed(suite.db);
       await suite.db.execute(sql`delete from change_log`);
     }
-  });
-
-  it("is unlike Disable, which keeps ordinary waiting jobs, settings and holder, and can be undone by Enable", async () => {
-    const v = await seedVenueWithPrinters();
-    const before = await snapshot();
-
-    // What the deactivate route runs.
-    await withTransaction(suite.db, async (tx) => {
-      await deactivatePrinter(tx, v.P);
-      await endDeactivatedInvoicePrintDeliveries(tx, v.P, NOW);
-    });
-    const after = await snapshot();
-    for (const table of [
-      "devices",
-      "device_profile_printers",
-      "station_printers",
-      "printer_holders",
-    ]) {
-      expect(after[table], table).toEqual(before[table]);
-    }
-    for (const id of [v.jobs.retryable, v.jobs.drawer]) {
-      expect(after.print_jobs!.find((row) => row.id === id)).toEqual(
-        before.print_jobs!.find((row) => row.id === id),
-      );
-    }
-
-    await withTransaction(suite.db, (tx) => updatePrinter(tx, v.P, { active: true }));
-    const [row] = await suite.db
-      .select({ active: printers.active, deletedAt: printers.deletedAt })
-      .from(printers)
-      .where(eq(printers.id, v.P));
-    expect(row).toEqual({ active: true, deletedAt: null });
   });
 });

@@ -25,11 +25,10 @@ import {
 } from "@waitron/catalogue";
 import {
   createPrinter,
-  deactivatePrinter,
+  updatePrinter,
   enqueuePrintJob,
   MAX_DELIVERY_ATTEMPTS,
   resendPrintJob,
-  updatePrinter,
 } from "@waitron/printing";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -1255,7 +1254,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
 
-    await inTx((tx) => deactivatePrinter(tx, v.kitchenPrinterId));
+    await inTx((tx) => updatePrinter(tx, v.kitchenPrinterId, { active: false }));
 
     const problem = {
       workingOrderId: table4.tabId,

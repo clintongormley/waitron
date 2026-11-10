@@ -224,7 +224,7 @@ describe("a deleted printer's late work", () => {
     expect((await rows([liveJob]))[liveJob]).toMatchObject({ status: "done", claimedBy: agent });
   });
 
-  it("hands out only the new registration's jobs once the same device key is added again, and an old report touches neither", async () => {
+  it("hands out only new jobs after Add restores a registration, and an old report touches neither", async () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
     const oldPrinter = await printer();
@@ -232,7 +232,7 @@ describe("a deleted printer's late work", () => {
     await withTransaction(suite.db, (tx) => claimPrintJobs(tx, agent, { visibleKeys: [USB_KEY] }));
     await deletePrinterRow(oldPrinter);
     const newPrinter = await printer();
-    expect(newPrinter).not.toBe(oldPrinter);
+    expect(newPrinter).toBe(oldPrinter);
     const newJob = await job(newPrinter);
 
     const pulled = await withTransaction(suite.db, (tx) =>
@@ -283,10 +283,13 @@ describe("a deleted printer's late work", () => {
         payload: new Uint8Array([0x41]),
       })
       .returning({ id: printJobs.id });
-    const newPrinter = await printer(MAC, "bluetooth");
+    const [live] = await suite.db
+      .insert(printers)
+      .values({ locationId: cfg.locationId, name: "Live", transport: "bluetooth", localKey: MAC })
+      .returning({ id: printers.id });
     const before = await rows([seeded!.id]);
 
-    const unpaired = await job(newPrinter);
+    const unpaired = await job(live!.id);
     expect(
       await withTransaction(suite.db, (tx) => endUnpairedPrinterJobs(tx, agent, [MAC])),
     ).toEqual([unpaired]);

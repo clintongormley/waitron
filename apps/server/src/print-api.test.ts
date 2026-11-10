@@ -1665,7 +1665,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     });
   });
 
-  it("creates, lists, updates and deactivates a printer", async () => {
+  it("creates, lists and updates a printer without public on/off controls", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId, "Kitchen printer");
@@ -1702,14 +1702,18 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const deactivate = await send(app, "POST", `/management-api/printers/${printerId}/deactivate`, {
       cookie: managerCookie,
     });
-    expect(deactivate.status).toBe(204);
-    const afterDeactivate = await send(app, "GET", "/management-api/printers", {
+    expect(deactivate.status).toBe(404);
+    const activation = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
+      body: { active: false },
     });
-    const off = ((await afterDeactivate.json()) as { id: string; active: boolean }[]).find(
-      (r) => r.id === printerId,
-    )!;
-    expect(off.active).toBe(false);
+    expect(activation.status).toBe(400);
+    expect(await activation.json()).toMatchObject({
+      error: {
+        code: "management.request_invalid",
+        params: { field: "active" },
+      },
+    });
   });
 
   it("creates each transport's shape (usb keyed on local_key, cloud_poll with poll_id, tcp with explicit port)", async () => {
@@ -1748,7 +1752,6 @@ describe("mountPrintApi — management: printers CRUD", () => {
         localKey: null,
         pollId: null,
         ticketScope: "order",
-        active: true,
       },
     });
     expect(res.status).toBe(204);
@@ -2190,10 +2193,7 @@ describe("printer cash-drawer calibration", () => {
       expect(response.status).toBe(status);
       expect(await response.json()).toMatchObject({ error: { code } });
     }
-    await send(app, "PATCH", `/management-api/printers/${id}`, {
-      cookie: managerCookie,
-      body: { active: false },
-    });
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, id));
     for (const printerId of [id, randomUUID()]) {
       const response = await send(
         app,
@@ -2593,10 +2593,7 @@ describe("mountPrintApi — management: print-test-page", () => {
   it("refuses an unknown or a deactivated printer with 404 printer.not_found", async () => {
     const app = mountApp();
     const deactivated = await createNetworkPrinter(app, "10.0.0.124", 9100, "Switched off");
-    const off = await send(app, "POST", `/management-api/printers/${deactivated}/deactivate`, {
-      cookie: managerCookie,
-    });
-    expect(off.status).toBe(204);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, deactivated));
     for (const id of [randomUUID(), deactivated]) {
       const res = await send(app, "POST", `/management-api/printers/${id}/print-test-page`, {
         cookie: managerCookie,
@@ -3047,7 +3044,6 @@ describe("mountPrintApi — the hardware.manage gate", () => {
     ["POST", "/management-api/printers", { name: "X", transport: "network_tcp", host: "10.0.0.1" }],
     ["GET", "/management-api/printers"],
     ["PATCH", `/management-api/printers/${DUMMY}`, { name: "X" }],
-    ["POST", `/management-api/printers/${DUMMY}/deactivate`],
     ["GET", `/management-api/printers/${DUMMY}/delete-impact`],
     ["DELETE", `/management-api/printers/${DUMMY}`],
     ["POST", `/management-api/printers/${DUMMY}/test-print`],
@@ -4629,11 +4625,12 @@ describe("Bluetooth Pair and Forget commands", () => {
       await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
-      const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+      const restored = await send(app, "POST", "/management-api/printers", {
         cookie: managerCookie,
-        body: { active: true },
+        body: { name: "Scanned printer", transport: "bluetooth", localKey: mac },
       });
-      expect(reactivated.status).toBe(204);
+      expect(restored.status).toBe(201);
+      expect(await restored.json()).toMatchObject({ id: printerId });
       const alertsFor = async (now: Date) =>
         (await withTransaction(suite.db, (tx) => printingAlertSource().read({ tx, now }))).filter(
           (a) => a.key === `printer.jobs_waiting:${printerId}`,
@@ -4659,11 +4656,12 @@ describe("Bluetooth Pair and Forget commands", () => {
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
 
       // What the dashboard's Enable sends, then the calibration wizard's first print.
-      const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+      const restored = await send(app, "POST", "/management-api/printers", {
         cookie: managerCookie,
-        body: { active: true },
+        body: { name: "Scanned printer", transport: "bluetooth", localKey: mac },
       });
-      expect(reactivated.status).toBe(204);
+      expect(restored.status).toBe(201);
+      expect(await restored.json()).toMatchObject({ id: printerId });
       const printed = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
         cookie: managerCookie,
       });
@@ -4710,12 +4708,8 @@ describe("a deleted printer in discovery", () => {
     return ((await res.json()) as { id: string }).id;
   }
 
-  async function disable(app: Hono, id: string): Promise<void> {
-    const res = await send(app, "PATCH", `/management-api/printers/${id}`, {
-      cookie: managerCookie,
-      body: { active: false },
-    });
-    expect(res.status).toBe(204);
+  async function disable(_app: Hono, id: string): Promise<void> {
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, id));
   }
 
   async function remove(app: Hono, id: string): Promise<void> {
@@ -4804,7 +4798,7 @@ describe("a deleted printer in discovery", () => {
   ];
 
   for (const shape of shapes) {
-    it(`${shape.label}: a disabled printer still matches, a deleted one does not, and its replacement takes a new id`, async () => {
+    it(`${shape.label}: Add recognises a deleted printer and restores its saved identity`, async () => {
       const app = mountApp();
       const { token } = await joinAndAccept(app, "Discovery agent");
       const { inventory, body, find, nullPort } = shape.make();
@@ -4827,17 +4821,18 @@ describe("a deleted printer in discovery", () => {
       expect((await discovered(app)).find(find)).toMatchObject({
         alreadyRegistered: false,
         printerId: null,
+        retainedName: "Old kitchen",
       });
 
       const replacement = await register("New kitchen");
-      expect(replacement).not.toBe(original);
+      expect(replacement).toBe(original);
       if (nullPort) expect((await printerRow(replacement)).port).toBeNull();
       expect((await discovered(app)).find(find)).toMatchObject({
         alreadyRegistered: true,
         printerId: replacement,
       });
       expect(await printerRow(original)).toMatchObject({ name: "Old kitchen" });
-      expect((await printerRow(original)).deleted_at).not.toBeNull();
+      expect((await printerRow(original)).deleted_at).toBeNull();
     });
   }
 
@@ -4887,7 +4882,7 @@ describe("a deleted printer in discovery", () => {
     expect(second).not.toBe(first);
   });
 
-  it("after a replacement, a stale pull, late result and unpairing leave the old printer and its jobs where they were", async () => {
+  it("Add does not replay ended jobs after a late result, pull or unpairing", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app, "Stale agent");
     const mac = randomMac();
@@ -4908,16 +4903,8 @@ describe("a deleted printer in discovery", () => {
       transport: "bluetooth",
       localKey: mac,
     });
-    // Neither is a state the delete leaves: switched back on and holding a waiting job, the old row
-    // shows any write the pull, the late result or the unpairing makes to it, and any claim.
-    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, original));
-    const [seeded] = await suite.db
-      .insert(printJobs)
-      .values({ locationId, printerId: original, payload: new Uint8Array([0x41]) })
-      .returning({ id: printJobs.id });
-    const tombstone = await printerRow(original);
-    expect(Number(tombstone.active)).toBe(1);
-    const endedJobs = [await jobRow(claimed), await jobRow(waiting), await jobRow(seeded!.id)];
+    expect(replacement).toBe(original);
+    const endedJobs = [await jobRow(claimed), await jobRow(waiting)];
 
     const late = await send(app, "POST", `/print-api/agent/jobs/${claimed}/result`, {
       bearer: token,
@@ -4941,13 +4928,10 @@ describe("a deleted printer in discovery", () => {
     const { command } = (await forget.json()) as { command: { id: string } };
     await pull(app, token, { bluetoothOutcomes: [{ id: command.id, ok: true }] });
 
-    expect(await printerRow(original)).toEqual(tombstone);
-    expect([await jobRow(claimed), await jobRow(waiting), await jobRow(seeded!.id)]).toEqual(
-      endedJobs,
-    );
+    expect([await jobRow(claimed), await jobRow(waiting)]).toEqual(endedJobs);
     const { rows } = await suite.db.execute<{ id: string; printer_id: string }>(
       sql`select id, printer_id from print_jobs
-        where id in (${claimed}, ${waiting}, ${seeded!.id}) order by id`,
+        where id in (${claimed}, ${waiting}) order by id`,
     );
     expect(rows.every((row) => row.printer_id === original)).toBe(true);
     // The unpairing still reaches the live printer at the address.
@@ -4997,19 +4981,12 @@ describe("a deleted printer's job history", () => {
     const off = await createUsbPrinter(app, `SN-HIST-${randomUUID()}`, "Off printer");
     const offJob = await enqueue(off, esc(WIDE).line("off").bytes());
     await finish(offJob, "done");
-    const disabled = await send(app, "PATCH", `/management-api/printers/${off}`, {
-      cookie: managerCookie,
-      body: { active: false },
-    });
-    expect(disabled.status).toBe(204);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, off));
 
     const deleted = await send(app, "DELETE", `/management-api/printers/${original}`, {
       cookie: managerCookie,
     });
     expect(deleted.status).toBe(200);
-    const replacement = await createUsbPrinter(app, serial, "New kitchen");
-    const replacementJob = await enqueue(replacement, esc(WIDE).line("new").bytes());
-    await finish(replacementJob, "done");
 
     const res = await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie });
     expect(res.status).toBe(200);
@@ -5028,11 +5005,6 @@ describe("a deleted printer's job history", () => {
       canResend: false,
     });
     expect(byId.get(offJob)).toMatchObject({ printerName: "Off printer", canResend: true });
-    expect(byId.get(replacementJob)).toMatchObject({
-      printerId: replacement,
-      printerName: "New kitchen",
-      canResend: true,
-    });
     expect(Object.keys(byId.get(printed)!).sort()).toEqual(
       [
         "attempts",
@@ -5061,6 +5033,13 @@ describe("a deleted printer's job history", () => {
     expect(((await resend.json()) as { error: { code: string } }).error.code).toBe(
       "printer.not_found",
     );
+    expect(await suite.db.select({ id: printJobs.id }).from(printJobs)).toHaveLength(
+      jobsBefore.length,
+    );
+    const restored = await createUsbPrinter(app, serial, "Scanned name");
+    expect(restored).toBe(original);
+    const [saved] = await suite.db.select().from(printers).where(eq(printers.id, restored));
+    expect(saved).toMatchObject({ name: "Old kitchen", paperWidth: "58mm", resolution: "203dpi" });
     expect(await suite.db.select({ id: printJobs.id }).from(printJobs)).toHaveLength(
       jobsBefore.length,
     );

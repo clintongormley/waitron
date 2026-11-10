@@ -3,7 +3,6 @@ import "@waitron/printing";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import {
-  deviceProfilePrinters,
   deviceProfiles,
   kitchenStations,
   printAgents,
@@ -15,7 +14,8 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
-import { PULL_BATCH_LIMIT } from "@waitron/printing";
+import { createPrinter, PULL_BATCH_LIMIT } from "@waitron/printing";
+import { deletePrinter } from "./printer-delete.js";
 import { claimInvoicePrintJobs, reportInvoicePrintJob } from "./invoice-print.js";
 
 export const DEMO_PRINTER_KEY = "WAITRON-DEMO-PRINTER";
@@ -45,26 +45,20 @@ export async function configureDemoPrinter(
       );
     if (!practiceMode) {
       if (existing !== undefined) {
-        await unlistDemoPrinter(tx, existing.id);
-        await tx.delete(stationPrinters).where(eq(stationPrinters.printerId, existing.id));
-        await tx.update(printers).set({ active: false }).where(eq(printers.id, existing.id));
+        await deletePrinter(tx, existing.id);
       }
       return null;
     }
     const printerId =
       existing?.id ??
       (
-        await tx
-          .insert(printers)
-          .values({
-            locationId: venueId,
-            name: "Demo printer",
-            transport: "usb",
-            localKey: DEMO_PRINTER_KEY,
-            hasCashDrawer: true,
-          })
-          .returning({ id: printers.id })
-      )[0]!.id;
+        await createPrinter(tx, {
+          name: "Demo printer",
+          transport: "usb",
+          localKey: DEMO_PRINTER_KEY,
+          hasCashDrawer: true,
+        })
+      ).id;
     if (existing !== undefined)
       await tx.update(printers).set({ active: true }).where(eq(printers.id, printerId));
 
@@ -89,31 +83,6 @@ export async function configureDemoPrinter(
     await routeToDemoPrinter(tx, printerId);
     return { printerId, agentId };
   });
-}
-
-/** Takes the printer off every profile list and default; `setProfilePrinterLists` clears the
- * devices' choices of it. */
-async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<void> {
-  const listing = await tx
-    .selectDistinct({ id: deviceProfilePrinters.deviceProfileId })
-    .from(deviceProfilePrinters)
-    .where(eq(deviceProfilePrinters.printerId, printerId));
-  for (const { id: profileId } of listing) {
-    const lists = await readProfilePrinterLists(tx, profileId);
-    const without = (ids: string[]) => ids.filter((id) => id !== printerId);
-    const unlessIt = (id: string | null) => (id === printerId ? null : id);
-    await setProfilePrinterLists(tx, profileId, {
-      ...lists,
-      receiptPrinterIds: without(lists.receiptPrinterIds),
-      paymentSlipPrinterIds: without(lists.paymentSlipPrinterIds),
-      cashDrawerPrinterIds: without(lists.cashDrawerPrinterIds),
-      invoicePrinterIds: without(lists.invoicePrinterIds),
-      receiptPrinterDefaultId: unlessIt(lists.receiptPrinterDefaultId),
-      paymentSlipPrinterDefaultId: unlessIt(lists.paymentSlipPrinterDefaultId),
-      cashDrawerPrinterDefaultId: unlessIt(lists.cashDrawerPrinterDefaultId),
-      invoicePrinterDefaultId: unlessIt(lists.invoicePrinterDefaultId),
-    });
-  }
 }
 
 /**

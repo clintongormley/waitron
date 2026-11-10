@@ -8,14 +8,19 @@ you like, and choose **Add** again; calibration opens next. An office printer sh
 printer** instead.
 
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
-PIN and choose **Pair and add** again. Once it is paired, the name dialog opens: choose **Add**.
+PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
 
 If a network printer is not found, open **Check a known address**, type its IP address and choose
 **Connect**.
 
+To remove a receipt or kitchen printer, choose **Delete** in its row menu or details. The
+confirmation lists the assignments removed and work ended. To use it again, choose **Add a
+printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
+do not need to name or calibrate it again. Assign its devices and kitchen stations again.
+
 ## Calibrate a receipt printer {#calibrate}
 
-Calibration has three steps. It opens after you add a receipt printer, and **Calibrate printer**
+Calibration has three steps. It opens after you add a new receipt printer, and **Calibrate printer**
 on the printer's details runs it again.
 
 - Choose **Print width test**. On the paper, choose the last number on the ruler you can see in
@@ -29,9 +34,9 @@ on the printer's details runs it again.
 ## Printer details {#printer-details}
 
 Choose a printer's name in the **Printers** tab or the **Print Queue** to open its details.
-**Active** switches the printer on or off at once. **Edit** changes its name and, for a network
+**Edit** changes its name and, for a network
 receipt printer, its address. **Calibrate printer** runs calibration again. An A4 printer's
-details have no calibration; **Print test page** checks one. To switch one back on, find it again
+details have no calibration; **Print test page** checks one. Its **Active** switch turns it off. To switch it back on, find it again
 with **Add a printer**.
 
 ## Print Queue {#print-queue}

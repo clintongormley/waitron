@@ -18,7 +18,7 @@ import {
   claimPrintJobs,
   endUnpairedPrinterJobs,
 } from "./runtime.js";
-import { createPrinter, deactivatePrinter } from "./printers.js";
+import { createPrinter, updatePrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 type PrintConfig = { locationId: string };
 
@@ -177,7 +177,7 @@ describe("endUnpairedPrinterJobs", () => {
         localKey: MAC,
       });
       const { jobId } = await enqueuePrintJob(tx, created.id, new Uint8Array([0x41]));
-      await deactivatePrinter(tx, created.id);
+      await updatePrinter(tx, created.id, { active: false });
       return jobId;
     });
 

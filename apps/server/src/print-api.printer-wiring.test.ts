@@ -1444,15 +1444,12 @@ describe("printer delete routes (hardware.manage)", () => {
       const printer = `/management-api/printers/${p.printerId}`;
       const calls: Call[] = [
         ["empty edit", "PATCH", printer, {}],
-        ["Enable", "PATCH", printer, { active: true }],
-        ["Disable", "PATCH", printer, { active: false }],
         ["rename", "PATCH", printer, { name: "Brought back" }],
         ["connection", "PATCH", printer, { host: "10.0.0.10", port: 9100 }],
         ["paper", "PATCH", printer, { paperWidth: "58mm", resolution: "180dpi" }],
         ["drawer", "PATCH", printer, { hasCashDrawer: true }],
         ["portable unchanged", "PATCH", printer, { portable: true }],
         ["portable changed", "PATCH", printer, { portable: false }],
-        ["deactivate", "POST", `${printer}/deactivate`],
         [
           "station attach",
           "POST",
@@ -1504,12 +1501,11 @@ describe("printer delete routes (hardware.manage)", () => {
       expect(await printingRows()).toEqual(before);
     });
 
-    it("still edits, Enables, lists and detaches a switched-off printer that is not deleted", async () => {
+    it("still edits, lists and detaches a system-switched-off printer that is not deleted", async () => {
       const app = mountApp(() => NOW);
       const p = await linkedPrinter(app);
       const printer = `/management-api/printers/${p.printerId}`;
-      const off = await send(app, "POST", `${printer}/deactivate`, { cookie: managerCookie });
-      expect(off.status).toBe(204);
+      await suite.db.update(printers).set({ active: false }).where(eq(printers.id, p.printerId));
 
       for (const [label, method, path, body, status] of [
         ["rename", "PATCH", printer, { name: `Renamed ${randomUUID()}` }, 204],
@@ -1528,7 +1524,6 @@ describe("printer delete routes (hardware.manage)", () => {
           undefined,
           204,
         ],
-        ["Enable", "PATCH", printer, { active: true }, 204],
       ] as const) {
         const res = await send(app, method, path, {
           cookie: managerCookie,
@@ -1540,7 +1535,7 @@ describe("printer delete routes (hardware.manage)", () => {
         .select({ active: printers.active, portable: printers.portable })
         .from(printers)
         .where(eq(printers.id, p.printerId));
-      expect(row).toEqual({ active: true, portable: false });
+      expect(row).toEqual({ active: false, portable: false });
       expect(
         await suite.db
           .select()

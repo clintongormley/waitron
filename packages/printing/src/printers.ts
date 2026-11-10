@@ -1,6 +1,6 @@
 // Keeps errors.ts's codes reachable from the throwing file (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -60,6 +60,33 @@ export async function createPrinter(
     throw new AppError("printer.invalid_config", {
       reason: `${input.transport}_missing_${missing}`,
     });
+  }
+
+  const endpoint =
+    input.transport === "network_tcp"
+      ? and(
+          eq(printers.host, input.host!),
+          sql`coalesce(${printers.port}, 9100) = ${input.port ?? 9100}`,
+        )
+      : input.transport === "cloud_poll"
+        ? eq(printers.pollId, input.pollId!)
+        : eq(printers.localKey, input.localKey!);
+  const [retained] = await tx
+    .select()
+    .from(printers)
+    .where(and(eq(printers.transport, input.transport), endpoint))
+    .orderBy(
+      desc(sql`${printers.deletedAt} is null`),
+      desc(printers.deletedAt),
+      desc(printers.active),
+    )
+    .limit(1);
+  if (retained !== undefined && (!retained.active || retained.deletedAt !== null)) {
+    await tx
+      .update(printers)
+      .set({ active: true, deletedAt: null })
+      .where(eq(printers.id, retained.id));
+    return { id: retained.id };
   }
 
   try {
@@ -145,20 +172,7 @@ export async function updatePrinter(
   if (updated.length === 0) throw new AppError("printer.not_found", { id });
 }
 
-/**
- * Disable keeps the id, and Enable brings the printer back. A deactivated printer refuses new jobs
- * and its queued ones wait, unclaimed, until it is reactivated.
- */
-export async function deactivatePrinter(tx: Transaction, id: string): Promise<void> {
-  const updated = await tx
-    .update(printers)
-    .set({ active: false })
-    .where(and(eq(printers.id, id), isNull(printers.deletedAt)))
-    .returning({ id: printers.id });
-  if (updated.length === 0) throw new AppError("printer.not_found", { id });
-}
-
-/** Includes deactivated printers, so the dashboard can show and reactivate them; never deleted ones. */
+/** System-switched-off printers stay visible; deleted registrations do not. */
 export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
   const rows = await tx
     .select({

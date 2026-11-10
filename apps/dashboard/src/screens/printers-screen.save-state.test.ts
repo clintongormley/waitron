@@ -73,7 +73,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updateAgent: vi.fn().mockResolvedValue(undefined),
     updatePrinter: vi.fn().mockResolvedValue(undefined),
     createPrinter: vi.fn().mockResolvedValue({ id: "p5" }),
-    deactivatePrinter: vi.fn().mockResolvedValue(undefined),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     ...overrides,
@@ -567,15 +566,6 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     portable: false,
     active: false,
   };
-  const seenAgain: DiscoveredPrinter = {
-    ...unregistered,
-    localKey: "SN-2",
-    make: "Star",
-    model: "TSP143",
-    name: null,
-    alreadyRegistered: true,
-    printerId: "p3",
-  };
 
   async function addFromDiscovery(device: DiscoveredPrinter) {
     history.replaceState(null, "", "/manage/printers/view/printers");
@@ -595,57 +585,42 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     return { el, api };
   }
 
-  it("re-adding a switched-off printer opens its wizard with Save ready, and an untouched press keeps it on", async () => {
-    const { el, api } = await addFromDiscovery(seenAgain);
-    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true });
-    expect(resultText(el, "paper")).toBe(t("printers.paper_width_58"));
-    await go(el, "calibration-next");
-    expect(await state(el, "save-printer-p3")).toEqual(ready);
-    await press(el, "save-printer-p3");
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
-    await settle();
-    expect(api.updatePrinter).toHaveBeenCalledTimes(1);
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
-  });
-
-  it("a re-added printer's Save stays ready while its save is in flight, even with the change undone", async () => {
-    const { el, api } = await addFromDiscovery(seenAgain);
+  it("a freshly added printer's Save stays ready while its save is in flight, even with the change undone", async () => {
+    const { el, api } = await addFromDiscovery(unregistered);
     const save = pending();
     vi.mocked(api.updatePrinter).mockReturnValueOnce(save.answer);
     await go(el, "calibration-next");
     await toggle(el, "printer-portable", true);
-    await press(el, "save-printer-p3");
-    expect(api.updatePrinter).toHaveBeenLastCalledWith("p3", { portable: true });
+    await press(el, "save-printer-p5");
+    expect(api.updatePrinter).toHaveBeenLastCalledWith("p5", { portable: true });
     // Back to the stored settings: unchanged from what the wizard opened on, but still an add.
     await toggle(el, "printer-portable", false);
     // A loading button's inner button is disabled, so the look is read from the host alone.
-    expect(await state(el, "save-printer-p3")).toMatchObject({
+    expect(await state(el, "save-printer-p5")).toMatchObject({
       variant: "primary",
       disabled: false,
     });
-    expect(action(el, "save-printer-p3").loading).toBe(true);
+    expect(action(el, "save-printer-p5").loading).toBe(true);
     save.finish();
-    await vi.waitFor(() => expect(action(el, "save-printer-p3").loading).toBe(false));
+    await vi.waitFor(() => expect(action(el, "save-printer-p5").loading).toBe(false));
     expect(q(el, "[data-test=edit-printer-modal]")).not.toBeNull();
-    expect(await state(el, "save-printer-p3")).toEqual(ready);
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    expect(await state(el, "save-printer-p5")).toEqual(ready);
   });
 
-  it("a re-added printer's wizard that a newer change keeps open turns quiet when that change is undone", async () => {
-    const { el, api } = await addFromDiscovery(seenAgain);
+  it("a freshly added printer's wizard that a newer change keeps open turns quiet when that change is undone", async () => {
+    const { el, api } = await addFromDiscovery(unregistered);
     const save = pending();
     vi.mocked(api.updatePrinter).mockReturnValueOnce(save.answer);
     await go(el, "calibration-next");
     await toggle(el, "printer-portable", true);
-    await press(el, "save-printer-p3");
-    expect(api.updatePrinter).toHaveBeenLastCalledWith("p3", { portable: true });
-    await toggle(el, "printer-cash-drawer", false);
-    save.finish();
-    await vi.waitFor(async () => expect(await state(el, "save-printer-p3")).toEqual(ready));
-    expect(q(el, "[data-test=edit-printer-modal]")).not.toBeNull();
+    await press(el, "save-printer-p5");
+    expect(api.updatePrinter).toHaveBeenLastCalledWith("p5", { portable: true });
     await toggle(el, "printer-cash-drawer", true);
-    expect(await state(el, "save-printer-p3")).toEqual(quiet);
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    save.finish();
+    await vi.waitFor(async () => expect(await state(el, "save-printer-p5")).toEqual(ready));
+    expect(q(el, "[data-test=edit-printer-modal]")).not.toBeNull();
+    await toggle(el, "printer-cash-drawer", false);
+    expect(await state(el, "save-printer-p5")).toEqual(quiet);
   });
 
   it("a freshly added printer's wizard opens with Save ready, and an untouched press closes it sending nothing", async () => {
@@ -658,11 +633,10 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
     await settle();
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
   });
 
   it("a printer's calibration wizard, opened after an added printer's wizard was closed unsaved, opens with Save quiet", async () => {
-    const { el, api } = await addFromDiscovery(unregistered);
+    const { el } = await addFromDiscovery(unregistered);
     const closed = new Promise((resolve) =>
       q(el, "[data-test=edit-printer-modal]")!.addEventListener("wt-close", resolve, {
         once: true,
@@ -671,7 +645,6 @@ describe("the calibration wizard's Save, when an add opened it", () => {
     q(el, "[data-test=cancel-edit-printer]")!.click();
     await closed;
     await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
-    expect(api.deactivatePrinter).not.toHaveBeenCalled();
     q(el, "[data-test=printer-row-p1]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull());
     q(el, "[data-test=calibrate-printer-details]")!.click();
@@ -733,13 +706,6 @@ describe("the name dialog's Add, which opening it already asks for", () => {
     localKey: "SN-2",
     active: false,
   };
-  const seenAgain: DiscoveredPrinter = {
-    ...unregistered,
-    localKey: "SN-2",
-    name: null,
-    alreadyRegistered: true,
-    printerId: "p3",
-  };
 
   async function openName(device: DiscoveredPrinter) {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([printer, switchedOff]) });
@@ -762,19 +728,6 @@ describe("the name dialog's Add, which opening it already asks for", () => {
     await press(el, "confirm-add-printer");
     await vi.waitFor(() => expect(api.createPrinter).toHaveBeenCalledOnce());
     expect(vi.mocked(api.createPrinter).mock.calls[0]![0]).toMatchObject({ name: "EPSON TM-T20" });
-  });
-
-  it("opens on a switched-off printer's stored name with Enable ready, and a press switches it on", async () => {
-    const { el, api } = await openName(seenAgain);
-    expect(
-      q<HTMLElementTagNameMap["wt-input"]>(el, "[data-test=discovered-name-SN-2]")!.value,
-    ).toBe("Bar USB");
-    expect(action(el, "confirm-add-printer").textContent!.trim()).toBe(t("printers.enable"));
-    expect(await state(el, "confirm-add-printer")).toEqual(ready);
-    await press(el, "confirm-add-printer");
-    await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true }),
-    );
   });
 
   it("a name emptied by an edit keeps Add drawn ready but unpressable once tried", async () => {

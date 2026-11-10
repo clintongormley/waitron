@@ -8,15 +8,21 @@ nombre si quieres y vuelve a elegir **Añadir**; después se abre la calibració
 oficina muestra en su lugar **Añadir como impresora A4**.
 
 Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
-junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Cuando esté emparejada, se
+junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
 abre el diálogo del nombre: elige **Añadir**.
 
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**.
 
+Para quitar una impresora de recibos o cocina, elige **Eliminar** en su menú o en sus detalles.
+La confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
+usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se reconoce, conserva su
+nombre y calibración, así que no necesitas repetirlos. Vuelve a asignar sus dispositivos y
+puestos de cocina.
+
 ## Calibrar una impresora de recibos {#calibrate}
 
-La calibración tiene tres pasos. Se abre al añadir una impresora de recibos, y **Calibrar
+La calibración tiene tres pasos. Se abre al añadir una impresora de recibos nueva, y **Calibrar
 impresora** en los detalles de la impresora la repite.
 
 - Elige **Imprimir prueba de ancho**. En el papel, elige el último número de la regla que se ve
@@ -30,10 +36,10 @@ impresora** en los detalles de la impresora la repite.
 ## Detalles de la impresora {#printer-details}
 
 Elige el nombre de una impresora en la pestaña **Impresoras** o en la **Cola de impresión** para
-abrir sus detalles. **Activa** la enciende o la apaga al momento. **Editar** cambia su nombre y, si
+abrir sus detalles. **Editar** cambia su nombre y, si
 es una impresora de recibos de red, su dirección. **Calibrar impresora** repite la calibración.
 Los detalles de una impresora A4 no tienen calibración;
-**Imprimir página de prueba** la comprueba. Para volver a activarla, búscala de nuevo con
+**Imprimir página de prueba** la comprueba. Su interruptor **Activa** la apaga. Para volver a activarla, búscala de nuevo con
 **Añadir impresora**.
 
 ## Cola de impresión {#print-queue}

@@ -15,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
-import { createPrinter, deactivatePrinter } from "@waitron/printing";
+import { createPrinter, updatePrinter } from "@waitron/printing";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -86,7 +86,7 @@ async function parkedThenRelease<A, B>(
 const AT_CLOCK = "13:00";
 
 /**
- * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
+ * A `updatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
  * its job, the deactivation lands only afterwards, and the printer ends up inactive.
  *
  * Narrower than its name: there is no hook inside `enqueueKitchenTickets`, so the fire parks AFTER
@@ -95,7 +95,7 @@ const AT_CLOCK = "13:00";
  * mechanism is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
  */
 describe("print-on-fire concurrency — the write queue around the mapping read", () => {
-  it("a concurrent deactivatePrinter runs only after the fire commits, and never aborts it", async () => {
+  it("a concurrent updatePrinter runs only after the fire commits, and never aborts it", async () => {
     // ---- Setup, committed before the two contending transactions are staged ----
     await seedTenant(suite.db);
     await seedLegacySellingUnits(suite.db);
@@ -172,7 +172,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       readDone.passed,
       releaseA.open,
       async (txB) => {
-        await deactivatePrinter(txB, printerId);
+        await updatePrinter(txB, printerId, { active: false });
         deactivateDone = true;
       },
     );
