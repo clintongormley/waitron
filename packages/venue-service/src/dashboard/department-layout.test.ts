@@ -73,7 +73,7 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
       expect(bounds.right).toBeLessThanOrEqual(390);
       inside(form.shadowRoot!.querySelector("wt-tabs")!, bounds);
       const section = form.shadowRoot!.querySelector("[data-test=transfers-section]")!;
-      inside(section.querySelector("h2")!, bounds);
+      inside(section.querySelector("h3")!, bounds);
       const destinations = [...section.querySelectorAll(".destination")];
       expect(destinations).toHaveLength(1);
       for (const destination of destinations) {
