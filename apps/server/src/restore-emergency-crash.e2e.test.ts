@@ -145,7 +145,7 @@ it.each([
 /** Every call of `nativeFs[method]` that `matches` picks throws `failure` until the mocks are
  * restored. */
 function failEvery(
-  method: "copyFile" | "rename" | "writeFile",
+  method: "copyFile" | "rename" | "open",
   matches: (...args: string[]) => boolean,
   failure: Error,
 ) {
@@ -163,7 +163,7 @@ const enospc = () =>
 const beforePlacement = {
   "the first-start marker cannot be written": (f: Awaited<ReturnType<typeof stage>>) =>
     failEvery(
-      "writeFile",
+      "open",
       (path) => path === join(f.stateDir, "rebuild-first-start.json.tmp"),
       enospc(),
     ),
