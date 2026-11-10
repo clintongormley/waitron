@@ -120,10 +120,6 @@ export async function buildConfigurationBundle(
   } = row;
   const { defaultCatalogueId, ...fields } = await readVenue(db);
   const { doc } = await readVenueSettings(db);
-  // The column's JSON read mapping checks no element types.
-  if (fields.invoiceLocales.some((locale: unknown) => typeof locale !== "string")) {
-    throw new AppError("setup.request_invalid", { field: "venue" });
-  }
   const clock = await readVenueClock(db);
   const businessDay = businessDayAt(clock, now);
   if (clock.cutoverChanges.some((change) => change.effectiveBusinessDay > businessDay))

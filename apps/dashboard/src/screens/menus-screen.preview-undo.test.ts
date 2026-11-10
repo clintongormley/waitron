@@ -783,11 +783,11 @@ it("forgets a refusal once a content language switched off takes its Undo away, 
     fake.getMenuRead.mockImplementation(() => new Promise<MenuReadResult>(() => undefined));
 
     fake.state.languages = ["en"];
-    live.invalidate([{ type: "content_languages" }]);
+    live.invalidate([{ type: "settings.venue" }]);
     await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).toBeNull());
 
     fake.state.languages = ["en", "es"];
-    live.invalidate([{ type: "content_languages" }]);
+    live.invalidate([{ type: "settings.venue" }]);
     await vi.waitFor(() => expect(undoButton(panel(), "mains-renamed")).not.toBeNull());
     await settle();
     expect(refusalIn(panel(), "mains-renamed")).toBeNull();

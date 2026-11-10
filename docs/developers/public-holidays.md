@@ -62,7 +62,7 @@ territorial choice, choose it in the Year; until then, only facts certain for th
 are shown. The 2026 territorial source notes remain in the archived sources README.
 
 An area's identity uses country, province and normalized city. Changing the address stops using
-that area's choice, but keeps it stored for a later matching address. `holidayCityKey` normalizes
+that area's choice; choosing another area replaces it. `holidayCityKey` normalizes
 Unicode, trims and collapses spaces, and lowercases; accents and punctuation still count.
 Special days are not filtered by that identity, and you can add them without a recognized holiday
 address or country calendar.
@@ -195,6 +195,8 @@ These steps assume Spain; another country follows the same shape with its own of
    local-table receipt below is historical.
 
 ### Earlier data-revision receipt
+
+**2026-11-10, A1308 5c:** the area choice below now lives in settings.venue; the two retired tables no longer hold rows.
 
 **2026-10-09, A366 slice 2:** the 2026-10-06 data-revision experiment described here used
 `local_holidays`, which the slice now retires. It is not evidence about today's named-day writes.

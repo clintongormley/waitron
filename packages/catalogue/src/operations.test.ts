@@ -178,13 +178,11 @@ describe("catalogue operations", () => {
     });
   });
 
-  let locationId: string;
   let eachUnitId: string;
   let kgUnitId: string;
 
   beforeEach(async () => {
-    const venue = await seedVenueWithSeries(fx.db);
-    locationId = venue.locationId;
+    await seedVenueWithSeries(fx.db);
     await withTransaction(fx.db, async (tx) => {
       eachUnitId = (
         await createUnit(

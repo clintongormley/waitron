@@ -66,13 +66,20 @@ describe("the media module descriptor", () => {
       ],
       media_image_data: [{ image_id: "image-a", bytes: `\\x${bytes.toString("hex")}` }],
     });
+    const context = {
+      createdAt: new Date("2026-10-20T12:00:00Z"),
+      country: "GB",
+      area: null,
+      timeZone: "Europe/London",
+      dayCutover: "05:00",
+      contentLanguages: { defaultLanguage: "en", languages: ["en"] },
+      holidayArea: null,
+    };
     const matching = `${createHash("sha256").update(bytes).digest("hex")}.jpg`;
-    expect(() =>
-      validate?.(bundle(matching), { contentLanguages: { defaultLanguage: "en" } }),
-    ).not.toThrow();
-    expect(() =>
-      validate?.(bundle(`${"0".repeat(64)}.jpg`), { contentLanguages: { defaultLanguage: "en" } }),
-    ).toThrow(expect.objectContaining({ code: "image.invalid_metadata" }));
+    expect(() => validate?.(bundle(matching), context)).not.toThrow();
+    expect(() => validate?.(bundle(`${"0".repeat(64)}.jpg`), context)).toThrow(
+      expect.objectContaining({ code: "image.invalid_metadata" }),
+    );
   });
 
   it("lets a manager into the image library and keeps staff and supervisors out", async () => {

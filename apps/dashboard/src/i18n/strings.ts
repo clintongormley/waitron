@@ -1017,7 +1017,7 @@ export const en = {
   "venue_details.postcode_warning":
     "The postcode must belong to the saved province. A different fiscal or language context requires separate setup.",
   "venue_details.city_warning":
-    "A city correction does not rename saved dates or department names. In Hours, local holidays entered for another city stay recorded and hidden until the address names that city again.",
+    "Review public holidays in Hours after changing the city. Choosing an area there replaces your previous choice.",
   "venue_details.current_clock": "Saved clock",
   "venue_details.proposed_clock": "Proposed clock",
   "venue_details.local_time": "Local civil date and time",
@@ -4807,7 +4807,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.postcode_warning":
     "El código postal debe pertenecer a la provincia guardada. Otro contexto fiscal o lingüístico requiere una configuración aparte.",
   "venue_details.city_warning":
-    "Corregir la ciudad no cambia las fechas guardadas ni los nombres de departamentos. En Horarios, los festivos locales de otra ciudad se conservan y se ocultan hasta que la dirección vuelva a indicar esa ciudad.",
+    "Revisa los festivos en Horarios después de cambiar la ciudad. Si eliges una zona, se sustituye la elección anterior.",
   "venue_details.current_clock": "Reloj guardado",
   "venue_details.proposed_clock": "Reloj propuesto",
   "venue_details.local_time": "Fecha civil y hora local",

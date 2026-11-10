@@ -13,3 +13,5 @@ Your own special-day names stay as you entered them. If you create a new special
 Some holidays depend on the island or part of a province where your venue stands. If the Year view asks for a holiday area, choose the one that applies to your address. The choices follow your dashboard language too; **Lleida, outside Aran** appears as **Lleida, fuera del territorio de Arán** in Spanish.
 
 Changing the screen language keeps your chosen area. To change which holidays apply, change the area itself.
+
+Review public holidays after changing the venue’s city. Choosing another holiday area replaces your previous choice.

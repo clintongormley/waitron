@@ -763,13 +763,11 @@ triggers.
    developer Mac with `node:sqlite`, 2,001 rows in one transaction, not the real schema: 0.5 ms with no
    trigger, 5.9 ms reading a typed row, 6.9 ms reading a settings document (the ledger's run, 4 November);
    a second run, medians of 41, gave 0.4, 3.9 and 4.3 ms. Both triggers refused a wrong language.
-   **2026-11-10, real-schema measurement and watcher decision (Lane H questions.md, 12:27):**
-   on an Apple M5 Pro developer Mac, Node v26.13.0, SQLite 3.54.1, medians of 41 transactions
-   inserting 2,001 lines were 82.996 ms for the current location triggers, 82.916 ms for document
-   triggers and 64.834 ms without the four language triggers. This was the developer Mac, not the
-   reference micro PC. The watcher kept the document: these real-schema figures do not show a cost
-   from changing its source. A scratch control with different document and location lists, in both
-   directions, verified all 16 description/variant combinations followed the intended source.
+   **2026-11-10, real schema (watcher, Lane H questions.md 12:27):** Apple M5 Pro developer Mac,
+   Node v26.13.0/SQLite3.54.1, not the reference micro PC; medians of 41 transactions/2,001 lines:
+   current 82.996ms, document 82.916ms, four language triggers removed 64.834ms. The watcher kept
+   the document because changing its source added no measured cost. Differing-lists controls
+   followed the correct source in all 16 description/variant combinations; full script/output in 5c's PR.
 3. **Document upgrades vs backup verification.** Take a backup, raise a document's `version` with an
    upgrade-on-read, restore and verify. Failing result: verification refuses — then the read-time
    upgrade rule in §2.4 must be written into the central definition, or core's comparison must accept a

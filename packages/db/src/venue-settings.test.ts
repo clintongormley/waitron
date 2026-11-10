@@ -163,6 +163,7 @@ describe("the venue document", () => {
     expect((await withTransaction(suite.db, api.readVenueClockAndPlace)).place).toEqual({
       province: "Coast",
       city: "Harbour",
+      holidayArea: null,
     });
   });
 

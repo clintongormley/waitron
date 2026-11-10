@@ -239,12 +239,11 @@ only once the page's own model loads (`render` in
 Staffing view sees the switch and the Opening hours error instead. Next: decide whether a
 module view draws without that model.
 
-## A701. Opening hours' month reads the holiday tables twice on a holiday-linked special day
+## A701. Opening hours' month reads the country twice on a holiday-linked special day
 
 `readOpeningHoursMonth` (`packages/venue-service/src/opening-hours-calendar.ts`) reads `tenants`
-and `holiday_geographies` once in `readCalendarMonthPlan` and again in its own holiday read
-(`locations` is already read once). Next: hand the plan's holiday facts to the
-second read.
+once in `readCalendarMonthPlan` and again in its own holiday read; `locations` and the venue
+document are read once. Next: hand the plan's holiday facts to the second read.
 
 ## A702. Opening hours' season chip is clipped on a season name that is one long word
 

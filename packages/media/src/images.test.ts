@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   withTransaction,
@@ -57,6 +57,7 @@ const suite = useVenueDb({
 /** A photo ready to store. A different width is a different photo (`testing/sample-image.ts`). */
 const prepare = (width: number): Promise<PreparedImage> => samplePreparedImage({ width });
 const photo = await prepare(8);
+beforeEach(() => seedVenueSettings(suite.db));
 
 describe("image library", () => {
   it("does not read the same image row again when counting its uses", async () => {
@@ -75,7 +76,6 @@ describe("image library", () => {
 
   it("stores a prepared photo with required default metadata and reuses it for a repeat upload", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const first = await uploadImage(
         tx,
@@ -444,7 +444,6 @@ describe("search and sorting", () => {
 
   it("sorts by name using the requested translation then site default, date in either direction and stable pages", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
       const added = [];
       for (let n = 0; n < 3; n++)
@@ -565,7 +564,6 @@ describe("one search rule with every other search", () => {
 
   it("needs one translation to hold every word", async () => {
     await withTransaction(suite.db, async (tx) => {
-      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const toast = await add(tx, 402, { en: "Toast", es: "Tostada" });
       expect(await ids(tx, { query: "tostada" })).toEqual([toast]);
@@ -713,7 +711,6 @@ it("sorts accented names alphabetically in both directions across pages", async 
 
 it("sorts by the default when the requested language was disabled while retaining its translations", async () => {
   await withTransaction(suite.db, async (tx) => {
-    await seedVenueSettings(tx);
     await writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr"] });
     const first = await uploadImage(
       tx,
@@ -1213,7 +1210,6 @@ describe("free default choice with incomplete catalogue and image text", () => {
   it("switches with all nine catalogue kinds and a real image gap without rewriting their rows", async () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const menu = await createCatalogue(tx, {
         name: "Staff menu",
@@ -1362,14 +1358,12 @@ describe("free default choice with incomplete catalogue and image text", () => {
 
   it("still refuses an image metadata write missing the newly selected default", async () => {
     const id = await withTransaction(suite.db, async (tx) => {
-      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
       const result = await uploadImage(
         tx,
         { image: await prepare(81), names: { en: "Original" } },
         { fallbackLanguage: "en" },
       );
-      await seedVenueSettings(tx);
       await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["en", "es"] });
       return result.image.id;
     });
