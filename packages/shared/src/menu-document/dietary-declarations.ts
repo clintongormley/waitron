@@ -33,9 +33,6 @@ export function expandDietaryDeclarations(declarations: readonly DietaryLabel[])
   return DIETARY_LABELS.filter((label) => labels.has(label));
 }
 
-/** The POSITIVE per-choice dietary set: the four labels a modifier choice may declare itself "suitable
- * for". Deliberately smaller than {@link DIETARY_LABELS} (the product-recipe set, which also carries
- * `no_meat`/`no_fish`) — a choice states suitability, not a recipe-derived preference filter. */
 export const DIETARY_SUITABILITY = ["vegan", "vegetarian", "halal", "kosher"] as const;
 export type DietarySuitability = (typeof DIETARY_SUITABILITY)[number];
 const SUITABILITY = new Set<string>(DIETARY_SUITABILITY);

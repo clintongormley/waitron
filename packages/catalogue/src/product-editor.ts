@@ -42,9 +42,6 @@ const columns = {
   color: products.color,
 };
 
-/** The row as stored, and beside it the PUBLISHED allergens (the manual overlay merged with the
- * recipe derivation, or null when not yet reviewed), which the editor's `allergens` field does not
- * carry. */
 async function readStored(tx: Transaction, productId: string) {
   const [row] = await tx
     .select({ ...columns, publishedAllergens: products.allergens })

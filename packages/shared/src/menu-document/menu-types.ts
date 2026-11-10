@@ -1,7 +1,7 @@
 import type { CombinedOffer } from "./menu-combine-types.js";
 import type { OptionLabel } from "./modifier-list-types.js";
 import type { ProductAllergens } from "./allergens.js";
-import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
+import type { DietOverride, DietProfile } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
 import type { PricingUnit } from "./pricing-unit.js";
 import type { ProductOrdering } from "./product-ordering.js";
@@ -46,7 +46,6 @@ export interface MenuOffer extends MenuItem {
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
-  dietDerivation: DietDerivation | null;
   dietOverride: DietOverride | null;
   dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
@@ -79,7 +78,6 @@ export interface MenuOfferVariant {
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
-  dietDerivation: DietDerivation | null;
   dietOverride: DietOverride | null;
   dietaryDeclarations: DietaryLabel[];
   courseId: string | null;
@@ -139,9 +137,6 @@ export interface AvailableProduct {
    * halal/kosher from the override — or null when unreviewed. The diet twin of `allergens`. Not part
    * of the priceable projection. */
   diet: DietProfile | null;
-  /** The recipe-derived diet overlay (`products.dietDerivation`) — the folded ingredient origins + a
-   * `pending` flag — or null when there is no recipe. */
-  dietDerivation: DietDerivation | null;
   /** The staff diet override (`products.dietOverride`) ALONE, or null when none — exposed distinctly
    * from `diet` (the published union) so an editor seeds its picker without double-counting, mirroring
    * `manualAllergens`. */

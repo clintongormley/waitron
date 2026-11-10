@@ -101,13 +101,12 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     expect(col).toEqual({ name: "allergens", notnull: 0 });
   });
 
-  it("products carries the three nullable diet columns", async () => {
+  it("products carries the two nullable diet columns", async () => {
     const cols = (await columnsOf(db, "products"))
-      .filter((c) => ["diet_derivation", "diet_override", "diet"].includes(c.name))
+      .filter((c) => ["diet_override", "diet"].includes(c.name))
       .sort((a, b) => a.name.localeCompare(b.name));
     expect(cols).toEqual([
       { name: "diet", notnull: 0 },
-      { name: "diet_derivation", notnull: 0 },
       { name: "diet_override", notnull: 0 },
     ]);
   });

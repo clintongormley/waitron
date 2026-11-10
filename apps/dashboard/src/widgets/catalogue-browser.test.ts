@@ -64,7 +64,6 @@ const product = (
   ordering: "public",
   allergens: null,
   dietOverride: null,
-  dietDerivation: null,
   manualAllergens: null,
   image: null,
   color: null,

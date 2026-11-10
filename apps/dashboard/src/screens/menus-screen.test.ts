@@ -122,7 +122,6 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     ordering: "public",
     allergens: null,
     dietOverride: null,
-    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,
@@ -9162,7 +9161,6 @@ describe("publishing", () => {
       vatClass: offer.vatClass,
       allergens: offer.allergens,
       diet: offer.diet,
-      dietDerivation: offer.dietDerivation,
       dietOverride: offer.dietOverride,
       dietaryDeclarations: offer.dietaryDeclarations,
     };

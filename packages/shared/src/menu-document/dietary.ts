@@ -1,26 +1,10 @@
 import { AppError } from "../errors.js";
 
-export const DIETARY_ORIGINS = [
-  "plant",
-  "meat",
-  "fish",
-  "shellfish",
-  "dairy",
-  "egg",
-  "honey",
-  "other_animal",
-] as const;
-export type DietaryOrigin = (typeof DIETARY_ORIGINS)[number];
-
 export const CONTAINS_TAGS = ["meat", "fish"] as const;
 export type ContainsTag = (typeof CONTAINS_TAGS)[number];
 
 export type DietLabel = "yes" | "no" | "unknown";
 
-export interface DietDerivation {
-  origins: DietaryOrigin[];
-  pending: boolean;
-}
 export interface DietOverride {
   vegan?: "yes" | "no";
   vegetarian?: "yes" | "no";
@@ -36,24 +20,7 @@ export interface DietProfile {
   halal?: "yes" | "no";
   kosher?: "yes" | "no";
 }
-const ORIGINS = new Set<string>(DIETARY_ORIGINS);
 const CONTAINS = new Set<string>(CONTAINS_TAGS);
-// The origins compatible with each diet. vegan = plant only; vegetarian also allows the non-slaughter
-// animal products. Anything not listed excludes the diet.
-const VEGAN_OK = new Set<DietaryOrigin>(["plant"]);
-const VEGETARIAN_OK = new Set<DietaryOrigin>(["plant", "dairy", "egg", "honey"]);
-
-export function validateOrigin(value: unknown): DietaryOrigin {
-  if (typeof value !== "string" || !ORIGINS.has(value)) {
-    throw new AppError("diet.invalid_origin", { origin: String(value) });
-  }
-  return value as DietaryOrigin;
-}
-
-/** Validate a single contains-tag against `CONTAINS_TAGS` (meat/fish ONLY) — the override's
- * `addContains`/`removeContains` entries. The parallel of {@link validateOrigin} but over the
- * strictly smaller contains set, so an otherwise-valid origin like `"plant"` is rejected here. A bad
- * value is `diet.invalid_origin` (`origin` echoes it), the same code the full-origin check uses. */
 export function validateContainsTag(value: unknown): ContainsTag {
   if (typeof value !== "string" || !CONTAINS.has(value)) {
     throw new AppError("diet.invalid_origin", { origin: String(value) });
@@ -88,15 +55,11 @@ function validateContainsList(value: unknown): void {
   for (const tag of value) validateContainsTag(tag);
 }
 
-/** Derived-only profile (no halal/kosher — those come from the override). Cautious: any pending
- * withholds vegan/vegetarian as "unknown"; contains-tags assert from KNOWN presence regardless. */
-export function deriveDietProfile(d: DietDerivation): DietProfile {
-  const present = new Set(d.origins);
-  const label = (ok: Set<DietaryOrigin>): DietLabel =>
-    d.pending ? "unknown" : [...present].every((o) => ok.has(o)) ? "yes" : "no";
-  const contains = [...CONTAINS_TAGS].filter((t) => present.has(t));
-  return { vegan: label(VEGAN_OK), vegetarian: label(VEGETARIAN_OK), contains };
-}
+export const UNDECLARED_DIET: DietProfile = {
+  vegan: "unknown",
+  vegetarian: "unknown",
+  contains: [],
+};
 
 /** Fold a staff override over a derived profile. Override wins; halal/kosher appear only when set. */
 export function overlayDietProfile(

@@ -62,7 +62,6 @@
     "@waitron/printing": "workspace:*",
     "@waitron/provisioning": "workspace:*",
     "@waitron/purchasing": "workspace:*",
-    "@waitron/recipes": "workspace:*",
     "@waitron/recovery-pack": "workspace:*",
     "@waitron/reporting": "workspace:*",
     "@waitron/server-kit": "workspace:*",

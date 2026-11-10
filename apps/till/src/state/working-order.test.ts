@@ -994,7 +994,6 @@ describe("WorkingOrderStore: the VAT preview takes each class's rate today", () 
     category: null,
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
     courseId: null,

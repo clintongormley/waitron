@@ -1195,7 +1195,6 @@ export async function listWorkingLineContexts(
     vatClass: string;
     allergens: MenuOffer["allergens"];
     diet: unknown;
-    dietDerivation: unknown;
     dietOverride: unknown;
   }[]
 > {
@@ -1214,7 +1213,6 @@ export async function listWorkingLineContexts(
       vatClass: workingLineContexts.vatClass,
       allergens: workingLineContexts.allergens,
       diet: workingLineContexts.diet,
-      dietDerivation: workingLineContexts.dietDerivation,
       dietOverride: workingLineContexts.dietOverride,
     })
     .from(workingLineContexts)
@@ -1347,7 +1345,6 @@ export async function recordWorkingLineContexts(
         vatClass: offer.vatClass,
         allergens: offer.allergens,
         diet: offer.diet,
-        dietDerivation: offer.dietDerivation,
         dietOverride: offer.dietOverride,
         latePeriodName: line.late?.periodName ?? null,
         lateConfirmedBy: line.late?.confirmedBy ?? null,

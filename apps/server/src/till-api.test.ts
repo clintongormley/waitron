@@ -2411,10 +2411,9 @@ describe("zone-offer catalogue routes", () => {
           vatClass: "general",
           category: "Bebidas",
           allergens: { sulphites: {} },
-          // No override and no recipe: vegan/vegetarian "unknown" — an unreviewed plate asserts no
+          // No override: vegan/vegetarian "unknown" — an unreviewed plate asserts no
           // positive diet claim.
           diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
-          dietDerivation: null,
           dietOverride: null,
           dietaryDeclarations: [],
           courseId: null,
@@ -2434,9 +2433,8 @@ describe("zone-offer catalogue routes", () => {
           vatClass: "general",
           category: "Bebidas",
           allergens: null,
-          // No override, no recipe → the cautious "unknown" profile (see Agua mineral above).
+          // No override → the cautious "unknown" profile (see Agua mineral above).
           diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
-          dietDerivation: null,
           dietOverride: null,
           dietaryDeclarations: [],
           courseId: null,

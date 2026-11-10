@@ -213,7 +213,6 @@ function product(
     ordering: "public",
     allergens: null,
     dietOverride: null,
-    dietDerivation: null,
     manualAllergens: null,
     image: null,
     color: null,
@@ -5840,32 +5839,6 @@ describe("product-list filters (A463)", () => {
     await choose(el, "dietary", "has");
     expect(cellUnder(root, "a-declared", "Dietary info").textContent!.trim()).toBe("Vegan");
     expect(cellUnder(root, "b-override", "Dietary info").textContent!.trim()).toBe("Halal: No");
-  });
-
-  it("counts a recipe's categorised ingredient origins as dietary info, and an uncategorised one as none", async () => {
-    showColumns("dietary");
-    setLocale("en");
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({
-          id: "a-recipe",
-          name: "A",
-          dietDerivation: { origins: ["meat", "plant", "meat"], pending: true },
-        }),
-        product({
-          id: "b-uncategorised",
-          name: "B",
-          dietDerivation: { origins: [], pending: true },
-        }),
-      ],
-    });
-    const root = await tableRoot(el);
-    await choose(el, "dietary", "has");
-    expect(rowKeys(root)).toEqual(["a-recipe"]);
-    expect(cellUnder(root, "a-recipe", "Dietary info").textContent!.trim()).toBe("Plant, Meat");
-    await choose(el, "dietary", "none");
-    expect(rowKeys(root)).toEqual(["b-uncategorised"]);
-    expect(cellUnder(root, "b-uncategorised", "Dietary info").textContent!.trim()).toBe("");
   });
 
   it("offers no Status filter: Show archived, off at first, lists archived products and variants read-only", async () => {

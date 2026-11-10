@@ -176,7 +176,6 @@ export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export type { AllergenMap } from "@waitron/shared";
 export { locationCatalogues } from "./schema/location-catalogues.js";
-export { ingredients, recipeLines } from "./schema/recipes.js";
 export {
   purchaseInvoiceVat,
   purchaseInvoices,

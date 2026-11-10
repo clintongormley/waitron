@@ -484,15 +484,8 @@ export type VatClass = "general" | "reduced" | "super_reduced" | "zero";
  * present. */
 export type AllergenDeclaration = Record<string, AllergenEntry> | null;
 
-export { DIETARY_ORIGINS, DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
-export type {
-  DietaryOrigin,
-  DietaryLabel,
-  DietarySuitability,
-  ContainsTag,
-  DietOverride,
-} from "@waitron/shared";
-import type { DietaryOrigin } from "@waitron/shared";
+export { DIETARY_LABELS, DIETARY_SUITABILITY } from "@waitron/shared";
+export type { DietaryLabel, DietarySuitability, ContainsTag, DietOverride } from "@waitron/shared";
 
 export interface CatalogueSummary {
   id: string;
@@ -573,32 +566,6 @@ export interface ProductUsingUnit {
   name: string;
   active: boolean;
 }
-
-// ── Ingredient & product-recipe types ─────────────────────────────────────────────────────────────
-
-export interface Ingredient {
-  id: string;
-  name: string;
-  allergens: AllergenDeclaration;
-  /** The dietary-origin category, or null when uncategorised (dependent products go diet-PENDING). */
-  dietaryOrigin: DietaryOrigin | null;
-  active: boolean;
-}
-
-export interface IngredientInput {
-  name: string;
-  allergens?: Record<string, AllergenEntry>;
-  dietaryOrigin?: DietaryOrigin | null;
-}
-
-export interface IngredientPatch {
-  name?: string;
-  allergens?: AllergenDeclaration;
-  dietaryOrigin?: DietaryOrigin | null;
-  active?: boolean;
-}
-
-export type RecipeLine = Ingredient;
 
 // ── Receipt-trim (configurable-till) types ────────────────────────────────────────────────────────
 
@@ -3431,30 +3398,6 @@ export class DashboardApi {
 
   get imageLibraryRequest(): DashboardRequest {
     return this.#request;
-  }
-
-  // ── Ingredients & product recipes ──────────────────────────────────────────────────────────────
-
-  listIngredients(): Promise<Ingredient[]> {
-    return this.#request<Ingredient[]>("/management-api/ingredients", "GET");
-  }
-
-  createIngredient(input: IngredientInput): Promise<Ingredient> {
-    return this.#request<Ingredient>("/management-api/ingredients", "POST", input);
-  }
-
-  updateIngredient(id: string, patch: IngredientPatch): Promise<void> {
-    return this.#request<void>(`/management-api/ingredients/${id}`, "PATCH", patch);
-  }
-
-  getProductRecipe(productId: string): Promise<RecipeLine[]> {
-    return this.#request<RecipeLine[]>(`/management-api/products/${productId}/recipe`, "GET");
-  }
-
-  setProductRecipe(productId: string, ingredientIds: string[]): Promise<void> {
-    return this.#request<void>(`/management-api/products/${productId}/recipe`, "PUT", {
-      ingredientIds,
-    });
   }
 
   // ── Receipt-trim configuration ────────────────────────────────────────────────────────────────

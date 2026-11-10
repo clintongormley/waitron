@@ -5319,7 +5319,6 @@ export interface HeldOrder {
       catalogueId: string;
       catalogueName: string;
       diet: unknown;
-      dietDerivation: unknown;
       dietOverride: unknown;
     };
   }[];
@@ -5530,7 +5529,6 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             catalogueId: context.menuId,
             catalogueName: context.menuName,
             diet: context.diet,
-            dietDerivation: context.dietDerivation,
             dietOverride: context.dietOverride,
           },
         };

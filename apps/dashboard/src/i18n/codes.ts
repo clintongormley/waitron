@@ -994,14 +994,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A product offered as an extra can't have active variants. First remove it from these extras lists:",
     es: "Un producto que se ofrece como extra no puede tener variantes activas. Quítalo primero de estas listas de extras:",
   },
-  "ingredient.name_required": {
-    en: "Enter a name",
-    es: "Introduce un nombre",
-  },
-  "ingredient.not_found": {
-    en: "This ingredient no longer exists. Refresh the page and try again.",
-    es: "Este ingrediente ya no existe. Actualiza la página y vuelve a intentarlo.",
-  },
   "media.read_failed": {
     en: "The image couldn't be read, try again",
     es: "No se pudo leer la imagen, inténtalo de nuevo",

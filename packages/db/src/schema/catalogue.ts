@@ -82,18 +82,7 @@ export const products = table(
     // till surfaces distinctly); {} = reviewed, contains none.
     allergens: json<AllergenMap>("allergens"),
     // Staff-authored allergen overlay — what a human explicitly declared. NULL = not reviewed.
-    // `allergens` (published) is the computed union of this and `recipe_derivation`; the recipe
-    // module (@waitron/recipes) writes `recipe_derivation`, catalogue republishes `allergens`.
     manualAllergens: json<AllergenMap>("manual_allergens"),
-    // The recipe module's derived floor + a `pending` flag (a recipe with an unreviewed ingredient).
-    // NULL = no recipe / module unused. Written only via catalogue's applyRecipeDerivation.
-    recipeDerivation: json<{ allergens: AllergenMap; pending: boolean }>("recipe_derivation"),
-    // Diet analogue of `recipe_derivation`: the set of reviewed ingredient origins + pending, written
-    // by @waitron/recipes. Separate from `recipe_derivation` because allergen-pending and diet-pending
-    // are independent (an ingredient may have reviewed allergens but an uncategorised origin).
-    dietDerivation: json<{ origins: string[]; pending: boolean }>("diet_derivation"),
-    // Staff override — forced vegan/vegetarian/halal/kosher + hand contains-tags. halal/kosher live
-    // ONLY here (no derivation). NULL = no override.
     dietOverride: json<{
       vegan?: "yes" | "no";
       vegetarian?: "yes" | "no";
@@ -102,8 +91,7 @@ export const products = table(
       addContains?: string[];
       removeContains?: string[];
     }>("diet_override"),
-    // Published, display diet profile — the diet twin of the published `allergens` column, recomputed
-    // by @waitron/catalogue whenever derivation or override changes. Read by the menu filter/grid.
+    // The published profile: the override laid over UNDECLARED_DIET.
     diet: json<{
       vegan: "yes" | "no" | "unknown";
       vegetarian: "yes" | "no" | "unknown";

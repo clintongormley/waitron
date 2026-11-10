@@ -158,7 +158,6 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
       vatClass: "reduced",
       allergens: null,
       diet: null,
-      dietDerivation: null,
       dietOverride: null,
       dietaryDeclarations: [],
     });

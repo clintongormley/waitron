@@ -1,6 +1,6 @@
 // Deep imports, not the barrel, which would pull the DB layer into the browser bundle.
-import { deriveDietProfile, overlayDietProfile, expandDietaryDeclarations } from "@waitron/shared";
-import type { DietaryLabel, DietDerivation, DietOverride, DietProfile } from "@waitron/shared";
+import { UNDECLARED_DIET, overlayDietProfile, expandDietaryDeclarations } from "@waitron/shared";
+import type { DietaryLabel, DietOverride, DietProfile } from "@waitron/shared";
 import type { OrderLine } from "./working-order.js";
 
 /** `pending` when the dish's own allergens are unreviewed (a null base). */
@@ -32,7 +32,6 @@ export function asServedDiet(line: OrderLine): DietProfile {
     if (declarations.includes("kosher")) result.kosher = "yes";
     return result;
   }
-  const derivation: DietDerivation = line.product.dietDerivation ?? { origins: [], pending: true };
   const override: DietOverride | null = line.product.dietOverride ?? null;
-  return overlayDietProfile(deriveDietProfile(derivation), override);
+  return overlayDietProfile(UNDECLARED_DIET, override);
 }

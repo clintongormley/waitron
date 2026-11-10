@@ -246,21 +246,21 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       id: "salad",
       name: "Ensalada",
       customerName: { es: "Ensalada para el cliente" },
-      dietDerivation: { origins: ["plant"], pending: false },
+      dietOverride: { vegan: "yes", vegetarian: "yes" },
     };
     const meat: TillProduct = {
       ...coffee,
       id: "meat",
       name: "Chuleta",
       customerName: { es: "Chuleta para el cliente" },
-      dietDerivation: { origins: ["meat"], pending: false },
+      dietOverride: { vegan: "no", vegetarian: "no", addContains: ["meat"] },
     };
     const mystery: TillProduct = {
       ...coffee,
       id: "mystery",
       name: "Plato del día",
       customerName: { es: "Plato del día para el cliente" },
-      dietDerivation: { origins: [], pending: true },
+      dietOverride: null,
     };
     store.addProduct(salad, "1");
     store.addProduct(meat, "1");

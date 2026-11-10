@@ -1,6 +1,5 @@
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { products, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -10,10 +9,8 @@ import {
   createCategory,
   createProduct,
   listAvailableProducts,
-  updateProduct,
 } from "@waitron/catalogue";
 import type { ProductAllergens } from "@waitron/catalogue";
-import { createIngredient, setProductRecipe, updateIngredient } from "@waitron/recipes";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
@@ -68,50 +65,6 @@ describe("catalogue allergen workflows", () => {
       "House cake": { milk: {}, nuts: { kinds: ["almonds"] } },
       "Garden salad": {},
       "Daily soup": null,
-    });
-  });
-
-  it("publishes recipe inheritance and manual additions, then withdraws and restores review", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      const sauce = await createIngredient(tx, { name: "Egg sauce", allergens: { eggs: {} } });
-      const bread = await createIngredient(tx, {
-        name: "Wheat bread",
-        allergens: { gluten: { kinds: ["wheat"] } },
-      });
-      const filling = await createIngredient(tx, { name: "Unreviewed filling" });
-      const catalogue = await createCatalogue(tx, { name: "Deli" });
-      const sandwich = await createProduct(tx, {
-        catalogueId: catalogue.id,
-        categoryId: null,
-        name: "Sandwich",
-        pricingUnit: "each",
-        unitPrice: "5.50",
-        vatClass: "reduced",
-      });
-      const published = async () =>
-        (
-          await tx
-            .select({ allergens: products.allergens })
-            .from(products)
-            .where(eq(products.id, sandwich.id))
-        )[0]!.allergens;
-      await setProductRecipe(tx, sandwich.id, [sauce.id, bread.id]);
-      expect(await published()).toEqual({ eggs: {}, gluten: { kinds: ["wheat"] } });
-      await updateProduct(tx, sandwich.id, { allergens: { nuts: { kinds: ["almonds"] } } });
-      expect(await published()).toEqual({
-        eggs: {},
-        gluten: { kinds: ["wheat"] },
-        nuts: { kinds: ["almonds"] },
-      });
-      await setProductRecipe(tx, sandwich.id, [sauce.id, bread.id, filling.id]);
-      expect(await published()).toBeNull();
-      await updateIngredient(tx, filling.id, { allergens: { fish: {} } });
-      expect(await published()).toEqual({
-        eggs: {},
-        fish: {},
-        gluten: { kinds: ["wheat"] },
-        nuts: { kinds: ["almonds"] },
-      });
     });
   });
 });

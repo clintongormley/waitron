@@ -71,8 +71,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     // The catalogue module's `afterImport` sets `name_key` from the name.
     { name: "products", omit: ["name_key"] },
     { name: "location_catalogues" },
-    { name: "ingredients" },
-    { name: "recipe_lines" },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
     { name: "floor_zones", leaveBehindWhenFalse: "active" },
     {

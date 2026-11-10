@@ -1075,16 +1075,11 @@ Left as they were, from #827's review: unlike the two staff
   column today; what a click on that cell's blank space then does was not tested.
 
 
-## A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left open by A1222)
+## A1227. Check screens that add live subscriptions after an awaited read
 
-- **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
-  open by A1222).** Since A1222 the dashboard opens its first live stream after the screen is
-  drawn. The Catalogue still opens a second when at least one catalogue exists:
-  `catalogue-screen.ts` `#load` watches `ingredients` and `recipe_lines` only from
-  `#reloadProducts`, after awaited reads, so the stream that opened with the screen's other types
-  is replaced once those reads answer. Decide whether the screen should watch those types from the
-  start, and check other screens that watch after an awaited read the same way. A1308 removes both
-  tables, which ends the Catalogue's case; the check of other screens stays.
+Check screens that watch after an awaited read: decide whether they should watch those types
+from the start, avoiding a replacement of the initial live stream after loading.
+
 
 ## A1315. Bring every help bubble down to orientation, one area per PR
 

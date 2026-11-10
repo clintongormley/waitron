@@ -56,7 +56,6 @@ function offer(menu: Menu): TillMenuOffer {
     category: null,
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
     courseId: null,

@@ -74,7 +74,7 @@ export interface ErrorParams {
   "allergen.invalid_kind": { code: string };
   /** A direct dietary declaration is not one of the supported suitability labels. */
   "diet.declaration_invalid": Record<string, never>;
-  /** A supplied dietary origin is not one of the `DIETARY_ORIGINS`. */
+  /** A supplied contains-tag, or a contains list, is not valid. */
   "diet.invalid_origin": { origin: string };
   /** A supplied diet label (`vegan`/`vegetarian`/…) is not an accepted value for `field`. */
   "diet.invalid_label": { field: string; value: string };

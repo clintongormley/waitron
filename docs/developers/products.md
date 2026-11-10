@@ -560,8 +560,8 @@ lists are always its parent's. Its Name, customer-facing name and kitchen name a
 kitchen name falls back to the variant's own staff name (_The three names_, above).
 
 A variant's published allergens stay blank, and so read as its parent's, until it sets allergens of
-its own, and its published diet likewise until it sets a diet override of its own; once set, each is
-computed over the parent's recipe-derived values and recomputed when those change
+its own, and its published diet likewise until it sets a diet override of its own; once set, each keeps its own
+declaration or override independently of later parent edits
 (`republishOverlays`, `packages/catalogue/src/operations.ts`).
 
 ### Price
@@ -782,8 +782,8 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
 A variant also has its own product page: the product editor's routes read and save a variant's id.
 The value it reads is the variant's own row, a field it leaves blank read blank, and its parent's
 value for each of those fields in `inherited` — for allergens, the parent's published declaration
-(the allergens staff set on it together with those its recipe derives, or no declaration at all
-while nothing on the parent has been reviewed or its recipe has an unreviewed ingredient), since
+(the declaration staff set on it, sorted and de-duplicated, or no declaration at all
+while the parent has not been reviewed), since
 that is what a blank reads as, while the variant's own allergens field holds only what staff set on
 the variant. Saving a blank keeps the field inheriting, and saving a value overrides it for that
 variant alone. The main category, the unit and the colour are the exceptions: the read gives a
@@ -891,7 +891,7 @@ archived variant sent inactive or omitted remains unchanged (`writeProductVarian
 
 A product has two states. **Active / Archived** is its retained state. Archive sets `active: false`
 and keeps the row. Switching it back on is refused with `product.archived`. Editor saves, product
-patches, variant writes, extras-list additions, course and recipe writes, and unit reassignment
+patches, variant writes, extras-list additions, course writes, and unit reassignment
 refuse an archived product too. Translation fixes, the main reporting category and folder moves
 remain allowed.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,

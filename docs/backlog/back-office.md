@@ -3,24 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Purchasing, recipes, stock and reports". This file holds
 their full text.
 
-## Recipes are removed under A1308 (owner, 2026-11-04)
-
-The question here was whether to delete the recipe routes and screen or to remount them. The owner
-decided: "remove it, and remove recipes. we don't use them." Nothing outside tests mounts
-`/management-api/ingredients` or `/management-api/products/:id/recipe`, and
-`apps/dashboard/src/screens/recipe-screen.ts` is imported by nothing, so no box can reach them
-(read, not run). Allergens and diet stay declared directly on the product, as they have been since
-#345.
-
-[A1308's menu slice](../superpowers/specs/2026-11-02-rationalisation/tables-menu.md) does the work; its §4
-lists everything that goes. These backlog lines go stale with that slice, not before:
-
-- `dashboard.md`: A1227's two tables, the form-width entry's "ingredient form", and the refusal list's
-  ingredient form and dietary-origin picker.
-- `architecture.md`: A974's and A976's "recipe ingredient" fixture text.
-- `docs/developers/products.md:563`, `:784-785`, `:891`, `docs/developers/design-system.md:2863`, `:2882`,
-  `:2980`, `docs/developers/ci-and-gates.md:278`, `:319`, `docs/developers/conventions-data.md:1352`.
-
 ## A supplier credit note cannot be entered through the dashboard
 
 **OPEN, unqueued.** A negative gross total on the purchase-invoice routes is a supplier credit

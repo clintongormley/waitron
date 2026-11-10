@@ -69,7 +69,6 @@ function offer(
     category: null,
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
     courseId: null,

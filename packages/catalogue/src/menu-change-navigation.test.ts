@@ -99,7 +99,6 @@ function offer(id = "soup"): FrozenOffer {
     vatClass: "general",
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
     ordering: "public",
@@ -439,7 +438,6 @@ function variant(id: string): FrozenOfferVariant {
     vatClass: "general",
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
   };

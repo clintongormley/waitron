@@ -393,7 +393,7 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   and their consumers stay with A976, as do the filing order-portion samples.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976.
-  Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
+  Catalogue display names, seasonal venue and zone names and printer-screen display labels
   also stay with A976, along with counter-screen display text, station-screen display names,
   kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
   device/printer deletion fixture text.
@@ -769,7 +769,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   Keep accented search fixtures unchanged. Shared helper display samples and their consumers
   stay with A976.
   Other fixture text stays with A976, including catalogue
-  display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
+  display names, seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
   payment/queue widget display text, the table-action suite's beer/cake display names,
   variant media fixtures and device/printer deletion fixture text.

@@ -315,7 +315,6 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/dashboard-kit",
   "@waitron/credentials",
   "@waitron/catalogue",
-  "@waitron/recipes",
   "@waitron/workforce-es",
   "@waitron/layouts",
   "@waitron/printing",

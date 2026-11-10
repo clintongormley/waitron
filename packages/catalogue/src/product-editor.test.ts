@@ -9,12 +9,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  applyRecipeDerivation,
-  createCatalogue,
-  listProducts,
-  updateProduct,
-} from "./operations.js";
+import { createCatalogue, listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
 import { createCategory } from "./categories.js";
@@ -425,46 +420,6 @@ it("changes the product's unit on update", async () => {
   expect(updated.unitId).toBe(other.id);
 });
 
-it("writes direct declarations without reviving or rewriting stale recipe derivation", async () => {
-  const saved = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, null, catalogueId, input, "en"),
-  );
-  const staleRecipe = { allergens: { milk: {} }, source: "old" };
-  const staleDiet = { origins: ["dairy"], pending: false };
-  await withTransaction(fx.db, async (tx) => {
-    // Through the table on both sides: a `json()` column stores JSON TEXT, so the write needs the
-    // column's own mapping, and the read needs it to hand back a parsed value rather than the
-    // stored string.
-    await tx
-      .update(products)
-      .set({
-        recipeDerivation: staleRecipe as never,
-        dietDerivation: staleDiet as never,
-      })
-      .where(eq(products.id, saved.id));
-    await saveProductEditor(
-      tx,
-      saved.id,
-      catalogueId,
-      { ...input, dietaryDeclarations: ["halal", "kosher"] },
-      "en",
-    );
-  });
-  const rows = await fx.db
-    .select({
-      recipe_derivation: products.recipeDerivation,
-      diet_derivation: products.dietDerivation,
-      dietary_declarations: products.dietaryDeclarations,
-    })
-    .from(products)
-    .where(eq(products.id, saved.id));
-  expect(rows[0]).toEqual({
-    recipe_derivation: staleRecipe,
-    diet_derivation: staleDiet,
-    dietary_declarations: ["halal", "kosher"],
-  });
-});
-
 it("rolls back product and variants when a supporting association fails", async () => {
   // An attachment naming no stored list is the failure this reaches for: the product and its
   // variants roll back with it.
@@ -771,21 +726,6 @@ describe("a variant's own page", () => {
     expect((await read(variantId)).inherited).toMatchObject({ name: "Coffee" });
     await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { name: "Coffee renamed" }));
     expect((await read(variantId)).inherited).toMatchObject({ name: "Coffee renamed" });
-  });
-
-  it("offers the parent's PUBLISHED allergens as inherited, never only its manual overlay", async () => {
-    const eggs = { eggs: {} };
-    await withTransaction(fx.db, (tx) =>
-      applyRecipeDerivation(tx, parentId, { allergens: eggs, pending: false }),
-    );
-    const union = await read(variantId);
-    expect(union.inherited?.allergens).toEqual({ milk: {}, ...eggs });
-    expect(union.allergens).toBeNull();
-
-    await withTransaction(fx.db, (tx) => updateProduct(tx, parentId, { allergens: null }));
-    const recipeOnly = await read(variantId);
-    expect(recipeOnly.inherited?.allergens).toEqual(eggs);
-    expect(recipeOnly.allergens).toBeNull();
   });
 
   it("keeps a blank blank when the read value is saved back unchanged", async () => {

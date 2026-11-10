@@ -58,13 +58,7 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import {
-  DIETARY_ORIGINS,
-  type CategorySummary,
-  type Course,
-  type DietaryOrigin,
-  type Product,
-} from "../api/client.js";
+import { type CategorySummary, type Course, type Product } from "../api/client.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 
 export const ROOT_KEY = "root";
@@ -103,27 +97,20 @@ function rowActive({ product, variant }: ProductRow): boolean {
 
 const OVERRIDE_DIETS = ["vegan", "vegetarian", "halal", "kosher"] as const;
 
-function recipeOrigins(product: Product): DietaryOrigin[] {
-  const origins = product.dietDerivation?.origins ?? [];
-  return DIETARY_ORIGINS.filter((origin) => origins.includes(origin));
-}
-
 function hasDietaryInfo(product: Product): boolean {
   return (
-    recipeOrigins(product).length > 0 ||
     product.dietaryDeclarations.length > 0 ||
     OVERRIDE_DIETS.some((diet) => product.dietOverride?.[diet] !== undefined)
   );
 }
 
 function dietaryInfoText(product: Product): string {
-  const origins = recipeOrigins(product).map((origin) => t(`origin.${origin}`));
   const declared = product.dietaryDeclarations.map((label) => t(`editor.diet.${label}`));
   const overridden = OVERRIDE_DIETS.flatMap((diet) => {
     const answer = product.dietOverride?.[diet];
     return answer === undefined ? [] : [`${t(`diet.${diet}`)}: ${t(`diet.${answer}`)}`];
   });
-  return [...origins, ...declared, ...overridden].join(", ");
+  return [...declared, ...overridden].join(", ");
 }
 
 export function acceptsCatalogueDrop(

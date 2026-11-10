@@ -108,8 +108,6 @@ export const effectiveProductColumns = {
   image: inherited(products.image, parentProducts.image),
   allergens: inherited(products.allergens, parentProducts.allergens),
   manualAllergens: inherited(products.manualAllergens, parentProducts.manualAllergens),
-  recipeDerivation: inherited(products.recipeDerivation, parentProducts.recipeDerivation),
-  dietDerivation: inherited(products.dietDerivation, parentProducts.dietDerivation),
   dietOverride: inherited(products.dietOverride, parentProducts.dietOverride),
   diet: inherited(products.diet, parentProducts.diet),
   dietaryDeclarations: owned(products.dietaryDeclarations, parentProducts.dietaryDeclarations),

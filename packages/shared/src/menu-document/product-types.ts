@@ -1,7 +1,7 @@
 import type { PricingUnit } from "./pricing-unit.js";
 import type { VatClass } from "./vat-rates.js";
 import type { ProductAllergens } from "./allergens.js";
-import type { DietDerivation, DietOverride } from "./dietary.js";
+import type { DietOverride } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
 import type { ProductOrdering } from "./product-ordering.js";
 
@@ -126,18 +126,13 @@ export interface Product {
    * held order's line kept at or below its quantity is still billed although its dish or an extra
    * has since become Inactive or Unavailable; a raise is checked in `updateHeldOrder`. */
   available: boolean;
-  /** The PUBLISHED allergen union (manual overlay merged with any recipe-derived floor), or null when
-   * not yet reviewed. */
+
   allergens: ProductAllergens | null;
-  /** The staff-authored overlay ALONE, before the recipe floor is unioned in — null when unreviewed.
-   * The editor seeds its picker from THIS so recipe-derived allergens are never re-saved as manual. */
+
   manualAllergens: ProductAllergens | null;
-  /** The staff diet override ALONE, or null when none — the diet twin of `manualAllergens`; the editor
-   * seeds its diet-override controls from THIS without double-counting the recipe-derived profile. */
+
   dietOverride: DietOverride | null;
-  /** The recipe-derived diet overlay — the ingredients' origins folded together, plus a pending flag
-   * set by any uncategorised ingredient — or null when the product has no recipe. */
-  dietDerivation: DietDerivation | null;
+
   image: string | null;
   /** Its own tile colour, or null when it takes its category's. */
   color: string | null;
@@ -212,10 +207,8 @@ export interface InheritedValues {
   /** The parent's category, which is always the variant's. */
   primaryCategoryId: string | null;
   courseId: string | null;
-  /** The parent's PUBLISHED allergens (its manual overlay merged with its recipe derivation, or null
-   * when not yet reviewed), which are what a variant with no allergen overlay of its own reads. The
-   * variant's own editable `allergens` field is the variant's manual overlay; this field is the
-   * parent's published value, not the parent's manual overlay. */
+  /** A blank variant reads the parent's published value; its editable allergens hold its own manual
+   * declaration. This inherited value is not the parent's manual declaration. */
   allergens: ProductAllergens | null;
   dietaryDeclarations: DietaryLabel[];
 }

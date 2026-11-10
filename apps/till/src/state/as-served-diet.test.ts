@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
-import type { DietDerivation, DietOverride, OfferedExtraItem, TillProduct } from "../api/client.js";
+import type { DietOverride, OfferedExtraItem, TillProduct } from "../api/client.js";
 
 function item(productId: string): OfferedExtraItem {
   return {
@@ -36,12 +36,7 @@ function item(productId: string): OfferedExtraItem {
   };
 }
 
-/** A product offering one extras list of `items`, a diet derivation and an optional override. */
-function product(
-  derivation: DietDerivation | null,
-  items: OfferedExtraItem[],
-  override?: DietOverride | null,
-): TillProduct {
+function product(override: DietOverride | null, items: OfferedExtraItem[]): TillProduct {
   return {
     id: "dish",
     name: "dish",
@@ -51,8 +46,7 @@ function product(
     vatClass: "general",
     category: null,
     allergens: null,
-    dietDerivation: derivation,
-    ...(override === undefined ? {} : { dietOverride: override }),
+    dietOverride: override,
     offeredModifiers: [
       {
         kind: "extras",
@@ -109,41 +103,38 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
     expect(asServedDiet(line(prod, "bacon"))).toMatchObject(own);
   });
 
-  it("shows the dish's own derived diet, ignoring a no-cheese extra", () => {
+  it("shows the dish's own diet, ignoring a no-cheese extra", () => {
     // Base plant + dairy, reviewed ⇒ vegetarian but NOT vegan; the extra changes nothing.
-    const prod = product({ origins: ["plant", "dairy"], pending: false }, [item("no-cheese")]);
+    const prod = product({ vegan: "no", vegetarian: "yes" }, [item("no-cheese")]);
     expect(asServedDiet(line(prod)).vegan).toBe("no");
     expect(asServedDiet(line(prod, "no-cheese")).vegan).toBe("no");
   });
 
   it("shows the dish's own vegan diet, ignoring an add-meat extra", () => {
-    const prod = product({ origins: ["plant"], pending: false }, [item("add-bacon")]);
+    const prod = product({ vegan: "yes", vegetarian: "yes" }, [item("add-bacon")]);
     const asServed = asServedDiet(line(prod, "add-bacon"));
     expect(asServed.vegan).toBe("yes");
     expect(asServed.vegetarian).toBe("yes");
     expect(asServed.contains).toEqual([]);
   });
 
-  it("a pending derivation reads unknown (never a positive claim), extra or no extra", () => {
-    const prod = product({ origins: ["plant", "dairy"], pending: true }, [item("no-cheese")]);
-    const asServed = asServedDiet(line(prod, "no-cheese"));
-    expect(asServed.vegan).toBe("unknown");
-    expect(asServed.vegetarian).toBe("unknown");
-  });
-
-  it("a null derivation reads unknown (an unreviewed dish)", () => {
-    const prod = product(null, []);
-    const asServed = asServedDiet(line(prod));
-    expect(asServed.vegan).toBe("unknown");
-    expect(asServed.vegetarian).toBe("unknown");
-  });
-
-  it("re-applies the staff override to the dish's own derivation", () => {
-    // Base plant-only (would be vegan), but the owner forces vegan:"no" and sets halal.
-    const prod = product({ origins: ["plant"], pending: false }, [], {
-      vegan: "no",
-      halal: "yes",
+  it("a dish with no declaration and no override reads unknown", () => {
+    expect(asServedDiet(line(product(null, [])))).toEqual({
+      vegan: "unknown",
+      vegetarian: "unknown",
+      contains: [],
     });
+  });
+
+  it("applies the dish's own staff override", () => {
+    // Base plant-only (would be vegan), but the owner forces vegan:"no" and sets halal.
+    const prod = product(
+      {
+        vegan: "no",
+        halal: "yes",
+      },
+      [],
+    );
     const asServed = asServedDiet(line(prod));
     expect(asServed.vegan).toBe("no");
     expect(asServed.halal).toBe("yes");
@@ -151,7 +142,7 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
 
   it("a forced-vegan dish reads its own vegan:'yes'; a selected add-meat extra does not change it", () => {
     // The owner forces vegan:"yes" on the DISH; the extra's meat does not cap it.
-    const prod = product({ origins: ["plant"], pending: false }, [item("add-bacon")]);
+    const prod = product({ vegan: "yes", vegetarian: "yes" }, [item("add-bacon")]);
     prod.dietOverride = { vegan: "yes" };
     expect(asServedDiet(line(prod)).vegan).toBe("yes");
     const asServed = asServedDiet(line(prod, "add-bacon"));
@@ -169,14 +160,14 @@ describe("asServedDiet — the dish's own diet, no modifier fold", () => {
       vatClass: "general",
       category: null,
       allergens: null,
-      dietDerivation: { origins: ["plant"], pending: false },
+      dietOverride: { vegan: "yes", vegetarian: "yes" },
     };
     expect(asServedDiet({ product: prod, quantity: "1" }).vegan).toBe("yes");
   });
 });
 
 it("shows the dish's own allergens, ignoring a selected extra that used to add one", () => {
-  const prod = product({ origins: ["plant"], pending: false }, []);
+  const prod = product({ vegan: "yes", vegetarian: "yes" }, []);
   prod.allergens = { gluten: { kinds: ["wheat" as const] } };
   prod.offeredModifiers = [
     {
@@ -194,7 +185,7 @@ it("shows the dish's own allergens, ignoring a selected extra that used to add o
 });
 
 it("the dish's own allergens and diet ignore a canonical extras selection", () => {
-  const prod = product({ origins: ["plant"], pending: false }, []);
+  const prod = product({ vegan: "yes", vegetarian: "yes" }, []);
   prod.allergens = {};
   prod.offeredModifiers = [
     {
@@ -218,7 +209,7 @@ it("the dish's own allergens and diet ignore a canonical extras selection", () =
 it.each(["answered here", "frozen by the server"] as const)(
   "the dish's own allergens and diet ignore an options answer (%s)",
   (source) => {
-    const prod = product({ origins: ["plant", "dairy"], pending: false }, []);
+    const prod = product({ vegan: "no", vegetarian: "yes" }, []);
     prod.allergens = { milk: {} };
     prod.offeredModifiers = [
       {

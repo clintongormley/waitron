@@ -459,7 +459,6 @@ function frozenOffer(
     vatClass: "reduced",
     allergens: null,
     diet: null,
-    dietDerivation: null,
     dietOverride: null,
     dietaryDeclarations: [],
     image: null,

@@ -152,7 +152,6 @@ function zoneOffers(
       category: product.category ?? "Other",
       allergens: product.allergens,
       diet: null,
-      dietDerivation: null,
       dietOverride: null,
       dietaryDeclarations: [],
       offeredModifiers: [],
