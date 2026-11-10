@@ -1166,8 +1166,8 @@ product failures.
 
 ## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
 
-18 entries, size M. The first 15 are unchanged from the index they came from (backlog review,
-2026-11-06); the 16th was added on 2026-11-07, and the last two are slow reads A1308 slice 0's
+17 entries, size M. The first 15 are unchanged from the index they came from (backlog review,
+2026-11-06); the 16th was added on 2026-11-07, and the last one is a slow read A1308 slice 0's
 bench found on a year of trading.
 Where each lands: the A1308 slice named in the design's "Lands in" column
 ([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
@@ -1220,14 +1220,6 @@ Where each lands: the A1308 slice named in the design's "Lands in" column
   sat in another migration set) ended when A760 moved
   it into core. Declare the keys when A1308 rewrites the starting migrations (CLAUDE.md §3: declare
   every foreign key).
-- **A1346. Two invoice-record lookups by sale walk every original record.** `filedReceiptFor` in
-  `packages/fiscal-verifactu/src/backend.ts` and `readDeviceReceiptEvidence` in
-  `packages/fiscal-verifactu/src/device-receipt-evidence.ts` filter
-  `sale_id = ? and tipo_registro = 'alta' and corrects_registro_id is null`. With no planner
-  statistics the engine picks the unique index on `corrects_registro_id`, where `is null` matches
-  every original record, instead of `registros_sale_idx`. Measured on the bench's day-9 database
-  from the `sqlite3` command line, warm: 236 µs, against 26 µs when forced through
-  `registros_sale_idx`. Fiscal-package code: the owner lands it.
 - **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
   on the bench's first full year (built 2026-11-06, since rebuilt), so any walk over print-job rows reads about five pages a job (the table was
   8 GB of the 12 GB year), and the printers-down check (`stationPrintersDownQuery` in

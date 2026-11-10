@@ -681,7 +681,7 @@ A1308 slice 0's bench found three slow reads on a year of trading, placed the sa
 | Today's table | Addition | Lands in | Backlog entry |
 | --- | --- | --- | --- |
 | `order_groups` | An index, or two indexed lookups, for the next round number | Orders and sales (2026-11-10: landed before A1308 as the A1469 index on `number_party_id`) | A1345 |
-| `registros_facturacion` | The two lookups by sale use `registros_sale_idx` | Fiscal, landed by the owner | A1346 |
+| `registros_facturacion` | The two lookups by sale use `registros_sale_idx` | Fiscal, landed by the owner (landed before A1308 as A1471, which also names the index in the void and absent-original remedy reads) | A1346 |
 | `print_jobs` | The payload after the columns reads filter on | Devices and printing | A print job's payload |
 
 A1306's history rewrite gets a task in A760's plan, Task 19, with a check that the `:main` image tag
