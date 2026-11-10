@@ -115,6 +115,6 @@ export const RESTRICTED_RETURN_WORDS: Readonly<
     clash:
       "El equipo principal ha encontrado diferencias en los datos de facturación o de pago. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. No restablezcas este equipo. La resolución de estas diferencias aún no está disponible.",
     confirmed:
-      "El equipo principal ha confirmado que todos los registros se han recibido o sus conflictos se han revisado y aceptado. Ya puedes restablecer este equipo.",
+      "El equipo principal ha confirmado que tiene todos los registros de facturación. Puedes restablecer este equipo.",
   },
 };
