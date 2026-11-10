@@ -16,6 +16,7 @@ import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
+import { fillTemplate } from "./fill-template.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import {
   BACKUP_DELETED_EMAIL_WORDS,
@@ -81,14 +82,6 @@ const TIME_PLACEHOLDERS = {
   after: "afterOffsetMinutes",
 } as const;
 
-/** `template` with each `{slot}` named in `values` filled in, in one pass: a typed name holding a
- * slot's spelling is printed as typed. A slot `values` does not name is left. */
-function fill(template: string, values: Readonly<Record<string, string>>): string {
-  return template.replace(/\{(\w+)\}/g, (whole, slot: string) =>
-    Object.hasOwn(values, slot) ? values[slot]! : whole,
-  );
-}
-
 /** A code's subject and text, with the slots only that code fills in `values`. */
 function wordsFor(
   code: EmailCode,
@@ -135,7 +128,7 @@ function wordsFor(
     if (params?.["byStaff"] === true && typeof person === "string") {
       const device = params["device"];
       const till =
-        typeof device === "string" ? fill(words.namedTill, { device }) : words.unnamedTill;
+        typeof device === "string" ? fillTemplate(words.namedTill, { device }) : words.unnamedTill;
       return { subject: words.subject, text: words.byStaff, values: { person, till } };
     }
     return { subject: words.subject, text: words.text, values: { confirmedBy } };
@@ -143,7 +136,7 @@ function wordsFor(
   if (code === "clock.corrected") {
     const words = CLOCK_CORRECTED_EMAIL_WORDS[language];
     const direction = params?.["direction"];
-    const step = fill(
+    const step = fillTemplate(
       direction === "forward" ? words.forward : direction === "back" ? words.back : words.moved,
       { duration: formatDuration(params?.["stepMs"], language === "es" ? "es-ES" : "en-GB") },
     );
@@ -159,7 +152,7 @@ function wordsFor(
     } else if (source === "staff") {
       const device = params?.["device"];
       values["till"] =
-        typeof device === "string" ? fill(words.namedTill, { device }) : words.unnamedTill;
+        typeof device === "string" ? fillTemplate(words.namedTill, { device }) : words.unnamedTill;
       text = words.staff;
     } else if (source === "admin") {
       text = words.admin;
@@ -194,7 +187,7 @@ export function boxEmailMessage(
     if (typeof at === "string" && typeof offset === "number")
       values[name] = receiptDateTimeNumeric(at, "en-GB", offset);
   }
-  return { subject: fill(words.subject, values), text: fill(words.text, values) };
+  return { subject: fillTemplate(words.subject, values), text: fillTemplate(words.text, values) };
 }
 
 /** The open alerts of `INCIDENT_EMAIL_CODES`, oldest first, read in one write-lock turn with no

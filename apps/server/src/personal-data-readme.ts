@@ -3,6 +3,7 @@ import {
   PERSONAL_DATA_README_WORDS,
   type ReadmeWords,
 } from "./i18n/personal-data-readme.js";
+import { fillTemplate } from "./fill-template.js";
 
 export interface PersonalDataReadmeInput {
   readonly language: "en" | "es";
@@ -17,11 +18,6 @@ export interface PersonalDataReadmeInput {
   readonly files: readonly string[];
 }
 
-/** A function replacement, so a `$&` or `$1` in a name is printed as typed. */
-function fill(template: string, values: Readonly<Record<string, string>>): string {
-  return template.replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole);
-}
-
 export function personalDataReadme(input: PersonalDataReadmeInput): string {
   const w = PERSONAL_DATA_README_WORDS[input.language];
   const venue = input.venue ?? w.unnamedVenue;
@@ -30,8 +26,8 @@ export function personalDataReadme(input: PersonalDataReadmeInput): string {
     words: Object.hasOwn(w.files, name) ? w.files[name] : undefined,
   }));
   const lines: string[] = [
-    fill(w.title, { venue }),
-    fill(w.prepared, { name: input.person, date: input.date }),
+    fillTemplate(w.title, { venue }),
+    fillTemplate(w.prepared, { name: input.person, date: input.date }),
     "",
   ];
   if (present.length > 0) {
@@ -52,10 +48,10 @@ export function personalDataReadme(input: PersonalDataReadmeInput): string {
 }
 
 function askLine(w: ReadmeWords, venue: string, privacyNoticeUrl: string | undefined): string {
-  const ask = fill(w.ask, { venue });
+  const ask = fillTemplate(w.ask, { venue });
   return privacyNoticeUrl === undefined
     ? ask
-    : `${ask} ${fill(w.notice, { url: privacyNoticeUrl })}`;
+    : `${ask} ${fillTemplate(w.notice, { url: privacyNoticeUrl })}`;
 }
 
 export interface InvoiceCustomerReadmeInput {
@@ -78,8 +74,8 @@ export function invoiceCustomerReadme(input: InvoiceCustomerReadmeInput): string
   const own = INVOICE_CUSTOMER_README_WORDS[input.language];
   const venue = input.venue ?? w.unnamedVenue;
   const lines: string[] = [
-    fill(w.title, { venue }),
-    fill(w.prepared, { name: input.customer, date: input.date }),
+    fillTemplate(w.title, { venue }),
+    fillTemplate(w.prepared, { name: input.customer, date: input.date }),
     "",
     w.filesHeading,
     `- invoices.json: ${own.holds} ${own.use}`,

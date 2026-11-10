@@ -276,7 +276,7 @@ describe("till-floor-screen: what each station has ready", () => {
     const el = await mountFloor([
       table({
         id: "t5",
-        label: "Mesa 5",
+        label: "Table 5",
         party: party({ id: "v5", displayName: "Ana {n}", tableIds: ["t5"] }),
         signals: [ready(["bar", "Bar {tables}", 2])],
       }),
