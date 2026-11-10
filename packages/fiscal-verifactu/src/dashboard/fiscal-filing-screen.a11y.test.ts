@@ -23,6 +23,7 @@ const EMPTY = overview({
   totalCases: 0,
   activeConflicts: [],
   heldWithoutCase: 0,
+  missingHistory: { notIssuedHere: [], identityChanges: [] },
 });
 
 async function show(answer: FilingOverviewAnswer, theme: Theme): Promise<FiscalFilingScreen> {

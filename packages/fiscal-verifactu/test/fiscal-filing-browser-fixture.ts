@@ -1,4 +1,9 @@
-import type { FilingCaseView, FilingOverviewAnswer } from "../src/filing-overview-types.js";
+import type {
+  FilingCaseView,
+  FilingOverviewAnswer,
+  IdentityChangeView,
+  NotIssuedHereView,
+} from "../src/filing-overview-types.js";
 
 export const OURS = "a".repeat(64);
 export const PREVIOUS = "b".repeat(64);
@@ -53,6 +58,26 @@ export function conflictCase(registroId: string, openedAt: string): FilingCaseVi
   };
 }
 
+export const NOT_ISSUED_HERE: NotIssuedHereView = {
+  seriesCode: "T0",
+  recordedAt: "2026-11-04T10:15:00.000Z",
+  invoice: {
+    IDEmisorFactura: "B12345678",
+    NumSerieFactura: "T0/12",
+    FechaExpedicionFactura: "28-10-2026",
+  },
+  state: "Correcto",
+  fingerprint: THEIRS,
+  system: { taxId: "B87654321", softwareId: "XX", installation: "ELSEWHERE-7" },
+};
+
+export const IDENTITY_CHANGE: IdentityChangeView = {
+  installationName: "BOX-02",
+  earlierInstallationName: "BOX-01",
+  lastHeldInvoice: { numSerieFactura: "T1/40", fechaExpedicionFactura: "2026-11-02" },
+  activatedAt: "2026-11-03T08:00:00.000Z",
+};
+
 export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOverviewAnswer {
   return {
     readAt: "2026-11-10T09:30:00.000Z",
@@ -91,7 +116,7 @@ export function overview(over: Partial<FilingOverviewAnswer> = {}): FilingOvervi
         },
       },
     ],
-    missingHistory: { notIssuedHere: [], identityChanges: [] },
+    missingHistory: { notIssuedHere: [NOT_ISSUED_HERE], identityChanges: [IDENTITY_CHANGE] },
     filing: true,
     awaitingCertificate: false,
     ...over,

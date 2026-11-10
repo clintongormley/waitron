@@ -20,6 +20,9 @@ import type {
   ActiveConflictView,
   FilingCaseView,
   FilingOverviewAnswer,
+  IdentityChangeView,
+  MissingHistory,
+  NotIssuedHereView,
 } from "../filing-overview-types.js";
 import type { FiscalFilingClient } from "./fiscal-filing-client.js";
 import { t } from "./strings.js";
@@ -251,6 +254,105 @@ function conflictLine(conflict: ActiveConflictView): TemplateResult {
   </li>`;
 }
 
+/** AEAT writes an invoice's date `DD-MM-YYYY`; the screen shows dates as the box stores them. */
+function storedDate(aeatDate: string): string {
+  const [day, month, year] = aeatDate.split("-");
+  return `${year}-${month}-${day}`;
+}
+
+function notIssuedLine(found: NotIssuedHereView): TemplateResult {
+  const system = found.system;
+  return html`<li>
+    <span
+      >${t("fiscal_filing.history.not_issued.line", {
+        number: found.invoice.NumSerieFactura,
+        date: storedDate(found.invoice.FechaExpedicionFactura),
+      })}</span
+    >
+    <span class="muted"
+      >${t("fiscal_filing.history.not_issued.series", { series: found.seriesCode })} ·
+      ${t("fiscal_filing.conflict.seen", { time: formatIsoMinute(found.recordedAt) })}</span
+    >
+    <wt-disclosure data-test="technical" heading=${t("fiscal_filing.technical")}>
+      <dl>
+        ${field(t("fiscal_filing.conflict.status"), aeatWords(found.state))}
+        ${field(
+          t("fiscal_filing.conflict.fingerprint"),
+          found.fingerprint === null
+            ? null
+            : html`<span class="fingerprint">${found.fingerprint}</span>`,
+        )}
+        ${field(
+          t("fiscal_filing.history.not_issued.sent_by"),
+          system === null
+            ? null
+            : `${system.taxId} · ${system.softwareId} · ${system.installation}`,
+        )}
+      </dl>
+    </wt-disclosure>
+  </li>`;
+}
+
+function identityChangeLine(change: IdentityChangeView): TemplateResult {
+  const earlier = change.earlierInstallationName;
+  return html`<li>
+    <span
+      >${t("fiscal_filing.history.identity.line", {
+        earlier,
+        new: change.installationName,
+        number: t("fiscal_filing.history.identity.invoice", {
+          number: change.lastHeldInvoice.numSerieFactura,
+          date: change.lastHeldInvoice.fechaExpedicionFactura,
+        }),
+      })}</span
+    >
+    <span class="muted"
+      >${t("fiscal_filing.history.identity.changed", {
+        time: formatIsoMinute(change.activatedAt),
+      })}</span
+    >
+  </li>`;
+}
+
+function historyList<T>(
+  heading: string,
+  test: string,
+  rows: readonly T[],
+  line: (row: T) => TemplateResult,
+  none: string,
+): TemplateResult {
+  return html`<div class="history" data-test=${test}>
+    <h3>${heading}</h3>
+    ${
+      rows.length === 0
+        ? html`<p class="muted" data-test="empty">${none}</p>`
+        : html`<ul>
+            ${rows.map(line)}
+          </ul>`
+    }
+  </div>`;
+}
+
+function missingHistory({ notIssuedHere, identityChanges }: MissingHistory): TemplateResult {
+  return html`<section aria-labelledby="fiscal-filing-history" data-test="missing-history">
+    <h2 id="fiscal-filing-history">${t("fiscal_filing.history")}</h2>
+    ${historyList(
+      t("fiscal_filing.history.not_issued"),
+      "not-issued-here",
+      notIssuedHere,
+      notIssuedLine,
+      t("fiscal_filing.history.not_issued.none"),
+    )}
+    ${historyList(
+      t("fiscal_filing.history.identity"),
+      "identity-changes",
+      identityChanges,
+      identityChangeLine,
+      t("fiscal_filing.history.identity.none"),
+    )}
+  </section>`;
+}
+
 /** Reads how this box's invoice records are being sent to AEAT. It changes nothing. */
 @customElement("vf-fiscal-filing-screen")
 export class FiscalFilingScreen extends LitElement {
@@ -340,6 +442,20 @@ export class FiscalFilingScreen extends LitElement {
       }
       .held {
         margin-top: var(--wt-space-3);
+      }
+      h3 {
+        margin: var(--wt-space-4) 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-sm);
+      }
+      .history ul {
+        display: grid;
+        gap: var(--wt-space-3);
+        margin: 0;
+        padding-inline-start: var(--wt-space-5);
+      }
+      .history li span {
+        display: block;
+        overflow-wrap: anywhere;
       }
       .footer {
         display: flex;
@@ -636,6 +752,7 @@ export class FiscalFilingScreen extends LitElement {
           : html`<p class="held" data-test="held-without-case">
               ${t("fiscal_filing.held_without_case", { count: count(overview.heldWithoutCase) })}
             </p>`
-      }`;
+      }
+      ${missingHistory(overview.missingHistory)}`;
   }
 }
