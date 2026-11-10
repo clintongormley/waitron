@@ -1629,13 +1629,11 @@ describe("setup-app", () => {
     "USB Demo refusal gives the available choices and Reload (%s)",
     async (locale, sentence, reload) => {
       try {
-        const provision = vi
-          .fn()
-          .mockRejectedValue({
-            code: "setup.mode_not_allowed",
-            params: { installationOrigin: "usb" },
-            status: 400,
-          });
+        const provision = vi.fn().mockRejectedValue({
+          code: "setup.mode_not_allowed",
+          params: { installationOrigin: "usb" },
+          status: 400,
+        });
         const el = await mountSetupApp(stubApi({ provision }));
         setLocale(locale);
         provisionRequest(el);
