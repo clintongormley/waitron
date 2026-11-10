@@ -193,7 +193,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with options described by a second line", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
+      '<wt-combobox label="Standalone ordering" search="never" value="staff" preserve-order></wt-combobox>',
       theme,
       DESCRIBED,
     );
@@ -206,7 +206,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   // from the panel's.
   test("open, with the cursor over a described row", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
+      '<wt-combobox label="Standalone ordering" search="never" value="staff" preserve-order></wt-combobox>',
       theme,
       DESCRIBED,
     );
@@ -220,7 +220,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("opened from the keyboard, with a described row active", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Standalone ordering" search="never" value="staff"></wt-combobox>',
+      '<wt-combobox label="Standalone ordering" search="never" value="staff" preserve-order></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = DESCRIBED;
@@ -422,7 +422,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with rows indented by depth", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Category" value="cocktails"></wt-combobox>',
+      '<wt-combobox label="Category" value="cocktails" preserve-order></wt-combobox>',
       theme,
       TREE,
     );

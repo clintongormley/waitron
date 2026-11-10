@@ -1,4 +1,6 @@
 import { DragEdgeScroll } from "../drag-edge-scroll.js";
+import { ChangeObserver } from "../change-observer.js";
+import { subscribePageLanguage } from "../page-language.js";
 import {
   compareSearchRanks,
   createLabelComparator,
@@ -43,7 +45,9 @@ export interface DataTableColumn<Row> {
     allLabel: string;
     /** A list keeps the row when it holds a chosen option. */
     value: (row: Row) => string | readonly string[];
-    options: { value: string; label: string }[];
+    options: { value: string; label: string; fixed?: boolean }[];
+    /** Retain a configured, chronological or lifecycle sequence in the filter dropdown. */
+    preserveOrder?: boolean;
     /** The option the filter starts on, while no choice is made or restored and the column's
      * options include it. Choosing the all option is then remembered as a choice of its own, so on
      * a table with a `viewKey` it outlives a reload. */
@@ -1191,6 +1195,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
   }
 
+  readonly #language = new ChangeObserver(this, subscribePageLanguage);
+
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener("focusin", this.#containFilterFocus);
@@ -1972,7 +1978,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (column?.sortValue === undefined && group === undefined && ranks === undefined)
       return [...rows];
     const direction = this.sortDirection === "ascending" ? 1 : -1;
-    const compareLabels = createLabelComparator();
+    const compareLabels = createLabelComparator(document.documentElement.lang);
     return [...rows]
       .map((row) => ({
         row,
@@ -2876,6 +2882,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   searchPlaceholder=${this.filterSearchPlaceholder}
                   noResultsLabel=${this.filterNoResultsLabel}
                   ?multiple=${Boolean(multiple)}
+                  ?preserve-order=${column.filter.preserveOrder}
                   .countLabel=${multiple?.countLabel ?? String}
                   .options=${this.#filterOptionList(column.filter)}
                   .value=${multiple ? "" : (active[0] ?? "")}
