@@ -877,11 +877,11 @@ describe("queued account mail primary admission at real boot", () => {
         await profile.body?.cancel();
         if (role === "primary") {
           await expect.poll(() => smtp.messages.length, { timeout: 5000 }).toBe(3);
-          expect(suite.db.all(sql`select status from outgoing_mail order by seq`)).toEqual([
-            { status: "sent" },
-            { status: "sent" },
-            { status: "sent" },
-          ]);
+          await expect
+            .poll(() => suite.db.all(sql`select status from outgoing_mail order by seq`), {
+              timeout: 5000,
+            })
+            .toEqual([{ status: "sent" }, { status: "sent" }, { status: "sent" }]);
         } else {
           expect(suite.db.all(sql`select id from outgoing_mail`)).toEqual([]);
           expect(suite.db.all(sql`select id from management_account_actions`)).toEqual([]);

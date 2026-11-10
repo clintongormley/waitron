@@ -572,9 +572,11 @@ without USB, OS reinstall, disk/encryption reset or practice database promotion.
 host-owned durable handoff and audit survive outside the removed venue. Interruptions continue
 the recorded operation and never erase a newly created Live venue. No setup code, private preview,
 setup/resume/recovery grant or credential reserves that fresh setup; LAN first claim, including
-pending fresh Live, is explicitly accepted. W60's first-claim concern is closed by that decision;
-its production-mode restriction stays. Blank stick boxes offer Prepare/Live/existing-venue,
-without Demo; production-started boxes offer neither Demo nor Prepare.
+pending fresh Live, is explicitly accepted. W60's first-claim concern is closed by that decision.
+Remaining mode work: blank stick boxes offer Prepare/Live/existing-venue without Demo; Live or
+restored production venues cannot start same-box re-setup; installed-box choices use the deployment
+state. Setup explicitly started with `WAITRON_ENV=production` already hides Demo/Prepare and now
+refuses both at the provision route, including supplied operations.
 
 The small downloading stick and three guards stay: disk first in boot order, mandatory USB
 removal before restart because firmware can ignore that order, and a stick that finds Waitron

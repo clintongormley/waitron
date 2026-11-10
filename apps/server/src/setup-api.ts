@@ -638,9 +638,6 @@ function parseProvisionPayload(
   };
 }
 
-/** Demo, Preparation and a dev box's Live make their own preproduction allocation. A production
- * box or request environment is refused not here but, when an enabled module offers a throwaway
- * allocation, by that seat, which `provisionVenue` calls with both (`provision.ts`). */
 function throwawayMarker(
   mode: "demo" | "prepare" | "live",
   devMode: boolean,
@@ -882,6 +879,9 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         deps.devMode === true,
         c.req.header("Accept-Language"),
       );
+      if (deps.environment === "production" && payload.mode !== "live") {
+        throw new AppError("setup.mode_not_allowed", { environment: "production" });
+      }
       const { mode, request, contribution, secret, secretExpected: expected, rawSecret } = payload;
       if (
         mode === "live" &&

@@ -1169,6 +1169,7 @@ declare module "@waitron/shared" {
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
+    "setup.mode_not_allowed": { environment: "production" };
     /**
      * The same adopt request was sent again after an earlier attempt failed past its first write to
      * this node. Adopt has no resume path, and running it again mints a second standby identity, so

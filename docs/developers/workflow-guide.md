@@ -381,26 +381,24 @@ development box (one started with `WAITRON_ENV=dev`), supplies no allocation, th
 own: a throwaway allocation, signed by a key made in memory for that one setup and never written
 anywhere (`packages/fiscal-verifactu/src/throwaway-allocation.ts`).
 
-**When the box makes one.** The setup route asks for a throwaway allocation when the request
-carries no `initialOperations` (no supplied allocation) and the mode is Demo or Preparation, on any
-box, or Live on a development box (`throwawayMarker`, `apps/server/src/setup-api.ts`). All three
+**When the box makes one.** On a non-production box, the setup route asks for a throwaway allocation
+when the request carries no `initialOperations` (no supplied allocation) and the mode is Demo or
+Preparation, or Live on a development box (`throwawayMarker`, `apps/server/src/setup-api.ts`). All three
 are stamped preproduction: the database records which environment it belongs to, and Waitron
 refuses to change it afterwards (`stampDeployment`, `packages/db/src/deployment.ts`);
 `parseProvisionPayload` in the same file picks it. A request that supplies an
-allocation always goes through the real custodian path, unchanged.
+allocation uses the supplied operations after the route's mode check.
 
-**When the setup route refuses it.** The throwaway signer refuses unless both the box's
-environment and the request's are preproduction, with `sif.throwaway_allocation_refused`, before
-it makes a key, and `provisionVenue` (`apps/server/src/provision.ts`) asks it before it writes
-anything. So on a box started with `WAITRON_ENV=production`, Demo and Preparation answer HTTP 400
-with that code. Through the setup route this holds only where an enabled module offers a throwaway
-allocation, which today is the Veri\*Factu module. A territory whose fiscal slot is `fiscal-none`,
-which files nothing, makes no allocation, so there is nothing to refuse; no country the setup route
-accepts today has one: the route takes its country from `getVenueSetupCountryPack`
-(`packages/country-packs/src/registry.ts`), which offers only Spain, and Spain's only supported
-fiscal territory files through Veri\*Factu (`packages/country-es/src/spain.ts`). Since A1384 the setup
-wizard does not offer Demo or Preparation on a production box, and words this refusal, with
-Reload, if one is requested anyway.
+**When the setup route refuses it.** On a box started with `WAITRON_ENV=production`, the provision
+route refuses Demo and Preparation after parsing, before calling provisioning. It answers HTTP 400
+with `setup.mode_not_allowed`, including when you supply `initialOperations`; the check
+does not depend on a module offering a throwaway allocation. The wizard hides both choices and
+offers Reload if either is requested anyway. This check uses the setup process's environment;
+binding installed-box choices to the deployment state remains part of B3.
+
+The throwaway signer also refuses unless both the box's environment and the request's are
+preproduction, before making a key. `provisionVenue` (`apps/server/src/provision.ts`) asks the
+enabled module for that allocation before writing the deployment stamp.
 
 **2026-10-15 A679 candidate:** the refusal below describes an unclaimed request. The claimed
 wizard runs its separate preproduction readiness check before collecting email settings or a
