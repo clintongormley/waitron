@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   readNodeMembership,
   readTenant,
@@ -306,6 +306,8 @@ describe("the spare's handover duty in a full start", () => {
   }, 120_000);
 
   it("shares the password delay across preparation and activation in a real TLS start", async () => {
+    const passwordAttemptClock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
+    onTestFinished(() => passwordAttemptClock.mockRestore());
     const tls = mintSelfSignedServerCert({
       hostnames: ["localhost"],
       ipAddresses: ["127.0.0.1"],

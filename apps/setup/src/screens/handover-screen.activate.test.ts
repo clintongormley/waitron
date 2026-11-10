@@ -195,10 +195,14 @@ it("clears the stored secrets and selected clock on leaving", async () => {
   await select(el);
   const selected = Reflect.get(el, "entry") as { readOperation(): unknown };
   expect(selected.readOperation()).not.toBeNull();
+  const host = el.parentElement!;
   el.remove();
   expect(Reflect.get(el, "password")).toBe("");
   expect(Reflect.get(el, "code")).toBe("");
   expect(selected.readOperation()).toBeNull();
+  host.append(el);
+  await vi.waitFor(() => expect(q(el, "[data-test=authenticate]")).not.toBeNull());
+  expect(q(el, "vf-recovery-hour")).toBeNull();
 });
 
 it.each(["activated", "abandoned"])(

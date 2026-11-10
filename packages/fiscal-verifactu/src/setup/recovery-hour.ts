@@ -50,7 +50,7 @@ const strings = {
       "Check your password and code, then compare clocks again. Use a fresh authenticator code.",
     promotionThrottled: "Wait before trying your password again, then compare clocks again.",
     promotionPermission:
-      "Use an administrator account allowed to hand over the venue and open this box at its own HTTPS address, then compare clocks again.",
+      "Use an administrator account allowed to hand over the venue. Open this box at its own HTTPS address, then compare clocks again.",
     promotionClock: "The clock check is too old. Compare clocks again before starting the venue.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
