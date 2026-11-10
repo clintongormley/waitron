@@ -24,6 +24,7 @@ import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import type { StartedServer } from "./boot.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { copyMigrationsRoot, awaitListening } from "./testing/boot-harness.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { freePorts } from "./testing/free-ports.js";
 
 const path = "/management-api/fiscal-certificate";
@@ -95,6 +96,7 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
         .from(persons)
         .where(eq(persons.role, "admin"));
       const session = await startManagementSession(tx, { personId: admin!.id });
+      await setFreshManagementSignIn(tx, session.token);
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });
     const logged: [string, string, unknown][] = [];
@@ -246,6 +248,7 @@ for (const [fiscal, box] of Object.entries(boxes)) {
             .from(persons)
             .where(eq(persons.role, "admin"));
           const session = await startManagementSession(tx, { personId: admin!.id });
+          await setFreshManagementSignIn(tx, session.token);
           return `${MANAGEMENT_COOKIE}=${session.token}`;
         });
         const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-fiscal-certificate-"));
