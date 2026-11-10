@@ -2560,7 +2560,6 @@ export class DashboardApi {
     return this.#localesPromise;
   }
 
-  /** The venue's name and languages can change under a page that stays open (a rename, a reset). */
   forgetLocales(): void {
     this.#localesPromise = undefined;
   }

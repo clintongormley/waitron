@@ -528,7 +528,6 @@ it("signed in, the banner has no language chooser and the account menu holds the
 
 it("signed in, the account menu reads the languages through the passive client, once", async () => {
   const background = {
-    forgetLocales: () => {},
     getLocales: vi.fn().mockResolvedValue({
       locales: [
         { code: "es-ES", label: "Español" },

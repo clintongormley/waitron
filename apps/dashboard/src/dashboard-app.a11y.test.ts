@@ -155,7 +155,6 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
           })
         : stubApi({
             getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
-            forgetLocales: () => {},
             getLocales: vi.fn().mockResolvedValue({
               locales: [{ code: "es-ES", label: "Español" }],
               venueDefault: "es-ES",

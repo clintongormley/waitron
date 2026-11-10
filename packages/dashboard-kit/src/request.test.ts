@@ -164,7 +164,7 @@ it("rejects with server.internal (not a parse error) when the error body is not 
   expect(onError).toHaveBeenCalledWith("server.internal");
 });
 
-it("reports an answered 404 with an empty body as server.internal with its status", async () => {
+it("rejects an answered 404 with an empty body as server.internal with its status, and reports the code", async () => {
   const onError = vi.fn();
   const fetchImpl = vi.fn<FetchLike>().mockResolvedValue(new Response(null, { status: 404 }));
   const request = createRequest({ fetchImpl, onError });
@@ -176,7 +176,7 @@ it("reports an answered 404 with an empty body as server.internal with its statu
   expect(onError.mock.calls).toEqual([["server.internal"]]);
 });
 
-it("reports an answered 404 with an error envelope as its code with its status", async () => {
+it("rejects an answered 404 with an error envelope as its code with its status, and reports the code", async () => {
   const onError = vi.fn();
   const fetchImpl = vi
     .fn<FetchLike>()
