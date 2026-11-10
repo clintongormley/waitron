@@ -1,5 +1,10 @@
-import { spawn, execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import process from "node:process";
+import console from "node:console";
+import { Buffer } from "node:buffer";
+import { URL } from "node:url";
+import { setTimeout, clearTimeout } from "node:timers";
+import { createHash, X509Certificate } from "node:crypto";
 import { appendFileSync, createReadStream } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
@@ -9,8 +14,11 @@ import { recipeFailures } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
 if (caseName !== "recipe-setup") throw new Error("Only recipe-setup is implemented here");
+const imageArgument = process.env.B3_RECIPE_IMAGE;
+if (imageArgument === undefined || imageArgument === "")
+  throw new Error("B3_RECIPE_IMAGE must be set");
 await mkdir(runDir, { mode: 0o700 });
-const image = resolve(process.env.B3_RECIPE_IMAGE);
+const image = resolve(imageArgument);
 const output = dirname(image);
 const populate = process.env.B3_POPULATE === "1";
 const uuid = (await readFile(join(output, "uuid"), "utf8")).trim();
@@ -21,7 +29,7 @@ const hash = async () => {
 };
 const hashBefore = populate ? undefined : await hash();
 const preload = `set -euxo pipefail
-mkdir /inputs
+mkdir -p /inputs
 mount -o ro /dev/vdb /inputs
 for archive in /inputs/*.tar; do docker load -i "$archive"; done
 cd /opt/waitron
@@ -147,17 +155,34 @@ try {
     const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
     try {
       const context = await browser.newContext({ ignoreHTTPSErrors: true });
+      const ca = await context.request.get("https://127.0.0.1/ca.crt");
+      if (ca.status() !== 200) throw new Error(`CA HTTP ${ca.status()}`);
+      await writeFile(
+        join(runDir, "ca-fingerprint.txt"),
+        new X509Certificate(await ca.text()).fingerprint256,
+      );
       const page = await context.newPage();
+      page.on("pageerror", (failure) => console.error("pageerror", failure));
+      page.on("requestfailed", (request) =>
+        console.error("requestfailed", request.url(), request.failure()),
+      );
       await page.goto("https://127.0.0.1/setup", { waitUntil: "domcontentloaded" });
-      await page.locator("wt-mode-screen").waitFor();
-      await page.screenshot({ path: join(runDir, "setup.png") });
-      await page.getByText("Prepare", { exact: true }).click();
-      await page.locator("wt-admin-screen").waitFor();
+      try {
+        await page.locator("setup-connection-screen [data-test=continue] button").click();
+        await page.locator("setup-mode-screen").waitFor();
+      } finally {
+        await page.screenshot({ path: join(runDir, "setup.png") });
+        await writeFile(join(runDir, "page.html"), await page.content());
+        await writeFile(join(runDir, "page-url.txt"), page.url());
+      }
+      await page.getByText("Prepare your restaurant", { exact: true }).click();
+      await page.locator("setup-admin-screen").waitFor();
+      await page.screenshot({ path: join(runDir, "prepare.png") });
     } finally {
       await browser.close();
     }
-    const status = JSON.parse(serial.match(/B3_STATUS:([^\r\n]+)/)[1]);
-    const actualUuid = serial.match(/B3_UUID:([^\r\n]+)/)[1].trim();
+    const status = JSON.parse(serial.match(/\nB3_STATUS:([^\r\n]+)/)[1]);
+    const actualUuid = serial.match(/\nB3_UUID:([^\r\n]+)/)[1].trim();
     child.kill("SIGTERM");
     await stopped;
     const images = JSON.parse(serial.match(/\nB3_IMAGES:([^\r\n]+)/)[1]);

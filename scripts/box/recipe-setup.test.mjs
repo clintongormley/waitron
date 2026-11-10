@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath, URL } from "node:url";
 
 const expected = {
   uuid: "5418a8bb-eeb9-4e94-832f-72629874781e",
@@ -15,6 +20,32 @@ const complete = {
 };
 
 describe("recipe boot evidence", () => {
+  it.each(["", undefined])("names a missing image setting before using a path (%s)", (value) => {
+    const root = mkdtempSync(join(tmpdir(), "b3-image-argument-"));
+    const env = { ...process.env };
+    if (value === undefined) delete env.B3_RECIPE_IMAGE;
+    else env.B3_RECIPE_IMAGE = value;
+    try {
+      const result = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(new URL("../../bench/box-installer/run.mjs", import.meta.url)),
+          "--case",
+          "recipe-setup",
+          "--run-dir",
+          join(root, "check"),
+        ],
+        { env, encoding: "utf8", timeout: 5000 },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("B3_RECIPE_IMAGE");
+      expect(result.stderr).not.toContain("EISDIR");
+      expect(result.stderr).not.toContain("ERR_INVALID_ARG_TYPE");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("accepts the built root serving fresh setup with all embedded services", async () => {
     await expect(
       import("./recipe-setup.mjs").then(({ recipeFailures }) => recipeFailures(expected, complete)),

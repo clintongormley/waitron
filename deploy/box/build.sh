@@ -17,23 +17,34 @@ Components: stable
 Architectures: amd64
 Signed-By: /usr/share/keyrings/docker.asc
 EOF
-cp -a "$output/sandbox/etc/apt/sources.list.d/docker.sources" /etc/apt/sources.list.d/
-cp "$output/sandbox/usr/share/keyrings/docker.asc" /usr/share/keyrings/
-timeout -k 10 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 update
-packages=()
-for package in docker-ce docker-ce-cli containerd.io docker-compose-plugin; do
-  version="$(apt-cache policy "$package:amd64" | awk '/Candidate:/ {print $2}')"
-  test -n "$version" && test "$version" != '(none)'
-  packages+=(--package="$package=$version")
-done
+packages=(
+  --package='docker-ce=5:29.9.3-1~debian.13~trixie'
+  --package='docker-ce-cli=5:29.9.3-1~debian.13~trixie'
+  --package='containerd.io=2.4.2-3~debian.13~trixie'
+  --package='docker-compose-plugin=5.7.0-1~debian.13~trixie'
+)
 cd "$output"
 timeout -k 10 600 mkosi --directory="$repo/deploy/box" --sandbox-tree="$output/sandbox" \
   --output-directory="$output" "${packages[@]}" build
 root="$output/recipe-root"
 install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
 cp "$repo/deploy/compose.yml" "$root/opt/waitron/compose.yml"
-cp "$inputs/compose.env" "$root/opt/waitron/.env"
+mkdir "$output/input-stage"
+for kind in app agent mailpit; do
+  archive="$inputs/$kind.tar"
+  cp --reflink=auto "$archive" "$output/input-stage/$kind.tar"
+  config="$(tar -xOf "$archive" manifest.json | jq -er '.[0].Config')"
+  digest="$(tar -xOf "$archive" -- "$config" | sha256sum | cut -d' ' -f1)"
+  name="$kind"
+  if [ "$kind" = agent ]; then name=print-agent; fi
+  printf '%s\t%s\n' "$name" "$digest" >> "$output/input-stage/expected-configs.tsv"
+done
+app="$(tar -xOf "$inputs/app.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
+agent="$(tar -xOf "$inputs/agent.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
+printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\n' "$app" "$agent" > "$root/opt/waitron/.env"
 chmod 0600 "$root/opt/waitron/.env"
+install -D -m 0644 "$output/sandbox/usr/share/keyrings/docker.asc" "$root/usr/share/keyrings/docker.asc"
+install -D -m 0644 "$output/sandbox/etc/apt/sources.list.d/docker.sources" "$root/etc/apt/sources.list.d/docker.sources"
 install -m 0644 "$repo/deploy/apparmor/waitron-print-agent" "$root/etc/apparmor.d/waitron-print-agent"
 mkdir -p "$root/etc/systemd/system/bluetooth.service.d"
 bluez="$(sed -n 's/^ExecStart=//p' "$root/usr/lib/systemd/system/bluetooth.service")"
@@ -53,9 +64,9 @@ cp "$root/boot/initrd.img-$kernel" "$output/initrd"
 uuid="$(cat /proc/sys/kernel/random/uuid)"
 truncate -s 8G "$output/waitron-box-dev.img"
 mkfs.ext4 -q -F -U "$uuid" -d "$root" "$output/waitron-box-dev.img"
-bytes="$(du -sb "$inputs" | cut -f1)"
+bytes="$(du -sb "$output/input-stage" | cut -f1)"
 truncate -s "$((bytes + 134217728))" "$output/inputs.img"
-mkfs.ext4 -q -F -d "$inputs" "$output/inputs.img"
+mkfs.ext4 -q -F -d "$output/input-stage" "$output/inputs.img"
 printf '%s\n' "$uuid" > "$output/uuid"
 B3_RECIPE_IMAGE="$output/waitron-box-dev.img" B3_POPULATE=1 \
   node "$repo/bench/box-installer/run.mjs" --case recipe-setup --run-dir "$output/populate"

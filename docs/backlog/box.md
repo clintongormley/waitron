@@ -560,6 +560,12 @@ old name only points at the new one for 14 days. Five slices; no migration.
 
 ## B3. The bootable USB installer
 
+**2026-11-10 development rehearsal:** the [recipe and single boot check](../../bench/box-installer/README.md)
+build an unencrypted Debian root, boot the embedded containers and open Prepare’s administrator
+form in QEMU. The emulator supplies startup units; this does not install or start a physical
+box. The image-consumed Demo restriction, encrypted host-state, first-start sealing/restart,
+retained disk keys, release VM and real stick/box/Android checks remain open.
+
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”
 [Design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md),
@@ -716,9 +722,9 @@ and the real screen, network and disk adapters come with the Linux pull request.
   time, is ignored. The decisions name the network to join but never carry its password, which stays with
   the adapter. The waits are in `NETWORK_TIMINGS_MS`.
 
-Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and
-dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtures; the real
-observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
+The development recipe and `recipe-setup` rig case now run through TCG emulation on this Mac.
+Still waiting for the installed-root and firmware/TPM work: encrypted recipe/dracut integration,
+firmware disk fixtures and the real observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
 refuse); the root-owned
 check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
 PR 2 left for later, from its plan's "Out": the preboot screen and the words for the `explain`
@@ -817,8 +823,8 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
 its request writer and reply reader; PR 9's routes call that client): what the server may ask B3's
 host service and what the host may answer, as a pure module with no socket, root or NetworkManager.
 
-- Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to slice 1's
-  recipe); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`), and this
+- Seven requests from Task 3.1's list (`HOST_VERBS`; `first-start.status` is left to the installed
+  first-start service); `clock.status` and `clock.set` stay slice 9b's shell handler's (`SHELL_VERBS`), and this
   module answers them `unknown_request`.
 - A request is one line: the verb, one space and one JSON object of the request's fields and then
   `actor`, printable ASCII only, at most 4096 characters, and accepted only in the exact form
@@ -1131,10 +1137,11 @@ client. No screen calls them yet.
   text and a QR code holding that same text, so `parseDiskRecoveryKey` reads a scan of it.
 - The screen's words for the `letter` and `length` refusals, in Spanish and English, come with the
   preboot screen.
-- The key-use record and the startup-fingerprint check before resealing wait for slice 1's recipe.
+- The key-use record and the startup-fingerprint check before resealing wait for the encrypted
+  installed root and first-start service; the development recipe does not build either.
 - `disk-key.mjs`'s store (reading the record, and writing the key with `writeFile` and `rename`)
   and `wifi-record.mjs`'s reader check their folder and then use the file by path, so a root
-  process can swap the folder in between. Slice 1's Linux adapters must either open relative to
+  process can swap the folder in between. The installed host's Linux adapters must either open relative to
   the checked folder (`node:fs` on Node 26.13 has no such call, as PR 5's note says) or keep every
   other writer out of those folders while they are used; the Wi-Fi folder is the one PR 5's
   publisher writes, whose other writers PR 5's note leaves to slice 3.
@@ -1166,7 +1173,7 @@ client. No screen calls them yet.
 - Nothing zeroes the Wi-Fi password end to end (PR 7's note above), so the host service and its
   adapters make no claim that it is wiped from memory unless a later pull request builds and tests
   that.
-- `first-start.status`, in Task 3.1's list, is left to slice 1's recipe pull request: nothing
+- `first-start.status`, in Task 3.1's list, is left to the installed first-start service: nothing
   defines its answer or reads it, because the host itself serves first start's failure page while
   Waitron is not yet running (spec §7.3 item 3). That pull request decides whether the request
   exists, and if it does, its answer and who reads it.

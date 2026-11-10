@@ -1,6 +1,6 @@
 # B3-11 PR A: boot the recipe’s setup screen
 
-**Proposal awaiting watcher approval.** Controlling scope is Lane K `questions.md`, WATCHER 2026-11-10 05:52:
+**Approved by the watcher on 2026-11-10 at 06:16**, as signed `140ddd3062` in Lane K `questions.md`; the approval accepts the startup-unit/snapshot/rendering route and one emulator check. Controlling scope is Lane K `questions.md`, WATCHER 2026-11-10 05:52:
 > PR A: the recipe builds a disk image that boots to setup in an emulator on this Mac, with one boot check. Three hours to an open PR.
 
 That note separates PR B’s image-consumed Demo restriction, reusing `setup.mode_not_allowed` and omitting `box-env.test.ts`. Read the [B3 design](../specs/2026-10-21-b3-usb-installer-design.md) (D), [original plan](2026-10-26-b3-usb-installer.md), and `docs/backlog/box.md:981–990`. The local receipt `~/waitron-campaign-k/receipts/b3-recipe-feasibility-20261110/feasibility.md` proves minimal Debian direct-kernel/shell boot only. Waitron/Docker/firmware/TPM remain untested.
