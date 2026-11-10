@@ -49,6 +49,9 @@ de facturación. El envío de esos registros aún no está disponible: no restab
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 
+Activar el acceso remoto pide la [confirmación de identidad compartida](staff.md#account-access).
+Desactivarlo no pide una nueva confirmación de identidad.
+
 Para impedir que el personal abra el panel desde fuera del local, abre **Servicios Cloud** en **Ajustes**
 en el equipo principal y elige **Desactivar el acceso remoto**. Si usas la dirección del personal,
 confirma **Desactivar el acceso remoto** para desconectarte también, o elige **Detener** para mantenerlo activado. Ten a mano la dirección local del equipo. La vinculación con

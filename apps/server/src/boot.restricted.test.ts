@@ -10,11 +10,13 @@ import {
   readNodeMembership,
   stampDeployment,
   withNodeTransaction,
+  withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import {
   endorseKey,
@@ -395,12 +397,12 @@ describe("a full start's stepdown, through its test seam", () => {
     body: JSON.stringify({
       operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       destinationNodeId: "00000000-0000-4000-8000-0000000000cc",
-      signIn: { method: "password", password: "correct horse" },
     }),
   });
 
   const adminCookie = async (): Promise<string> => {
     const { token } = await openManagementSession(suite.db, "admin");
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
     return `${MANAGEMENT_COOKIE}=${token}`;
   };
 

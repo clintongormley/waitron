@@ -1,7 +1,14 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { sales, saleSettlements, tenders, tenderRefunds, withTransaction } from "@waitron/db";
+import {
+  managementSessions,
+  sales,
+  saleSettlements,
+  tenders,
+  tenderRefunds,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
@@ -56,6 +63,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
+    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
     const original = await appendToChain(
       tx,
       node.nodeId,
@@ -503,7 +511,9 @@ it("refuses a saved decision that belongs to another administrator", async () =>
       .insert(persons)
       .values({ displayName: "Other administrator", role: "admin", pinHash: hashPin("1357") })
       .returning();
-    return (await startManagementSession(tx, { personId: other!.id })).token;
+    const session = await startManagementSession(tx, { personId: other!.id });
+    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    return session.token;
   });
   const before = await snapshot();
   const response = await send();

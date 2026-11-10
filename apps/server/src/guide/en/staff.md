@@ -29,7 +29,10 @@ Waitron asks you to sign in again before you invite someone, resend an invitatio
 login, disable or re-enable their account, or change an email, role or account status in **Users**.
 This includes changing your own email there. Names, telephone numbers and PIN resets do not need
 this confirmation. You also confirm before you change backups, download recovery files, show the
-backup recovery key, or export configuration or another staff member's data. Use your
+backup recovery key, or export configuration or another staff member's data. The same window
+covers connecting or disconnecting payment providers, changing the mail server or Cloud
+connection, turning on remote access, preparing a replacement box, installing a tax certificate,
+changing the legal name, fiscal corrections, handing over and removing a server. Use your
 password or passkey, plus an authenticator or recovery code if your account uses one. The
 confirmation covers these actions in this browser for 15 minutes, or until your session ends.
 Choose **Cancel** to leave the action undone. If the disk is full, open **Box status** and use

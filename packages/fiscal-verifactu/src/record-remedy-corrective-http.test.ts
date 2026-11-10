@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { recordSale } from "@waitron/core";
 import {
+  managementSessions,
   invoiceSeries,
   saleLines,
   sales,
@@ -102,6 +103,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
+    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
     const original = await recordSale(
       tx,
       backend,

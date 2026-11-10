@@ -7,6 +7,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   hashPin,
+  hashSessionToken,
+  managementSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -74,6 +76,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
+    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
     const original = await appendToChain(
       tx,
       node.nodeId,
@@ -171,6 +174,20 @@ async function acceptedDescriptionDecision() {
     };
   });
 }
+
+it("requires the shared confirmation before an enabled remedy changes records", async () => {
+  await suite.db
+    .update(managementSessions)
+    .set({ provedAt: null })
+    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+  const before = await snapshot();
+  const response = await send();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "management_session.proof_required", params: {} },
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it("appends an explicitly selected accepted-with-errors description correction with S/N markers", async () => {
   const decision = await acceptedDescriptionDecision();

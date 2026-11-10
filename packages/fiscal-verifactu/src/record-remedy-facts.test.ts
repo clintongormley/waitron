@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
-import { sales, withTransaction } from "@waitron/db";
+import { managementSessions, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   hashPin,
@@ -54,6 +54,7 @@ beforeEach(async () => {
       .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
       .returning();
     token = (await startManagementSession(tx, { personId: person!.id })).token;
+    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
     const original = await appendToChain(
       tx,
       node.nodeId,

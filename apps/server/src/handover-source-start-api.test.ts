@@ -63,7 +63,7 @@ import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { closeSupersededOperation, repairAtStart } from "./start-peer-check.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { copyImageMigrations } from "./testing/image-migrations.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
@@ -81,7 +81,6 @@ const ROUTE = "/management-api/handover";
 const OFFER_PATH = "/api/node/handover/offer";
 const QUERY_PATH = "/api/node/peer-status";
 const STRANGER = { nodeId: OTHER_BOX, ...generateNodeKeyPair() };
-const PASSWORD_SIGN_IN = { method: "password", password: "correct horse" };
 const FORGED_TEXT = "<img src=x onerror=alert(1)>\nsecond line";
 
 const migrations = [CORE_MIGRATIONS, NODE_MIGRATIONS];
@@ -175,9 +174,6 @@ function mount(
       stateDir: mainState,
       migrationsRoot: null,
       advertisedOrigin: MAIN_URL,
-      credentialKeyRing: TOTP_KEY_RING,
-      rpId: "localhost",
-      origin: "http://localhost",
       venueCanPromote: true,
       gate,
       stepDownAfterOffer,
@@ -222,6 +218,7 @@ beforeEach(async () => {
   const session = await openManagementSession(mainBox.db, "admin");
   personId = session.personId;
   cookie = `${MANAGEMENT_COOKIE}=${session.token}`;
+  await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, cookie));
   socket = new TLSSocket(new Socket());
   gate = createHandoverGate();
   exchanged = [];
@@ -261,7 +258,6 @@ async function start(
       body: JSON.stringify({
         operationId: OP,
         destinationNodeId: spare,
-        signIn: PASSWORD_SIGN_IN,
         ...body,
       }),
     },
@@ -431,14 +427,13 @@ describe("the connection", () => {
   const send = async (
     headers: Record<string, string>,
     env: unknown,
-    signIn: unknown = PASSWORD_SIGN_IN,
   ): Promise<{ status: number; body: unknown }> => {
     const response = await app.request(
       ROUTE,
       {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
-        body: JSON.stringify({ operationId: OP, destinationNodeId: spare, signIn }),
+        body: JSON.stringify({ operationId: OP, destinationNodeId: spare }),
       },
       env as object,
     );
@@ -478,11 +473,6 @@ describe("the connection", () => {
     expect(await send({}, undefined)).toEqual(NOT_PERMITTED);
   });
 
-  it("refuses plain HTTP before reading a password", async () => {
-    const answer = await send({ cookie }, undefined, { method: "password", password: "wrong" });
-    expect(answer).toEqual(NOT_PERMITTED);
-  });
-
   it("accepts a request from this box's own origin", async () => {
     const answer = await send({ cookie, origin: "http://localhost" }, { incoming: { socket } });
     expect(answer.status).toBe(200);
@@ -490,6 +480,13 @@ describe("the connection", () => {
 });
 
 describe("who may start one", () => {
+  it("requires the shared confirmation before contacting or recording a handover", async () => {
+    await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+    expect(await start()).toEqual(refusal(400, "management_session.proof_required"));
+    await expectNothingRecorded();
+    expect(exchanged).toEqual([]);
+  });
+
   it("refuses without a session", async () => {
     expect(await start({}, app, null)).toEqual(refusal(401, "management_session.required"));
     await expectNothingRecorded();
@@ -501,39 +498,24 @@ describe("who may start one", () => {
     await expectNothingRecorded();
   });
 
-  it("a person without `node.promote` is refused, before their password is looked at", async () => {
+  it("refuses a person without `node.promote` before requesting confirmation", async () => {
     const manager = await openManagementSession(mainBox.db, "manager");
-    const answer = await start(
-      { signIn: { method: "password", password: "wrong" } },
-      app,
-      `${MANAGEMENT_COOKIE}=${manager.token}`,
-    );
+    const answer = await start({}, app, `${MANAGEMENT_COOKIE}=${manager.token}`);
     expect(answer).toEqual(
       refusal(403, "authorization.not_permitted", { permission: "node.promote" }),
     );
     await expectNothingRecorded();
   });
 
-  it("refuses a wrong password", async () => {
-    const answer = await start({ signIn: { method: "password", password: "wrong" } });
-    expect(answer).toEqual(refusal(401, "password.invalid"));
-    await expectNothingRecorded();
-    expect(exchanged).toEqual([]);
-  });
-
-  it("refuses a missing sign-in", async () => {
-    const answer = await start({ signIn: undefined });
-    expect(answer).toEqual(refusal(400, "management.request_invalid", { field: "method" }));
-    await expectNothingRecorded();
-  });
-
-  it("checks the sign-in before looking at the stored operation", async () => {
+  it("requires confirmation before looking at a stored operation", async () => {
     await start();
-    const answer = await start({
-      destinationNodeId: OTHER_BOX,
-      signIn: { method: "password", password: "wrong" },
-    });
-    expect(answer).toEqual(refusal(401, "password.invalid"));
+    const before = operations();
+    const contacts = [...exchanged];
+    await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+    const answer = await start({ destinationNodeId: OTHER_BOX });
+    expect(answer).toEqual(refusal(400, "management_session.proof_required"));
+    expect(operations()).toEqual(before);
+    expect(exchanged).toEqual(contacts);
   });
 });
 

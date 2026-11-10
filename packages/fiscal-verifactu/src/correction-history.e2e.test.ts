@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { previewCorrectionAmounts, recordCorrection, recordSale } from "@waitron/core";
 import {
+  managementSessions,
   captureError,
   invoiceSeries,
   newId,
@@ -212,6 +213,7 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
     ).id,
   }));
   const app = new Hono();
+  await suite.db.update(managementSessions).set({ provedAt: new Date().toISOString() });
   mountRecordRemedies(
     app,
     {
