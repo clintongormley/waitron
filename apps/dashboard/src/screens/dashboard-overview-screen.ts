@@ -59,8 +59,8 @@ export class OverviewScreen extends LitElement {
       .cards > wt-card {
         display: grid;
       }
-      .cards > [data-test="top-sellers"] {
-        grid-column: 1 / -1;
+      .top-sellers {
+        margin-block-start: var(--wt-space-4);
       }
       .metric {
         display: flex;
@@ -80,10 +80,10 @@ export class OverviewScreen extends LitElement {
         text-align: left;
         border-bottom: 1px solid var(--wt-color-border);
       }
-      .cards th[scope="row"] {
+      .top-sellers th[scope="row"] {
         max-width: 0;
       }
-      .cards .seller-word {
+      .top-sellers .seller-word {
         display: inline-block;
         max-width: 100%;
         overflow: hidden;
@@ -228,12 +228,11 @@ export class OverviewScreen extends LitElement {
             "open-tables",
           )}
         </wt-card>
-
-        <wt-card data-test="top-sellers">
-          <h2 slot="header">${t("overview.top_sellers_title")}</h2>
-          ${renderTopSellers(overview.topSellers, this.#topSellerLabels())}
-        </wt-card>
       </div>
+      <wt-card class="top-sellers" data-test="top-sellers">
+        <h2 slot="header">${t("overview.top_sellers_title")}</h2>
+        ${renderTopSellers(overview.topSellers, this.#topSellerLabels())}
+      </wt-card>
     `;
   }
 

@@ -511,6 +511,8 @@ describe.each(["light", "dark"] as const)("overview card layout (%s)", (theme) =
   it.each([
     ["en-GB", 1280],
     ["es-ES", 1280],
+    ["en-GB", 1600],
+    ["es-ES", 1600],
     ["en-GB", 900],
     ["es-ES", 900],
     ["en-GB", 390],
@@ -526,7 +528,9 @@ describe.each(["light", "dark"] as const)("overview card layout (%s)", (theme) =
         theme,
       );
       await flush(el);
-      const cards = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".cards > wt-card")];
+      const cards = [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>(".cards > wt-card, .top-sellers"),
+      ];
       expect(cards).toHaveLength(4);
       await Promise.all(
         cards.map(
@@ -544,6 +548,9 @@ describe.each(["light", "dark"] as const)("overview card layout (%s)", (theme) =
           expect(box.bottom).toBeCloseTo(painted[0]!.bottom, 1);
         }
         expect(painted[3]!.top).toBeGreaterThan(painted[0]!.bottom);
+        const grid = el.shadowRoot!.querySelector(".cards")!.getBoundingClientRect();
+        expect(painted[0]!.left).toBeCloseTo(grid.left, 1);
+        expect(painted[2]!.right).toBeCloseTo(grid.right, 1);
       } else {
         for (let i = 1; i < painted.length; i++) {
           expect(painted[i]!.top).toBeGreaterThan(painted[i - 1]!.bottom);
@@ -671,6 +678,7 @@ it.each([1280, 985, 390])(
       await flush(el);
       await document.fonts.ready;
       const words = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".seller-word")];
+      expect(words.map((word) => word.textContent)).toEqual(["Octopus", "Croquetas"]);
       for (const word of words)
         expect(word.scrollWidth, word.textContent!).toBeLessThanOrEqual(word.clientWidth);
     } finally {

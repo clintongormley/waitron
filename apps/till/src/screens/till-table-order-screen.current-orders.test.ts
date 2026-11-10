@@ -603,8 +603,8 @@ describe("Current orders and Sent service", () => {
         lineNo: 1,
         name: "Beer",
         productId: "beer",
-        quantity: "1.000",
-        unitPrecision: 0,
+        quantity: "0.750",
+        unitPrecision: 3,
         unitPriceGross: "3.00",
         servedAt: null,
         courseId: null,
@@ -622,11 +622,20 @@ describe("Current orders and Sent service", () => {
       lines,
       groups: [{ ...orderGroup("g1", 1, "fired"), lineIds: ["l-beer"] }],
     });
-    expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×1");
+    expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×0.75");
     expect(q(el, "[data-serve-row]")).toBeNull();
     expect(q(el, "[data-serve-group]")).toBeNull();
     expect(q(el, "[data-group-summary]")).toBeNull();
     expect(q(el, "[data-sent-fallback] wt-button")).toBeNull();
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(text(q(el, '[data-sent-fallback-line="l-beer"]')!)).toContain("Beer ×0,75");
+    } finally {
+      setLocale(previous);
+    }
   });
 });
 

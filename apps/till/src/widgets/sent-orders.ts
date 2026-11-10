@@ -496,7 +496,7 @@ export class TillSentOrders extends LitElement {
     return html`<span class="what"
       >${row.name}${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}
       ×${this.#quantity(quantity)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}
-      ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${formatDecimalInput(extra.quantity, currentLocale())}</span>`)}
+      ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${this.#quantity(extra.quantity)}</span>`)}
       ${row.note === null ? nothing : html`<span class="note">${t("line.note.label")}: ${row.note}</span>`}
     </span>`;
   }

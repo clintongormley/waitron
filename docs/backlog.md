@@ -129,7 +129,7 @@ no design yet.
 - [Recheck that a spare gets later charts](backlog/replication-cloud.md#bundle-recheck-that-a-spare-gets-later-charts)
 - [Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)](backlog/ci.md#bundle-get-ready-for-a1308s-history-rewrite-a1306-and-cis-concurrency-groups)
 
-**5. Important work.** The 55 bundles marked important under each area, taken by theme so that a lane
+**5. Important work.** The bundles marked important under each area, taken by theme so that a lane
 stays in one area.
 
 **6. After the first venue.** The 89 remaining bundles, which are nice to have. Take

@@ -510,7 +510,7 @@ it.each([
     );
     const text = (selector: string) => find(el, selector).textContent!.replace(/\s+/g, " ").trim();
     expect(text("[data-fired-line=ready] .what")).toBe(
-      `Queso 1.5, × maduro ×${ready} Salsa 0.5, × suave ×${locale === "en" ? "0.250" : "0,250"}`,
+      `Queso 1.5, × maduro ×${ready} Salsa 0.5, × suave ×${firing}`,
     );
     expect(text("[data-fired-line=firing] .what")).toBe(`firing ×${firing}`);
     await click(el, "[data-served-toggle]");

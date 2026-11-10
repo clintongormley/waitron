@@ -1240,6 +1240,7 @@ it("localises the sent dish, extras and served quantity", async () => {
   setLocale("es-ES");
   const el = await openRow(
     {
+      billBalance: balance([{ lineId: "l-weighed", lineNo: 1, paidQuantity: "0.250" }]),
       currentOrders: current({
         held: [],
         ungrouped: [
@@ -1266,4 +1267,7 @@ it("localises the sent dish, extras and served quantity", async () => {
   expect(q(el, "[data-sent-line-dialog] .move-dish")!.textContent).toContain("×0,75");
   expect(q(el, "[data-sent-extra]")!.textContent).toContain("Sauce ×0,5");
   expect(q(el, "[data-sent-line-served]")!.textContent).toContain("0,25");
+  expect(q(el, "[data-sent-line-dialog] [data-line-paid]")!.textContent).toBe(
+    t("bill_pay.paid_part").replace("{paid}", "0,25").replace("{quantity}", "0,75"),
+  );
 });

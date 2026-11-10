@@ -4733,7 +4733,12 @@ describe("department transfers across operator lifetimes", () => {
         "counter-tab",
         [
           {
-            product: c.products[0]!,
+            product: {
+              ...c.products[0]!,
+              id: "beans",
+              name: "Coffee beans",
+              pricingUnit: "weight",
+            },
             quantity: "2.500",
           },
         ],
