@@ -43,8 +43,8 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
       // `exclude` replaces rather than merges, so the spread keeps a future non-empty default.
-      // No test imports the page entry point src/main.ts; test-helpers.ts is test-only support.
-      exclude: [...coverageConfigDefaults.exclude, "src/main.ts", "src/widgets/test-helpers.ts"],
+      // test-helpers.ts is test-only support.
+      exclude: [...coverageConfigDefaults.exclude, "src/widgets/test-helpers.ts"],
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },

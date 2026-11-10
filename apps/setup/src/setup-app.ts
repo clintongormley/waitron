@@ -39,6 +39,7 @@ import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
+import "./problem-report.js";
 import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import type {
   RecoveryRestoreCredentials,
@@ -591,16 +592,23 @@ export class SetupApp extends LitElement {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: wrap;
         gap: var(--wt-space-3);
       }
 
       .header-controls {
+        margin-inline-start: auto;
         display: flex;
         align-items: center;
         gap: var(--wt-space-1);
       }
 
       @media (max-width: 40rem) {
+        setup-problem-report {
+          order: 1;
+          flex-basis: 100%;
+        }
+
         wt-language-chooser::part(name) {
           display: none;
         }
@@ -2254,6 +2262,7 @@ export class SetupApp extends LitElement {
       >
         <header>
           <wt-waitron-lockup class="logo" data-test="setup-logo"></wt-waitron-lockup>
+          <setup-problem-report></setup-problem-report>
           <div class="header-controls">
             <wt-theme-chooser
               data-test="theme-chooser"

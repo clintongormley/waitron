@@ -21,9 +21,10 @@ answer inside the savepoint.
 is GitHub issues; for now a bundle only needs to be copy-pastable.
 
 **2026-11-10 update:** the [download-first plan](../superpowers/plans/2026-11-08-a982-client-only-report-first.md)
-provides the dashboard's browser-only preview and download, including before sign-in. Its opening
+provides browser-only preview and download in the dashboard before sign-in and in setup, including
+before discovery, after a refusal and while an already-loaded page is offline. Its opening
 activity and environment stay fixed while description edits update the exact downloaded preview.
-Nothing is submitted to or stored on the box. Till/setup buttons, richer trail hardening and stored
+Nothing is submitted to or stored on the box. Till buttons, richer trail hardening and stored
 capture with manager read/download remain open; the stored slices need separate plans. The
 [2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) and older slice
 notes below retain their original context. Cloud forwarding and automatic crash/freeze intake remain
@@ -39,7 +40,7 @@ separate follow-ups.
   redaction (it filters by value TYPE only, so a secret string under any key passes) and scrub
   `message`/`stack` from rejected Errors; `maskPath` masks UUID and all-numeric segments only — mask
   slugs and emails too; route the dashboard's boot-probe-fail, post-login and logout transitions
-  through the nav trail; roll the trail and report button out to `apps/setup`.
+  through the nav trail; add setup route vocabulary and resolved transitions.
 - **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
   Slices 2 and 3 and replace one part of Slice 3; design them together before building:
   - **Reports go to Waitron Cloud, which files the GitHub issue.** The box holds no GitHub
