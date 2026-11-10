@@ -5,8 +5,9 @@
 //
 //   node bluetoothctl-pair.mjs <MAC> <PIN>   exits 0 when bluetoothctl printed `Pairing successful`
 import { spawn } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { clearTimeout, setTimeout } from "node:timers";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters } from "node:util";
 
 const FAILED = /Failed to pair|Failed to register agent|not available/;
@@ -50,7 +51,15 @@ export function pairOverPipes(child, { address, pin, deadlineMs = 30_000, graceM
 
 // The CLI cases run this block in a child process, outside the parent's coverage collector.
 /* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Inline rather than scripts/is-main-script.mjs: image-smoke copies this file alone into a container.
+function isMainScript() {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+if (isMainScript()) {
   const [address, pin] = process.argv.slice(2);
   if (!address || !pin) {
     console.error("usage: node bluetoothctl-pair.mjs <MAC> <PIN>");

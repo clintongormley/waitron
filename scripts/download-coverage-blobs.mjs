@@ -3,8 +3,8 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { isMainScript } from "./is-main-script.mjs";
 
 async function readResponse(url, token, status, consume) {
   const response = await globalThis.fetch(url, {
@@ -109,7 +109,7 @@ export async function downloadCoverageBlobs({
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (isMainScript(import.meta.url)) {
   downloadCoverageBlobs({
     repository: process.env.GITHUB_REPOSITORY,
     runId: process.env.GITHUB_RUN_ID,

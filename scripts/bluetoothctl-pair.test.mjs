@@ -190,6 +190,18 @@ process.stdin.on("data", (d) => {
     expect(r.status).toBe(1);
   });
 
+  it("imports cleanly when the process was started from no file", async () => {
+    const originalArgv = process.argv;
+    try {
+      process.argv = [process.execPath, "-"];
+      vi.resetModules();
+      await expect(import("./bluetoothctl-pair.mjs")).resolves.toHaveProperty("pairOverPipes");
+    } finally {
+      process.argv = originalArgv;
+      vi.resetModules();
+    }
+  });
+
   it("refuses to run without an address and a PIN", () => {
     const r = cli(fakeBluetoothctl("Pairing successful"), [MAC]);
     expect(r.stderr).toContain("usage");

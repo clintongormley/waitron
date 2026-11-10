@@ -133,8 +133,9 @@ export function isRootScopePath(path) {
  * Files outside `deploy/` that image-smoke runs or reads, so a change to one is run against the box
  * image nowhere else. The print agent's Bluetooth sender is one: only image-smoke runs it against the
  * real socket module, under the shipped profile. It must hold every `scripts/` file
- * `.github/workflows/image-smoke.yml` names; `scripts/setup-s3-test-server.mjs` is read for the
- * versitygw pin. Guard: the image-smoke case in scripts/changed-scope.test.mjs, weaker than its
+ * `.github/workflows/image-smoke.yml` names, and the root modules `scripts/bundle-node.mjs` imports
+ * (hand-kept; nothing checks that list is complete); `scripts/setup-s3-test-server.mjs` is read
+ * for the versitygw pin. Guard: the image-smoke case in scripts/changed-scope.test.mjs, weaker than its
  * name — it reads the workflow as text and sees only literal `scripts/…` paths. The workflow file
  * itself is not an image input, by a recorded decision (ci.yml's `image` job comment): an edit to it
  * is left to image-nightly.yml.
@@ -144,6 +145,8 @@ const IMAGE_SMOKE_FILES = [
   "scripts/bundle-node.mjs",
   "scripts/generate-hour-release.mjs",
   "scripts/npm-bundle-notices.mjs",
+  "scripts/is-main-script.mjs",
+  "scripts/backup-verification-runtime.mjs",
   "apps/till/vite.config.ts",
   "apps/dashboard/vite.config.ts",
   "apps/setup/vite.config.ts",

@@ -417,7 +417,8 @@ The helper returns the copied CLI's canonical path. On this Mac, passing the tem
 through its `/var/folders` spelling returned success without producing a bundle, because the CLI's
 entry predicate compares the argument URL with the module's resolved URL. Using the matching
 `/private/var/folders` spelling executed it. A994 canonicalizes its test path and leaves the
-production predicate unchanged.
+production predicate unchanged. (2026-11-11, A1489: the predicate now resolves both paths through
+`scripts/is-main-script.mjs`, and these fixtures copy that helper too.)
 
 ### Why the sign-off check leaves out main's commits, and why only a refreshed main
 

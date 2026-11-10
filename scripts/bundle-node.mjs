@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, rmSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { isMainScript } from "./is-main-script.mjs";
 import { writeBundledNpmNotices } from "./npm-bundle-notices.mjs";
 import { readBuildHourRelease } from "./generate-hour-release.mjs";
 import { readBuildBackupVerificationRuntime } from "./backup-verification-runtime.mjs";
@@ -72,7 +72,7 @@ function noticeForBundle(outfile) {
 
 // CLI assertions execute this block in child processes, outside the parent coverage collector.
 /* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainScript(import.meta.url)) {
   try {
     const pairs = parsePairs(process.argv.slice(2));
     const release = readBuildHourRelease();

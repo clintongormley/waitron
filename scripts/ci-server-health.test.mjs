@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { URL } from "node:url";
@@ -1185,5 +1185,17 @@ describe("server health recovery", () => {
       /Stuck run 12.*force-cancel.*HTTP 403/,
     );
     expect(f.calls.some(([path]) => path.endsWith("/rerun"))).toBe(false);
+  });
+
+  it("imports cleanly when the process was started from no file", async () => {
+    const originalArgv = process.argv;
+    try {
+      process.argv = [process.execPath, "-"];
+      vi.resetModules();
+      await expect(import("./ci-server-health.mjs")).resolves.toHaveProperty("main");
+    } finally {
+      process.argv = originalArgv;
+      vi.resetModules();
+    }
   });
 });

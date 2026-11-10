@@ -14,8 +14,9 @@ import {
   link,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve, relative, isAbsolute } from "node:path";
-import { pathToFileURL, URL } from "node:url";
+import { join, relative, isAbsolute } from "node:path";
+import { URL } from "node:url";
+import { isMainScript } from "../is-main-script.mjs";
 
 const hash = (bytes) => createHash("sha512").update(bytes).digest("hex");
 const BUILD_ENV = new Set([
@@ -349,9 +350,4 @@ export async function main(args) {
   });
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(await realpath(resolve(process.argv[1]))).href
-) {
-  await main(process.argv.slice(2));
-}
+if (isMainScript(import.meta.url)) await main(process.argv.slice(2));

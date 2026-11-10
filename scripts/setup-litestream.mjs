@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { isMainScript } from "./is-main-script.mjs";
 import { downloadRelease } from "./download-release.mjs";
 
 export const VERSION = "0.5.18";
@@ -111,7 +111,7 @@ export async function install({
 
 // The process wiring alone; the suite calls `install` with the download and the platform injected.
 /* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainScript(import.meta.url)) {
   const { target, version, downloaded } = await install({
     root: join(import.meta.dirname, ".."),
     platform: process.platform,

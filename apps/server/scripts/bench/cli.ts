@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { buildYear } from "./build-year.js";
 import { compareTimings, formatComparison } from "./compare-timings.js";
 import { measureVenue, type MeasureResult } from "./measure.js";
@@ -122,7 +122,17 @@ function compare(args: readonly string[], print: (text: string) => void) {
   }
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isMainScript(): boolean {
+  const script = process.argv[1];
+  if (script === undefined) return false;
+  try {
+    return realpathSync(script) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMainScript()) {
   runCli(process.argv.slice(2), (text) => console.log(text)).then(
     () => process.exit(0),
     (error: unknown) => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { appendFileSync, realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
 class InventoryUnavailable extends Error {}
@@ -425,5 +425,12 @@ export async function main(command, env = process.env, request = githubRequest) 
     },
   );
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  await main(process.argv[2]);
+// Inline rather than scripts/is-main-script.mjs: CI downloads this file alone to $RUNNER_TEMP.
+function isMainScript() {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+if (isMainScript()) await main(process.argv[2]);

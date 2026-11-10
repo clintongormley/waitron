@@ -38,7 +38,12 @@ function checkFixture(fn, packageName = "ui-core") {
   try {
     mkdirSync(join(dir, "scripts"));
     mkdirSync(join(dir, `packages/${packageName}`), { recursive: true });
-    for (const file of ["changed-packages.mjs", "changed-scope.mjs", "run-with-deadline.mjs"])
+    for (const file of [
+      "changed-packages.mjs",
+      "changed-scope.mjs",
+      "run-with-deadline.mjs",
+      "is-main-script.mjs",
+    ])
       copyFileSync(resolve(import.meta.dirname, "..", file), join(dir, "scripts", file));
     const scripts = Object.fromEntries(
       ["typecheck", "lint", "test:coverage", "test:package"].map((key) => [key, "present"]),

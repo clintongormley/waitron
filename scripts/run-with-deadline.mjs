@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
-import { pathToFileURL } from "node:url";
+import { isMainScript } from "./is-main-script.mjs";
 import { clearTimeout, setTimeout } from "node:timers";
 
 export function createDeadlineDiagnostics({
@@ -149,7 +149,7 @@ export async function runWithDeadline(
 
 // CLI assertions execute this block in child processes, outside the parent coverage collector.
 /* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainScript(import.meta.url)) {
   const [seconds, ...rest] = process.argv.slice(2);
   const diagnostics = rest[0] === "--diagnostics";
   if (diagnostics) rest.shift();

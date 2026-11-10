@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { isMainScript } from "../is-main-script.mjs";
 
 const SEED_IMPORT = "@waitron/db/testing/seed.js";
 function walk(node, visit) {
@@ -179,5 +179,4 @@ export function main(args, print = console.log) {
     if (result.source !== before) print(`${file}: ${write ? "written" : "would change"}`);
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  main(process.argv.slice(2));
+if (isMainScript(import.meta.url)) main(process.argv.slice(2));

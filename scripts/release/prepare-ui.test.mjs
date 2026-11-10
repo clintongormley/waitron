@@ -732,3 +732,15 @@ it("prepares contract metadata with no peers and preserves the UI policy", () =>
   expect(() => releaseManifest(contract, source, "0.2.7", "../other")).toThrow(/package/);
   expect(releaseManifest(packed, source, "0.2.7").peerDependencies).toEqual({ lit: "^3.2.0" });
 });
+
+it("imports cleanly when the process was started from no file", async () => {
+  const originalArgv = process.argv;
+  try {
+    process.argv = [process.execPath, "-"];
+    vi.resetModules();
+    await expect(import("./prepare-ui.mjs")).resolves.toHaveProperty("prepareUi");
+  } finally {
+    process.argv = originalArgv;
+    vi.resetModules();
+  }
+});

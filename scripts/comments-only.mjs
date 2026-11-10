@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { pathToFileURL } from "node:url";
+import { isMainScript } from "./is-main-script.mjs";
 import ts from "typescript";
 
 // Proves a change touched nothing but comments in its code files. It reads commits, never an
@@ -218,7 +218,7 @@ export function main(argv, { cwd, env, stdout, stderr }) {
   return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainScript(import.meta.url)) {
   process.exitCode = main(process.argv.slice(2), {
     cwd: process.cwd(),
     env: process.env,
