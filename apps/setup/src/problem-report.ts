@@ -122,7 +122,7 @@ export class SetupProblemReport extends LitElement {
       anchor.click();
       this.close();
     } catch {
-      this.downloadError = t("problem_report.download_failed");
+      this.downloadError = t("shell.problem_report.download_failed");
     } finally {
       anchor.remove();
       if (url) URL.revokeObjectURL(url);
@@ -133,28 +133,28 @@ export class SetupProblemReport extends LitElement {
     return html`<wt-button
         data-report-problem
         variant="ghost"
-        aria-label=${t("problem_report.title")}
-        title=${t("problem_report.title")}
+        aria-label=${t("shell.problem_report.title")}
+        title=${t("shell.problem_report.title")}
         @click=${this.show}
-        >${t("problem_report.title")}</wt-button
+        >${t("shell.problem_report.title")}</wt-button
       >
       <wt-report-dialog
         .open=${this.snapshot !== undefined}
         .description=${this.description}
         .preview=${file?.text ?? ""}
-        .validationError=${file ? "" : t("problem_report.description_invalid")}
+        .validationError=${file ? "" : t("shell.problem_report.description_invalid")}
         .downloadError=${this.downloadError}
         .opener=${this.opener}
         .beforeClose=${this.beforeClose}
         .copy=${{
-          heading: t("problem_report.title"),
-          scope: t("problem_report.scope"),
-          warning: t("problem_report.warning"),
-          description: t("problem_report.description"),
-          preview: t("problem_report.preview"),
-          invalid: t("problem_report.invalid"),
-          cancel: t("problem_report.cancel"),
-          download: t("problem_report.download"),
+          heading: t("shell.problem_report.title"),
+          scope: t("shell.problem_report.scope"),
+          warning: t("shell.problem_report.warning"),
+          description: t("shell.problem_report.description"),
+          preview: t("shell.problem_report.preview"),
+          invalid: t("shell.problem_report.invalid"),
+          cancel: t("shell.problem_report.cancel"),
+          download: t("shell.problem_report.download"),
         }}
         @wt-description-change=${this.edited}
         @wt-report-download=${this.download}
