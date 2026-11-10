@@ -14,7 +14,8 @@ La página lee el equipo al abrirla. No se actualiza sola: elige **Actualizar** 
 ## Un conflicto de identidad {#conflict}
 
 Cuando este equipo ha dejado de emitir facturas por un conflicto de identidad, un recuadro rojo
-arriba lo indica y muestra cada factura afectada con lo que dijo la AEAT de ella. Elige **Abrir la
+arriba lo indica y muestra cada factura afectada con lo que la AEAT tiene de ella. Las palabras
+de la AEAT, su huella y el nombre de la instalación están en **Detalles técnicos**. Elige **Abrir la
 recuperación del conflicto** y sigue
 [Recupera una identidad de facturación en conflicto](box-status.md#invoice-conflict). Necesitas la
 clave de recuperación del equipo.

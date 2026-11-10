@@ -159,13 +159,24 @@ const en = {
   "fiscal_filing.conflict.stopped":
     "This box has stopped issuing invoices because of an identity conflict. Recovering needs the box's recovery key.",
   "fiscal_filing.conflict.open": "Open conflict recovery",
-  "fiscal_filing.conflict.reply": "Invoice {number}: AEAT answered {state} {code} {description}",
-  "fiscal_filing.conflict.lookup": "AEAT holds invoice {number} as {state}.",
+  "fiscal_filing.conflict.reply.fiscal.huella_divergente":
+    "AEAT already holds a different record for invoice {number}, so it refused this box's record.",
+  "fiscal_filing.conflict.reply.fiscal.duplicado_anulado":
+    "AEAT holds invoice {number} as cancelled, so it refused this box's record.",
+  "fiscal_filing.conflict.lookup":
+    "AEAT holds invoice {number} as {state}, and its details do not match this box's record.",
+  "fiscal_filing.conflict.lookup_unknown":
+    "AEAT holds invoice {number}, and its details do not match this box's record.",
+  "fiscal_filing.conflict.state.Correcto": "accepted",
+  "fiscal_filing.conflict.state.AceptadoConErrores": "accepted with errors",
+  "fiscal_filing.conflict.state.Anulado": "cancelled",
+  "fiscal_filing.conflict.status": "AEAT's status",
+  "fiscal_filing.conflict.reply_words": "AEAT's reply",
+  "fiscal_filing.conflict.fingerprint": "AEAT's fingerprint",
   "fiscal_filing.conflict.series": "AEAT holds invoice {number}; this box did not issue it.",
   "fiscal_filing.conflict.cancelled": "Invoice {number}: AEAT lists it as cancelled.",
   "fiscal_filing.conflict.no_evidence": "Invoice {number}: AEAT's answer was not kept.",
-  "fiscal_filing.conflict.theirs": "AEAT's fingerprint: {fingerprint}",
-  "fiscal_filing.conflict.seen": "Installation {installation}, seen {time}",
+  "fiscal_filing.conflict.seen": "Seen {time}",
   "fiscal_filing.progress": "Sending progress",
   "fiscal_filing.state.pendiente": "Waiting",
   "fiscal_filing.state.enviando": "Sending",
@@ -233,7 +244,8 @@ const en = {
   "fiscal_filing.detail.invoice_code": "Invoice type (AEAT code)",
   "fiscal_filing.detail.then_code": "AEAT's code when the case opened",
   "fiscal_filing.detail.latest_code": "AEAT's latest code",
-  "fiscal_filing.detail.total": "Total and tax",
+  "fiscal_filing.detail.total": "Total",
+  "fiscal_filing.detail.total_value": "{total}, of which VAT {tax}",
   "fiscal_filing.detail.generated": "Generated",
   "fiscal_filing.detail.installation": "Installation",
   "fiscal_filing.detail.fingerprint": "Fingerprint",
@@ -414,14 +426,24 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.conflict.stopped":
     "Este equipo ha dejado de emitir facturas por un conflicto de identidad. Para recuperarlo hace falta la clave de recuperación del equipo.",
   "fiscal_filing.conflict.open": "Abrir la recuperación del conflicto",
-  "fiscal_filing.conflict.reply":
-    "Factura {number}: la AEAT respondió {state} {code} {description}",
-  "fiscal_filing.conflict.lookup": "La AEAT tiene la factura {number} como {state}.",
+  "fiscal_filing.conflict.reply.fiscal.huella_divergente":
+    "La AEAT ya tiene otro registro para la factura {number}, así que rechazó el de este equipo.",
+  "fiscal_filing.conflict.reply.fiscal.duplicado_anulado":
+    "La AEAT tiene la factura {number} como anulada, así que rechazó el registro de este equipo.",
+  "fiscal_filing.conflict.lookup":
+    "La AEAT tiene la factura {number} como {state}, y sus datos no coinciden con el registro de este equipo.",
+  "fiscal_filing.conflict.lookup_unknown":
+    "La AEAT tiene la factura {number}, y sus datos no coinciden con el registro de este equipo.",
+  "fiscal_filing.conflict.state.Correcto": "aceptada",
+  "fiscal_filing.conflict.state.AceptadoConErrores": "aceptada con errores",
+  "fiscal_filing.conflict.state.Anulado": "anulada",
+  "fiscal_filing.conflict.status": "Estado en la AEAT",
+  "fiscal_filing.conflict.reply_words": "Respuesta de la AEAT",
+  "fiscal_filing.conflict.fingerprint": "Huella de la AEAT",
   "fiscal_filing.conflict.series": "La AEAT tiene la factura {number}; este equipo no la emitió.",
   "fiscal_filing.conflict.cancelled": "Factura {number}: la AEAT la tiene como anulada.",
   "fiscal_filing.conflict.no_evidence": "Factura {number}: no se guardó la respuesta de la AEAT.",
-  "fiscal_filing.conflict.theirs": "Huella de la AEAT: {fingerprint}",
-  "fiscal_filing.conflict.seen": "Instalación {installation}, vista: {time}",
+  "fiscal_filing.conflict.seen": "Vista: {time}",
   "fiscal_filing.progress": "Estado de los envíos",
   "fiscal_filing.state.pendiente": "Pendientes",
   "fiscal_filing.state.enviando": "Enviándose",
@@ -489,7 +511,8 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.detail.invoice_code": "Tipo de factura (código de la AEAT)",
   "fiscal_filing.detail.then_code": "Código de la AEAT al abrir el caso",
   "fiscal_filing.detail.latest_code": "Último código de la AEAT",
-  "fiscal_filing.detail.total": "Importe total y cuota",
+  "fiscal_filing.detail.total": "Importe total",
+  "fiscal_filing.detail.total_value": "{total}, de los que {tax} son IVA",
   "fiscal_filing.detail.generated": "Generado",
   "fiscal_filing.detail.installation": "Instalación",
   "fiscal_filing.detail.fingerprint": "Huella",

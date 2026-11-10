@@ -63,6 +63,17 @@ describe.each(["light", "dark"] as const)("fiscal filing accessibility %s", (the
     await expectNoA11yViolations(host);
   });
 
+  it("draws the conflict box with its technical details open", async () => {
+    await page.viewport(1280, 1000);
+    const screen = await show(overview(), theme);
+    const fold = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+      "[data-test=conflict] wt-disclosure",
+    )!;
+    fold.open = true;
+    await fold.whenSettled();
+    await expectNoA11yViolations(host);
+  });
+
   it("draws a case's details with the technical details closed and open", async () => {
     await page.viewport(1280, 1000);
     const screen = await show(overview(), theme);

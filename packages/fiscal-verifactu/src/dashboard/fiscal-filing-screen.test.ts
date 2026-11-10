@@ -169,6 +169,54 @@ describe("vf-fiscal-filing-screen", () => {
     expect(none.screen.shadowRoot!.querySelector("[data-test=conflict]")).toBeNull();
   });
 
+  it("says in plain words what AEAT holds for a conflict, with its evidence folded away", async () => {
+    const [lookup] = overview().activeConflicts;
+    const conflictCaseView = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+    const answer = (): Promise<FilingOverviewAnswer> =>
+      Promise.resolve(
+        overview({
+          activeConflicts: [
+            {
+              ...lookup!,
+              evidence: { ...lookup!.evidence!, state: "Correcto" } as typeof lookup.evidence,
+            },
+            { ...lookup!, invoiceNumber: "T1/42", evidence: conflictCaseView.conflicts[0]! },
+          ],
+        }),
+      );
+    const { screen } = await mount(vi.fn(answer));
+    const items = [...screen.shadowRoot!.querySelectorAll("[data-test=conflict] li")];
+    const said = items.map((item) => flat(item.querySelector("[data-test=said]")));
+    expect(said).toEqual([
+      "AEAT holds invoice T1/41 as accepted, and its details do not match this box's record.",
+      "AEAT already holds a different record for invoice T1/42, so it refused this box's record.",
+    ]);
+    expect(flat(items[0]!.querySelector("[data-test=seen]"))).toBe(
+      `Seen ${formatIsoMinute(lookup!.observedAt)}`,
+    );
+    const fold = items[0]!.querySelector("wt-disclosure[data-test=technical]") as HTMLElement & {
+      open: boolean;
+    };
+    expect(fold.open).toBe(false);
+    expect(fold.getAttribute("heading")).toBe("Technical details");
+    expect(flat(fold.querySelector("q[lang=es]"))).toBe("Correcto");
+    for (const raw of [THEIRS, "BOX-01", "Correcto"]) {
+      expect(flat(items[0]!.querySelector("[data-test=said]"))).not.toContain(raw);
+      expect(flat(fold)).toContain(raw);
+    }
+    expect(flat(items[1]!.querySelector("wt-disclosure q[lang=es]"))).toBe(
+      "Incorrecto 3000 Registro de facturación duplicado.",
+    );
+
+    setLocale("es");
+    const spanish = await mount(vi.fn(answer));
+    expect(
+      flat(spanish.screen.shadowRoot!.querySelector("[data-test=conflict] [data-test=said]")),
+    ).toBe(
+      "La AEAT tiene la factura T1/41 como aceptada, y sus datos no coinciden con el registro de este equipo.",
+    );
+  });
+
   it("says when AEAT holds an invoice under this box's series that this box did not issue", async () => {
     const [record] = overview().activeConflicts;
     const answer = (): Promise<FilingOverviewAnswer> =>
@@ -247,6 +295,7 @@ describe("vf-fiscal-filing-screen", () => {
       "A new simplified invoice: a till receipt that names no customer.",
     );
     expect(plain("[data-test=state] dd")).toBe("AEAT refused it.");
+    expect(plain("[data-test=total] dd")).toBe("€12.10, of which VAT €2.10");
     expect(plain("[data-test=issued-by] dd")).toBe("This venue's box.");
     const reply = details.querySelector("[data-test=reply-then] q")!;
     expect(reply.getAttribute("lang")).toBe("es");
@@ -267,6 +316,9 @@ describe("vf-fiscal-filing-screen", () => {
     expect(flat(spanish.querySelector("[data-test=kind] dd"))).toBe(
       "Una factura simplificada nueva: un tique que no identifica al cliente.",
     );
+    expect(flat(spanish.querySelector("[data-test=total] dd"))).toBe(
+      "12,10 €, de los que 2,10 € son IVA",
+    );
   });
 
   it.each([
@@ -277,9 +329,12 @@ describe("vf-fiscal-filing-screen", () => {
     ["alta", "X9", "An invoice record."],
   ] as const)("names the record %s %s in plain words", async (tipoRegistro, tipoFactura, line) => {
     const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
-    const found = { ...base, record: { ...base.record, tipoRegistro, tipoFactura } };
+    const amounts = tipoRegistro === "anulacion" ? { importeTotal: null, cuotaTotal: null } : {};
+    const found = { ...base, record: { ...base.record, tipoRegistro, tipoFactura, ...amounts } };
     const { screen } = await mount(vi.fn(async () => overview({ cases: [found] })));
-    expect(flat((await openDetails(screen)).querySelector("[data-test=kind] dd"))).toBe(line);
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=kind] dd"))).toBe(line);
+    expect(details.querySelector("[data-test=total]") === null).toBe(tipoRegistro === "anulacion");
   });
 
   it("says once that Waitron cannot correct the records while there are cases, and not without", async () => {

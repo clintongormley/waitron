@@ -14,6 +14,7 @@ import {
   formatIsoMinute,
   subscribeLocale,
 } from "@waitron/dashboard-kit";
+import { formatMoney } from "@waitron/shared";
 import type { EnvioState } from "../filing-states.js";
 import type {
   ActiveConflictView,
@@ -63,6 +64,16 @@ function fingerprints(theirs: string | null, ours: string): TemplateResult {
             >${t("fiscal_filing.detail.theirs", { fingerprint: theirs })}</span
           >`
     } <span class="fingerprint">${t("fiscal_filing.detail.ours", { fingerprint: ours })}</span>`;
+}
+
+/** Both are null on a cancellation, which carries no amounts, and set on every other record. */
+function total({ importeTotal, cuotaTotal }: FilingCaseView["record"]): string | null {
+  if (importeTotal === null || cuotaTotal === null) return null;
+  const locale = currentLocale();
+  return t("fiscal_filing.detail.total_value", {
+    total: formatMoney(importeTotal, locale),
+    tax: formatMoney(cuotaTotal, locale),
+  });
 }
 
 function recordKind(record: FilingCaseView["record"]): string {
@@ -151,10 +162,7 @@ function caseDetails(found: FilingCaseView): TemplateResult {
       )}
       ${field(t("fiscal_filing.detail.kind"), recordKind(record), "kind")}
       ${field(t("fiscal_filing.detail.state"), recordState(submission), "state")}
-      ${field(
-        t("fiscal_filing.detail.total"),
-        [record.importeTotal, record.cuotaTotal].filter((part) => part !== null).join(" · "),
-      )}
+      ${field(t("fiscal_filing.detail.total"), total(record), "total")}
       ${field(t("fiscal_filing.detail.recorded"), formatIsoMinute(record.fechaHoraHusoGenRegistro))}
       ${field(t("fiscal_filing.detail.issued_by"), t("fiscal_filing.issued_by"), "issued-by")}
       ${field(t("fiscal_filing.detail.then"), aeatWords(evidence.mensaje), "reply-then")}
@@ -169,11 +177,15 @@ function caseDetails(found: FilingCaseView): TemplateResult {
     ${technicalDetails(found)}`;
 }
 
+const LOOKUP_STATES = ["Correcto", "AceptadoConErrores", "Anulado"] as const;
+
 function conflictLine(conflict: ActiveConflictView): TemplateResult {
   const number = conflict.invoiceNumber;
   const evidence = conflict.evidence;
   let said: string;
   let theirs: string | null = null;
+  let status: string | null = null;
+  let reply: string | null = null;
   if (conflict.source === "series") {
     said = t("fiscal_filing.conflict.series", { number });
     theirs = evidence !== null && "fingerprint" in evidence ? evidence.fingerprint : null;
@@ -184,32 +196,39 @@ function conflictLine(conflict: ActiveConflictView): TemplateResult {
         : t("fiscal_filing.conflict.no_evidence", { number });
   } else if ("line" in evidence) {
     const line = evidence.line;
-    said = t("fiscal_filing.conflict.reply", {
-      number,
-      state: line.EstadoRegistro ?? "",
-      code: line.CodigoErrorRegistro ?? "",
-      description: line.DescripcionErrorRegistro ?? "",
-    }).trim();
+    said = t(`fiscal_filing.conflict.reply.${conflict.cause}`, { number });
+    reply = [line.EstadoRegistro, line.CodigoErrorRegistro, line.DescripcionErrorRegistro]
+      .filter((part) => part !== null && part !== "")
+      .join(" ");
     theirs = evidence.comparison.storedFingerprint;
   } else {
-    said = t("fiscal_filing.conflict.lookup", { number, state: evidence.state });
+    const known = LOOKUP_STATES.find((state) => state === evidence.state);
+    said =
+      known === undefined
+        ? t("fiscal_filing.conflict.lookup_unknown", { number })
+        : t("fiscal_filing.conflict.lookup", {
+            number,
+            state: t(`fiscal_filing.conflict.state.${known}`),
+          });
+    status = evidence.state;
     theirs = evidence.fingerprint;
   }
   return html`<li>
-    <span>${said}</span>
-    ${
-      theirs === null
-        ? nothing
-        : html`<span class="fingerprint"
-            >${t("fiscal_filing.conflict.theirs", { fingerprint: theirs })}</span
-          >`
-    }
-    <span class="muted"
-      >${t("fiscal_filing.conflict.seen", {
-        installation: conflict.installationName,
-        time: formatIsoMinute(conflict.observedAt),
-      })}</span
+    <span data-test="said">${said}</span>
+    <span class="muted" data-test="seen"
+      >${t("fiscal_filing.conflict.seen", { time: formatIsoMinute(conflict.observedAt) })}</span
     >
+    <wt-disclosure data-test="technical" heading=${t("fiscal_filing.technical")}>
+      <dl>
+        ${field(t("fiscal_filing.conflict.status"), aeatWords(status))}
+        ${field(t("fiscal_filing.conflict.reply_words"), aeatWords(reply))}
+        ${field(
+          t("fiscal_filing.conflict.fingerprint"),
+          theirs === null ? null : html`<span class="fingerprint">${theirs}</span>`,
+        )}
+        ${field(t("fiscal_filing.detail.installation"), conflict.installationName)}
+      </dl>
+    </wt-disclosure>
   </li>`;
 }
 
