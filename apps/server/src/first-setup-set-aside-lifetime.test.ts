@@ -99,7 +99,7 @@ it("lifetime: clearing replaced databases and freeing space at start leave the m
   await mkdir(logDir);
   const rotated = join(logDir, `${LOG_FILE_NAME}.3`);
   await writeFile(rotated, "old log");
-  await mkdir(join(roots.stateDir, BACKUP_STAGING_DIR));
+  await mkdir(join(roots.stateDir, BACKUP_STAGING_DIR), { recursive: true });
   const dump = join(
     roots.stateDir,
     BACKUP_STAGING_DIR,
