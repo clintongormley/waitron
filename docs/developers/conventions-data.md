@@ -1220,10 +1220,10 @@ through `buildVatBreakdown`: it has its base and tax each rounded to the cent, a
 `sale.total_mismatch` if the rounded amounts no longer add up to the total.
 
 _2026-10-02 (C126):_ a correction that credits the whole invoice (`wholeInvoice`) does not reach
-`deriveVatBreakdown`: it files the invoice's breakdown negated, the stored one or the one the regime
-accepted in a fix of it (`packages/core/src/record-correction.ts`). So for a whole-invoice credit
-the rates and amounts reaching the fiscal record DO cross the storage boundary, read back from the
-original's `sales.vat_breakdown` or its filed records, and the "does not cross the storage boundary at all" above holds only for
+`deriveVatBreakdown`: it files the invoice's stored breakdown negated
+(`packages/core/src/record-correction.ts`). So for a whole-invoice credit the rates and amounts
+reaching the fiscal record DO cross the storage boundary, read back from the original's
+`sales.vat_breakdown`, and the "does not cross the storage boundary at all" above holds only for
 a breakdown built from lines or supplied by a caller. The huella gate above records sales from
 literals and does not file a whole-invoice credit, so it says nothing about that path.
 
@@ -1232,6 +1232,13 @@ It is not rounded: it is refused with `sale.correction_breakdown_invalid` unless
 the cent and agrees with its own total and lines, the invoice and the corrections already recorded
 against it, and with `sale.correction_history_unusable` when what is stored about the invoice or
 those corrections cannot be checked.
+
+_2026-11-10 (A802 slice 3b):_ once the regime accepted a fix of the invoice's VAT, a whole-invoice
+credit files that accepted split negated, read from the invoice's filed records rather than
+`sales.vat_breakdown`. A `partialVatBreakdown` is checked against the accepted figures of the
+invoice and its earlier corrections (the stored ones where none is accepted), and once those differ
+from the stored ones it is not checked against its lines rate by rate. Both are refused while the
+newest filed fix still waits for the regime's answer.
 
 **A guard got quietly weaker and had to be shored up.** With `quantity` and `rate` converted, the
 vocabulary stopped importing `numeric` at all — and `scripts/column-vocabulary.test.ts` DERIVES its

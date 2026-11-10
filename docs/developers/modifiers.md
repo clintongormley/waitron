@@ -445,8 +445,8 @@ which groups each line's `lineTotal`, rounded to the cent, by its `vatRate`; a s
 takes that path, and so does a correction unless it credits the whole invoice (`wholeInvoice`,
 `packages/core/src/record-correction.ts`), which files the invoice's breakdown negated (the stored
 one, or the one the regime accepted in a fix of it) after checking that the lines, summed per rate
-at the cent, are the stored bases and, where they state one, that their gross amounts are its base
-plus tax. When the caller
+at the cent, are the stored bases and, where they state one, that their gross amounts are the
+stored base plus tax. When the caller
 supplies its own — which the till's filing routes do — it is filed with each base and tax rounded to
 the cent, but it too was grouped per rate over the priced lines a moment earlier
 (`packages/catalogue/src/pricing.ts`). In each of the three an extras child line's base and its own

@@ -60,8 +60,10 @@ declare module "@waitron/shared" {
     "sale.correction_unsupported": { saleId: string };
     /** Thrown by `recordCorrection` when a negative correction would take the invoice below zero:
      * `remaining` is the invoice's total net of the corrections already recorded against it, and
-     * `correction` is the amount the row would store, rounded to the cent. A correction down to
-     * exactly zero, and any positive one, is accepted. Refused before a number is allocated. */
+     * `correction` is the amount the row would store, rounded to the cent. With
+     * `partialVatBreakdown`, `remaining` is the sum of the invoice's and its corrections' totals as
+     * the regime accepted them, else as stored. A correction down to exactly zero, and any positive
+     * one, is accepted. Refused before a number is allocated. */
     "sale.correction_exceeds_total": { saleId: string; remaining: string; correction: string };
     /** Thrown by `recordCorrection` for a whole-invoice credit (`wholeInvoice`) whose `correction`,
      * at the cent, is not minus `invoiceTotal`, or of an invoice that `correctionCount` corrective
@@ -73,11 +75,11 @@ declare module "@waitron/shared" {
       correction: string;
     };
     /** Thrown by `recordCorrection` for a whole-invoice credit whose lines at `rate`, summed at the
-     * cent, are not what the copied breakdown files there: `linesBase` (their line totals) against
-     * `breakdownBase`, or `linesGross` (their gross amounts, a line stating none counted as none)
-     * against `breakdownGross`, its base plus tax. Both breakdown params are `"0"` at a rate it does
-     * not file; `linesGross` is `null`, and not compared, when no line at `rate` states a gross. The
-     * stored lines would disagree with the record. Refused before a number is allocated. */
+     * cent, are not what the invoice's stored breakdown holds there: `linesBase` (their line
+     * totals) against `breakdownBase`, or `linesGross` (their gross amounts, a line stating none
+     * counted as none) against `breakdownGross`, its base plus tax. Both breakdown params are `"0"` at a rate it does
+     * not file; `linesGross` is `null`, and not compared, when no line at `rate` states a gross.
+     * Refused before a number is allocated. */
     "sale.correction_lines_mismatch": {
       saleId: string;
       rate: string;

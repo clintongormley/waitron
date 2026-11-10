@@ -495,6 +495,8 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
     "series.no_rectificative_for_node",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
+    "sale.correction_history_unusable",
+    "sale.correction_not_admitted",
   ]) {
     expect(codeMessage(code, "en")).not.toBe(generic.en);
     expect(codeMessage(code, "es")).not.toBe(generic.es);

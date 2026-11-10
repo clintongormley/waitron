@@ -957,7 +957,7 @@ asesor Q31 (2026-09-30), not decided.
   cancelling an issued order is refused while a VAT fix of its invoice waits for AEAT's answer
   (`sale.correction_not_admitted`, `filed_figures_unanswered`), and when a fix changed its total or
   its filed figures cannot be read (`sale.correction_history_unusable`); the till API answers 409.
-  The till explains each refusal but offers no next step until slice 5's till screen or the
+  The till explains each; the second has no way to cancel until slice 5's till screen or the
   filing-case remedy screens give one.
 
 ## Correct VAT without returning money
@@ -1201,7 +1201,7 @@ a line with no operation is not refused for that.
 - **Decided (owner, 2026-10-02): a whole-invoice credit copies the invoice's own VAT split,
   negated** (`recordCorrection`'s `wholeInvoice`, `packages/core/src/record-correction.ts`). Once
   AEAT accepted a fix of that split, it copies the fixed one (owner, 2026-11-10 21:10).
-  Worked out from the lines, as a partial correction still is, a 0.55 dish at 21% invoiced
+  Worked out from the lines, as a partial correction without `partialVatBreakdown` still is, a 0.55 dish at 21% invoiced
   0.45 + 0.10 reverses to -0.45 - 0.09 (measured 2026-10-02); copied, it is -0.45 - 0.10.
 - **Over-limit invoices (A261-2c, #1285; owner decision, 2026-10-06).** Non-fiscal placement
   accepts an over-limit order; collection refuses the over-limit invoice without taking money.

@@ -801,6 +801,8 @@ credit stays on the stored split (the writer change's point 5 is left out, below
 derived path stays as it is (design B's weakness, recorded in the backlog in S6). So the cancel
 credit (`apps/server/src/cancel-credit.ts:68–79`) and every existing administrator request that does
 not send `partialVatBreakdown` file exactly what they file today.
+_Superseded 2026-11-10 21:10: the owner chose point 5, so the whole-invoice credit and the
+cancellation change too; see "As built (3b)"._
 
 ### S2. The writer and its checks (core) — about 100 production, 75 test lines
 
@@ -1099,16 +1101,22 @@ Size after these: about 175 production and 320 test lines.
   and the stored split otherwise or when the backend reads no filed figures. It refuses
   `sale.correction_history_unusable` when the figures cannot be read or a fix changed the total,
   and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a fix waits for its answer.
-  The administrator's corrective-invoice remedy for a refused original is unchanged: its newest
-  version is the refused one, so nothing waits for an answer (`record-remedy-corrective-http.test.ts`,
-  "credits the whole original using its stored line and exact VAT", passes).
+  The administrator's corrective-invoice remedy for a refused original files what it filed before:
+  a refused version is answered, so nothing waits (`record-remedy-corrective-http.test.ts`, the
+  refused original and the refused fix of it both pass).
+- "Waits for its answer" means the newest filed version's submission is queued, being sent, held
+  behind its chain (`detenido`) or set aside (`retenido`), or has no submission row; accepted,
+  accepted with errors and refused are answered (`newestAwaitingAnswer` in
+  `packages/fiscal/src/backend.ts`, set by `packages/fiscal-verifactu/src/filed-figures.ts`).
 - The preview's moved path: naming dishes refuses `sale.correction_scope_invalid`
   (`filed_split_changed`), a part of a changed total refuses it (`filed_total_changed`); the split
   comes from the accepted figures and the lines from the stored history.
 - Reports: top sellers count a dish as returned once its corrections reach its money (gross where
-  the line stored one); the category report puts a corrected extra under its dish.
-- The till API answers both refusals with 409 (`apps/server/src/till-api.ts`); the till has no
-  wording for them yet.
+  the line stored one), leaving out a correction voided at or before that point; a void gives back
+  the dishes its correction was counted as returning. The category report puts a corrected extra,
+  and its void, under its dish.
+- The till API answers both refusals with 409 (`apps/server/src/till-api.ts`); the till words both
+  (`apps/till/src/i18n/codes.ts`, owner 22:04).
 
 **Decisions.**
 
@@ -1122,6 +1130,6 @@ Size after these: about 175 production and 320 test lines.
 - A cancellation is refused while a fix waits for its answer, the same rule as the preview and the
   exact-split path.
 
-**Size** (`git diff --numstat 8add5a04a7`, TypeScript only): production 453 lines added and 137
-removed; tests and test fixtures 678 added and 41 removed. The plan review estimated about 175
-and 320, before point 5 and the review's fixes were added.
+**Size** (`git diff --numstat 0b7f37048f`, TypeScript only): production 531 lines added and 170
+removed; tests, test fixtures and the fake backend 1,122 added and 49 removed. The plan review
+estimated about 175 and 320, before point 5, the till wording and the reviews' fixes were added.
