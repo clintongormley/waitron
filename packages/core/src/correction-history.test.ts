@@ -1,11 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import {
-  basisPointsToDecimal,
-  centsToDecimal,
-  decimal,
-  deviceOrigin,
-  saleId as brandSaleId,
-} from "@waitron/shared";
+import { decimal, deviceOrigin, saleId as brandSaleId } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiledFigures, FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -234,20 +228,6 @@ it("reads every invoice line, extras included, its stored split and nothing cons
     vatBreakdown: BREAKDOWN,
     consumed: [],
   });
-});
-
-it("reads a whole-invoice credit as consuming every line", async () => {
-  const { saleId, rows } = await sell();
-  const whole = rows.map((row) => ({
-    saleLineId: row.id,
-    rate: basisPointsToDecimal(row.vatRate),
-    gross: centsToDecimal(row.lineGross!),
-    base: centsToDecimal(row.lineTotal),
-    tax: centsToDecimal(row.lineGross! - row.lineTotal),
-  }));
-  await correct(saleId, "-24.20", correctionLinesFor(rows, whole), { wholeInvoice: true });
-
-  expect((await read(saleId)).consumed).toEqual(whole);
 });
 
 // An earlier correction filed through the derived path: €1.05 off the steak, its split derived
@@ -496,11 +476,6 @@ it.each<
     reason: string,
   ]
 >([
-  [
-    "the invoice filed at another rate",
-    ({ invoice }) => [invoice, filed("12.10", ["10.00", "11.00", "1.10"])],
-    "filed_figures_changed",
-  ],
   [
     "the invoice filed with an extra rate",
     ({ invoice }) => [

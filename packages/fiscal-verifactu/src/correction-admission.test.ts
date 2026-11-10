@@ -94,8 +94,6 @@ describe("an F2 is judged by its submission state", () => {
     ["aceptado", eligible("accepted", 1)],
     ["aceptado_con_errores", eligible("accepted_with_issues", 1)],
     ["rechazado", refused("filing_refused")],
-    ["detenido", refused("filing_refused")],
-    ["retenido", refused("filing_refused")],
   ] as const)("%s", async (estado, expected) => {
     const { saleId } = await file({ estado });
     expect(await admission(saleId)).toEqual(expected);

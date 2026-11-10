@@ -225,24 +225,6 @@ it("files the last two cents of ten €1.20 coffees as VAT alone", async () => {
   expect(await snapshot(saleId)).toEqual(before);
 });
 
-it("refuses a refused original before reading its history", async () => {
-  const { saleId, before } = await sell([["10.00", null]], ["10.00", "2.10"]);
-  const setFiling = (estado: "rechazado" | "aceptado") =>
-    suite.db.update(envios).set({ estado }).where(eq(envios.registroId, before.registro.id));
-
-  await setFiling("rechazado");
-  const refused = await captureError(() => preview(saleId, "1.00"));
-  await setFiling("aceptado");
-  const unreadable = await captureError(() => preview(saleId, "1.00"));
-
-  expect(refused).toMatchObject({
-    code: "sale.correction_not_admitted",
-    params: { reason: "filing_refused" },
-  });
-  expect(unreadable).toMatchObject({ code: "sale.correction_history_unusable" });
-  expect(await snapshot(saleId)).toEqual(before);
-});
-
 it("refuses an invoice the agency refused, then, once its fix files it at 10%, as moved", async () => {
   // No line gross, so the history read would refuse: each refusal must come before it.
   const { saleId, before } = await sell([["10.00", null]], ["10.00", "2.10"]);

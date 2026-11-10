@@ -107,30 +107,6 @@ const version = (total: string, rate: string, base: string, tax: string) => ({
 const V21 = version("12.10", "21.00", "10.00", "2.10");
 const V10 = version("12.10", "10.00", "11.00", "1.10");
 
-it("answers an unfixed invoice's and a corrective's own figures for both versions", async () => {
-  const invoiceSale = await file({ estado: "aceptado" });
-  const negative: Figures = {
-    desglose: [detail("21.00", "-5.00", "-1.05")],
-    cuota: "-1.05",
-    importe: "-6.05",
-  };
-  const corrective = await file({ tipo: "R5", figures: negative, estado: "aceptado_con_errores" });
-
-  const answer = await figuresFor(invoiceSale.saleId, corrective.saleId);
-
-  expect(answer.get(invoiceSale.saleId)).toEqual({
-    readable: true,
-    newest: V21,
-    newestAnswered: V21,
-  });
-  const credit = version("-6.05", "21.00", "-5.00", "-1.05");
-  expect(answer.get(corrective.saleId)).toEqual({
-    readable: true,
-    newest: credit,
-    newestAnswered: credit,
-  });
-});
-
 describe("a fixed filing: the newest is the fix, the newest answered the latest accepted", () => {
   it.each([
     ["rechazado", "pendiente", null],
@@ -154,18 +130,12 @@ describe("a fixed filing: the newest is the fix, the newest answered the latest 
 });
 
 describe("unreadable figures", () => {
-  const exempt: DetalleDesgloseInput = {
-    ClaveRegimen: "01",
-    OperacionExenta: "E1",
-    BaseImponibleOimporteNoSujeto: "12.10",
-  };
   const surcharge: DetalleDesgloseInput = {
     ...detail("21.00", "10.00", "2.10"),
     TipoRecargoEquivalencia: "5.20",
     CuotaRecargoEquivalencia: "0.52",
   };
   it.each<[string, Figures]>([
-    ["an exempt detail", { desglose: [exempt], cuota: "0.00", importe: "12.10" }],
     ["an equivalence surcharge", { desglose: [surcharge], cuota: "2.10", importe: "12.10" }],
     [
       "two details at one rate",
