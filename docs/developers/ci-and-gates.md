@@ -186,7 +186,7 @@ quarantined slots and retained runners are excluded, and admitted jobs are not c
 A failed free-slot health check publishes zero slots; a full pool uses its recorded capacity. The router refreshes hosted counts through
 its existing read-only API scan and compares `(running + waiting) / slots` with the server
 snapshot, using the owner's stipulated 20 hosted slots. Ties select the server; zero server
-slots select hosted. Unknown inputs retain the existing server preference and readable-stall checks.
+slots select hosted. Unknown inputs select hosted; readable-stall checks remain.
 The summary prints both counts, snapshot age and the chosen side, including in hosted mode. This repository snapshot reserves no capacity;
 simultaneous decisions can choose the same side. The run's own `changes` job counts while running.
 Before activation, verify repository-variable arrival in an ordinary run and check its route and labels.
@@ -206,8 +206,8 @@ The existing health check reads CI's queued and running workflows. A job's wait 
 If a server job has waited five minutes and no server job is
 assigned or running, and no assigned job in those runs started or finished within five
 minutes, this run uses GitHub and records the reason in its summary. An unverifiable
-inventory makes routing continue with the other readable runs and choose the server unless
-readable work shows the stalled queue above (watcher, 2026-11-09 10:34). The summary
+inventory makes routing continue checking the other readable runs, then choose GitHub
+(owner, 2026-11-10, A1470). Degraded reads can leave the server idle. The summary
 names the uncertainty rather than presenting partial hosted counts as complete. A timed-out routing step leaves an empty result, which
 every routed job treats as hosted. This does not change the human routing switch.
 When the retry record and previous attempt can be read, an unassigned server job cancelled
@@ -240,12 +240,11 @@ job can keep new runs on hosted until someone resolves it; the check only report
 The health reader requests job inventories in pages of 30 and run inventories in pages of 100.
 GET failures reporting HTTP 5xx get two 15-second attempts, one second apart. Writes and
 JSON parse errors are not retried; the final request error remains visible.
-A server route chosen without readable inputs logs `CI_ROUTE_BLIND run=ID attempt=N`
-once, including a failed routing-module fetch. Use those lines to count daily blind
-routes after deployment; this change does not reconsider or move them. The workflow-module
-fetch also retries once after one second. A routing step killed at its existing two-minute
-limit leaves an empty route and uses hosted runners; it does not emit a BLIND line, so
-the daily count excludes those killed-step choices. Read failed routing-step logs separately.
+The router's explicit blind decisions and a failed routing-module fetch log
+`CI_ROUTE_BLIND run=ID attempt=N` once. Use those lines to count reported blind choices after deployment. The workflow-module
+fetch also retries once after one second. A routing step that crashes or reaches its existing
+two-minute limit before reporting leaves an empty route and uses hosted runners without a
+BLIND line; those counts exclude these choices. Read failed routing-step logs separately.
 On 9 November, the attempt-job endpoints for runs `42580703144` (84 jobs) and `42584158356`
 (87 jobs) returned HTTP 502 with 100-record pages and returned 30 records with 30-record pages.
 The reader keeps its complete-count, unique-ID and run/attempt/head checks across those pages.

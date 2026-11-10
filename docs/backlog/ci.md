@@ -705,6 +705,7 @@ A1424's live qualification was added on 7 November 2026.
   hosted routing additionally requires the selected initial job wave to fit the remaining room.
   Cloud PR #1115 publishes the matching 30-record reader in v41; six slots remain. **2026-11-09 17:19:**
   the owner replaced initial-wave fit with whole-run queue pressure; qualify the count variable and route before activation.
+  **2026-11-10, A1470:** the owner chose “Unsure → GitHub (Recommended)”. New-run routing uses GitHub when inventory, capacity or its module cannot be read; normal ratios and server ties remain. Degraded reads may leave the server idle; retain the first natural blind decision’s source, route and runner results before claiming live qualification.
 
 - **A1459: measured shared startup, with child internals still unknown (2026-11-08).**
 

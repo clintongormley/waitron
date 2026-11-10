@@ -195,7 +195,11 @@ describe("queue-pressure routing", () => {
         },
         f.options.request,
       );
-      expect(readFileSync(directory + "/output", "utf8")).toBe("server_route=server\n");
+      expect(readFileSync(directory + "/output", "utf8")).toBe(
+        capacity.startsWith('{"observedAt":1,"slots":6')
+          ? "server_route=server\n"
+          : "server_route=hosted\n",
+      );
       expect(readFileSync(directory + "/summary", "utf8")).toContain(
         capacity.startsWith('{"observedAt":1,"slots":6') ? "snapshot age" : "could not be verified",
       );
@@ -228,7 +232,7 @@ describe("queue-pressure routing", () => {
       if (path.includes("/workflows/ci.yml/runs?")) throw new Error("HTTP 502 health inventory");
       return request(path, options);
     };
-    expect((await serverRoute(f.options)).route).toBe("server");
+    expect((await serverRoute(f.options)).route).toBe("hosted");
     expect(f.calls.filter(([path]) => path.includes("/actions/runs?"))).toHaveLength(0);
   });
 
@@ -257,7 +261,7 @@ describe("queue-pressure routing", () => {
     expect(answer.reason).toContain("19 running, 0 queued");
   });
 
-  it("uses the server when hosted capacity names a different repository", async () => {
+  it("uses hosted when hosted capacity names a different repository", async () => {
     const f = fixture(20),
       outputs = [],
       reports = [];
@@ -266,7 +270,7 @@ describe("queue-pressure routing", () => {
       output: (line) => outputs.push(line),
       report: (line) => reports.push(line),
     });
-    expect(outputs).toEqual(["server_route=server"]);
+    expect(outputs).toEqual(["server_route=hosted"]);
     expect(reports[0]).toContain("Foreign hosted run inventory");
   });
 
@@ -349,7 +353,7 @@ describe("queue-pressure routing", () => {
         return request(path, options);
       };
       const answer = await serverRoute(f.options);
-      expect(answer.route).toBe("server");
+      expect(answer.route).toBe("hosted");
       expect(answer.reason).toMatch(/could not be verified|unavailable/i);
       expect(f.calls.some(([path]) => path.includes("/runs/60/attempts/1/jobs?"))).toBe(true);
       stalled = true;
@@ -403,38 +407,43 @@ describe("queue-pressure routing", () => {
           };
         return request(path, options);
       };
-      for (const expected of ["server", "hosted"]) {
+      for (const expectedBlind of [1, 0]) {
         const outputs = [],
           reports = [];
         await healthCommand("route", f.options, {
           output: (line) => outputs.push(line),
           report: (line) => reports.push(line),
         });
-        expect(outputs).toEqual([`server_route=${expected}`]);
+        expect(outputs).toEqual(["server_route=hosted"]);
         expect(reports[0]).toContain("could not be verified");
+        expect(reports.filter((line) => line.startsWith("CI_ROUTE_BLIND "))).toHaveLength(
+          expectedBlind,
+        );
         stalled = true;
       }
     },
   );
 
-  it("uses the server when the active run list shrinks between pages", async () => {
+  it("uses hosted when the active run list shrinks between pages", async () => {
     const f = fixture(),
       request = f.options.request;
     f.options.request = async (path, options) =>
       path.includes("/workflows/ci.yml/runs?") && path.includes("status=queued")
         ? { total_count: 1, workflow_runs: [] }
         : request(path, options);
-    expect((await serverRoute(f.options)).route).toBe("server");
+    expect((await serverRoute(f.options)).route).toBe("hosted");
   });
 
-  it.each(["unavailable", "duplicate", "foreign"])(
-    "uses the server on %s unreadable capacity inventory",
+  it.each(["unavailable", "duplicate", "foreign", "empty page"])(
+    "uses hosted on %s unreadable capacity inventory",
     async (fault) => {
       const f = fixture(20),
         request = f.options.request,
         outputs = [],
         reports = [];
       f.options.request = async (path, options) => {
+        if (fault === "empty page" && path.includes("/actions/runs?"))
+          return { total_count: 1, workflow_runs: [] };
         if (path.includes("/runs/50/attempts/2/jobs?")) {
           if (fault === "unavailable") throw new Error("HTTP 503");
           if (fault === "duplicate") return { total_count: 2, jobs: [f.jobs[0], f.jobs[0]] };
@@ -446,8 +455,8 @@ describe("queue-pressure routing", () => {
         output: (line) => outputs.push(line),
         report: (line) => reports.push(line),
       });
-      expect(outputs).toEqual(["server_route=server"]);
-      expect(reports[0]).toContain("could not be verified");
+      expect(outputs).toEqual(["server_route=hosted"]);
+      expect(reports[0]).toContain("could not be verified; using GitHub");
     },
   );
 });
