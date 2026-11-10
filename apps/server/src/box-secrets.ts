@@ -1,6 +1,5 @@
 import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import {
-  access,
   chmod,
   copyFile,
   lstat,
@@ -12,25 +11,16 @@ import {
   type FileHandle,
 } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
-import { X509Certificate } from "node:crypto";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import { join } from "node:path";
 import { generateKeyRing, readDurableHostJson, type GeneratedKeyRing } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { withRecoveryLock } from "./recovery-lock.js";
 import "./errors.js";
 import { listBoxIpv4 } from "./box-reach.js";
-import {
-  mintSelfSignedServerCert,
-  isPermittedLeafIpv4,
-  reissueServerLeaf,
-} from "./self-signed-cert.js";
-import {
-  mkdirDurable,
-  stageFileDurable,
-  stagedPath,
-  syncFolderHolding,
-  writeFileDurable,
-} from "./fs-atomic.js";
+import { closeTlsInstall, dropTlsInstall, fileExists, stageTlsInstall } from "./box-tls-install.js";
+import { leafIpv4s, mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
+import { mkdirDurable, stagedPath, writeFileDurable } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
@@ -93,10 +83,6 @@ export function keyRingEnv(ring: EncodedKeyRing): Record<string, string> {
   return env;
 }
 
-export function leafIpv4s(listIpv4: () => string[]): string[] {
-  return Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
-}
-
 /**
  * The box's own minted leaf, or `undefined` when either half is missing: `buildServeOptions` reads
  * both, and a half-written pair would throw inside the serve call. A phone or till trusts the box's
@@ -149,17 +135,6 @@ export interface EnsureBoxSecretsDeps {
   listIpv4?: () => string[];
 }
 
-// Only ENOENT is "absent". Treating an unreadable file as absent would regenerate secrets.env's
-// vault master key over one it merely could not read, orphaning everything sealed under it.
-const exists = (p: string): Promise<boolean> =>
-  access(p).then(
-    () => true,
-    (err: NodeJS.ErrnoException) => {
-      if (err.code === "ENOENT") return false;
-      throw err;
-    },
-  );
-
 /**
  * Write the box's self-signed CA, leaf and vault key ring ONCE under `stateDir`, then reuse them on
  * every later boot, because a fresh CA would break every already-trusting setup client and a fresh
@@ -186,7 +161,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
   await mkdirDurable(files.tlsDir, 0o700);
   await tightenTlsDir(deps.stateDir);
 
-  if (!(await exists(files.keyFile))) {
+  if (!(await fileExists(files.keyFile))) {
     for (const path of [
       files.caCertFile,
       files.caKeyFile,
@@ -195,7 +170,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
       join(files.tlsDir, "repair-archive"),
       join(deps.stateDir, SECRETS_ENV_FILE),
     ]) {
-      if (await exists(path)) throw new AppError("setup.not_ready", {});
+      if (await fileExists(path)) throw new AppError("setup.not_ready", {});
     }
     const m = mint({
       hostnames: deps.hostnames,
@@ -209,7 +184,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
   }
 
   const secretsFile = join(deps.stateDir, SECRETS_ENV_FILE);
-  if (!(await exists(secretsFile))) {
+  if (!(await fileExists(secretsFile))) {
     const ring = makeKeyRing();
     const body = formatEnvFile({
       WAITRON_CREDENTIALS_KEY: ring.key,
@@ -223,14 +198,13 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
 
 /**
  * Replace the leaf with one naming THIS machine's addresses, signed by the authority already in
- * `<stateDir>/tls`, which stays untouched. The listener refuses a certificate whose key does not
- * match, so both new files are written under working names first and renamed into place only when
- * both are written; a failed write removes the working files and leaves the old pair, and a failed
- * key rename puts the old certificate back unless that rename fails too, when the old certificate
- * is kept as `server.crt.previous` until the next reissue overwrites it. A failed folder sync after
- * both renames throws with the new pair in place and the old certificate kept as
- * `server.crt.previous`. What is left is a crash after the first rename and before the folder
- * sync, or the key rename and the put-back both failing.
+ * `<stateDir>/tls`, which stays untouched. The new pair goes through `stageTlsInstall`, so a process
+ * stop part-way leaves the old pair or one `finishTlsInstall` completes at the next start. A throw
+ * instead leaves a pair the listener can load: a failed write removes the working files and the
+ * list, and a failed key rename puts the old certificate back unless that rename fails too, when
+ * the old certificate is kept as `server.crt.previous` until the next reissue overwrites it and
+ * the new certificate stays beside the old key. A failed folder sync after both renames throws with
+ * the new pair in place and the old certificate kept as `server.crt.previous`.
  */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;
@@ -256,17 +230,16 @@ async function reissueBoxLeafLocked(deps: {
     ipAddresses: leafIpv4s(deps.listIpv4),
     now: deps.now(),
   });
+  // The certificate moves first: only its old copy is kept for a put-back, never the old key.
   const pair = [
-    { path: files.certFile, pem: leaf.serverCertPem },
-    { path: files.keyFile, pem: leaf.serverKeyPem },
-  ];
-  const discardStaged = async () => {
-    for (const { path } of pair) await rm(stagedPath(path), { force: true }).catch(() => {});
-  };
+    { name: "server.crt", pem: leaf.serverCertPem },
+    { name: "server.key", pem: leaf.serverKeyPem },
+  ] as const;
+  const names = pair.map(({ name }) => name);
   try {
-    for (const { path, pem } of pair) await stageFileDurable(path, pem, 0o600);
+    await stageTlsInstall(deps.stateDir, pair);
   } catch (error) {
-    await discardStaged();
+    await dropTlsInstall(deps.stateDir, names);
     throw error;
   }
   const previousCert = `${files.certFile}.previous`;
@@ -283,19 +256,19 @@ async function reissueBoxLeafLocked(deps: {
         putBackFailed = true;
       });
     }
-    await discardStaged();
+    await dropTlsInstall(deps.stateDir, names);
     // A failed put-back leaves the copy as the only one of the old certificate.
     if (!putBackFailed) await rm(previousCert, { force: true }).catch(() => {});
     throw error;
   }
-  await syncFolderHolding(files.keyFile);
+  await closeTlsInstall(deps.stateDir);
   await rm(previousCert, { force: true });
 }
 
 /**
  * Reissues the box's leaf with {@link reissueBoxLeaf} when it lacks one of `hostnames` or a current
- * permitted address, or does not verify under the current `tls/ca.crt`; otherwise leaves both files
- * untouched. A box with no minted leaf is left alone.
+ * permitted address, does not verify under the current `tls/ca.crt`, or is not the certificate of
+ * `tls/server.key`; otherwise leaves both files untouched. A box with no minted leaf is left alone.
  */
 export async function ensureLeaf(deps: {
   stateDir: string;
@@ -307,11 +280,12 @@ export async function ensureLeaf(deps: {
   if (mintedBoxLeaf(deps.stateDir) === undefined) return "kept";
   const leaf = new X509Certificate(await readFile(files.certFile, "utf8"));
   const authority = new X509Certificate(await readFile(files.caCertFile, "utf8"));
-  const names = new Set((leaf.subjectAltName ?? "").split(", "));
+  const key = createPrivateKey(await readFile(files.keyFile, "utf8"));
   const fits =
     leaf.verify(authority.publicKey) &&
-    deps.hostnames.every((host) => names.has(`DNS:${host}`)) &&
-    leafIpv4s(deps.listIpv4).every((ip) => names.has(`IP Address:${ip}`));
+    leaf.checkPrivateKey(key) &&
+    deps.hostnames.every((host) => leaf.checkHost(host) === host) &&
+    leafIpv4s(deps.listIpv4).every((ip) => leaf.checkIP(ip) === ip);
   if (fits) return "kept";
   await reissueBoxLeaf(deps);
   return "reissued";

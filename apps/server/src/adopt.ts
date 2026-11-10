@@ -30,7 +30,7 @@ import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { assertAdoptionModules, writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
-import { BOX_HOSTNAME, boxHostnameFor, ownContactUrl } from "./box-name.js";
+import { leafHostnamesFor, ownContactUrl } from "./box-name.js";
 import "./errors.js";
 
 export type PersistTradingArgs = TradingConfig;
@@ -180,7 +180,7 @@ export async function adoptFromPrimary(
   await installVenueAuthority({
     stateDir: deps.stateDir,
     authority: { certPem: bundle.boxCaPem, keyPem: bundle.boxCaKeyPem },
-    hostnames: [boxHostnameFor(standby.nodeId), BOX_HOSTNAME, "localhost"],
+    hostnames: leafHostnamesFor(standby.nodeId),
     listIpv4: deps.listIpv4,
     now: deps.now,
   });

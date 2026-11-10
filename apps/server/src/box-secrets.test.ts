@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { X509Certificate, createPrivateKey } from "node:crypto";
-import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSecureContext } from "node:tls";
@@ -9,11 +9,13 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { chmod, lstat, symlink, writeFile, mkdir, type FileHandle } from "node:fs/promises";
 import {
   ensureBoxSecrets,
+  ensureLeaf,
   mintedBoxLeaf,
   reissueBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
 } from "./box-secrets.js";
+import { finishTlsInstall } from "./box-tls-install.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import {
   syncsAndRenames as recordSyncsAndRenames,
@@ -517,6 +519,39 @@ describe("reissueBoxLeaf", () => {
     expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
     expect(await readFile(join(tls, "server.crt.previous"), "utf8")).toBe(before.cert);
     expect((await readdir(tls)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+  });
+
+  it("a process stop between the two renames leaves a pair the next start finishes", async () => {
+    const d = await newDir();
+    await ensureBoxSecrets(deps(d));
+    const stopped = await newDir();
+    const passthrough = renameMock.getMockImplementation()!;
+    renameMock.mockImplementation(async (from: string, to: string) => {
+      await passthrough(from, to);
+      // What the disk holds if the process stops right after the certificate's rename.
+      if (to === join(d, "tls", "server.crt")) {
+        await cp(join(d, "tls"), join(stopped, "tls"), { recursive: true });
+      }
+    });
+    try {
+      await reissue(d);
+    } finally {
+      renameMock.mockImplementation(passthrough);
+    }
+
+    expect(await finishTlsInstall(stopped)).toBe("finished");
+    const after = await pairOf(stopped);
+    expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
+    expect(() => createSecureContext(after)).not.toThrow();
+    expect(after).toEqual(await pairOf(d));
+    expect(
+      await ensureLeaf({
+        stateDir: stopped,
+        hostnames: ["waitron.local", "localhost"],
+        now: () => new Date("2026-09-23T10:00:00Z"),
+        listIpv4: () => ["192.168.1.77"],
+      }),
+    ).toBe("kept");
   });
 });
 

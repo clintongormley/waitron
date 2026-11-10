@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,7 +11,11 @@ import {
   joinedAnotherBox,
   markJoined,
 } from "./box-tls-install.js";
-import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+import {
+  mintSelfSignedServerCert,
+  reissueServerLeaf,
+  type SelfSignedMaterial,
+} from "./self-signed-cert.js";
 import {
   syncsAndRenames as recordSyncsAndRenames,
   writtenDurably,
@@ -28,6 +32,10 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   openMock.mockImplementation(actual.open);
   renameMock.mockImplementation(actual.rename);
   return { ...actual, mkdir: mkdirMock, open: openMock, rename: renameMock };
+});
+vi.mock("./self-signed-cert.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./self-signed-cert.js")>();
+  return { ...actual, reissueServerLeaf: vi.fn(actual.reissueServerLeaf) };
 });
 const syncsAndRenames = (run: () => Promise<unknown>) =>
   recordSyncsAndRenames({ mkdir: mkdirMock, open: openMock, rename: renameMock }, run);
@@ -65,15 +73,19 @@ async function ownBox(): Promise<string> {
 
 const tlsFile = (stateDir: string, name: string) => readFile(join(stateDir, "tls", name), "utf8");
 
-function install(stateDir: string, rename?: (from: string, to: string) => Promise<void>) {
+function install(stateDir: string, authority = { certPem: main.caCertPem, keyPem: main.caKeyPem }) {
   return installVenueAuthority({
     stateDir,
-    authority: { certPem: main.caCertPem, keyPem: main.caKeyPem },
+    authority,
     hostnames: HOSTNAMES,
     listIpv4: () => [],
     now: () => new Date(),
-    ...(rename === undefined ? {} : { rename }),
   });
+}
+
+/** The box's four files, byte for byte. */
+async function setOf(stateDir: string): Promise<string[]> {
+  return Promise.all(INSTALLED.map((name) => tlsFile(stateDir, name)));
 }
 
 /** Serves the box's leaf and connects as a device pinning `caPem`, naming `servername`. */
@@ -132,14 +144,17 @@ describe("installVenueAuthority", () => {
   it("a crash after the list finishes at the next start", async () => {
     for (let renamesBeforeCrash = 0; renamesBeforeCrash <= INSTALLED.length; renamesBeforeCrash++) {
       const stateDir = await ownBox();
-      let renamed = 0;
-      const crashing = async (from: string, to: string) => {
-        if (renamesBeforeCrash === 0) throw new Error("power lost");
-        await rename(from, to);
-        renamed += 1;
-        if (renamed === renamesBeforeCrash) throw new Error("power lost");
-      };
-      await expect(install(stateDir, crashing)).rejects.toThrow("power lost");
+      const rename = renameMock.getMockImplementation()!;
+      // The first rename puts the list in place and each later one moves a working file; the
+      // process stops after `renamesBeforeCrash` moves.
+      for (let renamed = 0; renamed < Math.max(1, renamesBeforeCrash); renamed++) {
+        renameMock.mockImplementationOnce(rename);
+      }
+      renameMock.mockImplementationOnce(async (from: string, to: string) => {
+        if (renamesBeforeCrash > 0) await rename(from, to);
+        throw new Error("power lost");
+      });
+      await expect(install(stateDir)).rejects.toThrow("power lost");
 
       expect(await finishTlsInstall(stateDir)).toBe("finished");
       expect(await tlsFile(stateDir, "ca.crt")).toBe(main.caCertPem);
@@ -151,8 +166,8 @@ describe("installVenueAuthority", () => {
 
   it("working files with no list are deleted", async () => {
     const stateDir = await ownBox();
-    for (const name of INSTALLED) {
-      await writeFile(join(stateDir, "tls", `${name}.install`), "half-written");
+    for (const name of [...INSTALLED, "install.json"]) {
+      await writeFile(join(stateDir, "tls", `${name}.tmp`), "half-written");
     }
 
     expect(await finishTlsInstall(stateDir)).toBe("discarded");
@@ -180,18 +195,23 @@ describe("installVenueAuthority", () => {
     const stateDir = await ownBox();
     const tls = join(stateDir, "tls");
     const events = await syncsAndRenames(() => install(stateDir));
-    for (const name of [...INSTALLED.map((n) => `${n}.install`), "install.json"]) {
+    for (const name of [...INSTALLED, "install.json"]) {
       expect(writtenDurably(events, join(tls, name), tls), name).toBe(true);
     }
     const listWritten = events.indexOf(
       `rename ${join(tls, "install.json.tmp")} ${join(tls, "install.json")}`,
     );
     const moves = INSTALLED.map((name) =>
-      events.indexOf(`rename ${join(tls, `${name}.install`)} ${join(tls, name)}`),
+      events.indexOf(`rename ${join(tls, `${name}.tmp`)} ${join(tls, name)}`),
     );
+    for (const name of INSTALLED) {
+      const synced = events.indexOf(`sync ${join(tls, `${name}.tmp`)}`);
+      expect(synced, name).not.toBe(-1);
+      expect(synced, name).toBeLessThan(listWritten);
+    }
     for (const moved of moves) expect(moved).toBeGreaterThan(listWritten);
     const moveOrder = events
-      .filter((event) => event.startsWith(`rename ${tls}/`) && event.includes(".install "))
+      .filter((event) => event.startsWith(`rename ${tls}/`) && !event.includes("install.json"))
       .map((event) => event.split(" ")[2]!.slice(tls.length + 1));
     expect(moveOrder).toEqual(["ca.key", "ca.crt", "server.key", "server.crt"]);
     // One sync before the list is removed and one after it.
@@ -199,6 +219,92 @@ describe("installVenueAuthority", () => {
       .slice(Math.max(...moves))
       .filter((event) => event === `sync ${tls}`);
     expect(syncsAfterMoves).toHaveLength(2);
+  });
+
+  it("refuses an authority certificate paired with another authority's key, leaving the box's own set", async () => {
+    const stateDir = await ownBox();
+    const before = await setOf(stateDir);
+
+    await expect(
+      install(stateDir, { certPem: main.caCertPem, keyPem: own.caKeyPem }),
+    ).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed" });
+
+    expect(await setOf(stateDir)).toEqual(before);
+    expect((await readdir(join(stateDir, "tls"))).sort()).toEqual(INSTALLED);
+  });
+
+  it("refuses a leaf that does not verify under the authority, leaving the box's own set", async () => {
+    const stateDir = await ownBox();
+    const before = await setOf(stateDir);
+    vi.mocked(reissueServerLeaf).mockReturnValueOnce({
+      serverCertPem: own.serverCertPem,
+      serverKeyPem: own.serverKeyPem,
+    });
+
+    await expect(install(stateDir)).rejects.toMatchObject({ code: "mirror.bundle_fetch_failed" });
+
+    expect(await setOf(stateDir)).toEqual(before);
+    expect((await readdir(join(stateDir, "tls"))).sort()).toEqual(INSTALLED);
+  });
+
+  it("a listed install finishes its listed files and deletes every other working file", async () => {
+    const stateDir = await ownBox();
+    const tls = join(stateDir, "tls");
+    await writeFile(join(tls, "server.crt.tmp"), main.serverCertPem);
+    await writeFile(join(tls, "server.key.tmp"), main.serverKeyPem);
+    await writeFile(join(tls, "ca.key.tmp"), "half-written");
+    await writeFile(join(tls, "install.json.tmp"), "half-written");
+    await writeFile(
+      join(tls, "install.json"),
+      JSON.stringify({ files: ["server.crt", "server.key"] }),
+    );
+
+    expect(await finishTlsInstall(stateDir)).toBe("finished");
+
+    expect((await readdir(tls)).sort()).toEqual(INSTALLED);
+    expect(await tlsFile(stateDir, "server.crt")).toBe(main.serverCertPem);
+    expect(await tlsFile(stateDir, "server.key")).toBe(main.serverKeyPem);
+    expect(await tlsFile(stateDir, "ca.key")).toBe(own.caKeyPem);
+  });
+
+  it("finishes a listed install in a tls folder that is a link", async () => {
+    const stateDir = await ownBox();
+    const elsewhere = await mkdtemp(join(tmpdir(), "waitron-tls-install-linked-"));
+    dirs.push(elsewhere);
+    await rm(join(stateDir, "tls"), { recursive: true });
+    await symlink(elsewhere, join(stateDir, "tls"));
+    for (const name of INSTALLED) await writeFile(join(elsewhere, name), "old");
+    await writeFile(join(elsewhere, "server.crt.tmp"), main.serverCertPem);
+    await writeFile(
+      join(elsewhere, "install.json"),
+      JSON.stringify({ files: ["server.crt", "server.key"] }),
+    );
+
+    expect(await finishTlsInstall(stateDir)).toBe("finished");
+
+    expect((await readdir(elsewhere)).sort()).toEqual(INSTALLED);
+    expect(await readFile(join(elsewhere, "server.crt"), "utf8")).toBe(main.serverCertPem);
+  });
+
+  it.each([
+    ["a list that is not JSON", "{", "setup.attempt_invalid"],
+    [
+      "a list naming a file outside the set",
+      JSON.stringify({ files: ["secrets.env"] }),
+      "setup.not_ready",
+    ],
+    ["a list with no files", JSON.stringify({}), "setup.not_ready"],
+  ])("refuses %s and leaves the set and the list as found", async (_case, body, code) => {
+    const stateDir = await ownBox();
+    const tls = join(stateDir, "tls");
+    const before = await setOf(stateDir);
+    await writeFile(join(tls, "server.crt.tmp"), main.serverCertPem);
+    await writeFile(join(tls, "install.json"), body);
+
+    await expect(finishTlsInstall(stateDir)).rejects.toMatchObject({ code });
+
+    expect(await setOf(stateDir)).toEqual(before);
+    expect(await readFile(join(tls, "install.json"), "utf8")).toBe(body);
   });
 
   it("a box with no tls folder has nothing to finish", async () => {

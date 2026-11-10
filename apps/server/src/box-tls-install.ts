@@ -1,16 +1,29 @@
 import { TLS_DIR, TLS_INSTALL_FILE, TLS_JOINED_FILE } from "@waitron/store";
-import { access, readFile, rename as renameFile, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { leafIpv4s } from "./box-secrets.js";
-import { mkdirDurable, syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
+import { X509Certificate, createPrivateKey } from "node:crypto";
+import { access, realpath, rename, rm } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { readDurableHostJson } from "@waitron/provisioning";
+import { AppError } from "@waitron/shared";
+import {
+  mkdirDurable,
+  stageFileDurable,
+  stagedPath,
+  syncFolderHolding,
+  writeFileDurable,
+} from "./fs-atomic.js";
 import { withRecoveryLock } from "./recovery-lock.js";
-import { reissueServerLeaf } from "./self-signed-cert.js";
+import { leafIpv4s, reissueServerLeaf } from "./self-signed-cert.js";
+import "./errors.js";
 
-const INSTALLED = ["ca.key", "ca.crt", "server.key", "server.crt"] as const;
+/** Every file an install may list. */
+const TLS_SET = ["ca.key", "ca.crt", "server.key", "server.crt"] as const;
+type TlsSetFile = (typeof TLS_SET)[number];
 
-const workingName = (name: string) => `${name}.install`;
+const LIST_LIMIT = 4096;
 
-const present = (path: string): Promise<boolean> =>
+// Only ENOENT is "absent". Treating an unreadable file as absent would regenerate secrets.env's
+// vault master key over one it merely could not read, orphaning everything sealed under it.
+export const fileExists = (path: string): Promise<boolean> =>
   access(path).then(
     () => true,
     (error: NodeJS.ErrnoException) => {
@@ -29,7 +42,47 @@ export async function markJoined(stateDir: string, originNodeId: string): Promis
 }
 
 export function joinedAnotherBox(stateDir: string): Promise<boolean> {
-  return present(join(stateDir, TLS_JOINED_FILE));
+  return fileExists(join(stateDir, TLS_JOINED_FILE));
+}
+
+/**
+ * Writes each of `files` under its working name and syncs it, then writes `install.json` naming
+ * them. A stop at any point before the list is in
+ * place leaves the old files whole, and {@link finishTlsInstall} deletes the working files; from
+ * then on it finishes the moves. The caller holds the recovery lock, moves each file from
+ * `stagedPath`, then calls {@link closeTlsInstall}.
+ */
+export async function stageTlsInstall(
+  stateDir: string,
+  files: ReadonlyArray<{ name: TlsSetFile; pem: string }>,
+): Promise<void> {
+  for (const { name, pem } of files) {
+    await stageFileDurable(join(stateDir, TLS_DIR, name), pem, 0o600);
+  }
+  await writeFileDurable(
+    join(stateDir, TLS_INSTALL_FILE),
+    JSON.stringify({ files: files.map(({ name }) => name) }),
+    0o600,
+  );
+}
+
+/** Removes what {@link stageTlsInstall} wrote, ignoring anything already gone or not removable. */
+export async function dropTlsInstall(
+  stateDir: string,
+  names: readonly TlsSetFile[],
+): Promise<void> {
+  for (const name of names) {
+    await rm(stagedPath(join(stateDir, TLS_DIR, name)), { force: true }).catch(() => {});
+  }
+  await rm(join(stateDir, TLS_INSTALL_FILE), { force: true }).catch(() => {});
+}
+
+/** Once every listed file is in place: syncs the folder, removes the list, and syncs it again. */
+export async function closeTlsInstall(stateDir: string): Promise<void> {
+  const list = join(stateDir, TLS_INSTALL_FILE);
+  await syncFolderHolding(list);
+  await rm(list);
+  await syncFolderHolding(list);
 }
 
 export interface InstallVenueAuthorityDeps {
@@ -38,84 +91,96 @@ export interface InstallVenueAuthorityDeps {
   hostnames: string[];
   listIpv4: () => string[];
   now: () => Date;
-  /** Test seam: each move of a working file into place. */
-  rename?: (from: string, to: string) => Promise<void>;
 }
 
 /**
- * Makes `authority`, and a leaf it signs for `hostnames`, this box's own `tls/` set. The four files
- * are written under working names, then `install.json` lists them, then each is moved into place,
- * then the list goes: a stop before the list leaves the old set whole, and a stop after it is
- * finished by {@link finishTlsInstall} at the next start, before that start reads `tls/`.
+ * Makes `authority`, and a leaf it signs for `hostnames`, this box's own `tls/` set, through
+ * {@link stageTlsInstall}. Refuses, with `mirror.bundle_fetch_failed` and before it writes anything,
+ * an authority certificate whose key is not the one given, or a leaf that does not verify under it.
  */
 export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Promise<void> {
+  const { certPem, keyPem } = deps.authority;
+  if (!keyBelongsTo(certPem, keyPem)) throw new AppError("mirror.bundle_fetch_failed", {});
   const leaf = reissueServerLeaf({
-    caCertPem: deps.authority.certPem,
-    caKeyPem: deps.authority.keyPem,
+    caCertPem: certPem,
+    caKeyPem: keyPem,
     hostnames: deps.hostnames,
     ipAddresses: leafIpv4s(deps.listIpv4),
     now: deps.now(),
   });
-  const contents: Record<(typeof INSTALLED)[number], string> = {
-    "ca.crt": deps.authority.certPem,
-    "ca.key": deps.authority.keyPem,
-    "server.crt": leaf.serverCertPem,
-    "server.key": leaf.serverKeyPem,
-  };
+  if (!new X509Certificate(leaf.serverCertPem).verify(new X509Certificate(certPem).publicKey)) {
+    throw new AppError("mirror.bundle_fetch_failed", {});
+  }
+  const files = [
+    { name: "ca.key", pem: keyPem },
+    { name: "ca.crt", pem: certPem },
+    { name: "server.key", pem: leaf.serverKeyPem },
+    { name: "server.crt", pem: leaf.serverCertPem },
+  ] as const;
   const tlsDir = join(deps.stateDir, TLS_DIR);
-  const rename = deps.rename ?? renameFile;
   await withRecoveryLock(deps.stateDir, async () => {
     await mkdirDurable(tlsDir, 0o700);
-    for (const name of INSTALLED) {
-      await writeFileDurable(join(tlsDir, workingName(name)), contents[name], 0o600);
+    await stageTlsInstall(deps.stateDir, files);
+    for (const { name } of files) {
+      await rename(stagedPath(join(tlsDir, name)), join(tlsDir, name));
     }
-    const list = join(deps.stateDir, TLS_INSTALL_FILE);
-    await writeFileDurable(list, JSON.stringify({ files: INSTALLED }), 0o600);
-    for (const name of INSTALLED) {
-      await rename(join(tlsDir, workingName(name)), join(tlsDir, name));
-    }
-    await syncFolderHolding(list);
-    await rm(list);
-    await syncFolderHolding(list);
+    await closeTlsInstall(deps.stateDir);
   });
 }
 
+function keyBelongsTo(certPem: string, keyPem: string): boolean {
+  try {
+    return new X509Certificate(certPem).checkPrivateKey(createPrivateKey(keyPem));
+  } catch {
+    return false;
+  }
+}
+
+function listedFiles(value: unknown): TlsSetFile[] {
+  const files = (value as { files?: unknown }).files;
+  if (
+    !Array.isArray(files) ||
+    files.length === 0 ||
+    files.some((name) => !(TLS_SET as readonly unknown[]).includes(name))
+  ) {
+    throw new AppError("setup.not_ready", {});
+  }
+  return files as TlsSetFile[];
+}
+
 /**
- * Moves into place what a listed install left, or deletes working files no list names. `runEntry`,
- * `startServerOrFirstSetupResolution` and `bootServer` each call it before they first read
- * `tls/`, so the entries' connection check sees a whole set.
+ * Moves into place what a listed install left, and deletes every other
+ * working file of the set and of the list. Runs before anything reads `tls/`.
  */
 export async function finishTlsInstall(
   stateDir: string,
 ): Promise<"none" | "finished" | "discarded"> {
   const tlsDir = join(stateDir, TLS_DIR);
-  if (!(await present(tlsDir))) return "none";
+  if (!(await fileExists(tlsDir))) return "none";
   return withRecoveryLock(stateDir, async () => {
     const list = join(stateDir, TLS_INSTALL_FILE);
-    let listed: unknown;
-    try {
-      listed = (JSON.parse(await readFile(list, "utf8")) as { files?: unknown }).files;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      let discarded = false;
-      for (const name of INSTALLED) {
-        const working = join(tlsDir, workingName(name));
-        if (!(await present(working))) continue;
-        await rm(working);
-        discarded = true;
-      }
+    // Read through the folder `tls` resolves to: the reader refuses a linked parent folder.
+    const record = await readDurableHostJson(
+      join(await realpath(tlsDir), basename(TLS_INSTALL_FILE)),
+      LIST_LIMIT,
+    );
+    const listed = record === null ? [] : listedFiles(record);
+    for (const name of listed) {
+      const working = stagedPath(join(tlsDir, name));
+      if (await fileExists(working)) await rename(working, join(tlsDir, name));
+    }
+    let discarded = false;
+    for (const working of [...TLS_SET.map((name) => join(tlsDir, name)), list].map(stagedPath)) {
+      if (!(await fileExists(working))) continue;
+      await rm(working);
+      discarded = true;
+    }
+    if (record === null) {
       if (!discarded) return "none";
       await syncFolderHolding(list);
       return "discarded";
     }
-    for (const name of INSTALLED) {
-      if (!Array.isArray(listed) || !listed.includes(name)) continue;
-      const working = join(tlsDir, workingName(name));
-      if (await present(working)) await renameFile(working, join(tlsDir, name));
-    }
-    await syncFolderHolding(list);
-    await rm(list);
-    await syncFolderHolding(list);
+    await closeTlsInstall(stateDir);
     return "finished";
   });
 }

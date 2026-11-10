@@ -77,6 +77,11 @@ export function isPermittedLeafIpv4(ip: string): boolean {
   });
 }
 
+/** The iPAddress SANs a box leaf carries: 127.0.0.1 and `listIpv4`'s, less any the CA cannot vouch for. */
+export function leafIpv4s(listIpv4: () => string[]): string[] {
+  return Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
+}
+
 /**
  * A pre-built `nameConstraints` extension (node-forge has no builder for it). The `value` is the DER
  * of `NameConstraints ::= SEQUENCE { permittedSubtrees [0] IMPLICIT SEQUENCE OF GeneralSubtree }`,

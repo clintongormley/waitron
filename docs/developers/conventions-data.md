@@ -3572,11 +3572,15 @@ first writes `tls/joined.json` (`TLS_JOINED_FILE`, `packages/store/src/state-lay
 the main box's node id, before `stampDeployment` and before the main box's key ring replaces
 `secrets.env`. It then installs the main box's certificate authority, and a leaf that authority
 signs for this box's names, as this box's own `tls/ca.*` and `tls/server.*`
-(`installVenueAuthority`, `apps/server/src/box-tls-install.ts`): four working files, then a
-durable `tls/install.json` (`TLS_INSTALL_FILE`) naming them, then the renames, then the list is
-removed. `finishTlsInstall` finishes a listed install, or deletes working files no list names,
-before `tls/` is first read: in `node-entry.ts`, in `first-setup-launch.ts`, and in `startServer`.
-No box keeps a second authority beside its own.
+(`installVenueAuthority`, `apps/server/src/box-tls-install.ts`): four working files (each
+`<name>.tmp`, `stagedPath`), then a durable `tls/install.json` (`TLS_INSTALL_FILE`) naming them,
+then the renames, then the list is removed. It refuses an authority certificate whose key is not
+the one given (`mirror.bundle_fetch_failed`) before it writes anything. A leaf reissue
+(`reissueBoxLeaf`, `apps/server/src/box-secrets.ts`) writes `server.crt` and `server.key` the same
+way. `finishTlsInstall` finishes a listed install and deletes every other working file of the set
+and of the list, before `tls/` is first read: in `node-entry.ts` (the image's entry point) and in
+`first-setup-launch.ts` (what `bin.ts` runs); a test or script that calls `startServer` directly
+does not run it. No box keeps a second authority beside its own.
 
 Both resets of a box holding `tls/joined.json` empty `tls/` and remove `secrets.env`, the marker
 last, so a reset cut short runs again: the staged reset (`apps/server/src/reset-request.ts`, which
@@ -3588,12 +3592,14 @@ later promoted keeps the marker, so a plain reset of it also empties `tls/`, and
 trust it again.
 
 **Every start checks its leaf.** `ensureLeaf` (`apps/server/src/box-secrets.ts`) reissues the
-leaf when it lacks one of the box's names or a current address, or does not verify under
-`tls/ca.crt`, and otherwise leaves it byte for byte. A start that refuses, and a box another box
-has fenced, leave `tls/` as it was; a failed reissue logs `tls.leaf_reissue_failed` and the box
-serves the old leaf, because a wrong name is no reason to stop selling.
+leaf when it lacks one of the box's names or a current address, does not verify under
+`tls/ca.crt`, or is not the certificate of `tls/server.key`, and otherwise leaves it byte for
+byte. A start that refuses, and a box another box has fenced, leave `tls/` as it was; a failed
+reissue logs `tls.leaf_reissue_failed` and the box serves the old leaf, because a wrong name is no
+reason to stop selling.
 
 **Guards.** `apps/server/src/box-tls-install.test.ts` (every crash point of the install),
+`box-secrets.test.ts` (a stop between the reissue's two renames),
 `reset-request.test.ts` and `scripts/waitron-sh.test.mjs` (the joined and never-joined resets and
 the marker-last order), `box-leaf-names.test.ts`, and the refused-restore and fenced cases in
 `boot.restore.test.ts` and `boot.reconcile.test.ts`. Weaker than the rule: nothing checks that a

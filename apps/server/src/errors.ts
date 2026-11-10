@@ -1301,8 +1301,9 @@ declare module "@waitron/shared" {
      */
     "mirror.standby_invalid": Record<string, never>;
     /**
-     * A mirror could not fetch or parse the bundle from the primary. Never carries the upstream
-     * error's `.message`, which can embed a URL or connection detail.
+     * A mirror could not fetch or parse the bundle from the primary, or the bundle's authority
+     * certificate and key do not belong together. Never carries the upstream error's `.message`,
+     * which can embed a URL or connection detail.
      */
     "mirror.bundle_fetch_failed": Record<string, never>;
     /** No box but this one answered for another box's `.local` name within the time limit. */

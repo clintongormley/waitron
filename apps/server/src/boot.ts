@@ -354,7 +354,7 @@ import {
 } from "./mdns.js";
 import type { MdnsQuerySocket } from "./box-lookup.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
-import { BOX_HOSTNAME, boxHostnameFor } from "./box-name.js";
+import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -395,7 +395,6 @@ import {
 } from "./recovery-document-evidence.js";
 import { invoiceFontBytes } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
-import { finishTlsInstall } from "./box-tls-install.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
@@ -497,9 +496,6 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  * SECRETS.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
-
-/** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
-export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
 
 /**
  * The upper bound on a single product-image upload, in bytes: how large an upload the server will
@@ -1179,7 +1175,6 @@ async function bootServer(
     // Only once this process holds the venue folder: a second process must not delete a running
     // process's restore working folders.
     await clearRestoreLeftovers(config.stateDir, log);
-    await finishTlsInstall(config.stateDir);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,
@@ -1705,7 +1700,7 @@ async function bootServer(
   const ownHostname = boxHostnameFor(config.node.nodeId);
   const ownNameOnly: readonly string[] = [ownHostname];
   const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
-  const leafHostnames = [ownHostname, BOX_HOSTNAME, "localhost"];
+  const leafHostnames = leafHostnamesFor(config.node.nodeId);
   // Called only once a start is past its refusals and not fenced, so a start that refuses, or a
   // fenced box, leaves `tls/` as it was. Logged rather than thrown, as above: the old leaf still
   // serves the tills that trust it.

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +22,13 @@ import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { runEntry, type EntryDeps } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
+
+const { renameMock } = vi.hoisted(() => ({ renameMock: vi.fn() }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  renameMock.mockImplementation(actual.rename);
+  return { ...actual, rename: renameMock };
+});
 
 let material: SelfSignedMaterial;
 let venueSet: SelfSignedMaterial;
@@ -632,7 +639,12 @@ it("keeps a hostname-valid box on HTTPS after its network address changes", asyn
 async function halfInstalled(renamed: number) {
   const f = await fixture();
   await writeFile(join(f.stateDir, "tls/server.key"), material.serverKeyPem);
-  let moves = 0;
+  const rename = renameMock.getMockImplementation()!;
+  // The first rename puts the install's list in place; the next `renamed` move working files.
+  for (let done = 0; done <= renamed; done++) renameMock.mockImplementationOnce(rename);
+  renameMock.mockImplementationOnce(async () => {
+    throw new Error("power lost");
+  });
   await expect(
     installVenueAuthority({
       stateDir: f.stateDir,
@@ -640,10 +652,6 @@ async function halfInstalled(renamed: number) {
       hostnames: ["waitron.local", "localhost"],
       listIpv4: () => ["127.0.0.1"],
       now: () => new Date(),
-      rename: async (from, to) => {
-        if (moves++ === renamed) throw new Error("power lost");
-        await rename(from, to);
-      },
     }),
   ).rejects.toThrow("power lost");
   return f;

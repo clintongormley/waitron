@@ -1,5 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { X509Certificate } from "node:crypto";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, createServer } from "node:tls";
@@ -147,6 +147,23 @@ describe("ensureLeaf", () => {
     const stateDir = await box(leafFrom(other, HOSTNAMES, ["127.0.0.1", ADDRESS]));
 
     expect(await handshake(stateDir, own.caCertPem, OWN_NAME)).toBe("CERT_SIGNATURE_FAILURE");
+  });
+
+  it("a leaf naming everything under this authority but paired with another key is reissued", async () => {
+    const leaf = leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]);
+    const stray = leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]);
+    const stateDir = await box({
+      serverCertPem: leaf.serverCertPem,
+      serverKeyPem: stray.serverKeyPem,
+    });
+
+    expect(await ensure(stateDir)).toBe("reissued");
+
+    const cert = new X509Certificate(await tlsFile(stateDir, "server.crt"));
+    expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "server.key")))).toBe(
+      true,
+    );
+    expect(await handshake(stateDir, own.caCertPem, OWN_NAME)).toBe("verified");
   });
 
   it("a failed reissue rejects and keeps the old leaf", async () => {
