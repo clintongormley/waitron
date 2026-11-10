@@ -464,3 +464,5 @@ Cambiarlo no imprime nada por sí solo. Reenviar un trabajo fallido conserva su 
 Los nombres de platos y mesas y tus notas siguen como se registraron. Una reimpresión conserva las
 instrucciones originales sobre alergias y elige su texto guardado en inglés o español para que
 coincida con las cabeceras.
+
+Para recuperar un justificante de tarjeta antes de completar la cuenta, usa [Imprimir una copia en Pagos](table-service.md#reader-slips).

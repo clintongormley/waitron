@@ -1344,7 +1344,10 @@ export class TillTicketView extends LitElement {
             : nothing
         }
         ${
-          !this.historical && this.canPrintReceipt && r.tender.method === "card"
+          !this.historical &&
+          this.canPrintReceipt &&
+          (r.payments?.some((payment) => payment.method === "card" && payment.reference === null) ??
+            r.tender.method === "card")
             ? html`<wt-button
                 class="payment-slip"
                 variant="secondary"

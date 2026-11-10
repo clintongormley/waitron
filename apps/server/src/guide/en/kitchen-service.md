@@ -421,3 +421,5 @@ The next new ticket, correction or kitchen reprint uses the saved default immedi
 the default prints nothing by itself. Resending a failed job sends its original paper unchanged.
 Dish names, table names and your notes stay as recorded. A reprint keeps the original allergy
 instructions and selects their recorded English or Spanish wording to match its headings.
+
+To recover a card slip before the bill is fully paid, use [Print a copy in Payments](table-service.md#reader-slips).

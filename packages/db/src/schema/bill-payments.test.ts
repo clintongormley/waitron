@@ -198,6 +198,44 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   }
 
+  it("stores a capture's remaining balance only as it becomes received, then freezes it", async () => {
+    const id = await insertPayment();
+    const [pending] = await inTx((tx) =>
+      tx.select().from(billPayments).where(eq(billPayments.id, id)),
+    );
+    expect(pending).toHaveProperty("remainingAfter", null);
+    for (const change of [
+      "remaining_after = 2000",
+      "state = 'failed', failed_at = '2026-09-27T12:05:00.000Z', remaining_after = 2000",
+    ]) {
+      expect(
+        triggerRaised(
+          await captureError(() => updatePayment(id, change)),
+          BILL_PAYMENT_CHANGE_REFUSAL,
+        ),
+      ).toBe(true);
+    }
+    await updatePayment(
+      id,
+      "state = 'received', received_at = '2026-09-27T12:00:00.000Z', remaining_after = 2000",
+    );
+    const [received] = await inTx((tx) =>
+      tx.select().from(billPayments).where(eq(billPayments.id, id)),
+    );
+    expect(received).toHaveProperty("remainingAfter", 2000);
+    expect(
+      triggerRaised(
+        await captureError(() => updatePayment(id, "remaining_after = 1000")),
+        BILL_PAYMENT_CHANGE_REFUSAL,
+      ),
+    ).toBe(true);
+    await updatePayment(id, "state = 'declined'");
+    const [declined] = await inTx((tx) =>
+      tx.select().from(billPayments).where(eq(billPayments.id, id)),
+    );
+    expect(declined).toHaveProperty("remainingAfter", 2000);
+  });
+
   describe("bill_payments columns and checks", () => {
     it("writes and reads back a pending card contribution", async () => {
       const id = await insertPayment();

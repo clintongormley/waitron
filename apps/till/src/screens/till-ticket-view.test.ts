@@ -1291,6 +1291,23 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  it("offers the slip after cash followed by a reader payment", async () => {
+    const { el } = await mount({
+      payments: [
+        {
+          method: "cash",
+          change: "0.00",
+          amount: "4.40",
+          tip: "0.00",
+          tendered: "4.40",
+          refunds: [],
+        },
+        { method: "card", amount: "5.00", tip: "0.00", reference: null, refunds: [] },
+      ],
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).not.toBeNull();
+  });
+
   it("hides receipt and payment-slip actions when this enrolled device cannot print them", async () => {
     const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
       result: {

@@ -476,6 +476,7 @@ export class TillBillPayDialog extends LitElement {
   /** Set after each refund made from the bill's payments list. */
   @property({ attribute: false }) refunded: RefundNotice | null = null;
   @property({ type: Boolean }) busy = false;
+  @property({ type: Boolean }) canPrintReceipt = false;
   @property({ type: Boolean }) confirmationLocked = false;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
@@ -1338,6 +1339,19 @@ export class TillBillPayDialog extends LitElement {
             : nothing
         }
       </div>
+      ${
+        this.canPrintReceipt && payment.canCopySlip === true
+          ? html`<wt-button
+              variant="secondary"
+              size="sm"
+              data-payment-slip-copy=${payment.id}
+              aria-label=${t("bill_pay.slip_copy_label").replace("{n}", String(n))}
+              .disabled=${this.busy}
+              @click=${() => this.#emit("bill-slip-copy", { paymentId: payment.id })}
+              >${t("bill_pay.slip_copy")}</wt-button
+            >`
+          : nothing
+      }
       ${
         refundOffered(payment, status)
           ? html`<wt-button

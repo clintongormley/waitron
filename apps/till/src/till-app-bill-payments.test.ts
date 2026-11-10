@@ -87,6 +87,26 @@ import type {
 
 let api: TillApi;
 
+it("prints a partial card payment copy without taking another payment", async () => {
+  const printBillPaymentSlip = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountApp({
+    printBillPaymentSlip,
+    getBillBalance: vi
+      .fn()
+      .mockResolvedValue(
+        balanceOf({
+          payments: [paymentOf({ canCopySlip: true, method: "card", entry: "reader" })],
+        }),
+      ),
+  });
+  await openTable(el);
+  await openDialog(el, "rest");
+  emit(dialog(el)!, "bill-slip-copy", { paymentId: "pay-1" });
+  await vi.waitFor(() => expect(printBillPaymentSlip).toHaveBeenCalledWith("wo-4", "pay-1"));
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
+  expect(dialog(el)).not.toBeNull();
+});
+
 const fullInvoicesOn = () => ({
   getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
 });

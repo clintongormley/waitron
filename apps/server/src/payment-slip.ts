@@ -15,6 +15,8 @@ export interface PaymentSlipInput {
   charged: string;
   card: CardDetails | null;
   invoiceLocale: string;
+  remaining?: string | null;
+  copy?: boolean;
   /** The receipt printer's settings, which set the image width and the column count. */
   printer: EscSetting;
 }
@@ -32,6 +34,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
     }
   };
   text(labels.paymentHeading);
+  if (input.copy) text(labels.duplicate);
   text(labels.paymentNotice);
   text(`${input.issuer.venueName} · ${input.issuer.nif}`);
   text(receiptDateTime(input.paidAt, input.invoiceLocale));
@@ -54,5 +57,7 @@ export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
   // always renders two places, so a zero tip is "0.00" and nothing else.
   if (input.tip !== "0.00") row(labels.tip, formatMoney(input.tip, input.invoiceLocale));
   row(labels.charged, formatMoney(input.charged, input.invoiceLocale));
+  if (input.remaining != null)
+    row(labels.paymentRemaining, formatMoney(input.remaining, input.invoiceLocale));
   return b.feedAndCut().bytes();
 }

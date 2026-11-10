@@ -299,6 +299,7 @@ const ROUTES: readonly Row[] = [
   ],
   ["POST", `/api/sales/${id}/receipt`, "print-receipt", forbidden("receipt"), {}],
   ["POST", `/api/sales/${id}/payment-slip`, "print-receipt", forbidden("payment-slip"), {}],
+  ["POST", `/api/working-orders/${id}/payments/${id}/slip-copy`, "print-receipt", forbidden("slip-copy"), {}],
   ["POST", `/api/sales/${id}/reprint`, "print-receipt", forbidden("reprint"), {}],
   ["POST", "/api/drawer/open", "open-cash-drawer", forbidden("drawer_open"), {}],
   [

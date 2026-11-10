@@ -161,6 +161,18 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(await providerRowOf(rows[0]!.id)).toMatchObject({ state: "captured" });
   });
 
+  it("stores the received balance without counting another reader's pending reservation", async () => {
+    const billId = await tabWithDishes("Paella");
+    const first = await heldCard(billId, "10.00");
+    const second = await cardContribution(billId, "5.00", { cookie: venue.cookie2 });
+    first.release();
+    await first.answer;
+    expect(second.status).toBe(200);
+    const rows = await paymentRows(venue, billId);
+    expect(rows.find((row) => row.applied === 500)).toHaveProperty("remainingAfter", 3000);
+    expect(rows.find((row) => row.applied === 1000)).toHaveProperty("remainingAfter", 2000);
+  });
+
   it("charges the reader on the device's own reader, never the other till's", async () => {
     const billId = await tabWithDishes("Tarta");
     await cardContribution(billId, "5.00", { cookie: venue.cookie2 });

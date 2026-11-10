@@ -1516,11 +1516,18 @@ async function retainShortCapture(
   // Background recovery has no operator to attribute a contribution to. The provider row already
   // retains the money; the next operator's Pay attaches it without charging again.
   if (operatorId !== undefined && payment!.billPaymentId === null) {
+    const balance = await readBillBalance(tx, orderId);
     const [part] = await tx
       .insert(billPayments)
       .values({
         workingOrderId: orderId,
         submissionId: `capture:${captured.id}`,
+        remainingAfter: decimalToCents(
+          subtractDecimal(
+            subtractDecimal(balance.total, balance.received),
+            decimal(captured.amount),
+          ),
+        ),
         fingerprint: captured.id,
         kind: "contribution",
         method: "card",

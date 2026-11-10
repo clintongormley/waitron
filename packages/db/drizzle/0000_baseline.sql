@@ -1169,6 +1169,7 @@ CREATE TABLE `bill_payments` (
 	`applied` integer NOT NULL,
 	`tip` integer DEFAULT 0 NOT NULL,
 	`tendered` integer,
+	`remaining_after` integer,
 	`state` text NOT NULL,
 	`requested_by` text NOT NULL,
 	`source` text NOT NULL,
@@ -3127,6 +3128,8 @@ BEGIN
     AND new.share_of IS old.share_of
     AND new.method IS old.method
     AND ((new.applied IS old.applied AND new.tip IS old.tip)
+      OR (old.state = 'pending' AND new.state = 'received' AND old.method = 'card'))
+    AND (new.remaining_after IS old.remaining_after
       OR (old.state = 'pending' AND new.state = 'received' AND old.method = 'card'))
     AND new.tendered IS old.tendered
     AND new.requested_by IS old.requested_by

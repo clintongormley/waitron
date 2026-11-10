@@ -1,16 +1,19 @@
 import "./errors.js";
 import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
+  billPayments,
   readTenant,
   sales,
   tenders,
   venueLocationId,
   withTransaction,
   type Database,
+  type Transaction,
 } from "@waitron/db";
 import { cardReaders, payments, type CardDetails } from "@waitron/payments";
 import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
+import { readReceiptLanguage } from "@waitron/catalogue";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
@@ -32,6 +35,9 @@ export async function printSalePaymentSlip(
         charged: payments.amount,
         paidAt: payments.settledAt,
         tip: tenders.tipAmount,
+        remaining: sql<
+          number | null
+        >`case when ${payments.billPaymentId} is null then 0 else ${billPayments.remainingAfter} end`,
         scheme: payments.cardScheme,
         last4: payments.cardLast4,
         entryMode: payments.cardEntryMode,
@@ -50,6 +56,7 @@ export async function printSalePaymentSlip(
           ),
         ),
       )
+      .leftJoin(billPayments, eq(billPayments.id, payments.billPaymentId))
       .leftJoin(cardReaders, eq(cardReaders.id, payments.readerId))
       .where(
         and(
@@ -65,40 +72,113 @@ export async function printSalePaymentSlip(
       // rows were written in.
       .orderBy(payments.settledAt, sql`${payments}.rowid`);
     if (cards.length === 0) return;
-    const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
-    if (printer === undefined) return;
-    const taxpayer = await readTenant(tx);
-    /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */
-    if (taxpayer === null) return;
-    /* v8 ignore stop */
-    const order = await readReceiptOrder(tx, workingOrderId);
-    const venueId = await venueLocationId(tx);
-    for (const payment of cards) {
-      const card: CardDetails | null =
-        payment.scheme === null || payment.last4 === null || payment.entryMode === null
-          ? null
-          : {
-              scheme: payment.scheme,
-              last4: payment.last4,
-              entryMode: payment.entryMode as CardDetails["entryMode"],
-              authCode: payment.authCode,
-            };
-      // `payments.amount` and `tenders.tip_amount` each store a count of whole cents; the slip is
-      // printed from amounts, so both become decimals here, at the row that read them.
-      const charged = centsToDecimal(payment.charged);
-      const tip = centsToDecimal(payment.tip);
-      const payload = formatPaymentSlip({
-        issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-        ...order,
-        paidAt: payment.paidAt!,
-        amount: subtractDecimal(charged, tip),
-        charged,
-        tip,
-        card,
-        invoiceLocale: sale.locale,
-        printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
-      });
-      await enqueuePrintJob(tx, printer.id, payload, "document", { venueId });
-    }
+    await enqueueSlips(tx, cfg, workingOrderId, cards, sale.locale);
   });
+}
+
+export async function readBillSlipPayments(tx: Transaction, workingOrderId: string) {
+  return tx
+    .select({
+      id: billPayments.id,
+      charged: payments.amount,
+      paidAt: payments.settledAt,
+      tip: billPayments.tip,
+      remaining: billPayments.remainingAfter,
+      scheme: payments.cardScheme,
+      last4: payments.cardLast4,
+      entryMode: payments.cardEntryMode,
+      authCode: payments.cardAuthCode,
+    })
+    .from(billPayments)
+    .innerJoin(payments, eq(payments.billPaymentId, billPayments.id))
+    .leftJoin(cardReaders, eq(cardReaders.id, payments.readerId))
+    .where(
+      and(
+        eq(billPayments.workingOrderId, workingOrderId),
+        eq(billPayments.state, "received"),
+        isNotNull(billPayments.remainingAfter),
+        isNotNull(payments.settledAt),
+        ne(payments.provider, "manual"),
+        or(isNull(cardReaders.id), eq(cardReaders.printsOwnSlipAutomatically, false)),
+      ),
+    );
+}
+
+export async function printBillPaymentSlip(
+  db: Database,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  paymentId: string,
+): Promise<void> {
+  await withTransaction(db, async (tx) => {
+    const [payment] = await tx
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(and(eq(billPayments.id, paymentId), eq(billPayments.workingOrderId, workingOrderId)));
+    if (payment === undefined) throw new AppError("bill.payment_not_found", { paymentId });
+    const cards = (await readBillSlipPayments(tx, workingOrderId)).filter(
+      (card) => card.id === paymentId,
+    );
+    await enqueueSlips(tx, cfg, workingOrderId, cards, (await readReceiptLanguage(tx)).locale);
+  });
+}
+
+async function enqueueSlips(
+  tx: Transaction,
+  cfg: OriginConfig,
+  workingOrderId: string,
+  cards: readonly {
+    charged: number;
+    paidAt: string | null;
+    tip: number;
+    scheme: string | null;
+    last4: string | null;
+    entryMode: string | null;
+    authCode: string | null;
+    remaining?: number | null;
+  }[],
+  locale: string,
+): Promise<void> {
+  const printer = await resolvePaymentSlipPrinter(tx, cfg.origin);
+  if (printer === undefined) return;
+  const taxpayer = await readTenant(tx);
+  /* v8 ignore start -- the taxpayer row is the database's one row; presentation still degrades */
+  if (taxpayer === null) return;
+  /* v8 ignore stop */
+  const order = await readReceiptOrder(tx, workingOrderId);
+  const venueId = await venueLocationId(tx);
+  for (const payment of cards) {
+    const card: CardDetails | null =
+      payment.scheme === null || payment.last4 === null || payment.entryMode === null
+        ? null
+        : {
+            scheme: payment.scheme,
+            last4: payment.last4,
+            entryMode: payment.entryMode as CardDetails["entryMode"],
+            authCode: payment.authCode,
+          };
+    // `payments.amount` and `tenders.tip_amount` each store a count of whole cents; the slip is
+    // printed from amounts, so both become decimals here, at the row that read them.
+    const charged = centsToDecimal(payment.charged);
+    const tip = centsToDecimal(payment.tip);
+    const payload = formatPaymentSlip({
+      issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
+      ...order,
+      paidAt: payment.paidAt!,
+      amount: subtractDecimal(charged, tip),
+      charged,
+      tip,
+      card,
+      invoiceLocale: locale,
+      copy: true,
+      remaining:
+        payment.remaining === undefined
+          ? "0.00"
+          : payment.remaining === null
+            ? null
+            : centsToDecimal(payment.remaining),
+      printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
+    });
+    await enqueuePrintJob(tx, printer.id, payload, "document", { venueId });
+  }
 }

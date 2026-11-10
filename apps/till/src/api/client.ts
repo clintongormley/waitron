@@ -1156,6 +1156,7 @@ export interface BillRefundView {
 }
 
 export interface BillPaymentView {
+  canCopySlip?: true;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -3129,6 +3130,14 @@ export class TillApi {
   /** Print the ORIGINAL receipt offered at invoice issuance. */
   async printReceipt(workingOrderId: string): Promise<void> {
     await this.#request<void>(`/api/sales/${workingOrderId}/receipt`, "POST", {});
+  }
+
+  async printBillPaymentSlip(workingOrderId: string, paymentId: string): Promise<void> {
+    await this.#request<void>(
+      `/api/working-orders/${workingOrderId}/payments/${paymentId}/slip-copy`,
+      "POST",
+      {},
+    );
   }
 
   /** Print the separate card-payment slip for the filed sale's integrated capture, when one exists. */
