@@ -36,8 +36,8 @@ import {
 } from "@waitron/catalogue";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import type { MdnsQuerySocket } from "./box-lookup.js";
-import type { MdnsSocket } from "./mdns.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
@@ -534,15 +534,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         destroy: (cb) => cb?.(),
       };
     };
-    let onQuery: ((q: { questions: { name: string; type: string }[] }) => void) | undefined;
-    const answered: string[] = [];
-    const responderSocket: MdnsSocket = {
-      on: ((event: string, handler: never) => {
-        if (event === "query") onQuery = handler;
-      }) as MdnsSocket["on"],
-      respond: (response) => answered.push(...response.answers.map((a) => a.name)),
-      destroy: (cb) => cb?.(),
-    };
+    const mdns = fakeMdnsSocket();
     const random = vi.fn(() => 0);
     const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
     const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
@@ -553,13 +545,13 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         async () => {
           await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1));
           // The ask failed, so the box cannot know nobody else holds the name.
-          onQuery?.({ questions: [{ name: "waitron.local", type: "A" }] });
-          expect(answered).toEqual([]);
+          mdns.query("waitron.local");
+          expect(mdns.answers()).toEqual([]);
         },
         {
           seams: {
             mdnsQuerySocket: querySocket,
-            mdnsSocket: () => responderSocket,
+            mdnsSocket: () => mdns.socket,
             setupAskRandom: random,
           },
         },
@@ -599,15 +591,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         destroy: (cb) => cb?.(),
       };
     };
-    let onQuery: ((q: { questions: { name: string; type: string }[] }) => void) | undefined;
-    const answered: string[] = [];
-    const responderSocket: MdnsSocket = {
-      on: ((event: string, handler: never) => {
-        if (event === "query") onQuery = handler;
-      }) as MdnsSocket["on"],
-      respond: (response) => answered.push(...response.answers.map((a) => a.data)),
-      destroy: (cb) => cb?.(),
-    };
+    const mdns = fakeMdnsSocket();
     const random = vi.fn(() => 0);
     try {
       await withSetupBoot(
@@ -616,13 +600,15 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         async () => {
           // The ask ends at its two-second limit.
           await vi.waitFor(() => expect(random).toHaveBeenCalledTimes(1), { timeout: 10_000 });
-          onQuery?.({ questions: [{ name: "waitron.local", type: "A" }] });
-          expect(answered).toEqual([configured]);
+          mdns.query("waitron.local");
+          expect(mdns.answers().map(({ name, data }) => ({ name, data }))).toEqual([
+            { name: "waitron.local", data: configured },
+          ]);
         },
         {
           seams: {
             mdnsQuerySocket: querySocket,
-            mdnsSocket: () => responderSocket,
+            mdnsSocket: () => mdns.socket,
             setupAskRandom: random,
           },
         },

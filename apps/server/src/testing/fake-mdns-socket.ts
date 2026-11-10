@@ -13,8 +13,13 @@ export function fakeMdnsSocket() {
   };
   return {
     socket,
-    query: (name: string) => onQuery?.({ questions: [{ name, type: "A" }] }),
+    /** Throws when no responder took this socket, so an empty answer cannot mean an unwired one. */
+    query: (name: string) => {
+      if (onQuery === undefined) throw new Error("no mDNS responder is listening on this socket");
+      onQuery({ questions: [{ name, type: "A" }] });
+    },
     answered: () => [...new Set(responses.flatMap((r) => r.answers.map((a) => a.name)))],
+    answers: () => responses.flatMap((r) => r.answers),
     clear: () => responses.splice(0),
   };
 }
