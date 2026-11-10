@@ -91,6 +91,11 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         await write(...writeArgs);
         hooks.during?.("writeFile", String(args[0]));
       };
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        hooks.during?.("close", String(args[0]));
+      };
       if (!String(args[0]).endsWith(GROWING_KEY)) return handle;
       return new Proxy(handle, {
         get(target, prop) {
@@ -162,6 +167,23 @@ describe("LocalFsBackend", () => {
       expect(await readFile(join(dir, "output"), "utf8")).toBe("new bytes");
     },
   );
+
+  it("closes the copied-file handle when its flush fails", async () => {
+    await writeFile(join(dir, "input"), "new");
+    await writeFile(join(dir, "output"), "old");
+    let closes = 0;
+    hooks.during = (name, path) => {
+      if (!path.endsWith("/payload")) return;
+      if (name === "sync") throw Object.assign(new Error("flush failed"), { code: "EIO" });
+      if (name === "close") closes += 1;
+    };
+    const backend = new LocalFsBackend("d1", dir);
+    await expect(backend.putFile("output", join(dir, "input"), call)).rejects.toMatchObject({
+      code: "EIO",
+    });
+    expect(closes).toBe(1);
+    expect(await readFile(join(dir, "output"), "utf8")).toBe("old");
+  });
 
   it("puts then gets the same bytes", async () => {
     const be = new LocalFsBackend("d1", dir);

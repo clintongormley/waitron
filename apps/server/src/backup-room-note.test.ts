@@ -161,7 +161,7 @@ describe("writeBackupRoomNote", () => {
     ]);
   });
 
-  it("writes under a temporary name the recovery's originals walk leaves out", async () => {
+  it("writes under the backup room's temporary name", async () => {
     const seen: string[] = [];
     const actual = await vi.importActual<typeof fs>("node:fs/promises");
     vi.mocked(fs.rename).mockImplementationOnce(async (from, to) => {

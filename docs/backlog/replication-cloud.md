@@ -415,7 +415,9 @@ that slice 3 has to restore:
   a never-provisioned one.
 - **Worker-lifecycle manager** (promote Slice 3) — in-process promotion without the restart; the
   node-role collapse decides.
-- **The selling gate after a reboot.** Confirm that selling waits until the reboot has completed.
+- **Power-loss ordering and the selling gate.** Check how a power cut between publishing
+  `trading.env` and committing a promotion affects the node's role and series. Selling must wait
+  until the reboot has completed.
 - **Getting the AEAT certificate onto a promoted standby needs a new design.** The
   [2026-09-07 design](../superpowers/specs/2026-09-07-fiscal-cert-distribution-design.md) landed as #279
   and was reverted by #281, and the replication it was rebuilt against was itself removed on

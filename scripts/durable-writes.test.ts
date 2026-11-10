@@ -20,7 +20,7 @@ const server = Object.fromEntries(
     ["cloud-tunnel", "tunnel volume outside state"],
     ["handover-acceptance", "A1018 reachDisk"],
     ["handover-place-copy", "A1018 reachDisk"],
-    ["handover-source-api", "A1018 reachDisk"],
+    ["handover-source-api", "A1018 final-copy retake"],
     ["mirror-bundle-fetch", "A1018 reachDisk"],
     ["local-fs-backend", "flushes, keeping cancellation before replacement"],
     ["log-file", "log rotation"],
