@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { registerIcons } from "@waitron/ui";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -425,5 +426,53 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
 
     const two = await mountFor([draft("wo-2", 2, "p-ana"), draft("wo-3", 3, "p-ana")]);
     expect(triggerText(two)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ 2 cuentas sin enviar");
+  });
+
+  describe("on a phone, embedded in the till, 360 wide", () => {
+    // The ⋮ icon is registered by till-app.ts; without it the ⋮ is drawn empty.
+    registerIcons({
+      kebab:
+        "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+    });
+
+    afterEach(() => resetPage());
+
+    async function mountPhone() {
+      await pageAt(360, 740);
+      const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
+        products: [],
+        lines: [],
+        orderId: "wo-1",
+        party: { ...switcherParty, unsentDrafts: [draft("wo-2", 2, "p-ana")] },
+        bills: three,
+        personId: "p-ana",
+        embedded: true,
+        handheld: true,
+      });
+      await document.fonts.ready;
+      return el;
+    }
+    const box = (node: Element) => node.getBoundingClientRect();
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+
+    it("in Spanish the mark wraps inside the switcher and the ⋮ stays on its row, inside the screen", async () => {
+      setLocale("es");
+      const el = await mountPhone();
+      const sw = box(switcher(el)!);
+      const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
+
+      expect(triggerText(el)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ Cuenta 2 sin enviar");
+      expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
+      expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
+    });
+
+    it("in English the closed label and the mark stay on one line", async () => {
+      const el = await mountPhone();
+      const closed = box(trigger(el).querySelector(".bill-switcher-closed")!);
+      const mark = box(trigger(el).querySelector("[data-unsent-mark]")!);
+
+      expect(mark.left).toBeGreaterThanOrEqual(closed.right);
+      expect(Math.abs(middle(mark) - middle(closed))).toBeLessThanOrEqual(1);
+    });
   });
 });

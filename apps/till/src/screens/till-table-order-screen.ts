@@ -764,6 +764,10 @@ export class TillTableOrderScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
       }
+      /* Leaves room for the ⋮ beside it when a long unsent mark wraps the switcher's words. */
+      .head-actions .bill-switcher {
+        max-width: calc(100% - var(--wt-tap-min) - var(--wt-space-2));
+      }
 
       /* Words first, so the problem never rests on the warning colour. */
       .bill-gone {
