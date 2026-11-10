@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
-import type { CaseTiming, MeasureResult } from "./measure.js";
+import type { MeasureResult } from "./measure.js";
 
 /** How far after's median may move past before's spread of round medians and still be noise. */
 const MARGIN = 0.1;
@@ -15,36 +15,59 @@ export interface ComparisonRow {
   verdict: Verdict;
 }
 
-/** One row per case either result holds; a case only one of them holds has no verdict to give. */
-export function compareTimings(before: MeasureResult, after: MeasureResult): ComparisonRow[] {
+export interface Comparison {
+  /** One row per case both results hold, in before's order. */
+  rows: ComparisonRow[];
+  onlyBefore: string[];
+  onlyAfter: string[];
+}
+
+export function compareTimings(before: MeasureResult, after: MeasureResult): Comparison {
   for (const field of ["seed", "profile", "machine"] as const)
     if (!isDeepStrictEqual(before[field], after[field]))
       throw new Error(
         `bench: the two results differ in ${field}: ${JSON.stringify(before[field])} against ` +
           JSON.stringify(after[field]),
       );
-  const afterCases = new Map(after.cases.map((entry) => [entry.name, entry]));
+  const beforeMedians = roundMediansByCase(before, "before");
+  const afterMedians = roundMediansByCase(after, "after");
   const rows: ComparisonRow[] = [];
-  for (const entry of before.cases) {
-    const other = afterCases.get(entry.name);
+  for (const [name, medians] of beforeMedians) {
+    const other = afterMedians.get(name);
     if (other === undefined) continue;
-    const medians = roundMedians(entry);
     const lowestMs = Math.min(...medians);
     const highestMs = Math.max(...medians);
-    const afterMs = median(roundMedians(other));
+    const afterMs = median(other);
     const verdict: Verdict =
       afterMs > highestMs * (1 + MARGIN)
         ? "slower"
         : afterMs < lowestMs * (1 - MARGIN)
           ? "faster"
           : "same";
-    rows.push({ name: entry.name, before: { lowestMs, highestMs }, afterMs, verdict });
+    rows.push({ name, before: { lowestMs, highestMs }, afterMs, verdict });
   }
-  return rows;
+  return {
+    rows,
+    onlyBefore: [...beforeMedians.keys()].filter((name) => !afterMedians.has(name)),
+    onlyAfter: [...afterMedians.keys()].filter((name) => !beforeMedians.has(name)),
+  };
 }
 
-function roundMedians(entry: CaseTiming): number[] {
-  return entry.rounds.map((round) => round.medianMs);
+/** Refuses a case with no rounds, or a median JSON wrote as `null`, rather than call it `same`. */
+function roundMediansByCase(result: MeasureResult, side: string): Map<string, number[]> {
+  const byCase = new Map<string, number[]>();
+  for (const entry of result.cases) {
+    if (entry.rounds.length === 0) throw new Error(`bench: ${entry.name} has no rounds in ${side}`);
+    const medians = entry.rounds.map((round) => round.medianMs as unknown);
+    const bad = medians.findIndex((value) => typeof value !== "number" || !Number.isFinite(value));
+    if (bad !== -1)
+      throw new Error(
+        `bench: ${entry.name} has a round median that is not a number in ${side}: ` +
+          String(medians[bad]),
+      );
+    byCase.set(entry.name, medians as number[]);
+  }
+  return byCase;
 }
 
 function median(values: number[]): number {
@@ -53,7 +76,7 @@ function median(values: number[]): number {
   return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
-export function formatComparison(rows: ComparisonRow[]): string {
+export function formatComparison({ rows, onlyBefore, onlyAfter }: Comparison): string {
   const ms = (value: number) => `${value.toFixed(2)} ms`;
   const table = [
     ["case", "before (round medians)", "after (median)", "verdict"],
@@ -67,12 +90,13 @@ export function formatComparison(rows: ComparisonRow[]): string {
   const widths = table[0]!.map((_, column) =>
     Math.max(...table.map((line) => line[column]!.length)),
   );
-  return table
-    .map((line) =>
-      line
-        .map((cell, column) => cell.padEnd(widths[column]!))
-        .join("  ")
-        .trimEnd(),
-    )
-    .join("\n");
+  const lines = table.map((line) =>
+    line
+      .map((cell, column) => cell.padEnd(widths[column]!))
+      .join("  ")
+      .trimEnd(),
+  );
+  if (onlyBefore.length > 0) lines.push(`only in before: ${onlyBefore.join(", ")}`);
+  if (onlyAfter.length > 0) lines.push(`only in after: ${onlyAfter.join(", ")}`);
+  return lines.join("\n");
 }

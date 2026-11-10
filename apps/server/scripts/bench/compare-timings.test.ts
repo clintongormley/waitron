@@ -36,7 +36,7 @@ describe("compareTimings", () => {
       before,
       result({ "sale.counter": [11.5, 11.5, 11.5], "floor.read": [10.5, 10.5, 10.5] }),
     );
-    expect(rows.map((row) => [row.name, row.verdict])).toEqual([
+    expect(rows.rows.map((row) => [row.name, row.verdict])).toEqual([
       ["sale.counter", "slower"],
       ["floor.read", "same"],
     ]);
@@ -48,7 +48,7 @@ describe("compareTimings", () => {
       before,
       result({ "sale.counter": [8, 8, 8], "floor.read": [8.5, 8.5, 8.5] }),
     );
-    expect(rows.map((row) => row.verdict)).toEqual(["faster", "same"]);
+    expect(rows.rows.map((row) => row.verdict)).toEqual(["faster", "same"]);
   });
 
   it("refuses two results with different seeds", () => {
@@ -61,5 +61,47 @@ describe("compareTimings", () => {
     expect(() =>
       compareTimings(before, { ...other, machine: { ...other.machine, cpu: "other" } }),
     ).toThrow(/machine/);
+  });
+
+  it("lists the cases only one result holds, under the table", () => {
+    const compared = compareTimings(
+      before,
+      result({ "sale.counter": [10, 10, 10], "close.day": [5], "report.read": [6] }),
+    );
+
+    expect(compared.rows.map((row) => row.name)).toEqual(["sale.counter"]);
+    expect(compared.onlyBefore).toEqual(["floor.read"]);
+    expect(compared.onlyAfter).toEqual(["close.day", "report.read"]);
+    const lines = formatComparison(compared).split("\n");
+    expect(lines.slice(-2)).toEqual([
+      "only in before: floor.read",
+      "only in after: close.day, report.read",
+    ]);
+  });
+
+  it("prints no only-in line when both results hold the same cases", () => {
+    const text = formatComparison(compareTimings(before, before));
+
+    expect(text).not.toContain("only in");
+    expect(text.split("\n")).toHaveLength(3);
+  });
+
+  it.each([
+    ["before", { ...before, cases: [{ ...before.cases[0]!, rounds: [] }] }, before],
+    ["after", before, result({ "sale.counter": [], "floor.read": [10] })],
+  ])("refuses a case with no rounds in %s", (side, first, second) => {
+    expect(() => compareTimings(first, second)).toThrow(
+      `bench: sale.counter has no rounds in ${side}`,
+    );
+  });
+
+  it("refuses a case whose round median is not a finite number", () => {
+    // A NaN median is written to JSON as null.
+    const after = result({ "sale.counter": [10], "floor.read": [10] });
+    (after.cases[1]!.rounds[0] as { medianMs: unknown }).medianMs = null;
+
+    expect(() => compareTimings(before, after)).toThrow(
+      "bench: floor.read has a round median that is not a number in after: null",
+    );
   });
 });
