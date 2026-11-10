@@ -10415,14 +10415,14 @@ How claims are marked: **(read)** means read in the code at `3c673d46be`, not ru
 - **The bar button.** `barTables` (`apps/till/src/state/bar-tables.ts:75-140`) gives a button per
   table; the app's `#onOpenBarTable` (`till-app.ts:11970-11988`) either goes back to the held bill
   (`held`, D9: `#onTabSelect("order")`, no re-read, the same bill) or opens the table as a Floor
-  tap does, through `#onOpenTable` → `#openTableFromEvent` (`:11394-11461`, `fromBar: true`) →
+  tap does, through `#onOpenTable` → `#openTableFromEvent` (`:11391-11461`, `fromBar: true`) →
   `#openTable` (`:11469`), which shows `this.orderParty?.openingBillId` (`:11576`) and then
   `#followBillsRead(bills, [], true)` (`:11586`), which keeps the bill on screen while the bills
-  read still shows it (`billToShow`, `apps/till/src/state/bill-state.ts:46-58`).
+  read still shows it (`billToShow`, `apps/till/src/state/bill-state.ts:46-57`).
 - **What the device knows before a read does.** `#released` (`till-app.ts`, `#releaseDraft`
-  `:11321-11360`) records each bill this device left a table on, with its store's line count
+  `:11327-11360`) records each bill this device left a table on, with its store's line count
   (`LocalBill`, `bar-tables.ts:14-21`), until a floor read started after its save answers
-  (`#applyTables`, `:11284`). The held bill is `#heldBill()` (`:11950-11968`).
+  (`#applyTables`, `:11284`). The held bill is `#heldBill()` (`:11954-11968`).
 - **`savedAt`** is written only as `nowIso()` (`git grep -n 'updatedAt' apps/server/src/order-drafts.ts`:
   every write is `updatedAt: nowIso()`; ran), one spelling; compare with `Date.parse` anyway.
 
