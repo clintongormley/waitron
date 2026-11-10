@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { cardReaders, payments } from "@waitron/payments";
+import { validateCapabilities } from "@waitron/layouts";
 import { provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 
@@ -19,7 +20,7 @@ useVenueDb({
       for (const profile of await tx.select().from(deviceProfiles))
         await tx
           .update(deviceProfiles)
-          .set({ capabilities: [...profile.capabilities, "print-receipt"] })
+          .set({ capabilities: [...validateCapabilities(profile.capabilities), "print-receipt"] })
           .where(eq(deviceProfiles.id, profile.id));
     });
   },
