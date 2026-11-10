@@ -1,4 +1,5 @@
 import { correctionAdmissionFor } from "./correction-admission.js";
+import { filedFiguresFor } from "./filed-figures.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
 // Registers this package's own error codes on the shared registry.
 import "./errors.js";
@@ -24,6 +25,7 @@ import type {
   CorrectionAdmission,
   Counterparty,
   FiscalBackend,
+  FiledFigures,
   FiledReceipt,
   FiledInvoiceEvidence,
   FiscalRecordRef,
@@ -435,6 +437,13 @@ export class VerifactuBackend implements FiscalBackend {
     issuingNodeId: NodeId,
   ): Promise<CorrectionAdmission> {
     return correctionAdmissionFor(tx, saleId, issuingNodeId);
+  }
+
+  filedFiguresFor(
+    tx: Transaction,
+    saleIds: readonly SaleId[],
+  ): Promise<ReadonlyMap<SaleId, FiledFigures>> {
+    return filedFiguresFor(tx, saleIds);
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */

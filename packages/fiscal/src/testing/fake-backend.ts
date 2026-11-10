@@ -1,10 +1,12 @@
-import { sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { inArray, sql } from "drizzle-orm";
+import { AppError, centsToDecimal, decimal } from "@waitron/shared";
 import type { Decimal, NodeId, SaleId } from "@waitron/shared";
+import { sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type {
   ClockBehindLatestRecord,
   CorrectionAdmission,
+  FiledFigures,
   FiscalBackend,
   FiledReceipt,
   FiscalRecordRef,
@@ -55,6 +57,7 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Promise.resolve();
   }
 
+  private readonly filedFigures = new Map<SaleId, FiledFigures>();
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
   private admission: CorrectionAdmission = {
     eligible: true,
@@ -287,6 +290,34 @@ export class FakeFiscalBackend implements FiscalBackend {
     return Promise.resolve(this.admission);
   }
 
+  /** Each sale's stored total and split, as both versions, unless the test set its answer. */
+  async filedFiguresFor(
+    tx: Transaction,
+    saleIds: readonly SaleId[],
+  ): Promise<ReadonlyMap<SaleId, FiledFigures>> {
+    const rows = await tx
+      .select({ id: sales.id, total: sales.total, vatBreakdown: sales.vatBreakdown })
+      .from(sales)
+      .where(inArray(sales.id, [...saleIds]));
+    const answer = new Map<SaleId, FiledFigures>();
+    for (const row of rows) {
+      const stored = {
+        total: centsToDecimal(row.total),
+        vatBreakdown: row.vatBreakdown.map((line) => ({
+          rate: decimal(line.rate),
+          base: decimal(line.base),
+          tax: decimal(line.tax),
+        })),
+      };
+      const id = row.id as SaleId;
+      answer.set(
+        id,
+        this.filedFigures.get(id) ?? { readable: true, newest: stored, newestAnswered: stored },
+      );
+    }
+    return answer;
+  }
+
   async pendingCount(nodeId: NodeId): Promise<number> {
     const rows = await this.db.execute<{ count: string }>(sql`
       select cast(count(*) as text) as count
@@ -307,6 +338,11 @@ export class FakeFiscalBackend implements FiscalBackend {
   /** What `correctionAdmissionFor` answers for every sale from now on. */
   setCorrectionAdmission(admission: CorrectionAdmission): void {
     this.admission = admission;
+  }
+
+  /** What `filedFiguresFor` answers for `saleId` from now on, while its sale row exists. */
+  setFiledFigures(saleId: SaleId, figures: FiledFigures): void {
+    this.filedFigures.set(saleId, figures);
   }
 
   restoreIntegrity(nodeId: NodeId): void {
