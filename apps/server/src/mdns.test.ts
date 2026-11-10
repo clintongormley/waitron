@@ -132,6 +132,40 @@ describe("mdns", () => {
     ]);
   });
 
+  it("answers every one of its names asked in one query", () => {
+    const f = fakeSocket();
+    startMdnsResponder({
+      names: () => ["box-0a1b.waitron.local", "waitron.local"],
+      devMode: false,
+      httpHost: "0.0.0.0",
+      getAddresses: () => ["192.168.1.5"],
+      log: () => {},
+      makeSocket: () => f.socket,
+    });
+    f.query({
+      questions: [
+        { name: "box-0a1b.waitron.local", type: "A" },
+        { name: "other.local", type: "A" },
+        { name: "waitron.local", type: "ANY" },
+      ],
+    });
+    expect(f.respond.mock.calls).toEqual([
+      [
+        {
+          answers: [
+            {
+              name: "box-0a1b.waitron.local",
+              type: "A",
+              ttl: MDNS_TTL_SECONDS,
+              data: "192.168.1.5",
+            },
+            { name: "waitron.local", type: "A", ttl: MDNS_TTL_SECONDS, data: "192.168.1.5" },
+          ],
+        },
+      ],
+    ]);
+  });
+
   it("stops answering a name dropped from the list on the next query", () => {
     const f = fakeSocket();
     let names = ["box-0a1b.waitron.local", "waitron.local"];

@@ -15,8 +15,15 @@ export function addressIsBox(address: string | undefined, deps: RequestSourceDep
   if (address === undefined) return true;
   const bare = plainAddress(address);
   if (isLoopbackHost(bare)) return true;
-  return Object.values((deps.interfaces ?? networkInterfaces)()).some((entries) =>
-    (entries ?? []).some((entry) => entry.address.replace(/%.*$/, "") === bare),
+  return ownInterfaceAddresses(deps.interfaces).includes(bare);
+}
+
+/** Every address on the box's own interfaces, internal ones included, without a `%scope`. */
+export function ownInterfaceAddresses(
+  interfaces: typeof networkInterfaces = networkInterfaces,
+): string[] {
+  return Object.values(interfaces()).flatMap((entries) =>
+    (entries ?? []).map((entry) => entry.address.replace(/%.*$/, "")),
   );
 }
 

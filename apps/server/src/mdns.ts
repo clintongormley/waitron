@@ -61,11 +61,14 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
 
   socket.on("query", (query) => {
     const ours = names();
-    const asked = query.questions.find(
-      (q) => ours.includes(q.name) && (q.type === "A" || q.type === "ANY"),
+    const asked = new Set(
+      query.questions
+        .filter((q) => ours.includes(q.name) && (q.type === "A" || q.type === "ANY"))
+        .map((q) => q.name),
     );
-    if (asked === undefined) return;
-    const answers = buildMdnsAnswers(asked.name, getAddresses());
+    if (asked.size === 0) return;
+    const addresses = getAddresses();
+    const answers = [...asked].flatMap((name) => buildMdnsAnswers(name, addresses));
     if (answers.length === 0) return;
     socket.respond({ answers });
   });

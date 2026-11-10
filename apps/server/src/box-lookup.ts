@@ -1,9 +1,9 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { networkInterfaces } from "node:os";
 import multicastDns from "multicast-dns";
 import { AppError } from "@waitron/shared";
 import { isLoopbackHost } from "./primary-url.js";
+import { ownInterfaceAddresses } from "./request-from-box.js";
 import "./errors.js";
 
 /** A minimal view of a multicast-dns instance used for asking, so lookups can be tested with a fake. */
@@ -26,12 +26,6 @@ export interface BoxLookupOptions {
 
 const DEFAULT_TIMEOUT_MS = 2000;
 
-function interfaceAddresses(): string[] {
-  return Object.values(networkInterfaces()).flatMap((entries) =>
-    (entries ?? []).map((entry) => entry.address.replace(/%.*$/, "")),
-  );
-}
-
 /**
  * Asks once for `hostname`'s A record and gathers every other box's IPv4 answered within the time
  * limit. The socket hears this box's own answers too (multicast-dns loops them back), and leaving
@@ -39,7 +33,7 @@ function interfaceAddresses(): string[] {
  * answering for the venue's name it also answers for.
  */
 function askNetwork(hostname: string, opts: BoxLookupOptions): Promise<string[]> {
-  const own = new Set((opts.ownAddresses ?? interfaceAddresses)());
+  const own = new Set(opts.ownAddresses?.() ?? ownInterfaceAddresses());
   const wanted = hostname.toLowerCase();
   const socket = (opts.makeSocket ?? (() => multicastDns() as MdnsQuerySocket))();
   const heard: string[] = [];
