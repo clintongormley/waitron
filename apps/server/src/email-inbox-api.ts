@@ -21,6 +21,7 @@ const STATUS = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "email.test_inbox_unavailable": 409,
+  "email.message_not_found": 404,
 } as const;
 
 export function mountEmailInboxApi(app: Hono, deps: EmailInboxApiDeps, log: Logger): void {

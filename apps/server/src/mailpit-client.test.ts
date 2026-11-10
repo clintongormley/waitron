@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { AppError } from "@waitron/shared";
 import { createMailpitClient } from "./mailpit-client.js";
 
 const address = (Name: string, Address: string) => ({ Name, Address });
@@ -74,5 +75,25 @@ describe("createMailpitClient", () => {
     await expect(createMailpitClient("http://127.0.0.1:8025", fetchImpl).list()).rejects.toThrow(
       "Mailpit request failed with 503",
     );
+  });
+
+  it("refuses an unknown message id as a missing message", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response("404 page not found", { status: 404 }));
+
+    const read = createMailpitClient("http://127.0.0.1:8025", fetchImpl).read("no-such-message");
+
+    await expect(read).rejects.toBeInstanceOf(AppError);
+    await expect(read).rejects.toMatchObject({ code: "email.message_not_found" });
+  });
+
+  it("keeps any other failed message read a plain failure", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response("broken", { status: 500 }));
+
+    const read = createMailpitClient("http://127.0.0.1:8025", fetchImpl).read("message-1");
+
+    await expect(read).rejects.toThrow("Mailpit request failed with 500");
+    await expect(read).rejects.not.toBeInstanceOf(AppError);
   });
 });
