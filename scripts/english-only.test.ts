@@ -37,7 +37,7 @@ const repoRoot = join(import.meta.dirname, "..");
  * `STILL_TO_CLEAN`'s length, pinned equal so a change in either direction fails: deleting entries
  * lowers this in the same change, and adding one has to raise it where the diff shows it.
  */
-const STILL_TO_CLEAN_COUNT = 1231;
+const STILL_TO_CLEAN_COUNT = 1230;
 
 // A per-call kill timeout for a hung `git` (Vitest's timer cannot interrupt a blocking child), and
 // a per-test bound above it for the case that builds a repository.
@@ -276,8 +276,13 @@ describe("configuration", () => {
 describe("the lists", () => {
   it("keeps exactly the files whose job needs non-English text, each with a reason", () => {
     expect(Object.keys(KEEPS_NON_ENGLISH).sort()).toEqual([
+      "apps/server/scripts/bench/measure.ts",
+      "apps/server/scripts/bench/trading-day.test.ts",
       "apps/server/scripts/receipt-look.ts",
+      "apps/server/src/first-setup-database-holdings.test.ts",
+      "apps/server/src/first-setup-start-again-hour.test.ts",
       "apps/server/src/log-personal-data.ts",
+      "apps/server/src/start-again-full-disk.e2e.test.ts",
       "packages/db/src/immutability.sql.md",
       "packages/identity/src/passkey-providers.ts",
       "packages/migrations/migrations.manifest.json",

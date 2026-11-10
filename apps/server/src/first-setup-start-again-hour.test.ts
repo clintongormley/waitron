@@ -325,7 +325,7 @@ it.each([
   ],
   [
     "filing",
-    "insert into filing_cases(id, registro_id, cause, evidence, opened_at) values ('filing', 'registro', 'retained', '{}', 1)",
+    "insert into filing_cases(id, registro_id, cause, evidence, opened_at) values ('filing', 'record', 'retained', '{}', 1)",
   ],
   ["unknown table", "create table unknown_rows(value text)"],
   ["partial schema", "drop table catalogues"],

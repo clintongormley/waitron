@@ -174,7 +174,7 @@ package's `src/starter-content.ts`, and the two files that list forbidden words
 
 Two lists sit beside it. `KEEPS_NON_ENGLISH` in `english-only.ts` names the files outside the homes
 whose job needs non-English text, each with its reason. `scripts/english-only-still-to-clean.ts`
-names the files that held non-English text on 2026-11-09 and that nobody has yet cleaned or judged to
+names the files that held non-English text on 2026-11-10 and that nobody has yet cleaned or judged to
 need it. A listed file with nothing left to find fails the suite until its entry is deleted, and
 the suite holds the list's length equal to `STILL_TO_CLEAN_COUNT` in the suite, so deleting an entry lowers the
 count in the same change and adding one has to raise it where the diff shows it. A renamed or moved

@@ -38,6 +38,9 @@ export interface Keep {
   findings: number;
 }
 
+const VERIFACTU_NAMES =
+  "names Veri*Factu tables or columns, which packages/fiscal-verifactu's schema spells in Spanish";
+
 /**
  * Files outside the homes whose job needs non-English text, with why. Each is held to its number of
  * findings, not to which lines hold them.
@@ -52,11 +55,11 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     findings: 1,
   },
   "packages/migrations/migrations.manifest.json": {
-    reason: "names the Veri*Factu tables, whose Spanish names cannot change",
+    reason: VERIFACTU_NAMES,
     findings: 2,
   },
   "packages/db/src/immutability.sql.md": {
-    reason: "names the Veri*Factu tables, whose Spanish names cannot change",
+    reason: VERIFACTU_NAMES,
     findings: 2,
   },
   "apps/server/src/log-personal-data.ts": {
@@ -64,6 +67,26 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     findings: 2,
   },
   "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 2 },
+  "apps/server/scripts/bench/measure.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 2,
+  },
+  "apps/server/scripts/bench/trading-day.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 8,
+  },
+  "apps/server/src/first-setup-database-holdings.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 3,
+  },
+  "apps/server/src/first-setup-start-again-hour.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 9,
+  },
+  "apps/server/src/start-again-full-disk.e2e.test.ts": {
+    reason: VERIFACTU_NAMES,
+    findings: 2,
+  },
 };
 
 /** There is deliberately no list of forgiven words: if a column's name needs one, rename the column. */
