@@ -11,6 +11,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  hashSessionToken,
   hashPin,
   persons,
   registerModulePermissions,
@@ -63,7 +64,10 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
-    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await tx
+      .update(managementSessions)
+      .set({ provedAt: new Date().toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
     const original = await appendToChain(
       tx,
       node.nodeId,
@@ -512,7 +516,10 @@ it("refuses a saved decision that belongs to another administrator", async () =>
       .values({ displayName: "Other administrator", role: "admin", pinHash: hashPin("1357") })
       .returning();
     const session = await startManagementSession(tx, { personId: other!.id });
-    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await tx
+      .update(managementSessions)
+      .set({ provedAt: new Date().toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)));
     return session.token;
   });
   const before = await snapshot();

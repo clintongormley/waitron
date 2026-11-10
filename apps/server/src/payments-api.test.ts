@@ -329,6 +329,30 @@ it.each(["connect", "disconnect"] as const)(
   },
 );
 
+it("rechecks confirmation after the provider wait before storing credentials", async () => {
+  const venue = await seedVenueWithStaff();
+  const app = mountApp(venue, [
+    {
+      ...stripeSeat,
+      connect: async (...args) => {
+        const answer = await stripeSeat.connect(...args);
+        await withTransaction(suite.db, (tx) =>
+          setFreshManagementSignIn(tx, venue.managerCookie, false),
+        );
+        return answer;
+      },
+    },
+  ]);
+  const poolBefore = evicted.length;
+  const response = await connectStripe(app, venue);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "management_session.proof_required", params: {} },
+  });
+  expect(await sealedStripe()).toBeNull();
+  expect(evicted).toHaveLength(poolBefore);
+});
+
 describe("connect", () => {
   it("seals the credential, returns the merchant name and NO secret, and evicts the pool", async () => {
     const venue = await seedVenueWithStaff();

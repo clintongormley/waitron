@@ -14,6 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  hashSessionToken,
   hashPin,
   loginWithPin,
   persons,
@@ -213,7 +214,10 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
     ).id,
   }));
   const app = new Hono();
-  await suite.db.update(managementSessions).set({ provedAt: new Date().toISOString() });
+  await suite.db
+    .update(managementSessions)
+    .set({ provedAt: new Date().toISOString() })
+    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
   mountRecordRemedies(
     app,
     {

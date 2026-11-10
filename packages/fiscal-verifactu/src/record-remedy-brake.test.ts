@@ -10,7 +10,12 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import {
+  hashSessionToken,
+  persons,
+  registerModulePermissions,
+  startManagementSession,
+} from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId, saleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
@@ -82,7 +87,10 @@ beforeEach(async () => {
       .values({ displayName: "Administrator", role: "admin" })
       .returning();
     token = (await startManagementSession(tx, { personId: person!.id })).token;
-    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await tx
+      .update(managementSessions)
+      .set({ provedAt: new Date().toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
     return person!.id;
   });
   ids = [];
@@ -483,7 +491,10 @@ it("refuses a second administrator's reuse of the first administrator's action k
       .values({ displayName: "Second administrator", role: "admin" })
       .returning();
     const session = await startManagementSession(tx, { personId: other!.id });
-    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await tx
+      .update(managementSessions)
+      .set({ provedAt: new Date().toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(session.token)));
     return session.token;
   });
   const before = await snapshot();

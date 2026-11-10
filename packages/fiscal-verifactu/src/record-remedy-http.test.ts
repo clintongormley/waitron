@@ -76,7 +76,10 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
-    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await tx
+      .update(managementSessions)
+      .set({ provedAt: new Date().toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
     const original = await appendToChain(
       tx,
       node.nodeId,

@@ -5,7 +5,7 @@ la prueba llega a la dirección de tu propia cuenta. Durante la configuración, 
 del administrador que has introducido.
 
 Antes de guardar o quitar el servidor de correo, confirma tu identidad en la ventana compartida.
-[La confirmación](staff.md#account-access) dura 15 minutos o hasta que cierres sesión.
+[La confirmación](staff.md#account-access) dura 15 minutos o hasta que termine tu sesión.
 
 ## Configura un servidor de correo {#set-up}
 

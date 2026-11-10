@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { managementSessions, sales, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  hashSessionToken,
   hashPin,
   persons,
   registerModulePermissions,
@@ -61,7 +62,10 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
-    await tx.update(managementSessions).set({ provedAt: new Date().toISOString() });
+    await tx
+      .update(managementSessions)
+      .set({ provedAt: new Date().toISOString() })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
     const original = await appendToChain(
       tx,
       node.nodeId,

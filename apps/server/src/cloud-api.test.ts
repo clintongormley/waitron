@@ -126,6 +126,108 @@ it.each(["prepare", "check"] as const)(
     expect(effect).not.toHaveBeenCalled();
   },
 );
+it.each(["complete", "revoke", "remote-access"] as const)(
+  "rechecks confirmation inside Cloud %s before saving",
+  async (action) => {
+    const f = await installationFixture();
+    try {
+      const manager = await person("manager");
+      const afterWait = async (authorize: () => Promise<void>) => {
+        await withTransaction(suite.db, (tx) =>
+          setFreshManagementSignIn(tx, manager.session, false),
+        );
+        await authorize();
+      };
+      const connection = {
+        ...f.client,
+        complete: (
+          choice: Parameters<typeof f.client.complete>[0],
+          authorize: () => Promise<void>,
+        ) => f.client.complete(choice, () => afterWait(authorize)),
+        revoke: (authorize: () => Promise<void>) => f.client.revoke(() => afterWait(authorize)),
+        setRemoteAccess: (enabled: boolean, authorize: () => Promise<void>) =>
+          f.client.setRemoteAccess(enabled, () => afterWait(authorize)),
+      };
+      const app = new Hono();
+      mountCloudApi(
+        app,
+        { db: suite.db, connection, managementOrigin: "https://venue.test", isPrimary: () => true },
+        () => {},
+      );
+      const before = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
+      const saved = JSON.parse(before) as { requestId: string };
+      const response = await app.request(`/management-api/cloud/${action}`, {
+        method: "POST",
+        headers: {
+          cookie: manager.cookie,
+          origin: "https://venue.test",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(
+          action === "complete"
+            ? {
+                requestId: saved.requestId,
+                organisationId: f.organisationId,
+                legalBusinessId: f.legalBusinessId,
+              }
+            : action === "remote-access"
+              ? { enabled: true }
+              : {},
+        ),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management_session.proof_required", params: {} },
+      });
+      expect(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")).toBe(before);
+    } finally {
+      await f.close();
+    }
+  },
+);
+it.each(["prepare", "check"] as const)(
+  "rechecks confirmation inside replacement %s",
+  async (action) => {
+    const manager = await person("manager");
+    const change = async (authorize?: () => Promise<void>) => {
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, manager.session, false));
+      await authorize?.();
+      return { state: "awaiting_owner" } as ReplacementView;
+    };
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => true,
+        replacement: {
+          status: async () => null,
+          eligible: async () => true,
+          approval: async () => null,
+          hasProposal: async () => false,
+          prepare: change,
+          check: change,
+          recordStop: async () => {},
+        },
+      },
+      () => {},
+    );
+    const response = await app.request(`/management-api/cloud/replacement/${action}`, {
+      method: "POST",
+      headers: {
+        cookie: manager.cookie,
+        origin: "https://venue.test",
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.proof_required", params: {} },
+    });
+  },
+);
 it("lets a manager toggle only remote access, with the same origin and primary checks as other Cloud writes", async () => {
   const f = await installationFixture();
   try {

@@ -5,7 +5,7 @@ the test goes to your own account address. During setup, it goes to the administ
 you entered.
 
 Before saving or removing a mail server, confirm your sign-in in the shared window.
-[Your confirmation](staff.md#account-access) lasts 15 minutes or until you sign out.
+[Your confirmation](staff.md#account-access) lasts 15 minutes or until your session ends.
 
 ## Set up a mail server {#set-up}
 
