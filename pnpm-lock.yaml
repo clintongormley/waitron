@@ -410,6 +410,9 @@ importers:
       '@waitron/dashboard-modules':
         specifier: workspace:*
         version: link:../../packages/dashboard-modules
+      '@waitron/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
       '@waitron/module':
         specifier: workspace:*
         version: link:../../packages/module

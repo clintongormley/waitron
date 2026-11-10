@@ -11,6 +11,7 @@ import type { SetupApp } from "./setup-app.js";
 import type { SetupApi, SetupStatus } from "./api/client.js";
 import { setLocale } from "./i18n/t.js";
 import "./setup-app.js";
+import { expectNoA11yViolations } from "./widgets/test-helpers.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -126,3 +127,42 @@ it("hands the chooser the same labels on a redraw, and new ones when the languag
   expect(chooserOf(el).labels).not.toBe(english);
   expect(chooserOf(el).labels.theme).toBe("Tema");
 });
+
+it.each(
+  [390, 1280].flatMap((width) =>
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["light", "dark"].map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)(
+  "keeps reporting and the original header controls visible at $width in $locale/$theme",
+  async ({ width, locale, theme }) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(width, 844);
+    try {
+      const { el, host } = await mountSetupApp([locale]);
+      host.setAttribute("data-theme", theme);
+      const header = el.shadowRoot!.querySelector<HTMLElement>("header")!;
+      const report = header.querySelector("setup-problem-report")!;
+      await report.updateComplete;
+      const button = report.shadowRoot!.querySelector("wt-button")!;
+      await button.updateComplete;
+      await expect
+        .element(button.shadowRoot!.querySelector("button")!)
+        .toHaveAccessibleName(locale === "es-ES" ? "Informar de un problema" : "Report a problem");
+      const bounds = header.getBoundingClientRect();
+      const trigger = button.getBoundingClientRect();
+      const controls = header.querySelector(".header-controls")!.getBoundingClientRect();
+      expect(trigger.width).toBeGreaterThanOrEqual(44);
+      expect(trigger.height).toBeGreaterThanOrEqual(44);
+      expect(trigger.left).toBeGreaterThanOrEqual(bounds.left - 1);
+      expect(trigger.right).toBeLessThanOrEqual(bounds.right + 1);
+      expect(header.scrollWidth).toBeLessThanOrEqual(header.clientWidth);
+      if (width === 390) expect(trigger.top).toBeGreaterThanOrEqual(controls.bottom);
+      else expect(trigger.right).toBeLessThanOrEqual(controls.left);
+      await expectNoA11yViolations(header);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);

@@ -15,6 +15,8 @@ nada ni se guarda en el equipo. No incluyas contraseñas, datos de pago ni infor
 en tu descripción.
 
 En un móvil, usa el botón con un bocadillo de diálogo y una exclamación.
+Durante la configuración, elige **Informar de un problema** en la cabecera de la página. Puedes
+guardar un informe aunque el equipo no responda o esta página ya abierta pierda la conexión.
 
 Abre **Ajustes → Estado del equipo**, justo encima de **Diagnóstico**. Solo la ven las personas
 que pueden gestionar el sistema.

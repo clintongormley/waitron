@@ -1,6 +1,20 @@
 // setup-app.ts's own text: the page title and every refusal and outcome the shell hands a screen.
 
 export const shellEn = {
+  "problem_report.title": "Report a problem",
+  "problem_report.cancel": "Cancel",
+  "problem_report.description": "What happened?",
+  "problem_report.scope":
+    "Save only this browser's activity to a file you keep; nothing is stored on the box or sent anywhere.",
+  "problem_report.warning":
+    "Your description may identify someone. Do not include passwords, payment details or personal information.",
+  "problem_report.preview": "Report preview",
+  "problem_report.invalid": "Check your description.",
+  "problem_report.description_invalid":
+    "Use up to 2,000 characters and remove unsupported characters.",
+  "problem_report.download": "Download report",
+  "problem_report.download_failed": "Could not create the download. Try again.",
+
   "shell.first_setup.owner_required": "The box no longer lets this page carry this setup on.",
   "shell.first_setup.attempt_conflict": "Another setup attempt owns this venue.",
   "shell.first_setup.attempt_uncertain":
@@ -181,6 +195,20 @@ export const shellEn = {
 } as const;
 
 export const shellEs: Record<keyof typeof shellEn, string> = {
+  "problem_report.title": "Informar de un problema",
+  "problem_report.cancel": "Cancelar",
+  "problem_report.description": "¿Qué ha pasado?",
+  "problem_report.scope":
+    "Guarda solo la actividad de este navegador en un archivo que conservas; no se guarda nada en el servidor ni se envía a ningún sitio.",
+  "problem_report.warning":
+    "Tu descripción puede identificar a alguien. No incluyas contraseñas, datos de pago ni información personal.",
+  "problem_report.preview": "Vista previa del informe",
+  "problem_report.invalid": "Revisa la descripción.",
+  "problem_report.description_invalid":
+    "Usa hasta 2000 caracteres y elimina los caracteres no admitidos.",
+  "problem_report.download": "Descargar informe",
+  "problem_report.download_failed": "No se ha podido crear la descarga. Inténtalo de nuevo.",
+
   "shell.first_setup.owner_required":
     "El equipo ya no deja que esta página continúe esta configuración.",
   "shell.first_setup.attempt_conflict":
