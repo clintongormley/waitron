@@ -354,7 +354,7 @@ import {
 } from "./mdns.js";
 import type { MdnsQuerySocket } from "./box-lookup.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
-import { boxHostnameFor } from "./box-name.js";
+import { BOX_HOSTNAME, boxHostnameFor } from "./box-name.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -497,15 +497,7 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
-/**
- * The box's mDNS hostname: the name the responder answers for, discovery advertises and the leaf's
- * SANs cover must agree, or the trust flow hits a certificate-hostname mismatch.
- *
- * Copies outside this process (the image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`,
- * compose's defaults, `waitron.sh`'s QR URL) are pinned to this line, read as text, by
- * `scripts/deploy-image-env.test.ts`.
- */
-export const BOX_HOSTNAME = "waitron.local";
+export { BOX_HOSTNAME };
 
 /** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
 export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
