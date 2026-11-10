@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { refusalOn, triggerRaised, UNIQUE_VIOLATION, type Transaction } from "@waitron/db";
+import type { BackupQuery } from "@waitron/store";
+import { checkFiscalChains } from "./handover-chain-check.js";
+import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { canonicalize } from "@waitron/membership";
 
 export type ReturnRow = Record<string, string | number | null>;
@@ -21,7 +26,13 @@ export async function readReturnedOriginals(
   tx: Transaction,
   sourceNodeId: string,
 ): Promise<ReturnedOriginals> {
-  const saleIds = sql`(select sale_id from registros_facturacion where node_id = ${sourceNodeId})`;
+  const saleIds = sql`(with recursive parents(id) as (
+    select sale_id from registros_facturacion where node_id = ${sourceNodeId}
+    union select s.corrects_sale_id from sales s join parents p on p.id = s.id
+      where s.corrects_sale_id is not null
+    union select s.substituted_sale_id from sale_substitutions s
+      join parents p on p.id = s.substitution_sale_id
+  ) select id from parents)`;
   const records = tx.all<ReturnRow>(sql`
     select * from registros_facturacion where node_id = ${sourceNodeId} order by secuencia`);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
@@ -60,4 +71,348 @@ export async function readReturnedOriginals(
     substitutions,
     inventory,
   };
+}
+
+async function insertRow(tx: Transaction, table: string, row: ReturnRow) {
+  const entries = Object.entries(row);
+  await tx.execute(sql`insert into ${sql.identifier(table)}
+    (${sql.join(
+      entries.map(([key]) => sql.identifier(key)),
+      sql`, `,
+    )})
+    values (${sql.join(
+      entries.map(([, value]) => sql`${value}`),
+      sql`, `,
+    )})`);
+}
+
+function held(tx: Transaction, table: string, id: ReturnRow[string], key = "id") {
+  return tx.all<ReturnRow>(sql`select * from ${sql.identifier(table)}
+    where ${sql.identifier(key)} = ${id}`)[0];
+}
+
+export async function receiveReturnedOriginals(
+  tx: Transaction,
+  sourceNodeId: string,
+  returned: ReturnedOriginals,
+  now: Date,
+): Promise<{ complete: boolean }> {
+  for (const sale of returned.sales) {
+    if (
+      !held(tx, "nodes", sale.node_id) ||
+      held(tx, "invoice_series", sale.series_id)?.node_id !== sale.node_id
+    )
+      throw new AppError("fiscal.return_invalid", { reason: "missing sale metadata" });
+  }
+  for (const record of returned.records) {
+    if (
+      record.node_id !== sourceNodeId ||
+      held(tx, "registro_sif", record.sif_id)?.node_id !== sourceNodeId
+    )
+      throw new AppError("fiscal.return_invalid", { reason: "missing record metadata" });
+  }
+  const resolutions = new Set<string>();
+  for (const event of tx.all<{ action: string }>(sql`select e.action from filing_case_events e
+    join filing_cases c on c.id = e.case_id where e.kind = 'resolved' and c.cause = 'fiscal.return_clash'`)) {
+    try {
+      const action = JSON.parse(event.action) as Record<string, unknown>;
+      if (
+        action.kind === "accept-return-clash" &&
+        action.sourceNodeId === sourceNodeId &&
+        typeof action.fingerprint === "string"
+      )
+        resolutions.add(action.fingerprint);
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+    }
+  }
+  const accepted = (record: ReturnRow) =>
+    resolutions.has(returnFingerprint(returned, sourceNodeId, record));
+  const clashes: { heldId: string; incoming: ReturnRow; reason: string }[] = [];
+  const allowed: ReturnRow[] = [];
+  let blocked = false;
+  for (const record of [...returned.records].sort(
+    (a, b) => Number(a.secuencia) - Number(b.secuencia),
+  )) {
+    if (blocked) continue;
+    const own = held(tx, "registros_facturacion", record.id);
+    const [collision] = tx.all<ReturnRow>(sql`select * from registros_facturacion where
+      (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
+      (${record.corrects_registro_id} is null and corrects_registro_id is null and
+        id_emisor_factura = ${record.id_emisor_factura} and num_serie_factura = ${record.num_serie_factura}
+        and fecha_expedicion_factura = ${record.fecha_expedicion_factura}
+        and tipo_registro = ${record.tipo_registro}) limit 1`);
+    const conflict = own
+      ? canonicalize(own) !== canonicalize(record)
+        ? own
+        : undefined
+      : collision;
+    if (conflict && accepted(record)) continue;
+    if (conflict) {
+      clashes.push({ heldId: String(conflict.id), incoming: record, reason: "original" });
+      blocked = true;
+    } else allowed.push(record);
+  }
+  const needed = new Set(allowed.map((row) => row.sale_id));
+  function includeParent(id: ReturnRow[string]) {
+    const sale = returned.sales.find((row) => row.id === id);
+    const parents = [
+      sale?.corrects_sale_id,
+      ...returned.substitutions
+        .filter((row) => row.substitution_sale_id === id)
+        .map((row) => row.substituted_sale_id),
+    ];
+    for (const parent of parents)
+      if (parent && !needed.has(parent)) {
+        needed.add(parent);
+        includeParent(parent);
+      }
+  }
+  for (const id of needed) includeParent(id);
+  for (const device of returned.devices) {
+    if (held(tx, "devices", device.id)) continue;
+    const location = held(tx, "nodes", sourceNodeId)?.location_id;
+    const [profile] = tx.all<ReturnRow>(sql`select id from device_profiles order by id limit 1`);
+    await insertRow(tx, "devices", {
+      id: device.id!,
+      label: device.label!,
+      location_id: location!,
+      device_profile_id: profile!.id!,
+      token_hash: "",
+      active: 0,
+      deleted_at: now.toISOString(),
+      enrolled_at: now.toISOString(),
+      created_at: now.toISOString(),
+    });
+  }
+  const paymentClashes: ReturnRow[] = [];
+  for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
+    if (!held(tx, "sales", sale.id))
+      await insertRow(tx, "sales", { ...sale, working_order_id: null });
+    try {
+      await tx.transaction(async (paymentTx) => {
+        for (const tender of returned.tenders.filter((row) => row.sale_id === sale.id)) {
+          if (!held(paymentTx, "tenders", tender.id))
+            await insertRow(paymentTx, "tenders", {
+              ...tender,
+              bill_payment_id: held(paymentTx, "bill_payments", tender.bill_payment_id)
+                ? tender.bill_payment_id!
+                : null,
+            });
+        }
+        for (const settlement of returned.settlements.filter((row) => row.sale_id === sale.id)) {
+          if (!held(paymentTx, "sale_settlements", settlement.id))
+            await insertRow(paymentTx, "sale_settlements", settlement);
+        }
+      });
+    } catch (error) {
+      if (
+        !refusalOn(error, UNIQUE_VIOLATION, { table: "tenders", columns: ["bill_payment_id"] }) &&
+        !refusalOn(error, UNIQUE_VIOLATION, { table: "sale_settlements", columns: ["sale_id"] }) &&
+        !triggerRaised(error, "tenders do not cover the sale")
+      )
+        throw error;
+      paymentClashes.push(sale);
+    }
+  }
+  for (const record of allowed) {
+    if (held(tx, "registros_facturacion", record.id)) continue;
+    await insertRow(tx, "registros_facturacion", record);
+    const delivery = returned.deliveries.find((row) => row.registro_id === record.id);
+    await insertRow(
+      tx,
+      "envios",
+      delivery ?? {
+        registro_id: record.id!,
+        estado: "pendiente",
+        proximo_intento_en: now.toISOString(),
+      },
+    );
+    if (delivery?.estado === "rechazado")
+      await openFilingCase(tx, {
+        registroId: String(record.id),
+        cause: "fiscal.registro_rechazado",
+        evidence: {
+          codigo: delivery.codigo_error === null ? null : Number(delivery.codigo_error),
+          mensaje: delivery.mensaje_error as string | null,
+          csv: delivery.csv as string | null,
+        },
+        now,
+      });
+    if (delivery?.estado === "aceptado_con_errores")
+      await openAcceptedWithErrorsCase(tx, {
+        registroId: String(record.id),
+        codigo: delivery.codigo_error === null ? null : Number(delivery.codigo_error),
+        mensaje: delivery.mensaje_error as string | null,
+        csv: delivery.csv as string | null,
+        now,
+      });
+  }
+  for (const [table, rows] of [
+    ["sale_voids", returned.voids],
+    ["sale_substitutions", returned.substitutions],
+  ] as const) {
+    for (const row of rows) {
+      const own = held(tx, table, row.id);
+      let conflict = own !== undefined && canonicalize(own) !== canonicalize(row);
+      if (!own) {
+        try {
+          await insertRow(tx, table, row);
+        } catch (error) {
+          const key = table === "sale_voids" ? "sale_id" : "substituted_sale_id";
+          if (!refusalOn(error, UNIQUE_VIOLATION, { table, columns: [key] })) throw error;
+          conflict = true;
+        }
+      }
+      if (conflict) {
+        const saleId = table === "sale_voids" ? row.sale_id : row.substitution_sale_id;
+        const [record] = tx.all<ReturnRow>(sql`select * from registros_facturacion
+          where sale_id = ${saleId} order by secuencia limit 1`);
+        if (record) clashes.push({ heldId: String(record.id), incoming: row, reason: table });
+      }
+    }
+  }
+  const [last] = tx.all<ReturnRow>(sql`select * from registros_facturacion
+    where node_id = ${sourceNodeId} order by secuencia desc limit 1`);
+  const head = held(tx, "cadenas", sourceNodeId, "node_id");
+  if (last && Number(last.secuencia) > Number(head?.secuencia ?? 0)) {
+    await tx.execute(sql`update cadenas set secuencia = ${last.secuencia},
+      ultimo_registro_id = ${last.id}, ultima_huella = ${last.huella},
+      actualizado_en = ${returned.heads[0]?.actualizado_en ?? now.toISOString()}
+      where node_id = ${sourceNodeId}`);
+  }
+  if ((await checkFiscalChains(transactionQuery(tx))) !== "ok")
+    throw new AppError("fiscal.return_invalid", { reason: "chain verification failed" });
+  for (const sale of paymentClashes) {
+    const [record] =
+      tx.all<ReturnRow>(sql`select * from registros_facturacion where sale_id = ${sale.id}
+      order by secuencia limit 1`);
+    if (record) clashes.push({ heldId: String(record.id), incoming: record, reason: "payment" });
+  }
+  let missing = false;
+  for (const [table, rows] of [
+    ["registros_facturacion", returned.records],
+    ["sales", returned.sales],
+    ["tenders", returned.tenders],
+    ["sale_settlements", returned.settlements],
+    ["sale_voids", returned.voids],
+    ["sale_substitutions", returned.substitutions],
+  ] as const) {
+    for (const row of rows) {
+      const sourceRecords =
+        table === "registros_facturacion"
+          ? [row]
+          : returned.records.filter(
+              (record) =>
+                record.sale_id ===
+                (table === "sales" ? row.id : (row.sale_id ?? row.substitution_sale_id)),
+            );
+      if (sourceRecords.some(accepted)) continue;
+      const own = held(tx, table, row.id);
+      if (!own) {
+        missing = true;
+        continue;
+      }
+      if (canonicalize(normalized(table, own)) === canonicalize(normalized(table, row))) continue;
+      const saleId = table === "sales" ? row.id : (row.sale_id ?? row.substitution_sale_id);
+      const [record] = tx.all<ReturnRow>(sql`select * from registros_facturacion
+        where sale_id = ${saleId} order by secuencia limit 1`);
+      if (record) clashes.push({ heldId: String(record.id), incoming: row, reason: table });
+      else missing = true;
+    }
+  }
+  let unresolved = false;
+  for (const clash of clashes) {
+    const original = clash.incoming.tipo_registro
+      ? clash.incoming
+      : returned.records.find(
+          (record) =>
+            record.sale_id ===
+            (clash.reason === "sales"
+              ? clash.incoming.id
+              : (clash.incoming.sale_id ?? clash.incoming.substitution_sale_id)),
+        );
+    if (original && accepted(original)) continue;
+    unresolved = true;
+    await openFilingCase(tx, {
+      registroId: clash.heldId,
+      cause: "fiscal.return_clash",
+      evidence: {
+        codigo: null,
+        csv: null,
+        mensaje: canonicalize({
+          sourceNodeId,
+          fingerprint: returnFingerprint(returned, sourceNodeId, original ?? clash.incoming),
+          originalId: (original ?? clash.incoming).id!,
+          reason: clash.reason,
+        }),
+      },
+      now,
+    });
+  }
+  return { complete: !blocked && !missing && !unresolved };
+}
+
+function orderedSales(sales: ReturnRow[]): ReturnRow[] {
+  const remaining = new Map(sales.map((sale) => [sale.id, sale]));
+  const ordered: ReturnRow[] = [];
+  function visit(sale: ReturnRow) {
+    remaining.delete(sale.id);
+    const parent = remaining.get(sale.corrects_sale_id);
+    if (parent) visit(parent);
+    ordered.push(sale);
+  }
+  for (const sale of [...sales].sort(
+    (a, b) => Date.parse(String(a.issued_at)) - Date.parse(String(b.issued_at)),
+  )) {
+    if (remaining.has(sale.id)) visit(sale);
+  }
+  return ordered;
+}
+
+function transactionQuery(tx: Transaction): BackupQuery {
+  return {
+    async *rows(statement, values = []) {
+      const parts = statement.split("?");
+      const query = sql.empty();
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) query.append(sql`${values[i - 1]}`);
+        query.append(sql.raw(parts[i]!));
+      }
+      for (const row of tx.all<ReturnRow>(query))
+        yield Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [
+            key,
+            typeof value === "number" && Number.isInteger(value) ? BigInt(value) : value,
+          ]),
+        );
+    },
+  };
+}
+
+function normalized(table: string, row: ReturnRow): ReturnRow {
+  if (table === "sales") return { ...row, working_order_id: null };
+  if (table === "tenders") return { ...row, bill_payment_id: null };
+  return row;
+}
+
+function returnFingerprint(returned: ReturnedOriginals, sourceNodeId: string, record: ReturnRow) {
+  const saleId = record.sale_id;
+  return createHash("sha256")
+    .update(
+      canonicalize({
+        sourceNodeId,
+        record,
+        sales: returned.sales
+          .filter((row) => row.id === saleId)
+          .map((row) => normalized("sales", row)),
+        tenders: returned.tenders
+          .filter((row) => row.sale_id === saleId)
+          .map((row) => normalized("tenders", row)),
+        settlements: returned.settlements.filter((row) => row.sale_id === saleId),
+        voids: returned.voids.filter((row) => row.sale_id === saleId),
+        substitutions: returned.substitutions.filter((row) => row.substitution_sale_id === saleId),
+      }),
+    )
+    .digest("hex");
 }

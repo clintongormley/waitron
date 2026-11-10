@@ -103,6 +103,7 @@ declare module "@waitron/shared" {
      * unauthenticated recovery page renders to anyone on the venue's LAN
      * (`apps/server/src/recovery-surface.ts`), so an operator's data must never travel here.
      */
+    "fiscal.return_invalid": { reason: string };
     "fiscal.record_invalid": { fields: string[]; codes: string[] };
     "fiscal.record_already_corrected": { registroId: string };
     "fiscal.remedy_invalid": { registroId: string };

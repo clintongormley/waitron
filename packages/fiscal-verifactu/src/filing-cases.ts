@@ -302,3 +302,47 @@ export async function heldRecords(tx: Transaction): Promise<HeldRecord[]> {
   }
   return held;
 }
+
+export async function acceptReturnClash(
+  tx: Transaction,
+  input: {
+    caseId: string;
+    sourceNodeId: string;
+    fingerprint: string;
+    actionKey: string;
+    reason: string;
+    personId: string;
+    now: Date;
+  },
+): Promise<FilingCaseEvent> {
+  const [found] = await tx.select().from(filingCases).where(eq(filingCases.id, input.caseId));
+  if (
+    !found ||
+    found.cause !== "fiscal.return_clash" ||
+    !input.reason.trim() ||
+    !input.actionKey.trim()
+  )
+    throw new AppError("fiscal.remedy_request_invalid", {});
+  const evidence = JSON.parse(found.evidence.mensaje ?? "null") as {
+    sourceNodeId: string;
+    fingerprint: string;
+    originalId: string;
+  } | null;
+  if (
+    !evidence ||
+    evidence.sourceNodeId !== input.sourceNodeId ||
+    evidence.fingerprint !== input.fingerprint
+  )
+    throw new AppError("fiscal.remedy_request_invalid", {});
+  return recordCaseEvent(tx, {
+    ...input,
+    kind: "resolved",
+    action: JSON.stringify({
+      kind: "accept-return-clash",
+      sourceNodeId: input.sourceNodeId,
+      fingerprint: input.fingerprint,
+      originalId: evidence.originalId,
+      reason: input.reason,
+    }),
+  });
+}
