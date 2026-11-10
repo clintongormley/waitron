@@ -111,6 +111,7 @@ it.each(["__proto__", "constructor", "toString"])(
   "ignores inherited locale and key %s",
   (value) => {
     expect(t("x.hi", value)).toBe("Hi");
+    expect(t("toString", value)).toBe("toString");
     expect(t(value, "en-GB")).toBe(value);
     expect(pickLocale({ en: "English", es: "Spanish" }, value)).toBe("English");
   },

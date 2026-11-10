@@ -3799,3 +3799,17 @@ beforeEach(() => {
   setLocale("es-ES");
 });
 afterEach(() => setLocale(receivedLocale));
+
+it("keeps a card-reader load refusal through live profiles", async () => {
+  const api = Object.assign(
+    stubApi({ listReaders: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    { liveData: new LiveData() },
+  );
+  const el = await mount(api);
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+  await vi.waitFor(() => expect(scopeBottom(el)).toBe(codeMessage("connection.failed")));
+  api.liveData.refresh();
+  await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2));
+  await flush(el);
+  expect(scopeBottom(el)).toBe(codeMessage("connection.failed"));
+});

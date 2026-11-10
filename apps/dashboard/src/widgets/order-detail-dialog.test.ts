@@ -509,4 +509,3 @@ it.each([
 });
 
 const receivedLocale = currentLocale();
-afterEach(() => setLocale(receivedLocale));

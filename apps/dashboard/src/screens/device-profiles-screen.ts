@@ -600,7 +600,7 @@ export class DeviceProfilesScreen extends LitElement {
   @state() private staff: PersonSummary[] = [];
 
   @state() private errorKey: string | null = null;
-  #readErrorOwner: "main" | "scope" | null = null;
+  #readErrorOwner: "main" | "scope" | "profiles" | null = null;
   /** The live reads' latest failure until they recover. Opening the editor clears the screen's
    * message, and this is put back so the form still says why its lists may be stale or empty. */
   #standingReadError: { error: unknown } | null = null;
@@ -731,8 +731,7 @@ export class DeviceProfilesScreen extends LitElement {
       await Promise.all([
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
-          if (this.#readErrorOwner === "main") this.#showError(null);
-          if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
+          if (this.#readErrorOwner === "profiles") this.#showError(null);
           this.#profilesRead = true;
           this.#openLinkedProfile();
         }),
@@ -779,13 +778,13 @@ export class DeviceProfilesScreen extends LitElement {
     if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
   }
 
-  #showError(code: string | null, owner: "main" | "scope" | null = null): void {
+  #showError(code: string | null, owner: "main" | "scope" | "profiles" | null = null): void {
     this.errorKey = code;
     this.#readErrorOwner = owner;
   }
 
   /** A read's failure never replaces an action's message. */
-  #showReadError(error: unknown, owner: "main" | "scope" = "main"): void {
+  #showReadError(error: unknown, owner: "main" | "scope" | "profiles" = "main"): void {
     if (this.errorKey === null || this.#readErrorOwner !== null)
       this.#showError(codeOf(error), owner);
   }
@@ -799,7 +798,7 @@ export class DeviceProfilesScreen extends LitElement {
       written = true;
       this.profiles = await this.api.listDeviceProfiles();
     } catch (error) {
-      if (written) this.#showReadError(error);
+      if (written) this.#showReadError(error, "profiles");
       else this.#showError(codeOf(error));
     }
   }

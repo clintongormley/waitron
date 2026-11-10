@@ -2503,7 +2503,7 @@ it("keeps readers unknown while pending, then shows a successful empty list", as
   });
   const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
     api,
-    providerPanels: PANELS,
+    panels: PANELS,
   });
   expect(q(el, "section[slot=readers] wt-data-table")).toBeNull();
   answer([]);

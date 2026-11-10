@@ -1,4 +1,4 @@
-import { expect, afterEach, describe, it, vi } from "vitest";
+import { expect, afterEach, beforeEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
