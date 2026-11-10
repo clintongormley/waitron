@@ -30,6 +30,7 @@ import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
 import {
   AppError,
   compareStationNames,
+  contentLanguageCode,
   partyTablesName,
   perDishOptionQuantity,
   stringToThousandths,
@@ -114,12 +115,8 @@ function changeItem(entry: KitchenTicketItem, item: FiredItem): KitchenTicketIte
   return { ...atFiredQuantity(entry, item), afterPeriod: undefined };
 }
 
-/**
- * Pick one language out of a snapshotted locale→string map (a line's unit label). A till whose locale
- * is not among the map's keys prints some stored language rather than a blank.
- */
 function ticketName(text: Record<string, string>, locale: string): string {
-  const localised = text[locale];
+  const localised = text[contentLanguageCode(locale)];
   if (localised !== undefined) return localised;
   // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
   // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.

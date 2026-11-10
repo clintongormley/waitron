@@ -408,6 +408,25 @@ describe("integrated whole-order attendance", () => {
     expect(await operations()).toHaveLength(1);
   });
 
+  it("a network-unavailable card finishes staff attendance as refused", async () => {
+    const req = request();
+    at();
+    provider.offlineNextCollect();
+    expect(
+      (
+        await payWorkingOrderIntegrated(
+          { ...deps(), admission: testTradingAdmission() },
+          v.cfg,
+          req,
+          collector,
+        )
+      ).outcome,
+    ).toBe("network_unavailable");
+    expect(await operations()).toEqual([
+      { sequence: 1, key: expect.any(String), ...evidence("refused") },
+    ]);
+  });
+
   it("a snapshot refusal rolls back the start before any reader charge", async () => {
     const req = request();
     at();

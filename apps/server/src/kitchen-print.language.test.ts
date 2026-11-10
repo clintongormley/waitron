@@ -539,7 +539,10 @@ it.each([
       const lineId = lineRows[0]!.id!;
       await tx
         .update(workingOrderLines)
-        .set({ unitName: { "en-GB": "EN-unit", "es-ES": "ES-unit" } })
+        .set({
+          unitName:
+            country === "GB" ? { es: "ES-unit", en: "EN-unit" } : { en: "EN-unit", es: "ES-unit" },
+        })
         .where(eq(workingOrderLines.id, lineId));
       await tx.execute(
         sql`update working_line_contexts set sold_in_each = 0 where working_order_line_id = ${lineId}`,

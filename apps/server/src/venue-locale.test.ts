@@ -44,7 +44,7 @@ async function inMadrid(act: () => Promise<void>) {
 }
 
 describe("readVenueLocale", () => {
-  it("derives the country default when no override and no regional catalogue", async () => {
+  it("derives the country default", async () => {
     // Barcelona → ca-ES unavailable in this build → country ES → es-ES.
     const got = await readVenueLocale(suite.db);
     expect(got).toBe("es-ES");

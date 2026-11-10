@@ -103,7 +103,6 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       venueDir: "/tmp/second-venue",
       credentialsKey: sampleEnv.WAITRON_CREDENTIALS_KEY,
       ids,
-      seedLocale: "en",
       httpPort: "8180",
     });
     expect(env.WAITRON_HTTP_PORT).toBe("8180");
@@ -114,7 +113,6 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       venueDir: "/var/lib/waitron/venue",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       ids,
-      seedLocale: "en",
     });
     expect(env.WAITRON_ENV).toBe("dev");
     expect(env.WAITRON_ONBOARDING_INTENT).toBe("demo");
@@ -125,7 +123,6 @@ describe("buildDevEnv carries the resolved seed locale into the env contract", (
       venueDir: "/var/lib/waitron/venue",
       credentialsKey: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       ids,
-      seedLocale: "en",
     });
     expect(env.WAITRON_VENUE_DIR).toBe("/var/lib/waitron/venue");
   });

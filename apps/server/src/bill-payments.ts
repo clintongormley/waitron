@@ -1488,16 +1488,6 @@ const REFUSED_START: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Take a card on a reader against an open bill, in the three phases of design §5.3:
- *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
- *    applied amount, and registers it as live in this process;
- *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment; a
- *    refusal named in {@link REFUSED_START} fails the payment and is passed on, and any other
- *    throw leaves it pending for the loop;
- *  - P3 (transaction): a capture is {@link completeBillPayment}; a decline or a refusal to go
- *    offline fails it; any other answer leaves it pending, for the loop to settle from the
- *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
- *
  * A retry of a payment already taken, whose own sign-in is open on an active till (the first sign-in
  * or a later one), answers its state and never collects again.
  */

@@ -97,8 +97,6 @@ export class FakePaymentProvider implements PaymentProvider {
     this.failNext = true;
   }
 
-  /** Test affordance: makes the next `collect` simulate a network outage, so it exercises the
-   * offline gate instead of an online capture. One-shot. */
   offlineNextCollect(): void {
     this.offlineNext = true;
   }

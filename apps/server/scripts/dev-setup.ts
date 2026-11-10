@@ -141,8 +141,6 @@ export function buildDevEnv(input: {
   venueDir: string;
   credentialsKey: string;
   ids: DevVenueIds;
-  seedLocale: SeedLocale;
-  receiptLocale?: string;
   httpPort?: string;
 }): DevEnv {
   const { venueDir, credentialsKey, ids } = input;
@@ -394,8 +392,6 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     venueDir,
     credentialsKey: randomBytes(32).toString("base64"),
     ids,
-    seedLocale,
-    receiptLocale: ids.receiptLocale,
     httpPort: opts.httpPort,
   });
   writeFileSync(envPath, renderEnvFile(env));
