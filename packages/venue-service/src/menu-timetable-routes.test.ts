@@ -394,11 +394,34 @@ describe("the opening-hours routes", () => {
         name: "Takeaway",
         menuId: unknown,
       }),
-      404,
+      400,
       {
         code: "catalogue.not_found",
         params: { catalogueId: unknown },
       },
+    );
+    await answers(
+      await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
+        staffMenuIds: [unknown],
+        name: "Takeaway",
+        menuId: r.coffeeMenu,
+      }),
+      400,
+      { code: "catalogue.not_found", params: { catalogueId: unknown } },
+    );
+    await answers(
+      await r.send("POST", `/departments/${unknown}/menu-periods`, r.manager, {
+        staffMenuIds: [],
+        name: "Takeaway",
+        menuId: r.coffeeMenu,
+      }),
+      404,
+      { code: "department.not_found", params: { departmentId: unknown } },
+    );
+    await answers(
+      await r.send("PATCH", `/menu-periods/${r.morningPeriod}`, r.manager, { menuId: unknown }),
+      404,
+      { code: "catalogue.not_found", params: { catalogueId: unknown } },
     );
     await answers(
       await r.send("POST", `/departments/${r.restaurant}/menu-periods`, r.manager, {
@@ -1142,6 +1165,27 @@ describe("the season weeks route", () => {
       code: "season.not_found",
       params: { seasonId },
     });
+    expect(await r.model()).toEqual(before);
+  });
+
+  it("answers 400 for a department or zone the body names that the venue does not hold, changing nothing", async () => {
+    const r = await routed();
+    const before = await r.model();
+    const unknown = randomUUID();
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        departments: [{ departmentId: unknown, days: week([]) }],
+      }),
+      400,
+      { code: "department.not_found", params: { departmentId: unknown } },
+    );
+    await answers(
+      await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
+        zones: [{ zoneId: unknown, days: closedWeek([]) }],
+      }),
+      400,
+      { code: "service_zone.not_found", params: { zoneId: unknown } },
+    );
     expect(await r.model()).toEqual(before);
   });
 

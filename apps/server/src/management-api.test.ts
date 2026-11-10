@@ -929,7 +929,7 @@ describe("/management-api/tables", () => {
           },
           managerCookie,
         );
-        expect(response.status).toBe(404);
+        expect(response.status).toBe(state === "active" ? 400 : 404);
         if (state === "active")
           expect(await response.json()).toMatchObject({
             error: {

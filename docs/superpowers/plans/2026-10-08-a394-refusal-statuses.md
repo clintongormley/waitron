@@ -424,6 +424,12 @@ Status changes:
   Tests to change: `routes.test.ts:409,843,1907,1913,1915,1920,1926,1933,1941,2056,2313`,
   `menu-timetable-routes.test.ts:335` (and `:381`, `hours-routes.test.ts:830,841` with question 9).
   Size M. Depends on: nothing (question 9 for its two optional rows).
+  **2026-11-10 (A394-8):** done — re-traced on main: an unknown or switched-off department, zone,
+  menu, routing subject or station that a request body names now answers 400 on the routing grid's
+  preview and save, zone create and move, special days, season weeks and period create; path ids
+  keep 404. Left: `PATCH /menu-periods/:periodId` keeps 404 for `catalogue.not_found`, because a
+  body that omits the menu makes it check the period's stored menus; `department_menu.not_found` is
+  raised nowhere, and the explain, fallback and department-menu routes no longer exist.
 - **A394-9 — Till, tables, zones and readers: body and query ids answer 400.** Files:
   `apps/server/src/till-api.ts` (`STATUS` `:370-551`, a second boundary for
   `GET /api/service-zones/:zoneId/offers` and for `POST /api/tables/:id/seat`),

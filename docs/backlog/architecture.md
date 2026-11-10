@@ -330,14 +330,15 @@ On `node:sqlite` only `db.run` wraps (as `DrizzleError`, message `Failed to run 
   identity-owned `management_sessions` to revoke an old viewer token. Probe real startup with identity and its dependants
   disabled before changing that path; the runtime outcome remains unverified.
 
-## A394-5, A394-8 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule
+## A394-5, A394-9 to A394-17 and A394-20 to A394-22 — refusal statuses by one rule
 
 OPEN,
 low priority, not queued — owner 2026-10-08: take them from here when a lane has room. (A394-1 to
 A394-4 landed as #1441, #1444, #1447 and #1455.) Read, not run: of 49 boundaries, 96 status rows
 break the rule (`docs/developers/conventions-data.md`); 17 defects answered 500, or success for a
 missing id (A394-1 to -6); all but A394-5's two, which still answer 500, are fixed; 16 owner
-questions; A394-8 settles A374's. The follow-ups and the rows:
+questions. The routing grid's save now answers 400 for a zone the body names, as the
+configuration import does (A394-8). The follow-ups and the rows:
 `docs/superpowers/plans/2026-10-08-a394-refusal-statuses.md`.
 
 ## Raw engine imports in `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`
