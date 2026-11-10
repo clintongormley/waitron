@@ -19,6 +19,7 @@ export interface BoxAlertWords {
   params?: Readonly<Record<string, unknown>>;
 }
 export function boxAlertMail(deps: {
+  previousEpisodeMailIds: ReadonlySet<string>;
   venueLanguage: "en" | "es";
   log: Logger;
 }): MailKindOwner<BoxAlertWords> {
@@ -29,6 +30,7 @@ export function boxAlertMail(deps: {
     retryDelaysMs: BOX_ALERT_RETRY_DELAYS_MS,
     longestWaitMs: 3600000,
     async claim(tx, mail) {
+      if (deps.previousEpisodeMailIds.has(mail.id)) return null;
       if (mail.personId === null) return null;
       const recipient = await readManagerEmailRecipient(tx, mail.personId, deps.venueLanguage);
       if (!recipient) return null;

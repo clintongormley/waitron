@@ -41,7 +41,7 @@ beforeEach(async () => {
   });
   deps = {
     db: suite.db,
-    owners: [boxAlertMail({ venueLanguage: "en", log })],
+    owners: [boxAlertMail({ previousEpisodeMailIds: new Set(), venueLanguage: "en", log })],
     now: () => now,
     isPrimary: () => true,
     signal: new AbortController().signal,
@@ -205,4 +205,12 @@ it("logs each failed outcome once per row, then its successful send", async () =
     ["info", "box_email.sent", { code: "storage.space_low" }],
   ]);
   expect(await row()).toMatchObject({ status: "sent", attempts: 4 });
+});
+
+it("expires an old alert email without a sent or failed line", async () => {
+  await queue("storage.space_low", { incident: false });
+  deps.now = () => new Date(now.getTime() + 86400001);
+  await runMailPass(deps);
+  expect(await row()).toMatchObject({ status: "expired" });
+  expect(log).not.toHaveBeenCalled();
 });

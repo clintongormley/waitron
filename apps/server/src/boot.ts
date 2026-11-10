@@ -52,7 +52,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
-import { eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import {
   installChangeFeed,
@@ -62,6 +62,7 @@ import {
   readNodeMembership,
   openVenueDatabase,
   withTransaction,
+  outgoingMail,
   applicationVersion,
   nodes,
   venueLocationId,
@@ -2514,8 +2515,14 @@ async function bootServer(
       await invoiceEmailLoop;
     });
     if (isSingletonPrimary) {
+      // A clock step can date new mail before start, so identify prior episodes by their row ids.
+      const previousEpisodeMailIds = new Set<string>();
       const owners = [
-        boxAlertMail({ venueLanguage: venueLocale === "es-ES" ? "es" : "en", log }),
+        boxAlertMail({
+          previousEpisodeMailIds,
+          venueLanguage: venueLocale === "es-ES" ? "es" : "en",
+          log,
+        }),
         ...(workforceEnabled
           ? [
               attendanceReminderMail({
@@ -2533,12 +2540,26 @@ async function bootServer(
             (await withTransaction(db, readPrivacyContact))?.privacyNoticeUrl ?? null,
         }),
       ];
-      await withTransaction(db, (tx) => abandonMailClaims(tx, owners, now()));
+      await withTransaction(db, async (tx) => {
+        const rows = await tx
+          .select({ id: outgoingMail.id })
+          .from(outgoingMail)
+          .where(
+            and(
+              eq(outgoingMail.kind, "box_alert"),
+              isNull(outgoingMail.subjectId),
+              inArray(outgoingMail.status, ["pending", "rejected"]),
+              isNull(outgoingMail.finishedAt),
+            ),
+          );
+        for (const row of rows) previousEpisodeMailIds.add(row.id);
+        await abandonMailClaims(tx, owners, now());
+      });
       mailLoop = startMailSender({
         db,
         owners,
         now,
-        isPrimary: () => holders.singletonRole.current === "primary",
+        isPrimary: () => holders.singletonRole.current === "primary" && diskFull.since() === null,
         signal: mailController.signal,
         resolveDelivery: (tx, rule) => resolveMailDeliveryIn(tx, ring, config, rule),
         log,

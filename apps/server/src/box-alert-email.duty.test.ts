@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, incidents, outgoingMail, persons } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -47,10 +47,22 @@ beforeEach(async () => {
   }
 });
 
-function duty() {
-  let now = at(0);
+function duty({ startedAt = at(0) } = {}) {
+  let now = startedAt;
   const controller = new AbortController();
-  const owner = boxAlertMail({ venueLanguage: "en", log: (...args) => log(...args) });
+  const previousEpisodeMailIds = new Set(
+    suite.db
+      .all<{ id: string }>(
+        sql`select id from outgoing_mail
+    where kind = 'box_alert' and subject_id is null and status in ('pending', 'rejected') and finished_at is null`,
+      )
+      .map((row) => row.id),
+  );
+  const owner = boxAlertMail({
+    previousEpisodeMailIds,
+    venueLanguage: "en",
+    log: (...args) => log(...args),
+  });
   const known = new Set<string>();
   const sources = [
     "dashboard",
@@ -519,6 +531,21 @@ describe("startBoxEmailDuty", () => {
       expected("storage.disk_full", ANA),
       expected("storage.disk_full", BEN),
     ]);
+  });
+
+  it("cancels waiting low-space mail for managers reached by the full-disk email", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    d.send.mockResolvedValue("unknown");
+    await d.tick();
+    d.state.diskSince = at(2);
+    d.send.mockResolvedValue("sent");
+    await d.tick();
+    d.send.mockClear();
+    d.state.diskSince = null;
+    await d.tick();
+    expect(d.send).not.toHaveBeenCalled();
+    expect((await d.rows()).map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
   });
 
   it("a full disk whose email never went sends the low-space email once the stop lifts", async () => {
@@ -1192,14 +1219,31 @@ describe("box email queue episodes", () => {
     expect((await d.rows()).map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
     expect(d.send).toHaveBeenCalledTimes(2);
   });
+  it("retries cancelling an ended episode after its write is refused", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    await d.check();
+    d.state.lowSince = null;
+    const lock = vi
+      .spyOn(suite.db, "withWriteLock")
+      .mockRejectedValueOnce(new Error("write refused"));
+    await d.check();
+    lock.mockRestore();
+    expect(d.events("box_email.check_failed")).toHaveLength(1);
+    await d.tick();
+    expect((await d.rows()).map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
+    expect(d.send).not.toHaveBeenCalled();
+  });
+
   it("an alert's email queued before a restart is sent after it, once", async () => {
     const a = duty();
     a.state.incidents = [RESTART];
     await a.check();
     await a.handle.stop();
     const before = await a.rows();
-    const b = duty();
+    const b = duty({ startedAt: at(2) });
     b.state.incidents = [RESTART];
+    await b.drain();
     await b.tick();
     await b.tick();
     expect((await b.rows()).map((row) => row.id)).toEqual(before.map((row) => row.id));
@@ -1210,8 +1254,9 @@ describe("box email queue episodes", () => {
     a.state.lowSince = at(1);
     await a.check();
     await a.handle.stop();
-    const b = duty();
+    const b = duty({ startedAt: at(2) });
     b.state.lowSince = at(1);
+    await b.drain();
     await b.tick();
     expect((await b.rows()).map((row) => row.status)).toEqual([
       "cancelled",
@@ -1224,6 +1269,18 @@ describe("box email queue episodes", () => {
       expected("storage.space_low", BEN),
     ]);
   });
+  it("does not send a previous process's low-space mail after space recovered during restart", async () => {
+    const a = duty();
+    a.state.lowSince = at(1);
+    await a.check();
+    await a.handle.stop();
+    const b = duty({ startedAt: at(2) });
+    await b.drain();
+    await b.check();
+    expect((await b.rows()).map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
+    expect(b.send).not.toHaveBeenCalled();
+  });
+
   it("queues nothing while the disk is full and writes nothing", async () => {
     const d = duty();
     d.state.diskSince = at(1);
@@ -1269,6 +1326,17 @@ describe("box email queue episodes", () => {
       expect(d.send).toHaveBeenCalledTimes(minute < 2 ? 2 : minute < 7 ? 3 : minute < 22 ? 4 : 5);
     }
   });
+  it("sends a new low-space episode after the box clock steps behind this process's start", async () => {
+    const d = duty();
+    d.advance(-86400000);
+    d.state.lowSince = at(1);
+    await d.tick();
+    expect(d.sent()).toEqual([
+      expected("storage.space_low", ANA),
+      expected("storage.space_low", BEN),
+    ]);
+  });
+
   it("keeps a queued email from being sent after its day", async () => {
     const d = duty();
     d.state.lowSince = at(1);

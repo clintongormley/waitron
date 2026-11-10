@@ -341,27 +341,22 @@ export function startBoxEmailDuty(deps: {
     deps.log("warn", event, { code: episode.code });
   }
 
-  async function deliver(
-    episode: Episode,
-    ctx: BoxEmailContext,
-    toldAlready?: ReadonlySet<string>,
-  ): Promise<boolean> {
+  async function deliver(episode: Episode, ctx: BoxEmailContext): Promise<void> {
     if (ctx.recipients.length === 0) {
       sayOnce(episode, "box_email.no_recipients");
-      return true;
+      return;
     }
     const pending = ctx.recipients.filter((r) => {
       const key = recipientKey(r);
-      return !episode.sentTo.has(key) && !toldAlready?.has(key);
+      return !episode.sentTo.has(key);
     });
-    if (pending.length === 0) return true;
+    if (pending.length === 0) return;
     if (ctx.delivery.mode === "unconfigured") {
       sayOnce(episode, "box_email.not_configured");
-      return true;
+      return;
     }
-    let finished = true;
     for (const recipient of pending) {
-      if (stopped) return false;
+      if (stopped) return;
       let outcome: TextEmailOutcome;
       try {
         outcome = await deps.send({
@@ -378,14 +373,12 @@ export function startBoxEmailDuty(deps: {
         deps.log("info", "box_email.sent", { code: episode.code });
         continue;
       }
-      if (outcome !== "rejected") finished = false;
       const logged = episode.logged.get(key) ?? new Set<TextEmailOutcome>();
       episode.logged.set(key, logged);
       if (logged.has(outcome)) continue;
       logged.add(outcome);
       deps.log("warn", "box_email.send_failed", { code: episode.code, outcome });
     }
-    return finished;
   }
 
   async function check(): Promise<void> {
@@ -473,6 +466,7 @@ export function startBoxEmailDuty(deps: {
       }
       const queued: { episode: Episode; personId: string }[] = [];
       const additions: { episode: Episode; personId: string }[] = [];
+      const suppressed: { episode: Episode; personId: string }[] = [];
       const dropped: string[] = [];
       for (const { episode, key, toldAlready } of due) {
         if (ctx!.recipients.length === 0) sayOnce(episode, "box_email.no_recipients");
@@ -481,6 +475,11 @@ export function startBoxEmailDuty(deps: {
         else
           for (const recipient of ctx!.recipients) {
             if (
+              toldAlready?.has(recipientKey(recipient)) &&
+              episode.queuedFor.has(recipient.personId)
+            )
+              suppressed.push({ episode, personId: recipient.personId });
+            if (
               !episode.queuedFor.has(recipient.personId) &&
               !toldAlready?.has(recipientKey(recipient))
             )
@@ -488,63 +487,62 @@ export function startBoxEmailDuty(deps: {
           }
         if (key !== undefined) dropped.push(key);
       }
-      try {
-        if (
-          !cleanedUp ||
-          ended.some((episode) => episode.queuedFor.size !== 0) ||
-          additions.length !== 0
-        ) {
-          await read(() =>
-            withTransaction(deps.db, async (tx) => {
-              if (stopped || !deps.isPrimary()) return;
-              const now = deps.now();
-              if (!cleanedUp) {
-                const leftovers = await tx
-                  .select({ key: outgoingMail.dedupeKey })
-                  .from(outgoingMail)
-                  .where(
-                    and(
-                      eq(outgoingMail.kind, "box_alert"),
-                      isNull(outgoingMail.subjectId),
-                      inArray(outgoingMail.status, ["pending", "rejected"]),
-                      isNull(outgoingMail.finishedAt),
-                    ),
-                  );
-                for (const row of leftovers) await cancelMail(tx, row.key, now);
-              }
-              for (const episode of ended)
-                for (const personId of episode.queuedFor)
-                  await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
-              for (const pair of additions) {
-                const { episode, personId } = pair;
-                await enqueueMail(tx, {
-                  kind: "box_alert",
-                  dedupeKey: boxAlertMailKey(episode.id, personId),
-                  subjectId: episode.incidentId ?? null,
-                  personId,
-                  params: {
-                    code: episode.code,
-                    wording: episode.incidentId ? null : JSON.stringify(episode.params ?? null),
-                  },
-                  now,
-                  notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert),
-                });
-                queued.push(pair);
-              }
-            }),
-          );
-          if (stopped || !deps.isPrimary()) {
-            episodes = previous;
-            return;
-          }
-          cleanedUp = true;
+      if (
+        !cleanedUp ||
+        ended.some((episode) => episode.queuedFor.size !== 0) ||
+        additions.length !== 0 ||
+        suppressed.length !== 0
+      ) {
+        await read(() =>
+          withTransaction(deps.db, async (tx) => {
+            if (stopped || !deps.isPrimary()) return;
+            const now = deps.now();
+            if (!cleanedUp) {
+              const leftovers = await tx
+                .select({ key: outgoingMail.dedupeKey })
+                .from(outgoingMail)
+                .where(
+                  and(
+                    eq(outgoingMail.kind, "box_alert"),
+                    isNull(outgoingMail.subjectId),
+                    inArray(outgoingMail.status, ["pending", "rejected"]),
+                    isNull(outgoingMail.finishedAt),
+                  ),
+                );
+              for (const row of leftovers) await cancelMail(tx, row.key, now);
+            }
+            for (const episode of ended)
+              for (const personId of episode.queuedFor)
+                await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
+            for (const { episode, personId } of suppressed)
+              await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
+            for (const pair of additions) {
+              const { episode, personId } = pair;
+              await enqueueMail(tx, {
+                kind: "box_alert",
+                dedupeKey: boxAlertMailKey(episode.id, personId),
+                subjectId: episode.incidentId ?? null,
+                personId,
+                params: {
+                  code: episode.code,
+                  wording: episode.incidentId ? null : JSON.stringify(episode.params ?? null),
+                },
+                now,
+                notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert),
+              });
+              queued.push(pair);
+            }
+          }),
+        );
+        if (stopped || !deps.isPrimary()) {
+          episodes = previous;
+          return;
         }
-        for (const { episode, personId } of queued) episode.queuedFor.add(personId);
-        for (const key of dropped) episodes.delete(key);
-      } catch (error) {
-        episodes = previous;
-        throw error;
+        cleanedUp = true;
       }
+      for (const { episode, personId } of suppressed) episode.queuedFor.delete(personId);
+      for (const { episode, personId } of queued) episode.queuedFor.add(personId);
+      for (const key of dropped) episodes.delete(key);
     } catch (error) {
       episodes = beforeCheck;
       refusedSince = beforeRefusal;
