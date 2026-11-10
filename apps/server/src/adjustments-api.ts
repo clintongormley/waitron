@@ -204,13 +204,14 @@ export function mountAdjustmentsApi(
               deps.attendance === undefined
                 ? undefined
                 : { recorder: deps.attendance, clock: deps.clock },
-            );
-            await issueIfFullyPaid(
-              tx,
-              fiscal,
-              sendingCfg(cfg, c, session.device),
-              applied.billId,
-              session.personId,
+              (billId) =>
+                issueIfFullyPaid(
+                  tx,
+                  fiscal,
+                  sendingCfg(cfg, c, session.device),
+                  billId,
+                  session.personId,
+                ),
             );
             if (applied.adjustmentIds.length > 0) {
               await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, applied.billId);
@@ -260,10 +261,13 @@ export function mountAdjustmentsApi(
               deps.attendance === undefined
                 ? undefined
                 : { recorder: deps.attendance, clock: deps.clock },
+              () => issueIfFullyPaid(tx, fiscal, saleCfg, id, personId),
             );
-            await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
             await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
-            return { ...applied, party: await partyRevisionOfOrder(tx, id) };
+            return {
+              ...applied,
+              party: await partyRevisionOfOrder(tx, id),
+            };
           },
           log,
         );

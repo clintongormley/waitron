@@ -120,7 +120,8 @@ export async function updateHeldOrder(
   };
   return issue === undefined
     ? whole(deps, cfg, id, request, undefined, attendance)
-    : whole(deps, cfg, id, { ...request, operatorId: input.operatorId! }, issue, attendance);
+    : (await whole(deps, cfg, id, { ...request, operatorId: input.operatorId! }, issue, attendance))
+        .revision;
 }
 
 export async function setWorkingOrderLabel(

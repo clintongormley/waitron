@@ -30,3 +30,27 @@ PR7 suppresses automatic receipts centrally for order-linked sales, including lo
 PR8 relaxes only F2 email admission, adds a small email-status read, retains null F2 Invoice status and A4/full-invoice restrictions. Use receipt caption/attachment, existing email worker and history; Print/Email coexist while history determines originals/copies in either order. Trace recipient retention/export before delivery changes, without inventing a new policy.
 
 **Proof owners:** provider tests own practice outcomes and rejection outside practice; database/API tests own slip recovery, Counter admission, sums, sent/collection facts and receipt/email history; browsers own fields, equipment, cash/change, session/order identity and explicit choices. None tests inspect print_jobs/invoice_deliveries; one disposable restored-auto-print control must fail. Give each property to its new owner: the central stop is tested once in receipt-print.test.ts; each route suite asserts only the choice it returns. PR3 generates packages/payments/drizzle/{0000_baseline.sql,meta/0000_snapshot.json,meta/_journal.json} and scripts/migration-baseline-epoch.json: protection-list before/after, payments baseline rebuild and unchanged schema/append-only/behavioral/starting-migration plus unchanged fiscal src/{inmutabilidad,write-path.e2e}.test.ts. Focused red/green, normal hook and current-head CI per cut. LOOK EN/ES, light/dark, 390/1280: EUR30 cash, three EUR10 payers, settling edit, zero, F1, retry/disconnect and later documents. Physical paper/reader/inbox qualification remains unverified until exercised.
+
+## 10 November cut 7 split, watcher 13:05 and 13:09
+
+The watcher split this cut after the whole-tree review found handheld paid-screen checks
+still expecting the retired screen. Cut 7(a) returns and caches existing invoice results
+from held/line edits, adjustments, draft save/submit/discard, item cancellation and move dishes.
+It adds no chooser and leaves automatic paper and settings unchanged. Cut 7(b) builds the
+chooser, stops automatic order-linked paper and removes the ineffective controls together.
+It preserves final cash change and migrates mixed handheld checks without losing their
+payment, document-recovery or table-action assertions.
+
+Claude reviewed the plan before the watcher cleared it at 01:26. Watcher 11:21 and 12:18
+cleared moving existing draft/adjustment issuance into completion callbacks so the existing
+command cache retains the original answer: same transaction, function, arguments and
+clock-stop order; rollback before/after issuance and exact replay without another fiscal
+record. The owner lands 7(a). No separate owner approval of this implementation design
+is recorded.
+
+Watcher 13:09 accepted the second Claude angle's simpler-route finding: draft split and
+single-bill split have no screen caller, so their invoice-response changes are dropped.
+Their issuance stays as on main. Move dishes and submit/save retain their screen callers.
+Forecasts (added/removed): 7(a) production110/50, tests300/40, support2/1, docs35/3;
+7(b) production350/150, tests1100/1900, support5/1, docs45/5. Each stops at 1.5 times
+its forecast. Receipt Email stays cut 8; slips 3/4 remain owner-held.

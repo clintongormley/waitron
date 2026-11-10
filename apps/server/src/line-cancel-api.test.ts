@@ -991,6 +991,7 @@ describe("the public cancellation read and command", () => {
     const before = await frozen();
     const answer = await post(p, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toHaveProperty("invoice.total", "2.00");
     const after = await frozen();
     const issued = after.sales.filter((s) => s.workingOrderId === p.billId);
     expect(issued).toHaveLength(1);
@@ -1003,7 +1004,13 @@ describe("the public cancellation read and command", () => {
     ]);
     expect(after.bills.find((b) => b.id === p.billId)?.status).toBe("settled");
     expect(after.payments).toEqual(before.payments);
+    const records = await venue.db.execute(
+      sql`select count(*) as count from registros_facturacion`,
+    );
     expect((await post(p, body)).json).toEqual(answer.json);
+    expect(
+      await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
+    ).toEqual(records);
     expect(await frozen()).toEqual(after);
   });
 

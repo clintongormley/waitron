@@ -89,6 +89,10 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { provisionBillVenue, send as sendBillRequest } from "./testing/bill-venue.js";
+import { parkOrder } from "./working-order.js";
+import { readBillEditState } from "./bill-editing.js";
+import { workingOrderLines, workingOrders } from "@waitron/db";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
@@ -4959,6 +4963,89 @@ describe("sale-policy order flow routes", () => {
         (await suite.db.execute(sql`select state from ticket_items where working_order_id = ${id}`))
           .rows,
       ).toEqual(sends ? [{ state: "queued" }] : []);
+    },
+  );
+});
+
+describe("settling edit answers", () => {
+  const edits = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+
+  it.each(["held", "line"] as const)(
+    "returns the invoice from a settling %s edit",
+    async (kind) => {
+      const venue = await provisionBillVenue(edits.db);
+      const id = randomUUID();
+      const menuItemId =
+        kind === "held"
+          ? venue.offerFor("Botella tinto")
+          : await withTransaction(edits.db, async (tx) => {
+              const catalogue = await createCatalogue(tx, { name: "Weighed dishes" });
+              const category = await createCategory(tx, { name: "Fish dishes" });
+              const product = await createProduct(tx, {
+                catalogueId: catalogue.id,
+                categoryId: category.id,
+                name: "Fish",
+                pricingUnit: "weight",
+                unitPrice: "30.00",
+                vatClass: "general",
+              });
+              await assignCatalogueToVenue(tx, catalogue.id);
+              const offers = await offerProducts(tx, venue.cfg, {
+                zone: "tables",
+                productIds: [product.id],
+              });
+              return offers.offerFor(product.id);
+            });
+      await parkOrder({ db: edits.db }, venue.cfg, {
+        id,
+        zoneId: venue.zoneId,
+        operatorId: venue.operatorId,
+        lines: [{ menuItemId, quantity: "2" }],
+      });
+      const expectedEdit = await withTransaction(edits.db, (tx) => readBillEditState(tx, id));
+      const paid = await sendBillRequest(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${id}/payments`,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "30.00",
+          method: "cash",
+          tendered: "30.00",
+          applied: "30.00",
+          tip: "0.00",
+          expectedEdit,
+        },
+      );
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+      const [line] = await edits.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      const [order] = await edits.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+      const answer = await sendBillRequest(
+        venue.app,
+        venue.cookie,
+        "PUT",
+        `/api/working-orders/${id}${kind === "line" ? `/lines/${line!.lineNo}` : ""}`,
+        {
+          revision: order!.revision,
+          expectedEdit,
+          ...(kind === "line"
+            ? { quantity: "1" }
+            : { lines: [{ workingOrderLineId: line!.id, menuItemId, quantity: "1" }] }),
+        },
+      );
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      expect(answer.json).toMatchObject({
+        revision: order!.revision + 1,
+        invoice: { total: "30.00" },
+      });
     },
   );
 });

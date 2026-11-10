@@ -308,6 +308,7 @@ import { recordSaleReceiptFacts } from "./receipt-guests.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.js";
 import {
+  type TillSaleResult,
   ordersWithUnfiledPayment,
   paymentAttemptIsLive,
   refusePlacedPaymentInFlight,
@@ -7004,7 +7005,7 @@ export async function updateHeldOrder(
   req: UpdateHeldOrderRequest & { operatorId: string },
   issue: IssueOnSave,
   attendance?: OrderAttendance,
-): Promise<number>;
+): Promise<{ revision: number; invoice?: TillSaleResult }>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps & { admission: TradingAdmission },
   cfg: TradingContext,
@@ -7012,7 +7013,7 @@ export async function updateHeldOrder(
   req: UpdateHeldOrderRequest,
   issue?: IssueOnSave,
   attendance?: OrderAttendance,
-): Promise<number> {
+): Promise<number | { revision: number; invoice?: TillSaleResult }> {
   return withIssuanceTransaction(deps.db, async (tx) => {
     await requireEconomicWrite(tx, cfg, deps.admission);
     const { label } = await requireEditableOrder(tx, id, req.revision);
@@ -7080,13 +7081,13 @@ export async function updateHeldOrder(
         .where(eq(workingOrders.id, id));
     }
     const revision = await countEdit(tx, id, req.revision, changed || relabelled);
-    // An edit that lowers the total to what the bill has received issues its invoice (design §7).
-    if (issue !== undefined) {
-      await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, req.operatorId);
-    }
+    const invoice =
+      issue === undefined
+        ? null
+        : await issueIfFullyPaid(tx, issue.fiscal, issue.saleCfg, id, req.operatorId);
     if (changed || relabelled)
       await captureOrderEdit(tx, attendance, id, req.operatorId, revision, "save", at);
-    return revision;
+    return issue === undefined ? revision : { revision, ...(invoice === null ? {} : { invoice }) };
   });
 }
 
