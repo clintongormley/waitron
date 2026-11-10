@@ -45,10 +45,12 @@ import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeHandoverEvents, readHandoverRestriction } from "@waitron/node-db";
 import type { StartedServer, StartServerSeams } from "./boot.js";
+import { boxHostnameFor } from "./box-name.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { freePorts } from "./testing/free-ports.js";
 import { listener } from "./testing/ephemeral-listener.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
@@ -157,6 +159,7 @@ async function boot(
     seams?: StartServerSeams;
     /** A fixed HTTP port, bound as given rather than replaced by an ephemeral one. */
     port?: number;
+    httpHost?: string;
   },
 ): Promise<Booted> {
   beforeServerStarts();
@@ -215,6 +218,7 @@ async function boot(
     WAITRON_MAX_TICK_MS: "600000",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
+    ...(options.httpHost === undefined ? {} : { WAITRON_HTTP_HOST: options.httpHost }),
   };
   if (options.enrolled) {
     await mkdir(join(dir, "tls"), { recursive: true });
@@ -249,6 +253,7 @@ async function boot(
       stateDir: dir,
       relayUrl: "https://relay.example",
       boxHostname: "waitron.local",
+      advertisedOrigin: OWN_URL,
       designated: { nodeId },
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,
@@ -308,6 +313,12 @@ async function boot(
   });
   return { nodeId, env, lines, acceptingSales };
 }
+
+const WAIT_ON_SPARE: StartPeerCheckOutcome = {
+  result: "wait",
+  successorNodeId: null,
+  waitingOn: [SPARE.nodeId],
+};
 
 function startChecks(lines: Record<string, unknown>[]) {
   return lines
@@ -827,7 +838,171 @@ describe("the start check on a real start", () => {
       });
       await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
     }, 60_000);
+
+    it("a waiting box that steps down stops answering the venue's name at once, while an admitted request is still held, and keeps its own", async () => {
+      const mdns = fakeMdnsSocket();
+      let answerReask!: () => void;
+      const peerCheck = vi
+        .fn<() => Promise<StartPeerCheckOutcome>>()
+        .mockResolvedValueOnce(WAIT_ON_SPARE)
+        .mockReturnValueOnce(new Promise((done) => (answerReask = () => done(WAIT_ON_SPARE))))
+        .mockRejectedValue(new Error("asked after the wait ended"));
+      let entered!: () => void;
+      const inside = new Promise<void>((resolve) => (entered = resolve));
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        httpHost: "0.0.0.0",
+        seams: {
+          ...seams(peerCheck),
+          mdnsSocket: () => mdns.socket,
+          waitingStart: {
+            intervalMs: 5,
+            secure: () => {
+              entered();
+              return true;
+            },
+          },
+        },
+      });
+      expect(booted.acceptingSales).toBe(false);
+      const own = boxHostnameFor(booted.nodeId);
+      const base = `http://127.0.0.1:${httpPort()}`;
+      mdns.query("waitron.local");
+      expect(mdns.answered()).toEqual(["waitron.local"]);
+      // A carry-on waits for the re-ask in flight, so it stays inside the gate until that answers.
+      await vi.waitFor(() => expect(peerCheck).toHaveBeenCalledTimes(2));
+      const holding = fetch(`${base}/carry-on`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          email: "owner@example.test",
+          password: "dashPass123",
+          switchedOff: "yes",
+          noOtherRecovery: "yes",
+        }),
+      });
+      try {
+        await inside;
+        const sent = await fetch(`${base}/api/node/membership`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            document: spareChart(2, [
+              [booted.nodeId, "sell-only", OWN_URL],
+              [SPARE.nodeId, "serving-primary", "https://spare.example"],
+            ]),
+          }),
+        });
+        expect(await sent.json()).toEqual({ accepted: true });
+        mdns.clear();
+        mdns.query("waitron.local");
+        mdns.query(own);
+        expect(mdns.answered()).toEqual([own]);
+        expect(restart).not.toHaveBeenCalled();
+      } finally {
+        answerReask();
+        await (await holding).text();
+      }
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
+    }, 60_000);
   });
+
+  it("a waiting box answers the venue's name and its own", async () => {
+    const mdns = fakeMdnsSocket();
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      httpHost: "0.0.0.0",
+      seams: {
+        peerCheck: () => Promise.resolve(WAIT_ON_SPARE),
+        waitingStart: { intervalMs: 60_000 },
+        mdnsSocket: () => mdns.socket,
+      },
+    });
+    expect(booted.acceptingSales).toBe(false);
+    const own = boxHostnameFor(booted.nodeId);
+    for (const name of [own, "waitron.local", "box-ffff.waitron.local"]) mdns.query(name);
+    expect(mdns.answered()).toEqual([own, "waitron.local"]);
+  }, 60_000);
+
+  it("a restricted start answers only its own name", async () => {
+    const mdns = fakeMdnsSocket();
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      httpHost: "0.0.0.0",
+      seams: {
+        peerCheck: () => Promise.resolve({ result: "superseded", successorNodeId: SPARE.nodeId }),
+        mdnsSocket: () => mdns.socket,
+      },
+    });
+    expect(booted.acceptingSales).toBe(false);
+    const own = boxHostnameFor(booted.nodeId);
+    for (const name of [own, "waitron.local"]) mdns.query(name);
+    expect(mdns.answered()).toEqual([own]);
+  }, 60_000);
+
+  it("a stepped-down box stops answering the venue's name at once, while an admitted request is still held, and keeps its own", async () => {
+    const mdns = fakeMdnsSocket();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let entered!: () => void;
+    const inside = new Promise<void>((resolve) => (entered = resolve));
+    const restart = vi.fn();
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      httpHost: "0.0.0.0",
+      seams: {
+        peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
+        mdnsSocket: () => mdns.socket,
+        stepdown: {
+          restart,
+          mount: (app, stepDown) => {
+            app.get("/test/held", async (c) => {
+              entered();
+              await held;
+              return c.text("done");
+            });
+            app.post("/test/stepdown", async (c) =>
+              c.json(
+                await stepDown({
+                  kind: "superseded",
+                  successorNodeId: null,
+                  membershipTerm: 1,
+                  self: c,
+                }),
+              ),
+            );
+          },
+        },
+      },
+    });
+    expect(booted.acceptingSales).toBe(true);
+    const own = boxHostnameFor(booted.nodeId);
+    const base = `http://127.0.0.1:${httpPort()}`;
+    mdns.query("waitron.local");
+    expect(mdns.answered()).toEqual(["waitron.local"]);
+    const holding = fetch(`${base}/test/held`);
+    try {
+      await inside;
+      const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
+      expect(await asked.json()).toEqual({ restarting: true, replayed: false });
+      const refused = await fetch(`${base}/api/pay`, { method: "POST" });
+      expect(refused.status).toBe(503);
+      await refused.text();
+      mdns.clear();
+      mdns.query("waitron.local");
+      mdns.query(own);
+      expect(mdns.answered()).toEqual([own]);
+      expect(restart).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await (await holding).text();
+    }
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
+  }, 60_000);
 
   it("the seam's superseded with a successor takes the restricted start", async () => {
     const booted = await boot(suite, {

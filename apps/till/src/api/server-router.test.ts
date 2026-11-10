@@ -4,7 +4,7 @@ import { SERVERS_STORAGE_KEY, ServerRouter, withServerTarget } from "./server-ro
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
 
-type Answer = { acceptingSales: boolean; term: number | null; nodeId: string } | "down";
+type Answer = { acceptingSales: boolean; term: number | null; nodeId?: string } | "down";
 
 /** A fetch that answers /api/node per origin from a mutable table; "down" rejects like a dead host. */
 function probeFetch(table: Record<string, Answer>): typeof fetch {
@@ -639,6 +639,252 @@ describe("ServerRouter — handing on the held chart", () => {
     await r.probeNow();
     expect(posts).toEqual([3, 4]);
     expect(r.statuses()[0]).toMatchObject({ state: "primary", term: 2 });
+  });
+});
+
+describe("ServerRouter: one line per box", () => {
+  const PAGE = "https://waitron.local";
+  const OWN = "https://box-n1xx.waitron.local";
+  const OTHER = "https://box-n2yy.waitron.local";
+
+  function probesOf(fetchImpl: typeof fetch, origin: string): number {
+    return (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
+      ([input]) => String(input) === `${origin}/api/node`,
+    ).length;
+  }
+
+  it("an own-name entry that never answers is hidden behind the page origin", async () => {
+    const fetchImpl = probeFetch({
+      [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+      [OWN]: "down",
+    });
+    const r = new ServerRouter({ origin: PAGE, fetchImpl, storage: memoryStorage() });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    await r.probeNow();
+    expect(r.statuses()).toEqual([
+      { url: PAGE, label: "waitron.local", state: "primary", term: 2 },
+    ]);
+    const before = probesOf(fetchImpl, OWN);
+    await r.probeNow();
+    expect(probesOf(fetchImpl, OWN)).toBe(before);
+    expect(r.current).toBe(PAGE);
+  });
+
+  it("two boxes are two servers", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+        [OTHER]: { acceptingSales: false, term: 2, nodeId: "n2" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n2", url: OTHER }]);
+    await r.probeNow();
+    await r.probeNow();
+    expect(r.statuses().map((s) => s.url)).toEqual([PAGE, OTHER]);
+  });
+
+  it("before the origin has reported its node id, every entry is shown", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: "down",
+        [OWN]: { acceptingSales: false, term: 2, nodeId: "n1" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    await r.probeNow();
+    expect(r.statuses()).toEqual([
+      { url: PAGE, label: "waitron.local", state: "unreachable", term: null },
+      { url: OWN, label: "box-n1xx.waitron.local", state: "standby", term: 2 },
+    ]);
+  });
+
+  it("never follows an own-name entry that the page's answer hides in the same round, whatever it answered", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: false, term: 2, nodeId: "n1" },
+        [OWN]: { acceptingSales: true, term: 3, nodeId: "n1" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    const moved = vi.fn();
+    r.addEventListener("server-changed", moved);
+    await r.probeNow();
+    expect(r.statuses().map((s) => s.url)).toEqual([PAGE]);
+    expect(moved).not.toHaveBeenCalled();
+    expect(r.current).toBe(PAGE);
+    expect(r.waiting).toBe(true);
+  });
+
+  it("stays on the page's origin when its own name answers primary at the same term", async () => {
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+        [OWN]: { acceptingSales: true, term: 2, nodeId: "n1" },
+      }),
+      storage: memoryStorage(),
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    const moved = vi.fn();
+    r.addEventListener("server-changed", moved);
+    await r.probeNow();
+    await r.probeNow();
+    expect(r.current).toBe(PAGE);
+    expect(moved).not.toHaveBeenCalled();
+  });
+
+  describe("when a box fails", () => {
+    const A = "https://box-aaaa.waitron.local";
+    const B = "https://box-bbbb.waitron.local";
+
+    /** Round 1: box A sells and answers the page; box B stands by. A's own-name line is then
+     * hidden. */
+    async function twoBoxes(fetchImpl?: (table: Record<string, Answer>) => typeof fetch) {
+      const table: Record<string, Answer> = {
+        [PAGE]: { acceptingSales: true, term: 2, nodeId: "A" },
+        [A]: { acceptingSales: true, term: 2, nodeId: "A" },
+        [B]: { acceptingSales: false, term: 2, nodeId: "B" },
+      };
+      const r = new ServerRouter({
+        origin: PAGE,
+        fetchImpl: (fetchImpl ?? probeFetch)(table),
+        storage: memoryStorage(),
+      });
+      r.setServers([
+        { nodeId: "A", url: A },
+        { nodeId: "B", url: B },
+      ]);
+      await r.probeNow();
+      expect(r.statuses().map((s) => s.url)).toEqual([PAGE, B]);
+      const moves: string[] = [];
+      r.addEventListener("server-changed", (e) =>
+        moves.push((e as CustomEvent<{ to: string }>).detail.to),
+      );
+      return { r, table, moves };
+    }
+
+    it("never moves to a dead box on the answer it gave while its line was hidden", async () => {
+      const { r, table, moves } = await twoBoxes();
+      table[PAGE] = { acceptingSales: false, term: 2, nodeId: "B" };
+      table[A] = "down";
+      await r.probeNow();
+      expect(moves).toEqual([]);
+      expect(r.current).toBe(PAGE);
+      expect(r.waiting).toBe(true);
+      expect(r.statuses()).toEqual([
+        { url: PAGE, label: "waitron.local", state: "standby", term: 2 },
+        { url: A, label: "box-aaaa.waitron.local", state: "unreachable", term: null },
+      ]);
+    });
+
+    it("follows the box at its own name, in the same round, when the page stops reaching it", async () => {
+      const { r, table, moves } = await twoBoxes();
+      table[PAGE] = "down";
+      await r.probeNow();
+      expect(moves).toEqual([A]);
+      expect(r.waiting).toBe(false);
+      expect(r.statuses()).toEqual([
+        { url: PAGE, label: "waitron.local", state: "unreachable", term: null },
+        { url: A, label: "box-aaaa.waitron.local", state: "primary", term: 2 },
+        { url: B, label: "box-bbbb.waitron.local", state: "standby", term: 2 },
+      ]);
+    });
+
+    it("follows the box at its own name when the page answers without a node id", async () => {
+      const { r, table, moves } = await twoBoxes();
+      // What a box not yet ready to trade answers.
+      table[PAGE] = { acceptingSales: false, term: null };
+      await r.probeNow();
+      expect(moves).toEqual([A]);
+      expect(r.waiting).toBe(false);
+    });
+
+    it("follows the box at its own name, in the same round, when the page answers an error status", async () => {
+      let pageFails = false;
+      const { r, moves } = await twoBoxes((t) => {
+        const inner = probeFetch(t);
+        return (async (input: RequestInfo | URL, init?: RequestInit) => {
+          // A box in setup mode answers the page's name and has no /api/node.
+          if (pageFails && String(input) === `${PAGE}/api/node`) {
+            return new Response("not found", { status: 404 });
+          }
+          return inner(input, init);
+        }) as typeof fetch;
+      });
+      pageFails = true;
+      await r.probeNow();
+      expect(moves).toEqual([A]);
+      expect(r.current).toBe(A);
+      expect(r.statuses().slice(0, 2)).toEqual([
+        { url: PAGE, label: "waitron.local", state: "unreachable", term: null },
+        { url: A, label: "box-aaaa.waitron.local", state: "primary", term: 2 },
+      ]);
+    });
+
+    it("follows the promoted box at its own name, then back to the page when the page answers as it", async () => {
+      const { r, table, moves } = await twoBoxes();
+      table[PAGE] = "down";
+      table[A] = "down";
+      table[B] = { acceptingSales: true, term: 3, nodeId: "B" };
+      await r.probeNow();
+      expect(moves).toEqual([B]);
+      table[PAGE] = { acceptingSales: true, term: 3, nodeId: "B" };
+      await r.probeNow();
+      expect(moves).toEqual([B, PAGE]);
+      expect(r.statuses()).toEqual([
+        { url: PAGE, label: "waitron.local", state: "primary", term: 3 },
+        { url: A, label: "box-aaaa.waitron.local", state: "unreachable", term: null },
+      ]);
+    });
+
+    it("draws a line that reappears as unknown until its probe answers, never with its old answer", async () => {
+      let releaseA!: () => void;
+      const heldA = new Promise<void>((resolve) => (releaseA = resolve));
+      const { r, table } = await twoBoxes((t) => {
+        const inner = probeFetch(t);
+        return (async (input: RequestInfo | URL, init?: RequestInit) => {
+          const page = t[PAGE];
+          const pageIsB = page !== undefined && page !== "down" && page.nodeId === "B";
+          if (String(input) === `${A}/api/node` && pageIsB) await heldA;
+          return inner(input, init);
+        }) as typeof fetch;
+      });
+      table[PAGE] = { acceptingSales: false, term: 2, nodeId: "B" };
+      table[A] = "down";
+      const round = r.probeNow();
+      await vi.waitFor(() => expect(r.statuses().map((s) => s.url)).toEqual([PAGE, A]));
+      expect(r.statuses()[1]).toEqual({
+        url: A,
+        label: "box-aaaa.waitron.local",
+        state: "unknown",
+        term: null,
+      });
+      releaseA();
+      await round;
+      expect(r.statuses()[1]?.state).toBe("unreachable");
+    });
+  });
+
+  it("hides a saved entry once the chart gives it the page's node id", async () => {
+    const storage = memoryStorage();
+    storage.setItem(SERVERS_STORAGE_KEY, JSON.stringify({ servers: [{ url: OWN }] }));
+    const r = new ServerRouter({
+      origin: PAGE,
+      fetchImpl: probeFetch({
+        [PAGE]: { acceptingSales: true, term: 2, nodeId: "n1" },
+        [OWN]: { acceptingSales: true, term: 2, nodeId: "n1" },
+      }),
+      storage,
+    });
+    r.setServers([{ nodeId: "n1", url: OWN }]);
+    await r.probeNow();
+    expect(r.statuses().map((s) => s.url)).toEqual([PAGE]);
   });
 });
 

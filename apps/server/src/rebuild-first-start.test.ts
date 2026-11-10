@@ -124,7 +124,7 @@ function deps(stateDir: string, overrides: Partial<RebuildDeps> = {}): RebuildDe
     node: suite.node,
     ring: RING,
     nodeId: NODE,
-    contactUrl: "https://waitron.local",
+    advertisedOrigin: "https://waitron.local",
     hostnames: ["waitron.local", "localhost"],
     listIpv4: () => [NEW_ADDRESS],
     now: () => NOW,
@@ -188,7 +188,7 @@ describe("completeRebuild", () => {
       const held = await readNodeMembership(suite.db);
       expect(held!.body.term).toBe(1);
       expect(held!.body.nodes).toEqual([
-        { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
+        { nodeId: NODE, contactUrl: "https://box-c000.waitron.local", standing: "serving-primary" },
       ]);
       expect(verifyMembershipDocument(held!, await readMembershipTrustSet(suite.db))).toMatchObject(
         { valid: true },
@@ -300,7 +300,7 @@ describe("completeRebuild", () => {
     );
     await completeRebuild(deps(stateDir));
     expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([
-      { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
+      { nodeId: NODE, contactUrl: "https://box-c000.waitron.local", standing: "serving-primary" },
       other,
     ]);
   });
@@ -433,6 +433,18 @@ describe("completeRebuild", () => {
     expect(await completeRebuild(deps(stateDir))).toBe(false);
   });
 
+  it("a rebuilt box's chart row names its own address", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await completeRebuild(deps(stateDir, { advertisedOrigin: "https://waitron.local:8443" }));
+    expect((await readNodeMembership(suite.db))!.body.nodes).toEqual([
+      {
+        nodeId: NODE,
+        contactUrl: "https://box-c000.waitron.local:8443",
+        standing: "serving-primary",
+      },
+    ]);
+  });
+
   it("signs term 0 naming this node alone when the restored database holds no document", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await suite.db.execute(sql`delete from node_membership`);
@@ -440,7 +452,7 @@ describe("completeRebuild", () => {
     const held = await readNodeMembership(suite.db);
     expect(held!.body.term).toBe(0);
     expect(held!.body.nodes).toEqual([
-      { nodeId: NODE, contactUrl: "https://waitron.local", standing: "serving-primary" },
+      { nodeId: NODE, contactUrl: "https://box-c000.waitron.local", standing: "serving-primary" },
     ]);
   });
 });

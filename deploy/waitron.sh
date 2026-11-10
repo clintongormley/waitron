@@ -16,7 +16,7 @@ WAITRON_DIR="${WAITRON_DIR:-/opt/waitron}"
 # The public repo, written out in full (not via a variable) so scripts/deploy-image-env.test.ts can
 # pin the literal URL as text — a typo in the org/repo then fails the guard loudly.
 RAW_BASE="https://raw.githubusercontent.com/clintongormley/waitron"
-# One copy of boot.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
+# One copy of box-name.ts's BOX_HOSTNAME, pinned by scripts/deploy-image-env.test.ts to the image env,
 # compose's defaults and the QR the restaurant scans.
 BOX_URL="https://waitron.local"
 
@@ -456,13 +456,55 @@ ensure_images_present() {
   done <<<"$images"
 }
 
+# The box's IPv4 addresses, one per line, by the same interface choice as the server's listBoxIpv4
+# (apps/server/src/box-reach.ts). It applies neither WAITRON_BOX_ADDRESSES nor the server's
+# private-range filter. Prints nothing, and still succeeds, when `ip` is missing or fails.
+# WAITRON_SH_PROC_NET_ROUTE is a test override for the route file.
+box_own_ipv4() {
+  local route_file="${WAITRON_SH_PROC_NET_ROUTE:-/proc/net/route}" uplink="" best=""
+  local iface dest metric mask family cidr addr listing
+  if [ -r "$route_file" ]; then
+    while read -r iface dest _ _ _ _ metric mask _; do
+      [ "$dest" = 00000000 ] && [ "$mask" = 00000000 ] || continue
+      [[ "$metric" =~ ^[0-9]+$ ]] || metric=99999999999
+      if [ -z "$uplink" ] || [ "$metric" -lt "$best" ]; then uplink="$iface" best="$metric"; fi
+    done <"$route_file"
+  fi
+  listing="$(ip -4 -o addr show 2>/dev/null)" || listing=""
+  local -a on_uplink=() others=()
+  while read -r _ iface family cidr _; do
+    [ "$family" = inet ] || continue
+    addr="${cidr%%/*}"
+    [ "$iface" = lo ] && continue
+    case "$addr" in 127.*) continue ;; esac
+    [ -n "$uplink" ] && [ "$iface" = "$uplink" ] && on_uplink+=("$addr")
+    case "$iface" in docker* | br-* | veth* | virbr* | cni* | flannel* | cali*) continue ;; esac
+    others+=("$addr")
+  done <<<"$listing"
+  if [ "${#on_uplink[@]}" -gt 0 ]; then
+    printf '%s\n' "${on_uplink[@]}"
+  elif [ "${#others[@]}" -gt 0 ]; then
+    printf '%s\n' "${others[@]}"
+  fi
+  return 0
+}
+
 # The whole console instruction after a box comes up: where to go, plus the QR of the setup URL.
 print_links() {
+  local own addr
+  own="$(box_own_ipv4)" || own=""
   cat <<EOF
 
   Waitron is ready.
 
   Start here:    http://waitron.local/setup/trust
+EOF
+  if [ -n "$own" ]; then
+    echo "  If this venue already has a Waitron box, waitron.local reaches that box instead. Use"
+    echo "  this box's own address:"
+    while read -r addr; do echo "                 http://${addr}/setup/trust"; done <<<"$own"
+  fi
+  cat <<EOF
   Secure help:   ${BOX_URL}/setup/trust
   If HTTP is unavailable or you use an operator-supplied certificate, use Secure help.
   Install this box's certificate before entering setup details.

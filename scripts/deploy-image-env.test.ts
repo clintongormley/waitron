@@ -21,7 +21,7 @@ import { workspaceMembers } from "./workspace-members.mjs";
  * The container image's environment, checked against the server that has to boot on it.
  *
  * It reads TEXT for everything outside the server's own module graph — the Dockerfile's `ENV`
- * block, compose's two defaults, the shell's `BOX_URL`, and `boot.ts`'s hostname literal. So these
+ * block, compose's two defaults, the shell's `BOX_URL`, and `box-name.ts`'s hostname literal. So these
  * are PINS between four copies of one string, not a single source anything derives from; the guard
  * is what makes a change to one of them fail loudly rather than ship a box whose certificate,
  * QR and passkey relying party disagree.
@@ -68,9 +68,9 @@ function imageEnv(dockerfile: string): Record<string, string> {
 
 const IMAGE_ENV = imageEnv(DOCKERFILE);
 
-/** `boot.ts`'s own literal — the name the mDNS responder answers for and the leaf's SANs cover. */
+/** `box-name.ts`'s own literal — the name the mDNS responder answers for and the leaf's SANs cover. */
 const HOSTNAME = only(
-  read("apps/server/src/boot.ts"),
+  read("apps/server/src/box-name.ts"),
   /const BOX_HOSTNAME = "([^"]+)"/,
   "BOX_HOSTNAME",
 );
@@ -926,7 +926,7 @@ describe("the waitron.sh box command", () => {
 });
 
 describe("every copy of the box's hostname", () => {
-  it("is the one boot.ts declares", () => {
+  it("is the one box-name.ts declares", () => {
     expect(IMAGE_ENV.WAITRON_MANAGEMENT_RP_ID).toBe(HOSTNAME);
     expect(IMAGE_ENV.WAITRON_MANAGEMENT_ORIGIN).toBe(`https://${HOSTNAME}`);
     // compose's operator-override defaults, which must not disagree with the image they default to.

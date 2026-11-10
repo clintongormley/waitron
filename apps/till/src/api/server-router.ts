@@ -35,6 +35,7 @@ function defaultStorage(): Pick<Storage, "getItem" | "setItem"> | undefined {
 
 interface Tracked {
   url: string;
+  nodeId?: string;
   label: string;
   state: ServerState;
   term: number | null;
@@ -53,6 +54,9 @@ export class ServerRouter extends EventTarget {
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
   #chart: HeldChart | null = null;
+  /** The node id the page origin's latest probe answered with; an entry the chart gives that id is
+   * neither probed, drawn nor chosen while it holds. */
+  #originNodeId: string | undefined;
   /** `url chart-term answered-term` triples already posted: a server is handed each held chart
    * once per answer, so a box that refused it while answering no term is handed it again once it
    * answers its own older term. */
@@ -85,7 +89,7 @@ export class ServerRouter extends EventTarget {
   }
 
   statuses(): ServerStatus[] {
-    return this.#servers.map((s) => ({
+    return this.#shown().map((s) => ({
       url: s.url,
       label: s.label,
       state: s.state,
@@ -136,14 +140,35 @@ export class ServerRouter extends EventTarget {
   }
 
   async #runRound(): Promise<void> {
-    await Promise.all(this.#servers.map((s) => this.#probe(s)));
-    const yes = this.#servers.filter((s) => s.state === "primary");
+    const probed = this.#shown();
+    // A hidden line keeps no old answer to be drawn with once the page's answer unhides it.
+    for (const s of this.#servers) {
+      if (!probed.includes(s)) {
+        s.state = "unknown";
+        s.term = null;
+      }
+    }
+    await Promise.all(probed.map((s) => this.#probe(s)));
+    // The page's probe can unhide a box's line; probe it now so the till can follow that box in
+    // this round.
+    await Promise.all(
+      this.#shown()
+        .filter((s) => !probed.includes(s))
+        .map((s) => this.#probe(s)),
+    );
+    const yes = this.#shown().filter((s) => s.state === "primary");
     this.#waiting = yes.length === 0;
     if (yes.length > 0) {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
     }
     this.#emitStateChanged();
+  }
+
+  #shown(): Tracked[] {
+    const own = this.#originNodeId;
+    if (own === undefined) return this.#servers;
+    return this.#servers.filter((s) => s.nodeId !== own);
   }
 
   /** Dispatch only when the rendered state changed, so a steady probe round drives no repaint. */
@@ -177,6 +202,7 @@ export class ServerRouter extends EventTarget {
         cache: "no-store",
       });
       if (!res.ok) {
+        this.#forgetOriginNode(s);
         s.state = "unreachable";
         s.term = null;
         return;
@@ -184,16 +210,25 @@ export class ServerRouter extends EventTarget {
       const body = (await res.json()) as {
         acceptingSales?: unknown;
         term?: unknown;
+        nodeId?: unknown;
       };
+      if (s.url === this.#origin) {
+        this.#originNodeId = typeof body.nodeId === "string" ? body.nodeId : undefined;
+      }
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
       this.#handChart(s.url, s.term);
     } catch {
+      this.#forgetOriginNode(s);
       s.state = "unreachable";
       s.term = null;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  #forgetOriginNode(s: Tracked): void {
+    if (s.url === this.#origin) this.#originNodeId = undefined;
   }
 
   /** Fire and forget, and never moves the till. A post answered with a 2xx or 4xx status is not sent
@@ -240,10 +275,12 @@ export class ServerRouter extends EventTarget {
       if (prev !== undefined) {
         // A probe mutates this tracked object after its fetch resolves. Retain it when getTill refreshes
         // the same URL mid-probe so that successful result remains in the active list.
+        prev.nodeId = e.nodeId;
         next.push(prev);
       } else {
         next.push({
           url,
+          nodeId: e.nodeId,
           label: parsed.hostname,
           state: "unknown",
           term: null,

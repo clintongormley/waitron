@@ -102,9 +102,9 @@ export interface ServerConfig {
    * the configured Google redirect and the server route cannot drift. */
   googleOidc?: { clientId: string; clientSecret: string; redirectUri: string };
   /**
-   * The origin tills route on for this node: its `contactUrl` in the membership document, and what
-   * the CORS allow-list treats as "self". From `WAITRON_ADVERTISED_ORIGIN`; unset or empty →
-   * `managementOrigin`.
+   * This node's configured origin, and what the CORS allow-list treats as "self". Its chart row's
+   * `contactUrl` is `ownContactUrl` of it (`box-name.ts`). From `WAITRON_ADVERTISED_ORIGIN`; unset
+   * or empty → `managementOrigin`.
    */
   advertisedOrigin: string;
   /**

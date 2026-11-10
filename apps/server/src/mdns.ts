@@ -1,9 +1,7 @@
 import multicastDns from "multicast-dns";
+import { askedAndHeardOthers, type MdnsQuerySocket } from "./box-lookup.js";
 import type { Logger } from "./logger.js";
 import { isLoopbackHost } from "./primary-url.js";
-
-// A thin mDNS responder so a box answers to `waitron.local` on the LAN. It only answers; it never
-// queries and holds no cache.
 
 /** One mDNS answer record — the subset of multicast-dns's ResourceRecord this module emits. */
 export interface MdnsAnswer {
@@ -32,8 +30,11 @@ export interface MdnsResponder {
 export interface MdnsDeps {
   devMode: boolean;
   httpHost: string;
-  /** The name to answer for, e.g. "waitron.local". */
-  hostname: string;
+  /**
+   * The names to answer for, read per query so a name dropped from the list stops being answered.
+   * Called for every query on the network, so it returns a list built beforehand.
+   */
+  names: () => readonly string[];
   /** Current box IPv4s, read per query (not cached) so a DHCP change is reflected. */
   getAddresses: () => string[];
   log: Logger;
@@ -48,23 +49,33 @@ export function buildMdnsAnswers(hostname: string, addresses: string[]): MdnsAns
   return addresses.map((data) => ({ name: hostname, type: "A", ttl: MDNS_TTL_SECONDS, data }));
 }
 
-/** Outside development, answer mDNS A queries for a non-loopback HTTP listener. */
-export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
+function respondsOnLan(deps: { devMode: boolean; httpHost: string }): boolean {
   // Development must not compete with a real box for its LAN name. A loopback-only listener
   // cannot serve the LAN addresses advertised here either.
-  if (deps.devMode || isLoopbackHost(deps.httpHost)) {
+  return !deps.devMode && !isLoopbackHost(deps.httpHost);
+}
+
+/** Outside development, answer mDNS A queries for a non-loopback HTTP listener. */
+export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
+  if (!respondsOnLan(deps)) {
     return { stop: () => Promise.resolve() };
   }
-  const { hostname, getAddresses, log } = deps;
+  const { names, getAddresses, log } = deps;
   const makeSocket = deps.makeSocket ?? (() => multicastDns() as MdnsSocket);
   const socket = makeSocket();
 
   socket.on("query", (query) => {
-    const wantsUs = query.questions.some(
-      (q) => q.name === hostname && (q.type === "A" || q.type === "ANY"),
-    );
-    if (!wantsUs) return;
-    const answers = buildMdnsAnswers(hostname, getAddresses());
+    const ours = names();
+    // Every query on the network arrives here, so one asking for none of ours allocates nothing.
+    let asked: Set<string> | undefined;
+    for (const q of query.questions) {
+      if ((q.type === "A" || q.type === "ANY") && ours.includes(q.name)) {
+        (asked ??= new Set()).add(q.name);
+      }
+    }
+    if (asked === undefined) return;
+    const addresses = getAddresses();
+    const answers = [...asked].flatMap((name) => buildMdnsAnswers(name, addresses));
     if (answers.length === 0) return;
     socket.respond({ answers });
   });
@@ -74,7 +85,7 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
     log("warn", "mdns.socket_error", { message: err.message });
   });
 
-  log("info", "mdns.responding", { hostname });
+  log("info", "mdns.responding", { hostnames: [...names()] });
 
   let stopped = false;
   return {
@@ -87,6 +98,68 @@ export function startMdnsResponder(deps: MdnsDeps): MdnsResponder {
           resolve();
         });
       });
+    },
+  };
+}
+
+export const SETUP_ASK_INTERVAL_MS = 30_000;
+export const SETUP_ASK_JITTER_MS = 10_000;
+
+export interface VenueNameWatchDeps {
+  hostname: string;
+  devMode: boolean;
+  httpHost: string;
+  /** In [0, 1); draws the delay added to each wait between asks. */
+  random: () => number;
+  makeSocket?: () => MdnsQuerySocket;
+  ownAddresses?: () => string[];
+}
+
+export interface VenueNameWatch {
+  /** `[hostname]` only while the last ask finished and heard no other box, else none. */
+  names(): readonly string[];
+  stop(): Promise<void>;
+}
+
+/** The random delay keeps two boxes switched on together from asking in step for ever. */
+export function watchVenueNameInSetup(deps: VenueNameWatchDeps): VenueNameWatch {
+  const { hostname } = deps;
+  const answering: readonly string[] = [hostname];
+  const silent: readonly string[] = [];
+  // Until the first ask finishes, the box cannot know that no other box answers the name.
+  let heardOthers = true;
+  let stopped = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let inFlight: Promise<void> = Promise.resolve();
+
+  const ask = async (): Promise<void> => {
+    try {
+      heardOthers = await askedAndHeardOthers(hostname, {
+        makeSocket: deps.makeSocket,
+        ownAddresses: deps.ownAddresses,
+      });
+    } catch {
+      // A failed ask cannot show that no other box answers.
+      heardOthers = true;
+    }
+    if (stopped) return;
+    timer = setTimeout(
+      () => {
+        inFlight = ask();
+      },
+      SETUP_ASK_INTERVAL_MS + Math.floor(deps.random() * SETUP_ASK_JITTER_MS),
+    );
+    timer.unref();
+  };
+
+  if (respondsOnLan(deps)) inFlight = ask();
+
+  return {
+    names: () => (heardOthers ? silent : answering),
+    async stop() {
+      stopped = true;
+      clearTimeout(timer);
+      await inFlight;
     },
   };
 }

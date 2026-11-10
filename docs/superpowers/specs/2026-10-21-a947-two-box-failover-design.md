@@ -65,7 +65,8 @@
 > 3. §3: the server carries the TLS between the boxes; versitygw and Litestream speak only on loopback.
 > 4. §3: the store also requires the main box's client certificate, not only the pair's access key.
 > 5. §4 item 5: `waitron.local` is also answered by a box waiting to sell, and by a box in setup mode
->    while no other box answers it.
+>    while no other box answers it. This was listed in the plan's departures table, was not put to
+>    the owner, and was cleared by the campaign watcher on 2026-11-10.
 > 6. The exposed-mirror guard is retired: a mirror listens on the venue's network with a listed
 >    surface, and accepts promotion only from its own screen until 4b.
 > 7. A box that lost its `node.db` refuses to start rather than start as a selling box.

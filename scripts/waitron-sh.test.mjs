@@ -246,6 +246,12 @@ function quietStub(name, body) {
 const REAL_CMP = spawnSync("bash", ["-c", "command -v cmp"], { encoding: "utf8" }).stdout.trim();
 quietStub("cmp", `[ "\${WT_CMP_FAIL}" = "1" ] && exit 2\nexec "${REAL_CMP}" "$@"`);
 stub("qrencode", "exit 0");
+// `ip` prints WT_IP_ADDRS (the lines `ip -4 -o addr show` would) and exits WT_IP_STATUS, so no case
+// reads the machine's real interfaces.
+stub(
+  "ip",
+  `[ -n "\${WT_IP_ADDRS}" ] && printf '%s\\n' "\${WT_IP_ADDRS}"\nexit "\${WT_IP_STATUS:-0}"`,
+);
 // `apt-get` fails, exiting 100 as apt does, for the first WT_APT_FAIL calls in a case, counted in a
 // file beside the case's log. `timeout` and `gtimeout` drop the limit and run the rest.
 stub(
@@ -462,6 +468,8 @@ function sandbox({
       WAITRON_SH_SYSTEMD_DIR: systemdDir,
       WAITRON_SH_BOX_LIB_DIR: join(root, "lib"),
       WAITRON_SH_BOX_UNIT_DIR: join(root, "units"),
+      // A path that does not exist: no case reads the machine's own routing table.
+      WAITRON_SH_PROC_NET_ROUTE: join(root, "no-route"),
     },
   };
 }
@@ -746,6 +754,117 @@ describe("waitron.sh install (published main)", () => {
     expect(r.stdout).not.toContain("http://waitron.local:9110");
     expect(r.stdout).toContain("http://waitron.local/setup/trust");
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
+  });
+});
+
+describe("waitron.sh install and the box's own setup address", () => {
+  const ADDRS = [
+    "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever",
+    "2: eth0    inet 192.168.10.5/24 brd 192.168.10.255 scope global dynamic eth0\\       valid_lft 86000sec preferred_lft 86000sec",
+    "3: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\\       valid_lft forever preferred_lft forever",
+    "4: br-1a2b3c    inet 172.18.0.1/16 brd 172.18.255.255 scope global br-1a2b3c\\       valid_lft forever preferred_lft forever",
+    "5: wlan0    inet 10.0.0.7/24 brd 10.0.0.255 scope global wlan0\\       valid_lft forever preferred_lft forever",
+  ].join("\n");
+  const ROUTE_HEADER =
+    "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT";
+  const WORDS =
+    "If this venue already has a Waitron box, waitron.local reaches that box instead. Use";
+
+  function routeFile(sb, rows) {
+    const p = join(sb.root, "route");
+    writeFileSync(p, [ROUTE_HEADER, ...rows].join("\n") + "\n");
+    return p;
+  }
+
+  it("gives the box's own setup address on the default-route interface", () => {
+    const sb = sandbox();
+    const route = routeFile(sb, [
+      "docker0\tAC110000\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0",
+      // A zero destination with a non-zero mask (0.0.0.0/1) is not the default route.
+      "wlan0\t00000000\t0100000A\t0003\t0\t0\t50\t00000080\t0\t0\t0",
+      "eth0\t00000000\t010AA8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0",
+    ]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(WORDS);
+    expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
+    expect(r.stdout).not.toContain("http://172.17.0.1/setup/trust");
+    expect(r.stdout).not.toContain("http://10.0.0.7/setup/trust");
+    expect(r.stdout).not.toContain("http://127.0.0.1/setup/trust");
+    // The new lines follow "Start here", and the QR code still encodes waitron.local.
+    expect(r.stdout.indexOf("Start here")).toBeLessThan(r.stdout.indexOf(WORDS));
+    expect(loggedCalls(sb)).toContain("qrencode -t ANSIUTF8 http://waitron.local/setup/trust");
+  });
+
+  it("picks the lowest-metric default route when there are several", () => {
+    const sb = sandbox();
+    const route = routeFile(sb, [
+      "eth0\t00000000\t010AA8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0",
+      "wlan0\t00000000\t0100000A\t0003\t0\t0\t100\t00000000\t0\t0\t0",
+    ]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("http://10.0.0.7/setup/trust");
+    expect(r.stdout).not.toContain("http://192.168.10.5/setup/trust");
+  });
+
+  it("without a default route, it skips Docker's and other virtual interfaces", () => {
+    const sb = sandbox();
+    const route = routeFile(sb, ["docker0\tAC110000\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0"]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain(WORDS);
+    expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
+    expect(r.stdout).toContain("http://10.0.0.7/setup/trust");
+    expect(r.stdout).not.toContain("http://172.17.0.1/setup/trust");
+    expect(r.stdout).not.toContain("http://172.18.0.1/setup/trust");
+    expect(r.stdout).not.toContain("http://127.0.0.1/setup/trust");
+  });
+
+  it("with no route file at all, it also falls back to the non-virtual interfaces", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
+    expect(r.stdout).not.toContain("http://172.17.0.1/setup/trust");
+  });
+
+  it("when the default-route interface has no IPv4 address, it falls back to the non-virtual ones", () => {
+    const sb = sandbox();
+    const route = routeFile(sb, ["ppp0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"]);
+    const r = run(sb, ["install"], { WT_IP_ADDRS: ADDRS, WAITRON_SH_PROC_NET_ROUTE: route });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("http://192.168.10.5/setup/trust");
+    expect(r.stdout).toContain("http://10.0.0.7/setup/trust");
+    expect(r.stdout).not.toContain("http://172.17.0.1/setup/trust");
+  });
+
+  it("skips the same interface-name prefixes as the server's VIRTUAL_IFACE_PREFIXES", () => {
+    const server = readFileSync(join(HERE, "..", "apps/server/src/box-reach.ts"), "utf8");
+    const script = readFileSync(SCRIPT, "utf8");
+    const listed = server.match(/const VIRTUAL_IFACE_PREFIXES = \[([^\]]*)\]/);
+    const cased = script.match(/^\s*case "\$iface" in ([^)]*)\) continue ;; esac$/m);
+    expect(listed, "VIRTUAL_IFACE_PREFIXES in box-reach.ts").not.toBeNull();
+    expect(cased, "the virtual-interface case in box_own_ipv4").not.toBeNull();
+    const fromServer = [...listed[1].matchAll(/"([^"]*)"/g)].map((m) => m[1]);
+    const fromScript = cased[1].split("|").map((p) => p.trim().replace(/\*$/, ""));
+    expect(fromScript).toEqual(fromServer);
+  });
+
+  it.each([
+    ["prints addresses and then fails", { WT_IP_ADDRS: ADDRS, WT_IP_STATUS: "1" }],
+    [
+      "prints nothing and exits 127, as a missing command does",
+      { WT_IP_ADDRS: "", WT_IP_STATUS: "127" },
+    ],
+    ["prints nothing", { WT_IP_ADDRS: "" }],
+  ])("when `ip` %s, prints no own setup address and the install still succeeds", (_, env) => {
+    const sb = sandbox();
+    const r = run(sb, ["install"], env);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("http://waitron.local/setup/trust");
+    expect(r.stdout).not.toContain(WORDS);
+    expect(r.stdout).not.toMatch(/http:\/\/\d+\.\d+\.\d+\.\d+\/setup\/trust/);
   });
 });
 

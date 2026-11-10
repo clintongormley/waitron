@@ -679,10 +679,7 @@ The start check verifies a peer's signed status with
 `peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
 pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
 these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
-silent. No box has a joined peer before 3b. 3b must also give each box its own address in the
-chart: by default both advertise `https://waitron.local` (`deploy/Dockerfile`, sent at
-`apps/server/src/adopt.ts:109`), and the check never asks a peer at its own address. Left open by
-A1018 Slice 3 (Ruling R13).
+silent. No box has a joined peer before 3b. Left open by A1018 Slice 3 (Ruling R13).
 
 
 ## The boot peer reconcile cannot reach a real box's certificate.
@@ -1092,7 +1089,8 @@ certificate fingerprint before it receives the venue's keys. Slice 3b's build
 [plan](../superpowers/plans/2026-11-04-a947-3b-spare-hosts-store.md) was written on 2026-11-04:
 eight pull requests, two of them fiscal and landed by the owner (3b-G, the start steps that decide
 whether a box files; 3b-F, letting a Veri*Factu venue add a spare, which waits on the owner's
-question Q1). Its build has not started. Slices 3c onwards are still open;
+question Q1). 3b-1 landed as [#2721](https://github.com/clintongormley/waitron/pull/2721); 3b-2 (each
+box's own name) as [#2742](https://github.com/clintongormley/waitron/pull/2742). Slices 3c onwards are still open;
 A1273 to A1285, A1295 and A1296 are the loose ends slice 3a left.
 A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
 of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
@@ -1112,7 +1110,23 @@ ahead of another device's, and a setup or restore waits 90–150 seconds before 
 §6.7). Any device, even a reloaded one, reaches the
 switch (§6.6); the returning box hands over and becomes the spare by itself after three checks
 (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
-the membership chart, so a till's router sees one server (§2).
+the membership chart, so a till's router sees one server (§2); 3b-2 gives each box its own name in
+the chart, and the till hides a line for its page's own box.
+
+- **A second box in setup mode, while the main box is silent, can be trusted by mistake in three
+  ways.** It answers `waitron.local` once its ask hears no other box (3b-2). By default a till
+  refuses it: each box makes its own certificate authority, and a connection trusting only the
+  venue's refuses a second box's certificate (`apps/server/src/box-secrets.venue-name.test.ts`,
+  "refuses a second box's certificate for waitron.local"). The three ways round that:
+  - a person opens `http://waitron.local`, reaches the setup box's plain-HTTP page and installs the
+    authority it offers for download (#330), without meaning any harm;
+  - a person clicks past the browser's certificate warning: the server sends no
+    `Strict-Transport-Security` header, and `landing-listener.test.ts` asserts it is absent (#290);
+  - an operator gives the second box a `WAITRON_TLS_*` pair from an authority the tills already
+    trust, which setup mode serves (#141).
+
+  Settle it before two-box failover goes live: it can only happen once a venue has a second box,
+  which is what A947 builds.
 
 ## A1273: the shared key ring has no rotation path to the spare
 

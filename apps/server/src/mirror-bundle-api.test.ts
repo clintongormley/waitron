@@ -198,7 +198,12 @@ async function seedStaff(): Promise<string> {
   });
 }
 
-function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: Logger): Hono {
+function mountApp(
+  designated: AdoptResult,
+  relayUrl: string | undefined,
+  log?: Logger,
+  advertisedOrigin = "https://box.deli.test",
+): Hono {
   const app = new Hono();
   mountMirrorBundleApi(
     app,
@@ -209,6 +214,7 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
       stateDir,
       relayUrl,
       boxHostname: "waitron.local",
+      advertisedOrigin,
       designated,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,
@@ -385,6 +391,57 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(line).not.toContain(ADMIN_PASSWORD);
     }
   });
+
+  it.each([
+    ["still names the venue's shared name", "https://waitron.local:8443"],
+    ["already names its own address", undefined],
+  ])(
+    "the chart that adds a spare names both boxes by their own addresses (the signer's row %s)",
+    async (_case, heldSignerUrl) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const ownUrl = `https://box-${designated.nodeId.slice(0, 4)}.waitron.local:8443`;
+      const app = mountApp(
+        designated,
+        "https://relay.example:9000/",
+        undefined,
+        "https://waitron.local:8443",
+      );
+      const standbyNodeId = crypto.randomUUID();
+      const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+      await writeNodeMembership(
+        db,
+        signedMembershipDoc(seedTerm, {
+          signerNodeId: designated.nodeId,
+          keyPair: primaryKeyPair,
+          nodes: [
+            {
+              nodeId: designated.nodeId,
+              contactUrl: heldSignerUrl ?? ownUrl,
+              standing: "serving-primary",
+            },
+          ],
+        }),
+      );
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        standbyNodeId,
+        standbyPublicKey: STANDBY_PUB,
+        standbyContactUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:8443`,
+      });
+      expect(res.status).toBe(200);
+
+      expect((await readNodeMembership(db))?.body.nodes).toEqual([
+        { nodeId: designated.nodeId, contactUrl: ownUrl, standing: "serving-primary" },
+        {
+          nodeId: standbyNodeId,
+          contactUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:8443`,
+          standing: "serving-secondary",
+        },
+      ]);
+    },
+  );
 
   it("appends the standby to the membership document with its contactUrl, term bumped, signed by the primary", async () => {
     const { designated, adminPersonId, primaryPublicKey } = await setupVenue();

@@ -30,6 +30,7 @@ import {
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -658,6 +659,34 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       expect(await read.json()).toMatchObject({ error: { code: "node.spare", params: {} } });
     } finally {
       await server.close();
+    }
+  }, 60_000);
+
+  it("a mirror start answers only its own name (control: the same identity as primary answers the venue's too)", async () => {
+    for (const [venue, answered] of [
+      ["mirror", ["box-3333.waitron.local"]],
+      ["primary", ["box-3333.waitron.local", "waitron.local"]],
+    ] as const) {
+      const mdns = fakeMdnsSocket();
+      const server = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_VENUE_DIR: venueDir[venue],
+          WAITRON_HTTP_HOST: "0.0.0.0",
+          WAITRON_MIRROR_ALLOW_EXPOSED: "true",
+          WAITRON_HTTP_PORT: String(await freePort()),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        },
+        {},
+        { mdnsSocket: () => mdns.socket },
+      );
+      try {
+        const asked = ["box-3333.waitron.local", "waitron.local", "box-7777.waitron.local"];
+        for (const name of asked) mdns.query(name);
+        expect({ venue, answered: mdns.answered() }).toEqual({ venue, answered });
+      } finally {
+        await server.close();
+      }
     }
   }, 60_000);
 

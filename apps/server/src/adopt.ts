@@ -29,6 +29,7 @@ import type { MirrorBundle } from "./mirror-bundle.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { assertAdoptionModules, writePendingAdoption } from "./finish-adoption.js";
 import type { TradingConfig } from "./trading-config.js";
+import { ownContactUrl } from "./box-name.js";
 import "./errors.js";
 
 export type PersistTradingArgs = TradingConfig;
@@ -74,8 +75,8 @@ export interface AdoptDeps {
     standby: { nodeId: string; publicKey: string; contactUrl: string },
     confirmedCaPem?: string,
   ) => Promise<MirrorBundle>;
-  /** Sent as this node's `contactUrl`, which the primary records so a till can route here after a
-   * failover. */
+  /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
+   * can route here after a failover. */
   advertisedOrigin: string;
   environment: DeploymentEnvironment;
   /** Persists `trading.env` so the next boot enters the trading branch. */
@@ -106,7 +107,11 @@ export async function adoptFromPrimary(
   const bundle = await deps.fetchBundle(
     req.primaryUrl,
     req.credential,
-    { nodeId: standby.nodeId, publicKey: standby.publicKey, contactUrl: deps.advertisedOrigin },
+    {
+      nodeId: standby.nodeId,
+      publicKey: standby.publicKey,
+      contactUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
+    },
     req.confirmedCaPem,
   );
   const { designated } = bundle;

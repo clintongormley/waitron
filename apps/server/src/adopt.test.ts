@@ -144,13 +144,14 @@ function deps(
     ) => Promise<MirrorBundle>;
     environment?: "production" | "preproduction";
     persistCredentialsRing?: (ring: MirrorBundle["credentialsRing"]) => Promise<void>;
+    advertisedOrigin?: string;
   } = {},
 ) {
   return {
     ownerDb: suite.db,
     ownerNode: suite.node,
     ring: RING,
-    advertisedOrigin: ADVERTISED_ORIGIN,
+    advertisedOrigin: extra.advertisedOrigin ?? ADVERTISED_ORIGIN,
     environment: extra.environment ?? ("preproduction" as const),
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
@@ -337,6 +338,22 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       NO_HOOKS,
     );
     expect(capturedStandby!.contactUrl).toBe(ADVERTISED_ORIGIN);
+  });
+
+  it("sends the spare's own address as its contactUrl", async () => {
+    let capturedStandby: { contactUrl: string } | undefined;
+    await adoptFromPrimary(
+      deps({
+        advertisedOrigin: "https://waitron.local:8443",
+        fetchBundle: async (_u, _c, s) => {
+          capturedStandby = s;
+          return makeBundle();
+        },
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(capturedStandby!.contactUrl).toBe("https://box-aaaa.waitron.local:8443");
   });
 
   it("calls beforeFirstWrite once, before the deployment is stamped", async () => {

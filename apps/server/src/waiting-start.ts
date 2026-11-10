@@ -63,8 +63,11 @@ export interface WaitingStartDeps {
    * as it claims the wait inside the transaction that records it (`claimed`). Tests only.
    */
   onCarryOn?: (stage: "turn" | "claimed") => void | Promise<void>;
-  /** Binds the waiting start's listeners; `close` closes them and nothing else. */
-  listen: (app: Hono) => { close(): Promise<void> };
+  /**
+   * Binds the waiting start's listeners; `close` closes them and nothing else. `steppingDown` turns
+   * true when a stepdown closes the gate, before the admitted requests drain and `close` runs.
+   */
+  listen: (app: Hono, steppingDown: () => boolean) => { close(): Promise<void> };
   closeStore: () => Promise<void>;
   restart: () => void;
   log: Logger;
@@ -254,7 +257,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   };
 
   deps.health.takesNoSales = true;
-  const listeners = deps.listen(app);
+  const listeners = deps.listen(app, gate.isClosed);
   schedule();
   log("info", "waiting_start.waiting", { waitingOn });
 

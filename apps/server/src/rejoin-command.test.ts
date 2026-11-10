@@ -434,7 +434,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
                 WAITRON_CREDENTIALS_KEY_VERSION: "1",
               }),
               nodeId: NODE,
-              contactUrl: "https://rejoined.example",
+              advertisedOrigin: "https://rejoined.example",
               hostnames: ["rejoined.example"],
               listIpv4: () => [],
               now: () => new Date("2026-10-22T10:00:00Z"),

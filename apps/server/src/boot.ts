@@ -346,7 +346,15 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
-import { startMdnsResponder, type MdnsResponder } from "./mdns.js";
+import {
+  startMdnsResponder,
+  watchVenueNameInSetup,
+  type MdnsResponder,
+  type MdnsSocket,
+} from "./mdns.js";
+import type { MdnsQuerySocket } from "./box-lookup.js";
+import { ownInterfaceAddresses } from "./request-from-box.js";
+import { BOX_HOSTNAME, boxHostnameFor } from "./box-name.js";
 import { startMenuActivation } from "./menu-activation.js";
 import { buildReachInfo, listBoxIpv4 } from "./box-reach.js";
 import { readBoxCaFingerprint } from "./box-tls-repair.js";
@@ -488,16 +496,6 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  * SECRETS.
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
-
-/**
- * The box's mDNS hostname: the name the responder answers for, discovery advertises and the leaf's
- * SANs cover must agree, or the trust flow hits a certificate-hostname mismatch.
- *
- * Copies outside this process (the image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`,
- * compose's defaults, `waitron.sh`'s QR URL) are pinned to this line, read as text, by
- * `scripts/deploy-image-env.test.ts`.
- */
-export const BOX_HOSTNAME = "waitron.local";
 
 /** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
 export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
@@ -978,6 +976,12 @@ export interface StartServerSeams {
    * carry-on request counts as reaching it over HTTPS (tests serve plain HTTP).
    */
   waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
+  /** The mDNS responder's socket; unset, the real multicast one. */
+  mdnsSocket?: () => MdnsSocket;
+  /** The socket the setup start asks whether another box answers `waitron.local`. */
+  mdnsQuerySocket?: () => MdnsQuerySocket;
+  /** Draws the setup start's delay between those asks; unset, `Math.random`. */
+  setupAskRandom?: () => number;
 }
 
 /**
@@ -1635,14 +1639,30 @@ async function bootServer(
     const tls = config.tls ?? { certFile: ensured.certFile, keyFile: ensured.keyFile };
     const server = startListening({ ...config, tls }, app, now, log);
     undoOnFailure.push(() => closeListener(server));
-    const mdns = startMdnsResponder({
+    const venueName = watchVenueNameInSetup({
       hostname: BOX_HOSTNAME,
+      devMode: config.devMode,
+      httpHost: config.httpHost,
+      random: seams.setupAskRandom ?? Math.random,
+      makeSocket: seams.mdnsQuerySocket,
+      ownAddresses: () => [...ownInterfaceAddresses(), ...(config.boxAddresses ?? [])],
+    });
+    undoOnFailure.push(() => venueName.stop());
+    const responder = startMdnsResponder({
+      names: venueName.names,
+      makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
       getAddresses: boxAddresses,
       log,
     });
-    undoOnFailure.push(() => mdns.stop());
+    undoOnFailure.push(() => responder.stop());
+    const mdns: MdnsResponder = {
+      stop: async () => {
+        await venueName.stop();
+        await responder.stop();
+      },
+    };
     return makeStartedServer(
       server,
       health,
@@ -1678,6 +1698,9 @@ async function bootServer(
   // every boot retries that step. `finish-adoption.ts`'s `PendingAdoption` header says why none can
   // complete it today. In this mode boot serves `/health` and a minimal `/api/box/status`, and reads
   // no deployment axes or membership.
+  const ownHostname = boxHostnameFor(config.node.nodeId);
+  const ownNameOnly: readonly string[] = [ownHostname];
+  const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
@@ -1697,7 +1720,8 @@ async function bootServer(
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
-      hostname: BOX_HOSTNAME,
+      names: () => ownNameOnly,
+      makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
       getAddresses: boxAddresses,
@@ -1779,7 +1803,8 @@ async function bootServer(
         const server = startTradingListener(config, restrictedApp, now, log);
         undoOnFailure.push(() => closeListener(server));
         const mdns = startMdnsResponder({
-          hostname: BOX_HOSTNAME,
+          names: () => ownNameOnly,
+          makeSocket: seams.mdnsSocket,
           devMode: config.devMode,
           httpHost: config.httpHost,
           getAddresses: boxAddresses,
@@ -1876,10 +1901,11 @@ async function bootServer(
         node: store.node,
         recheck: checkPeers,
         intervalMs: seams.waitingStart?.intervalMs ?? WAIT_RECHECK_MS,
-        listen: (waitingApp) => {
+        listen: (waitingApp, steppingDown) => {
           const server = startTradingListener(config, waitingApp, now, log);
           const mdns = startMdnsResponder({
-            hostname: BOX_HOSTNAME,
+            names: () => (steppingDown() ? ownNameOnly : ownAndVenueNames),
+            makeSocket: seams.mdnsSocket,
             devMode: config.devMode,
             httpHost: config.httpHost,
             getAddresses: boxAddresses,
@@ -1989,7 +2015,7 @@ async function bootServer(
         node: store.node,
         ring,
         nodeId: config.node.nodeId,
-        contactUrl: config.advertisedOrigin,
+        advertisedOrigin: config.advertisedOrigin,
         hostnames: BOX_LEAF_HOSTNAMES,
         listIpv4: boxAddresses,
         now,
@@ -1997,6 +2023,7 @@ async function bootServer(
         pointerTerm: () => readBucketPointerTerm(db, ring),
       });
   const isSingletonPrimary = holders.singletonRole.current === "primary";
+  const acceptingSales = isSingletonPrimary && !fencedOrMirror;
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
   // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
   const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
@@ -2346,7 +2373,7 @@ async function bootServer(
     app,
     {
       nodeId: tradingContext.nodeId,
-      acceptingSales: isSingletonPrimary && !fencedOrMirror,
+      acceptingSales,
       readTradingAdmission: () => tradingAdmission.snapshot(),
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
@@ -3414,6 +3441,7 @@ async function bootServer(
         // Staff access carries no standby protocol; adoption remains refused without a relay.
         relayUrl: undefined,
         boxHostname: BOX_HOSTNAME,
+        advertisedOrigin: config.advertisedOrigin,
         designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
@@ -3796,7 +3824,9 @@ async function bootServer(
   });
 
   const mdns = startMdnsResponder({
-    hostname: BOX_HOSTNAME,
+    // A stepdown closes the gate while admitted requests drain; tills must stop finding it then.
+    names: () => (acceptingSales && !handoverGate.isClosed() ? ownAndVenueNames : ownNameOnly),
+    makeSocket: seams.mdnsSocket,
     devMode: config.devMode,
     httpHost: config.httpHost,
     getAddresses: boxAddresses,
