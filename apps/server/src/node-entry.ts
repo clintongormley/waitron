@@ -34,6 +34,7 @@ import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
 import { withRecoveryLock } from "./recovery-lock.js";
+import { finishTlsInstall } from "./box-tls-install.js";
 import {
   afterFailure,
   cleared,
@@ -369,6 +370,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       statfs: deps.statfs,
     },
   );
+  await finishTlsInstall(admission.roots.stateDir);
   const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
   const transportPort = httpPortFrom(transportEnv);
   const transport: RecoveryServeOptions = {

@@ -46,7 +46,7 @@ export interface InstallVenueAuthorityDeps {
  * Makes `authority`, and a leaf it signs for `hostnames`, this box's own `tls/` set. The four files
  * are written under working names, then `install.json` lists them, then each is moved into place,
  * then the list goes: a stop before the list leaves the old set whole, and a stop after it is
- * finished by {@link finishTlsInstall} at the next start.
+ * finished by {@link finishTlsInstall} at the next start, before that start reads `tls/`.
  */
 export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Promise<void> {
   const leaf = reissueServerLeaf({
@@ -81,8 +81,9 @@ export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Pr
 }
 
 /**
- * Run at every start before anything reads `tls/`: moves into place what a listed install left,
- * or deletes working files no list names.
+ * Moves into place what a listed install left, or deletes working files no list names. `runEntry`,
+ * `startServerOrFirstSetupResolution` and `bootServer` each call it before they first read
+ * `tls/`, so the entries' connection check sees a whole set.
  */
 export async function finishTlsInstall(
   stateDir: string,

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
 import { loadBoxEnv } from "./box-env.js";
+import { finishTlsInstall } from "./box-tls-install.js";
 import { isUnset } from "./env-value.js";
 import { createLogger } from "./logger.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
@@ -99,6 +100,7 @@ export async function startServerOrFirstSetupResolution(
       requestRestart,
       log,
     );
+    await finishTlsInstall(admission.roots.stateDir);
     const effectiveEnv = await loadBoxEnv(env, admission.roots.stateDir);
     const port = httpPortFrom(effectiveEnv);
     const options: RecoveryServeOptions = {
