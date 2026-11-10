@@ -458,6 +458,19 @@ describe("releaseReminder (pure; D11)", () => {
     ).toEqual({ groupId: "g3", dueAt: T(15) });
   });
 
+  it("At once is due at the latest served time with no extra minutes", () => {
+    expect(
+      releaseReminder(
+        [fired("g1"), fired("g2"), held("g3")],
+        [
+          { groupId: "g1", servedAt: T(0) },
+          { groupId: "g2", servedAt: T(5) },
+        ],
+        0,
+      ),
+    ).toEqual({ groupId: "g3", dueAt: T(5) });
+  });
+
   it("has no time while a dish line of an earlier fired group is unserved", () => {
     expect(
       releaseReminder(

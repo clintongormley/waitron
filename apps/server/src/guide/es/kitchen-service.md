@@ -400,8 +400,9 @@ preparación. En una estación o en el pase, lee la copia que acompaña a cada p
 no abren el editor de alergias de la mesa. En la estación, confirma las correcciones.
 
 Un grupo en espera vence unos minutos después de que se hayan servido los platos marchados antes
-que él. Cada departamento fija esos minutos, o desactiva el aviso, en **Cursos y cocina**, en su
-pestaña **Servicio** del panel.
+que él. Fija el tiempo en **Cursos y cocina**, en la pestaña **Servicio** del departamento en el
+panel. Elige **Al momento** para recibir el aviso en cuanto se hayan servido esos platos, o
+**Deshabilitado** para desactivarlo.
 
 ## Haz que una estación espere al pase {#station-waits}
 

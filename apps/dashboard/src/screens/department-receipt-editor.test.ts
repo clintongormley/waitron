@@ -156,6 +156,26 @@ it("puts a server refusal beside its translated field and keeps the retry enable
   expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
   expect(receiptSave(el).disabled).toBe(false);
 });
+it.each([undefined, "unknown", "email"])(
+  "notifies the host only when a refused field is not shown (%s)",
+  async (field) => {
+    const api = receiptApi();
+    api.putDepartmentReceipt.mockRejectedValue({
+      code: "receipt.invalid",
+      params: field === undefined ? {} : { field },
+    });
+    const { el } = await mountReceiptEditor(api);
+    const refused = vi.fn();
+    el.addEventListener("department-receipt-refused", refused);
+    await editReceipt(el, "email", "new@example.com");
+    await clickReceiptSave(el);
+    await expect.poll(() => el.saving).toBe(false);
+    await el.updateComplete;
+    expect(refused).toHaveBeenCalledTimes(field === "email" ? 0 : 1);
+    if (field !== "email")
+      expect((refused.mock.calls[0]![0] as CustomEvent).detail).toEqual({ departmentId: "bar" });
+  },
+);
 it("stale preview success and failure cannot replace the latest draft's paper", async () => {
   const api = receiptApi();
   const first = deferred<ReturnType<typeof preview>>();

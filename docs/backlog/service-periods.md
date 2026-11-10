@@ -448,25 +448,12 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
 
 ## Bundle: Department dialog
 
-6 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S.
 
-- **A1070. The department dialog's Transfers panel heading is an `h2`, the dialog title's level,
-  beside Service's `h3` sections** — an existing accessibility check selects `h2` (left open by
-  #1852, A756).
-- **A1071. Offer "At once" (0 minutes) in each department's reminder**, as A773 §3.4 decided
-  (owner, 2026-10-17); the list offers Off and 5–30 minutes and the save refuses 0
-  (`requireReleaseReminderMinutes`, `packages/venue-service/src/routes.ts`). Left open by A756 PR 4.
-- **A1072. A chosen "Off" in the department reminder looks unset.** Off is the empty value, which
-  `wt-combobox` draws as a placeholder, grey and italic, without `show-empty-option`
-  (`packages/ui/src/components/wt-combobox.ts:508`, `:159-162`, `:1047`). Left open by A756 PR 4.
 - **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
   A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
   column draws blank cells. Owner to decide whether it goes
   (`packages/venue-service/src/dashboard/departments-list.ts`).
-- **A receipt refusal that names no field, arriving while another tab of the department dialog
-  shows, brings nothing back** (left by #1858): it appears only in the receipt editor's own error
-  line on the hidden Receipts tab. A refusal naming a field already brings Receipts back and focuses
-  the field.
 - **A per-field department policy repair changes the trading-name default.**
   [Detail](service-periods.md#a-per-field-department-policy-repair-changes-the-trading-name-default)
 

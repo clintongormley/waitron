@@ -559,6 +559,7 @@ const en = {
   "venue.readiness.zone_menu_unpublished": "needs an active, published menu.",
   "venue.release_reminder": "Remind to fire the next course after",
   "venue.release_reminder.off": "Off",
+  "venue.release_reminder.at_once": "At once",
   "venue.release_reminder.minutes": "{n} minutes",
   "venue.release_reminder_hint":
     "Counted from when every group fired before the next held group has been marked served. Staff can snooze it from the table.",
@@ -1484,6 +1485,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.readiness.zone_menu_unpublished": "necesita una carta activa y publicada.",
   "venue.release_reminder": "Avisar para marchar el siguiente curso tras",
   "venue.release_reminder.off": "Deshabilitado",
+  "venue.release_reminder.at_once": "Al momento",
   "venue.release_reminder.minutes": "{n} minutos",
   "venue.release_reminder_hint":
     "Se cuenta desde que cada grupo marchado antes del siguiente grupo en espera se ha marcado como servido. El personal puede posponerlo desde la mesa.",

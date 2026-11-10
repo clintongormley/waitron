@@ -200,6 +200,53 @@ it("a receipt refusal naming a field that lands while Details shows returns to R
     replace.mockRestore();
   }
 });
+it("a fieldless receipt refusal returns from Details without marking a field, replaces the address and focuses Save", async () => {
+  const held = deferred<Response>();
+  const { app, editor } = await mountReceiptTab({
+    respond: (path, init) =>
+      path.endsWith("/bar/receipt") && init.method === "PUT" ? held.promise : undefined,
+  });
+  await editReceipt(editor, "email", "new@example.com");
+  await userEvent.click(page.elementLocator(receiptSave(editor)));
+  await expect.poll(() => editor.saving).toBe(true);
+  await showDepartmentTab(app, "details");
+  await expect.poll(() => location.pathname).toBe("/manage/venue-operations/department/bar");
+  const form = departmentForm(app)!;
+  const push = vi.spyOn(history, "pushState");
+  const replace = vi.spyOn(history, "replaceState");
+  try {
+    held.resolve(
+      new Response(JSON.stringify({ error: { code: "server.internal" } }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await expect.poll(() => form.tab).toBe("receipt");
+    await expect
+      .poll(() => location.pathname)
+      .toBe("/manage/venue-operations/department/bar/view/receipt");
+    expect(push).not.toHaveBeenCalled();
+    expect(
+      replace.mock.calls.some(([, , url]) => String(url).includes("/department/bar/view/receipt")),
+    ).toBe(true);
+    const strip = form.shadowRoot!.querySelector("wt-tabs")!;
+    await strip.updateComplete;
+    expect(strip.items.find(({ key }) => key === "receipt")!.marked).toBeUndefined();
+    expect(editor.invalid).toBe(false);
+    const actions = receiptRoot(editor).querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.error).toBe("Something went wrong, try again");
+    expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+      actions.error,
+    );
+    const save = receiptSave(editor);
+    await expect.poll(() => receiptRoot(editor).activeElement).toBe(save);
+    expect(save.shadowRoot!.activeElement).toBe(save.shadowRoot!.querySelector("button"));
+  } finally {
+    push.mockRestore();
+    replace.mockRestore();
+  }
+});
 it("a receipt refusal naming a field that lands while Receipts shows changes no tab or address", async () => {
   const held = deferred<Response>();
   const { app, editor } = await mountReceiptTab({

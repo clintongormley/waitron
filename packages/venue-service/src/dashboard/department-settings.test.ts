@@ -1662,12 +1662,13 @@ it("gives the reminder dropdown its search, Off and its hint", async () => {
     control.shadowRoot!.querySelector(".trigger .value")!.classList.contains("placeholder"),
   ).toBe(false);
 });
-it("offers Off and 5 to 30 minutes, and keeps a stored value the list does not offer", async () => {
+it("offers Off, At once and 5 to 30 minutes, and keeps a stored value the list does not offer", async () => {
   const { el } = await mount(reminderView(7));
   const control = reminder(el);
   await control.updateComplete;
   expect(control.options.map((option) => option.value)).toEqual([
     "",
+    "0",
     "5",
     "7",
     "10",
@@ -1677,6 +1678,7 @@ it("offers Off and 5 to 30 minutes, and keeps a stored value the list does not o
   ]);
   expect(control.options.map((option) => option.label)).toEqual([
     "Off",
+    "At once",
     "5 minutes",
     "7 minutes",
     "10 minutes",
@@ -1694,6 +1696,7 @@ it("keeps offering a saved value the list does not offer after another is picked
   await reminder(el).updateComplete;
   expect(reminder(el).options.map((option) => option.value)).toEqual([
     "",
+    "0",
     "5",
     "7",
     "10",
@@ -1718,6 +1721,7 @@ it("offers both the saved value and an unsaved one the list does not offer", asy
   expect(reminder(el).value).toBe("10");
   expect(reminder(el).options.map((option) => option.value)).toEqual([
     "",
+    "0",
     "5",
     "10",
     "15",
@@ -1726,28 +1730,30 @@ it("offers both the saved value and an unsaved one the list does not offer", asy
     "30",
   ]);
 });
-it("opens quiet on a department with stored minutes", async () => {
-  const { el } = await mount(reminderView(25));
+it.each([0, 25])("opens quiet on a department with %s stored minutes", async (minutes) => {
+  const { el } = await mount(reminderView(minutes));
   await selectDepartmentTab(el, "service");
-  expect(reminder(el).value).toBe("25");
+  expect(reminder(el).value).toBe(String(minutes));
   expect(save(el).disabled).toBe(true);
   expect(save(el).variant).toBe("secondary");
 });
-it("choosing 20 enables Save and saves it with the department", async () => {
+it.each([0, 20])("choosing %s enables Save and saves it with the department", async (minutes) => {
   const { el, writes } = await mount();
   await selectDepartmentTab(el, "service");
   expect(save(el).disabled).toBe(true);
   expect(save(el).variant).toBe("secondary");
-  await chooseReminder(el, "20");
+  await chooseReminder(el, String(minutes));
   expect(save(el).disabled).toBe(false);
   expect(save(el).variant).toBe("primary");
   save(el).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]!.path).toBe("/management-api/venue-service/departments/d1/settings");
-  expect(writes[0]!.body).toMatchObject({ releaseReminderMinutes: 20 });
+  expect(writes[0]!.body).toMatchObject({ releaseReminderMinutes: minutes });
   await expect.poll(() => save(el).disabled).toBe(true);
-  el.model = reminderView(20);
+  el.model = reminderView(minutes);
   await el.updateComplete;
+  await reminder(el).updateComplete;
+  expect(shownText(reminder(el))).toBe(minutes === 0 ? "At once" : "20 minutes");
   await chooseReminder(el, "");
   expect(save(el).disabled).toBe(false);
   save(el).click();
@@ -1832,6 +1838,7 @@ it("reads the reminder in Spanish", async () => {
   expect(control.label).toBe("Avisar para marchar el siguiente curso tras");
   expect(control.options.map((option) => option.label)).toEqual([
     "Deshabilitado",
+    "Al momento",
     "5 minutos",
     "10 minutos",
     "15 minutos",

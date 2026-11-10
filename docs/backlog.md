@@ -621,7 +621,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Service periods, opening hours and departments
 
-- **Department dialog** (bundle of 6, 1 important, size S). Holds A1070, A1071, A1072. [Detail](backlog/service-periods.md#bundle-department-dialog)
+- **Department dialog** (bundle of 2, 1 important, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
 

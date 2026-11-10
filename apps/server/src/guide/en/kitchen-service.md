@@ -364,8 +364,9 @@ station or the pass, read the copy already attached to each dish. The kitchen sc
 the table's allergy editor. At the station, acknowledge any corrections.
 
 A held group falls due a set number of minutes after the dishes fired before it have been
-served. Each department sets those minutes, or turns the reminder off, under **Courses and the
-kitchen** on its **Service** tab in the dashboard.
+served. Set the delay under **Courses and the kitchen** on the department’s **Service** tab
+in the dashboard. Choose **At once** to remind you as soon as those dishes are served, or **Off**
+to turn the reminder off.
 
 ## Make a station wait for the pass {#station-waits}
 
