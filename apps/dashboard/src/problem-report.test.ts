@@ -56,6 +56,27 @@ it("hides the reporting entry when the browser has no secure context", async () 
   expect(el.shadowRoot!.querySelector("[data-report-problem]")).toBeNull();
 });
 
+it("keeps a compact entry named while hiding its text label", async () => {
+  setLocale("en-GB");
+  const { el } = await mountWidget<HTMLElement & { updateComplete: Promise<boolean> }>(
+    "dashboard-problem-report",
+    {},
+  );
+  Object.assign(el, { compact: true });
+  await el.updateComplete;
+  const trigger = el.shadowRoot!.querySelector<WtButton>("[data-report-problem]")!;
+  await trigger.updateComplete;
+  await expect
+    .element(trigger.shadowRoot!.querySelector("button")!)
+    .toHaveAccessibleName("Report a problem");
+  expect(trigger.title).toBe("Report a problem");
+  expect(trigger.querySelector("wt-icon")).not.toBeNull();
+  const label = trigger.querySelector<HTMLElement>(".trigger-label")!;
+  expect(getComputedStyle(label).display).toBe("none");
+  expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+  expect(trigger.getBoundingClientRect().width).toBe(trigger.getBoundingClientRect().height);
+});
+
 it.each([false, true])(
   "opens the report from the real dashboard banner (signed in=%s)",
   async (signedIn) => {

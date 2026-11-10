@@ -28,7 +28,7 @@ export class WtReportDialog extends LitElement {
         margin: 0 0 var(--wt-space-3);
       }
       pre {
-        white-space: pre-wrap;
+        text-wrap: wrap;
         overflow-wrap: anywhere;
         padding: var(--wt-space-3);
         border-radius: var(--wt-radius-md);

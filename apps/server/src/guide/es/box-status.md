@@ -14,6 +14,8 @@ incluye la actividad reciente de este navegador, en lugar del registro del equip
 nada ni se guarda en el equipo. No incluyas contraseñas, datos de pago ni información personal
 en tu descripción.
 
+En un móvil, usa el botón con un bocadillo de diálogo y una exclamación.
+
 Abre **Ajustes → Estado del equipo**, justo encima de **Diagnóstico**. Solo la ven las personas
 que pueden gestionar el sistema.
 

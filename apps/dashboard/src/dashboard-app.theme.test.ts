@@ -177,6 +177,7 @@ it("signed out, puts the theme chooser in the banner just before the language ch
   const { el } = await mountApp(stubApi("en-GB"));
   const actions = q(el, ".banner-actions")!;
   expect([...actions.children].map((child) => child.getAttribute("data-test"))).toEqual([
+    "problem-report",
     "theme-chooser",
     "language-chooser",
   ]);

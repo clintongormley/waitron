@@ -117,6 +117,7 @@ test("paints its read-only preview from tokens", async () => {
   el.style.setProperty("--wt-color-surface-sunken", "rgb(1, 2, 3)");
   el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
   const preview = getComputedStyle(el.shadowRoot!.querySelector("pre")!);
+  expect(preview.whiteSpace).toBe("pre-wrap");
   expect(preview.paddingTop).toBe("13px");
   expect(preview.backgroundColor).toBe("rgb(1, 2, 3)");
   expect(preview.color).toBe("rgb(4, 5, 6)");

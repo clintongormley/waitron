@@ -4818,6 +4818,10 @@ New primitives require an axe test covering every meaningfully distinct accessib
 
 ## Adding a primitive
 
+For a `<pre>` preview, set wrapping with `text-wrap: wrap`. The UI colour guard reads CSS as text
+and mistakes the property name `white-space` for a colour. The report dialog's computed-style
+test pins `pre-wrap`, so replacing the shorthand keeps whitespace preservation checked.
+
 1. Write the test first, in a real browser. Include a test proving it paints from a token — set
    the token on the `host` (see Testing, above) and assert the computed style changes. A component
    that renders correctly but ignores tokens is not a primitive.
