@@ -1111,7 +1111,7 @@ tests. Media still validates required image names and translates its refusal to
 
 ## Bundle: After A760 moves the bundle format: An import checks rows as a save does
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S.
 
 - **Loose ends left by A380 (#1385).** A configuration import stores a fixed folder name as given,
   spaces included, where a save through the dialog or the route trims it.
@@ -1125,7 +1125,7 @@ tests. Media still validates required image names and translates its refusal to
   in `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
   category that the effective category and the editor's read then ignore.
 - **A1074. A configuration import does not range-check a department's reminder minutes**, so a
-  file could store 0, a negative number or 999; only the department save refuses them. Left open
+  file could store a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
 
 ## Bundle: Tabs selected visible

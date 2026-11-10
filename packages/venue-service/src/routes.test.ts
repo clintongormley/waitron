@@ -713,7 +713,7 @@ describe("whole service settings saves", () => {
 
   it("saves a department's reminder and lists it in the model", async () => {
     const fx = await settingsFixture();
-    for (const releaseReminderMinutes of [15, null, 120]) {
+    for (const releaseReminderMinutes of [0, 15, null, 120]) {
       const saved = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
         ...departmentSettings,
         releaseReminderMinutes,
@@ -740,9 +740,9 @@ describe("whole service settings saves", () => {
     expect((await reminderMinutes(fx))[fx.departmentId]).toBe(15);
   });
 
-  it("refuses a reminder outside whole minutes 1 to 120 or null, naming it, and writes nothing", async () => {
+  it("refuses a reminder outside whole minutes 0 to 120 or null, naming it, and writes nothing", async () => {
     const fx = await settingsFixture();
-    for (const releaseReminderMinutes of [0, -5, 121, 2.5, "10", true, [10]]) {
+    for (const releaseReminderMinutes of [-5, 121, 2.5, "10", true, [10]]) {
       const before = await rawSettingsSnapshot();
       const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
         ...departmentSettings,

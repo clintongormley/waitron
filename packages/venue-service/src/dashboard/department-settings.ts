@@ -60,7 +60,7 @@ interface ReceiptEditor {
 type DepartmentDraft = Omit<DepartmentSettingsInput, "serviceSteps"> & {
   serviceSteps: ServiceStepDraft[];
 };
-const REMINDER_MINUTES = [5, 10, 15, 20, 30];
+const REMINDER_MINUTES = [0, 5, 10, 15, 20, 30];
 type Field = keyof DepartmentDraft | "receivingProfileId" | "destinationDepartmentIds";
 const fieldTab: Record<Field, DepartmentTab> = {
   name: "details",
@@ -265,6 +265,14 @@ export class DepartmentSettings extends LitElement {
     if (event.detail?.departmentId !== this.departmentId) return;
     this.requestUpdate();
     if (event.detail.invalid && this.tab !== "receipt") this.showFirstInvalid(new Set(["receipt"]));
+  }
+  private async receiptRefused(event: CustomEvent<{ departmentId?: string }>) {
+    event.stopPropagation();
+    if (event.detail?.departmentId !== this.departmentId) return;
+    const editor = event.target as HTMLElement;
+    if (this.tab !== "receipt") this.selectTab("receipt", true);
+    await this.updateComplete;
+    editor.shadowRoot?.querySelector<HTMLElement>("[data-test=save-receipt]")?.focus();
   }
   protected override willUpdate() {
     if (!this.offeredTabs.includes(this.tab)) this.tab = "details";
@@ -513,14 +521,17 @@ export class DepartmentSettings extends LitElement {
       label=${t("venue.release_reminder")}
       hint=${t("venue.release_reminder_hint")}
       search="auto"
-      placeholder=${t("venue.release_reminder.off")}
+      show-empty-option
       searchPlaceholder=${t("venue.combobox_search")}
       noResultsLabel=${t("venue.combobox_no_results")}
       .options=${[
         { value: "", label: t("venue.release_reminder.off") },
         ...choices.map((choice) => ({
           value: String(choice),
-          label: t("venue.release_reminder.minutes").replace("{n}", String(choice)),
+          label:
+            choice === 0
+              ? t("venue.release_reminder.at_once")
+              : t("venue.release_reminder.minutes").replace("{n}", String(choice)),
         })),
       ]}
       .value=${minutes === null ? "" : String(minutes)}
@@ -944,6 +955,7 @@ export class DepartmentSettings extends LitElement {
                 class="panel receipt"
                 slot="receipt"
                 @department-receipt-invalid=${this.receiptInvalid}
+                @department-receipt-refused=${this.receiptRefused}
               >
                 ${this.receiptEditor}
               </div>`
@@ -953,7 +965,7 @@ export class DepartmentSettings extends LitElement {
           this.showsTransfers
             ? html`<div class="panel" slot="transfers" @keydown=${this.submitOnEnter}>
                 <section data-test="transfers-section" aria-label=${t("venue.tab_transfers")}>
-                  <h2>${t("venue.tab_transfers")}</h2>
+                  <h3>${t("venue.tab_transfers")}</h3>
                   ${
                     this.transferFailure
                       ? html`<p class="error" data-test="transfers-load-error" role="alert">

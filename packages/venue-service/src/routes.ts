@@ -272,7 +272,7 @@ function requireReleaseReminderMinutes(value: unknown): number | null {
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||
-    value < 1 ||
+    value < 0 ||
     value > MAX_RELEASE_REMINDER_MINUTES
   ) {
     throw new AppError("management.request_invalid", { field: "releaseReminderMinutes" });

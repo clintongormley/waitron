@@ -214,7 +214,8 @@ export class DepartmentReceiptEditor extends LitElement {
       | "department-receipt-saved"
       | "department-receipt-cancel"
       | "department-receipt-closed"
-      | "department-receipt-invalid",
+      | "department-receipt-invalid"
+      | "department-receipt-refused",
     departmentId = this.department?.id,
     detail: { invalid?: boolean } = {},
   ): void {
@@ -553,6 +554,7 @@ export class DepartmentReceiptEditor extends LitElement {
         this.errors = { [key]: sentence };
       else this.actionError = sentence;
       await this.updateComplete;
+      if (this.actionError) this.#notify("department-receipt-refused");
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }

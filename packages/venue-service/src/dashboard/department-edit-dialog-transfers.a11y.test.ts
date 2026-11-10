@@ -160,7 +160,11 @@ describe.each(["light", "dark"] as const)("department-edit-dialog %s", (theme) =
       await expect
         .poll(() => settings.shadowRoot!.querySelector("[name=receivingProfileId]"))
         .not.toBeNull();
-    if (state === "transfers") await selectDepartmentTab(settings, "transfers");
+    if (state === "transfers") {
+      await selectDepartmentTab(settings, "transfers");
+      const section = settings.shadowRoot!.querySelector("[data-test=transfers-section]")!;
+      expect(section.querySelector("h3")?.textContent).toBe(section.getAttribute("aria-label"));
+    }
     if (state === "refusal") {
       settings.shadowRoot!.querySelector("[name=name]")!.dispatchEvent(
         new CustomEvent("wt-change", {

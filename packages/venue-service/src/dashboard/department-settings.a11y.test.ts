@@ -345,7 +345,7 @@ describe.each(["light", "dark"] as const)("Settings transfers bounds (%s)", (the
         section.querySelector<HTMLInputElement>("[name=transferDestination-d2]")!.checked,
       ).toBe(true);
       expect(section.querySelector("wt-combobox")!.value).toBe("p1");
-      expect(section.querySelector("h2")!.textContent).toBe(
+      expect(section.querySelector("h3")!.textContent).toBe(
         locale === "en" ? "Tab transfers" : "Traslados de cuentas",
       );
       await expectNoA11yViolations(host);
