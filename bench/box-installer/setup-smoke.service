@@ -2,6 +2,7 @@
 Description=Waitron development recipe rehearsal
 Wants=docker.service NetworkManager.service
 After=docker.service NetworkManager.service
+FailureAction=poweroff-force
 
 [Service]
 Type=oneshot

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
@@ -46,6 +46,40 @@ describe("recipe boot evidence", () => {
     }
   });
 
+  it("identifies a guest that exits before the preload success marker", () => {
+    const root = mkdtempSync(join(tmpdir(), "b3-guest-exit-"));
+    try {
+      writeFileSync(join(root, "uuid"), expected.uuid);
+      const qemu = join(root, "qemu-system-x86_64");
+      writeFileSync(qemu, "#!/bin/sh\nsleep 0.1\nexit 0\n");
+      chmodSync(qemu, 0o700);
+      const result = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(new URL("../../bench/box-installer/run.mjs", import.meta.url)),
+          "--case",
+          "recipe-setup",
+          "--run-dir",
+          join(root, "check"),
+        ],
+        {
+          env: {
+            ...process.env,
+            PATH: `${root}:${process.env.PATH}`,
+            B3_POPULATE: "1",
+            B3_RECIPE_IMAGE: join(root, "image"),
+          },
+          encoding: "utf8",
+          timeout: 5000,
+        },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("guest exited before B3_PRELOAD_OK");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("accepts the built root serving fresh setup with all embedded services", async () => {
     await expect(
       import("./recipe-setup.mjs").then(({ recipeFailures }) => recipeFailures(expected, complete)),
@@ -57,7 +91,7 @@ describe("recipe boot evidence", () => {
     ["a changed input", { hashBefore: "different" }, ["artifact"]],
     ["persistent boot writes", { hashAfter: "different" }, ["artifact"]],
     [
-      "an absent inventory",
+      "an absent guest image report",
       { images: undefined },
       ["image:app", "image:print-agent", "image:mailpit"],
     ],

@@ -722,7 +722,10 @@ and the real screen, network and disk adapters come with the Linux pull request.
   time, is ignored. The decisions name the network to join but never carry its password, which stays with
   the adapter. The waits are in `NETWORK_TIMINGS_MS`.
 
-The development recipe and `recipe-setup` rig case now run through TCG emulation on this Mac.
+The development recipe and `recipe-setup` rig case were run through TCG emulation on an arm64
+Mac with Docker Desktop on 2026-11-10. The entry point implements only that case; the other
+declared rig cases still need their runners. Firmware/TPM checks still need an appropriate
+Linux/KVM/OVMF/swtpm environment or the hardware.
 Still waiting for the installed-root and firmware/TPM work: encrypted recipe/dracut integration,
 firmware disk fixtures and the real observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
 refuse); the root-owned

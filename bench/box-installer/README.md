@@ -59,7 +59,8 @@ against `docker save` inside the guest. Docker and containerd data are embedded 
 the ext4 root. The acceptance boot uses QEMU’s temporary writes, checks that the
 base image hash stays unchanged, verifies the mounted UUID, embedded images and
 three running services, and renders setup over a loopback-only port forward. Guest
-outbound networking is restricted. Screenshots, serial output, status and the CA
+outbound networking is restricted. Screenshots, serial output (including the last 100 Docker log lines per service), status,
+a timing receipt and the CA
 fingerprint are retained in the check directory. The throwaway browser ignores
 certificate errors for rendering; this does not qualify certificate trust.
 

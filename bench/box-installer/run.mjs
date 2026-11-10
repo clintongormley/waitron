@@ -13,6 +13,7 @@ import { parseRigArgs } from "../../scripts/box/rig-contract.mjs";
 import { recipeFailures } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
+const started = Date.now();
 if (caseName !== "recipe-setup") throw new Error("Only recipe-setup is implemented here");
 const imageArgument = process.env.B3_RECIPE_IMAGE;
 if (imageArgument === undefined || imageArgument === "")
@@ -60,10 +61,12 @@ const smoke = `set -euxo pipefail
 cd /opt/waitron
 docker compose up -d --pull never
 for attempt in $(seq 1 90); do
- if curl -kfsS https://127.0.0.1/setup-api/status >/tmp/status.json; then break; fi
+ if code=$(curl -kfsS -w "%{http_code}" -o /tmp/status.json https://127.0.0.1/setup-api/status) && [ "$code" = 200 ]; then break; fi
  sleep 1
 done
+test "$code" = 200
 test -s /tmp/status.json
+echo B3_HTTP_STATUS:$code
 echo B3_STATUS:$(cat /tmp/status.json)
 echo B3_UUID:$(findmnt -n -o UUID /)
 echo B3_SERVICES:$(docker inspect $(docker compose ps -q) | jq -c 'map({key:.Config.Labels["com.docker.compose.service"],value:.State.Status})|from_entries')
@@ -73,6 +76,8 @@ for name in app print-agent mailpit; do
  jq -cn --arg name "$name" --arg id "$id" '{name:$name,id:$id}'
 done | jq -sc 'map({key:.name,value:.id})|from_entries' >/tmp/images.json
 echo B3_IMAGES:$(cat /tmp/images.json)
+echo B3_DOCKER_LOGS
+docker compose logs --no-color --tail 100
 echo B3_SETUP_READY
 sleep infinity
 `;
@@ -132,7 +137,10 @@ const ready = new Promise((resolveReady, reject) => {
     });
   child.on("error", reject);
   child.on("exit", (code, signal) => {
-    if (!hasMarker()) reject(new Error(`guest exited: ${code}/${signal}`));
+    if (!hasMarker())
+      reject(
+        error ?? new Error(`guest exited before ${marker}: ${code}/${signal}; see serial.log`),
+      );
   });
 });
 const timer = setTimeout(() => {
@@ -210,4 +218,8 @@ try {
   await stopped;
   clearTimeout(force);
   await writeFile(join(runDir, "serial.log"), serial);
+  await writeFile(
+    join(runDir, "timing.json"),
+    JSON.stringify({ started, elapsedMs: Date.now() - started }),
+  );
 }
