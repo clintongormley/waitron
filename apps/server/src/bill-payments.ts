@@ -1421,7 +1421,11 @@ export async function completeBillPayment(
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [pending] = await tx
-    .select({ applied: billPayments.applied, workingOrderId: billPayments.workingOrderId })
+    .select({
+      applied: billPayments.applied,
+      workingOrderId: billPayments.workingOrderId,
+      method: billPayments.method,
+    })
     .from(billPayments)
     .where(eq(billPayments.id, billPaymentId));
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
@@ -1430,19 +1434,24 @@ export async function completeBillPayment(
       ? decimalToCents(decimal(provided.amount))
       : undefined;
   const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
-  const funds = fundsOf(
-    pending!.workingOrderId,
-    await billPaymentTotal(tx, pending!.workingOrderId),
-    await readPaymentMoney(tx, [pending!.workingOrderId]),
-  );
-  const remainingAfter = subtractDecimal(
-    subtractDecimal(funds.total, funds.received),
-    centsToDecimal(applied ?? pending!.applied),
-  );
+  let remainingAfter: number | undefined;
+  if (pending!.method === "card") {
+    const funds = fundsOf(
+      pending!.workingOrderId,
+      await billPaymentTotal(tx, pending!.workingOrderId),
+      await readPaymentMoney(tx, [pending!.workingOrderId]),
+    );
+    remainingAfter = decimalToCents(
+      subtractDecimal(
+        subtractDecimal(funds.total, funds.received),
+        centsToDecimal(applied ?? pending!.applied),
+      ),
+    );
+  }
   const [payment] = await tx
     .update(billPayments)
     .set({
-      remainingAfter: decimalToCents(remainingAfter),
+      remainingAfter,
       applied,
       tip: actual === undefined ? undefined : actual - applied!,
       state: "received",

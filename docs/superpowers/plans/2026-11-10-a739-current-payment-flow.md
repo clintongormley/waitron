@@ -60,4 +60,6 @@ single-bill split have no screen caller, so their invoice-response changes are d
 Their issuance stays as on main. Move dishes and submit/save retain their screen callers.
 Forecasts (added/removed): 7(a) production110/50, tests300/40, support2/1, docs35/3;
 7(b) production350/150, tests1100/1900, support5/1, docs45/5. Each stops at 1.5 times
-its forecast. Receipt Email stays cut 8; slips 3/4 remain owner-held.
+its forecast. Receipt Email stays cut 8.
+
+**10 November 2026 correction:** the owner chose “Memory only (Recommended)” at 16:53 and the watcher released slips 3/4 at 17:38, under the [replacement slip plan](2026-11-10-a739-memory-only-card-slips.md).
