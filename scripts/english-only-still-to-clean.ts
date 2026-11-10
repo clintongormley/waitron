@@ -1033,7 +1033,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/db/src/schema/join-requests.test.ts",
   "packages/db/src/schema/kitchen-courses.test.ts",
   "packages/db/src/schema/kitchen-stations.test.ts",
-  "packages/db/src/schema/location-catalogues.test.ts",
   "packages/db/src/schema/order-group-hold-stations.test.ts",
   "packages/db/src/schema/order-groups.test.ts",
   "packages/db/src/schema/orders.test.ts",

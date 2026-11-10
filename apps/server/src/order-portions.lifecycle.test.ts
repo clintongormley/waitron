@@ -3,13 +3,7 @@ import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
-import {
-  locationCatalogues,
-  parties,
-  ticketItems,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { readVenue, parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -55,14 +49,11 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const [catalogue] = await tx
-        .select({ id: locationCatalogues.catalogueId })
-        .from(locationCatalogues)
-        .where(eq(locationCatalogues.locationId, venue.cfg.locationId));
+      const catalogueId = (await readVenue(tx)).defaultCatalogueId!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            catalogueId: catalogue!.id,
+            catalogueId: catalogueId,
             categoryId: null,
             name,
             customerName: { [venue.cfg.locale]: `${name} (customer)` },
@@ -75,7 +66,7 @@ useVenueDb({
       const burger = await product("Burger", "9.50");
       const ham = (
         await createProduct(tx, {
-          catalogueId: catalogue!.id,
+          catalogueId: catalogueId,
           categoryId: null,
           name: "Ham",
           customerName: { [venue.cfg.locale]: "Ham (customer)" },

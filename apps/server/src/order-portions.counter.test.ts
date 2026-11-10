@@ -6,7 +6,7 @@ import { adjustmentLines, adjustments, createAdjustmentReason } from "@waitron/a
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
   billPaymentLines,
-  locationCatalogues,
+  readVenue,
   orderPortionEvents,
   saleLinePortions,
   saleLines,
@@ -55,14 +55,11 @@ useVenueDb({
   setup: async (db) => {
     venue = await provisionBillVenue(db);
     ids = await inTx(venue, async (tx) => {
-      const [catalogue] = await tx
-        .select({ id: locationCatalogues.catalogueId })
-        .from(locationCatalogues)
-        .where(eq(locationCatalogues.locationId, venue.cfg.locationId));
+      const catalogueId = (await readVenue(tx)).defaultCatalogueId!;
       const product = async (name: string, price: string) =>
         (
           await createProduct(tx, {
-            catalogueId: catalogue!.id,
+            catalogueId: catalogueId,
             categoryId: null,
             name,
             customerName: null,

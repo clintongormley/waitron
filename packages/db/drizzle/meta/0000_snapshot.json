@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d15f95f5-5019-4e97-a496-dfaca228ebe0",
+  "id": "1e926429-a055-4d41-9ed2-e2ab491a1e88",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7123,65 +7123,6 @@
         }
       }
     },
-    "location_catalogues": {
-      "name": "location_catalogues",
-      "columns": {
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "catalogue_id": {
-          "name": "catalogue_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "location_catalogues_location_id_locations_id_fk": {
-          "name": "location_catalogues_location_id_locations_id_fk",
-          "tableFrom": "location_catalogues",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "location_catalogues_catalogue_id_catalogues_id_fk": {
-          "name": "location_catalogues_catalogue_id_catalogues_id_fk",
-          "tableFrom": "location_catalogues",
-          "tableTo": "catalogues",
-          "columnsFrom": [
-            "catalogue_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "location_catalogues_pk": {
-          "columns": [
-            "location_id",
-            "catalogue_id"
-          ],
-          "name": "location_catalogues_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
     "purchase_invoice_vat": {
       "name": "purchase_invoice_vat",
       "columns": {
@@ -7740,43 +7681,6 @@
         "custom_themes_in_use_ck": {
           "name": "custom_themes_in_use_ck",
           "value": "\"custom_themes\".\"in_use\" = 1"
-        }
-      }
-    },
-    "tenant_receipts": {
-      "name": "tenant_receipts",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
-        },
-        "receipt": {
-          "name": "receipt",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "tenant_receipts_singleton_ck": {
-          "name": "tenant_receipts_singleton_ck",
-          "value": "\"tenant_receipts\".\"id\" = 1"
         }
       }
     },

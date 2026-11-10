@@ -1,7 +1,7 @@
 import { isValidEmail } from "@waitron/identity";
 import { AppError, isValidTelephone, MEDIA_FILENAME } from "@waitron/shared";
 import "./errors.js";
-import type { DepartmentReceiptConfig, ReceiptText, VenueReceiptSettings } from "@waitron/shared";
+import type { DepartmentReceiptConfig, ReceiptText } from "@waitron/shared";
 import type { ReceiptConfig } from "./types.js";
 
 export const MAX_RECEIPT_FIELD_LENGTH = 200;
@@ -161,10 +161,4 @@ export function validateDepartmentReceipt(
       result.operationDescription = authored.operationDescription;
   }
   return result;
-}
-
-export function validateVenueReceiptSettings(input: unknown): VenueReceiptSettings {
-  const authored = requireAuthoredObject(input);
-  requireKnownFields(authored, ["logo", ...TEXT_FIELDS, "printAddress"]);
-  return validateReceiptConfig(authored);
 }

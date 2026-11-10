@@ -25,7 +25,7 @@ async function drawLogo(bytes: Uint8Array, paperWidth: PaperWidth): Promise<Mono
 }
 
 /**
- * The logo as each paper prints it, ready for `putReceipt`. Outside any transaction. The 80 mm
+ * The logo as each paper prints it. Outside any transaction. The 80 mm
  * picture serves 58 mm too when it already fits there: the height bound then decides both sizes.
  */
 export async function drawLogoRasters(bytes: Uint8Array): Promise<ReceiptLogoRasters> {

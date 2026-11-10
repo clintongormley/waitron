@@ -1,4 +1,5 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { venueMenus } from "./testing/venue-menus.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
@@ -14,7 +15,6 @@ import {
   printers,
   printJobs,
   stationPrinters,
-  tenantReceipts,
   ticketItems,
   venueLocationId,
   withTransaction,
@@ -53,9 +53,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
-import type { ReceiptConfig } from "@waitron/layouts";
 import {
-  addCatalogueToVenue,
   assignCatalogueToVenue,
   createCatalogue,
   createCategory,
@@ -68,7 +66,6 @@ import {
   writeProductModifiers,
   addMember,
   listMembers,
-  listAccessibleCatalogues,
   listAvailableProducts,
   removeMember,
 } from "@waitron/catalogue";
@@ -143,6 +140,7 @@ let beerProduct: { id: string; catalogueId: string };
 let counterZoneId: string;
 let waterOfferId: string;
 let hiddenWaterOfferId: string;
+let hiddenMenuId: string;
 // An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
 // route body.
 let sessionDeviceCookie: string;
@@ -193,7 +191,7 @@ const suite = useVenueDb({
     await db
       .insert(persons)
       .values({ displayName: "Zoe", pinHash: hashPin("2222"), role: "staff", status: "suspended" });
-    const { water, beer, zoneId, offerId, hiddenOfferId } = await withTransaction(
+    const { water, beer, zoneId, offerId, hiddenOfferId, staffMenuId } = await withTransaction(
       db,
       async (tx) => {
         const cat = await createCatalogue(tx, { name: "Carta" });
@@ -218,7 +216,6 @@ const suite = useVenueDb({
           unitPrice: "2.50",
           vatClass: "general",
         });
-        await addCatalogueToVenue(tx, cat2.id);
 
         const [department] = await tx
           .insert(departments)
@@ -266,6 +263,7 @@ const suite = useVenueDb({
           zoneId: zone!.id,
           offerId: offer.id,
           hiddenOfferId: hiddenOffer.id,
+          staffMenuId: hiddenMenu.id,
         };
       },
     );
@@ -275,6 +273,7 @@ const suite = useVenueDb({
     counterZoneId = zoneId;
     waterOfferId = offerId;
     hiddenWaterOfferId = hiddenOfferId;
+    hiddenMenuId = staffMenuId;
     cfg = makeCfg(venueId, nodeId);
     const sessionProfile = await seedDeviceProfile(db, "Session device profile", [
       ...CAPABILITY_FLAGS,
@@ -1888,9 +1887,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   });
 
   it("GET /api/till omits authored receipt state and the retired layout field", async () => {
-    const authoredReceipt: ReceiptConfig = { footerMessage: "Hasta pronto" };
-    await suite.db.insert(tenantReceipts).values({ receipt: authoredReceipt });
-    try {
+    {
       const app = new Hono();
       mountTillApi(app, deps(suite.db), collect([]));
 
@@ -1900,14 +1897,10 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body).not.toHaveProperty("receipt");
       expect(body).not.toHaveProperty("venueAddress");
       expect(body).not.toHaveProperty("layout");
-    } finally {
-      await suite.db.execute(sql`delete from tenant_receipts `);
     }
   });
 
   it("GET /api/till keeps current address, authored trim and raster changes out of boot", async () => {
-    const raster = { widthDots: 8, heightDots: 1, data: "/w==" };
-    const logo = `${"a".repeat(64)}.png`;
     await seedVenueSettings(suite.db, {
       addressLine1: "Calle Mayor 1",
       postalCode: "28013",
@@ -1921,17 +1914,13 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
           receipt: unknown;
           venueAddress: unknown;
         };
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ receipt: { logo, logoRasters: { "58mm": raster, "80mm": raster } } });
+
       expect(await boot()).not.toHaveProperty("receipt");
       expect(await boot()).not.toHaveProperty("venueAddress");
 
-      await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
       expect(await boot()).not.toHaveProperty("receipt");
       expect(await boot()).not.toHaveProperty("venueAddress");
     } finally {
-      await suite.db.execute(sql`delete from tenant_receipts`);
       await seedVenueSettings(suite.db, { addressLine1: null, postalCode: null, city: null });
     }
   });
@@ -2390,13 +2379,14 @@ describe("zone-offer catalogue routes", () => {
 
   it("reads the venue's accessible menus and product values", async () => {
     const catalogue = await withTransaction(suite.db, async (tx) => ({
-      menus: await listAccessibleCatalogues(tx),
+      menus: await venueMenus(tx),
       products: (await listAvailableProducts(tx)).products,
     }));
     expect(catalogue).toEqual({
       menus: [
         { id: waterProduct.catalogueId, name: "Carta", isDefault: true },
         { id: beerProduct.catalogueId, name: "Happy Hour", isDefault: false },
+        { id: hiddenMenuId, name: "Staff", isDefault: false },
       ],
       products: [
         {

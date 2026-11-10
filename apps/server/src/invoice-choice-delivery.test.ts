@@ -7,7 +7,6 @@ import {
   sales,
   workingOrders,
   floorZones,
-  tenantReceipts,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
@@ -112,9 +111,6 @@ function delivery() {
 async function contacts(f: Awaited<ReturnType<typeof fixture>>) {
   await authored(f.primary, { email: "dining@example.com", phone: "+34911234567" });
   await authored(f.fallback, { email: "default@example.com", phone: "+34922345678" });
-  await suite.db
-    .insert(tenantReceipts)
-    .values({ receipt: { email: "global@example.com", phone: "+34933456789" } });
 }
 describe("invoice-choice email contact selection", () => {
   it.each(["order", "sale"] as const)(

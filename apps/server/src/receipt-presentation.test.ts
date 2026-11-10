@@ -5,7 +5,6 @@ import {
   CORE_MIGRATIONS,
   invoiceSeries,
   sales,
-  tenantReceipts,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -60,16 +59,7 @@ async function fixture(header: "department" | "null" | "absent" = "department") 
       tradingName: "Recorded brand",
       printTradingName: true,
     });
-  await suite.db.insert(tenantReceipts).values({
-    receipt: {
-      logo: `${"a".repeat(64)}.png`,
-      headerSubtitle: "Retired subtitle",
-      footerMessage: "Retired footer",
-      phone: "Retired phone",
-      email: "retired@example.test",
-      printAddress: true,
-    },
-  });
+
   const authored = async (receipt: Record<string, unknown>) => {
     await suite.db
       .insert(departmentReceipts)
@@ -208,17 +198,14 @@ describe("department-only on-screen receipt", () => {
     });
   });
 
-  it.each(["venue", "department", "both"] as const)(
+  it.each(["department"])(
     "ignores retired storage and bounds diagnostics with %s storage absent",
     async (source) => {
       const f = await fixture();
       await f.authored({ printAddress: true, headerSubtitle: { "es-ES": "Own subtitle" } });
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const hiddenVenue = source !== "department";
       const hiddenDepartment = source !== "venue";
       try {
-        if (hiddenVenue)
-          await suite.db.execute(sql`alter table tenant_receipts rename to test_hidden_receipts`);
         if (hiddenDepartment)
           await suite.db.execute(
             sql`alter table department_receipts rename to test_hidden_department_receipts`,
@@ -247,8 +234,6 @@ describe("department-only on-screen receipt", () => {
           await suite.db.execute(
             sql`alter table test_hidden_department_receipts rename to department_receipts`,
           );
-        if (hiddenVenue)
-          await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);
         warning.mockRestore();
       }
     },

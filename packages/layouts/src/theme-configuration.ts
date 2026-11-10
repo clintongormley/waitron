@@ -1,7 +1,7 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { checkThemeName, readThemeDocument } from "@waitron/ui-core/theme";
-import { printableLogoRasters } from "./receipt-store.js";
+import { printableLogoRasters } from "./logo-rasters.js";
 import { isPlainObject } from "./validate.js";
 
 type Tables = Readonly<Record<string, readonly Record<string, unknown>[]>>;

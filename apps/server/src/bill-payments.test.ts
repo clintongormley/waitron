@@ -27,7 +27,6 @@ import {
   invoiceDeliveries,
   pagePrinters,
   tenders,
-  tenantReceipts,
   tenants,
   triggerRaised,
   withTransaction,
@@ -2414,22 +2413,6 @@ describe("the invoice at full payment", () => {
       countryCode: "ES",
     };
 
-    async function withVenueContact(receipt: { email?: string }, body: () => Promise<void>) {
-      const [original] = await inTx((tx) => tx.select().from(tenantReceipts));
-      try {
-        await inTx((tx) =>
-          tx
-            .insert(tenantReceipts)
-            .values({ receipt })
-            .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } }),
-        );
-        await body();
-      } finally {
-        if (original === undefined) await inTx((tx) => tx.delete(tenantReceipts));
-        else await inTx((tx) => tx.update(tenantReceipts).set({ receipt: original.receipt }));
-      }
-    }
-
     const stageEmail = (billId: string, revision = 0) =>
       setOrderInvoiceChoice(
         suite.db,
@@ -2461,7 +2444,7 @@ describe("the invoice at full payment", () => {
     });
 
     it("refuses with only a venue-wide contact and stages with a department contact", async () => {
-      await withVenueContact({ email: "venue@example.test" }, async () => {
+      {
         await withDepartmentContact({}, async () => {
           const billId = await tabWith("Beer");
           await expect(stageEmail(billId)).rejects.toMatchObject({
@@ -2473,13 +2456,13 @@ describe("the invoice at full payment", () => {
           );
           expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
         });
-      });
-      await withVenueContact({}, async () => {
+      }
+      {
         await withDepartmentContact({ email: "dining@example.test" }, async () => {
           const billId = await tabWith("Beer");
           expect(await stageEmail(billId)).toBe(1);
         });
-      });
+      }
     });
 
     it.each([
@@ -2638,11 +2621,11 @@ describe("the invoice at full payment", () => {
           }),
         ]);
         expect(Object.keys(reserved[0]!)).not.toContain("consent");
-        await withVenueContact({ email: "changed-venue@example.test" }, async () => {
+        {
           await withDepartmentContact({ email: "changed-dining@example.test" }, async () => {
             expect(await deliveries()).toEqual(reserved);
           });
-        });
+        }
       });
     });
   });

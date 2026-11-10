@@ -23,18 +23,15 @@ import {
 import {
   catalogues,
   categories,
-  locationCatalogues,
   locations,
   menuItems,
   menuItemVariantOverrides,
   now,
   products,
   productUnits,
-  readVenue,
   readVenueInvoiceLocales,
   sections,
   units,
-  venueLocationId,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
@@ -48,7 +45,6 @@ import type {
   VatClass,
   ListedVariant,
   Product,
-  AccessibleCatalogue,
   AvailableProduct,
   MenuItem,
   MenuOffer,
@@ -92,7 +88,6 @@ import {
   unitOwnerJoin,
 } from "./variant-fallback.js";
 export type {
-  AccessibleCatalogue,
   AvailableProduct,
   MenuItem,
   MenuOffer,
@@ -1215,71 +1210,17 @@ export async function assignCatalogueToVenue(tx: Transaction, catalogueId: strin
   await tx.update(locations).set({ catalogueId });
 }
 
-/**
- * Make `catalogueId` the venue's default menu while KEEPING the old default in the venue's menu
- * list: it is demoted to a member row rather than dropped, so membership and the default stay
- * independent. A venue with no prior default (or one already set to `catalogueId`) skips the
- * demote. The redundant member row `catalogueId` may already hold is left untouched —
- * {@link resolveAccessibleCatalogueIds} de-duplicates, so it is invisible.
- */
 export async function setVenueDefaultCatalogue(
   tx: Transaction,
   catalogueId: string,
 ): Promise<void> {
-  const { defaultCatalogueId: defaultId } = await readVenue(tx);
   await assertCatalogueExists(tx, catalogueId);
-  if (defaultId !== null && defaultId !== catalogueId) {
-    await insertVenueCatalogue(tx, defaultId);
-  }
   await assignCatalogueToVenue(tx, catalogueId);
-}
-
-/**
- * Attach a NON-default catalogue to the venue's menu list (a member row). Idempotent: the primary
- * key makes a re-attach a no-op.
- */
-export async function addCatalogueToVenue(tx: Transaction, catalogueId: string): Promise<void> {
-  await assertCatalogueExists(tx, catalogueId);
-  await insertVenueCatalogue(tx, catalogueId);
 }
 
 async function assertCatalogueExists(tx: Transaction, catalogueId: string): Promise<void> {
   if (!(await catalogueExists(tx, catalogueId)))
     throw new AppError("catalogue.not_found", { catalogueId });
-}
-
-/** The catalogue must already be known to exist. */
-async function insertVenueCatalogue(tx: Transaction, catalogueId: string): Promise<void> {
-  await tx
-    .insert(locationCatalogues)
-    .values({ locationId: await venueLocationId(tx), catalogueId })
-    .onConflictDoNothing();
-}
-
-/**
- * Detach a catalogue from the venue's menu list. NEVER touches the default, which is not stored as
- * a member row.
- */
-export async function removeCatalogueFromVenue(
-  tx: Transaction,
-  catalogueId: string,
-): Promise<void> {
-  await tx.delete(locationCatalogues).where(eq(locationCatalogues.catalogueId, catalogueId));
-}
-
-/**
- * The catalogue ids in the venue's menu list: its default unioned with every member row,
- * de-duplicated. The order of `ids` is not meaningful.
- */
-export async function resolveAccessibleCatalogueIds(
-  tx: Transaction,
-): Promise<{ ids: string[]; defaultId: string | null; invoiceLocales: string[] }> {
-  const { defaultCatalogueId: defaultId, invoiceLocales } = await readVenue(tx);
-  const members = await tx.select({ id: locationCatalogues.catalogueId }).from(locationCatalogues);
-  const ids = new Set<string>();
-  if (defaultId !== null) ids.add(defaultId);
-  for (const m of members) ids.add(m.id);
-  return { ids: [...ids], defaultId, invoiceLocales };
 }
 
 export async function readInvoiceLocales(tx: Transaction): Promise<string[]> {
@@ -1300,44 +1241,10 @@ export async function readReceiptLanguage(
   return { locale, invoiceLocales };
 }
 
-export interface VenueCatalogue extends Catalogue {
-  /** In the venue's menu list — its default OR a member row. */
-  sellable: boolean;
-  /** The venue's default menu; always also `sellable`. */
-  isDefault: boolean;
-}
-
-/**
- * EVERY catalogue, each flagged with whether it is in the venue's menu list (`sellable`) and
- * whether it is the venue's default (`isDefault`).
- */
-export async function listCataloguesForVenue(tx: Transaction): Promise<VenueCatalogue[]> {
-  const all = await listCatalogues(tx);
-  const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx);
-  const sellable = new Set(ids);
-  return all.map((c) => ({ ...c, sellable: sellable.has(c.id), isDefault: c.id === defaultId }));
-}
-
-/** The active catalogues in the venue's menu list, default first, then by name. */
-export async function listAccessibleCatalogues(tx: Transaction): Promise<AccessibleCatalogue[]> {
-  const { ids, defaultId } = await resolveAccessibleCatalogueIds(tx);
-  if (ids.length === 0) return [];
-  const rows = await tx
-    .select({ id: catalogues.id, name: catalogues.name })
-    .from(catalogues)
-    .where(and(inArray(catalogues.id, ids), eq(catalogues.active, true)));
-  return rows
-    .map((r) => ({ id: r.id, name: r.name, isDefault: r.id === defaultId }))
-    .sort((a, b) =>
-      a.isDefault === b.isDefault ? a.name.localeCompare(b.name) : a.isDefault ? -1 : 1,
-    );
-}
-
 export async function listAvailableProducts(
   tx: Transaction,
 ): Promise<{ products: AvailableProduct[]; invoiceLocales: string[] }> {
-  const { ids: accessible, invoiceLocales } = await resolveAccessibleCatalogueIds(tx);
-  if (accessible.length === 0) return { products: [], invoiceLocales };
+  const invoiceLocales = await readVenueInvoiceLocales(tx);
   const rows = await tx
     .select({
       id: products.id,
@@ -1371,7 +1278,6 @@ export async function listAvailableProducts(
     .leftJoin(categories, eq(categories.id, effective.categoryId))
     .where(
       and(
-        inArray(catalogues.id, accessible),
         eq(catalogues.active, true),
         eq(products.active, true),
         eq(products.available, true),

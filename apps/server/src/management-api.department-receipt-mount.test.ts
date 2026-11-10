@@ -4,7 +4,6 @@ import { beforeEach, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
-import { tenantReceipts } from "@waitron/db";
 import { mountManagementApi, type ManagementApiDeps } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -30,9 +29,6 @@ beforeEach(async () => {
       target: departmentReceipts.departmentId,
       set: { receipt: { operationDescription: "Meals" } },
     });
-  await suite.db
-    .insert(tenantReceipts)
-    .values({ receipt: { footerMessage: "Global footer", printAddress: true } });
 });
 function app() {
   const instance = new Hono();
@@ -85,10 +81,6 @@ it("management saves the department receipt and policy through the replacement m
         .where(eq(departmentSalePolicies.departmentId, id))
     )[0],
   ).toMatchObject(input.policy);
-  expect((await suite.db.select().from(tenantReceipts))[0]!.receipt).toEqual({
-    footerMessage: "Global footer",
-    printAddress: true,
-  });
 });
 it("management supplies the installed description validator before writing", async () => {
   const response = await request("PUT", path(), { receipt: { operationDescription: "" }, policy });
@@ -108,10 +100,8 @@ it("management supplies the installed description validator before writing", asy
 it.each(["/management-api/receipt", "/management-api/receipt-settings"])(
   "management no longer exposes global receipt route %s",
   async (route) => {
-    const before = await suite.db.select().from(tenantReceipts);
     expect((await request("GET", route)).status).toBe(404);
     expect((await request("PUT", route, { receipt: {}, settings: {} })).status).toBe(404);
-    expect(await suite.db.select().from(tenantReceipts)).toEqual(before);
   },
 );
 it("the mounted department receipt retains the venue permission gate", async () => {

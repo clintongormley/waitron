@@ -6,7 +6,6 @@ import {
   invoiceSeries,
   sales,
   floorZones,
-  tenantReceipts,
   withTransaction,
   venueLocationId,
 } from "@waitron/db";
@@ -134,9 +133,7 @@ describe("independent invoice email contact", () => {
     async (kind) => {
       const f = await fixture();
       await authored(f.fallback, { email: "fallback@example.com" });
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ receipt: { email: "venue@example.com", phone: "+34933456789" } });
+
       const source =
         kind === "order" ? { kind, orderId: randomUUID() } : { kind, saleId: randomUUID() };
       expect(await read(source)).toEqual({ email: "fallback@example.com" });

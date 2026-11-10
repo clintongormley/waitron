@@ -2,7 +2,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { kitchenStations, readVenue, readTenant, type Transaction } from "@waitron/db";
 import { setRoutingCell, STARTER_OPEN_PERIOD_NAMES } from "@waitron/venue-service";
 import {
-  addCatalogueToVenue,
   addMember,
   addProductToMenu,
   addProducts,
@@ -259,9 +258,6 @@ export async function seedCatalogues(
   }
 
   await assignCatalogueToVenue(tx, casaId);
-  await addCatalogueToVenue(tx, diaId);
-  await addCatalogueToVenue(tx, deliId);
-  await addCatalogueToVenue(tx, drinksId);
 
   return {
     productsByImage,

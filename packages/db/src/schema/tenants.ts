@@ -77,8 +77,6 @@ export const locations = table(
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
     // This location's DEFAULT catalogue (menu); a venue may exist before a menu is assigned.
-    // `location_catalogues` may add further catalogues, resolved by
-    // `resolveAccessibleCatalogueIds` (`packages/catalogue/src/operations.ts`).
     /* v8 ignore start */
     catalogueId: id("catalogue_id").references(() => catalogues.id),
     /* v8 ignore stop */

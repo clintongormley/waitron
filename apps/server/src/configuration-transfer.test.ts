@@ -82,7 +82,6 @@ import {
   customThemes,
   products,
   sales,
-  tenantReceipts,
   venueLocationId,
   withTransaction,
   type Transaction,
@@ -91,7 +90,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   deleteDeviceProfile,
   emptyPrinterLists,
-  getReceipt,
   listCustomThemes,
   readProfilePrinterLists,
   setProfilePrinterLists,
@@ -390,7 +388,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 14,
+  version: 15,
   settings: {},
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
@@ -2223,7 +2221,6 @@ it("transfers a department's receipt logo with its image and pictures, and the i
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Logo receipt" });
     await writeDepartmentReceipt(tx, department.id, { logo }, pictures);
-    await tx.insert(tenantReceipts).values({ receipt: { headerSubtitle: "Retired default" } });
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -2233,6 +2230,7 @@ it("transfers a department's receipt logo with its image and pictures, and the i
     new Date("2026-09-30T12:00:00Z"),
     versions,
   );
+
   expect(transferred.tables).not.toHaveProperty("tenant_receipts");
   await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
@@ -5481,7 +5479,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(14);
+  expect(exported.version).toBe(15);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -6749,7 +6747,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     writeDepartmentReceipt,
     departmentReceipts,
   } = await import("@waitron/venue-service");
-  const { getStoredLogoRasters } = await import("@waitron/layouts");
   const { resolveReceiptTrim } = await import("@waitron/shared");
   const cfg = {
     receiptLanguages: ["es-ES", "ca-ES"],
@@ -6759,14 +6756,7 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
     "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
   };
-  const defaults = {
-    logo,
-    phone: "+34911234567",
-    email: "venue@example.com",
-    headerSubtitle: "Venue default",
-    footerMessage: "Thanks from venue",
-    printAddress: false,
-  };
+
   const authored = {
     printAddress: true,
     operationDescription: "Dining service",
@@ -6776,7 +6766,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     footerMessage: { "ca-ES": "Gràcies" },
   };
   const ids = await withTransaction(suite.db, async (tx) => {
-    await tx.insert(tenantReceipts).values({ receipt: { ...defaults, logoRasters: pictures } });
     const own = await createDepartment(tx, { name: "Own receipt" });
     const empty = await createDepartment(tx, { name: "Empty receipt" });
     const imported = await createDepartment(tx, { name: "Bad optional receipt" });
@@ -6800,6 +6789,7 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   );
   expect(exported.tables.department_receipts).toHaveLength(2);
   expect(exported.tables).not.toHaveProperty("tenant_receipts");
+
   await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
@@ -6809,7 +6799,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   const imported = await withTransaction(targetSuite.db, async (tx) => {
     const rows = await tx.select().from(departments);
     const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
-    const global = await getReceipt(tx);
     const empty = await readDepartmentReceipt(tx, cfg, idFor("Empty receipt"));
     return {
       ids: [idFor("Own receipt"), idFor("Empty receipt"), idFor("Bad optional receipt")],
@@ -6818,8 +6807,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
       empty,
       inherited: resolveReceiptTrim(empty, {}, "es-ES", "es-ES"),
       bad: await readDepartmentReceipt(tx, cfg, idFor("Bad optional receipt")),
-      global,
-      pictures: await getStoredLogoRasters(tx, logo),
     };
   });
   for (const id of imported.ids) expect(ids).not.toContain(id);
@@ -6832,8 +6819,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   expect(imported.empty).toEqual({});
   expect(imported.inherited).toEqual({});
   expect(imported.bad).toEqual({ email: "good@example.com", headerSubtitle: { "ca-ES": "Good" } });
-  expect(imported.global).toEqual({});
-  expect(imported.pictures).toBeNull();
 });
 
 describe("a deleted printer in a configuration transfer", () => {

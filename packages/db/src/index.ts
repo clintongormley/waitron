@@ -178,7 +178,6 @@ export { stationPrinters } from "./schema/station-printers.js";
 export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { catalogues, categories, products } from "./schema/catalogue.js";
 export type { AllergenMap } from "@waitron/shared";
-export { locationCatalogues } from "./schema/location-catalogues.js";
 export {
   purchaseInvoiceVat,
   purchaseInvoices,
@@ -192,7 +191,6 @@ export {
 } from "./schema/device-profile-printers.js";
 export { printerHolders } from "./schema/printer-holders.js";
 export { customThemes } from "./schema/custom-themes.js";
-export { tenantReceipts } from "./schema/tenant-receipts.js";
 export { workingOrderCounters } from "./schema/working-order-counters.js";
 export {
   fiscalState,

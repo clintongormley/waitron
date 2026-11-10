@@ -9,7 +9,6 @@ import {
   locations,
   printers,
   readTenant,
-  tenantReceipts,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -309,16 +308,12 @@ describe("POST /management-api/receipt-preview", () => {
     await withPrinters(
       [{ device: "Till 1", paperWidth: "80mm", resolution: "203dpi" }],
       async () => {
-        const count = async (table: string) =>
-          (
-            await suite.db.execute<{ n: number }>(
-              sql`select count(*) as n from ${sql.identifier(table)}`,
-            )
-          ).rows[0]!.n;
-        const [jobs, receipts] = [await count("print_jobs"), await count("tenant_receipts")];
+        const countJobs = async () =>
+          (await suite.db.execute<{ n: number }>(sql`select count(*) as n from print_jobs`))
+            .rows[0]!.n;
+        const jobs = await countJobs();
         await rendered({ headerSubtitle: "Sin guardar", footerMessage: "Tampoco" });
-        expect(await count("print_jobs")).toBe(jobs);
-        expect(await count("tenant_receipts")).toBe(receipts);
+        expect(await countJobs()).toBe(jobs);
       },
     );
   });
@@ -791,7 +786,7 @@ describe("POST /management-api/receipt-preview", () => {
 describe("the receipt preview's top block", () => {
   afterEach(async () => {
     await suite.db.delete(departmentReceipts);
-    await suite.db.delete(tenantReceipts);
+
     await suite.db.delete(mediaImages);
   });
 
@@ -814,9 +809,6 @@ describe("the receipt preview's top block", () => {
     pictures(result).map((block) => (block.kind === "image" ? [block.width, block.height] : []));
 
   it("draws the enabled location address and authored contact under the subtitle, and marks each", async () => {
-    await suite.db
-      .insert(tenantReceipts)
-      .values({ receipt: { phone: "910 000 000", email: "hola@deli.test" } });
     const result = await rendered({
       headerSubtitle: "Desde 1990",
       phone: "910 000 000",

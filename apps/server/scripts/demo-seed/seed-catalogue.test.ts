@@ -1,3 +1,4 @@
+import { venueMenus } from "../../src/testing/venue-menus.js";
 /**
  * `seedCatalogues`: the demo menus, each category routed to its preparation station, the
  * default menu, and the image→product map the media and sales steps read.
@@ -10,7 +11,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   foldName,
-  listAccessibleCatalogues,
   listAvailableProducts,
   listMenuOffers,
   menuPrices,
@@ -243,7 +243,7 @@ describe("seedCatalogues", () => {
         locale: LOCALE,
         dataSet: CASA_DELGADO_ES,
       });
-      const menus = await listAccessibleCatalogues(tx);
+      const menus = await venueMenus(tx);
       const { products } = await listAvailableProducts(tx);
       const contentLanguages = await readContentLanguages(tx, LOCALE);
       const { rows: stationRows } = await tx.execute<{ name: string; is_default: number }>(sql`

@@ -1404,100 +1404,23 @@ describe("mountCatalogueApi — catalogues", () => {
 });
 
 describe("mountCatalogueApi — the venue's menus", () => {
-  // The venue's default + member rows are the ONLY state shared across these tests (one venue
-  // file for the whole file); every catalogue a test creates gets a fresh id. Reset both so the tests
-  // are order-independent.
   beforeEach(async () => {
-    await suite.db.execute(sql`delete from location_catalogues`);
     await suite.db.execute(sql`update locations set catalogue_id = null`);
   });
 
-  const cataloguesPath = () => "/management-api/venue/catalogues";
   const defaultPath = () => "/management-api/venue/default-catalogue";
 
-  it("GET lists every tenant catalogue with sellable + default flags (200)", async () => {
-    const app = mountApp();
-    const house = await createCatalogueVia(app, "House");
-    const day = await createCatalogueVia(app, "Daily");
-    const shelf = await createCatalogueVia(app, "Shelf");
-    await send(app, "PUT", defaultPath(), { body: { catalogueId: house } });
-    await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
-    const res = await send(app, "GET", cataloguesPath());
-    expect(res.status).toBe(200);
-    const rows = (await res.json()) as { id: string; sellable: boolean; isDefault: boolean }[];
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    expect(byId.get(house)).toMatchObject({ sellable: true, isDefault: true });
-    expect(byId.get(day)).toMatchObject({ sellable: true, isDefault: false });
-    expect(byId.get(shelf)).toMatchObject({ sellable: false, isDefault: false });
-  });
-
-  it("POST adds a catalogue to the venue's menu list (204)", async () => {
-    const app = mountApp();
-    const day = await createCatalogueVia(app, "Daily");
-    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
-    expect(res.status).toBe(204);
-    const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
-      id: string;
-      sellable: boolean;
-    }[];
-    expect(rows.find((r) => r.id === day)).toMatchObject({ sellable: true });
-  });
-
-  it("DELETE removes a catalogue from the venue's menu list (204)", async () => {
-    const app = mountApp();
-    const day = await createCatalogueVia(app, "Daily");
-    await send(app, "POST", cataloguesPath(), { body: { catalogueId: day } });
-    const res = await send(app, "DELETE", `${cataloguesPath()}/${day}`);
-    expect(res.status).toBe(204);
-    const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
-      id: string;
-      sellable: boolean;
-    }[];
-    expect(rows.find((r) => r.id === day)).toMatchObject({ sellable: false });
-  });
-
-  it("PUT default-catalogue sets the default and keeps the old default sellable (204)", async () => {
+  it("PUT default-catalogue sets the default (204)", async () => {
     const app = mountApp();
     const house = await createCatalogueVia(app, "House");
     const day = await createCatalogueVia(app, "Daily");
     await send(app, "PUT", defaultPath(), { body: { catalogueId: house } });
     const res = await send(app, "PUT", defaultPath(), { body: { catalogueId: day } });
     expect(res.status).toBe(204);
-    const rows = (await (await send(app, "GET", cataloguesPath())).json()) as {
-      id: string;
-      sellable: boolean;
-      isDefault: boolean;
-    }[];
-    const byId = new Map(rows.map((r) => [r.id, r]));
-    expect(byId.get(day)).toMatchObject({ sellable: true, isDefault: true });
-    expect(byId.get(house)).toMatchObject({ sellable: true, isDefault: false });
-  });
-
-  it("POST unauthenticated → 401", async () => {
-    const app = mountApp();
-    const res = await send(app, "POST", cataloguesPath(), {
-      body: { catalogueId: "11111111-1111-4111-8111-111111111111" },
-      cookie: null,
-    });
-    expect(res.status).toBe(401);
-  });
-
-  it("POST as a staff-role session → 403 authorization.not_permitted", async () => {
-    const app = mountApp();
-    const res = await send(app, "POST", cataloguesPath(), {
-      body: { catalogueId: "11111111-1111-4111-8111-111111111111" },
-      cookie: staffCookie,
-    });
-    expect(res.status).toBe(403);
-  });
-
-  it("POST with a missing/non-string catalogueId → management.request_invalid 400", async () => {
-    const app = mountApp();
-    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: 42 } });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "catalogueId" } },
-    });
+    const rows = await suite.db.execute<{ catalogue_id: string }>(
+      sql`select catalogue_id from locations`,
+    );
+    expect(rows.rows).toEqual([{ catalogue_id: day }]);
   });
 
   it("PUT default-catalogue with a missing/non-string catalogueId → management.request_invalid 400", async () => {
@@ -1509,15 +1432,6 @@ describe("mountCatalogueApi — the venue's menus", () => {
     });
   });
 
-  it("POST with a valid-but-nonexistent catalogueId → catalogue.not_found 400", async () => {
-    const app = mountApp();
-    const res = await send(app, "POST", cataloguesPath(), {
-      body: { catalogueId: "00000000-0000-0000-0000-000000000000" },
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
-  });
-
   it("PUT default-catalogue with a valid-but-nonexistent catalogueId → catalogue.not_found 400", async () => {
     const app = mountApp();
     const res = await send(app, "PUT", defaultPath(), {
@@ -1525,13 +1439,6 @@ describe("mountCatalogueApi — the venue's menus", () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "catalogue.not_found" } });
-  });
-
-  it("POST with a malformed-uuid catalogueId → shared.invalid_id 400", async () => {
-    const app = mountApp();
-    const res = await send(app, "POST", cataloguesPath(), { body: { catalogueId: "not-a-uuid" } });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
   });
 });
 

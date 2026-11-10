@@ -6,7 +6,7 @@ import { AppError, isUuid } from "@waitron/shared";
 import type { MonoRaster, PaperWidth } from "@waitron/printing";
 import { readThemeDocument, type ThemeChoices } from "@waitron/ui-core/theme";
 import { asc, eq, sql } from "drizzle-orm";
-import { printableLogoRasters, readLogoRaster, storedPictureMaxBytes } from "./receipt-store.js";
+import { printableLogoRasters, readLogoRaster, storedPictureMaxBytes } from "./logo-rasters.js";
 import { parseThemeChoices, parseThemeName } from "./theme-input.js";
 import type { ReceiptLogoRasters } from "./types.js";
 

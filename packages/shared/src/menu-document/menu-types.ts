@@ -9,16 +9,6 @@ import type { VatClass } from "./vat-rates.js";
 import type { SellableUnit } from "./product-types.js";
 import type { ProductPresentation } from "./product-presentation.js";
 
-/**
- * The menu wire shapes — the JSON the catalogue's read paths hand across the HTTP boundary to a till
- * (the menu offers a service zone sells, and the products in the venue's menu list) and to the
- * dashboard's menu screens. Like `product-types.ts`, this is a LEAF: type definitions only, no
- * running code, and every type it imports is itself browser-safe (nothing here reaches
- * `@waitron/db`, drizzle or a `node:` builtin), so the till and the dashboard can import ONE
- * authoritative copy instead of re-declaring them by hand. The guard is
- * `scripts/dashboard-browser-purity.test.ts`.
- */
-
 /** One menu-item row: the id (not the product id) that selects a price when a diner orders. */
 export interface MenuItem {
   id: string;
@@ -116,13 +106,6 @@ export interface MenuPriceRow {
   variants: MenuPriceVariant[];
 }
 
-/**
- * A product in the venue's menu list. An `AvailableProduct` is NOT a `PriceableProduct`:
- * it carries `name` + `customerName`, not the snapshot `descriptions` a sale line freezes. Before
- * pricing, resolve the customer-facing text (customerName, falling back to the staff `name`, via the
- * resolvers in `product-presentation.ts`) into a `PriceableProduct`, then hand THAT to `priceBasket`.
- * `category` is the resolved category NAME (left-joined), or null.
- */
 export interface AvailableProduct {
   id: string;
   name: string;
@@ -145,9 +128,6 @@ export interface AvailableProduct {
   /** The product's DEFAULT kitchen course (`products.course_id`), or null when it has none. Not part
    * of the priceable projection, so it is dropped when a row is resolved into a `PriceableProduct`. */
   courseId: string | null;
-  /** The catalogue (menu) this row came from — its `catalogues.id`. The venue's menu list may hold
-   * several catalogues (its default plus any member rows), so a row is tagged with
-   * which one it came from. Not part of the priceable projection, like `courseId`. */
   catalogueId: string;
   /** The catalogue's display name (`catalogues.name`), for grouping products by menu in the till. Also
    * not part of the priceable projection. */

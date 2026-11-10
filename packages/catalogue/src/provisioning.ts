@@ -2,12 +2,10 @@ import {
   catalogues,
   catalogueSettings,
   contentLanguages,
-  locationCatalogues,
   readTenant,
   readVenue,
   units,
   unitSeedStates,
-  venueLocationId,
 } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
 import {
@@ -125,10 +123,6 @@ export const CATALOGUE_PROVISIONING: ModuleProvisioning = {
         await createMenuShell(tx, catalogueId, created!.name);
         await assignCatalogueToVenue(tx, catalogueId);
       }
-      await tx
-        .insert(locationCatalogues)
-        .values({ locationId: await venueLocationId(tx), catalogueId })
-        .onConflictDoNothing();
       return "initial menu ready";
     },
   },

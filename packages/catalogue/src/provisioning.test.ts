@@ -4,7 +4,6 @@ import {
   catalogues,
   contentLanguages,
   CORE_MIGRATIONS,
-  locationCatalogues,
   locations,
   menuDetails,
   sections,
@@ -155,7 +154,7 @@ describe("catalogue provisioning", () => {
     await suite.db.update(contentLanguages).set({ defaultLanguage: "fr", languages: ["fr", "de"] });
     await run();
     expect(await storedLanguages()).toEqual([{ default_language: "fr", languages: ["fr", "de"] }]);
-    const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(locationCatalogues);
+    const menus = await suite.db.select({ count: sql<number>`count(*)` }).from(catalogues);
     expect(menus).toEqual([{ count: 1 }]);
     // The initial menu got its root and default layout once, not once per seed.
     const [menu] = await suite.db
