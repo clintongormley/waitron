@@ -210,6 +210,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "ticket.invalid_transition": 409,
+  "ticket_item.not_found": 404,
   "ticket.item_held": 409,
   "kitchen_notice.not_found": 404,
   "ticket.pass_context_changed": 409,
@@ -227,6 +228,12 @@ export const LEVER_STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "device.failed");
+/** A device's edit names its profiles and made-here stations only in the body
+ * (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong"). */
+const runDeviceEdit = createErrorBoundary(
+  { ...STATUS, "device_profile.not_found": 400, "station.not_found": 400 },
+  "device.failed",
+);
 
 /** The device's own housekeeping: none is a sale, an order, a kitchen send or a clock-in. */
 const DEVICE_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
@@ -683,18 +690,17 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       assertProfileAction(device, "prepare-orders");
       const cfg = requestCfg(deps.cfg, device);
       const id = c.req.param("id");
-      // A malformed id names no item exactly as an absent one does — screened to the SAME
-      // `ticket.invalid_transition` the verb raises for an unknown item. The screen is the only
-      // refusal; the `text` id column has none.
-      if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
+      // A malformed id names no item exactly as an absent one does; the `text` id column has no
+      // refusal of its own.
+      if (!isUuid(id)) throw new AppError("ticket_item.not_found", { ticketItemId: id });
       const body = await readJsonBody<{ to?: string }>(c);
-      // `to` reaches `advanceTicketItem` as-is (cast): the verb owns target validation, refusing
-      // "queued"/garbage/absent as `ticket.invalid_transition` before any enum reaches the column.
+      // `to` reaches `advanceTicketItem` as-is (cast): the verb refuses a target outside its
+      // transition table before any enum reaches the column.
       const to = body.to as TicketState;
       await withTransaction(deps.db, async (tx) => {
         const screen = await stationScreenOf(tx, c, device);
         // `advanceTicketItem` NEVER checks the station, so the station guard is the route's job.
-        // An unknown item is left to the verb → `ticket.invalid_transition`.
+        // An unknown item is left to the verb.
         const [item] = await tx
           .select({ stationId: ticketItems.stationId })
           .from(ticketItems)
@@ -852,7 +858,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
 
   // ── Edit a device (hardware.manage) ────────────────────────────────────────────────────────────────────
   app.patch("/management-api/devices/:id", (c) =>
-    run(c, log, async () => {
+    runDeviceEdit(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       // Parsed out here, screened inside the gate: an unauthorised caller is refused before anything

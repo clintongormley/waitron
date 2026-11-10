@@ -4676,12 +4676,13 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       });
       // No state legally advances INTO queued — refused before any query.
       await expect(advanceTicketItem(tx, cfg, item!.id, "queued")).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
+        code: "management.request_invalid",
+        params: { field: "to" },
       });
-      // An absent id matches no row and returns the same not-found code.
+      // An absent id matches no row and is refused as an unknown item.
       const missing = randomUUID();
       await expect(advanceTicketItem(tx, cfg, missing, "preparing")).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
+        code: "ticket_item.not_found",
         params: { ticketItemId: missing },
       });
       // The refusals changed nothing.
@@ -4703,15 +4704,15 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       await expect(
         advanceTicketItem(tx, cfg, item!.id, "garbage" as unknown as TicketState),
       ).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
-        params: { ticketItemId: item!.id },
+        code: "management.request_invalid",
+        params: { field: "to" },
       });
       // A missing `to` — an absent JSON field reaches here as `undefined` the same way.
       await expect(
         advanceTicketItem(tx, cfg, item!.id, undefined as unknown as TicketState),
       ).rejects.toMatchObject({
-        code: "ticket.invalid_transition",
-        params: { ticketItemId: item!.id },
+        code: "management.request_invalid",
+        params: { field: "to" },
       });
 
       // Neither refusal changed the item's state.

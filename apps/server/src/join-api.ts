@@ -73,6 +73,20 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "join.failed");
+// A renewal names its hold in the path; a check names its hold, and an approval its profile, in
+// the body (docs/developers/conventions-data.md, "A refusal's HTTP status says what was wrong").
+const runHoldRenew = createErrorBoundary(
+  { ...STATUS, "device.pairing_hold_lapsed": 404 },
+  "join.failed",
+);
+const runCheck = createErrorBoundary(
+  { ...STATUS, "device.pairing_hold_lapsed": 400 },
+  "join.failed",
+);
+const runDeviceAccept = createErrorBoundary(
+  { ...STATUS, "device_profile.not_found": 400 },
+  "join.failed",
+);
 
 const PERMISSION_FOR: Record<JoinRequestKind, Permission> = {
   device: "hardware.manage",
@@ -172,7 +186,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
 
   // ── Renew a hold (hardware.manage) ────────────────────────────────────────────────────────────────
   app.post("/management-api/pairing-mode/holds/:holdId/renew", (c) =>
-    run(c, log, async () => {
+    runHoldRenew(c, log, async () => {
       const sessionId = requireManagementSession(c);
       // Renewal never counts as someone using the dashboard, so an unattended dialog lapses with the
       // login.
@@ -263,7 +277,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
 
   // ── Check the number a manager tapped against a DEVICE's ask (hardware.manage) ─────────────────
   app.post("/management-api/device-join-requests/:id/check", (c) =>
-    run(c, log, async () => {
+    runCheck(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const sessionKey = hashSessionToken(sessionId);
       const id = c.req.param("id");
@@ -311,7 +325,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
 
   // ── Approve a DEVICE's ask this login has checked (hardware.manage) ───────────────────────────────
   app.post("/management-api/device-join-requests/:id/accept", (c) =>
-    run(c, log, async () => {
+    runDeviceAccept(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       // PARSED out here, SCREENED inside the gate. Parsing awaits the request stream, and

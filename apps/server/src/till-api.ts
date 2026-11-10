@@ -532,6 +532,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.reason_required": 400,
   "ticket.already_fired": 409,
   "ticket.invalid_transition": 409,
+  "ticket_item.not_found": 404,
   "ticket.item_held": 409,
   "ticket.already_started": 409,
   "course.not_found": 404,
@@ -2219,7 +2220,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { action: "prepare-orders" });
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("ticket.invalid_transition", { ticketItemId: id });
+      if (!isUuid(id)) throw new AppError("ticket_item.not_found", { ticketItemId: id });
       const body = await readJsonBody<{ to?: string; stationId?: unknown }>(c);
       const stationId = requireBodyUuid(body.stationId, "stationId").toLowerCase();
       // `advanceTicketItem` refuses any target outside its transition table before the update runs.

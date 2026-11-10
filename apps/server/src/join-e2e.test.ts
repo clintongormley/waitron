@@ -1307,7 +1307,7 @@ describe("a disabled device comes back as the same device", () => {
           body: { choice: second.verificationNumber, holdId: randomUUID(), createdAt: shown },
         },
       );
-      expect(checked.status).toBe(409);
+      expect(checked.status).toBe(400);
       expect((await errorOf(checked)).code).toBe("device.pairing_hold_lapsed");
       expect(mode.claimOf(deviceId)).toBeUndefined();
       expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
@@ -1409,7 +1409,7 @@ describe("a disabled device comes back as the same device", () => {
     expect(back.joinId).toBe(deviceId);
 
     const refused = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
-    expect(refused.status).toBe(404);
+    expect(refused.status).toBe(400);
     expect((await errorOf(refused)).code).toBe("device_profile.not_found");
     expect(await pendingCount()).toBe(1);
     expect(await deviceRow(deviceId)).toMatchObject({ active: false, deviceProfileId: profileId });

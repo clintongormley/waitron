@@ -3596,22 +3596,25 @@ describe("KDS-1 station-display operate routes", () => {
     });
   });
 
-  it("POST /api/ticket-items/:id/advance with a malformed id is 409 ticket.invalid_transition, not a 500", async () => {
+  it("POST /api/ticket-items/:id/advance with an unknown or malformed id is 404 ticket_item.not_found, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
-    const res = await app.request("/api/ticket-items/not-a-uuid/advance", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ to: "preparing" }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "ticket.invalid_transition", params: { ticketItemId: "not-a-uuid" } },
-    });
+    const kitchenStation = await defaultStation(app, cookie);
+    for (const id of [randomUUID(), "not-a-uuid"]) {
+      const res = await app.request(`/api/ticket-items/${id}/advance`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ to: "preparing", stationId: kitchenStation.id }),
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "ticket_item.not_found", params: { ticketItemId: id } },
+      });
+    }
   });
 
-  it("POST /api/ticket-items/:id/advance with a garbage or missing `to` is 409 ticket.invalid_transition, not a 500", async () => {
+  it("POST /api/ticket-items/:id/advance with a garbage or missing `to` is 400 management.request_invalid, not a 500", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}; ${sessionDeviceCookie}`;
@@ -3631,9 +3634,9 @@ describe("KDS-1 station-display operate routes", () => {
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ to: "garbage", stationId: kitchenStation.id }),
     });
-    expect(garbage.status).toBe(409);
+    expect(garbage.status).toBe(400);
     expect(await garbage.json()).toMatchObject({
-      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+      error: { code: "management.request_invalid", params: { field: "to" } },
     });
 
     // Names every object inherits are not transitions, and a non-string `to` is refused, not
@@ -3654,9 +3657,9 @@ describe("KDS-1 station-display operate routes", () => {
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({ to, stationId: kitchenStation.id }),
       });
-      expect({ to, status: refused.status }).toEqual({ to, status: 409 });
+      expect({ to, status: refused.status }).toEqual({ to, status: 400 });
       expect(await refused.json()).toMatchObject({
-        error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+        error: { code: "management.request_invalid", params: { field: "to" } },
       });
     }
 
@@ -3666,9 +3669,9 @@ describe("KDS-1 station-display operate routes", () => {
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ stationId: kitchenStation.id }),
     });
-    expect(missing.status).toBe(409);
+    expect(missing.status).toBe(400);
     expect(await missing.json()).toMatchObject({
-      error: { code: "ticket.invalid_transition", params: { ticketItemId: itemId } },
+      error: { code: "management.request_invalid", params: { field: "to" } },
     });
 
     const after = await app.request(`/api/stations/${kitchenStation.id}/queue`, {

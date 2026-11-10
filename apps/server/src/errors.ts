@@ -999,11 +999,11 @@ declare module "@waitron/shared" {
     "station.no_replacement": { stationId: string; productIds: string[] };
     /**
      * A per-line kitchen ticket-item bump is not legal from the item's current state (a skip, a
-     * repeat, backwards, INTO `queued`, or an absent item). `advanceTicketItem` refuses a target the
-     * transition table does not hold (`queued`, or a non-string) before any write; otherwise its
-     * conditional UPDATE is the check: an illegal move matches no row.
+     * repeat, or backwards). Its conditional UPDATE is the check: an illegal move matches no row.
      */
     "ticket.invalid_transition": { ticketItemId: string };
+    /** A ticket-item bump named an item that does not exist. */
+    "ticket_item.not_found": { ticketItemId: string };
     /**
      * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
      * refuses a line that already holds a ticket item before any of its writes), a re-course of a

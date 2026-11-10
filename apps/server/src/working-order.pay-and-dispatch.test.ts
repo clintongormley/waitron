@@ -2400,8 +2400,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     await expect(
       asTenant(cfg, (tx) => advanceTicketItem(tx, cfg, item!, "queued")),
     ).rejects.toMatchObject({
-      code: "ticket.invalid_transition",
-      params: { ticketItemId: item },
+      code: "management.request_invalid",
+      params: { field: "to" },
     });
     expect(await ticketStateOf(id)).toBe("ready"); // every refusal left the item untouched
   });

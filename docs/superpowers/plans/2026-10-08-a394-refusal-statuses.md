@@ -519,6 +519,25 @@ Status changes:
   `apps/dashboard/src/api/pairing-hold.ts:9,92`), so a new code needs mapping. Tests to change:
   `device-api.test.ts:683,1487,1584,1620,1767,2560,2576`, `join-api.db.test.ts:245-272,656,914,1453,1468`,
   `join-e2e.test.ts:1263,1340,1365`. Size M. Depends on: nothing.
+  **2026-11-10 (A394-13):** done — on `PATCH /management-api/devices/:id` a profile the body names
+  (`profileId`, `approvedProfileIds`) now answers `device_profile.not_found` 400 and a made-here
+  station it names (`madeHereStationIds`, unknown or switched off) `station.not_found` 400, under
+  the route's own boundary `runDeviceEdit`; on `POST /management-api/device-join-requests/:id/accept`
+  the body's `profileId` answers `device_profile.not_found` 400. A kitchen-screen station either
+  body names is refused `station.not_allowed` or `kitchen_screen.invalid`, already 400, so neither
+  route raises `station.not_found` from it. The shared `STATUS` tables still map both codes to 404:
+  the auto-join that finds no till profile and the station screen whose stored station has no
+  routing state are unchanged. A ticket-item bump on `POST /api/device/ticket-items/:id/advance`
+  and `POST /api/ticket-items/:id/advance` that names no item (unknown or malformed path id) now
+  answers a new code, `ticket_item.not_found` 404; a body `to` outside the transition table
+  (`queued`, garbage, missing, a non-string) answers `management.request_invalid` on `to`, 400,
+  screened once, in `advanceTicketItem`; a skip, repeat or backwards move on an existing item
+  stays `ticket.invalid_transition` 409. `device.pairing_hold_lapsed` keeps its code and answers
+  404 on `/pairing-mode/holds/:holdId/renew` (path) and 400 on `/device-join-requests/:id/check`
+  (body `holdId`), each under its own boundary. The till and dashboard read these codes, not the
+  status; the till station screen shows its generic advance message for any refusal but a full
+  disk, so the new code needs no wording. The `watcher.not_found` rows no longer exist: the
+  watcher routes were removed by #1502.
 - **A394-14 — Printing, orders and reports: a body printer or watcher answers 400.** Files:
   `apps/server/src/print-api.ts`, `orders-api.ts`, `report-api.ts`. Changes `printer.not_found` (4
   routes) and `watcher.not_found` (1 route) → 400 with second boundaries for the path routes;

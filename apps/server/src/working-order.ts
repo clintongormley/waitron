@@ -7864,8 +7864,10 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
     : { state: to, readyAt: at };
 }
 
-/** Advance one fired ticket item one step. An item not released yet (`fired_at` is null: held, or
- *  Requested and waiting for the pass) is refused `ticket.item_held`. */
+/** Advance one fired ticket item one step. A `to` outside the transition table is refused
+ *  `management.request_invalid` on `to`, an unknown item `ticket_item.not_found`, and an item not
+ *  released yet (`fired_at` is null: held, or Requested and waiting for the pass)
+ *  `ticket.item_held`. */
 export async function advanceTicketItem(
   tx: Transaction,
   cfg: TradingContext,
@@ -7877,7 +7879,7 @@ export async function advanceTicketItem(
   // Own string keys only: `hasOwn` converts its key, so ["preparing"] would otherwise match, and an
   // inherited name such as "__proto__" is not a transition.
   if (typeof to !== "string" || !Object.hasOwn(TICKET_TRANSITIONS, to)) {
-    throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
+    throw new AppError("management.request_invalid", { field: "to" });
   }
   const validTo = to as Exclude<TicketState, "queued">;
   const transition = TICKET_TRANSITIONS[validTo];
@@ -7898,9 +7900,8 @@ export async function advanceTicketItem(
       .select({ firedAt: ticketItems.firedAt })
       .from(ticketItems)
       .where(eq(ticketItems.id, itemId));
-    if (item !== undefined && item.firedAt === null) {
-      throw new AppError("ticket.item_held", { ticketItemId: itemId });
-    }
+    if (item === undefined) throw new AppError("ticket_item.not_found", { ticketItemId: itemId });
+    if (item.firedAt === null) throw new AppError("ticket.item_held", { ticketItemId: itemId });
     throw new AppError("ticket.invalid_transition", { ticketItemId: itemId });
   }
   await captureKitchenActivity(

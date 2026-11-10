@@ -3476,9 +3476,9 @@ export class TillApi {
 
   /**
    * Advance ONE ticket item one kitchen step → `POST /api/ticket-items/:id/advance`. `to` is the NEXT
-   * state; a skip, repeat or backwards move, or an unknown item, rejects with
-   * `ticket.invalid_transition`. A dish now at a station other than `stationId` rejects with
-   * `device.forbidden_station`.
+   * state; a skip, repeat or backwards move rejects with `ticket.invalid_transition`, and an
+   * unknown item with `ticket_item.not_found`. A dish now at a station other than `stationId`
+   * rejects with `device.forbidden_station`.
    */
   async advanceTicketItem(
     itemId: string,
@@ -3645,8 +3645,8 @@ export class TillApi {
   /**
    * Advance ONE ticket item at a station the device's station screen works →
    * `POST /api/device/ticket-items/:id/advance`, the device-scoped {@link advanceTicketItem}. An
-   * item at any other station rejects `device.forbidden_station` (403); an illegal transition or unknown
-   * item `ticket.invalid_transition`.
+   * item at any other station rejects `device.forbidden_station` (403); an illegal transition
+   * `ticket.invalid_transition`, and an unknown item `ticket_item.not_found`.
    */
   async deviceAdvance(itemId: string, to: Exclude<TicketState, "queued">): Promise<void> {
     await this.#request<void>(`/api/device/ticket-items/${itemId}/advance`, "POST", { to });
