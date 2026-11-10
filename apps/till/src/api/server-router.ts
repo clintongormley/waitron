@@ -54,8 +54,8 @@ export class ServerRouter extends EventTarget {
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
   #chart: HeldChart | null = null;
-  /** A box is listed both as the page's origin and under its own name; once the origin has said
-   * which node it is, the entry carrying that node id is the same server and is left out. */
+  /** The node id the page origin's latest probe answered with; an entry the chart gives that id is
+   * neither probed, drawn nor chosen while it holds. */
   #originNodeId: string | undefined;
   /** `url chart-term answered-term` triples already posted: a server is handed each held chart
    * once per answer, so a box that refused it while answering no term is handed it again once it
@@ -140,7 +140,22 @@ export class ServerRouter extends EventTarget {
   }
 
   async #runRound(): Promise<void> {
-    await Promise.all(this.#shown().map((s) => this.#probe(s)));
+    const probed = this.#shown();
+    // A hidden line keeps no old answer to be drawn with once the page's answer unhides it.
+    for (const s of this.#servers) {
+      if (!probed.includes(s)) {
+        s.state = "unknown";
+        s.term = null;
+      }
+    }
+    await Promise.all(probed.map((s) => this.#probe(s)));
+    // The page's answer can unhide a box's line; probe it now so the till can follow that box in
+    // this round.
+    await Promise.all(
+      this.#shown()
+        .filter((s) => !probed.includes(s))
+        .map((s) => this.#probe(s)),
+    );
     const yes = this.#shown().filter((s) => s.state === "primary");
     this.#waiting = yes.length === 0;
     if (yes.length > 0) {
@@ -153,7 +168,7 @@ export class ServerRouter extends EventTarget {
   #shown(): Tracked[] {
     const own = this.#originNodeId;
     if (own === undefined) return this.#servers;
-    return this.#servers.filter((s) => s.url === this.#origin || s.nodeId !== own);
+    return this.#servers.filter((s) => s.nodeId !== own);
   }
 
   /** Dispatch only when the rendered state changed, so a steady probe round drives no repaint. */
@@ -187,6 +202,7 @@ export class ServerRouter extends EventTarget {
         cache: "no-store",
       });
       if (!res.ok) {
+        this.#forgetOriginNode(s);
         s.state = "unreachable";
         s.term = null;
         return;
@@ -196,18 +212,23 @@ export class ServerRouter extends EventTarget {
         term?: unknown;
         nodeId?: unknown;
       };
-      if (s.url === this.#origin && typeof body.nodeId === "string") {
-        this.#originNodeId = body.nodeId;
+      if (s.url === this.#origin) {
+        this.#originNodeId = typeof body.nodeId === "string" ? body.nodeId : undefined;
       }
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
       this.#handChart(s.url, s.term);
     } catch {
+      this.#forgetOriginNode(s);
       s.state = "unreachable";
       s.term = null;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  #forgetOriginNode(s: Tracked): void {
+    if (s.url === this.#origin) this.#originNodeId = undefined;
   }
 
   /** Fire and forget, and never moves the till. A post answered with a 2xx or 4xx status is not sent
