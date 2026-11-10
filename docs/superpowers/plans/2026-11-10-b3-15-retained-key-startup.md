@@ -15,6 +15,10 @@ The owner authorised the [six-slice parent](2026-10-26-b3-usb-installer.md), not
 | Support | Extend `bench/box-installer/{run.mjs,Containerfile}`, `scripts/box/recipe-setup.mjs`. | 130/15 |
 | Docs | This plan, `bench/box-installer/README.md`, `deploy/README.md`, `docs/backlog.md`, `docs/backlog/box.md`. | 70/20 |
 
+| Interface provenance | Source’s words | Planned use |
+| --- | --- | --- |
+| [systemd v257](https://raw.githubusercontent.com/systemd/systemd/v257/man/systemd-cryptenroll.xml) | “used instead of reading the current PCR value”; “for wiping all key slots that are unlocked by an empty passphrase” | Probe explicit PCR15 enrollment and `--wipe-slot=empty`; guest behavior remains unverified. |
+
 **Build after clearance.** Reuse `createDiskRecoveryStore`, `diskRecoveryKeyPassphrase` and preboot policies. Bind the store to encrypted root-owned `@host-state`; enroll its existing 32-byte key as the recovery passphrase. Accept a clean bootstrap or a fully enrolled, matching disk opened by this boot’s TPM attempt. Refuse partial/ambiguous states; reinstall rather than retry or rotate. Authenticate `--wipe-slot=empty` through the retained-key descriptor; prove empty authentication fails. Secrets use descriptors/root-only tmpfs, never arguments/environment/logs; no tracing/swap/core dumps. Use Debian’s host `nodejs` package and existing notice collection.
 
 Add GRUB’s `tpm` module. Replace automatic `rd.luks.*` discovery with `rd.luks=0` and one Waitron disk-UUID argument. The hook skips unencrypted populate/stick boots; on installed boots it attempts TPM once, extends PCR15 on every exit, then permits bootstrap fallback only. Seal to PCRs 5/7/8/9 and PCR15’s zero reset value. Keep measured files unchanged. Enrolling service precedes a separate read-only, `RemainAfterExit=yes` gate required by both Docker service/socket. Populate/recipe boots receive runtime-only gate overrides from the rig; none ships on disk.
