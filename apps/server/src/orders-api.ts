@@ -67,6 +67,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "submission.id_reused": 409,
 };
 const run = createErrorBoundary(STATUS, "orders.failed");
+// A reprint names its printer only in the body's `printerId`.
+const runReprint = createErrorBoundary({ ...STATUS, "printer.not_found": 400 }, "orders.failed");
 
 const CURSOR = /^(?:(\d{1,16})_)?(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(.+)$/;
 const PAGE_SIZE = /^[1-9]\d{0,2}$/;
@@ -279,7 +281,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
   );
 
   app.post("/management-api/orders/:id/reprint", (c) =>
-    run(c, log, async () => {
+    runReprint(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id").toLowerCase();
       if (!isUuid(id)) throw new AppError("working_order.not_found", { workingOrderId: id });

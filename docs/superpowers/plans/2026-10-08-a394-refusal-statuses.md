@@ -226,7 +226,7 @@ pin today's number are in the part named.
 - **Printing, orders, reports (A394-14)** — part 3: `printer.not_found` from a body on
   `/orders/:id/reprint`, `/reports/categories/print`, `/watchers/:id/printers`,
   `/stations/:sid/printers` → 400; `watcher.not_found` on `/printers/:id/watcher` → 400;
-  `printer.invalid_config` 422 → 400.
+  `printer.invalid_config` 422 → 400 (moved to A394-20 on 2026-11-10; it waits on question 4).
 - **Payments (A394-15)** — part 3: `payment.provider_unknown` (body, 2 routes), `reader.not_found`
   (body, 2 routes) → 400; `reader.not_listed` on adopt 422 → 400; `payment.not_stuck` for an unknown
   payment 409 → 404.
@@ -546,6 +546,24 @@ Status changes:
   change: `orders-reprint.test.ts:292-312`, `report-api.categories.test.ts:550-557`,
   `print-api.printer-wiring.test.ts:935,1073`, `print-api.test.ts:962,1265-1267,1425,3236-3329`.
   Size S. Depends on: questions 4 and 9 for their rows.
+  **2026-11-10 (A394-14):** done — a printer that only the request body names now answers
+  `printer.not_found` 400 on `POST /management-api/orders/:id/reprint` (`printerId`),
+  `POST /management-api/reports/categories/print` (`printerId`) and
+  `PUT /management-api/stations/:sid/printers` (`printerIds`), and a card reader that
+  `POST /management-api/printers/:id/equipment-label` names in its body `id` answers
+  `reader.not_found` 400. Each route has its own boundary built from its file's `STATUS` with that
+  one code at 400 (`runReprint`, `runCategoryPrint`, `runStationPrinterList`,
+  `runEquipmentLabel`); the shared tables are unchanged, so every other route under them keeps its
+  status, among them the path printer on `POST`/`DELETE /stations/:sid/printers/:pid`. On the
+  equipment-label route `printer.not_found` keeps 404: it names both the path printer that prints
+  the label and a body `id` when `kind` is `printer`, one code for two meanings, the choice A394-11
+  made where the address and the form raise one code (A394-9 left the same case with the owner).
+  `reader.not_found` there comes only from the body `id`. The watcher rows no longer exist: the
+  watcher routes were removed by #1502. `printer.invalid_config` 422 and the two Bluetooth 409s
+  (questions 4 and 9) were left alone; A394-20 now carries them. A grep of `apps/dashboard`,
+  `apps/till`, `apps/setup` and `packages/` on 2026-11-10 finds no client comparing the status of
+  these four routes; the dashboard reads the code, and no client calls the station printer list
+  `PUT`.
 - **A394-15 — Payments: body ids answer 400, an unknown stuck payment 404.** Files:
   `apps/server/src/payments-api.ts`. Changes `payment.provider_unknown` and `reader.not_found` from
   bodies → 400; `reader.not_listed` on adopt → 400; `payment.not_stuck` for an unknown payment →
@@ -575,7 +593,11 @@ Status changes:
 - **A394-20 — One-off rows after the owner's answers.** Files: `units-api.ts` with
   `packages/catalogue/src/units.ts` (target unit → a second code), `location-settings-api.ts`,
   `cloud-api.ts`, `promote-api.ts`, `receipt-preview-api.ts`, `stream-api.ts`, `backup-api.ts`, the
-  till's no-reader case. Statuses per questions 5, 8, 10, 11, 14. Tests listed per row in the parts.
+  till's no-reader case, `print-api.ts`'s `printer.invalid_config` 422 and two Bluetooth 409s
+  (left by A394-14), and `catalogue-api.ts`'s `menu_section.wrong_role`,
+  `menu.shortcut_unreachable` and `extras.product_has_variants` 409s (left by A394-11) and its
+  folder summary's query ids at 404 (question 8, left by A394-11). Statuses per questions 4, 5, 8,
+  9, 10, 11, 14. Tests listed per row in the parts.
   Size M; split by file if it grows. Depends on: those questions.
 - **A394-21 — Server faults answer 500, an unset box 409.** Files:
   `configuration-transfer.ts`, `email-settings-api.ts`, `backup-api.ts`, `location-settings-api.ts`,
@@ -1298,6 +1320,8 @@ Codes checked 3 / match 2 / mismatch 1. `working_order.not_found` 404 is the pat
 | --- | --- | --- | --- | --- | --- | --- |
 | `POST /management-api/orders/:id/reprint` | `printer.not_found` | 404 (`orders-api.ts:42`) | 400 | `printerId` is a body field (`orders-api.ts:195-196`), looked up at `orders-reprint.ts:23-33` | code only: `apps/dashboard/src/widgets/order-reprint-dialog.ts:78` | `apps/server/src/orders-reprint.test.ts:292,308,312` (`status: 404`) |
 
+**2026-11-10 (A394-14):** the row above now answers 400, under the route's own boundary.
+
 ### payments-api.ts — boundary `payments-api.ts:141` (map `:99-135`)
 
 Codes checked 28 / match 21 / mismatch 6 rows (on 4 codes), plus 7 codes where 422 is used for
@@ -1354,6 +1378,10 @@ Codes checked 13 / match 8 / mismatch 6 rows (on 5 codes). Fitting: `printer.not
 | `POST /management-api/printers` and `PATCH /management-api/printers/:id` | `printer.invalid_config` | 422 (`:124`) | 400 | the body's transport fields are missing or contradict (`packages/printing/src/printers.ts:21,65`); not a file | none found | `print-api.test.ts:962,1425` (422) |
 | `POST /management-api/print-agents/:id/bluetooth/pair` | `printer.bluetooth_not_discovered` | 409 (`:120`) | 400 (judgment) | body `address` (`:737-738`) names a printer the agent has not reported (`:745-746`) | none found | `print-api.test.ts:3236,3251,3265,3329` (409) |
 | `POST /management-api/print-agents/:id/bluetooth/forget` | `printer.bluetooth_not_paired` | 409 (`:121`) | 400 (judgment) | body `address` names a printer not reported as paired (`:762-763`). Could also be read as a state clash (409); owner's call | none found | `print-api.test.ts:3294,3308` (409) |
+
+**2026-11-10 (A394-14):** the station printer list row now answers 400, and the equipment label's
+body reader (`reader.not_found`, a route this audit did not list) answers 400; the watcher rows no
+longer exist (#1502); the `printer.invalid_config` and Bluetooth rows wait on questions 4 and 9.
 
 ### promote-api.ts — boundary `promote-api.ts:55` (map `:44-52`)
 
@@ -1413,6 +1441,8 @@ catalogue clashes with the checks) I read as a clash, so it fits.
 | Route | Code | Current | Rule | Why | Clients | Tests pinning it |
 | --- | --- | --- | --- | --- | --- | --- |
 | `POST /management-api/reports/categories/print` | `printer.not_found` | 404 (`:72`) | 400 | body `printerId` (`:401`), checked at `:405-410` | none found for this route | `report-api.categories.test.ts:550-557` (three cases, 404) |
+
+**2026-11-10 (A394-14):** the row above now answers 400, under the route's own boundary.
 
 ### schedule-api.ts — boundary `schedule-api.ts:43` (map `:31-41`)
 

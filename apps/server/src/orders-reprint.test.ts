@@ -323,7 +323,7 @@ describe("dashboard receipt reprint", () => {
     );
     const before = await counts();
     expect(await post(venue.adminDashboard, valid, randomUUID())).toMatchObject({
-      status: 404,
+      status: 400,
       json: { code: "printer.not_found" },
     });
     expect(await post(venue.adminDashboard, valid)).toMatchObject({
@@ -343,7 +343,7 @@ describe("dashboard receipt reprint", () => {
       json: { code: "working_order.not_found" },
     });
     expect(await post(venue.adminDashboard, valid, other.id)).toMatchObject({
-      status: 404,
+      status: 400,
       json: { code: "printer.not_found" },
     });
     const after = await counts();
@@ -401,7 +401,7 @@ describe("a receipt copy printed on a printer later deleted", () => {
 
     const refusedAt = await counts();
     expect(await post(venue.adminDashboard, billId, old.id)).toMatchObject({
-      status: 404,
+      status: 400,
       json: { code: "printer.not_found" },
     });
     expect(await counts()).toEqual(refusedAt);
