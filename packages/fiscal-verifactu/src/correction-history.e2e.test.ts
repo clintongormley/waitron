@@ -41,7 +41,7 @@ import { mountRecordRemedies } from "./record-remedy-routes.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 
-/** Slices 1–3 together: what is stored feeds the calculator, whose lines and split the writer files. */
+/** What is stored feeds the calculator, whose lines and split the writer files and the regime validates. */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
