@@ -463,6 +463,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A full invoice needs a reviewed manual correction. Ask a manager for help",
     es: "Una factura completa necesita una rectificación manual revisada. Pide ayuda a un responsable",
   },
+  "sale.correction_history_unusable": {
+    en: "This invoice's VAT was changed after the tax agency refused it, so it cannot be cancelled here. Keep the order open and take payment as usual",
+    es: "El IVA de esta factura se cambió después de que la Agencia Tributaria la rechazara, así que no se puede anular aquí. Deja la cuenta abierta y cobra como siempre",
+  },
+  // The till reaches this code only through a cancellation, which raises it solely while a filed
+  // VAT fix waits for its answer (`filed_figures_unanswered`).
+  "sale.correction_not_admitted": {
+    en: "The tax agency has not yet answered this invoice's VAT fix, so it cannot be cancelled yet. Try again once it has answered",
+    es: "La Agencia Tributaria aún no ha respondido a la corrección del IVA de esta factura, así que todavía no se puede anular. Vuelve a intentarlo cuando haya respondido",
+  },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
     es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",

@@ -467,6 +467,23 @@ it("says what to do about each refusal of an unpaid departure, in both languages
   }
 });
 
+it("says why a cancellation of an invoice with a VAT fix is refused, in both languages", () => {
+  const cases = {
+    "sale.correction_history_unusable": {
+      en: "This invoice's VAT was changed after the tax agency refused it, so it cannot be cancelled here. Keep the order open and take payment as usual",
+      es: "El IVA de esta factura se cambió después de que la Agencia Tributaria la rechazara, así que no se puede anular aquí. Deja la cuenta abierta y cobra como siempre",
+    },
+    "sale.correction_not_admitted": {
+      en: "The tax agency has not yet answered this invoice's VAT fix, so it cannot be cancelled yet. Try again once it has answered",
+      es: "La Agencia Tributaria aún no ha respondido a la corrección del IVA de esta factura, así que todavía no se puede anular. Vuelve a intentarlo cuando haya respondido",
+    },
+  };
+  for (const [code, text] of Object.entries(cases)) {
+    expect(codeMessage(code, "en")).toBe(text.en);
+    expect(codeMessage(code, "es")).toBe(text.es);
+  }
+});
+
 it("words each refusal a cancel and credit can meet, in both languages, naming no identifier", () => {
   const generic = {
     en: codeMessage("server.internal", "en"),

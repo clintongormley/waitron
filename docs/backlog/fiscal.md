@@ -957,7 +957,7 @@ asesor Q31 (2026-09-30), not decided.
   cancelling an issued order is refused while a VAT fix of its invoice waits for AEAT's answer
   (`sale.correction_not_admitted`, `filed_figures_unanswered`), and when a fix changed its total or
   its filed figures cannot be read (`sale.correction_history_unusable`); the till API answers 409.
-  The till has no wording for either and offers no next step until slice 5's till screen or the
+  The till explains each refusal but offers no next step until slice 5's till screen or the
   filing-case remedy screens give one.
 
 ## Correct VAT without returning money
