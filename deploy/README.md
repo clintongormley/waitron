@@ -177,10 +177,13 @@ has no address, they are every address except loopback and those on connections 
 read, nothing is printed there. The QR code always stays `http://waitron.local/setup/trust`.
 
 A browser may upgrade HTTP to HTTPS before the guide opens. Both listeners serve the guide and
-certificate downloads at matching paths, but HTTPS can still show a certificate warning. On a spare, the plain-HTTP listener answers only the box itself; use the spare's `https://` address. Use the
+certificate downloads at matching paths, but HTTPS can still show a certificate warning. Use the
 browser's option to visit the local HTTP site if offered, or transfer the certificate from another
 device that can reach the box. Opening the wizard directly also offers certificate help before you
 enter setup details. Its Continue button checks communication with the box, not installed trust.
+Once a box has joined as a spare, its plain-HTTP listener answers only the box itself while the
+server runs (the recovery page's listener still answers the network); from another device, use the
+spare's `https://` address.
 
 On a box that already has a checkout of this repository, run the checkout's own script instead of
 downloading it. Because the folder above that copy holds the checkout's `.git`, `install` uses it as

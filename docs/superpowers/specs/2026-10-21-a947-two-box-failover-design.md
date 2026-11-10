@@ -1205,7 +1205,7 @@ the spare's status, nothing that sells — and any device reaches it:
    page at the address it always uses — where passkeys work unchanged (below). The original design
    already required that a waiting spare not answer the venue's name otherwise; today's responder
    does it with no role check (§2), and its answer lasts 120 seconds in a device's cache
-   (`MDNS_TTL_SECONDS`, `apps/server/src/mdns.ts:45`), so a device that looked the name up just
+   (`MDNS_TTL_SECONDS`, `apps/server/src/box-lookup.ts`), so a device that looked the name up just
    before the main box died may need up to that long to find the spare — **not measured**; slice
    4d measures it on the till hardware and shortens the lifetime if needed. Partitions are covered
    by what already exists: if a device or the spare can still reach the main box, the switch is

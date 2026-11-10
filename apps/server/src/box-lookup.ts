@@ -6,10 +6,13 @@ import { isLoopbackHost } from "./primary-url.js";
 import { ownInterfaceAddresses } from "./request-from-box.js";
 import "./errors.js";
 
-/** TTL (seconds) on the A records — short so a moved box is re-resolved quickly. */
+/**
+ * The lifetime this box gives its own A records, and the longest a kept answer lives: short so a
+ * moved box is re-resolved quickly.
+ */
 export const MDNS_TTL_SECONDS = 120;
 
-/** A venue has a handful of boxes; a network answering for many names cannot grow the store. */
+/** A venue has a handful of boxes; asking for many different names cannot grow the store past this. */
 const MAX_KEPT_NAMES = 64;
 
 /** A minimal view of a multicast-dns instance used for asking, so lookups can be tested with a fake. */
