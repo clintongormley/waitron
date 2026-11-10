@@ -8,6 +8,8 @@
 
 **Dependency update, 10 November 18:44:** the watcher released cut 3 to build before #2736 lands, from main if independent, or otherwise on that PR's branch. No cut 3 PR opens before #2736 is on main. The watcher's 19:10 owner-requested Fable read still holds #2736 landing.
 
+**Build checkpoint, 10 November 19:22:** the watcher cleared growth to about 760 changed lines plus review fixes, with an outside review again before about 850. Its same note says implementation waits for #2736; reconciliation with the 18:44 release is pending in Lane F questions. Existing work stays local while that gate is settled.
+
 ## Cut 3: historical balances and a copy before full payment
 
 **Finish:** reopen **Pay → Payments → Print a copy** beside a received reader payment, including an unpaid bill. Reuse the existing sale-level slip action after settlement; change only its first-tender visibility to any eligible reader capture. Add no per-payment ticket controls or history navigation.
