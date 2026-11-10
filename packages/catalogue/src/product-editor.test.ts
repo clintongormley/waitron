@@ -9,11 +9,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import {
-  createCatalogue,
-  listProducts,
-  updateProduct,
-} from "./operations.js";
+import { createCatalogue, listProducts, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
 import { createCategory } from "./categories.js";
