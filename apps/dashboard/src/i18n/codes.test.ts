@@ -1,12 +1,14 @@
 import { en, es } from "./strings.js";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { codeMessage, codeOf, fieldOf } from "./codes.js";
-import { setLocale, t } from "./t.js";
+import { currentLocale, setLocale, t } from "./t.js";
 
-afterEach(() => {
-  // Reset to the shipped default so a setLocale in one test cannot leak into another.
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
   setLocale("es-ES");
 });
+afterEach(() => setLocale(previousLocale));
 
 it("resolves a known code to its Spanish copy", () => {
   expect(codeMessage("password.invalid", "es")).toBe("Contraseña incorrecta, inténtalo de nuevo");

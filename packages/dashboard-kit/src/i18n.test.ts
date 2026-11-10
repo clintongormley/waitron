@@ -11,13 +11,13 @@ import {
   type NameTable,
 } from "./i18n.js";
 
+const previousLocale = currentLocale();
 beforeEach(() => {
   registerCatalogue({ en: { "x.hi": "Hi" }, es: { "x.hi": "Hola" } });
   setLocale("es-ES");
 });
 afterEach(() => {
-  // Module-level locale state — reset to the shipped default so a setLocale in one test cannot leak.
-  setLocale("es-ES");
+  setLocale(previousLocale);
 });
 
 it("resolves the region-stripped locale, then English, then the key", () => {
@@ -106,3 +106,12 @@ it("resolves a crafted 200,000-character locale within one second", () => {
   expect(pickLocale({ en: "En", es: "Es" }, crafted)).toBe("En");
   expect(performance.now() - started).toBeLessThan(1000);
 });
+
+it.each(["__proto__", "constructor", "toString"])(
+  "ignores inherited locale and key %s",
+  (value) => {
+    expect(t("x.hi", value)).toBe("Hi");
+    expect(t(value, "en-GB")).toBe(value);
+    expect(pickLocale({ en: "English", es: "Spanish" }, value)).toBe("English");
+  },
+);

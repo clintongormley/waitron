@@ -731,6 +731,8 @@ export class DeviceProfilesScreen extends LitElement {
       await Promise.all([
         this.#queries.watch("listDeviceProfiles", [], (value) => {
           this.profiles = value;
+          if (this.#readErrorOwner === "main") this.#showError(null);
+          if (this.#standingReadError !== null) this.#showReadError(this.#standingReadError.error);
           this.#profilesRead = true;
           this.#openLinkedProfile();
         }),

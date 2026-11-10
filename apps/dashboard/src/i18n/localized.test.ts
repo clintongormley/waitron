@@ -1,13 +1,16 @@
 import { beforeEach, afterEach, expect, it } from "vitest";
-import { setLocale } from "./t.js";
+import { currentLocale, setLocale } from "./t.js";
 import { localizedName } from "./localized.js";
 import { setContentLanguages } from "@waitron/ui";
 
-beforeEach(() => setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] }));
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
+});
 
 afterEach(() => {
-  // Reset to the shipped default so a setLocale in one test cannot leak into another.
-  setLocale("es-ES");
+  setLocale(previousLocale);
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
 });
 

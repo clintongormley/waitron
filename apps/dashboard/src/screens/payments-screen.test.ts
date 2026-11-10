@@ -1918,6 +1918,7 @@ describe("the providers and readers once the server answers again", () => {
     const { el } = await mount(api);
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
 
+    expect(q(el, "section[slot=readers] wt-data-table")).toBeNull();
     api.liveData.refresh();
     await vi.waitFor(() =>
       expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online"),
@@ -2044,6 +2045,8 @@ describe("the providers and readers once the server answers again", () => {
     api.liveData.refresh();
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
     await flush(el);
+    expect(q(el, "section[slot=readers] wt-data-table")).not.toBeNull();
+    expect(qCell(el, "[data-test=reader-status-r-1]")).not.toBeNull();
     api.liveData.refresh();
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(3));
     await flush(el);
@@ -2487,3 +2490,28 @@ describe("who carries each card reader, and its equipment label", () => {
     expect(await decodeQrImage((label() as HTMLImageElement).src)).toBe(code);
   });
 });
+
+it("keeps readers unknown while pending, then shows a successful empty list", async () => {
+  let answer!: (readers: ReaderRow[]) => void;
+  const api = stubApi({
+    listReaders: vi.fn(
+      () =>
+        new Promise<ReaderRow[]>((resolve) => {
+          answer = resolve;
+        }),
+    ),
+  });
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api,
+    providerPanels: PANELS,
+  });
+  expect(q(el, "section[slot=readers] wt-data-table")).toBeNull();
+  answer([]);
+  await vi.waitFor(() => expect(q(el, "section[slot=readers] wt-data-table")).not.toBeNull());
+  expect(q(el, "section[slot=readers] wt-data-table")!.shadowRoot!.textContent).toContain(
+    t("payments.readers_empty"),
+  );
+});
+
+const receivedLocale = currentLocale();
+afterEach(() => setLocale(receivedLocale));

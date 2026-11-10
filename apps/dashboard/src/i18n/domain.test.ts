@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it } from "vitest";
 import {
   absenceKindName,
   absenceStatusName,
@@ -19,12 +19,14 @@ import {
   vatClassName,
   vatKindName,
 } from "./domain.js";
-import { setLocale } from "./t.js";
+import { currentLocale, setLocale } from "./t.js";
 
-afterEach(() => {
-  // Reset to the shipped default so a setLocale in one test cannot leak into another.
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
   setLocale("es-ES");
 });
+afterEach(() => setLocale(previousLocale));
 
 it("names each Home device in the screen's language", () => {
   expect(homeDeviceName("handheld")).toBe("Terminal de mano");

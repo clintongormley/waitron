@@ -9,7 +9,7 @@ import {
 } from "@waitron/shared";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, formatDecimalInput } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -28,9 +28,9 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
+import { quantity } from "../quantity.js";
+
 const money = (value: string) => formatMoney(value, currentLocale());
-const quantity = (value: string) =>
-  formatDecimalInput(value.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, ""), currentLocale());
 const date = (value: string) =>
   new Intl.DateTimeFormat(currentLocale(), { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),

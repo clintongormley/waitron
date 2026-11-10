@@ -3,7 +3,7 @@ import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
 import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
 import type { MenuDocumentTree } from "./menu-document-tree.js";
 import {
@@ -15,10 +15,14 @@ import {
 } from "./test-helpers.js";
 
 // The wording is asserted as a person reads it, in English unless a case says otherwise.
-beforeEach(() => setLocale("en"));
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("en");
+});
 afterEach(() => {
   vi.restoreAllMocks();
-  setLocale("es-ES");
+  setLocale(previousLocale);
   cleanupWidgets();
 });
 
@@ -1308,4 +1312,20 @@ it("A498 keeps the content choice readable beside Expand all on a phone", async 
   expect(selector.width).toBeGreaterThanOrEqual(170);
   expect(expand.top).toBeLessThan(selector.bottom);
   expect(expand.left).toBeGreaterThanOrEqual(selector.right);
+});
+
+it.each([
+  ["en-GB", "Valencian"],
+  ["es-ES", "Valenciano"],
+])("offers the standalone Valencian preview in %s", async (locale, name) => {
+  setLocale(locale!);
+  const before = currentContentLanguages();
+  try {
+    setContentLanguages({ defaultLanguage: "ca-ES-valencia", languages: ["ca-ES-valencia"] });
+    const el = await mount({});
+    const chooser = q<HTMLElementTagNameMap["wt-combobox"]>(el, "[name=menu-preview-view]")!;
+    expect(chooser.options.find((option) => option.value === "ca-ES-valencia")?.label).toBe(name);
+  } finally {
+    setContentLanguages(before);
+  }
 });

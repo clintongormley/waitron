@@ -1,3 +1,5 @@
+import { FALLBACK_LOCALE } from "@waitron/shared";
+
 // The dashboard's shared i18n resolver: module-level locale state, a pub/sub for live switches, and a
 // mutable catalogue registry a module fills at load — so a module UI can contribute its own strings
 // without the kit importing the app's string table.
@@ -8,7 +10,7 @@ const catalogues: Catalogue = { en: {}, es: {} };
 
 // The active locale for calls that don't pass one explicitly. Module-level on purpose — a
 // single-locale-at-a-time UI, not a multi-tenant server.
-let locale = "es-ES";
+let locale: string = FALLBACK_LOCALE;
 
 type LocaleListener = () => void;
 const localeListeners = new Set<LocaleListener>();
@@ -50,7 +52,9 @@ function languageOf(l: string): string {
  */
 export function t(key: string, l: string = locale): string {
   const lang = languageOf(l);
-  return catalogues[lang]?.[key] ?? catalogues.en[key] ?? key;
+  const catalogue = Object.hasOwn(catalogues, lang) ? catalogues[lang]! : catalogues.en!;
+  if (Object.hasOwn(catalogue, key)) return catalogue[key]!;
+  return Object.hasOwn(catalogues.en!, key) ? catalogues.en![key]! : key;
 }
 
 /** A typed t() bound to a caller's own key union — the app narrows this to its StringKey. */
@@ -64,7 +68,7 @@ export function makeT<K extends string>(): (key: K, l?: string) => string {
  */
 export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
   const lang = languageOf(l);
-  return (entry as Record<string, string>)[lang] ?? entry.en;
+  return Object.hasOwn(entry, lang) ? (entry as Record<string, string>)[lang]! : entry.en;
 }
 
 /** A `token → { en, es }` display-name table (roles, statuses, allergen codes, booking states, …). */

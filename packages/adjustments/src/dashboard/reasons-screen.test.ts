@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LiveData, codeMessage, setLocale, type QueryController } from "@waitron/dashboard-kit";
+import {
+  LiveData,
+  codeMessage,
+  currentLocale,
+  setLocale,
+  type QueryController,
+} from "@waitron/dashboard-kit";
 import type { DeleteImpact, DeleteImpactRefusal } from "@waitron/shared";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, chooseOptions, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -12,7 +18,9 @@ import { ADJUSTMENTS_STRINGS, actionChoice, kindName, roleName, t, tf } from "./
 const ES = ADJUSTMENTS_STRINGS.es;
 
 const hosts: HTMLElement[] = [];
+let previousLocale: string;
 beforeEach(() => {
+  previousLocale = currentLocale();
   sessionStorage.clear();
   localStorage.clear();
   setLocale("en");
@@ -21,7 +29,7 @@ beforeEach(() => {
 afterEach(() => {
   sessionStorage.clear();
   localStorage.clear();
-  setLocale("en");
+  setLocale(previousLocale);
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   for (const host of hosts.splice(0)) host.remove();
 });
@@ -2608,3 +2616,14 @@ for (const locale of ["en", "es"]) {
     );
   });
 }
+
+it.each([
+  ["en-GB", "Valencian"],
+  ["es-ES", "valenciano"],
+])("names Valencian within the reason label in %s", async (locale, name) => {
+  setContentLanguages({ defaultLanguage: "ca-ES-valencia", languages: ["ca-ES-valencia"] });
+  const el = await mount(fakeApi());
+  setLocale(locale!);
+  await press(el, "edit-c");
+  expect(field(el, "names-ca-ES-valencia").getAttribute("label")).toContain(name);
+});

@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
@@ -3776,3 +3776,26 @@ describe("a device profile's address", () => {
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+it("clears a duplicate's direct reload failure when live profiles arrive", async () => {
+  const api = Object.assign(stubApi(), { liveData: new LiveData() });
+  const el = await mount(api);
+  vi.mocked(api.listDeviceProfiles).mockRejectedValueOnce({ code: "connection.failed" });
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed"),
+    ),
+  );
+  api.liveData.refresh();
+  await vi.waitFor(() => expect(api.listDeviceProfiles).toHaveBeenCalledTimes(3));
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});
+
+let receivedLocale: string;
+beforeEach(() => {
+  receivedLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => setLocale(receivedLocale));

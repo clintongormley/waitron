@@ -24,7 +24,7 @@ import {
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
-import { resolveActiveLocale } from "@waitron/shared";
+import { FALLBACK_LOCALE, resolveActiveLocale } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
 import { collectSearchDestinations } from "./nav-destinations.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -1127,7 +1127,7 @@ export class DashboardApp extends LitElement {
   @state() private onboardingIntent?: "demo" | "prepare" | "live";
 
   // Returning to sign-in must have a language even when the server is unreachable.
-  #venueLocale = "es-ES";
+  #venueLocale: string = FALLBACK_LOCALE;
   #loginLocale?: string;
   #loginLocaleChoice = 0;
   /** Bumped by a signed-in language pick, the twin of `#loginLocaleChoice` for the login screen. A

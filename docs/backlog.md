@@ -1457,7 +1457,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Should an all-archived product selection show Archive greyed out rather than hidden?**
   Left open by W110c (#1271); A435-1 removes Enable and keeps Archive hidden for that selection.
 
-- **Dashboard i18n odds** (bundle of 3, size S). [Detail](backlog/dashboard.md#bundle-dashboard-i18n-odds)
 
 - **Quantity display** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-quantity-display)
 
@@ -1525,7 +1524,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing
   keeps the two in step. Left open by A191 (the dashboard's sign-in pages, #1074; owner to decide).
 
-- **Read failure display** (bundle of 2, size S). [Detail](backlog/dashboard.md#bundle-read-failure-display)
 
 - **Modifiers' Status and Printers' Agent/Printer Status filters still receive column lists built
   during render** (A370 caller audit, code reading only). Their redraw work was not measured in this

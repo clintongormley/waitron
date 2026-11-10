@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale, setLocale } from "../i18n/t.js";
 import { PersonForm } from "./person-form.js";
 
 afterEach(cleanupWidgets);
@@ -622,3 +622,10 @@ describe("person-form validation and keyboard submit", () => {
     ]);
   });
 });
+
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => setLocale(previousLocale));

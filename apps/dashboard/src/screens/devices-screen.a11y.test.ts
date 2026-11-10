@@ -2,7 +2,7 @@ import { expect, afterEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { t, currentLocale, setLocale } from "../i18n/t.js";
 import type { DeleteImpact } from "@waitron/shared";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
@@ -1136,3 +1136,10 @@ describe("devices-screen a11y — the numeric match", () => {
     );
   });
 });
+
+let previousLocale: string;
+beforeEach(() => {
+  previousLocale = currentLocale();
+  setLocale("es-ES");
+});
+afterEach(() => setLocale(previousLocale));
