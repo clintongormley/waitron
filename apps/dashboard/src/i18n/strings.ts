@@ -1830,10 +1830,8 @@ export const en = {
   "printers.reprint_printer": "Print on",
   "printers.reprint_wide_enough": "Only printers at least as wide as this printout are offered.",
   "printers.reprint_own_only": "This printout reprints only on its own printer.",
-  "printers.reprint_original_off":
-    "{printer} is disabled. Switch it on in its details, then reprint.",
-  "printers.reprint_none":
-    "No other active printer can take this printout. Switch {printer} on in its details, then reprint.",
+  "printers.reprint_original_off": "{printer} is disabled.",
+  "printers.reprint_none": "No other active printer can take this printout. {printer} is disabled.",
   "printers.reprint_stuck":
     "{printer} has not printed this. Reprinting it elsewhere cancels it there.",
   "printers.reprint_sent": "Reprint sent to {printer}",
@@ -5720,10 +5718,9 @@ export const es: Record<StringKey, string> = {
   "printers.reprint_wide_enough":
     "Solo se ofrecen impresoras al menos tan anchas como esta impresión.",
   "printers.reprint_own_only": "Esta impresión solo se reimprime en su propia impresora.",
-  "printers.reprint_original_off":
-    "{printer} está deshabilitada. Actívala en sus detalles y reimprime.",
+  "printers.reprint_original_off": "{printer} está deshabilitada.",
   "printers.reprint_none":
-    "Ninguna otra impresora activa sirve para esta impresión. Activa {printer} en sus detalles y reimprime.",
+    "Ninguna otra impresora activa sirve para esta impresión. {printer} está deshabilitada.",
   "printers.reprint_stuck":
     "{printer} aún no la ha impreso. Si la reimprimes en otra, se cancela allí.",
   "printers.reprint_sent": "Reimpresión enviada a {printer}",

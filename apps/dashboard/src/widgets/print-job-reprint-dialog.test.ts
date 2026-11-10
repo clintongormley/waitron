@@ -127,7 +127,7 @@ it.each([
   ["own", [], "printers.reprint_original_off"],
   ["wide_enough", [], "printers.reprint_none"],
 ] as const)(
-  "says what to do when a disabled original's %s printout has nowhere else to go",
+  "says the original is disabled when its %s printout has nowhere else to go",
   async (reprintRule, reprintPrinterIds, key) => {
     const { el } = await mount(
       job({
