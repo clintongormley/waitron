@@ -595,8 +595,10 @@ describe("venue history locks", () => {
     );
     expect(saved.model.details.name).toBe("Current display");
   });
-  it("permits a time-zone override before operational history and retains the initial start", async () => {
+  it("permits a time-zone override before operational history without saving the venue document", async () => {
     const initial = await read();
+    const document = suite.db.all(sql`select * from settings where module = 'venue'`);
+    const activity = suite.db.all(sql`select * from activity_log where kind = 'settings.saved'`);
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
@@ -605,6 +607,10 @@ describe("venue history locks", () => {
     );
     expect(saved.model.details.timeZone).toBe("UTC");
     expect(saved.model.details.dayCutover).toBe("05:00");
+    expect(suite.db.all(sql`select * from settings where module = 'venue'`)).toEqual(document);
+    expect(suite.db.all(sql`select * from activity_log where kind = 'settings.saved'`)).toEqual(
+      activity,
+    );
     const { rows } = await suite.db.execute(
       sql`select day_cutover from locations where id = ${venue.cfg.locationId}`,
     );
