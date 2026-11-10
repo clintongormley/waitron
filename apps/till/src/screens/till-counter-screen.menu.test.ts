@@ -250,7 +250,7 @@ it("A461 Counter forwards unfiltered served offers through both menu diet result
   expect(source.unfilteredServedProducts).toEqual([salad, steak, wine, meatyBeer]);
 });
 
-describe("the pay card's Cash and Card while the basket's pay controls are held", () => {
+describe("the Pay entry while the basket's pay controls are held", () => {
   async function mountHeld(busy: boolean) {
     const store = new WorkingOrderStore();
     store.addProduct(dish("cafe", "Café", "lunch"), "1");
@@ -264,16 +264,14 @@ describe("the pay card's Cash and Card while the basket's pay controls are held"
       "till-tender-pay",
     )!;
     await pay.updateComplete;
-    return ["pay", "pay-card"].map((name) =>
-      pay.shadowRoot!.querySelector(`.${name}`)!.getAttribute("variant"),
-    );
+    return pay.shadowRoot!.querySelector("[data-counter-pay]")!.getAttribute("variant");
   }
 
-  it("draws them grey with a line rung up", async () => {
-    expect(await mountHeld(false)).toEqual(["secondary", "secondary"]);
+  it("draws Pay grey with a line rung up", async () => {
+    expect(await mountHeld(false)).toBe("secondary");
   });
 
-  it("keeps them blue while a payment is being sent", async () => {
-    expect(await mountHeld(true)).toEqual(["primary", "primary"]);
+  it("keeps Pay blue while a payment is being sent", async () => {
+    expect(await mountHeld(true)).toBe("primary");
   });
 });
