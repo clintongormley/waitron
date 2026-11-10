@@ -4992,6 +4992,30 @@ describe("A803 portion grouping: the station queue", () => {
     ).toEqual(["+ Jamón 150 g", "+ Queso 0.250 kg"]);
   });
 
+  it("A1202 names a measured extra made at another station with its amount and unit", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        order([
+          portion("p1", {
+            crossRefs: [
+              {
+                kind: "with",
+                name: "JAMÓN",
+                amount: "150.000",
+                unitName: { "es-ES": "g" },
+                stationName: "Fryer",
+              },
+            ],
+          }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-crossref]")!.textContent).toContain(
+      "with JAMÓN 150 g from Fryer",
+    );
+  });
+
   it("A803 portion grouping: a portion in another state shows apart", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order([portion("p1"), portion("p2", { state: "preparing" })])],

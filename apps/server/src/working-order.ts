@@ -7970,6 +7970,8 @@ export interface QueueCrossRef {
   kind: "with" | "for";
   name: string;
   perDish?: number;
+  amount?: string;
+  unitName?: Record<string, string>;
   stationName: string | null;
   addAllergens?: ProductAllergens | null;
   suitableFor?: string[] | null;
@@ -8140,18 +8142,21 @@ async function readQueueSubItems(
     .orderBy(workingOrderLines.lineNo);
   const counted = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
-    childRows.flatMap((child) => (child.ticketId === null ? [child.id] : [])),
+    childRows.map((child) => child.id),
   );
   for (const child of childRows) {
+    const quantity = thousandthsToDecimal(child.quantity);
+    const dishes = thousandthsToDecimal(parentQuantities.get(child.parentLineId!)!);
+    const amountPerDish =
+      child.unitName == null || counted.has(child.id)
+        ? { perDish: perDishOptionQuantity(quantity, dishes) }
+        : { amount: divideDecimal(quantity, dishes, QUANTITY_SCALE), unitName: child.unitName };
     if (child.ticketId !== null) {
       const refs = crossRefsByLine.get(child.parentLineId!) ?? [];
       refs.push({
         kind: "with",
         name: kitchenPresentationName(child),
-        perDish: perDishOptionQuantity(
-          thousandthsToDecimal(child.quantity),
-          thousandthsToDecimal(parentQuantities.get(child.parentLineId!)!),
-        ),
+        ...amountPerDish,
         stationName: child.stationName,
         addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
         suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
@@ -8160,13 +8165,9 @@ async function readQueueSubItems(
       continue;
     }
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
-    const quantity = thousandthsToDecimal(child.quantity);
-    const dishes = thousandthsToDecimal(parentQuantities.get(child.parentLineId!)!);
     mods.push({
       descriptions: child.descriptions,
-      ...(child.unitName == null || counted.has(child.id)
-        ? { perDish: perDishOptionQuantity(quantity, dishes) }
-        : { amount: divideDecimal(quantity, dishes, QUANTITY_SCALE), unitName: child.unitName }),
+      ...amountPerDish,
       addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
       suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
     });

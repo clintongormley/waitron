@@ -1503,6 +1503,8 @@ export interface QueueCrossRef {
   kind: "with" | "for";
   name: string;
   perDish?: number;
+  amount?: QueueModifier["amount"];
+  unitName?: QueueModifier["unitName"];
   stationName: string | null;
   addAllergens?: QueueModifier["addAllergens"];
   suitableFor?: QueueModifier["suitableFor"];

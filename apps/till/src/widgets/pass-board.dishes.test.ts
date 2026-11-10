@@ -108,6 +108,26 @@ describe("A773 pass board widget: dishes", () => {
     ).toEqual(["+ Jamón 150 gr", "+ Queso 0.250 kg"]);
   });
 
+  it("A1202 names a measured extra made at another station with its amount and unit", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "with",
+        crossRefs: [
+          {
+            kind: "with",
+            name: "JAMÓN",
+            amount: "0.250",
+            unitName: { "es-ES": "kg" },
+            stationName: "Fryer",
+          },
+        ],
+      }),
+    ]);
+    expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+      "with JAMÓN 0.250 kg from Fryer",
+    );
+  });
+
   it.each(["Tea $& $' $`", "Tea {station}"])(
     "A1006 shows a dish and station named %s exactly as typed in a cross-reference",
     async (name) => {
