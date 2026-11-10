@@ -154,7 +154,6 @@ describe("accepted group attendance snapshots", () => {
           key: `group:${event.id}`,
           kind: "order",
           personId: v.operatorId,
-          locationId: v.cfg.locationId,
           at: "2026-01-05T16:40:00.000Z",
           outcome: "qualifying",
         }),

@@ -30,15 +30,14 @@ describe("the public surface", () => {
  * select never runs it. Calling `getTableConfig` forces the callback to run.
  */
 describe("convenio_config constraint declarations (forces the lazy extraConfig callback)", () => {
-  it("declares convenio_config's foreign keys, unique key and working-days check", () => {
+  it("declares convenio_config's singleton and working-days checks", () => {
     const config = getTableConfig(api.convenioConfig);
 
     const fkNames = config.foreignKeys.map((fk) => fk.getName());
-    expect(fkNames).toEqual(expect.arrayContaining(["convenio_config_location_fk"]));
+    expect(fkNames).toEqual([]);
 
-    expect(config.uniqueConstraints.map((u) => u.getName())).toContain(
-      "convenio_config_location_uq",
-    );
+    expect(config.uniqueConstraints.map((u) => u.getName())).toEqual([]);
+    expect(config.checks.map((c) => c.name)).toContain("convenio_config_singleton_ck");
 
     expect(config.checks.map((c) => c.name)).toContain("convenio_config_working_days_ck");
   });

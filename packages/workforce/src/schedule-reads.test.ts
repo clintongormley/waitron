@@ -43,12 +43,9 @@ describe("listShiftsForPerson", () => {
   it("shows only published shifts while drafts, unattached and superseded shifts stay hidden", async () => {
     const personId = await seedPerson(suite.db, `publication-${crypto.randomUUID()}`);
     const loc = await seedLocation(suite.db);
-    const published = await insertRosterVersion(suite.db, { locationId: loc });
+    const published = publishedVersionId;
     const draft = await insertRosterVersion(suite.db, { locationId: loc });
     const superseded = await insertRosterVersion(suite.db, { locationId: loc });
-    await suite.db.execute(
-      sql`update roster_versions set status='published', published_at='2026-01-01T00:00:00Z' where id=${published}`,
-    );
     await suite.db.execute(
       sql`update roster_versions set status='superseded', published_at='2025-12-31T00:00:00Z' where id=${superseded}`,
     );

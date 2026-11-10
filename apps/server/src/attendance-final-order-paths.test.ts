@@ -115,7 +115,6 @@ describe("remaining accepted order attendance", () => {
       expect.objectContaining({
         source: "order",
         personId: v.operatorId,
-        locationId: v.cfg.locationId,
         kind: "order",
         at: "2026-01-05T16:40:00.000Z",
         outcome: "qualifying",
@@ -195,7 +194,6 @@ describe("remaining accepted order attendance", () => {
           expect.objectContaining({
             source: "order",
             personId: v.operatorId,
-            locationId: v.cfg.locationId,
             at: "2026-01-05T16:40:00.000Z",
             outcome: "qualifying",
           }),

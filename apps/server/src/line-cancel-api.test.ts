@@ -1287,7 +1287,6 @@ describe("the public cancellation read and command", () => {
     expect(facts[0]).toMatchObject({
       source: "order",
       personId: venue.staffId,
-      locationId: venue.cfg.locationId,
       kind: "order",
     });
     expect((await post(p, body, venue.cookie.staff, app)).json).toEqual(first.json);

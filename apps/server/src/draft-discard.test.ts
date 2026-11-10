@@ -202,7 +202,6 @@ describe("Discard resolves the whole owned draft atomically", () => {
     expect(own).toHaveLength(1);
     expect(own[0]).toMatchObject({
       personId: venue.staffId,
-      locationId: venue.cfg.locationId,
       kind: "order",
     });
     expect(
