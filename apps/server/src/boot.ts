@@ -362,7 +362,7 @@ import {
   type MdnsSocket,
 } from "./mdns.js";
 import type { MdnsQuerySocket } from "./box-lookup.js";
-import { ownInterfaceAddresses, requestFromBox } from "./request-from-box.js";
+import { ownInterfaceAddresses, requestProvenFromBox } from "./request-from-box.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
 import { createJobRunner } from "./job-runner.js";
 import { menuActivationJob } from "./menu-activation.js";
@@ -1336,7 +1336,7 @@ async function bootServer(
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
   let spare = false;
-  const fromBox = seams.requestFromBox ?? requestFromBox;
+  const fromBox = seams.requestFromBox ?? requestProvenFromBox;
   mountDiscovery(
     app,
     {

@@ -24,7 +24,7 @@ import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
-import { requestFromBox } from "./request-from-box.js";
+import { requestFromBox, requestProvenFromBox } from "./request-from-box.js";
 import { HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 
@@ -118,7 +118,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
   };
 
   const refuseFromNetworkOnMirror = (c: Context): void => {
-    if (deps.isMirror === true && !(deps.requestFromBox ?? requestFromBox)(c))
+    if (deps.isMirror === true && !(deps.requestFromBox ?? requestProvenFromBox)(c))
       throw new AppError("promotion.from_box_only", {});
   };
 

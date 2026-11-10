@@ -1,12 +1,17 @@
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
 import type { networkInterfaces } from "node:os";
+import { serve, type ServerType } from "@hono/node-server";
 import { Hono } from "hono";
-import { expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   addressIsBox,
   requestAddress,
   requestFromBox,
+  requestProvenFromBox,
   type RequestSourceDeps,
 } from "./request-from-box.js";
+import { resetObserver } from "./testing/reset-request.js";
 
 const interfaces = (() => ({
   eth0: [
@@ -89,4 +94,45 @@ it("never counts a request through the remote entrance as the box, even over loo
     await sourceOf({ remoteStaff: true, incoming: { socket: { remoteAddress: "127.0.0.1" } } }),
   ).toBe(false);
   expect(await sourceOf({ remoteStaff: true })).toBe(false);
+});
+
+it("a box check that permits counts only a readable box address", async () => {
+  const strictOf = async (env: unknown) => {
+    const app = new Hono();
+    app.get("/", (c) => c.json({ onBox: requestProvenFromBox(c, deps) }));
+    return ((await (await app.request("/", {}, env)).json()) as { onBox: boolean }).onBox;
+  };
+  const socket = (remoteAddress?: string) => ({ incoming: { socket: { remoteAddress } } });
+  expect(await strictOf(socket("::ffff:192.168.10.20"))).toBe(true);
+  expect(await strictOf(socket("127.0.0.1"))).toBe(true);
+  expect(await strictOf(socket("192.168.10.31"))).toBe(false);
+  expect(await strictOf(socket())).toBe(false);
+  expect(await strictOf(undefined)).toBe(false);
+  expect(await strictOf({ remoteStaff: true, ...socket("127.0.0.1") })).toBe(false);
+});
+
+describe("a connection reset before its route runs", () => {
+  let server: ServerType;
+  let port: number;
+  const reset = resetObserver();
+  beforeAll(async () => {
+    const app = new Hono();
+    app.get("/", (c) =>
+      c.json({ lenient: requestFromBox(c, deps), permits: requestProvenFromBox(c, deps) }),
+    );
+    server = serve({ fetch: reset.wrap(app.fetch), port: 0, hostname: "127.0.0.1" });
+    await once(server, "listening");
+    port = (server.address() as AddressInfo).port;
+  });
+  afterAll(() => {
+    server.close();
+  });
+
+  it("is counted as the box by a check that refuses, and never by one that permits", async () => {
+    const answer = await reset.sendThenReset(port, "GET / HTTP/1.1\r\nHost: box\r\n\r\n");
+    expect([answer.status, JSON.parse(answer.body)]).toEqual([
+      200,
+      { lenient: true, permits: false },
+    ]);
+  });
 });

@@ -1,4 +1,5 @@
 import { once } from "node:events";
+import { request as httpsRequest } from "node:https";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -26,8 +27,12 @@ import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { writeTlsSet } from "./testing/box-tls.js";
 import { writePendingAdoption } from "./finish-adoption.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { resetObserver } from "./testing/reset-request.js";
 
 const served = vi.hoisted(() => [] as { port: number; server: import("node:net").Server }[]);
+const fetchWrap = vi.hoisted(() => ({
+  wrap: <T>(fetch: T): T => fetch,
+}));
 
 vi.mock("@hono/node-server", async () => {
   const actual = await vi.importActual<typeof import("@hono/node-server")>("@hono/node-server");
@@ -37,7 +42,10 @@ vi.mock("@hono/node-server", async () => {
       options: Parameters<typeof actual.serve>[0],
       onListen: Parameters<typeof actual.serve>[1],
     ) => {
-      const server = actual.serve({ ...options, port: 0 }, onListen);
+      const server = actual.serve(
+        { ...options, fetch: fetchWrap.wrap(options.fetch), port: 0 },
+        onListen,
+      );
       served.push({ port: options.port ?? 0, server: server as import("node:net").Server });
       return server;
     },
@@ -45,6 +53,8 @@ vi.mock("@hono/node-server", async () => {
 });
 
 const { startServer } = serverFixture();
+const reset = resetObserver();
+fetchWrap.wrap = reset.wrap as typeof fetchWrap.wrap;
 
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
@@ -87,10 +97,11 @@ async function seedVenue(): Promise<void> {
   await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
 }
 
-/** Seeds the venue for `start` and boots it; `fromBox` decides who each request is from. */
+/** Seeds the venue for `start` and boots it; `fromBox`, when given, decides who each request is
+ * from in place of the connection's address. */
 async function boot(
   start: Start,
-  options: { landing?: boolean; fromBox: { current: boolean } },
+  options: { landing?: boolean; fromBox?: { current: boolean } },
 ): Promise<{ server: StartedServer; app: Hono; stateDir: string }> {
   await seedVenue();
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-surface-state-"));
@@ -152,7 +163,7 @@ async function boot(
   const mdns = fakeMdnsSocket();
   const seams: StartServerSeams = {
     observeApp: (observed) => (app = observed),
-    requestFromBox: () => options.fromBox.current,
+    ...(options.fromBox === undefined ? {} : { requestFromBox: () => options.fromBox!.current }),
     mdnsSocket: () => mdns.socket,
   };
   served.splice(0);
@@ -294,11 +305,35 @@ const LATCH_ANSWERS: Record<string, Answer> = {
   "GET /setup-api/ca.crt": { status: 200 },
 };
 
+async function listenerFor(port: number): Promise<AddressInfo> {
+  const listener = served.find((entry) => entry.port === port);
+  if (listener === undefined) throw new Error(`no listener was started for ${port}`);
+  if (!listener.server.listening) await once(listener.server, "listening");
+  return listener.server.address() as AddressInfo;
+}
+
 async function landingAddress(): Promise<string> {
-  const landing = served.find((entry) => entry.port === LANDING_PORT);
-  if (landing === undefined) throw new Error("no landing listener was started");
-  if (!landing.server.listening) await once(landing.server, "listening");
-  return (landing.server.address() as AddressInfo).address;
+  return (await listenerFor(LANDING_PORT)).address;
+}
+
+const REPAIR_REQUEST =
+  `POST /setup-api/connection/repair HTTP/1.1\r\nHost: ${OWN_HOST}\r\n` +
+  `Origin: ${OWN_ORIGIN}\r\nContent-Length: 0\r\n\r\n`;
+
+/** A repair over a kept connection from this machine to the real HTTPS listener. */
+async function repairOverLoopback(port: number): Promise<number> {
+  const request = httpsRequest({
+    host: "127.0.0.1",
+    port,
+    method: "POST",
+    path: "/setup-api/connection/repair",
+    headers: { host: OWN_HOST, origin: OWN_ORIGIN, "content-length": "0" },
+    rejectUnauthorized: false,
+  });
+  request.end();
+  const [response] = (await once(request, "response")) as [import("node:http").IncomingMessage];
+  response.resume();
+  return response.statusCode!;
 }
 
 async function repair(app: Hono): Promise<Answer> {
@@ -378,6 +413,28 @@ describe("a spare's network surface", () => {
         expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(before);
         fromBox.current = true;
         expect(await repair(app)).toEqual({ status: 200 });
+      } finally {
+        await server.close();
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
+  it.each<Start>(["mirror", "latch"])(
+    "a spare refuses a connection repair whose client reset before it ran: the %s start",
+    async (start) => {
+      const { server, stateDir } = await boot(start, {});
+      try {
+        const { port } = await listenerFor(HTTP_PORT);
+        const before = await readFile(join(stateDir, "tls", "server.crt"));
+        const answer = await reset.sendThenReset(port, REPAIR_REQUEST, { tls: true });
+        expect([answer.status, JSON.parse(answer.body)]).toEqual([
+          403,
+          { error: "connection.refused" },
+        ]);
+        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(before);
+        expect(await repairOverLoopback(port)).toBe(200);
       } finally {
         await server.close();
         await rm(stateDir, { recursive: true, force: true });
