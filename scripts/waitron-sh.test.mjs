@@ -1879,7 +1879,8 @@ describe("waitron.sh reset", () => {
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
 
-  it("the reset's state clean-up removes the venue authority a join left in tls/ and keeps the box's own files", () => {
+  /** Runs the reset's state clean-up over a state folder whose tls/ holds `tlsFiles`. */
+  function resetStateWith(tlsFiles) {
     const match = readFileSync(SCRIPT, "utf8").match(
       /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
     );
@@ -1887,18 +1888,7 @@ describe("waitron.sh reset", () => {
     const state = mkdtempSync(join(tmpdir(), "waitron-sh-state-"));
     dirs.push(state);
     mkdirSync(join(state, "tls"));
-    for (const name of [
-      "ca.crt",
-      "ca.key",
-      "server.crt",
-      "server.key",
-      "venue-ca.crt",
-      "venue-ca.key",
-      "venue-ca.crt.tmp",
-      "venue-ca.key.tmp",
-    ]) {
-      writeFileSync(join(state, "tls", name), name);
-    }
+    for (const name of tlsFiles) writeFileSync(join(state, "tls", name), name);
     writeFileSync(join(state, "secrets.env"), "WAITRON_CREDENTIALS_KEY=x\n");
     const r = spawnSync("sh", ["-c", match[1]], {
       encoding: "utf8",
@@ -1906,6 +1896,25 @@ describe("waitron.sh reset", () => {
       timeout: 10_000,
     });
     expect(r.status).toBe(0);
+    return state;
+  }
+
+  it("the reset of a box that joined another empties tls/", () => {
+    const state = resetStateWith([
+      "ca.crt",
+      "ca.key",
+      "server.crt",
+      "server.key",
+      "server.key.install",
+      "install.json",
+      "joined.json",
+    ]);
+    expect(readdirSync(state)).toEqual(["tls"]);
+    expect(readdirSync(join(state, "tls"))).toEqual([]);
+  });
+
+  it("the reset of a box that never joined keeps its authority and leaf", () => {
+    const state = resetStateWith(["ca.crt", "ca.key", "server.crt", "server.key"]);
     expect(readdirSync(state)).toEqual(["tls"]);
     expect(readdirSync(join(state, "tls")).sort()).toEqual([
       "ca.crt",

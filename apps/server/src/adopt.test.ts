@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
 import { X509Certificate, createPrivateKey } from "node:crypto";
@@ -38,6 +38,8 @@ import { verifyBreakGlass } from "./break-glass.js";
 import { keyRingEnv, writeCredentialsRing } from "./box-secrets.js";
 import { parseEnvFile } from "./env-file.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { runStagedReset, stageResetRequest } from "./reset-request.js";
+import { createSetupOperationStore } from "./setup-operation.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -620,27 +622,48 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     });
   });
 
-  it("a join stopped just after the key ring was written leaves the marker", async () => {
+  it("a join stopped just after the key ring was written leaves the marker, so the staged reset removes the ring", async () => {
+    const venueDir = join(stateDir, "venue");
+    await mkdir(venueDir);
+    const operations = createSetupOperationStore(stateDir);
+    const joinAndStage = async (bundle: MirrorBundle, stopBeforeFirstWrite: boolean) => {
+      const stopped = await operations
+        .run("adopt", "a-request", (operation) =>
+          adoptFromPrimary(deps({ fetchBundle: async () => bundle }), REQ, {
+            beforeFirstWrite: async () => {
+              if (stopBeforeFirstWrite) throw new Error("stopped");
+              await operation.advance("venue_committed", { resetProof: {} });
+            },
+          }),
+        )
+        .catch((e: unknown) => e);
+      expect(stopped).toBeInstanceOf(Error);
+      const record = await operations.read();
+      if (record !== null) await stageResetRequest(stateDir, record.id);
+      return record;
+    };
+
     // An authority key that cannot be read stops the install after the ring is written.
-    const stopped = await adoptFromPrimary(
-      deps({ fetchBundle: async () => makeBundle({ boxCaKeyPem: "not a key" }) }),
-      REQ,
-      NO_HOOKS,
-    ).catch((e: unknown) => e);
-    expect(stopped).toBeInstanceOf(Error);
+    const record = await joinAndStage(makeBundle({ boxCaKeyPem: "not a key" }), false);
     expect(parseEnvFile(await readFile(join(stateDir, "secrets.env"), "utf8"))).toMatchObject({
       WAITRON_CREDENTIALS_KEY: BUNDLE_RING.key,
     });
     expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(true);
+    expect(record?.phase).toBe("venue_committed");
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+    expect(await readdir(join(stateDir, "tls"))).toEqual([]);
 
-    // Control: a join stopped before its first write leaves no marker.
-    await rm(join(stateDir, "tls"), { recursive: true });
-    await adoptFromPrimary(deps(), REQ, {
-      beforeFirstWrite: async () => {
-        throw new Error("stopped");
-      },
-    }).catch(() => {});
+    // Control: a join stopped before its first write leaves no marker, and no record past "started",
+    // so the reset route offers no reset.
+    await rm(join(stateDir, "setup-operation.json"), { force: true });
+    const own = "WAITRON_CREDENTIALS_KEY=b3du\nWAITRON_CREDENTIALS_KEY_VERSION=1\n";
+    await writeFile(join(stateDir, "secrets.env"), own, { mode: 0o600 });
+    const control = await joinAndStage(makeBundle(), true);
+    expect(control).toBeNull();
     expect(existsSync(join(stateDir, "tls", "joined.json"))).toBe(false);
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(false);
+    expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(own);
   });
 
   it("pins the main box's public key", async () => {

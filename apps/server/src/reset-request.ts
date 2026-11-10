@@ -2,14 +2,15 @@ import { MODULES_FILE, SETUP_OPERATION_FILE } from "@waitron/store";
 import { RESET_REQUEST_FILE, TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed } from "@waitron/provisioning";
 import { existsSync } from "node:fs";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
 import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisioning";
-import { VENUE_FILE } from "@waitron/store";
+import { SECRETS_ENV_FILE, TLS_DIR, TLS_JOINED_FILE, VENUE_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
-import { stagedPath, writeFileAtomic } from "./fs-atomic.js";
+import { writeFileAtomic } from "./fs-atomic.js";
+import { joinedAnotherBox } from "./box-tls-install.js";
 import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
@@ -104,18 +105,20 @@ export async function runStagedReset(
       return false;
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
-    // The join's copy of the other venue's authority goes with the join, with the working copies
-    // a join stopped before their rename leaves.
-    for (const file of [
-      PENDING_ADOPTION_FILE,
-      MODULES_FILE,
-      SETUP_OPERATION_FILE,
-      "tls/venue-ca.crt",
-      "tls/venue-ca.key",
-      stagedPath("tls/venue-ca.crt"),
-      stagedPath("tls/venue-ca.key"),
-    ]) {
+    for (const file of [PENDING_ADOPTION_FILE, MODULES_FILE, SETUP_OPERATION_FILE]) {
       await rm(join(deps.stateDir, file), { force: true });
+    }
+    // The other venue's authority and key ring may be here, so the box's own go with them and the
+    // next setup start mints a fresh set. The marker goes last.
+    if (await joinedAnotherBox(deps.stateDir)) {
+      await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
+      const tlsDir = join(deps.stateDir, TLS_DIR);
+      for (const name of await readdir(tlsDir)) {
+        if (join(TLS_DIR, name) !== TLS_JOINED_FILE) {
+          await rm(join(tlsDir, name), { recursive: true, force: true });
+        }
+      }
+      await rm(join(deps.stateDir, TLS_JOINED_FILE), { force: true });
     }
     // Last, so a start cut short re-runs the reset; once the record is gone a re-run discards.
     await rm(markerPath, { force: true });

@@ -1,6 +1,6 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -19,7 +19,8 @@ import { AppError } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
-import { writeCredentialsRing } from "./box-secrets.js";
+import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
+import { markJoined } from "./box-tls-install.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { parseEnvFile } from "./env-file.js";
 import { PENDING_ADOPTION_FILE, type PendingAdoption } from "./finish-adoption.js";
@@ -94,7 +95,8 @@ const migrate = (venueDir: string) =>
   applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
 /** A box whose adopt wrote its rows and files and then stopped, as `adoptFromPrimary` leaves it. */
-async function halfAdoptedBox(): Promise<{
+/** `joined`: the adopt got as far as its marker, so the main box's ring and authority may be here. */
+async function halfAdoptedBox(joined = false): Promise<{
   stateDir: string;
   venueDir: string;
   operationId: string;
@@ -124,11 +126,7 @@ async function halfAdoptedBox(): Promise<{
   await writeFile(join(stateDir, PENDING_ADOPTION_FILE), "{}");
   await mkdir(join(stateDir, "tls"));
   await writeFile(join(stateDir, "tls", "ca.crt"), "ca");
-  await writeFile(join(stateDir, "tls", "venue-ca.crt"), "venue ca");
-  await writeFile(join(stateDir, "tls", "venue-ca.key"), "venue ca key");
-  // A join stopped between writing the working copies and renaming them leaves these.
-  await writeFile(join(stateDir, "tls", "venue-ca.crt.tmp"), "venue ca");
-  await writeFile(join(stateDir, "tls", "venue-ca.key.tmp"), "venue ca key");
+  if (joined) await markJoined(stateDir, PRIMARY_NODE_ID);
   await writeFile(join(stateDir, "secrets.env"), "S=1\n");
   await writeFile(join(stateDir, "backup.env"), "B=1\n");
 
@@ -158,10 +156,8 @@ async function snapshot(stateDir: string): Promise<string[]> {
     PENDING_ADOPTION_FILE,
     "setup-operation.json",
     "trading.env",
-    "tls/venue-ca.crt",
-    "tls/venue-ca.key",
-    "tls/venue-ca.crt.tmp",
-    "tls/venue-ca.key.tmp",
+    "tls/ca.crt",
+    "secrets.env",
   ];
   return Promise.all(
     paths.map(async (path) => {
@@ -235,10 +231,6 @@ describe("runStagedReset", () => {
       PENDING_ADOPTION_FILE,
       "setup-operation.json",
       "reset-request.json",
-      "tls/venue-ca.crt",
-      "tls/venue-ca.key",
-      "tls/venue-ca.crt.tmp",
-      "tls/venue-ca.key.tmp",
     ]) {
       expect(existsSync(join(stateDir, gone)), gone).toBe(false);
     }
@@ -259,6 +251,30 @@ describe("runStagedReset", () => {
     } finally {
       await store.close();
     }
+  });
+
+  it("a staged reset of a box that joined leaves no authority, leaf, client certificate or key ring", async () => {
+    const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
+    const tls = join(stateDir, "tls");
+    for (const name of ["ca.key", "server.crt", "server.key", "client.crt", "server.key.install"]) {
+      await writeFile(join(tls, name), name);
+    }
+    await stageResetRequest(stateDir, operationId);
+
+    expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+    expect(await readdir(tls)).toEqual([]);
+    expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe("B=1\n");
+    // A setup start can mint a fresh set: nothing of the old one is left to refuse it.
+    await ensureBoxSecrets({
+      stateDir,
+      hostnames: ["waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => [],
+    });
+    expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.crt", "server.key"]);
+    expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
   });
 
   it("lets the real adopt run to completion where before the reset it was refused", async () => {

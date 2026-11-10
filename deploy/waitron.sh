@@ -845,10 +845,12 @@ wipe_box() {
   if [ "$RESET_ALL" -eq 1 ]; then
     rm_volume waitron_state
   else
-    # A plain reset keeps tls/ and records/.
+    # A plain reset keeps tls/ and records/, except that a box that joined another (tls/joined.json)
+    # holds that venue's authority in tls/, so it is emptied there too, the marker last; secrets.env
+    # goes either way.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
       --entrypoint sh app \
-      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name records -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key" "${WAITRON_STATE_DIR:?}/tls/venue-ca.crt.tmp" "${WAITRON_STATE_DIR:?}/tls/venue-ca.key.tmp"'
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name records -exec rm -rf {} + && if [ -e "${WAITRON_STATE_DIR:?}/tls/joined.json" ]; then find "${WAITRON_STATE_DIR:?}/tls/" -mindepth 1 -maxdepth 1 -name joined.json -prune -o -exec rm -rf {} + && rm -f "${WAITRON_STATE_DIR:?}/tls/joined.json"; fi'
   fi
 }
 
