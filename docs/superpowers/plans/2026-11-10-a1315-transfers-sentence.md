@@ -1,5 +1,8 @@
 # A1315: shorten Transfers help
 
+Status, 2026-11-10 18:02: the watcher cleared this revised plan and its simpler count/absence
+check in Lane K questions.md; the waiting instruction below records the earlier plan stage.
+
 Owner decision, recorded by watcher 2026-11-10 17:19 in
 `/Users/clintongormley/waitron-campaign-k/questions.md:733`: "Drop the third sentence (Rec.)".
 Finish line: opening Transfers help in the handheld form shows its existing first two sentences
