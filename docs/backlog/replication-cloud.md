@@ -1130,6 +1130,16 @@ the chart, and the till hides a line for its page's own box.
   Settle it before two-box failover goes live: it can only happen once a venue has a second box,
   which is what A947 builds.
 
+- **Three limits 3b-3 ([#2761](https://github.com/clintongormley/waitron/pull/2761)) left in a
+  box's certificate check.** A box in the waiting start (waiting for its peers) or a restricted
+  start (handed over or superseded) serves its certificate before `ensureLeaf`
+  (`apps/server/src/box-secrets.ts`) checks it, so a certificate missing a new name or address is
+  served there until the next full start. A stop while a failed reissue is putting the old
+  certificate back can leave a certificate and key that do not belong together; the next start
+  reissues it, but the start's connection check may send the box to connection repair first. A
+  spare later promoted keeps `tls/joined.json`, so a plain reset of it also empties `tls/`, and its
+  devices must trust it again.
+
 ## A1273: the shared key ring has no rotation path to the spare
 
 Left open by A947 slice 3a, for slices 3b and 3c. A spare receives the main box's key ring once,
