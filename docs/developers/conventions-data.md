@@ -6332,3 +6332,26 @@ The source guard `scripts/write-path-tables.test.ts` restricts writes to the wri
 text, judges files rather than call chains, and misses the spellings and paths its header lists.
 It does not validate runtime data or guard reads. See
 [the approved interfaces and decisions](../superpowers/plans/2026-11-08-a1308-2-activity-log.md#interfaces-fixed-by-this-slice).
+
+## Root receipts moved on 2026-11-10
+
+These supporting fragments are from `CLAUDE.md` at
+`9ca4c3cf28787d47bba1f62f1522f49f074cf353`. The headings identify their unchanged root entries.
+
+### A module's configuration is one document in the shared settings table
+
+> Guards: `scripts/settings-not-migrated.test.ts` (weaker than the rule:
+> reads SQL text, not TypeScript run at migration or start) and the pinned-CHECK case in
+> `packages/db/src/settings.test.ts` (reads the built table's text, not what each check does).
+
+The full limits are in
+[A module's settings are one document in the shared settings table](#a-modules-settings-are-one-document-in-the-shared-settings-table).
+
+### A column of a transferred table that holds another row's id
+
+> A short id list kept as JSON (design R4) declares
+> `jsonReferences`: export prunes it, import rewrites it, and deletion clears it with
+> `removeIdFromJson`.
+
+How each path treats the list is in
+[the transferred-table section](#a-column-of-a-transferred-table-that-holds-another-rows-id-is-a-foreign-key-a-declared-references-entry-or-left-out-of-the-export).
