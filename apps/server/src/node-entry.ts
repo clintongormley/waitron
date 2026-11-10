@@ -353,7 +353,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
     });
   } catch (error) {
-    const variable = isAppError(error) ? error.params.variable : undefined;
+    const variable =
+      isAppError(error) && "variable" in error.params ? error.params.variable : undefined;
     (deps.reportFailure ?? (() => {}))(
       `The configured ${typeof variable === "string" ? variable : "backup settings"} cannot be used. Choose a folder outside ${join(deps.stateDir, SCRATCH_DIR)}, which the box empties at startup.`,
     );

@@ -58,7 +58,7 @@ it("reads an empty migrated database as holding no rows", async () => {
   const venueDir = join(root, "empty-venue");
   await mkdir(venueDir);
   await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
-  const result = await readSetupDatabase({ venueDir }, ALL_MODULES);
+  const result = await readSetupDatabase({ venueDir, stateDir: root }, ALL_MODULES);
   expect(result).toMatchObject({
     kind: "read",
     holdings: { rows: 0, kept: 0, records: 0, accepted: 0 },
