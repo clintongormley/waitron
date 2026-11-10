@@ -12,6 +12,7 @@ const server = Object.fromEntries(
   [
     ["box-secrets", "flushes; fl6 owns certificate swaps"],
     ["box-tls-repair", "flushes; fl6 owns it"],
+    ["box-tls-install", "A947 resumable TLS install"],
     ["cloud-client", "flushes; fl4 moves it"],
     ["cloud-recovery", "flushes; fl4 moves it"],
     ["cloud-replacement", "flushes; fl4 moves it"],
