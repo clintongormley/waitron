@@ -22,6 +22,7 @@
     "dev:reset:onboard": "tsx scripts/dev-onboard.ts --reset",
     "protection-list": "tsx scripts/protection-list/cli.ts",
     "migration-baseline": "tsx scripts/migration-baseline/cli.ts",
+    "bench": "tsx scripts/bench/cli.ts",
     "test": "vitest run",
     "test:preprod": "vitest run --config vitest.preprod.config.ts",
     "test:aws-rehearsal": "vitest run --config vitest.aws-rehearsal.config.ts",

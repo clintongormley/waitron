@@ -3411,6 +3411,157 @@ determinism case.
   built.
 
 
+## The bench
+
+A1308 changes most of the tables, and every slice has to show it did not make a path staff wait on
+slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
+in `apps/server/scripts/bench/` and runs from `apps/server` as `pnpm bench <command>`. It does not
+run in CI: only its unit tests do, in `apps/server`'s suite. It refuses a relative path, and a
+`--venue` or `--out` inside the repository; a refused command exits 2 through `pnpm bench`
+or `tsx`, and exited 1 through `pnpm -s` (pnpm 9.15.0). `bench compare`, which only
+reads its two files, takes any path.
+
+The bench builds a venue that trades through the real routes (`app.request`, with no network and a
+fake AEAT), then times the requests staff wait on. The dataset is synthetic. It follows
+`BENCH_PROFILE` in `apps/server/scripts/bench/profile.ts`: 250 bills a day for 360 days from
+2025-11-03, in Europe/Madrid, with 4 tills, 2 kitchen displays, 3 printers, 6 zones of 12 tables
+and about two thirds of bills paid by card. Rounds go through a waiter's draft, about a third of the
+later rounds are held and fired when due, and about one bill in 25 asks for a full invoice. One
+print agent prints every job through the agent routes. Each night the bench files the day's sales,
+runs the attendance passes and records the daily close.
+
+**Build it.** Build one venue per commit, in its own folder:
+
+```sh
+cd apps/server && C=$(git rev-parse --short HEAD) && mkdir -p ~/waitron-bench/$C && \
+  pnpm bench build --out ~/waitron-bench/$C --days 360 --bills-per-day 250 --seed 1
+```
+
+It prints two lines a day: the day's total, then each kind of request that day, largest total time
+first, with how many were sent and their median time. On a small build, `--days 2 --bills-per-day 30
+--seed 7`, it printed, cut short here:
+
+```text
+day 1/2 2025-11-03: 30 bills in 5.8 s, 0.195 s a bill
+  POST /api/parties/:id/drafts/:id/submit 76 x 19.3 ms; PUT /api/parties/:id/drafts 76 x 6.1 ms; …
+day 2/2 2025-11-04: 30 bills in 4.1 s, 0.137 s a bill
+  POST /api/parties/:id/drafts/:id/submit 73 x 14.5 ms; PUT /api/parties/:id/drafts 73 x 4.5 ms; …
+built 2 days into /tmp/bench-new7-FKz5
+```
+
+The folder holds `venue/`, the venue being traded, and `last-day/`, a copy taken after each finished
+day. `bench-session.json` records the last finished day, and `volume.json`, written only when the
+build finishes, holds the row count of every table, the size of `venue.db`, the seed, the commit and
+the profile.
+
+`request-timings.jsonl` holds one line of JSON for each finished day: `day`, `date`, `bills`,
+`dayMs`, `checkpointMs` and `routes`. `routes` gives, for each kind of request (`METHOD /path` with
+every id written `:id`), its `count`, `totalMs`, `medianMs` and `p95Ms`, so a request whose cost grows
+with history shows by name across the days. `checkpointMs` is the time spent checkpointing the
+database and copying the venue to `last-day/`, measured apart because that copy grows with the
+database. `dayMs - checkpointMs - sum(totalMs)` is the time outside requests: the bench's own reads
+between them, the overnight filing, the attendance passes and the daily close. A resumed build adds
+to the file and keeps each day once.
+
+If a build stops, run the same command again. It throws away `venue/`, because a half-traded day
+cannot be removed from the append-only tables, and carries on from `last-day/`. Running it again with
+a larger `--days` extends a finished build, and removes `volume.json` until the extension finishes. It
+refuses a different `--seed`, a different `--bills-per-day`, and a `--days` smaller than the days it
+has finished. Nothing checks that the code is the same, so never resume a folder with code that plans
+the days differently.
+
+Plan for a long run. On 9 November 2026 the full year took 8 h 28 min on an otherwise idle 32-core
+Linux server with Node 26.13.0, from 0.18 s a bill on day 1 to 0.49 s on day 360, and left 12.7
+million rows in a 15.5 GB `venue.db`; each `measure` with the defaults then took about an hour.
+
+**Measure it.**
+
+```sh
+pnpm bench measure --venue ~/waitron-bench/$C --out <absolute file> [--samples 200] [--rounds 3]
+```
+
+It needs `volume.json`, so it refuses a build that has not finished. Each case is one request, or
+the short run of requests a screen sends when it opens:
+
+| Case | What is timed |
+| --- | --- |
+| `payment.partial` | `POST /api/working-orders/:id/payments`, paying half a served bill in cash |
+| `payment.final` | the same route, paying the whole bill |
+| `sale.counter` | `POST /api/sales` |
+| `floor.read` | `GET /api/tables/state`, with 15 tables seated |
+| `floor.open` | `GET /api/zones`, then `GET /api/tables/state` |
+| `kitchen.queue` | `GET /api/stations/:id/queue`, with 30 dishes open |
+| `kitchen.screen` | `GET /api/device/station-screen`, as the kitchen display |
+| `kitchen.pass` | `GET /api/expo/board` |
+| `kitchen.pass-screen` | `GET /api/device/pass-board`, as the second display set up as a pass screen |
+| `dashboard.open` | `GET /management-api/session/me`, `/reports/overview` and `/reports/overdue-orders` |
+| `filing.pass` | one filing pass that sends 50 waiting sales to the fake AEAT |
+
+Only the requests in that column are inside the timer. A case's set-up runs untimed, and the case
+stops the run if the answer does not show the set-up, for example if `kitchen.queue` sees fewer than
+its 30 open dishes. The command prints each case's median for each round and writes the whole result,
+with `load: "idle"`, the machine, the Node version, the commit, the seed, the profile and the row
+count.
+
+**Compare two results.**
+
+```sh
+pnpm bench compare --before <file> --after <file>
+```
+
+For each case it takes the median of the after result's round medians. It prints `slower` if that is
+more than 10% above the before result's highest round median, `faster` if more than 10% below the
+lowest, and `same` otherwise. Two measurements of the same small build, 3 samples and 2 rounds each,
+printed in part:
+
+```text
+case                 before (round medians)  after (median)  verdict
+payment.partial      3.62 ms to 7.12 ms      5.16 ms         same
+floor.read           5.67 ms to 7.44 ms      5.59 ms         same
+filing.pass          8.68 ms to 12.29 ms     10.45 ms        same
+```
+
+3 samples are too few to trust a verdict: keep the default of 200. A case only one result holds is
+named under the table, as `only in before: …` or `only in after: …`.
+
+`bench compare` exits 0 whenever it can read both files, because a slower case is for a person to
+judge. When the two results differ in seed, profile or machine, or a case has no rounds or a round
+median that is not a number, it prints `not compared: …` instead of the table, and still exits 0. So
+read what it prints, never its exit status:
+
+```text
+not compared: bench: the two results differ in seed: 1 against 2
+```
+
+### How a slice uses it
+
+1. Before the change, in a throwaway worktree of the base commit (`git worktree add --detach <dir>
+   <base-sha>`, then `pnpm install` in it), build the bench venue and measure it twice. Compare the
+   two measurements with each other: any case that is not `same` shows how much noise that case has
+   on your machine.
+2. After the change, build a new bench venue on the new commit, in a new folder, measure it on the
+   same machine, and compare it with the base measurement. There is no pass mark: the rule is before
+   against after on one machine. The A1308 design's §5 says that the appendices' absolute figures
+   come from the reference micro PC when one is available, not from a developer Mac.
+
+### What it does not tell you
+
+- **The timings are taken on an idle database.** The cases run one at a time and nothing else uses
+  the venue meanwhile. A slice that needs timings under load measures them itself.
+- **The dataset is synthetic.** Its volumes and payment mix are the profile's, not a real venue's.
+- **Not behind boot's middleware.** The routes are mounted without the middleware boot puts in front of them, so
+  the timings leave it out.
+- **The bench venue stays open across days.** A real box restarts sometimes; a resumed build
+  reopens it, and carries on the attendance scan saved in the folder.
+- **`recordDailyClose` is the bench's own addition.** No boot step or route calls it today:
+  `git grep -n recordDailyClose -- 'apps/*.ts' 'packages/*.ts'` finds it, outside tests, only in
+  `apps/server/scripts/bench/trading-day.ts` and in `packages/reporting` itself.
+- **Each measure round starts from the same copy of the last day**, at the instant the build ended.
+  Rounds do not see each other's writes. Within a round they do: each `filing.pass` sample adds 50
+  sales first, so the last of 200 samples reads about 10,000 more sales than the first.
+- **The bench's tables have no floor plan, and its stations change only `printHeldWork` from the
+  defaults**, so the floor timings leave out the work a floor plan would add.
+
 ## Root receipt excerpts moved on 2026-10-23
 
 These passages retain the root instruction receipts moved by A1026. They are excerpts
