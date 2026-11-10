@@ -562,11 +562,12 @@ old name only points at the new one for 14 days. Five slices; no migration.
 
 **2026-11-10 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
 install onto a second virtual disk and start it twice through OVMF firmware, with no supplied kernel
-or app-start unit. The disk has the design’s five btrfs areas, still unencrypted. Setup hides/refuses
+or app-start unit. The disk has the design’s five btrfs areas inside LUKS2, with an empty development
+password that gives no theft protection. Setup hides/refuses
 Demo and retains Prepare, Live and Join or recover; the rehearsal opens Prepare’s administrator form.
-This qualifies only the emulator. Next come encrypted layout, then key sealing/startup with the retained
-key; A1187 part 3 and A950 cuts 4+ wait for that last slice. Release and real stick/box/Android checks
-remain open. [Installed-start plan](../superpowers/plans/2026-11-10-b3-13-installed-first-start.md).
+This qualifies only the emulator. Next come key sealing/startup with the retained key and refusal while
+the empty slot remains; A1187 part 3 and A950 cuts 4+ wait for that slice. Release and real stick/box/Android checks
+remain open. [Encrypted-layout plan](../superpowers/plans/2026-11-10-b3-14-encrypted-layout.md).
 
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”
@@ -1144,7 +1145,7 @@ client. No screen calls them yet.
 - The screen's words for the `letter` and `length` refusals, in Spanish and English, come with the
   preboot screen.
 - The key-use record and the startup-fingerprint check before resealing wait for the encrypted
-  installed root and its key-sealing startup route; the development recipe provides unencrypted startup only.
+  installed root's key-sealing startup route; the development recipe still opens with an empty password.
 - `disk-key.mjs`'s store (reading the record, and writing the key with `writeFile` and `rename`)
   and `wifi-record.mjs`'s reader check their folder and then use the file by path, so a root
   process can swap the folder in between. The installed host's Linux adapters must either open relative to

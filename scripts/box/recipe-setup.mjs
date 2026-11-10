@@ -36,6 +36,16 @@ export function installedFailures(expected, installedUuid, first, again) {
     failures.push(...bootFailures(expected, boot));
     if (!installedUuid || installedUuid === expected.uuid || boot.uuid !== installedUuid)
       failures.push("root-uuid");
+    if (!boot.luksUuid || boot.luksUuid === boot.uuid || boot.luksUuid !== first.luksUuid)
+      failures.push("luks-uuid");
+    const sizes = boot.partitionBytes;
+    if (
+      sizes?.length !== 3 ||
+      sizes[0] !== 536870912 ||
+      sizes[1] !== 1073741824 ||
+      sizes[2] < 10737418240
+    )
+      failures.push("partitions");
     if (boot.writerAbsent !== true) failures.push("installer-present");
     if (
       JSON.stringify([...boot.areas].sort()) !==

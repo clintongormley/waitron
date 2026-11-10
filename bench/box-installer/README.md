@@ -89,7 +89,9 @@ The first case checks that an occupied virtual target stays byte-for-byte unchan
 The second creates a blank 12 GiB virtual disk, firmware-boots the installer, installs,
 then detaches the source image and boots the target twice. It checks setup choices,
 opens Prepare, compares the installed images and services, and checks that the machine
-identity and certificate authority survive the second boot. A successful install must also
+identity, certificate authority and separate filesystem/LUKS identities survive the second boot.
+It checks the 512 MiB EFI and 1 GiB boot partitions and the five btrfs areas.
+A successful install must also
 report its systemd unit as successful. Serial logs and QEMU
 arguments show each phase; screenshots and observed JSON sit beside them.
 Copy the small evidence files you need, leaving target.img and firmware-variable copies
@@ -98,8 +100,10 @@ inside the disposable container.
 The source is attached read-only. Its installer runs with a temporary overlay, so boot-time
 writes stay in memory. The writer takes no device argument. It requires the rig’s machine name, exactly one
 non-source disk, the target’s virtio serial, no mounts or holders and an all-zero disk.
-It writes EFI and boot partitions, then unencrypted btrfs with separate root, images,
-volumes, logs and host-state areas. The disk starts the shipped development service;
+It writes EFI and boot partitions, then a marked LUKS2 container holding btrfs with separate root,
+images, volumes, logs and host-state areas. The standard startup image opens it using the
+UUID-qualified empty-password options on the boot line. Startup checks the mounted filesystem
+and its encrypted backing before Compose. The disk starts the shipped development service;
 no kernel, initrd, boot arguments or app-start unit is injected on disk-only boots.
 The installed payload contains no installer writer or installer unit. Startup uses `/health`
 after you complete setup; the setup-only evidence is emitted only while that route exists.
@@ -108,9 +112,11 @@ Guest package notices are kept under `/app/third-party`.
 Both routes are development rehearsals in QEMU with Secure Boot off. The original
 `recipe-setup` still supplies a temporary startup unit and boots its kernel directly.
 Neither rehearsal qualifies physical installation, TPM/Secure Boot, retained disk keys,
-first-start sealing, kiosk or real box/stick/Android behavior. Encryption before go-live
-remains required. Next come the encrypted layout, then key sealing and startup with the
-retained key. Certificate errors are ignored only for rendering the setup screen.
+first-start sealing, kiosk or real box/stick/Android behavior. The development disk keeps an empty
+password slot, so it provides no protection against theft. This temporarily permits Compose before
+the design's sealing step; the next slice must refuse Waitron startup while that slot remains and
+prove startup with the retained key. Protected encryption before go-live remains required.
+Certificate errors are ignored only for rendering the setup screen.
 
 After retaining the small results, remove your rehearsal resources. Do not remove
 shared images, volumes or build caches. Export the image first with `docker cp`

@@ -56,7 +56,7 @@ mkdir -p "$root/etc/systemd/system/bluetooth.service.d"
 bluez="$(sed -n 's/^ExecStart=//p' "$root/usr/lib/systemd/system/bluetooth.service")"
 printf '[Service]\nExecStart=\nExecStart=%s --noplugin=autopair\n' "$bluez" \
   > "$root/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf"
-printf 'hostonly="no"\nadd_drivers+=" virtio_pci virtio_blk ext4 btrfs "\n' > "$root/etc/dracut.conf.d/waitron.conf"
+printf 'hostonly="no"\nadd_drivers+=" virtio_pci virtio_blk ext4 btrfs dm_crypt "\nadd_dracutmodules+=" crypt "\n' > "$root/etc/dracut.conf.d/waitron.conf"
 printf '{"features":{"containerd-snapshotter":true}}\n' > "$root/etc/docker/daemon.json"
 systemctl --root="$root" enable docker.service NetworkManager.service
 mkdir -p "$root/etc/systemd/system-preset"

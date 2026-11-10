@@ -17,8 +17,11 @@ case "$name" in
  cat) case "$*" in
   */product_name) echo "\${DMI:-Waitron-B3-dev}" ;;
   */waitron-dev-root) echo installed-root ;;
+  */waitron-dev-luks) echo installed-luks ;;
   *) echo machine-a ;; esac ;;
- findmnt) echo "\${ROOT_UUID:-wrong-root}" ;;
+ findmnt)
+  if [[ "$*" == *SOURCE* ]]; then echo '/dev/mapper/luks-installed-luks[/@rootfs]'
+  else echo "\${ROOT_UUID:-wrong-root}"; fi ;;
  readlink) [ "$*" = "-f /run/systemd/volatile-root" ] || exit 99; echo "\${SOURCE_ROOT:-/dev/vda2}" ;;
  lsblk)
   if [[ "$*" == *MOUNTPOINTS* ]]; then echo "\${MOUNTED:-}"
@@ -40,7 +43,24 @@ case "$name" in
  cmp) exit "\${OCCUPIED:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
  docker) echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"; exit "\${DOCKER_EXIT:-43}" ;;
- sfdisk) echo "$*" >> "$WRITES"; exit 42 ;;
+ sfdisk)
+  echo "$*" >> "$WRITES"
+  if [ "\${PARTITION_EXIT:-42}" = 0 ]; then /bin/cat > "$LAYOUT_FILE"; fi
+  exit "\${PARTITION_EXIT:-42}" ;;
+ mktemp) /usr/bin/mktemp -d "$B3_TMP/install.XXXXXX" ;;
+ mkfs.vfat|mkfs.ext4|udevadm|umount) : ;;
+ cryptsetup)
+  if [ "$1" = status ]; then
+   [ "$2" = /dev/mapper/luks-installed-luks ] || exit 4
+   echo '  device: /dev/vda3'; exit "\${CRYPT_STATUS:-0}"
+  fi
+  if [ "$1" = luksUUID ]; then echo "\${LUKS_UUID:-installed-luks}"; exit 0; fi
+  echo "cryptsetup $*" >> "$WRITES"
+  for ((i=1; i<=$#; i++)); do
+   if [ "\${!i}" = --key-file ]; then ((i+=1)); [ -f "\${!i}" ] && [ ! -s "\${!i}" ] || exit 95; fi
+  done
+  if [[ "$*" == *luksFormat* ]]; then exit "\${FORMAT_EXIT:-0}"; fi ;;
+ mkfs.btrfs) echo "btrfs $*" >> "$WRITES"; exit 44 ;;
  *) echo "unexpected $name $*" >&2; exit 99 ;;
 esac
 `,
@@ -59,6 +79,13 @@ for (const name of [
   "apparmor_parser",
   "docker",
   "ls",
+  "mktemp",
+  "mkfs.vfat",
+  "mkfs.ext4",
+  "udevadm",
+  "umount",
+  "cryptsetup",
+  "mkfs.btrfs",
 ])
   symlinkSync(stub, join(scratch, name));
 const disk = (path = "/dev/vdb", serial = "waitron-dev-target") => ({
@@ -79,6 +106,8 @@ function writer(env = {}, args = []) {
       PATH: `${scratch}:${process.env.PATH}`,
       WRITES: writes,
       SIZE_CALLS: sizeCalls,
+      B3_TMP: scratch,
+      LAYOUT_FILE: join(scratch, "layout"),
       DISKS: JSON.stringify({ blockdevices: [source, disk()] }),
       ...env,
     },
@@ -126,6 +155,24 @@ describe("development disk writer", () => {
     const result = writer();
     expect(result.status).toBe(42);
     expect(result.writes).toBe("/dev/vdb\n");
+  });
+  it("formats LUKS2 before btrfs and closes the opened mapper on a later failure", () => {
+    const result = writer({ PARTITION_EXIT: "0" });
+    expect(result.status).toBe(44);
+    expect(result.writes).toMatch(/cryptsetup .*--type luks2 .*luksFormat \/dev\/vdb3/);
+    expect(result.writes).toMatch(/cryptsetup open .*\/dev\/vdb3 waitron-dev-root/);
+    expect(result.writes).toContain("btrfs -q -f /dev/mapper/waitron-dev-root\n");
+    expect(result.writes).toContain("cryptsetup close waitron-dev-root\n");
+    expect(readFileSync(join(scratch, "layout"), "utf8")).toContain(
+      'type=a8aaea61-baef-47f4-9cff-c4c967ee12c7, name="waitron-box"',
+    );
+    expect(result.writes).toContain("--subsystem waitron-box-1");
+  });
+  it("does not format btrfs when LUKS creation fails", () => {
+    const result = writer({ PARTITION_EXIT: "0", FORMAT_EXIT: "45" });
+    expect(result.status).toBe(45);
+    expect(result.writes).not.toContain("btrfs");
+    expect(result.writes).not.toContain("cryptsetup close");
   });
 });
 
@@ -203,4 +250,27 @@ describe("installed startup", () => {
     expect(result.stderr).toContain("start.refused:root-uuid");
     expect(result.status).toBe(1);
   });
+  it.each([{ CRYPT_STATUS: "4" }, { LUKS_UUID: "another-disk" }])(
+    "refuses an unencrypted or mismatched backing before starting services (%j)",
+    (env) => {
+      const writes = join(scratch, "wrong-backing-calls");
+      writeFileSync(writes, "");
+      const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
+        env: {
+          ...process.env,
+          PATH: `${scratch}:${process.env.PATH}`,
+          ROOT_UUID: "installed-root",
+          BASH_ENV: bashEnv,
+          B3_TEST_CWD: scratch,
+          WRITES: writes,
+          ...env,
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(result.stderr).toContain("start.refused:encrypted-root");
+      expect(result.status).toBe(1);
+      expect(readFileSync(writes, "utf8")).toBe("");
+    },
+  );
 });

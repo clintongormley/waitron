@@ -1,5 +1,8 @@
 # B3-14: encrypted development install with setup retained
 
+> 2026-11-10: the build keeps the cleared development-only empty slot. The first firmware feasibility
+> rehearsal reached setup on two disk-only boots; retained-key startup and the empty-slot refusal remain the next slice.
+
 **Cleared with five changes by the watcher, 2026-11-10 17:30; no owner approval claimed.** One Claude read took 211 seconds; the watcher obtained a further CHANGE verdict. Apply the five corrections below and build without another read. Implements the [design](../specs/2026-10-21-b3-usb-installer-design.md) §§6–8 and [six-slice plan](2026-10-26-b3-usb-installer.md), tasks 1.1–1.2. LUKS2 is the encryption container; btrfs divides it into five areas. The sequence remains layout, then sealing/startup with the retained key.
 
 **Decision and finish line.** A developer runs the existing `installed-setup` rehearsal: USB installs LUKS2 containing the five btrfs areas, source is detached, and two disk-only firmware boots reach setup with unchanged application/image/service/identity checks. Retain the design’s empty bootstrap slot and let this development-only start run Compose until sealing/startup lands. This explicitly suspends §7.3 item 3 for this private emulator image; it provides no protection against theft, is not a release and does not complete encrypted setup qualification. The present rehearsal is already unencrypted.

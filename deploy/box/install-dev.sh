@@ -23,40 +23,55 @@ sfdisk "$target" <<'LAYOUT'
 label: gpt
 size=512M, type=U
 size=1G, type=L
- type=L
+ type=a8aaea61-baef-47f4-9cff-c4c967ee12c7, name="waitron-box"
 LAYOUT
 udevadm settle
 mkfs.vfat "${target}1"
 mkfs.ext4 -q -F "${target}2"
-mkfs.btrfs -q -f "${target}3"
 work="$(mktemp -d /run/waitron-install.XXXXXX)"
-cleanup() { umount -R "$work/root" 2>/dev/null || true; umount "$work/top" "$work/payload" 2>/dev/null || true; rmdir "$work/root" "$work/top" "$work/payload" "$work" 2>/dev/null || true; }
+opened=false
+cleanup() {
+  umount -R "$work/root" 2>/dev/null || true
+  umount "$work/top" "$work/payload" 2>/dev/null || true
+  if "$opened"; then cryptsetup close waitron-dev-root; opened=false; fi
+  rm -f "$work/empty-password"
+  rmdir "$work/root" "$work/top" "$work/payload" "$work" 2>/dev/null || true
+}
 trap cleanup EXIT
+: > "$work/empty-password"
+cryptsetup --type luks2 --batch-mode --subsystem waitron-box-1 --key-file "$work/empty-password" luksFormat "${target}3"
+cryptsetup open --key-file "$work/empty-password" "${target}3" waitron-dev-root
+opened=true
+mapped=/dev/mapper/waitron-dev-root
+mkfs.btrfs -q -f "$mapped"
 mkdir "$work/top" "$work/root" "$work/payload"
-mount "${target}3" "$work/top"
+mount "$mapped" "$work/top"
 for area in rootfs images volumes logs host-state; do btrfs subvolume create "$work/top/@$area"; done
-mount -o subvol=@rootfs "${target}3" "$work/root"
+mount -o subvol=@rootfs "$mapped" "$work/root"
 root="$work/root"
 mkdir -p "$root/boot/efi" "$root/var/lib/waitron-images" "$root/var/lib/waitron-host"
 mount "${target}2" "$root/boot"
 mkdir -p "$root/boot/efi"
 mount "${target}1" "$root/boot/efi"
-mount -o subvol=@images "${target}3" "$root/var/lib/waitron-images"
+mount -o subvol=@images "$mapped" "$root/var/lib/waitron-images"
 mkdir -p "$root/var/lib/waitron-images/docker" "$root/var/lib/waitron-images/containerd" "$root/var/lib/docker" "$root/var/lib/containerd"
 mount --bind "$root/var/lib/waitron-images/docker" "$root/var/lib/docker"
 mount --bind "$root/var/lib/waitron-images/containerd" "$root/var/lib/containerd"
 mkdir -p "$root/var/lib/docker/volumes"
-mount -o subvol=@volumes "${target}3" "$root/var/lib/docker/volumes"
+mount -o subvol=@volumes "$mapped" "$root/var/lib/docker/volumes"
 mkdir -p "$root/var/lib/docker/volumes/waitron_logs/_data"
-mount -o subvol=@logs "${target}3" "$root/var/lib/docker/volumes/waitron_logs/_data"
-mount -o subvol=@host-state "${target}3" "$root/var/lib/waitron-host"
+mount -o subvol=@logs "$mapped" "$root/var/lib/docker/volumes/waitron_logs/_data"
+mount -o subvol=@host-state "$mapped" "$root/var/lib/waitron-host"
 mount -o ro /dev/disk/by-label/WAITRON_PAYLOAD "$work/payload"
 cp -a --sparse=always "$work/payload/." "$root/"
 tar -C "$work/payload" -cpf - . | tar -C "$root" -df -
-uuid="$(blkid -s UUID -o value "${target}3")"
+uuid="$(blkid -s UUID -o value "$mapped")"
+luks_uuid="$(cryptsetup luksUUID "${target}3")"
 boot_uuid="$(blkid -s UUID -o value "${target}2")"
 efi_uuid="$(blkid -s UUID -o value "${target}1")"
 printf '%s\n' "$uuid" > "$root/etc/waitron-dev-root"
+printf '%s\n' "$luks_uuid" > "$root/etc/waitron-dev-luks"
+printf 'luks-%s UUID=%s none luks,try-empty-password=yes,headless=yes\n' "$luks_uuid" "$luks_uuid" > "$root/etc/crypttab"
 cat > "$root/etc/fstab" <<FSTAB
 UUID=$uuid / btrfs defaults,subvol=@rootfs 0 0
 UUID=$boot_uuid /boot ext4 defaults 0 2
@@ -74,7 +89,7 @@ serial --unit=0 --speed=115200
 terminal_input serial
 terminal_output serial
 search --no-floppy --fs-uuid --set=root $boot_uuid
-linux /vmlinuz-$kernel root=UUID=$uuid rootfstype=btrfs rootflags=subvol=@rootfs rw console=ttyS0,115200 rd.shell=0
+linux /vmlinuz-$kernel root=UUID=$uuid rootfstype=btrfs rootflags=subvol=@rootfs rw console=ttyS0,115200 rd.shell=0 rd.emergency=reboot rd.luks.uuid=$luks_uuid rd.luks.options=$luks_uuid=try-empty-password=yes,headless=yes
 initrd /initrd.img-$kernel
 boot
 CONFIG
