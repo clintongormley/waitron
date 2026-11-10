@@ -54,9 +54,9 @@ function usageName(use: ImageUsage): string {
     case "section":
       return use.internalName;
     case "menu_include":
-      return t("image.included_menu_folder")
-        .replace("{included}", () => use.includedMenuName)
-        .replace("{menu}", () => use.menuName);
+      return t("image.included_menu_folder").replace(/\{(included|menu)\}/g, (_, slot: string) =>
+        slot === "included" ? use.includedMenuName : use.menuName,
+      );
     case "menu_version":
       return `${use.menuName} (${t("image.published_menu")})`;
     case "scheduled_menu_version":

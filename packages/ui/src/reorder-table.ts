@@ -310,10 +310,15 @@ export class ReorderController implements ReactiveController {
     const order = this.#model.order();
     const index = order.indexOf(id);
     if (index < 0) return;
-    this.#announcement = this.#announceText()
-      .replace("{item}", this.#model.label(id))
-      .replace("{index}", String(index + 1))
-      .replace("{total}", String(order.length));
+    const values: Record<string, string> = {
+      item: this.#model.label(id),
+      index: String(index + 1),
+      total: String(order.length),
+    };
+    this.#announcement = this.#announceText().replace(
+      /\{(item|index|total)\}/g,
+      (_, slot: string) => values[slot]!,
+    );
   }
 
   #startDrag(event: PointerEvent, id: string): void {

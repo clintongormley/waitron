@@ -205,6 +205,19 @@ describe("boxEmailMessage for payments restarted", () => {
     );
   });
 
+  it("names the staff member exactly as typed when the name spells the till's slot", () => {
+    const params = {
+      ...RESTARTED,
+      confirmedBy: "staff",
+      person: "Ana {till} $&",
+      byStaff: true,
+      device: "Bar",
+    };
+    expect(
+      boxEmailMessage("clock.behind_chain_restarted", "en", "Corner Bistro", params).text,
+    ).toContain("confirmed by Ana {till} $&, a staff member, on till Bar, and payments");
+  });
+
   it("names a till without a label as a till", () => {
     const params = {
       ...RESTARTED,
@@ -406,6 +419,38 @@ describe("boxEmailMessage for the box setting its clock", () => {
     expect(message("en", params).text).toContain("from the time on a till, confirmed by Ana,");
     expect(message("es", params).text).toContain(
       ES.staff.split("{till}")[0]!.concat(ES.unnamedTill),
+    );
+  });
+
+  it("names the till exactly as typed when its name spells the staff member's slot", () => {
+    const params = {
+      ...STEP,
+      source: "staff",
+      person: "Ana",
+      device: "Bar {person}",
+      byStaff: true,
+    };
+    expect(message("en", params).text).toContain(
+      "from the time on till Bar {person}, confirmed by Ana, a staff member:",
+    );
+  });
+
+  it("names the administrator exactly as typed when the name spells the step's or a time's slot", () => {
+    const params = { ...STEP, source: "admin", person: "Ben {step} {before}", byAdmin: true };
+    expect(message("en", params).text).toBe(
+      "The box's clock was set from Ben {step} {before}'s device: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to 18/10/2026 23:40.",
+    );
+  });
+
+  it("leaves a time's slot as it is when the alert carries no such time", () => {
+    expect(message("en", { ...STEP, after: undefined }).text).toBe(
+      "The box set its clock from the tax agency's time: moved forward 2 days and 3 hours, from 14/03/2025 09:12 to {after}.",
+    );
+  });
+
+  it("names the venue exactly as typed when its name spells a time's slot", () => {
+    expect(boxEmailMessage("clock.corrected", "en", "Bistro {after} $&", STEP).subject).toBe(
+      "Bistro {after} $&: the box's clock was set",
     );
   });
 

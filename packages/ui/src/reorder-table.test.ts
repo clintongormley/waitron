@@ -129,6 +129,18 @@ it("uses the injected announcement in the live region", async () => {
   expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("Position 2/3: One");
 });
 
+it("announces a row's label exactly as typed when it spells another slot or a replacement pattern", async () => {
+  const el = await mount([
+    { id: "a", name: "One {total} $&" },
+    { id: "b", name: "Two" },
+  ]);
+  press(el, "a", "ArrowDown");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe(
+    "One {total} $& moved to position 2 of 2",
+  );
+});
+
 it("leaves the order and the live region untouched at an end, on another key, and while busy", async () => {
   const el = await mount();
   press(el, "a", "ArrowUp"); // already first
