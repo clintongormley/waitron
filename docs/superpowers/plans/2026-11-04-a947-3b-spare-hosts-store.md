@@ -4,12 +4,13 @@
 > (Fable review):"). What changed: **the owner answered Q2** — "Yes, refuse the join (Recommended)",
 > desk, 2026-11-10 14:34 — so Tasks 6.3b and 6.3c are the chosen option and 3b-6 waits for no
 > answer (it still lands after 3b-G and needs lane J's A1342, whose parts are on `main`); new
-> **D19 and Task G.3b** in the owner-landed 3b-G: adopt writes the chart the joining bundle carries
-> into the spare's `venue.db`, so a main box restarted while its spare is still joining does not
-> wait (probe P35); **Task G.3's refusal acts before the start check**, and its words promise only
+> **D19 and Task G.3b** in the owner-landed 3b-G: a spare still joining says so in its signed
+> answer, and the main box's start check sets it aside and decides on its other counted boxes, so
+> a main box restarted while its spare is still joining does not wait (the claim check's round
+> replaced the first mechanism, a chart written at the join; see "Claim check round" at the end); **Task G.3's refusal acts before the start check**, and its words promise only
 > Retry; Tasks 4.5a, 4.5b and 6.5 and D8 item 1 now describe the read gate A1113 left, and the bind
 > guard goes with its reason stated; **R13 leaves 3b** (#2651; Task 4.4 dropped, fact 8 corrected);
-> a join refuses two clocks more than an hour apart, in words; the spare's state folders are
+> a join refuses two clocks 10 minutes or more apart, in words (claim check round); the spare's state folders are
 > `pair-store/` and `pair-copy/`, declared in `state-layout.ts`; one test that could not fail is
 > dropped; the guide says a spare cannot yet take over. **Line numbers** in the tasks of PRs 3b-3
 > to 3b-F, and in D19 and this revision's text, are `main` at `2eee23d7f4`; facts 1–27, D1–D18 and
@@ -116,7 +117,7 @@ the slice table (`:776-796`) and "Slice 3 as built" (`:1731-1760`, Rulings R12 a
 - **Fiscal: two of the eight, both landed by the owner.** **3b-G** changes the start steps that
   decide whether a box files: what the start check trusts, how the boot reconcile reaches a peer,
   a new start refusal for a box that lost its `node.db`, and (**2026-11-10 (Fable review)**, D19,
-  D16 judgement 3) the chart a joining spare answers the start check with (D16; house precedent: A1018 Slice 3,
+  D16 judgement 3) how the start check reads a spare that answers that it is still joining (D16; house precedent: A1018 Slice 3,
   "decides, before the first filing pass, whether a box may file", landed as FISCAL, #2436). **3b-F**
   lets a venue that files with Veri*Factu add a spare; its content depends on the owner's question
   Q1. By their file lists, the other six touch nothing in `packages/fiscal-verifactu` and add no
@@ -432,7 +433,7 @@ the end, which gives the command and what it printed.
 | **3b-3** | A joining spare's authority becomes the venue's, installed with its leaf, and marked; both resets empty `tls/` and `secrets.env` on a box that joined; every start checks the leaf's names and signer | no spare finishes joining yet; a main box's files are unchanged but for its leaf's added name | no | no | full |
 | **3b-4** | Boxes reach and trust each other: the lookup in every box-to-box call, a mirror that listens on the network with its landing pages and its promotion kept to its own screen (**2026-11-10 (Fable review):** R13's charts that vouch for every listed box landed as #2651, so Task 4.4 is dropped; the open dashboard was removed by A1113, #2592) | no box has a counted peer before 3b-6, so the start check still proceeds | no (D16 judgement 1) | no | full |
 | **3b-5** | The store on the spare and the pair's access key: `node_pair_link`, a joining route that needs no relay and refuses first, the spare passing each refusal on in its own words, the spare running versitygw behind a TLS listener that checks the main box's client certificate, the bucket screen and rotation refusing while a spare is joined; the join carries the main box's backup settings (D18) | the store runs and receives nothing | no | **yes**: `node.db`'s starting migration is rebuilt, so it ships with a venue reset (correction (1)) | full |
-| **3b-G** | The start steps that decide whether a box files: the start check trusts only the venue authority (R12); the boot reconcile reaches a real box; a box with a lost `node.db` refuses to start (A1274); **2026-11-10 (Fable review):** a joining spare holds the chart that lists it, so a counted spare still joining never makes the main box wait (D19, Task G.3b) | no box has a counted peer or a mirror link to a real box before 3b-6, so on a real venue only the A1274 refusal can fire, and only on a box that holds a chart naming it but no mode row | **yes — the owner lands it** (D16) | no | full |
+| **3b-G** | The start steps that decide whether a box files: the start check trusts only the venue authority (R12); the boot reconcile reaches a real box; a box with a lost `node.db` refuses to start (A1274); **2026-11-10 (Fable review; claim check):** a spare still joining says so, and the start check sets it aside, so a counted spare still joining never makes the main box wait on its own (D19, Task G.3b) | no box has a counted peer or a mirror link to a real box before 3b-6, so on a real venue only the A1274 refusal can fire, and only on a box that holds a chart naming it but no mode row | **yes — the owner lands it** (D16) | no | full |
 | **3b-6** | Joining brings the data: the main box streams to the spare and writes its `nodes` row when the store answers; the spare restores, places and checks its first copy and finishes joining; a two-box end-to-end test on a main box without Veri*Factu; the setup app's and the guide's words; the joining spare reads its stream key from the backup settings the join gave it, the main box sends it every later change, and a main box with no backup recovery key refuses a join (D18; the owner's answer to Q2, 2026-11-10) | a venue that does not file with Veri*Factu adds a spare end to end; a Veri*Factu venue is still refused before anything is reserved | no (D16 judgement 2) | no | full |
 | **3b-F** | A Veri*Factu venue can add a spare (Q1 decides how); the stream loop's Veri*Factu box B gains its spare steps | lands last; until then the refusal of 3b-5 stands | **yes — the owner lands it** | no | full |
 
@@ -568,8 +569,9 @@ the A1018 plan, not run.
   no counted peer, so the main box does not start waiting at every start for a box that never
   arrived (A1018 Slice 3 counts only boxes with a row). The row is written before the stream starts,
   so the first full copy carries it. **2026-11-10 (Fable review):** from the row's write until the
-  spare's first full start, the spare answers the start check from its latch start; D19 gives that
-  answer a chart, so a main box restarted in that stretch does not wait either.
+  spare's first full start, the spare answers the start check from its latch start; under D19 that
+  answer says it is joining and the check sets it aside, so a main box restarted in that stretch
+  does not wait for it (claim check round).
 - **D7 — A1273: no key ring rotation while a spare holds the ring.** `waitron-credentials rotate`
   refuses `credentials.rotation_spare_joined` while this box holds a pair link (Task 5.10), and the
   rule is written where rotation is already described (`conventions-data.md:928`; fact 15). A spare
@@ -590,7 +592,9 @@ the A1018 plan, not run.
   handover-activation.ts` prints nothing): each refuses a request that is not HTTPS from this
   box's own page first (`requireNodeOperationHttps`, `handover-preparation.ts:113`,
   `handover-activation.ts:161`), then a request naming no operation ready to promote
-  (`readOperationReadyToPromote`, `handover-preparation.ts:122`, `handover-activation.ts:89`), and
+  (`readOperationReadyToPromote`, `handover-preparation.ts:122`, `handover-activation.ts:89`; on
+  activation, an operation already activated is answered first, with no password read,
+  `alreadyActivated`, `handover-activation.ts:88`, claim check round), and
   only after that reads the sign-in (`signInCredentials`, `handover-preparation.ts:127`,
   `handover-activation.ts:103`, which resolves the email alone) and checks the password, inside the
   step that follows (`prepareWithDormantSetup`, `handover-preparation.ts:130`; `withPromotion`,
@@ -782,11 +786,10 @@ the A1018 plan, not run.
   and waits for the owner; nothing else in the cut moves.
 
   **Judgement 3, Task G.3b (3b-G), 2026-11-10 (Fable review; lane A decision, 2026-11-10 (Fable
-  review)).** D19's change is to adopt, the joining bundle and the joining route — files 3b-5 also
-  changes — but what it changes is the answer that decides whether the main box sells at its
-  start: a counted spare still joining answers with a chart, so the main box proceeds where today
-  it waits (probe P35). By the rule above that is a start step deciding whether a box files, so it
-  goes in the owner-landed 3b-G rather than in 3b-5 or 3b-6. It is a judgement the owner may
+  review); mechanism replaced by lane A decision, 2026-11-10 (claim check)).** D19 changes the start
+  check's own code (how it reads a counted box that says it is joining) and what the latch start's
+  status route answers, so the main box proceeds where today it waits. That is a start step
+  deciding whether a box files, so it goes in the owner-landed 3b-G. It is a judgement the owner may
   overrule both ways: to move G.3b into 3b-6 (where the `nodes` row is first written, Task 6.2), or
   to refuse D19 and keep today's wait, accepting finding 1's two-way wait as the cost (lifted only
   by an administrator's Carry on). 3b-G's PR body names it.
@@ -1028,10 +1031,10 @@ the A1018 plan, not run.
     task covers it, because the shipped configuration sets no backup variable:
     `deploy/.env.example:41-42` leaves them commented out and `deploy/compose.yml:37-38` passes them
     empty unless the operator sets them.
-- **D19 — A joining spare holds the chart that lists it, so a counted spare still joining never
-  makes the main box wait** (2026-11-10 (Fable review), finding 1; lane A decision, 2026-11-10
-  (Fable review); line numbers are `main` at `2eee23d7f4`). In 3b-G by D16 judgement 3, which the
-  owner may overrule.
+- **D19 — A spare still joining says so in its signed answer, and the start check sets it aside**
+  (2026-11-10 (Fable review), finding 1; lane A decision, 2026-11-10 (Fable review); mechanism
+  replaced by lane A decision, 2026-11-10 (claim check); line numbers are `main` at `2eee23d7f4`).
+  In 3b-G by D16 judgement 3, which the owner may overrule.
   - **What goes wrong without it.** From the moment the main box writes the spare's `nodes` row
     (Task 6.2) the spare is counted. Until its first full start it answers from its latch start,
     which mounts the status route over its own `venue.db` (`boot.ts:1707`). Adopt writes no chart
@@ -1049,37 +1052,45 @@ the A1018 plan, not run.
     joining route and `adoptFromPrimary`, booted its real latch start, and found: its answer
     verifies (`valid: true`) with `heldMembership: null`; with its `nodes` row in the main box's
     database the real `runStartPeerCheck` decides `wait` (spare `S`, `no_chart`); without the row,
-    `proceed`; with the main box's chart written into the spare's `venue.db` while it is still in
-    its latch start, `proceed` (spare `=`). Posting the chart to the latch start's existing
-    `POST /api/node/membership` is refused (`{accepted: false}`), because that route judges a chart
-    against the `nodes` keys in the spare's own `venue.db` (`node-membership-api.ts:49`), which is
-    empty on a joining spare. Probe P35 (this revision) re-ran two of those as its controls (the row
-    and no chart: `wait`, `S`, `no_chart`; the row and the chart: `proceed`, `=`) and added the
-    stale case (below).
-  - **The change.** The joining route already mints the chart that lists the spare before it
-    answers (`appendStandbyToChart`, `mirror-bundle-api.ts:202-230`, called at `:146-152` before
-    `return c.json(bundle)` at `:154`); it now returns that chart, and the bundle carries it as `membership` (`MirrorBundle`,
-    `mirror-bundle.ts:53-74`). Adopt checks it before its first write, beside the endorsement check
-    (`adopt.ts:159-167`): it verifies under the main box's key the bundle carries, the key adopt
-    pins (`verifyMembershipDocument(chart, { [designated]: bundle.primaryPublicKey })`,
-    `packages/membership/src/verify.ts:123`), it names the designated box `serving-primary`, and it
-    lists this box's node id. Anything else is `mirror.bundle_fetch_failed`, writing nothing. Adopt
-    then writes it into its own `venue.db` right after `stampDeployment` (`adopt.ts:172`), so
-    venue.db is written before the node transaction (`adopt.ts:181-197`), as the two-file rule
-    asks. The latch start's status route then answers with that chart, and the main box's check
-    reads it as `=` and proceeds.
-  - **A main box holding a newer chart still proceeds.** Probe P35: the main box's chart moved on
-    to term 3 while the spare held the term-2 chart of its join; the real check printed
-    `{"result":"proceed"}` with the spare's answer `"="`, and the main box's own chart stayed at
-    term 3. By the code: a verified chart older than the held one is `not_newer`
-    (`packages/membership/src/accept.ts:20-21`), which counts as `=` (`boot-peer-check.ts:215`).
-  - **What it does not lift.** A spare that is switched off, or whose server is stopped, while
-    counted still makes the main box wait: D17's limit, unchanged. A spare's answer after its first
-    full start comes from the copy, which holds the main box's own chart.
-  - **Not changed:** the start check's code and rules, A1018's handover code, and the latch start's
-    routes (D8 item 7). The staged reset already removes the spare's `venue.db`, chart included
-    (fact 19).
-
+    `proceed`. Probe P35 re-ran that case as a control.
+  - **Why not the first revision's change (adopt writing the join's chart into the spare).** The
+    claim check (`~/waitron-campaign/a947-3b-fable/claim-check.md`, I1) showed that a spare
+    answering `=` from a chart frozen at its join (its latch start refuses every later chart,
+    `node-membership-api.ts:49`) would clear the main box's wait while another counted box is
+    silent, because one counted `=` is enough (`boot-peer-check.ts:223`; the case "one counted peer
+    answering = is enough when another is silent (rule 4)", `boot-peer-check.test.ts:286`, printed
+    `Tests 1 passed | 141 skipped` when re-run for this round). In a venue of three boxes that could
+    let the main box sell while a box that took over is silent. Probe P35 measured the frozen chart
+    answering `=`. So that change is withdrawn, and nothing else in the plan needs a joining spare
+    to hold a chart.
+  - **The change.** The latch start's status answer carries `joining: true` inside the signed body
+    (`PeerStatusBody`, `peer-status-api.ts:52`; signed at `:157` as every answer is). It is set
+    from the start the box is making, never inferred from a missing chart (a lost `venue.db` also
+    has none): the latch start mounts the route with `joining: true` (`boot.ts:1707`), the start
+    selected by `pending-adoption.json` (`boot.ts:1704-1705`), and every other mount (restricted,
+    waiting, full) leaves it out. The start check reads a verified answer with `joining: true` as a
+    new answer, `J`, and **sets that box aside**: it is not counted, it never counts as agreement,
+    and the check decides on the other counted boxes; with none left, it proceeds. A part of the
+    answer that fences this box (`operationFences`, a fencing chart) is still read first, as today
+    (`boot-peer-check.ts:206-209`): stopping stays the safe side. An answer that does not verify
+    (forged, unsigned, signed by a key this box does not know) is silence, as every unverified answer
+    already is (`boot-peer-check.ts:152`, `.catch(() => null)`).
+  - **Why setting it aside is safe (read).** A box in its latch start cannot sell, file or switch
+    itself on while it answers "joining": the latch start returns at `boot.ts:1731`, having mounted
+    only `/api/box/status`, the status and chart routes and the finishing worker (`:1706-1716`);
+    the till's routes (`mountTillApi`, `boot.ts:2330`), the filing drain (`:2814`), promotion
+    (`mountPromoteApi`, `:3531`) and the handover's switch-on routes (`:3545`, `:3556`) are mounted
+    only in the full start, after that return. Its `node.db` already says `mirror` (adopt,
+    `adopt.ts:182`), so when it does finish, its next start is a mirror's, which does not sell
+    either (`acceptingSales`, `boot.ts:2026`). The routes mounted before any start's own (D8 item
+    1's dated text) sell nothing.
+  - **What it does not lift.** A counted spare that is switched off, whose server is stopped, **or
+    that is reset before it finishes joining** (it then answers nothing, from setup mode) still
+    makes the main box wait: D17's limit, unchanged; A1321 (`docs/superpowers/plans/2026-11-08-a1321-retire-spare.md`)
+    is the planned way to retire such a spare. A spare's answer after its first full start comes
+    from the copy, which holds the main box's own chart, and is read as today.
+  - **Not changed:** the check's other rules, A1018's handover code, and the latch start's routes
+    (D8 item 7; the status route's answer gains one field).
 ## Departures from the approved design
 
 Each is also listed, one line each, in the design's dated A947-3b pointer, rewritten for this
@@ -1186,7 +1197,9 @@ request for this revision; none is claimed approved here.
    the setup screen as its own words, not "couldn't join" (Task 5.6b, through the real fetch).
 9. **2026-11-10 (Fable review): a main box restarted while its spare is still joining** — after the
    spare's `nodes` row is written and before the spare's first full start — must start without
-   waiting, and so must every start while a spare stays stuck in its latch start (D19). Tests: Task
+   waiting, and so must every start while a spare stays stuck in its latch start (D19: the spare
+   says it is joining and is set aside; with another counted box silent the main box still waits,
+   claim check round). Tests: Task
    G.3b, and Task 6.9's `main-restart-mid-join` phase between `spare-join` and `spare-copy`. A spare
    switched off while counted still makes it wait (D17).
 
@@ -1233,9 +1246,9 @@ request for this revision; none is claimed approved here.
   `mirror-bind-guard.ts` and its test
   deleted; `guide/en/servers.md` and `guide/es/servers.md`. **2026-11-10 (Fable review):**
   `mirror-session.ts` is no longer touched (A1113 left only `endMirrorViewer`); new cases in
-  `handover-preparation.test.ts` and `handover-activation.test.ts` (Task 4.5a); `adopt.ts`,
-  `mirror-bundle.ts`, `mirror-bundle-api.ts` and `mirror-bundle-fetch.ts` also change in 3b-G
-  (Task G.3b).
+  `handover-preparation.test.ts` and `handover-activation.test.ts` (Task 4.5a); `peer-status-api.ts`,
+  `boot-peer-check.ts` and `start-peer-check.ts` change in 3b-G (Task G.3b; claim check round: the
+  first revision's changes to `adopt.ts` and the bundle are withdrawn).
 - **`apps/till/src/api/server-router.ts`**; **`apps/setup/src/`** (refusal words, the joined
   screen); **`apps/dashboard/src/i18n/codes.ts`** (the bucket refusal, the promotion refusal).
 - **`docs/`**: `docs/developers/conventions-data.md` (the store, the pair link, the rotation rule,
@@ -1692,7 +1705,9 @@ cases here and in Tasks 4.5b and 4.6 carry the protection it gave.
   wrong password get the same refusal" (each body carries a well-formed module operation and
   sign-in, so only the password differs; both `handover.operation_unknown` for an unknown id, and
   both `handover.step_out_of_order` for an operation not yet at `filing_assumed` with its copy
-  placed). These pin D8's reason for retiring the guard: the operation is checked
+  placed — on the activation route an operation that has **not** been activated, because an
+  activated one is answered by `alreadyActivated`, `handover-activation.ts:88`, before any of this;
+  claim check round). These pin D8's reason for retiring the guard: the operation is checked
   (`readOperationReadyToPromote`, `handover-preparation.ts:122`, `handover-activation.ts:89`) before
   the password, which is checked inside `prepareWithDormantSetup` (`handover-preparation.ts:130`)
   and `withPromotion` (`handover-activation.ts:105`). Control, run once, recorded in the PR body and
@@ -1891,7 +1906,8 @@ when an enabled module fails `assertAdoptionModules` (D12; until 3b-F); refuse
 in the held chart's `revoked` list with `membership.revoked_duplicate` (A1278). Each gets its row in
 the route's `STATUS` (`mirror-bundle-api.ts:63-73`). Tests `mirror-bundle-api.test.ts`.
 
-**2026-11-10 (Fable review), finding 8: two clocks more than an hour apart are refused, in words.**
+**2026-11-10 (Fable review), finding 8: two clocks too far apart are refused, in words** (the
+threshold and the words revised by lane A decision, 2026-11-10 (claim check), below).
 Two boxes with no internet is the go-live set-up, so a box whose clock is far off is a real case.
 A box's certificate is valid from one day before its maker's clock (`self-signed-cert.ts:159-164`),
 and the spare's leaf is made on the spare (Task 3.1) while its client certificate check reads the
@@ -1903,12 +1919,21 @@ as epoch milliseconds, sent by adopt beside `standbyContactUrl` (`mirror-bundle-
 request body); a missing or non-numeric one is `mirror.standby_invalid`, as a bad contact URL is.
 The main box's route refuses `mirror.clocks_apart` (409, `{ primaryAt, standbyAt }`, both ISO times,
 no other value) before the reservation, beside the refusals above, when its own clock and
-`standbyAt` are more than one hour apart. An hour sits well inside the certificates' one day and
-far above the seconds a request takes; drift after the join is 3c's clock alert (design).
-`errors.ts` registers the code. Test cases: "refuses a spare whose clock is more than an hour away,
-in either direction, reserving nothing and listing nobody" (reservations and chart before and
-after: equal; the answer's params are exactly the two times); control: "a spare 59 minutes away
-joins". Words in Task 5.6, the relay in Task 5.6b.
+`standbyAt` are **10 minutes or more** apart. **The threshold, tied to what fails (claim check
+round):** the direction was the certificates' one day of slack with a margin (23 hours), but the
+spare's store fails first. The pinned versitygw refuses a request signed more than 15 minutes from
+its own clock (probe P36: 14 minutes `ok`, 16 minutes `RequestTimeTooSkewed`, 403), and every
+request the main box sends the store — Task 6.2's probe and Task 6.1's stream — is signed with the
+main box's clock and checked against the spare's. So a join between clocks 15 minutes to a day
+apart would pass the certificates and then fail at the store. Ten minutes leaves five for drift
+until 3c's clock alert (design) and sits far above the seconds a request takes. Not established:
+whether Litestream's own client corrects its clock after that refusal; if it does, 10 minutes is
+stricter than needed, which is the safe side for a refusal that changes nothing. The certificates'
+day stays the outer limit, at which TLS itself fails.
+`errors.ts` registers the code. Test cases: "refuses a spare whose clock is too far away,
+in either direction, reserving nothing and listing nobody" at 10 minutes (reservations and chart
+before and after: equal; the answer's params are exactly the two times); control: "a spare 9
+minutes away joins". Words in Task 5.6, the relay in Task 5.6b.
 
 **Changed checks:** `adoption-allocation-refusal.test.ts:142` — the same code, now also from the main
 box's route before any reservation: the test that checks the spare wrote nothing stays, and the new
@@ -2132,29 +2157,29 @@ on; this task's tests stub the API.
     servidores. Volver te lleva al inicio de la configuración, donde puedes configurar este servidor
     para otro restaurante; o déjalo apagado."
 
-- `mirror.clocks_apart` (**2026-11-10 (Fable review)**, Task 5.3). The setup app shows each time
-  as a date and time in the browser's language.
-  - EN: "This server's clock and the primary server's are more than an hour apart: this server
-    reads {standbyAt}, the primary reads {primaryAt}. The two servers trust each other only while
+- `mirror.clocks_apart` (**2026-11-10 (Fable review)**, Task 5.3; words revised by lane A decision,
+  2026-11-10 (claim check)). The setup app shows each time as a date and time in the browser's
+  language.
+  - EN: "This server's clock and the primary server's are 10 minutes or more apart: this server
+    reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while
     their clocks agree. Nothing was changed on either server. If this server's time is wrong,
-    connect it to the internet for a minute so it sets its clock, then press Connect again. If the
-    primary's time is wrong, open Box status in the primary's dashboard, choose Check with this
-    device's time, then press Connect again."
-  - ES: "El reloj de este servidor y el del servidor principal se diferencian en más de una hora:
+    connect it to the internet for a minute so it sets its clock, then press Connect again."
+  - ES: "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más:
     este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo
-    confían el uno en el otro mientras sus relojes coinciden. No se ha cambiado nada en ninguno de
-    los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para
-    que ajuste su reloj y vuelve a pulsar Conectar. Si la hora del principal está mal, abre Estado
-    del equipo en el panel del principal, elige «Comprobar con la hora de este dispositivo» y
-    vuelve a pulsar Conectar."
-  - The labels are the dashboard's: `nav.box_status` "Box status" / «Estado del equipo»
-    (`apps/dashboard/src/i18n/strings.ts:1091,4925`) and `box_status.clock.admin.open` "Check with
-    this device's time" / «Comprobar con la hora de este dispositivo» (`:3725,7606`), the button
-    that leads to the clock-set route an administrator uses from their own device
-    (`box-health-api.ts:325`; CLAUDE.md §5 names an administrator's own device as a source).
-    Read, not run: that connecting a box to the internet sets its clock (the same premise as the
-    recovery page's existing words, `apps/server/src/i18n/recovery-page.ts:292`), and when the Box
-    status screen shows that button. Step 3 checks the second.
+    pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los
+    dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que
+    ajuste su reloj y vuelve a pulsar Conectar."
+  - **The primary-side sentence is cut (claim check round).** The first revision sent a person with
+    a wrong primary clock to Box status → Check with this device's time. That button is drawn only
+    while a clock stop shows or a clock check waits (`#clockCheckNeeded`,
+    `apps/dashboard/src/screens/box-status-screen.ts:445-447`), and it sets the clock only during a
+    stop the tax agency has not settled (`#canSetClock`, `:452-459`, `settableStop`). A selling main
+    box that is merely off has no stop, so the words would name a choice that is not there. A main
+    box whose own clock is wrong has no self-service fix in this version; the words leave it out
+    rather than promise one, and the times shown let the person see which box is off.
+  - Read, not run: that connecting a box to the internet sets its clock (the same premise as the
+    recovery page's existing words, `apps/server/src/i18n/recovery-page.ts:292`). Step 3 tests it as
+    far as a dev stack can.
 
 - [ ] **Step 1: Write the failing tests.** "shows the bucket refusal's words with both choices";
   "shows the name refusal and leaves Connect working"; "shows the Veri*Factu refusal and Back";
@@ -2162,9 +2187,12 @@ on; this task's tests stub the API.
   times"; the same five in Spanish (the screen tests read expected strings, CLAUDE.md §3).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/setup-app.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** Open each refusal in both themes and at phone width, and look.
-  (2026-11-10) Open the dashboard's Box status as an administrator on a dev stack that keeps no
-  internet time and check that Check with this device's time is offered; if it is not, STOP and
-  report: the clocks words would name a choice the screen does not offer.
+  (2026-11-10, revised in the claim check round) The clocks words promise one thing: that a
+  server put on the internet sets its clock. On a box image with its time service on and its clock
+  set 30 minutes wrong while unplugged, plug it in and read the time again within two minutes; if
+  the box cannot be had, record that this was not run and say so in the PR body rather than claim
+  it. If the clock does not come right, STOP and report: the words would promise a step that does
+  not work.
 - [ ] **Step 4: Run** it — PASS; `pnpm --filter @waitron/setup typecheck`.
 - [ ] **Step 5: Commit** `git commit -s -m "setup: words for a join refused by a bucket copy, a name in use, a joined standby, two clocks apart, or Veri*Factu"`.
 
@@ -2354,9 +2382,9 @@ refusal for a box that lost its `node.db`, so that box neither sells nor files. 
 `node.db` dangerous (fact 16). The fiscal suites run unedited. PR first line: "FISCAL — a box
 trusts only the venue's authority when it asks another box at start, its start-time chart check
 reaches a real box, and a box that lost its own record does not start selling or filing (A947 3b-G)."
-**2026-11-10 (Fable review):** the first line gains, at its end, "; and a spare still joining
-answers the start check with the chart it was given, so the main box does not wait for it (D19,
-by D16 judgement 3, which the owner may overrule)".
+**2026-11-10 (Fable review; claim check):** the first line gains, at its end, "; and a spare still
+joining says so, and the start check sets it aside and decides on the other boxes, so the main box
+does not wait for it (D19, by D16 judgement 3, which the owner may overrule)".
 
 ### Task G.1: Every peer call trusts the venue authority and nothing else (was Task 4.2)
 
@@ -2476,14 +2504,22 @@ built here: that needs the owner.
   the main box `serving-primary` at a local address that records every connection and answers none,
   and this node as a standby; a `venue.db` holding **both boxes' `nodes` rows**; bound to `0.0.0.0`
   with an injected mDNS socket (D3's test pattern). Expected: the start rejects with
-  `node.state_missing`; the drain's stand-in is never called; the main box's address records no
-  connection (the start check never asked); the socket never answered `waitron.local`. **The
+  `node.state_missing`; the drain's stand-in is never called; no `handover.start_check` line is
+  logged (the start check never ran; claim check round: revision of 2026-11-10's "the main box's
+  address records no connection" also held with the check running, because a box with no signing
+  key fails to sign before it connects, `boot-peer-check.ts:390-396`); the socket never answered
+  `waitron.local`. **The
   distinguishing case is the main box's row.** Control, run once, recorded in the PR body and
   restored: move the refusal after the start check and see this test fail, because the start
   waits instead (its page at `/` answers "This box is waiting for", and the socket answers
   `waitron.local`); then, with the refusal still moved, delete the main box's row from the fixture
   and see the test pass again — which is why the fixture must hold it. Control: "a first box with
-  no mode row still starts as the sole primary" (the chart names it serving primary). "The
+  no mode row still starts as the sole primary" (the chart names it serving primary). Control
+  (claim check round): "a restored box with a rebuild marker and a fresh node.db starts" — a
+  restore keeps the backup's own node id (`recovery-preparation.ts:134`) and the chart the backup
+  holds, which names that id `serving-primary` (read, not run), and its first start (`runFirstStart`,
+  `boot.ts:2012`; `completeRebuild`, `rebuild-first-start.ts:105`) runs after G.3's check, so G.3
+  must let it through; if it does not, STOP and report. "The
   recovery page shows the title, the action and Retry a normal boot in both languages, and no Start
   again". `mode.test.ts`: "the row reader answers null for a node with no row, and readNodeMode
   still answers primary".
@@ -2509,48 +2545,48 @@ minting a chart that names the new main box — which changes A1018 Slice 5's ha
 owner-landed fiscal change outside 3b's scope. The session running this plan adds one bullet to
 A1274's backlog entry saying so, and that it could cost a filing.
 
-### Task G.3b: A joining spare holds the chart that lists it (D19, 2026-11-10 (Fable review))
+### Task G.3b: A spare still joining says so, and the start check sets it aside (D19)
 
-In 3b-G by D16 judgement 3, which the owner may overrule. Built after 3b-4, beside 3b-5, as the
-rest of 3b-G; it touches files 3b-5 also changes, and whichever lands second rebases.
+2026-11-10 (Fable review); mechanism replaced by lane A decision, 2026-11-10 (claim check). In 3b-G
+by D16 judgement 3, which the owner may overrule. Built after 3b-4, beside 3b-5, as the rest of
+3b-G.
 
-**Files:** Modify `apps/server/src/mirror-bundle-api.ts` (`appendStandbyToChart`, `:202-230`,
-returns the chart it saved; the route answers `{ ...bundle, membership }`, `:154`),
-`mirror-bundle.ts` (`MirrorBundle`, `:53-74`, gains `membership: SignedMembershipDocument`),
-`mirror-bundle-fetch.ts` (`isMirrorBundle`, `:37`: `membership` is a chart shape), `adopt.ts` (before
-`beforeFirstWrite`, beside the endorsement check, `:159-167`: the chart verifies under
-`bundle.primaryPublicKey` for the designated node id (`verifyMembershipDocument`,
-`packages/membership/src/verify.ts:123`), names the designated box `serving-primary` and lists
-this box; else `mirror.bundle_fetch_failed`, writing nothing; right after `stampDeployment`,
-`:172`, write it into this box's `venue.db` with `writeNodeMembership`). Tests `adopt.test.ts`,
-`mirror-bundle-api.test.ts`, `mirror-bundle-fetch.test.ts`, `boot.start-check.test.ts` (or a new
-`boot.joining-spare-answers.test.ts`).
+**Files:** Modify `apps/server/src/peer-status-api.ts` (`PeerStatusBody`, `:52`, gains `joining?:
+true`; `PeerStatusApiDeps` gains `joining?: boolean`, and the route puts `joining: true` in the
+signed body only when it is set), `boot.ts` (the latch start's mount, `:1707`, passes `joining:
+true`; no other mount changes), `boot-peer-check.ts` (`checkPeersAtStart`, `:120-225`: after the
+fencing reads at `:206-209`, a verified status with `joining: true` answers `J`, `counted: false`,
+so the final rules at `:219-224` see it neither as agreement nor as silence; `partsReadable`,
+`:318`, treats a `joining` that is present and not `true` as an unreadable part, so it is silence), `start-peer-check.ts` (the `handover.start_check` line, `:215`, names `J`).
+Every other reader of `PeerStatusBody` (`git grep -n "PeerStatusBody\|heldMembership" --
+apps/server/src ':!*.test.ts'`) is read for a strict shape check before the field is added; one
+that would refuse the field is a STOP. Tests `boot-peer-check.test.ts`, `peer-status-api.test.ts`,
+`boot.start-check.test.ts` (or a new `boot.joining-spare-answers.test.ts`).
 
-**Changed checks:** the bundle fixtures that the suites naming `credentialsRing` build gain
-`membership` (a fixture, not a check; `git grep -ln credentialsRing -- 'apps/server/src/*.test.ts'`).
-A fixture change that makes an `expect(` line change is a STOP.
+**Changed checks:** none expected; an existing `expect(` line that changes is a STOP.
 
-- [ ] **Step 1: Write the failing tests.** `mirror-bundle-api.test.ts`: "the bundle carries the chart
-  that lists the spare" (equal to the main box's held chart after the join). `adopt.test.ts`: "a
-  joined spare holds the chart its bundle carried" (`readNodeMembership` on its `venue.db`);
-  "refuses a bundle whose chart another key signed, or that does not list this box, writing
-  nothing". The finding-1 sequence, booted for real as probe P35 booted it (the real joining route
-  and `adoptFromPrimary`; the spare's real latch start; the main box's real start): with the
-  spare's `nodes` row in the main box's database and the spare still in its latch start, **"a main
-  box restarted while its spare is still joining starts without waiting"** (its start check logs
-  the spare as `=`), and the lasting version, **"a spare stuck in its latch start never makes the
-  main box wait"** (two more starts of the main box, both proceed). Control: the same with the
-  spare's chart removed from its `venue.db` waits (`S`, `no_chart`), as today. **"A main box
-  holding a newer chart than the joining spare still proceeds"** (the main box's chart a term on;
-  the spare answers `=`; probe P35). The limit, a pin: "a counted spare that is switched off still
-  makes the main box wait" (D17, unchanged).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/adopt.test.ts src/mirror-bundle-api.test.ts src/mirror-bundle-fetch.test.ts src/boot.start-check.test.ts` — FAIL.
-- [ ] **Step 3: Implement.** Venue first, node after: the chart is written before adopt's node
-  transaction (`adopt.ts:181-197`).
-- [ ] **Step 4: Run** them — PASS; then `src/adoption-allocation-refusal.test.ts src/boot.setup-routes.test.ts
-  src/handover-two-boxes.test.ts src/start-peer-check.test.ts src/boot-peer-check.test.ts`, unedited
-  but for the fixture field.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a joining spare holds the chart that lists it, so the main box does not wait for it"`.
+- [ ] **Step 1: Write the failing tests.** `peer-status-api.test.ts`: "the latch start's answer says
+  it is joining, inside the signature"; control: "a full start's answer carries no joining field".
+  `boot-peer-check.test.ts`: "a counted peer answering joining is set aside: with no other counted
+  box, the box proceeds"; **the three-box case** "a joining peer and another counted peer that is
+  silent: the box waits" (control: "a joining peer and another counted peer answering `=`: the box
+  proceeds"); "a joining answer whose chart or operation fences this box is still F"; "a joining
+  answer that does not verify (forged, unsigned, or signed by an unknown key) is silence". Booted for
+  real, as probe P35 booted it (the real joining route and `adoptFromPrimary`; the spare's real
+  latch start; the main box's real start), with the spare's `nodes` row in the main box's database
+  and the spare still in its latch start: **"a main box restarted while its spare is still joining
+  starts without waiting"** (its `handover.start_check` line names the spare `J`), and the lasting
+  version, **"a spare stuck in its latch start never makes the main box wait"** (two more starts of
+  the main box, both proceed). Control: the same with the joining field left out of the latch
+  start's mount waits (`S`, `no_chart`), as today. The limit, a pin: "a counted spare that is
+  switched off still makes the main box wait" (D17, unchanged).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/peer-status-api.test.ts src/boot-peer-check.test.ts src/boot.start-check.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then `src/start-peer-check.test.ts src/waiting-start.test.ts
+  src/handover-two-boxes.test.ts src/handover-source-start-api.test.ts`, and every suite naming the
+  start check (`git grep -ln "boot-peer-check\|start-peer-check" -- 'apps/server/src/*.test.ts'`),
+  unedited.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a spare still joining says so, and a box's start check sets it aside"`.
 
 ### Task G.4: Final checks for 3b-G
 
@@ -3131,11 +3167,12 @@ The phases:
   (phase 3) and `spare-copy` (phase 4).** S is started with its copy attempts held (Task 6.8a's
   `spareCopy.hold` seam, released at the end of this phase), so S is certain to be in its latch
   start. Once M's pair link reads `streaming` (M has written S's `nodes` row), M restarts through
-  the restart seam. M's start does not wait: its `handover.start_check` line gives S `=`, counted,
-  and M's `/api/node` answers `acceptingSales: true` (D19, Task G.3b). Then the hold is released
-  and `spare-copy` must still pass, so a main box restarted mid-join does not stop the join either.
-  Control, run once, recorded in the PR body and restored: remove adopt's chart write (Task G.3b)
-  and see this phase fail with M on its waiting page (S `S`, `no_chart`).
+  the restart seam. M's start does not wait: its `handover.start_check` line gives S `J`, set
+  aside, and M's `/api/node` answers `acceptingSales: true` (D19, Task G.3b). Then the hold is
+  released and `spare-copy` must still pass, so a main box restarted mid-join does not stop the
+  join either. Control, run once, recorded in the PR body and restored: leave the joining field out
+  of the latch start's mount (Task G.3b) and see this phase fail with M on its waiting page (S
+  `S`, `no_chart`).
 5. `start-check`: M restarts; its start check asks S at `box-<S>` and counts its verified answer
    (R13 end to end, from #2651, under 3b-G's pin), with no `own_address`.
 6. `loopback-only`: no socket the servers in this process opened went to an address other than
@@ -3449,7 +3486,8 @@ under `/tmp/a947-3b-r3.Iv7F/` — all outside the worktree.
 | P32 | (2026-11-10) `pnpm --filter @waitron/server exec vitest run src/backup-api.route.test.ts src/stream-api.route.test.ts -t "turning archives on reuses the key the box already holds\|Save sets a recovery key when there is none\|Save keeps an existing recovery key"`; `pnpm --filter @waitron/dashboard exec vitest run src/screens/backup-screen.test.ts -t "turning backups on with a recovery key already held mints none and sends none\|mints a key by default and shows it with copy\|keeps apply disabled until the saved-it checkbox is ticked"` (both under `env -u AI_AGENT -u CLAUDECODE`) | `Tests 3 passed \| 167 skipped`; `Tests 3 passed \| 117 skipped` (Chromium) | D18 Q2, Task 6.3c |
 | P33 | (2026-11-10) `pnpm --filter @waitron/server exec vitest run src/stream-host.test.ts -t "starts no child until resealing succeeds"`; the same with `src/handover-source-start-api.test.ts -t "settings differ"`; `pnpm --filter @waitron/stream exec vitest run src/restore.test.ts -t "refused"` (each under `env -u AI_AGENT -u CLAUDECODE`) | `Tests 2 passed \| 52 skipped`; `Tests 7 passed \| 174 skipped`; `Tests 2 passed \| 21 skipped` (a stand-in store answering 403 to the keyed read: `backup.stream_request_failed`, no Litestream started) | D18, Task 6.3, Q2 |
 | P34 | (2026-11-10) `node scripts/setup-s3-test-server.mjs` (the pinned versitygw 1.8.0, darwin-arm64, its SHA-256 checked by the script; `versitygw --version`: `Version  : 1.8.0`), then from `apps/server` `pnpm exec tsx /tmp/a947-d18-fix1/p34.mts <repo>`: `startS3TestServer` (`apps/server/src/testing/s3-test-server.ts:135`, which runs `versitygw … posix --sidecar <meta> <data>`, `:179-197`), the real `verifyStreamKey` on the empty store, a PUT of `venues/venue1/<generation>/0000/0000000000000001-0000000000000001.ltx` with customer key A, `verifyStreamKey` with key A and with key B, a GET with no key, and a search of the data folder for the bytes. Failing case, had the store checked keys: key B refused `backup.stream_request_failed` with status 403, the plain GET refused, no plaintext on disk | `empty store, verify key A: refused backup.stream_request_failed {…"status":null…}`; `PUT with SSE-C key A: ok`; `verify key A: ok`; `verify key B: ok`; `GET with no key: ok secret-bytes-0123456789`; `plaintext on disk: /data/waitron-loop/venues/venue1/…/0000000000000001-0000000000000001.ltx`. `versitygw --help` and `posix --help` list no encryption option. Not run: Litestream against it, the Linux build. The round-3 claim check measured the same | D18, Tasks 6.3 and 6.9b |
-| P35 | (2026-11-10, Fable review) a scratch test, `apps/server/src/zz-probe-f1-stale.test.ts`, built from the watcher's finding-1 probe (`~/waitron-campaign/a947-3b-fable/probe-f1.test.ts.txt`); its text is kept at `~/waitron-campaign/a947-3b-fable/probe-f1-stale.test.ts.txt` and the file was deleted after the run. It joins a spare through the real `mountMirrorBundleApi` and `adoptFromPrimary`, writes the spare's `nodes` row on the main box as Task 6.2 plans, boots the spare's real latch start, and runs the main box's real `runStartPeerCheck`: (A) the spare's `venue.db` holding no chart; (B) the join's chart written into it while the spare was down (D19's change, by hand); (C) then the main box's chart moved on a term. Run `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/zz-probe-f1-stale.test.ts`. Failing case for C, written first: `wait`, with the spare `S` (`untrusted_chart` or `no_chart`) | (A) `{"result":"wait",…}`, spare `"answer":"S","counted":true,"why":"no_chart"`; (B) `{"result":"proceed"}`, spare `"="`; (C) main term `3`, spare term `2`, `{"result":"proceed"}`, spare `"="`, and the main box's chart still term `3` after the check; `Tests 1 passed (1)` | D19, Task G.3b, finding 1 |
+| P35 | (2026-11-10, Fable review) a scratch test, `apps/server/src/zz-probe-f1-stale.test.ts`, built from the watcher's finding-1 probe (`~/waitron-campaign/a947-3b-fable/probe-f1.test.ts.txt`); its text is kept at `~/waitron-campaign/a947-3b-fable/probe-f1-stale.test.ts.txt` and the file was deleted after the run. It joins a spare through the real `mountMirrorBundleApi` and `adoptFromPrimary`, writes the spare's `nodes` row on the main box as Task 6.2 plans, boots the spare's real latch start, and runs the main box's real `runStartPeerCheck`: (A) the spare's `venue.db` holding no chart; (B) the join's chart written into it while the spare was down (the first revision's D19 change, since withdrawn, by hand); (C) then the main box's chart moved on a term. Run `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/zz-probe-f1-stale.test.ts`. Failing case for C, written first: `wait`, with the spare `S` (`untrusted_chart` or `no_chart`) | (A) `{"result":"wait",…}`, spare `"answer":"S","counted":true,"why":"no_chart"`; (B) `{"result":"proceed"}`, spare `"="`; (C) main term `3`, spare term `2`, `{"result":"proceed"}`, spare `"="`, and the main box's chart still term `3` after the check; `Tests 1 passed (1)` | finding 1; and the frozen chart answering `=`, which the claim check's I1 rests on (D19's first mechanism, withdrawn) |
+| P36 | (2026-11-10, claim check round) `node scripts/setup-s3-test-server.mjs` (the pinned versitygw 1.8.0, its checksum checked by the script), then a scratch test, `apps/server/src/zz-probe-s3-skew.test.ts` (text kept at `~/waitron-campaign/a947-3b-fable/probe-s3-skew.test.ts.txt`, file deleted after the run): `startS3TestServer` and one `PutObject` per signing-clock offset through `@aws-sdk/client-s3` with `systemClockOffset` and `maxAttempts: 1` (so the SDK cannot correct its clock and retry), run with `env -u AI_AGENT -u CLAUDECODE pnpm exec vitest run src/zz-probe-s3-skew.test.ts` from `apps/server`. Failing case for a one-day threshold, written first: every offset under a day `ok` | offsets 0, 5 and 14 minutes: `ok`; 16 minutes, 60, −60 and 23 hours: `refused RequestTimeTooSkewed 403`; `Tests 1 passed (1)`. Not run: Litestream against it (whether its own client corrects its clock after such a refusal), or the Linux build | Task 5.3's clock threshold |
 
 **Claims that rest on reading only:** the till router's list and lock-screen lines (fact 17); the
 mirror's ambient viewer and who reaches it today (fact 6) — Task 4.5b's surface test turns D8 into a
@@ -3603,14 +3641,14 @@ review):".
 | Finding | Done | Where |
 | --- | --- | --- |
 | Section 1, approvals unverified (the twelve departures, D16's judgements, D18's mechanism) | stated, not claimed | None of them is owner-approved as far as any record shows: not refused is not approved. The note under the departures table says so, adds this revision's own lane A decisions (D19, the bind guard's removal, the clocks refusal, D16 judgement 3), and says each goes in the watcher's approval request. The design's approval stays as recorded, with the review's limit (session-written records). Q2 is now the owner's recorded answer, quoted |
-| 1 (Important), a restart of the main box between the spare's row and its first full start leaves it waiting, possibly both ways | fixed, in 3b-G | Established first: the watcher's probe (D19 "The established facts") and probe P35, which re-ran its two deciding cases and added the stale case: a main box holding a newer chart than the joining spare still proceeds, and the spare's verdict symbol is `=`. New D19 and Task G.3b: the joining route returns the chart it minted, the bundle carries it, adopt verifies it under the main box's key it pins and writes it into the spare's `venue.db`, so a counted spare in its latch start answers with a chart. D16 judgement 3 puts it in 3b-G, owner may overrule. Tests: the finding-1 sequence, the lasting version, the stale case, the switched-off spare that still waits (D17's limit, stated in D17 and D19). Review Focus 9; Task 6.9's `main-restart-mid-join` phase with a copy-hold seam (Task 6.8a) |
+| 1 (Important), a restart of the main box between the spare's row and its first full start leaves it waiting, possibly both ways | fixed, in 3b-G | Established first: the watcher's probe (D19 "The established facts") and probe P35, which re-ran its two deciding cases and added the stale case: a main box holding a newer chart than the joining spare still proceeds, and the spare's verdict symbol is `=`. New D19 and Task G.3b: the joining route returns the chart it minted, the bundle carries it, adopt verifies it under the main box's key it pins and writes it into the spare's `venue.db`, so a counted spare in its latch start answers with a chart. D16 judgement 3 puts it in 3b-G, owner may overrule. Tests: the finding-1 sequence, the lasting version, the stale case, the switched-off spare that still waits (D17's limit, stated in D17 and D19). Review Focus 9; Task 6.9's `main-restart-mid-join` phase with a copy-hold seam (Task 6.8a) (Claim check round: the mechanism is replaced; the spare says it is joining and the check sets it aside; see below) |
 | 2 (Important), G.3's refusal sits after the wait | fixed | Task G.3 rewritten: the refusal goes right after `finishPromotedRole` (`boot.ts:1759`), before the restriction check, the start check (`:1836`), the waiting start that answers `waitron.local` (`:1907`) and the role holders (`:1990`); a `node.db` row reader that tells "no row" from `primary` (`mode.ts:27` defaults). The fixture holds the main box's `nodes` row; the test asserts the check never asks and the socket never answers `waitron.local`; the control moves the refusal after the check and sees the test fail, and shows that without the main box's row the test could not tell — the row is the distinguishing case. The second case (a box that handed over, then lost `node.db`): not closed by 3b, stated under Task G.3 with why (it needs a handover record outside `node.db`, a change to A1018 Slice 5's code), and one bullet in A1274's backlog entry saying it could cost a filing |
 | 3 (Important), tasks describe code A1113 removed | fixed | D8 item 1 rewritten from `spare-read-gate.ts:19-36` and `boot.ts:2053`, naming every route mounted before the gates. Task 4.5a rewritten: no `mirror-session.ts` work; the bind guard is deleted, with D8's reason (both handover sign-in routes check HTTPS from the box's own page, then a ready operation, and only then the password — `handover-preparation.ts:113,122,127,130`, `handover-activation.ts:161,89,103,105` — and no throttle there), pinned by "a right and a wrong password get the same refusal" on both routes, whose control moves the operation check and fails. Kept-guard was not workable: a spare must answer the network, and the image listens on every address. Task 4.5b's walk requires the gate's own `node.spare`, so deleting the gate fails it (its control). Task 6.5's `ensureMirrorViewer` is gone. **Found while rewriting D8 (beyond the review):** the HTTPS listener serves the landing app's two connection writes before either gate on every start; Task 4.5b now keeps them to the box itself on a spare, with a test and a control, and D8 item 7 says the latch start serves the pre-gate routes too |
 | 4 (Important), R13 already landed | fixed | Task 4.4 dropped; Task 5.4's endorsement half and its test dropped; fact 8 corrected with `membership-mint.ts:70-83`, `mirror-bundle-api.ts:224` and the passing `-t endorse` run; the placed-items row, the cut table and the A1018 table point at #2651. #2651's rule stands for 3b; what a new main box does with the old signer's endorsements after a switch is A1342's (lane J) |
 | 5 (Important), "Start again empties this box" | fixed | Traced (`~/waitron-campaign/a947-3b-fable/f5-start-again.md`): the page cannot offer Start again, and it would move nothing. G.3's words now name only Retry a normal boot (this page) and Carry on as the main box (the main box), say no screen clears or rejoins the box in this version, and that it can stay switched off. What exists was checked: the recovery page offers only Retry; the setup app's staged reset runs only in setup mode after a stopped join (`setup-api.ts:1156`); Remove refuses a joined standby (fact 26); A1321's planned retirement waits for 3b-6 and already lists these words. No removal is built. Step 0's stop is kept, re-aimed at the page offering exactly Retry. The `secrets.env` copy a Move makes in `records/` is noted as context |
 | 6 (Minor), a second join during the probe | fixed | Task 6.2: under the node write lock, the link is re-read and must still be `pending` and name the probed peer before the row is written (venue first, node after, node lock outside); new case "a link replaced while the probe ran leaves no row". The other half of the same race: Task 5.4's node transaction re-reads the link and refuses `mirror.spare_already_joined` if it became `streaming`, with a case and no new seam |
 | 7 (Minor), the copy can run again in the finishing start | fixed | Task 6.3 runs the copy only while the link is `awaiting_copy` and this box's `venue.db` holds no `nodes` row for this box; the placed copy always holds it, so the finishing start runs none, and a finish that keeps the latch does not loop. New case "starts no copy when venue.db already holds this box's row" |
-| 8 (Minor), a joining box with a clock far off | fixed | Task 5.3: the joining request carries `standbyAt`; the main box refuses `mirror.clocks_apart` (409, the two times only) before reserving when the clocks are more than an hour apart, well inside the certificates' one-day slack (`self-signed-cert.ts:159-164`). Words in Task 5.6, English and Spanish, naming both next steps (connect this server to the internet; or Box status → Check with this device's time on the primary), with a Step 3 check that the button is offered; the relay in Task 5.6b. Read, not run: that connecting a box to the internet sets its clock (the recovery page's existing words rest on the same premise) — flagged for the watcher |
+| 8 (Minor), a joining box with a clock far off | fixed | Task 5.3: the joining request carries `standbyAt`; the main box refuses `mirror.clocks_apart` (409, the two times only) before reserving when the clocks are more than an hour apart, well inside the certificates' one-day slack (`self-signed-cert.ts:159-164`). Words in Task 5.6, English and Spanish, naming both next steps (connect this server to the internet; or Box status → Check with this device's time on the primary), with a Step 3 check that the button is offered; the relay in Task 5.6b. Read, not run: that connecting a box to the internet sets its clock (the recovery page's existing words rest on the same premise) — flagged for the watcher (Claim check round: the threshold is now 10 minutes, from probe P36, and the primary-side advice is cut; see below) |
 | 9 (Minor), the main box loses `node.db` | limit stated | D17 (b): it waits at its start (it cannot sign its question), and after Carry on it streams to nobody with no alert expected; the archives keep running under the owner's Q2 answer; recovering it is A1274's. No alert added: the smallest honest answer is the stated limit |
 | 10 (Minor), new state-folder names | fixed | Folders renamed `pair-store/` (Task 5.7) and `pair-copy/` (Task 6.3), away from `spare-space`; each gets a `STATE_LAYOUT` entry, and the `tls/` names constants beside `TLS_DIR` (Tasks 3.1, 5.8), with root `scripts/state-layout.test.ts` run. Also: Task 6.4 no longer edits `scripts/spare-space.test.ts`, which has nothing to do with replacing `venue.db` |
 | 11 (Minor), a test that cannot fail | dropped | Task 6.1's sale-delay case; Review Focus 4 now names what bounds the main box (the stream's 256 MiB pause, `supervisor.ts:172`, and `backup.stream_behind`), each with its own tests |
@@ -3618,3 +3656,18 @@ review):".
 | 13 (Minor), stale line numbers | re-anchored | Every line number the tasks of 3b-3 to 3b-F cite now reads against `2eee23d7f4` (a read-only sweep of every citation in those tasks, each moved one opened at its new line; more than sixty of its answers opened again by hand, which corrected its `adopt.ts` numbers by one). The reviewer's list is covered: the stream job's file list is `scripts/ci-workflow.test.mjs:965-979`; Start again's offer is `node-entry.ts:468-478` (G.3 now cites the failed-start page, `:550-580`); `boot.ts`'s bind guard `:2039`, latch landing `:1743`, time-zone repair landing `:2240`, full start's `:3968`; `refusalFrom` `mirror-bundle-fetch.ts:78-92`. Gone: Task 6.8a's backup-repair restart (#2461). Facts 1–27, D1–D18 and the probes keep the commits they name |
 | Q2, the owner's answer | recorded | D18's Q2, the Questions section, the header notes, the cut table, the placed-items row, 3b-6's header and Tasks 6.3, 6.3b, 6.3c, 6.9b and 6.10: "Yes, refuse the join (Recommended)" (desk, 2026-11-10 14:34). Option (ii)'s replacement tasks and every "3b-6 waits for Q2" are gone. Task 6.3c's words are the watcher's shorter wording, in the setup app's own term "primary server"; Task 6.3b's test asserts the code and an unchanged main-box database. 3b-6 still lands after 3b-G and needs lane J's A1342 (both its parts are on `main`) |
 | Backlog | checked | The A947 entry's "build has not started" line is already gone on `2eee23d7f4` (it names #2721 and #2742), so it is not edited; one bullet added to A1274's entry (finding 2) |
+
+### Claim check round (2026-11-10)
+
+The claim check of `5e62f0e039`: `/Users/clintongormley/waitron-campaign/a947-3b-fable/claim-check.md`.
+Each direction is a lane A decision, 2026-11-10 (claim check).
+
+| Finding | Done | Where |
+| --- | --- | --- |
+| I1, a joining spare's `=` from a frozen chart can clear a wait another silent box should hold | mechanism replaced | D19 and Task G.3b rewritten: the latch start's signed answer carries `joining: true`, set from the start it is making (never inferred from a missing chart), and the start check sets such a box aside (`J`, not counted, never agreement) and decides on the other counted boxes, proceeding when none is left. Before writing it, read that a box in its latch start cannot sell, file or switch itself on (D19 "Why setting it aside is safe": it returns at `boot.ts:1731`, before the till, filing, promotion and handover routes, and its mode is already `mirror`). The adopt-writes-the-chart change is withdrawn; nothing else needs it. Tests: the finding-1 sequence and the stuck spare proceed; the three-box case waits (control: the other box answering `=` proceeds); a forged or unsigned joining answer is silence; a fencing part is still read first. Judgement 3, the header facts, the cut table, D6's note, the 3b-G PR line, Review Focus 9, Task 6.9's phase and its control, the file structure and the header note follow |
+| I2, the clock refusal's threshold and its advice for a wrong primary clock | changed beyond the direction, flagged for the watcher | The direction was a margin under the certificates' one day (about 23 hours). Probe P36 shows the spare's store fails first: the pinned versitygw refuses a request signed 16 minutes off (`RequestTimeTooSkewed`, 403) and accepts 14. So 23 hours would let joins through that then fail at the store. The safest choice tied to what fails: refuse at 10 minutes or more (Task 5.3), five minutes inside the store's limit. Not established: whether Litestream's client corrects its clock after that refusal. The primary-side sentence is cut (the button is drawn only during a stop and sets the clock only then, `box-status-screen.ts:445-459`), leaving the spare-side step; Task 5.6's Step 3 now tests that step's promise or records that it was not run |
+| M1, a spare reset before it finishes joining | stated | D19's limit names it, with A1321 as the planned way out |
+| M2, a G.3 assertion weaker than it reads | replaced | G.3 now asserts no `handover.start_check` line instead of "no connection" |
+| M3, no restore case in G.3 | added | G.3's control "a restored box with a rebuild marker and a fresh node.db starts", with a STOP if it does not |
+| M4, `alreadyActivated` | named | D8's sign-in paragraph names `handover-activation.ts:88`; Task 4.5a's same-refusal case uses an operation not yet activated |
+
