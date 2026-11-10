@@ -36,7 +36,7 @@ let clock: BenchClock | undefined;
 
 afterEach(async () => {
   for (const { venue, dir } of opened.splice(0)) {
-    await venue.close();
+    await venue?.close();
     rmSync(dir, { recursive: true, force: true });
   }
   clock?.uninstall();
