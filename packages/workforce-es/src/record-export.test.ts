@@ -132,20 +132,20 @@ it("keeps automatic ends counted and worker acknowledgment separate", async () =
     endOffsetMinutes: 0,
   });
   expect(cells(before, "history").find((r) => r.entryId === target)).toMatchObject({
-    automatic: true,
-    unconfirmed: false,
-    confirmedByWorker: false,
-    authorKind: "automatic",
-    authorPersonId: null,
-    effective: true,
+    automatic: "Yes",
+    unconfirmed: "No",
+    confirmedByWorker: "No",
+    authorKind: "Automatic",
+    authorPersonId: "",
+    effective: "Yes",
   });
   await run((tx) =>
     backend.confirmAutomaticEntry(tx, { nodeId, entryId: target, workerPersonId: worker, origin }),
   );
   expect(cells(await doc(), "history").find((r) => r.entryId === target)).toMatchObject({
-    automatic: true,
-    unconfirmed: false,
-    confirmedByWorker: true,
+    automatic: "Yes",
+    unconfirmed: "No",
+    confirmedByWorker: "Yes",
   });
 });
 it("keeps originals, requests, approvals, reasons and stored self approval", async () => {
@@ -162,8 +162,8 @@ it("keeps originals, requests, approvals, reasons and stored self approval", asy
     expect.arrayContaining([target, change, answer]),
   );
   expect(cells(exported, "history").find((r) => r.entryId === answer)).toMatchObject({
-    selfApproved: true,
-    corrected: true,
+    selfApproved: "Yes",
+    corrected: "Yes",
     respondsToEntryId: change,
     correctsEntryId: target,
     authorPersonId: worker,
@@ -186,12 +186,12 @@ it("retains disputed manager changes without counting the proposed time", async 
   const exported = await doc();
   expect(cells(exported, "sessions")[0]!.workedMinutes).toBe(480);
   expect(cells(exported, "history").find((r) => r.entryId === change)).toMatchObject({
-    authorKind: "manager",
+    authorKind: "Manager",
     authorName: "José Manager",
-    disputed: true,
+    disputed: "Yes",
   });
   expect(cells(exported, "history").find((r) => r.entryId === answer)).toMatchObject({
-    correctionStatus: "disputed",
+    correctionStatus: "Disputed",
     respondsToEntryId: change,
     authorName: "María Worker",
   });
@@ -299,7 +299,7 @@ it("exports empty and open history without inventing a completed session", async
   await run((tx) => backend.breakStart(tx, event("2026-01-05T12:00:00Z")));
   const open = await doc();
   expect(cells(open, "sessions")).toEqual([]);
-  expect(cells(open, "history").map((r) => r.entryKind)).toEqual(["in", "break_start"]);
+  expect(cells(open, "history").map((r) => r.entryKind)).toEqual(["Clock in", "Break start"]);
   expect(cells(open, "totals")[0]!.workedMinutes).toBe(0);
 });
 
@@ -326,7 +326,7 @@ it("follows a retimed shift out of January into February without duplicate total
   expect(cells(january, "totals")[0]!.workedMinutes).toBe(0);
   expect(cells(february, "totals")[0]!.workedMinutes).toBe(480);
   expect(cells(february, "sessions").map((r) => r.date)).toEqual(["2026-02-01"]);
-  const decisions = cells(february, "history").filter((r) => r.entryKind === "correction");
+  const decisions = cells(february, "history").filter((r) => r.entryKind === "Correction");
   expect(decisions).toHaveLength(4);
   expect(decisions.map((r) => r.recordedAt)).toEqual(Array(4).fill("2026-03-05T12:00:00.000Z"));
   expect(decisions.map((r) => r.nodeId)).toEqual(Array(4).fill(nodeId));
@@ -375,7 +375,7 @@ it("keeps the full frozen period and explicit null and populated summary values"
     periodEnd: "2026-02-01",
   });
   expect(cells(exported, "frozen-summaries").find((r) => r.personId === worker)).toMatchObject({
-    summaryAvailable: true,
+    summaryAvailable: "Yes",
     workedMinutes: 960,
     contractedMinutes: 5314,
     dailyAccrualOvertimeMinutes: 480,
@@ -383,9 +383,9 @@ it("keeps the full frozen period and explicit null and populated summary values"
     overtimeMinutes: 480,
   });
   expect(cells(exported, "frozen-summaries").find((r) => r.personId === other)).toMatchObject({
-    summaryAvailable: false,
-    workedMinutes: null,
-    contractedMinutes: null,
+    summaryAvailable: "No",
+    workedMinutes: "",
+    contractedMinutes: "",
   });
   expect(cells(exported, "frozen-days").find((r) => r.personId === worker)).toMatchObject({
     date: "2026-01-05",
@@ -396,14 +396,14 @@ it("keeps the full frozen period and explicit null and populated summary values"
   expect(cells(exported, "automatic-marks")).toHaveLength(1);
   expect(cells(exported, "automatic-marks")[0]!.entryId).toBe(automaticId);
   expect(cells(exported, "frozen-history").find((r) => r.entryId === automaticId)).toMatchObject({
-    automatic: true,
-    unconfirmed: false,
-    confirmedByWorker: false,
+    automatic: "Yes",
+    unconfirmed: "No",
+    confirmedByWorker: "No",
   });
   expect(cells(exported, "history").find((r) => r.entryId === automaticId)).toMatchObject({
-    automatic: true,
-    unconfirmed: false,
-    confirmedByWorker: true,
+    automatic: "Yes",
+    unconfirmed: "No",
+    confirmedByWorker: "Yes",
   });
   expect(
     cells(exported, "frozen-sessions")
@@ -450,7 +450,7 @@ it("selects only declared scalar keys even when live and frozen objects gain dat
   }
   expect(cells(exported, "history")[0]).toMatchObject({
     personName: "María Worker",
-    entryKind: "in",
+    entryKind: "Clock in",
     eventAtLocal: "2026-01-05T09:00:00+00:00",
   });
 });
@@ -475,10 +475,67 @@ it("retains unknown actor references instead of dropping their decisions", async
 
 it.each([
   { locale: "en", holders: ["Worker", "Legal representatives", "Labour inspectorate"] },
-  { locale: "es", holders: ["trabajador", "representantes_legales", "inspeccion_trabajo"] },
+  {
+    locale: "es",
+    holders: ["Persona trabajadora", "Representantes legales", "Inspección de Trabajo"],
+  },
 ] as const)("exports access-holder labels for $locale", async ({ locale, holders }) => {
   const exported = await doc({ locale });
   expect(cells(exported, "metadata").map((row) => row.accessHolder)).toEqual(holders);
+});
+it.each([
+  {
+    locale: "en",
+    audience: "Standard",
+    entryKinds: ["Clock in", "Clock out", "Correction", "Correction"],
+    worker: "Worker",
+    manager: "Manager",
+    requested: "Requested",
+    approved: "Approved",
+    yes: "Yes",
+    no: "No",
+  },
+  {
+    locale: "es",
+    audience: "Estándar",
+    entryKinds: ["Entrada", "Salida", "Corrección", "Corrección"],
+    worker: "Persona trabajadora",
+    manager: "Responsable",
+    requested: "Solicitado",
+    approved: "Aprobado",
+    yes: "Sí",
+    no: "No",
+  },
+] as const)("writes every coded value in words for $locale", async (words) => {
+  const target = await day();
+  const change = await request(target);
+  const answer = await run((tx) =>
+    backend.approveCorrection(tx, { nodeId, correctionId: change, approverPersonId: manager }),
+  );
+  const exported = await doc({ locale: words.locale });
+  expect(cells(exported, "metadata")[0]!.audience).toBe(words.audience);
+  const history = cells(exported, "history");
+  expect(history.map((r) => r.entryKind)).toEqual(words.entryKinds);
+  const byId = (id: string) => history.find((r) => r.entryId === id)!;
+  expect(byId(target)).toMatchObject({
+    authorKind: words.worker,
+    correctionDirection: "",
+    effective: words.no,
+    automatic: words.no,
+  });
+  expect(byId(change)).toMatchObject({
+    correctionDirection: words.worker,
+    correctionStatus: words.requested,
+    missingEntryKind: "",
+  });
+  expect(byId(answer)).toMatchObject({
+    authorKind: words.manager,
+    correctionStatus: words.approved,
+    corrected: words.yes,
+  });
+  const values = rows(exported).flatMap((r) => Object.values(r));
+  for (const code of [true, false, null, "standard", "worker", "manager", "in", "out"])
+    expect(values).not.toContain(code);
 });
 it("names the venue once and gives entries and closures no workplace column", async () => {
   await day();

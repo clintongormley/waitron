@@ -1577,10 +1577,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **The Spanish working-time record prints English words and internal codes** (seen by A980
-  S2b): its version, access holders, events and author types, in the PDF and CSV.
-  [Detail](backlog/workforce.md#the-spanish-working-time-record-prints-english-words-and-internal-codes).
-
 - **Give the built close step a caller, then its cadence rule** (bundle of 2, 1 important, size M, needs the owner). [Detail](backlog/workforce.md#bundle-give-the-built-close-step-a-caller-then-its-cadence-rule)
 
 - **Audit attendance discovery invalidation for late attribution and rule changes.** A direct-insert
