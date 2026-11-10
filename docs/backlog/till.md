@@ -1217,7 +1217,8 @@ in `~/waitron-campaign-c/a1386-shots/`), and none was investigated:
 - At phone width (390 px), the Downstairs bar's map draws its tables as three 10-pixel dots in a
   map 29 pixels tall (`e13-next-signin-390-light-en.png`).
 - Reloading the page while on a table's order lands on an empty order page reading "Review (0)",
-  with no table (`e3-order-390-light-en.png`).
+  with no table (`e3-order-390-light-en.png`). A797 slice 10 replaced that Review button with the
+  Menu / Order switch.
 - A slow first read at sign-in leaves the PIN pad on screen with nothing saying the till is waiting.
 
 
@@ -2221,10 +2222,8 @@ Printer identity is separate from the till route inventory.
 
 8 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
-- **Two small phone-width points A414 left (#1495).** On the Order screen at 390 px the Review
-  button stops short of the right edge; the Schedule screen draws its own copy of
-  the card's border and padding.
-  [Detail](till.md#two-small-phone-width-points-a414-left-1495)
+- **The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495).**
+  [Detail](till.md#the-schedule-and-allergens-screens-draw-their-own-copy-of-the-cards-style-a414-1495)
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
   extras-and-options work.** Found while looking at the real screens for B1 Task 12.
   [Detail](till.md#five-measured-till-layout-defects-and-one-seen-in-a-screenshot-all-of-them-older-than-the-extras-and-options-work)
@@ -3168,22 +3167,12 @@ are saved to their existing bill rows. The 2026-10-19 documentation check ran th
 419 cases passed, including the €28.50-to-€32.50 added-extra example, invalid-choice refusals and
 submission replay. This is a check of those paths, not completion of the whole-branch prose audit.
 
-Phone Review counts the fixture's two Beers, one Flan with three Sauces, one weighed dish and
-two recalled portions as six dishes. The extras add no items to that count. The native Review
-and Back checks in `till-table-order-screen.review-acceptance.test.ts` retain the quantities,
-placement and selection without submitting, then show seven after the Beer quantity becomes three.
-They cover English and Spanish, both themes, at 360 and 390 px, with accessibility scans in both
-views. These component checks are complemented by the native app cases below; server persistence
-and physical trials remain separate.
-
 The native mixed-dish cases in `apps/till/src/till-app-drafts.test.ts` open the table through the
-floor's button, then use Review and Back. They retain the four saved dish families, their extras,
-recorded source details, placement and selection through a same-revision focus refresh. Review
-counts six dishes, including the weighed dish once and excluding extras. The checks cover English
-and Spanish in both themes at 360 and 390 px, measure the native Review and Back targets, and scan
-both views for accessibility. Review and Back send no save, submission or takeover request. The
-API replies and sign-in are controlled; these checks do not exercise server persistence or a
-physical till.
+floor's button, then switch to Menu and back to Order. They retain the four saved dish families,
+their extras, recorded source details, placement and selection through a same-revision focus
+refresh. The checks cover English and Spanish in both themes at 360 and 390 px and scan both views
+for accessibility. Switching views sends no save, submission or takeover request. The API replies
+and sign-in are controlled; these checks do not exercise server persistence or a physical till.
 
 The last-added strip follows a saved line's id when that order is refreshed, including weighed
 lines and lines kept separate. It clears when that id disappears or another order is loaded;
@@ -4128,11 +4117,9 @@ refuses it, as a delete is refused, or only warns.
 actions primitive while retaining the single correction sentence, keyboard submission and
 draft/save behavior. A551's focused validation and axe cases pass with the retained arrangement.
 
-## Two small phone-width points A414 left (#1495)
+## The Schedule and Allergens screens draw their own copy of the card's style (A414, #1495)
 
-On the Order screen at 390 px the Review
-button stops short of the right edge (seen in a screenshot, not compared with before #1495); and
-the Schedule and Allergens screens now draw their own copy of the card's border and padding
+The Schedule and Allergens screens draw their own copy of the card's border and padding
 (`apps/till/src/widgets/screen-card-styles.ts`), so a later change to the card's look will not
 reach them.
 

@@ -818,9 +818,9 @@ the pass, and Overview first when it is shown (§3.5).
      till's New order (unsent dishes): **"First order" on the pass**; a counter order's card already
      says "Counter #12", so "First order" reads true there too (lane G's A773-2, its tests and the
      kitchen guide). _2026-11-09: not built. On 2026-11-02 the owner chose to keep «Nuevo pedido» /
-     "New order" on the pass card for a table's first send, "the same name as the waiter's unsent
-     list, because the card is that same order, now sent" (lane C's questions file, A773-2 B3
-     question 7, answer (a)); so (g)'s «Primer pedido» is not used either. See the build plan's
+     "New order" on the pass card for a table's first send: the recommended option (a), "the same
+     name as the waiter's unsent list, because the card is that same order, now sent" (lane C's
+     questions file, A773-2 B3 question 7, answer (a)); so (g)'s «Primer pedido» is not used either. See the build plan's
      slice 10, D11._
   7. "Warm" in the dashboard's kitchen settings and the till's "Waiting" for the same limit, and
      three Spanish words each for Warm and Overdue: **"Waiting after" and the till's words** (A797
