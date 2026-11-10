@@ -1706,8 +1706,11 @@ async function bootServer(
   const ownNameOnly: readonly string[] = [ownHostname];
   const ownAndVenueNames: readonly string[] = [ownHostname, BOX_HOSTNAME];
   const leafHostnames = [ownHostname, BOX_HOSTNAME, "localhost"];
-  // Logged rather than thrown, as above: the old leaf still serves the tills that trust it.
-  if (config.tls === undefined) {
+  // Called only once a start is past its refusals and not fenced, so a start that refuses, or a
+  // fenced box, leaves `tls/` as it was. Logged rather than thrown, as above: the old leaf still
+  // serves the tills that trust it.
+  const checkLeaf = async () => {
+    if (config.tls !== undefined) return;
     try {
       await ensureLeaf({
         stateDir: config.stateDir,
@@ -1721,7 +1724,7 @@ async function bootServer(
         errorCode: codeOf(error),
       });
     }
-  }
+  };
   const pendingAdoption = await readPendingAdoption(config.stateDir);
   if (pendingAdoption !== null) {
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
@@ -1738,6 +1741,7 @@ async function bootServer(
       log("error", "adoption.worker_rejected", { errorCode: codeOf(err) }),
     );
     undoOnFailure.push(() => finishWorker.catch(() => {}));
+    await checkLeaf();
     const server = startTradingListener(config, app, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
@@ -2135,6 +2139,7 @@ async function bootServer(
       await validateRetainedZoneClock(tx, scope, context.savedZone.timeZone, now());
     return context;
   });
+  if (!fenced) await checkLeaf();
   if (context.savedZone.kind !== "valid") {
     tradingAdmission.repairOnly(context.savedZone.kind);
     app.use("*", zoneRepairGate(tradingAdmission));

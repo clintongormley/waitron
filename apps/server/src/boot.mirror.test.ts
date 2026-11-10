@@ -1,5 +1,7 @@
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { X509Certificate } from "node:crypto";
+import { connect as tlsConnect } from "node:tls";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,6 +39,7 @@ import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
 import { MIRROR_VIEWER_PERSON_ID, MIRROR_VIEWER_SESSION_ID } from "./mirror-session.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
 import { get } from "node:https";
 
@@ -773,5 +776,52 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       rmSync(stateDir, { recursive: true, force: true });
     }
     await expect(fetch(`${base}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("a box still joining reissues, before it serves, a leaf that does not name it", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "waitron-adopting-leaf-"));
+    writeFileSync(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    writeFileSync(
+      join(stateDir, "pending-adoption.json"),
+      JSON.stringify({
+        standby: { nodeId: "88888888-8888-4888-8888-888888888888", publicKey: "pub" },
+        nodeName: "standby",
+        filingModule: "fiscal-verifactu",
+        taxModule: null,
+        reserved: { modules: {}, series: [], endorsement: {} },
+        originNodeId: MIRROR_ORIGIN_NODE,
+      }),
+      { mode: 0o600 },
+    );
+    await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
+    const ca = await readFile(join(stateDir, "tls", "ca.crt"));
+    const port = await freePort();
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_STATE_DIR: stateDir,
+      WAITRON_VENUE_DIR: venueDir.adopting,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    try {
+      // The handshake completes only if the served leaf names this box.
+      const served = await new Promise<X509Certificate | undefined>((resolve, reject) => {
+        const socket = tlsConnect(
+          { port: httpPort(), host: "127.0.0.1", ca, servername: "box-3333.waitron.local" },
+          () => {
+            resolve(socket.getPeerX509Certificate());
+            socket.destroy();
+          },
+        );
+        socket.once("error", reject);
+      });
+      expect(served?.subjectAltName).toContain("DNS:waitron.local");
+    } finally {
+      await server.close();
+      rmSync(stateDir, { recursive: true, force: true });
+    }
   }, 60_000);
 });
