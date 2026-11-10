@@ -287,7 +287,8 @@ async function copyBase() {
 
 it("counts returned VAT and settled payments without changing the new main's own day-close", async () => {
   const source = await seedNode(old.db, "Source");
-  const receiverId = await bareNode(old.db);
+  const receiver = await seedNode(old.db, "Receiver");
+  const receiverId = receiver.nodeId;
   await copyBase();
   const clock = {
     businessDay: "2026-07-20",
@@ -295,9 +296,6 @@ it("counts returned VAT and settled payments without changing the new main's own
     dayCutover: "05:00",
     cutoverChanges: [],
   };
-  const ownBefore = await withTransaction(current.db, (tx) =>
-    computeDailyClose(tx, { ...clock, nodeIds: [receiverId] }),
-  );
   const [sale] = await old.db
     .insert(sales)
     .values({
@@ -316,6 +314,30 @@ it("counts returned VAT and settled payments without changing the new main's own
       fiscalState: "recorded",
     })
     .returning();
+  const [ownSale] = await current.db
+    .insert(sales)
+    .values({
+      ...sale!,
+      id: "10000000-0000-4000-8000-000000000003",
+      nodeId: receiverId,
+      seriesId: receiver.seriesId,
+      deviceId: receiver.deviceId,
+    })
+    .returning();
+  const [ownIdentity] = current.db.all<{ nif: string; numero_instalacion: string }>(
+    sql`select nif,numero_instalacion from registro_sif where id=${receiver.sifId}`,
+  );
+  const ownPending = altaFor(receiver, brandSaleId(ownSale!.id), 1, 1);
+  ownPending.input.IDEmisorFactura = ownIdentity!.nif;
+  ownPending.input.SistemaInformatico.NumeroInstalacion = ownIdentity!.numero_instalacion;
+  await withTransaction(current.db, (tx) => appendToChain(tx, receiverId, ownPending));
+  const ownBefore = await withTransaction(current.db, (tx) =>
+    computeDailyClose(tx, { ...clock, nodeIds: [receiverId] }),
+  );
+  expect(ownBefore).toMatchObject({
+    counts: { sales: 1, corrections: 0, voids: 0 },
+    vat: { grossTotal: "123.45" },
+  });
   const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
     sql`select nif,numero_instalacion from registro_sif where id=${source.sifId}`,
   );
@@ -324,23 +346,19 @@ it("counts returned VAT and settled payments without changing the new main's own
   pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
   await withTransaction(old.db, async (tx) => {
     await appendToChain(tx, source.nodeId, pending);
-    await tx
-      .insert(tenders)
-      .values({
-        id: "returned-tender",
-        saleId: sale!.id,
-        method: "cash",
-        amount: 12345,
-        tipAmount: 0,
-        settledAt: "2026-07-20T17:21:00.000Z",
-      });
-    await tx
-      .insert(saleSettlements)
-      .values({
-        id: "returned-settlement",
-        saleId: sale!.id,
-        settledAt: "2026-07-20T17:21:00.000Z",
-      });
+    await tx.insert(tenders).values({
+      id: "returned-tender",
+      saleId: sale!.id,
+      method: "cash",
+      amount: 12345,
+      tipAmount: 0,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
+    await tx.insert(saleSettlements).values({
+      id: "returned-settlement",
+      saleId: sale!.id,
+      settledAt: "2026-07-20T17:21:00.000Z",
+    });
   });
   const snapshot = await withTransaction(old.db, (tx) => readReturnedOriginals(tx, source.nodeId));
   for (const batch of makeReturnedBatches(snapshot))
@@ -352,12 +370,12 @@ it("counts returned VAT and settled payments without changing the new main's own
   const vat = await withTransaction(current.db, (tx) =>
     computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 7 } }),
   );
-  expect(vat.byRate).toEqual([{ rate: "21.00", base: "102.02", tax: "21.43" }]);
+  expect(vat.byRate).toEqual([{ rate: "21.00", base: "204.04", tax: "42.86" }]);
   expect(mapModelo303(vat).boxes).toMatchObject({
-    "07": "102.02",
-    "09": "21.43",
-    "27": "21.43",
-    "46": "21.43",
+    "07": "204.04",
+    "09": "42.86",
+    "27": "42.86",
+    "46": "42.86",
   });
   expect(
     await withTransaction(current.db, (tx) =>

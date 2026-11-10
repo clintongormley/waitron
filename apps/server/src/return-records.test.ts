@@ -124,7 +124,7 @@ it("returns all module batches through real signatures and confirms only the com
   ]);
 });
 
-it.each(["environment", "venue", "destination", "signature", "payload"])(
+it.each(["environment", "venue", "destination", "source", "signature", "payload"])(
   "refuses a return with wrong %s before invoking its module",
   async (field) => {
     const app = destination();
@@ -141,6 +141,7 @@ it.each(["environment", "venue", "destination", "signature", "payload"])(
         if (field === "environment") venue.environment = "production";
         if (field === "venue") venue.taxId = "other-taxpayer";
         if (field === "destination") raw.body.destinationNodeId = source;
+        if (field === "source") raw.body.sourceNodeId = receiver;
         const { signAsThisBox } = await import("./handover-signing.js");
         Object.assign(
           raw,
@@ -161,6 +162,7 @@ it.each([
   "pinned source",
   "primary receiver",
   "revoked source",
+  "evicted source",
   "changed chart",
   "read-only receiver",
 ])("refuses a trusted return for a %s before importing facts", async (field) => {
@@ -183,6 +185,7 @@ it.each([
     }
     if (field === "primary receiver") changed.body.nodes[0]!.standing = "sell-only";
     if (field === "revoked source") changed.body.revoked = [source];
+    if (field === "evicted source") changed.body.nodes[1]!.standing = "evicted";
     changed.signature = signDocumentBody(changed.body, receiverKey);
     if (field === "changed chart") {
       changed.body.term++;

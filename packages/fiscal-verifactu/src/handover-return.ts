@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { refusalOn, triggerRaised, UNIQUE_VIOLATION, type Transaction } from "@waitron/db";
+import {
+  COVERAGE_REFUSAL,
+  POST_SETTLEMENT_REFUSAL,
+  refusalOn,
+  triggerRaised,
+  UNIQUE_VIOLATION,
+  type Transaction,
+} from "@waitron/db";
 import type { BackupQuery } from "@waitron/store";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
@@ -184,8 +191,8 @@ export async function receiveReturnedOriginals(
       if (
         !refusalOn(error, UNIQUE_VIOLATION, { table: "tenders", columns: ["bill_payment_id"] }) &&
         !refusalOn(error, UNIQUE_VIOLATION, { table: "sale_settlements", columns: ["sale_id"] }) &&
-        !triggerRaised(error, "tenders do not cover the sale") &&
-        !triggerRaised(error, "tender rejected: the sale is already settled")
+        !triggerRaised(error, COVERAGE_REFUSAL) &&
+        !triggerRaised(error, POST_SETTLEMENT_REFUSAL)
       )
         throw error;
       missing = true;
