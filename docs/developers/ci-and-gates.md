@@ -556,6 +556,8 @@ subsection below says what it costs to leave it where it is.
 
 ### The first promotion — measured 2026-09-23
 
+**2026-11-10:** A1308 slice 4a-i removes the recipes package. The list below records the earlier measurement.
+
 `pnpm -r --no-bail --workspace-concurrency=4 test:coverage` on `9cd2fda58`: green in all 46 members
 that run coverage, 1,066 test files and 13,811 tests. Every member's
 `coverage/coverage-summary.json` was read, and none holds a path outside its own package directory

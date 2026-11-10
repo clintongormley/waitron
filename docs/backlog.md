@@ -1418,11 +1418,8 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   The owner, 2026-11-09: require a Cloud login for now; supporting a venue without one "shouldn't be
   forgotten". Low priority.
 
-- **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
-  open by A1222).** It watches `ingredients` and `recipe_lines` only after awaited reads, so its
-  first stream is replaced once those reads answer. Decide whether it should watch them from the
-  start. A1308 removes both tables.
-  [Detail](backlog/dashboard.md#a1227-the-catalogue-screen-replaces-its-live-stream-once-per-load-when-catalogues-exist-left-open-by-a1222)
+- **A1227. Check screens that add live subscriptions after an awaited read.**
+  [Detail](backlog/dashboard.md#a1227-check-screens-that-add-live-subscriptions-after-an-awaited-read)
 
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
@@ -1664,11 +1661,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 ### Purchasing, recipes, stock and reports
 
 - **One design for supplier invoices and credit notes** (bundle of 2, 2 important, size M, needs the owner). Holds A1326. [Detail](backlog/back-office.md#bundle-one-design-for-supplier-invoices-and-credit-notes)
-
-- **Recipes are removed under A1308 (owner, 2026-11-04).** "Remove it, and remove recipes. we don't
-  use them." The routes and the screen are unreached today; A1308's menu slice deletes them with
-  `ingredients`, `recipe_lines` and `packages/recipes`.
-  [Detail](backlog/back-office.md#recipes-are-removed-under-a1308-owner-2026-11-04)
 
 ### The box: backups, upgrades and recovery
 
@@ -2564,7 +2556,7 @@ partial scope; the detail for a live thread is in its area.
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17  | Accounting export            | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (core subset; extends Reporting)                                                                                                                                  |
-| 18  | Menu/recipes/allergens       | EU-14 allergens, declared directly on the product since #345 (recipes are removed under A1308, owner 2026-11-04), product images, venue↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked       |
+| 18  | Menu/allergens       | EU-14 allergens, declared directly on the product since #345 product images, venue↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
 | 20  | Procurement & inventory      | received purchase invoices (`@waitron/purchasing`, feeds modelo 303)                                                                                                                                                                                                                                                                                                                                                              | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred                                                                                           |
 

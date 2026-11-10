@@ -1858,10 +1858,12 @@ dropped `service_settings`) and A980 S1a2 (format 9, 2026-10-26, when the copy g
 privacy contact as the required top-level `privacyContact` key) moved the format for the same
 reason. A1301 S17 (format 10) made the venue's setup fields `venue`'s own keys, moved
 the default menu to the top-level `defaultCatalogueId` and dropped the location's `id` and
-`fireControl`; a format-9 export is refused as outdated. `configuration-transfer.test.ts` now pins
-format 10, and older files are refused as `setup.configuration_outdated`.
+`fireControl`; a format-9 export is refused as outdated. `configuration-transfer.test.ts` pins
+the current format, and older files are refused as `setup.configuration_outdated`.
 A1308 slice 1b-ii (format 11) moves the comp limit from `adjustment_settings` to the
 `settings.adjustments` document; a format-10 export is refused as outdated.
+A1308 slice 4a-i (format 12) removes the recipe tables and derivation columns;
+a format-11 export is refused as outdated.
 
 **2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
 staff and booking tables and makes `convenio_config` a singleton with integer id 1.

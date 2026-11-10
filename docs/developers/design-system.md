@@ -663,8 +663,7 @@ through a token. `wt-modal` has three sized widths, each a token: compact, `--wt
 `--wt-modal-max-width` (`64rem`, 1024px), which is also the width of a modal given no size (see
 the `wt-modal` entry below). A fourth size, `full`, fills the window less `--wt-modal-inline-margin`
 on every side; only the floor plan editor uses it. `wt-dialog`, `wt-help-tooltip` and `wt-relative-time`'s box read their own token and are at most
-`48rem` (768px). Some add and edit forms are built in `wt-dialog` rather than `wt-modal` (the
-ingredient form is one), so they are held to 768px too. Outside `wt-modal` a few pieces read the
+`48rem` (768px). Some add and edit forms are built in `wt-dialog` rather than `wt-modal`, so they are held to 768px too. Outside `wt-modal` a few pieces read the
 compact size token, `--wt-modal-compact-width`: the product editor's Pricing unit chooser and Menu
 publications set their `--wt-dialog-max-width` from it; grep the token for the others. To resize
 any other dialog, set `--wt-dialog-max-width` (the till's device chooser does).
@@ -2994,8 +2993,8 @@ and the staffing grid's block editor in the A761 entry):
   reconnect). Disposing the scope redraws the form, so without that check a form taken out of the
   page takes a new scope while detached, and once put back it does not ask before discarding an
   edit made after that. The till's party name, bill name, invoice recipient, extras picker and station
-  dialogs and the floor's Rename window, the dashboard's unit, ingredient, extras list, option
-  list and option label forms, recipe editor, Add to menus picker, a section's Add products picker
+  dialogs and the floor's Rename window, the dashboard's unit, extras list, option
+  list and option label forms, Add to menus picker, a section's Add products picker
   and the Home page tab's shortcut picker, the menus screen's section and menu details form and an
   include's Edit dialog, the staff
   edit and new person forms, the variant and purchase forms, the bookings form, the
@@ -3012,10 +3011,9 @@ and the staffing grid's block editor in the A761 entry):
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase and bookings forms, the product
-  editor, the unit, ingredient, extras list, option list and option label forms, the menus screen's section and menu details form, an include's Edit
+  editor, the unit, extras list, option list and option label forms, the menus screen's section and menu details form, an include's Edit
   dialog, the Add to menus and Add products pickers, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
-  live menu window, whose committed value is always no changes. A menu's Schedule and Change time window does too, though it takes its scope at opening and again as it is put back rather than in `willUpdate`, so it is not in the list above: put back onto the same menu it keeps its edit, onto a different one it closes unchanged, and taken out during its write it closes as it is put back and reads the list again rather than keep its edit, so it leaves nothing to send a second time; a write that fails after that, while the panel still shows that menu, shows on the panel, outside the window, as one sentence saying it may not have gone through, and the panel reads the list again; the sentence stays until Schedule or Change time is opened again or the panel follows a different menu (`menu-publications.unsaved.test.ts`). The recipe editor
-  clears its choice on removal by design (batch 2a). The till's party name, bill name, Guests, invoice recipient,
+  live menu window, whose committed value is always no changes. A menu's Schedule and Change time window does too, though it takes its scope at opening and again as it is put back rather than in `willUpdate`, so it is not in the list above: put back onto the same menu it keeps its edit, onto a different one it closes unchanged, and taken out during its write it closes as it is put back and reads the list again rather than keep its edit, so it leaves nothing to send a second time; a write that fails after that, while the panel still shows that menu, shows on the panel, outside the window, as one sentence saying it may not have gone through, and the panel reads the list again; the sentence stays until Schedule or Change time is opened again or the panel follows a different menu (`menu-publications.unsaved.test.ts`). The till's party name, bill name, Guests, invoice recipient,
   extras picker and station dialogs, Split a table's panel and the floor's Rename window keep it and count it, each with a reconnect case in its
   `*.unsaved.test.ts`. That accounts for every form in the list above;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
@@ -3111,7 +3109,7 @@ and nothing guards it across screens:
 
 - batch 1: the product editor and the variant form;
 - batch 2a: the "VAT class for new products" default (now on Venue settings' Defaults card); the
-  recipe editor and the ingredient form; the unit form, new and existing; the options list and its
+  the unit form, new and existing; the options list and its
   option window; the extras list; Add to menus after a product is created; a section's Add products;
   a menu's Schedule and Change time on its Preview tab. Units' Change unit, the Products browser's
   Move and Delete dialog and the image picker act on what is selected rather than save a draft, so

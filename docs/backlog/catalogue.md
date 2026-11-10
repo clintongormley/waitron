@@ -1397,8 +1397,8 @@ Availability is blank for an ordinary product, Unavailable when sold out, and Ar
 also when it is sold out; the owner chose this column over badges beside the name. The Allergens filter
 offers the column's three states (Pending / None / Declared) rather than one "nutritional info" filter,
 so a product never checked stays apart from one checked and allergen-free. A668-3 (2026-10-16) renames the displayed Pending label to Not reviewed and applies each variant's effective state to its cell and filter; inherited badges are italic. Dietary info's "Has" means a
-categorised dietary origin from the product's recipe, or a Vegan, Vegetarian, Halal or Kosher override (owner); the list also counts a
-ticked dietary declaration. (2026-11-04: recipes go under A1308, and the origin half of "Has" goes with them.) Made at offers only the stations the column names for some product, not
+Vegan, Vegetarian, Halal or Kosher override (owner); the list also counts a
+ticked dietary declaration. Made at offers only the stations the column names for some product, not
 every kitchen station, and matches the station the column shows, including a switched-off station a
 product has no replacement for; the backlog entry marked that matching "assumed, not asked".
 **2026-10-10 update:** A435 step 5 removes deleted stations from current routing settings and
