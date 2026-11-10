@@ -502,3 +502,121 @@ describe("an ordinary promotion while a handover is open on this box", () => {
     await expectRefusedNamingOperation(LATER_OP);
   });
 });
+
+describe("on a mirror, promotion answers only the box itself", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const binding = {
+    module: "test-regime",
+    action: "promote",
+    eventId: "event-1",
+    sourceId: "promotion-1",
+    targetNodeId: NODE,
+  };
+
+  function mirrorApp(fromBox: boolean, isMirror = true) {
+    const run = vi.fn(async (): Promise<PromoteRunResult> => ({
+      alreadyPrimary: false,
+      restarting: true,
+    }));
+    const prepare = vi.fn(async () => ({ prepared: true }));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: fakeDb,
+      nodeDb: fakeNode,
+      nodeId: NODE,
+      run,
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: {
+        prepare,
+        withPromotion: vi.fn(),
+      } as unknown as PromoteApiDeps["nodePreparation"],
+      requestFromBox: () => fromBox,
+      isMirror,
+    });
+    return { app, run, prepare };
+  }
+
+  async function overHttps(app: Hono, path: string, body: unknown): Promise<Response> {
+    const socket = new TLSSocket(new Socket());
+    try {
+      return await app.request(
+        `https://box.test/management-api/promote${path}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        { incoming: { socket } },
+      );
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  const REFUSAL = { error: { code: "promotion.from_box_only", params: {} } };
+
+  it("a mirror refuses promotion from another address, promotes nothing and reads no password", async () => {
+    const { app, run } = mirrorApp(false);
+    const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(checkManagerPassword).not.toHaveBeenCalled();
+    expect(loginManagerById).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("a mirror still accepts promotion from the box itself", async () => {
+    const { app, run } = mirrorApp(true);
+    const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+    expect([res.status, await res.json()]).toEqual([
+      200,
+      { alreadyPrimary: false, restarting: true },
+    ]);
+    expect(checkManagerPassword).toHaveBeenCalled();
+    expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: true });
+  });
+
+  it("a mirror refuses preparation from another address and reads no password", async () => {
+    const { app, prepare } = mirrorApp(false);
+    const res = await overHttps(app, "/preparation", {
+      moduleOperation: { binding, input: null },
+      personId: PERSON,
+      password: "pw",
+    });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("a mirror refuses preparation from another address before its HTTPS check", async () => {
+    const { app, prepare } = mirrorApp(false);
+    const res = await app.request("/management-api/promote/preparation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "not json",
+    });
+    expect([res.status, await res.json()]).toEqual([403, REFUSAL]);
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it("a mirror still accepts preparation from the box itself", async () => {
+    const { app, prepare } = mirrorApp(true);
+    const res = await overHttps(app, "/preparation", {
+      moduleOperation: { binding, input: null },
+      personId: PERSON,
+      password: "pw",
+    });
+    expect([res.status, await res.json()]).toEqual([200, { prepared: true }]);
+    expect((prepare.mock.calls[0] as unknown[])[4]).toEqual({ onBox: true });
+  });
+
+  it("a fenced box's promotion refusal is unchanged", async () => {
+    const { app, run } = mirrorApp(false, false);
+    run.mockRejectedValueOnce(new AppError("promotion.node_fenced", { standing: "sell-only" }));
+    const res = await post(app, { oldNodeNeutralised: true, personId: PERSON, password: "pw" });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("promotion.node_fenced");
+    expect(checkManagerPassword).toHaveBeenCalled();
+  });
+});

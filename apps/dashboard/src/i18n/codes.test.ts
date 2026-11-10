@@ -911,3 +911,12 @@ it.each([
   expect(codeMessage(code, "en")).toBe(english);
   expect(codeMessage(code, "es")).toBe(spanish);
 });
+
+it("says a standby server is switched on only from its own screen, in English and Spanish", () => {
+  expect(codeMessage("promotion.from_box_only", "en")).toBe(
+    "In this version a standby server can be switched on only from its own screen. Nothing was changed.",
+  );
+  expect(codeMessage("promotion.from_box_only", "es")).toBe(
+    "En esta versión, un servidor en espera solo se puede activar desde su propia pantalla. No se ha cambiado nada.",
+  );
+});

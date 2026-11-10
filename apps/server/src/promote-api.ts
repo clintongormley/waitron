@@ -49,6 +49,8 @@ export interface PromoteApiDeps {
   nodePreparation?: ReturnType<typeof createNodeOperationPreparation>;
   /** Whether a request came from a browser on the box itself; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
+  /** On a mirror both routes answer only a request from the box itself. */
+  isMirror?: boolean;
   run: (
     attestation: FenceAttestation,
     operation?: PromotionOperationRunner,
@@ -60,6 +62,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "password.throttled": 429,
   "promotion.break_glass_invalid": 401,
   "authorization.not_permitted": 403,
+  "promotion.from_box_only": 403,
   "promotion.fence_not_attested": 400,
   "promotion.node_fenced": 409,
   "promotion.membership_superseded": 409,
@@ -114,9 +117,15 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
       throw new AppError("handover.operation_in_progress", { operationId: open.operationId });
   };
 
+  const refuseFromNetworkOnMirror = (c: Context): void => {
+    if (deps.isMirror === true && !(deps.requestFromBox ?? requestFromBox)(c))
+      throw new AppError("promotion.from_box_only", {});
+  };
+
   app.post("/management-api/promote/preparation", (c) =>
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");
+      refuseFromNetworkOnMirror(c);
       requireNodeOperationHttps(c);
       const body = await readJsonBody<{
         moduleOperation?: unknown;
@@ -156,6 +165,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
 
   app.post("/management-api/promote", (c) =>
     run(c, log, async () => {
+      refuseFromNetworkOnMirror(c);
       const turn = promotionTurn(deps.nodeDb);
       const afterSignIn = async (): Promise<void> => {
         turn.claim();

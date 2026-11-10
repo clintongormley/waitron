@@ -1411,6 +1411,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This handover was already started with different details, so nothing was changed. Start a new handover.",
     es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
   },
+  "promotion.from_box_only": {
+    en: "In this version a standby server can be switched on only from its own screen. Nothing was changed.",
+    es: "En esta versión, un servidor en espera solo se puede activar desde su propia pantalla. No se ha cambiado nada.",
+  },
   "handover.operation_in_progress": {
     en: "Another handover is already in progress. Keep both boxes connected. Do not start another handover until it finishes.",
     es: "Ya hay otro traspaso en curso. Mantén los dos equipos conectados. No inicies otro traspaso hasta que termine.",

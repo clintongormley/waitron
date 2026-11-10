@@ -3671,6 +3671,7 @@ async function bootServer(
       modules: setsToMigrate,
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
+      isMirror,
       nodePreparation,
     },
     log,

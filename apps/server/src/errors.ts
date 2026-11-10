@@ -1265,6 +1265,11 @@ declare module "@waitron/shared" {
      */
     "promotion.break_glass_invalid": Record<string, never>;
     /**
+     * A promotion of a mirror was asked for from another address. Until A947's take-over lands a
+     * spare is switched on only from its own screen; refused before the body is read.
+     */
+    "promotion.from_box_only": Record<string, never>;
+    /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.
      */
