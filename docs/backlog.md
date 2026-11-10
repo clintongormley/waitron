@@ -1977,7 +1977,9 @@ outstanding on code that exists.
   Build waits for A947 3b-6; no new start check or returning-key trust path.
   [Detail](backlog/replication-cloud.md#a1321-retire-a-dead-or-reset-spare-from-servers)
 
-- **A947. Go-live on two local boxes.** The owner approved the revised design. Slice 3b's build
+- **A947. Go-live on two local boxes.** The owner approved the revised design. Lifting
+  `WAITRON_MIRROR_ALLOW_EXPOSED` makes **Hand over the venue** live on real boxes whether or not
+  the emergency route has landed. Slice 3b's build
   plan is written (eight pull requests; Q1 is the owner's); 3b-1 and 3b-2 ([#2742](https://github.com/clintongormley/waitron/pull/2742)) landed, 3b-3 onwards
   are still to build. A second box in setup mode can be trusted by mistake in three ways, to settle before go-live. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 

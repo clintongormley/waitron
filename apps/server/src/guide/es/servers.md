@@ -8,9 +8,7 @@ ofrece acceso al panel de gestión.
 
 ## Traspasar el local a un equipo de reserva {#hand-over}
 
-Usa este proceso solo con un equipo de reserva que haya terminado de unirse al local. Para usarlo
-con equipos reales también hace falta la recuperación de emergencia, que aún no está disponible;
-el proceso controlado está comprobado por ahora con equipos simulados.
+Usa este proceso solo con un equipo de reserva que haya terminado de unirse al local.
 
 En el equipo principal, abre **Ajustes → Servidores**. Abre el menú de la fila del equipo de reserva
 y elige **Traspasar el local**. Lee la explicación e introduce tu contraseña de administrador y el
@@ -20,12 +18,14 @@ con contraseña; las llaves de acceso y los códigos de recuperación no complet
 
 Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue
 la transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador, compara
-los relojes y crea la nueva serie. Elige **Iniciar el local en este equipo** y después **Continuar
-en este equipo**. Los pagos ya registrados se conservan en la copia transferida.
+los relojes y crea la nueva serie. Elige **Iniciar el local en este equipo**. Si la página indica
+que el equipo se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este equipo**.
+Los pagos ya registrados se conservan en la copia transferida.
 
-Si se pierde una respuesta, mantén la página abierta o recárgala para consultar el progreso. No
-inicies otro traspaso. Un mensaje de espera describe el último intento; mantén los dos equipos
-conectados mientras vuelven a intentarlo.
+Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **Consultar el
+progreso del traspaso**. En la página de traspaso del equipo de reserva puedes recargar para
+consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
+mantén los dos equipos conectados mientras vuelven a intentarlo.
 
 ## Después del traspaso {#after-hand-over}
 

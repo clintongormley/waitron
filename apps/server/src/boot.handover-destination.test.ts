@@ -1,5 +1,6 @@
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { request as httpsRequest } from "node:https";
 import type { AddressInfo } from "node:net";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -42,7 +43,7 @@ import {
 import type { StartedServer } from "./boot.js";
 import { acceptedCopyPath } from "./handover-acceptance.js";
 import { imageMigrationsDigest, readOfferSettings } from "./handover-manifest.js";
-import { advanceHandover, beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover, HANDOVER_EVENT } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
@@ -180,8 +181,12 @@ async function startMainBox(
 async function boot(
   mode: "mirror" | "primary",
   mainBoxState = "abandoned",
-  beforeStart: (nodeId: string, ownKey: string) => Promise<void> = async () => {},
-  inStateFolder: (stateDir: string) => Promise<void> = async () => {},
+  beforeStart: (
+    nodeId: string,
+    ownKey: string,
+    binding: HandoverBinding,
+  ) => Promise<void> = async () => {},
+  inStateFolder: (stateDir: string) => Promise<Record<string, string> | void> = async () => {},
 ) {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
@@ -221,7 +226,7 @@ async function boot(
     },
   });
   await beginHandover({ node: suite.node, nodeId }, binding(OP), "destination");
-  await beforeStart(nodeId, own);
+  await beforeStart(nodeId, own, binding(OP));
   await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, mode);
   await writeMirrorLink(suite.node, nodeId, {
     relayUrl: "http://127.0.0.1:1/",
@@ -245,7 +250,7 @@ async function boot(
     join(scratch, "modules.json"),
     JSON.stringify({ modules: { "fiscal-none": false } }),
   );
-  await inStateFolder(scratch);
+  const extraEnvironment = await inStateFolder(scratch);
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const env: Record<string, string> = {
     ...KEY_ENV,
@@ -259,6 +264,7 @@ async function boot(
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_MAX_TICK_MS: "600000",
     WAITRON_MIN_TICK_MS: "200",
+    ...extraEnvironment,
   };
   server = await startServer(env, env, {
     peerCheck: async () => ({ result: "proceed", successorNodeId: null }),
@@ -271,6 +277,135 @@ const operation = (nodeId: string, operationId: string) =>
   readHandoverOperation(suite.node, nodeId, operationId);
 
 describe("the spare's handover duty in a full start", () => {
+  it("serves the handover page and its setup asset on a real spare start", async () => {
+    await boot(
+      "mirror",
+      "source_stepped_down",
+      async () => {},
+      async (stateDir) => {
+        const root = join(stateDir, "setup");
+        await mkdir(join(root, "assets"), { recursive: true });
+        await writeFile(
+          join(root, "index.html"),
+          '<main>Handover fixture</main><script type="module" src="./assets/app.js"></script>',
+        );
+        await writeFile(
+          join(root, "assets", "app.js"),
+          'document.body.dataset.handover = "loaded";',
+        );
+        return { WAITRON_SETUP_APP_DIR: root };
+      },
+    );
+    const origin = "http://127.0.0.1:" + httpPort();
+    const page = await fetch(origin + "/handover/" + OP, { headers: { accept: "text/html" } });
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Handover fixture");
+    const asset = await fetch(origin + "/handover/assets/app.js");
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toBe('document.body.dataset.handover = "loaded";');
+  }, 120_000);
+
+  it("shares the password delay across preparation and activation in a real TLS start", async () => {
+    const tls = mintSelfSignedServerCert({
+      hostnames: ["localhost"],
+      ipAddresses: ["127.0.0.1"],
+      now: new Date(),
+    });
+    const { nodeId } = await boot(
+      "mirror",
+      "source_stepped_down",
+      async (id, _key, operationBinding) => {
+        await withNodeTransaction(suite.node, async (tx) => {
+          await advanceHandoverOperationTx(tx, id, OP, "filing_assumed", null);
+          await appendHandoverEventTx(tx, {
+            nodeId: id,
+            operationId: OP,
+            kind: "filing_assumed",
+            detail: {},
+            envelope: JSON.stringify(
+              signEnvelope(
+                "relinquishment",
+                {
+                  binding: operationBinding as unknown as CanonicalValue,
+                  indicatorDigest: "a".repeat(64),
+                  acceptanceDigest: "b".repeat(64),
+                  filingAssignedTo: id,
+                  authorisedBy: AUTHORISER,
+                },
+                MAIN_BOX,
+              ),
+            ),
+          });
+          await appendHandoverEventTx(tx, {
+            nodeId: id,
+            operationId: OP,
+            kind: HANDOVER_EVENT.copyPlaced,
+            detail: {},
+            envelope: null,
+          });
+        });
+      },
+      async (stateDir) => {
+        const cert = join(stateDir, "server.crt");
+        const key = join(stateDir, "server.key");
+        await writeFile(cert, tls.serverCertPem);
+        await writeFile(key, tls.serverKeyPem);
+        return { WAITRON_TLS_CERT_FILE: cert, WAITRON_TLS_KEY_FILE: key };
+      },
+    );
+    const body = JSON.stringify({
+      signIn: { email: "unknown-owner@example.test", password: "wrong password" },
+      moduleOperation: {
+        binding: {
+          module: "fiscal-verifactu",
+          action: "promote",
+          eventId: OP,
+          sourceId: MAIN_BOX.nodeId,
+          targetNodeId: nodeId,
+        },
+        input: null,
+      },
+      proposal: { action: "clock-challenge" },
+    });
+    const send = (step: string) =>
+      new Promise<{ status: number; body: unknown }>((resolve, reject) => {
+        const request = httpsRequest(
+          {
+            hostname: "127.0.0.1",
+            port: httpPort(),
+            path: "/api/node/handover/" + OP + "/" + step,
+            method: "POST",
+            ca: tls.caCertPem,
+            servername: "localhost",
+            timeout: 5000,
+            headers: { "content-type": "application/json" },
+          },
+          (response) => {
+            let text = "";
+            response.on("data", (chunk: Buffer) => {
+              text += chunk.toString();
+            });
+            response.on("end", () =>
+              resolve({ status: response.statusCode!, body: JSON.parse(text) }),
+            );
+          },
+        );
+        request.on("error", reject);
+        request.on("timeout", () => request.destroy(new Error("handover TLS request timed out")));
+        request.end(body);
+      });
+    for (const step of ["preparation", "activate", "preparation", "activate"])
+      expect(await send(step)).toMatchObject({
+        status: 401,
+        body: { error: { code: "password.invalid" } },
+      });
+    for (const step of ["preparation", "activate"])
+      expect(await send(step)).toMatchObject({
+        status: 429,
+        body: { error: { code: "password.throttled" } },
+      });
+  }, 120_000);
+
   it("a mirror reads its open operation at boot, and an offer wakes it for the next", async () => {
     vi.mocked(mountHandoverSourceApi).mockClear();
     const { nodeId, asked, binding } = await boot("mirror");

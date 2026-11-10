@@ -1,5 +1,5 @@
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -33,12 +33,19 @@ afterEach(() => {
   cleanupWidgets();
   setLocale(originalLocale);
 });
-async function mount(options: { permission?: boolean; password?: boolean; lost?: boolean } = {}) {
+async function mount(
+  options: {
+    permission?: boolean;
+    password?: boolean;
+    lost?: boolean;
+    listing?: ServerListing;
+  } = {},
+) {
   const start = vi.fn().mockResolvedValue({ handoverPage: "https://new.example/handover/move" });
-  if (options.lost) start.mockRejectedValue(new TypeError("network lost"));
+  if (options.lost) start.mockRejectedValue({ code: "connection.failed" });
   const status = vi.fn().mockResolvedValue({ handoverPage: "https://new.example/handover/move" });
   const api = {
-    listServers: vi.fn().mockResolvedValue(listing),
+    listServers: vi.fn().mockResolvedValue(options.listing ?? listing),
     startHandover: start,
     handoverStatus: status,
     getProfile: vi.fn().mockResolvedValue({
@@ -71,6 +78,17 @@ async function mount(options: { permission?: boolean; password?: boolean; lost?:
 }
 const q = (el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector)!;
+it.each(["source is not primary", "target is not spare", "target has no address"] as const)(
+  "does not offer handover when %s",
+  async (condition) => {
+    const changed = structuredClone(listing);
+    if (condition === "source is not primary") changed.nodes[0]!.standing = "serving-secondary";
+    if (condition === "target is not spare") changed.nodes[1]!.standing = "serving-primary";
+    if (condition === "target has no address") changed.nodes[1]!.contactUrl = "";
+    const { el } = await mount({ listing: changed });
+    expect(q(q(el, "wt-data-table"), '[data-test="handover-new"]')).toBeNull();
+  },
+);
 async function open(el: ServersScreen, includeCode = true) {
   q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
   await vi.waitFor(() => expect(q(el, "dashboard-fresh-sign-in")).not.toBeNull());
@@ -252,6 +270,9 @@ it("offers Close rather than Stop once a lost request may already have started h
     expect(q(el, "[data-test=confirm-handover]").textContent).toContain("Check handover progress"),
   );
   expect(q(el, "[data-test=stop-handover]").textContent?.trim()).toBe("Close");
+  expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+    t("servers.handover_reconnect"),
+  );
 });
 
 it("keeps an early refusal through a lost status read and retries only after unknown operation is confirmed", async () => {
@@ -259,7 +280,7 @@ it("keeps an early refusal through a lost status read and retries only after unk
   const refusal = { code: "handover.destination_unreachable", status: 409 };
   start.mockRejectedValue(refusal);
   status
-    .mockRejectedValueOnce(new TypeError("network lost"))
+    .mockRejectedValueOnce({ code: "connection.failed" })
     .mockRejectedValue({ code: "handover.operation_unknown", status: 404 });
   await open(el);
   q(el, "[data-test=confirm-handover]").click();

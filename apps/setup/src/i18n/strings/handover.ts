@@ -12,6 +12,7 @@ export const handoverEn = {
   "handover.source":
     "The last attempt could not reach the old box. Check its power and network connection.",
   "handover.done": "This box has taken over the venue.",
+  "handover.restarting": "The venue has started here; this box is restarting.",
   "handover.continue": "Continue to this box",
   "handover.closed":
     "This handover ended without activating this box. Open Servers on the main box to see its current state.",
@@ -24,8 +25,6 @@ export const handoverEn = {
   "handover.activate": "Start the venue on this box",
   "handover.fix": "Complete the highlighted fields to continue.",
   "handover.required": "Complete this field.",
-  "handover.failed":
-    "Check your password and code, then compare clocks again. If this box is restarting, keep the page open while it reconnects.",
   "handover.zone": "Times are shown in your device’s time zone and UTC.",
 } as const;
 export const handoverEs: Record<keyof typeof handoverEn, string> = {
@@ -42,6 +41,7 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.source":
     "El último intento no pudo conectar con el equipo anterior. Comprueba su alimentación y conexión de red.",
   "handover.done": "Este equipo ha pasado a llevar el local.",
+  "handover.restarting": "El local se ha iniciado aquí; este equipo se está reiniciando.",
   "handover.continue": "Continuar en este equipo",
   "handover.closed":
     "Este traspaso terminó sin activar este equipo. Abre Servidores en el equipo principal para consultar su estado actual.",
@@ -54,7 +54,5 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.activate": "Iniciar el local en este equipo",
   "handover.fix": "Completa los campos resaltados para continuar.",
   "handover.required": "Completa este campo.",
-  "handover.failed":
-    "Revisa la contraseña y el código y vuelve a comparar los relojes. Si este equipo se está reiniciando, mantén la página abierta mientras se recupera la conexión.",
   "handover.zone": "Las horas se muestran en la zona horaria de tu dispositivo y en UTC.",
 };

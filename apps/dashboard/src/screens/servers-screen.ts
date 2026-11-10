@@ -303,7 +303,7 @@ export class ServersScreen extends LitElement {
         }
       }
       this.handoverError =
-        this.#startRefusal && !(this.#startRefusal instanceof TypeError)
+        this.#startRefusal && codeOf(this.#startRefusal) !== "connection.failed"
           ? `${codeMessage(codeOf(this.#startRefusal))} ${t("servers.handover_reconnect")}`
           : t("servers.handover_reconnect");
     } finally {

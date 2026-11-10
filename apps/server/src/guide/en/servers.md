@@ -7,9 +7,7 @@ and data. The spare’s page shows its status; it takes no sales and offers no d
 
 ## Hand over to a spare box {#hand-over}
 
-Use this flow only with a spare that has finished joining the venue. Real-box use also needs the
-emergency recovery flow, which is not available yet; the controlled flow is currently qualified on
-simulated boxes.
+Use this flow only with a spare that has finished joining the venue.
 
 On the main box, open **Settings → Servers**. Open the spare’s row menu and choose **Hand over the
 venue**. Read the explanation, then enter your administrator password and authenticator code if
@@ -19,12 +17,12 @@ complete this flow.
 
 Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once
 the copy is ready, enter the same administrator account, compare the clocks and make the new
-series. Choose **Start the venue on this box**, then **Continue to this box**. Payments already
-recorded remain in the transferred copy.
+series. Choose **Start the venue on this box**. If the page says this box is restarting, keep it
+open until **Continue to this box** appears. Payments already recorded remain in the transferred copy.
 
-If an answer is lost, keep the page open or reload it to read progress. Do not start another
-handover. A waiting message describes the last attempt; keep both boxes connected while they try
-again.
+If an answer is lost in Servers, keep the dialog open and choose **Check handover progress**.
+On the spare’s handover page, you can reload to read progress. Do not start another handover.
+A waiting message describes the last attempt; keep both boxes connected while they try again.
 
 ## After the handover {#after-hand-over}
 

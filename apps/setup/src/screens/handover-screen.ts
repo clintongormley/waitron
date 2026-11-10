@@ -47,6 +47,7 @@ export class SetupHandoverScreen extends LitElement {
   @property() operationId = "";
   @state() private status?: HandoverStatus;
   @state() private readFailed = false;
+  @state() private restarting = false;
   @property({ attribute: false }) contributions: readonly SetupContribution[] = SETUP_MODULES;
   @state() private email = "";
   @state() private password = "";
@@ -86,6 +87,7 @@ export class SetupHandoverScreen extends LitElement {
       if (controller.signal.aborted) return;
       this.status = status;
       if (activated(status) || closed(status)) {
+        this.restarting = false;
         this.#resetSelection();
         this.password = this.code = "";
       }
@@ -149,8 +151,13 @@ export class SetupHandoverScreen extends LitElement {
     this.busy = true;
     this.actionError = "";
     try {
-      await this.api.activateHandover(this.operationId, this.#signIn(), moduleOperation);
+      const answer = await this.api.activateHandover(
+        this.operationId,
+        this.#signIn(),
+        moduleOperation,
+      );
       if (controller?.signal.aborted) return;
+      this.restarting = answer.restarting;
       this.#resetSelection();
       this.password = this.code = "";
       this.#restartPolling();
@@ -229,14 +236,16 @@ export class SetupHandoverScreen extends LitElement {
               <a href="/">${t("handover.continue")}</a>`
           : closed(status)
             ? html`<p role="status">${t("handover.closed")}</p>`
-            : status?.role === "destination" &&
-                status.copyPlaced &&
-                status.scenario === "controlled"
-              ? this.#fields()
-              : html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`
+            : this.restarting
+              ? html`<p role="status">${t("handover.restarting")}</p>`
+              : status?.role === "destination" &&
+                  status.copyPlaced &&
+                  status.scenario === "controlled"
+                ? this.#fields()
+                : html`<p role="status">${t(status ? "handover.copy" : "handover.loading")}</p>`
       }
       ${status?.waitingReason ? html`<p role="status">${t(status.waitingReason === "storage.disk_full" || status.waitingReason === "handover.no_room_to_place" ? "handover.space" : status.waitingReason === "handover.source_unreachable" ? "handover.source" : "handover.wait")}</p>` : nothing}
-      ${this.readFailed ? html`<p role="status">${t("handover.read_failed")}</p>` : nothing}
+      ${this.readFailed && !this.restarting ? html`<p role="status">${t("handover.read_failed")}</p>` : nothing}
     </main>`;
   }
 }

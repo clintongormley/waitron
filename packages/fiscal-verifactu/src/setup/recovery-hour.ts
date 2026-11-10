@@ -50,7 +50,7 @@ const strings = {
       "Check your password and code, then compare clocks again. Use a fresh authenticator code.",
     promotionThrottled: "Wait before trying your password again, then compare clocks again.",
     promotionPermission:
-      "Use an administrator account allowed to hand over the venue, then compare clocks again.",
+      "Use an administrator account allowed to hand over the venue and open this box at its own HTTPS address, then compare clocks again.",
     promotionClock: "The clock check is too old. Compare clocks again before starting the venue.",
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
@@ -89,7 +89,7 @@ const strings = {
     promotionThrottled:
       "Espera antes de volver a probar la contraseña y compara los relojes de nuevo.",
     promotionPermission:
-      "Usa una cuenta de administrador con permiso para traspasar el local y vuelve a comparar los relojes.",
+      "Usa una cuenta de administrador con permiso para traspasar el local y abre la dirección HTTPS de este equipo. Después, vuelve a comparar los relojes.",
     promotionClock:
       "La comprobación del reloj ha caducado. Vuelve a comparar los relojes antes de iniciar el local.",
     deviceInvoices: "Facturas vistas en este dispositivo",

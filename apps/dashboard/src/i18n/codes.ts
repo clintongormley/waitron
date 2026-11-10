@@ -1400,8 +1400,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
   },
   "handover.operation_in_progress": {
-    en: "Another handover is already in progress. Open its progress page on the spare and finish it before starting another.",
-    es: "Ya hay otro traspaso en curso. Abre su página de progreso en el equipo de reserva y termínalo antes de iniciar otro.",
+    en: "Another handover is already in progress. Keep both boxes connected. Do not start another handover until it finishes.",
+    es: "Ya hay otro traspaso en curso. Mantén los dos equipos conectados. No inicies otro traspaso hasta que termine.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.

@@ -512,9 +512,11 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await page.locator('input[name="handover-code"]').fill(generateSync({ secret }));
     await page.getByRole("button", { name: "Continue to clock check" }).click();
     expect(Math.abs((await page.evaluate(() => Date.now())) - Date.now())).toBeLessThan(10_000);
+    let activationRequest: unknown;
     page.on("request", (request) => {
       if (request.url().endsWith("/preparation"))
         notes.push(["proposal", request.postDataJSON().proposal]);
+      if (request.url().endsWith("/activate")) activationRequest = request.postDataJSON();
     });
     page.on("response", (response) => {
       if (response.url().endsWith("/preparation"))
@@ -534,7 +536,11 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await page.getByText("This box has taken over the venue.", { exact: true }).waitFor();
     await placed.close();
     placed = undefined;
-    const bootUrl = `http://127.0.0.1:${bootPort}`;
+    const bootUrl = `https://127.0.0.1:${bootPort}`;
+    const bootCert = join(root!, "boot.crt");
+    const bootKey = join(root!, "boot.key");
+    await writeFile(bootCert, material.serverCertPem);
+    await writeFile(bootKey, material.serverKeyPem);
     const bootEnv = {
       WAITRON_MIGRATIONS_DIR: join(root!, "migrations"),
       WAITRON_ENV: "preproduction",
@@ -549,6 +555,8 @@ it("hands over from built Servers through a real copy, placement restart and clo
       WAITRON_SETUP_APP_DIR: join(root!, "setup"),
       WAITRON_MANAGEMENT_ORIGIN: bootUrl,
       WAITRON_MANAGEMENT_RP_ID: "localhost",
+      WAITRON_TLS_CERT_FILE: bootCert,
+      WAITRON_TLS_KEY_FILE: bootKey,
       WAITRON_LOG_DIR: join(directory, "boot-logs"),
     };
     const bootSeams = {
@@ -568,9 +576,10 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await page.getByRole("heading", { name: /This box is waiting/ }).waitFor();
     const waitingActivation = await page.request.post(
       `${bootUrl}/api/node/handover/${operationId}/activate`,
-      { data: {} },
+      { data: activationRequest, headers: { origin: bootUrl } },
     );
-    expect(waitingActivation.status()).not.toBe(200);
+    expect(activationRequest).toBeDefined();
+    expect(waitingActivation.status()).toBe(404);
     await waitingActivation.dispose();
     await booted.close();
     booted = undefined;

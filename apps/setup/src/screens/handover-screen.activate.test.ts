@@ -53,6 +53,7 @@ async function mount(
   options: {
     loseAnswer?: boolean;
     waitForStatus?: boolean;
+    restartOutage?: boolean;
     refuse?: boolean | { code: string; params: Record<string, unknown> };
   } = {},
 ) {
@@ -63,7 +64,10 @@ async function mount(
     release = resolve;
   });
   const fetcher = vi.fn<typeof fetch>(async (path, init) => {
-    if (init?.method === "GET") return new Response(JSON.stringify({ body: { ...status, state } }));
+    if (init?.method === "GET") {
+      if (options.restartOutage && state === "activated") throw new TypeError("box restarting");
+      return new Response(JSON.stringify({ body: { ...status, state } }));
+    }
     const body = JSON.parse(init!.body as string) as Record<string, unknown>;
     requests.push({ path: String(path), body });
     if (String(path).endsWith("/activate")) {
@@ -105,7 +109,15 @@ async function mount(
   await edit(el, "handover-code", "123456");
   q(el, "[data-test=authenticate]").click();
   await vi.waitFor(() => expect(q(el, "vf-recovery-hour")).not.toBeNull());
-  return { el, requests, fetcher, release };
+  return {
+    el,
+    requests,
+    fetcher,
+    release,
+    showState: (value: string) => {
+      state = value;
+    },
+  };
 }
 async function select(el: SetupHandoverScreen) {
   const clockEntry = q<LitElement>(el, "vf-recovery-hour");
@@ -137,7 +149,72 @@ it("sends the same administrator and selected minute to activation and clears se
     },
   });
   expect(q(el, '[name="handover-password"]')).toBeNull();
+  expect(Reflect.get(el, "password")).toBe("");
+  expect(Reflect.get(el, "code")).toBe("");
 });
+
+it("keeps the successful restart visible while every progress read fails", async () => {
+  const { el, fetcher } = await mount({ restartOutage: true });
+  await select(el);
+  q(el, "[data-test=activate]").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(
+      "The venue has started here; this box is restarting",
+    ),
+  );
+  expect(Reflect.get(el, "password")).toBe("");
+  expect(Reflect.get(el, "code")).toBe("");
+  await vi.waitFor(
+    () =>
+      expect(
+        fetcher.mock.calls.filter(([, init]) => init?.method === "GET").length,
+      ).toBeGreaterThanOrEqual(3),
+    { timeout: 4000 },
+  );
+  await el.updateComplete;
+  expect(q(el, "[data-test=authenticate]")).toBeNull();
+  expect(q(el, "wt-form-actions")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("Could not read handover progress");
+}, 10_000);
+
+it.each(["password", "code"] as const)(
+  "clears the clock selection when the %s changes",
+  async (field) => {
+    const { el } = await mount();
+    await select(el);
+    const selected = Reflect.get(el, "entry") as { readOperation(): unknown };
+    expect(selected.readOperation()).not.toBeNull();
+    await edit(el, "handover-" + field, field === "password" ? "changed password" : "654321");
+    expect(q(el, "vf-recovery-hour")).toBeNull();
+    expect(selected.readOperation()).toBeNull();
+  },
+);
+
+it("clears the stored secrets and selected clock on leaving", async () => {
+  const { el } = await mount();
+  await select(el);
+  const selected = Reflect.get(el, "entry") as { readOperation(): unknown };
+  expect(selected.readOperation()).not.toBeNull();
+  el.remove();
+  expect(Reflect.get(el, "password")).toBe("");
+  expect(Reflect.get(el, "code")).toBe("");
+  expect(selected.readOperation()).toBeNull();
+});
+
+it.each(["activated", "abandoned"])(
+  "clears stored secrets and the clock when progress becomes %s",
+  async (state) => {
+    const { el, showState } = await mount();
+    await select(el);
+    const selected = Reflect.get(el, "entry") as { readOperation(): unknown };
+    expect(selected.readOperation()).not.toBeNull();
+    showState(state);
+    await vi.waitFor(() => expect(Reflect.get(el, "password")).toBe(""), { timeout: 4000 });
+    expect(Reflect.get(el, "code")).toBe("");
+    expect(selected.readOperation()).toBeNull();
+  },
+  10_000,
+);
 it("clears a selection when the administrator changes", async () => {
   const { el, requests } = await mount();
   await select(el);
