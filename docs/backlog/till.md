@@ -829,8 +829,11 @@ may predate that branch:
   the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late
   card's tab, and its collapsed column, carry a red bar) landed in #2144, from the plan's slice 9c; it
   builds `overviewRows` (`apps/till/src/state/kitchen-overview.ts`), the one counting function
-  A773-2's pass reuses. What is left of A797: slices 10–11 and 12b
-  (slice 12 is A773-2's own). Build slices (design §8), in the owner's
+  A773-2's pass reuses. Slice 10 (on a phone, the table screen's Menu / Order switch in place of
+  Review, a number on each tile for the New order, a bar fixed at the bottom of Menu with Send all,
+  Order's total, Still to pay and Pay fixed at the bottom of a handheld, a table opening on Order
+  once anything is sent, and a handheld staying on its table after its last send) is delivered from
+  the plan's slice 10. What is left of A797: slices 11 and 12b (slice 12 is A773-2's own). Build slices (design §8), in the owner's
   order: (1) table short names (migration), the phone's bar, zones on a handheld, the Ready bar and its waiting warning (migration); (2) the
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
@@ -4243,15 +4246,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 16. **The reason drop-down shows a search box** even with the five starter Void reasons.
 17. **The report's "Refunded €5.50" cell repeats its column heading.**
 18. **On a phone, the report's new columns sit mid-scroll.**
-
-## A1120. A handheld stays on the table after its last send, so its button shows highlighted without ✎
-
-For A797 slice 10. The design's worked example 1 (§4) and Q51 (b) describe Ana sending everything at
-T9 and staying on it, its bar button highlighted without ✎ until she taps Floor. Today a send that
-empties the New order returns a handheld to the Floor (`#returnToFloor` at the end of the send in
-`apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's ruling of 2026-10-26) because
-what the order screen does after a send is slice 10's, the handheld's order screen at phone width:
-[design](../superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
 
 ## A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`
 

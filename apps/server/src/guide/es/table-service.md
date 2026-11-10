@@ -248,8 +248,9 @@ olvidar los platos que no llegaste a enviar. Por eso, en un móvil o una tableta
 muestra **Sala** y después un botón como **✎ M4**, con el nombre corto de la mesa, por cada mesa
 donde tienes platos sin enviar; aunque varias cuentas tuyas tengan platos sin enviar allí, la mesa
 tiene un solo botón. Toca un botón para volver a esa mesa. La mesa en la que estás aparece
-resaltada, y cuando ya no queda nada tuyo sin enviar en ella su botón pierde el ✎ y desaparece al
-salir, mientras que una mesa de la que sales con platos aún sin enviar conserva su botón con ✎. Si
+resaltada. Cuando ya no queda nada tuyo sin enviar en ella, por ejemplo después de enviarlo todo, su
+botón sigue resaltado sin el ✎ hasta que sales, y entonces desaparece, mientras que una mesa de la
+que sales con platos aún sin enviar conserva su botón con ✎. Si
 otra persona se queda con tu cuenta, deja de contar como tuya: al momento en la mesa en la que
 estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas. Cuando hay más botones
 de los que caben, **Sala** se queda en su sitio y los botones de las mesas se deslizan de lado junto
@@ -265,6 +266,24 @@ dispositivo, cuando no cabe en la barra, lo que en un móvil ocurre siempre; las
 permite tu perfil; **Zonas en este dispositivo**, **Equipo**, **Idioma** y **Tema** bajo el
 título **Ajustes**; **Salir**; y, mientras el local tiene un logotipo, **Con la tecnología de
 Waitron** debajo.
+
+## Tomar un pedido en un móvil {#phone-order}
+
+En un móvil, o en cualquier pantalla de mesa de menos de 720 px de ancho, **Carta** y **Pedido**,
+arriba, muestran una cosa u otra, y **Pedido** indica cuántos platos hay en tu **Nuevo pedido**,
+como **Pedido · 3**. Una mesa se abre en **Carta** hasta que se ha enviado algo de la cuenta en
+pantalla, y desde entonces en **Pedido**.
+
+En **Carta**, un número sobre un plato indica cuántos hay de él en tu **Nuevo pedido**. Mientras
+tenga algo, una barra abajo dice qué, como **Nuevo pedido · 3 artículos — 2 × Croquetas · 1 ×
+Paletilla**: toca **Enviar todo** para enviarlo y ver **Pedido**, o toca el texto para verlo en
+**Pedido**.
+
+En un terminal de camarero, **Pedido** mantiene abajo el **Total**, **Pendiente de pago en la
+mesa** y **Cobrar**, con **Enviar todo** encima mientras tengas platos por enviar. Después de
+enviarlo todo, el terminal de camarero se queda en la mesa hasta que tocas **Sala**. En una
+pantalla de 720 px de ancho o más, como la de una tableta, la carta y el pedido aparecen uno junto
+al otro.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
@@ -337,7 +356,7 @@ terminal de camarero, cuando se paga una cuenta con factura simplificada y queda
 enumera las cuentas que quedan por pagar y **Volver a la mesa** abre la primera de ellas.
 
 Waitron no cobra una cuenta con platos sin enviar. Mientras la cuenta en pantalla tiene platos en tu
-**Pedido sin enviar**, o se muestran platos sin enviar de otra persona para ella con su botón
+**Nuevo pedido**, o se muestran platos sin enviar de otra persona para ella con su botón
 **Tomar el pedido**, los botones que empiezan un cobro se ven apagados. Aun así responden: un toque
 no empieza ningún cobro y explica por qué, por ejemplo **Cuenta 1. Envía o quita los platos sin
 enviar antes de cobrar.** Envía o quita tus propios platos. Para los de otra persona, toca primero

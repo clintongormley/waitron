@@ -1062,11 +1062,11 @@ the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit abo
 
 On the Order screen the unsent order's button bar (Move to…, Fire, Send all; `.draft-bar`,
 `apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` with `bottom: 0`, beside
-the menu and on the phone's Review view alike, with a line along its top and the order pane's own
+the menu and on the narrow screen's Order view alike, with a line along its top and the order pane's own
 colour behind it. While the bar's own place is below the foot of the till's scroll area, it stays
 at that foot and what is above it scrolls under it; otherwise it sits in its own place below the
 unsent order's lines. A line the till scrolls into view (a dish just added, or the newest line as
-the phone's Review view opens) stops just above the bar rather than under it: the screen measures
+the narrow screen's Order view is shown) stops just above the bar rather than under it: the screen measures
 the bar's height into `--draft-bar-size`, which the basket's lines keep clear below them
 (`scroll-margin-block-end`). Its wrappers, `[data-round-controls]` and `.round-bar`, are
 `display: contents`, so the bar can rise anywhere in the order pane, over an open Sent panel too.
@@ -1082,7 +1082,39 @@ than the paragraph: they put the screen in stand-ins for the shell's scroll area
 `till-shell`, the "keeps Send all on screen" cases measure Send all only, and the fade case reads
 computed opacity, not what is painted, on the menu, the order's lines, Move to… and the Fire / Send
 all group only, and the "newly added line" cases cover a line added after the bar is drawn and the
-phone's Review view opening, not a line revealed as the screen first draws.
+phone's Order view being shown, not a line revealed as the screen first draws.
+
+On a handheld below the width, whose pay section is one Pay or none, the order pane carries
+`handheld-foot` and its foot, `[data-order-foot]`, is `position: sticky` with `bottom: 0`: the
+bill's Total, Still to pay at this table and Pay, with the rest of the pay section (its heading and
+choices) in the flow above it. The whole tender is not fixed there, since it would cover the order.
+The screen measures the foot's height into `--order-foot-size` on the pane; the draft bar sticks at
+that height above the foot, and the basket's lines keep both clear (`scroll-margin-block-end`). On a
+handheld below the width the draft bar is not drawn while the New order is empty. A till below the
+width, and a handheld drawing the whole tender, keep the foot in the flow. Guards: the "fixed foot
+on a handheld" cases in `till-table-order-screen.action-bar.test.ts`, weaker than the paragraph:
+they use that file's stand-in for the shell's scroll area, not the real `till-shell`.
+
+**Table screen below the width: Menu / Order, the Menu bar and tile numbers (A797 slice 10).**
+Below `DRAFT_SIDE_BY_SIDE_MIN_WIDTH` (720 px of the screen's own width) the table screen shows a
+Menu / Order switch (`[data-view-switch]`, two `aria-pressed` buttons) in place of side by side,
+and its `view` state says which is shown; browsing is hidden, never removed, on Order. Order's
+button carries the New order's item count after a " · " hidden from screen readers. A table opens
+on Order when the bill on screen has sent lines and on Menu otherwise; a bill switch shows Menu;
+widening shows Menu. While the New order has a line, Menu ends in a bar (`[data-new-order-bar]`,
+sticky at the window's foot) whose words (New order · items — n × dish · …, cut on one line) show
+Order and whose Send all sends what the draft bar's Send all sends and shows Order as the send
+starts, quiet and disabled exactly when the draft bar's is. The menu's tiles take `inOrder`, a map
+from product id to items, every variant and choice of a product counted together, and draw the
+number at the tile's corner with the words for screen readers; side by side the map is not passed.
+Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
+the bar), `newOrderDishes` (the bar's list, one entry per shown name in first-appearance order) and
+`newOrderByProduct` (the tiles), where a whole-unit line counts by quantity and a weighed or
+fractional one counts as one. Guards: `till-table-order-screen.review.test.ts`,
+`till-table-order-screen.new-order-bar.test.ts`, the "a tile's number in the New order" cases in
+`widgets/menu-browser.test.ts` and `state/new-order-count.test.ts`; weaker than the paragraph:
+the screen cases mount the screen without `till-app`; `till-app-open-table.test.ts`'s handheld
+case opens a real table.
 
 **Table screen: bill switcher and ⋮ (A803 slice 3).** The Order screen's panel head holds, after the
 status, the bill switcher and then the ⋮ (`billSwitcher` and `tableMenu`,
@@ -6408,7 +6440,7 @@ Counter and table Order share a last-added strip in the layout flow after the me
 the final product row uncovered. Adding a dish, including merging into an existing line, reveals
 that line in the order scroller; unrelated updates preserve the scroll position. The strip's
 quantity steps apply only to whole-unit dishes. Its name opens the matching line window, and a
-held press does the same. On a narrow table screen, opening it brings the existing Review into view.
+held press does the same. On a narrow table screen, opening it shows Order.
 
 An unsent Counter row shows the name and nutrition marks, quantity steps, amount, information and
 removal actions. Extras and a note sit on their own indented lines. Amounts share a right edge;
