@@ -497,6 +497,18 @@ que la zona se abre igual la próxima vez, y cambiar una zona no cambia las dem�
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
 tiene ninguna.
 
+## Cambiar el perfil de este dispositivo {#device-profile}
+
+Cuando este dispositivo está aprobado para más de un perfil, **Más** (☰) ofrece **Perfil**.
+Elige otro **Perfil de dispositivo** y toca **Cambiar**. Solo puedes cambiar a un perfil que
+tengas permiso para usar.
+
+Antes de cambiar, aparca o vacía el pedido en curso y espera a que termine cualquier cobro en curso.
+Las otras personas que tengan sesión en este dispositivo salen de ella si el nuevo perfil no les
+permite iniciar sesión.
+Para elegir qué zonas muestra este dispositivo, consulta
+[Elegir las zonas que muestra este dispositivo](table-service.md#device-zones).
+
 ## Elegir las zonas que muestra este dispositivo {#device-zones}
 
 Un dispositivo muestra todas las zonas que permite su perfil. Si solo atiendes la terraza, las demás

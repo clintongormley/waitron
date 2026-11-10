@@ -469,6 +469,17 @@ in the zone's ⋮ menu. The device keeps your choice for each zone, so the zone 
 next time, and switching one zone leaves the others as they were. A zone you have not switched
 opens as a map when it has tables placed on its plan, and as a list when it has none.
 
+## Switch this device's profile {#device-profile}
+
+When this device is approved for more than one profile, **More** (☰) offers **Profile**.
+Choose another **Device profile** and tap **Switch**. You can only switch to a profile you are
+allowed to use.
+
+Before switching, park or clear the order in progress and wait for any payment in progress to finish.
+Other staff signed in on this device are signed out if the new profile does not allow them to sign in.
+To choose which zones this device shows, see
+[Choose the zones this device shows](table-service.md#device-zones).
+
 ## Choose the zones this device shows {#device-zones}
 
 A device shows every zone its profile allows. If you only work the terrace, the other zones get in
