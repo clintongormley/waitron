@@ -163,7 +163,12 @@ It finishes by printing a setup address and QR code, also shown on an attached m
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's
 connection certificate, then continue to the secure site. The guide covers common operating systems
 and browsers, and walks through removing any old certificate first and fully quitting the browser.
-If the name does not resolve, use the box's IP address at the same path.
+Below that address it prints the box's own address at the same path, for example
+`http://192.168.1.20/setup/trust`, under the words "If this venue already has a Waitron box,
+waitron.local reaches that box instead. Use this box's own address:". Use it when the name does not
+resolve, or when the venue already has a Waitron box. The address is that of the network connection
+carrying the box's default route, or, when there is none, each address on a connection that is not
+Docker's or another virtual one. The QR code always stays `http://waitron.local/setup/trust`.
 
 A browser may upgrade HTTP to HTTPS before the guide opens. Both listeners serve the guide and
 certificate downloads at matching paths, but HTTPS can still show a certificate warning. Use the
