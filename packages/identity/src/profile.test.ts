@@ -39,6 +39,9 @@ async function fixture() {
   const email = `${randomUUID()}@example.com`;
   const personId = await seedManager(suite.db, { email });
   const session = await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId }));
+  await suite.db.run(
+    sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
+  );
   return { personId, email, managementSessionId: session.token, queueEmailChange: true };
 }
 
@@ -61,7 +64,7 @@ describe("your profile", () => {
     });
   });
 
-  it("saves details, requires current credentials for email changes, and invalidates old reset links", async () => {
+  it("saves details, requires confirmation for email changes, and invalidates old reset links", async () => {
     const f = await fixture();
     const issued = await withTransaction(suite.db, (tx) =>
       issueAccountAction(tx, { ...f, purpose: "password_reset" }),
@@ -77,24 +80,28 @@ describe("your profile", () => {
     await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, { ...f, ...details, keyRing: TOTP_KEY_RING }),
     );
+    await suite.db.run(
+      sql`update management_sessions set proved_at=null where token_hash=${hashSessionToken(f.managementSessionId)}`,
+    );
     await expect(
       withTransaction(suite.db, (tx) =>
         saveOwnProfile(tx, {
           ...f,
           ...details,
           email: "changed@example.com",
-          currentPassword: "wrong",
           keyRing: TOTP_KEY_RING,
         }),
       ),
-    ).rejects.toMatchObject({ code: "password.invalid" });
+    ).rejects.toMatchObject({ code: "management_session.proof_required" });
+    await suite.db.run(
+      sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(f.managementSessionId)}`,
+    );
     const codeKey = Buffer.alloc(32, 19);
     const queued = await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, {
         ...f,
         ...details,
         email: " CHANGED@example.com ",
-        currentPassword: "correct horse",
         keyRing: TOTP_KEY_RING,
       }),
     );
@@ -164,7 +171,6 @@ describe("your profile", () => {
           displayName: "Queued profile",
           email: "new@example.com",
           locale: "en-GB",
-          currentPassword: "correct horse",
           keyRing: TOTP_KEY_RING,
           queueEmailChange,
         }),
@@ -191,7 +197,6 @@ describe("your profile", () => {
       telephone: null,
       email: f.email,
       locale: "en-GB",
-      currentPassword: "correct horse",
     };
     for (const [patch, code] of [
       [{ displayName: " " }, "profile.invalid"],
@@ -226,7 +231,6 @@ describe("your profile", () => {
       telephone: null,
       email: f.email,
       locale: "en-GB",
-      currentPassword: "correct horse",
     };
     for (const [patch, field] of [
       [{ displayName: "  " }, "displayName"],
@@ -250,7 +254,6 @@ describe("your profile", () => {
       lastNames: "Lovelace",
       email: f.email,
       locale: "en-GB",
-      currentPassword: "correct horse",
     };
     await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, { ...base, telephone: "  +34 600 000 000  ", keyRing: TOTP_KEY_RING }),
@@ -297,23 +300,6 @@ describe("your profile", () => {
       withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, {
           ...f,
-          currentPassword: "wrong",
-          password: "new password",
-          keyRing: TOTP_KEY_RING,
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "password.invalid" });
-    // Omitting the current password entirely is refused the same way a wrong one is.
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        changeOwnPassword(tx, { ...f, password: "new password", keyRing: TOTP_KEY_RING }),
-      ),
-    ).rejects.toMatchObject({ code: "password.invalid" });
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        changeOwnPassword(tx, {
-          ...f,
-          currentPassword: "correct horse",
           password: "short",
           keyRing: TOTP_KEY_RING,
         }),
@@ -322,7 +308,6 @@ describe("your profile", () => {
     await withTransaction(suite.db, (tx) =>
       changeOwnPassword(tx, {
         ...f,
-        currentPassword: "correct horse",
         password: "new password",
         keyRing: TOTP_KEY_RING,
       }),
@@ -353,7 +338,6 @@ describe("your profile", () => {
       withTransaction(suite.db, (tx) =>
         changeOwnPin(tx, {
           ...f,
-          currentPassword: "correct horse",
           pin: "12",
           keyRing: TOTP_KEY_RING,
         }),
@@ -362,7 +346,6 @@ describe("your profile", () => {
     await withTransaction(suite.db, (tx) =>
       changeOwnPin(tx, {
         ...f,
-        currentPassword: "correct horse",
         pin: "9876",
         keyRing: TOTP_KEY_RING,
       }),
@@ -397,7 +380,6 @@ describe("your profile", () => {
         removeOwnPasskey(tx, {
           ...f,
           id: otherId,
-          currentPassword: "correct horse",
           keyRing: TOTP_KEY_RING,
         }),
       ),
@@ -406,7 +388,6 @@ describe("your profile", () => {
       removeOwnPasskey(tx, {
         ...f,
         id: credentialId,
-        currentPassword: "correct horse",
         keyRing: TOTP_KEY_RING,
       }),
     );
@@ -439,19 +420,18 @@ describe("your profile", () => {
     });
   });
 
-  it("requires recovery without a password and a TOTP code when enrolled", async () => {
+  it("allows a confirmed passwordless account and still requires an enrolled TOTP code", async () => {
     const f = await fixture();
     await suite.db.execute(sql`update persons set password_hash=null where id=${f.personId}`);
     await expect(
       withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, {
           ...f,
-          currentPassword: "",
           password: "new password",
           keyRing: TOTP_KEY_RING,
         }),
       ),
-    ).rejects.toMatchObject({ code: "password.invalid" });
+    ).resolves.toBeUndefined();
     const g = await fixture();
     const keyRing = { current: { version: 1, key: Buffer.alloc(32, 4) } };
     await suite.db.execute(
@@ -461,7 +441,6 @@ describe("your profile", () => {
       withTransaction(suite.db, (tx) =>
         changeOwnPassword(tx, {
           ...g,
-          currentPassword: "correct horse",
           password: "new password",
           keyRing,
         }),
@@ -475,7 +454,6 @@ describe("your profile", () => {
     const pending = await withTransaction(suite.db, (tx) =>
       beginOwnTotpEnrollment(tx, {
         ...f,
-        currentPassword: "correct horse",
         keyRing,
       }),
     );
@@ -539,7 +517,6 @@ describe("your profile", () => {
     const replacement = await withTransaction(suite.db, (tx) =>
       regenerateOwnRecoveryCodes(tx, {
         ...f,
-        currentPassword: "correct horse",
         totp: generateSync({ secret: pending.secret }),
         keyRing,
       }),
@@ -557,7 +534,6 @@ describe("your profile", () => {
     await withTransaction(suite.db, (tx) =>
       disableOwnTotp(tx, {
         ...f,
-        currentPassword: "correct horse",
         totp: generateSync({ secret }),
         keyRing,
       }),
@@ -573,9 +549,7 @@ describe("your profile", () => {
     await suite.db.execute(
       sql`update persons set google_subject = 'google-subject' where id = ${f.personId}`,
     );
-    await withTransaction(suite.db, (tx) =>
-      unlinkOwnGoogle(tx, { ...f, currentPassword: "correct horse", keyRing: TOTP_KEY_RING }),
-    );
+    await withTransaction(suite.db, (tx) => unlinkOwnGoogle(tx, { ...f, keyRing: TOTP_KEY_RING }));
     const rows = await suite.db.execute<{ google_subject: string | null }>(
       sql`select google_subject from persons where id = ${f.personId}`,
     );
@@ -600,7 +574,6 @@ describe("your profile", () => {
     const pending = await withTransaction(suite.db, (tx) =>
       beginOwnTotpEnrollment(tx, {
         ...f,
-        currentPassword: "correct horse",
         keyRing: { current: { version: 1, key: Buffer.alloc(32, 3) } },
       }),
     );
@@ -644,7 +617,6 @@ describe("your profile", () => {
             displayName: "Name",
             email: contested,
             locale: "en-GB",
-            currentPassword: "correct horse",
             keyRing: TOTP_KEY_RING,
           }),
         ),
@@ -663,7 +635,6 @@ describe("your profile", () => {
       ...f,
       displayName: "Name",
       locale: "en-GB",
-      currentPassword: "correct horse",
     };
     await withTransaction(suite.db, (tx) =>
       saveOwnProfile(tx, {
@@ -842,10 +813,8 @@ describe("a fresh sign-in by the signed-in person", () => {
 
   it("leaves the other account changes needing an authenticator code: a recovery code does not stand in", async () => {
     const f = await enrolled();
-    // Credentials has no recoveryCode field; sent anyway.
     const withRecovery = {
       ...f,
-      currentPassword: "correct horse",
       recoveryCode: f.codes[2],
       keyRing,
     };
@@ -869,7 +838,7 @@ describe("an authenticator enrolment begun before a backward clock step", () => 
   async function finishWithExpiry(aheadOfClockMs: number): Promise<string> {
     const f = await fixture();
     const pending = await withTransaction(suite.db, (tx) =>
-      beginOwnTotpEnrollment(tx, { ...f, currentPassword: "correct horse", keyRing }),
+      beginOwnTotpEnrollment(tx, { ...f, keyRing }),
     );
     const expiresAt = new Date(Date.now() + aheadOfClockMs).toISOString();
     await suite.db.execute(

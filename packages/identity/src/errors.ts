@@ -30,8 +30,8 @@ declare module "@waitron/shared" {
     "pin.throttled": { retryAfterSeconds: number };
     /** `min` is the policy, never the password. */
     "password.too_short": { min: number };
-    /** Every password login refusal, whatever the cause, and a wrong current password on a profile
-     * change or a fresh sign-in. This package's login refusals carry the cause in the log-only
+    /** Every password login refusal, whatever the cause, and a wrong password at fresh
+     * confirmation. This package's login refusals carry the cause in the log-only
      * `reason`. */
     "password.invalid": Record<string, never>;
     /** Also thrown for a malformed token. */

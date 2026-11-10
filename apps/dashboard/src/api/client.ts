@@ -404,7 +404,6 @@ export interface OwnProfile {
   }>;
 }
 export interface ProfileCredentials {
-  currentPassword?: string;
   totp?: string;
 }
 export interface ProfileDetails extends ProfileCredentials {

@@ -78,6 +78,25 @@ afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 afterEach(() => setLocale("en-GB"));
 
+it("associates the password field with the signed-in email for browser autofill", async () => {
+  const { root } = await mount(profile({ email: "alex@example.test" }));
+  const username = root.querySelector<HTMLInputElement>('input[autocomplete="username"]');
+  expect(username).not.toBeNull();
+  expect(username!.value).toBe("alex@example.test");
+  expect(username!.type).toBe("email");
+  expect(username!.readOnly).toBe(true);
+  expect(username!.tabIndex).toBe(-1);
+  expect(username!.getAttribute("aria-hidden")).toBe("true");
+  const password = field(root, "current-password")!;
+  expect(password.shadowRoot!.querySelector("input")!.autocomplete).toBe("current-password");
+  expect(username!.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+    0,
+  );
+  const box = username!.getBoundingClientRect();
+  expect(box.width).toBeLessThanOrEqual(1);
+  expect(box.height).toBeLessThanOrEqual(1);
+});
+
 describe("the code field", () => {
   it("is absent for a person with no authenticator", async () => {
     const { root } = await mount(profile({ hasTotp: false }));

@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID, randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -110,6 +111,7 @@ describe("account mail owner", () => {
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId }),
     );
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
     const keyRing = { current: { version: 1, key: Buffer.alloc(32, 5) } };
     for (const email of ["first@example.test", "second@example.test"]) {
       await withTransaction(suite.db, (tx) =>
@@ -118,7 +120,6 @@ describe("account mail owner", () => {
           displayName: "Recipient",
           email,
           locale: "en-GB",
-          currentPassword: "correct horse",
           keyRing,
           queueEmailChange: true,
         }),

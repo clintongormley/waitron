@@ -47,6 +47,11 @@ Abre **Configuración de la cuenta** desde el menú de cuenta para cambiar tus p
 acceso. Puedes seguir gestionando tu correo, contraseña, PIN, llaves de acceso y verificación en
 dos pasos.
 
+Estos cambios usan la misma confirmación de 15 minutos que las otras acciones protegidas. Si usas
+un autenticador, introduce su código actual para cada cambio de acceso; un código de recuperación
+no lo sustituye. Puedes crear una contraseña con **Añadir** si normalmente accedes con una
+passkey.
+
 También puedes cambiar tu nombre, nombre visible, teléfono e idioma, y vincular Google en **Seguridad** si está disponible.
 
 Para confirmar una nueva dirección, introduce el código que llegue a ella. Si el correo no está configurado, usa el enlace a Correo o **Iniciar sesión como administrador** que ofrece el resultado; después vuelve a tu cuenta, introduce de nuevo la dirección en **Tus datos** y guarda. Si el código no llega en unos minutos, vuelve a introducir la nueva dirección y guarda: solo funciona el código más reciente.

@@ -13,6 +13,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { classifyPasskeySignInError } from "../passkey-errors.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { autofillUsername, autofillUsernameStyles } from "./autofill-username.js";
 
 export interface SignInWays {
   password: boolean;
@@ -32,6 +33,7 @@ type Field = "password" | "code";
 export class FreshSignIn extends LitElement {
   static override styles = [
     baseStyles,
+    autofillUsernameStyles,
     css`
       :host {
         display: flex;
@@ -259,6 +261,7 @@ export class FreshSignIn extends LitElement {
         ${t("fresh_sign_in.no_way_in")} ${t("profile.password_recovery")}
       </p>`;
     return html`
+      ${ways.password ? autofillUsername(this.profile!.email) : nothing}
       ${ways.password ? this.#passwordField() : nothing}
       ${this.profile!.hasTotp ? this.#codeField() : nothing}
       <div>

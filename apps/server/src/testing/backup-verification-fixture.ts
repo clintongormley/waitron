@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -276,12 +277,12 @@ export function useBackupVerificationFixture() {
     const session = await withTransaction(suite.db, (tx) =>
       startManagementSession(tx, { personId: person!.id }),
     );
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.token));
     const env = { WAITRON_CREDENTIALS_KEY: vault };
     const accountKey = resolveAccountKey(env, loadKeyRing(env));
     await withTransaction(suite.db, (tx) =>
       beginOwnTotpEnrollment(tx, {
         managementSessionId: session.token,
-        currentPassword: "fixture-only-password",
         keyRing: { current: { version: 1, key: accountPurposeKey(accountKey, "totp") } },
       }),
     );

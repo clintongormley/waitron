@@ -160,7 +160,7 @@ describe("GET /management-api/membership", () => {
 
   it("serves an admin with an authenticator who sends a correct current code", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     const app = mountApp(designated);
 
     const res = await getMembership(app, {
@@ -173,7 +173,7 @@ describe("GET /management-api/membership", () => {
 
   it("refuses an admin with an authenticator who sends a wrong code with 401 password.invalid", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     const app = mountApp(designated);
 
     const res = await getMembership(app, {

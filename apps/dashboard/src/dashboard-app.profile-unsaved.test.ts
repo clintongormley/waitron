@@ -276,7 +276,7 @@ it("closing a clean profile leaves an unrelated page draft protected", async () 
   scope.dispose();
   expect(unload()).toBe(false);
 });
-it("forced expiry bypasses a pending outer close and clears credential proof", async () => {
+it("forced expiry bypasses a pending outer close and clears credential input", async () => {
   const m = await mount();
   m.screen.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
   await expect.poll(() => m.inner.open).toBe(false);
@@ -284,7 +284,7 @@ it("forced expiry bypasses a pending outer close and clears credential proof", a
   await m.screen.updateComplete;
   await m.inner.updateComplete;
   m.screen
-    .shadowRoot!.querySelector("wt-input[name=currentPassword]")!
+    .shadowRoot!.querySelector("wt-input[name=password]")!
     .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "sensitive proof" } }));
   await m.screen.updateComplete;
   close(m, "footer");
@@ -299,7 +299,7 @@ it("forced expiry bypasses a pending outer close and clears credential proof", a
   oldDiscard.click();
   expect(m.question.open).toBe(false);
   expect(unload()).toBe(false);
-  expect(m.screen.shadowRoot!.querySelector("wt-input[name=currentPassword]")).toBeNull();
+  expect(m.screen.shadowRoot!.querySelector("wt-input[name=password]")).toBeNull();
   expect(m.app.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull();
   expect(location.pathname).toBe("/manage/");
 });

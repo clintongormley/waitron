@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./fresh-management-sign-in.js";
 import { withTransaction, type Database } from "@waitron/db";
 import {
   beginOwnTotpEnrollment,
@@ -11,14 +12,13 @@ import { generateSync } from "otplib";
 export async function enrolAuthenticator(
   db: Database,
   personId: string,
-  password: string,
   keyRing: TotpKeyRing,
 ): Promise<string> {
   return withTransaction(db, async (tx) => {
     const { token } = await startManagementSession(tx, { personId });
+    await setFreshManagementSignIn(tx, token);
     const { enrollmentId, secret } = await beginOwnTotpEnrollment(tx, {
       managementSessionId: token,
-      currentPassword: password,
       keyRing,
     });
     await finishOwnTotpEnrollment(tx, {

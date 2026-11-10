@@ -719,7 +719,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
   it("signs in an admin with an authenticator who sends a correct current code", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     const app = mountApp(designated, "https://relay.example:9000/");
 
     const res = await post(app, {
@@ -733,7 +733,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
   it("refuses an admin with an authenticator who sends a wrong code with 401 password.invalid", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     const app = mountApp(designated, "https://relay.example:9000/");
 
     const res = await post(app, {
@@ -748,7 +748,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
   it("answers every login that fails identically, whatever the cause, and reserves nothing", async () => {
     const { designated, adminPersonId } = await setupVenue();
-    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(db, adminPersonId, TOTP_KEY_RING);
     const suspendedAdminId = await withTransaction(db, async (tx) => {
       const [row] = await tx
         .insert(persons)

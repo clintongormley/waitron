@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import { hashSessionToken } from "./session-token.js";
 /**
  * One live display name and one login address across the venue, whatever case the accented letters
  * are typed in and whichever way the accent is encoded.
@@ -130,13 +132,15 @@ describe("an unproven replacement address is taken whichever way its accent is e
   async function requestAddressChange(requested: string): Promise<void> {
     const personId = await seedManager(suite.db, { email: `${randomUUID()}@example.test` });
     const session = await run((tx) => startManagementSession(tx, { personId }));
+    await suite.db.run(
+      sql`update management_sessions set proved_at=${new Date().toISOString()} where token_hash=${hashSessionToken(session.token)}`,
+    );
     await run((tx) =>
       saveOwnProfile(tx, {
         managementSessionId: session.token,
         displayName: `Owner ${randomUUID()}`,
         email: requested,
         locale: "en-GB",
-        currentPassword: "correct horse",
         keyRing: TOTP_KEY_RING,
         queueEmailChange: true,
       }),

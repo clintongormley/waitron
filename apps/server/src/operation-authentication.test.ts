@@ -139,7 +139,7 @@ describe("host-issued authority after fresh operator authentication", () => {
   });
 
   it("checks an enrolled authenticator instead of trusting a password alone", async () => {
-    const secret = await enrolAuthenticator(suite.db, ADMIN, PASSWORD, TOTP_KEY_RING);
+    const secret = await enrolAuthenticator(suite.db, ADMIN, TOTP_KEY_RING);
     for (const totp of [undefined, wrongTotpCode(secret)]) {
       let entered = false;
       await expect(

@@ -247,27 +247,15 @@ describe("DashboardApi", () => {
       locale: "en-GB",
     };
     await api.saveProfile(details);
-    await api.changePassword({ currentPassword: "current", password: "replacement" });
-    await api.changePin({ currentPassword: "current", pin: "4321" });
-    await api.removePasskey("credential-id", { currentPassword: "current" });
+    await api.changePassword({ password: "replacement" });
+    await api.changePin({ pin: "4321" });
+    await api.removePasskey("credential-id", {});
     expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
       ["/management-api/session/me/profile", "GET", undefined],
       ["/management-api/session/me/profile", "PUT", JSON.stringify(details)],
-      [
-        "/management-api/session/me/password",
-        "PUT",
-        JSON.stringify({ currentPassword: "current", password: "replacement" }),
-      ],
-      [
-        "/management-api/session/me/pin",
-        "PUT",
-        JSON.stringify({ currentPassword: "current", pin: "4321" }),
-      ],
-      [
-        "/management-api/session/me/passkeys/credential-id",
-        "DELETE",
-        JSON.stringify({ currentPassword: "current" }),
-      ],
+      ["/management-api/session/me/password", "PUT", JSON.stringify({ password: "replacement" })],
+      ["/management-api/session/me/pin", "PUT", JSON.stringify({ pin: "4321" })],
+      ["/management-api/session/me/passkeys/credential-id", "DELETE", JSON.stringify({})],
     ]);
   });
 
@@ -287,7 +275,7 @@ describe("DashboardApi", () => {
     await expect(api.beginGoogleLogin()).resolves.toEqual({
       authorizationUrl: "https://accounts.google.test/login",
     });
-    await expect(api.beginGoogleLink({ currentPassword: "correct horse" })).resolves.toEqual({
+    await expect(api.beginGoogleLink({})).resolves.toEqual({
       authorizationUrl: "https://accounts.google.test/link",
     });
     expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
@@ -511,12 +499,12 @@ describe("DashboardApi", () => {
     };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.passkeyRegisterOptions({ currentPassword: "correct horse" })).toEqual(payload);
+    expect(await api.passkeyRegisterOptions({})).toEqual(payload);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/register/options", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: "correct horse" }),
+      body: JSON.stringify({}),
     });
   });
 

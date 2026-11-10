@@ -833,8 +833,13 @@ export class LoginScreen extends LitElement {
     this.busy = true;
     const attempt = ++this.passkeyAttempt;
     try {
+      await this.api.confirmFreshSignIn({
+        method: "password",
+        password: this.password,
+        ...(this.secondFactor === "" ? {} : { totp: this.secondFactor }),
+      });
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       const { challengeHandle, options } = await this.api.passkeyRegisterOptions({
-        currentPassword: this.password,
         ...(this.secondFactor === "" ? {} : { totp: this.secondFactor }),
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;

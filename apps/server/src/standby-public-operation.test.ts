@@ -327,7 +327,7 @@ it("does not consult outside evidence when the node key is wrong, even with vali
 });
 it("requires the administrator's current authenticator code before outside collection", async () => {
   const app = await promotionApp();
-  const secret = await enrolAuthenticator(suite.db, ADMIN, PASSWORD, TOTP_KEY_RING);
+  const secret = await enrolAuthenticator(suite.db, ADMIN, TOTP_KEY_RING);
   const response = await post(
     app,
     "/management-api/promote",

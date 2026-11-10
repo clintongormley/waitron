@@ -113,7 +113,7 @@ describe("DashboardApi routes", () => {
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(jsonResponse({ personId: "p1", authenticated: true }));
     const api = new DashboardApi("", fetchImpl);
-    const credentials = { currentPassword: "current", totp: "123456" };
+    const credentials = { totp: "123456" };
 
     await expect(api.passkeyOfferSeen()).resolves.toBeUndefined();
     await expect(api.confirmProfileEmail("842913")).resolves.toEqual({
@@ -125,7 +125,7 @@ describe("DashboardApi routes", () => {
       codes: ["cccc-dddd"],
     });
     await expect(api.disableTotp(credentials)).resolves.toBeUndefined();
-    await expect(api.unlinkGoogle({ currentPassword: "current" })).resolves.toBeUndefined();
+    await expect(api.unlinkGoogle({})).resolves.toBeUndefined();
     await expect(
       api.completeAccountAction("token-1", "invitation", "a new password", "4321"),
     ).resolves.toEqual({ personId: "p1", authenticated: true });
@@ -137,7 +137,7 @@ describe("DashboardApi routes", () => {
       ["/management-api/session/me/totp/finish", "POST", { enrollmentId: "enr-1", code: "654321" }],
       ["/management-api/session/me/recovery-codes", "POST", credentials],
       ["/management-api/session/me/totp", "DELETE", credentials],
-      ["/management-api/session/me/google", "DELETE", { currentPassword: "current" }],
+      ["/management-api/session/me/google", "DELETE", {}],
       [
         "/management-api/account-actions/complete",
         "POST",

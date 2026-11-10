@@ -1,3 +1,5 @@
+import type { FetchLike } from "@waitron/dashboard-kit";
+import { createFreshSignInGate } from "../api/fresh-sign-in.js";
 import { useLocale } from "../testing/locale-setup.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +60,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     // Stubbed so "does not fetch the roster on connect" can show the screen never calls it.
     getStaffRoster: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ada" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1" }),
+    confirmFreshSignIn: vi.fn().mockResolvedValue(undefined),
     passkeyOfferSeen: vi.fn().mockResolvedValue(undefined),
     requestPasswordReset: vi.fn().mockResolvedValue(undefined),
     inspectAccountAction: vi.fn((_token, purpose) =>
@@ -343,19 +346,28 @@ describe("login-screen", () => {
 
   it("requests an authenticator code when registration reauthentication requires it", async () => {
     const { el, api } = await mountPasskeyOffer({
-      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
+      ...passkeyRegistrationStubs(),
+      confirmFreshSignIn: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "totp.invalid" })
+        .mockResolvedValue(undefined),
     });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-input[name=one-time-code]")).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledTimes(1);
+    expect(api.confirmFreshSignIn).toHaveBeenCalledTimes(1);
+    expect(api.passkeyRegisterOptions).not.toHaveBeenCalled();
     input(el, "one-time-code", "654321");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
+    expect(api.confirmFreshSignIn).toHaveBeenLastCalledWith({
+      method: "password",
+      password: "new password",
+      totp: "654321",
+    });
     expect(api.passkeyRegisterOptions).toHaveBeenLastCalledWith({
-      currentPassword: "new password",
       totp: "654321",
     });
   });
@@ -407,7 +419,7 @@ describe("login-screen", () => {
     expect((el as unknown as { actionValidated: boolean }).actionValidated).toBe(false);
   });
 
-  it("offers a passkey after activation and uses the newly set password for registration", async () => {
+  it("offers a passkey after activation through the shared confirmation", async () => {
     history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
     const api = stubApi({
       passkeyRegisterOptions: vi.fn().mockResolvedValue({
@@ -445,9 +457,11 @@ describe("login-screen", () => {
     expect(navigator.credentials.create).not.toHaveBeenCalled();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]")!.click();
     await flush(el);
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
-      currentPassword: "a replacement password",
+    expect(api.confirmFreshSignIn).toHaveBeenCalledWith({
+      method: "password",
+      password: "a replacement password",
     });
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({});
     expect(api.passkeyRegisterVerify).toHaveBeenCalledWith({
       challengeHandle: "register",
       response: expect.objectContaining({ id: "new-key" }),
@@ -1991,8 +2005,12 @@ describe("login-screen: password and second factor", () => {
     input(el, "one-time-code", "654321");
     pressEnter(el, "one-time-code");
     await flush(el);
+    expect(api.confirmFreshSignIn).toHaveBeenCalledWith({
+      method: "password",
+      password: "correct horse battery",
+      totp: "654321",
+    });
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
-      currentPassword: "correct horse battery",
       totp: "654321",
     });
   });
@@ -2054,6 +2072,63 @@ describe("login-screen: password reset by email", () => {
 });
 
 describe("login-screen: the passkey offer after sign-in", () => {
+  it("confirms through the real shared client only after the offer's explicit Add", async () => {
+    const stubs = passkeyRegistrationStubs();
+    const registration = await stubs.passkeyRegisterOptions!({});
+    const paths: string[] = [];
+    let proved = false;
+    const fetchImpl = vi.fn<FetchLike>(async (path, init) => {
+      paths.push(String(path));
+      if (path === "/management-api/session/me/fresh-sign-in") {
+        expect(JSON.parse(String(init.body))).toEqual({
+          method: "password",
+          password: "correct horse battery",
+        });
+        proved = true;
+        return new Response(null, { status: 204 });
+      }
+      if (path === "/management-api/passkey/register/options")
+        return new Response(
+          JSON.stringify(
+            proved
+              ? registration
+              : { error: { code: "management_session.proof_required", params: {} } },
+          ),
+          { status: proved ? 200 : 400 },
+        );
+      if (path === "/management-api/passkey/register/verify")
+        return new Response(JSON.stringify({ credentialId: "new-key" }));
+      if (path === "/management-api/session/me/passkey-offer")
+        return new Response(null, { status: 204 });
+      throw new Error(`Unexpected path: ${path}`);
+    });
+    const prompt = vi.fn(async () => false);
+    const actual = new DashboardApi("", fetchImpl, undefined, undefined, false, {
+      freshSignIn: createFreshSignInGate({ sessionGeneration: () => 0, prompt }),
+    });
+    const { el } = await signInWithPassword({
+      login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+      confirmFreshSignIn: actual.confirmFreshSignIn.bind(actual),
+      passkeyRegisterOptions: actual.passkeyRegisterOptions.bind(actual),
+      passkeyRegisterVerify: actual.passkeyRegisterVerify.bind(actual),
+      passkeyOfferSeen: actual.passkeyOfferSeen.bind(actual),
+    });
+    const completed: Event[] = [];
+    el.addEventListener("logged-in", (event) => completed.push(event));
+    expect(paths).toEqual([]);
+    click(el, "setup-passkey");
+    await flush(el);
+    expect(paths[0]).toBe("/management-api/session/me/fresh-sign-in");
+    await expect.poll(() => completed.length).toBe(1);
+    expect(paths).toEqual([
+      "/management-api/session/me/fresh-sign-in",
+      "/management-api/passkey/register/options",
+      "/management-api/passkey/register/verify",
+      "/management-api/session/me/passkey-offer",
+    ]);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
   async function offer(overrides: Partial<DashboardApi> = {}) {
     return signInWithPassword({
       login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
@@ -2066,9 +2141,7 @@ describe("login-screen: the passkey offer after sign-in", () => {
     const { el, api } = await offer();
     click(el, "setup-passkey");
     await flush(el);
-    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({
-      currentPassword: "correct horse battery",
-    });
+    expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({});
   });
 
   it("reports a failed passkey ceremony with the passkey message and keeps the offer open", async () => {
@@ -2900,7 +2973,7 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
 
   it("keeps a signed-in password re-check's own wording when adding a passkey after sign-in", async () => {
     const { el } = await mountPasskeyOffer({
-      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "password.invalid" }),
+      confirmFreshSignIn: vi.fn().mockRejectedValue({ code: "password.invalid" }),
     });
     click(el, "setup-passkey");
     await flush(el);

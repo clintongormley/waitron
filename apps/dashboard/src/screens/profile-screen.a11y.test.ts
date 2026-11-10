@@ -87,6 +87,18 @@ describe.each(["light", "dark"] as const)("profile-screen a11y (%s theme)", (the
           path: `__screenshots__/look/a319-profile-${locale}-${theme}-${width}-${tab}.png`,
         });
       }
+      for (const action of ["add-passkey", "change-password"]) {
+        el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${action}]`)!.click();
+        await el.updateComplete;
+        await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+        expect(el.shadowRoot!.querySelector("wt-input[name=currentPassword]")).toBeNull();
+        await expectNoA11yViolations(host);
+        await page.screenshot({
+          path: `__screenshots__/look/a1437-${locale}-${theme}-${width}-${action}.png`,
+        });
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+        await expect.poll(() => el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+      }
     } finally {
       setLocale(previous);
       await page.viewport(viewport.width, viewport.height);

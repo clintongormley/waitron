@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { generateSync } from "otplib";
@@ -180,14 +181,16 @@ async function signIn(app: Hono, email = MANAGER_EMAIL): Promise<Response> {
 }
 
 /** Returns only the session cookie pair; asserts the 200 so no caller carries an absent cookie. */
-async function login(app: Hono, email: string, password = PASSWORD): Promise<string> {
+async function login(app: Hono, email: string, password = PASSWORD, fresh = true): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
   expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!.split(";")[0];
+  const cookie = res.headers.get("set-cookie")!.split(";")[0];
+  if (fresh) await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
+  return cookie;
 }
 
 function readCredentials(): Promise<
@@ -211,7 +214,7 @@ async function registerPasskey(
   const options = await app.request("/management-api/passkey/register/options", {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ currentPassword: PASSWORD }),
+    body: JSON.stringify({}),
   });
   expect(options.status).toBe(200);
   const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -245,7 +248,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const res = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: PASSWORD }),
+      body: JSON.stringify({}),
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { challengeHandle: string; options: { challenge: string } };
@@ -261,7 +264,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: PASSWORD }),
+      body: JSON.stringify({}),
     });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -295,7 +298,7 @@ describe("Management API passkey routes (mocked ceremony)", () => {
     const options = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: PASSWORD }),
+      body: JSON.stringify({}),
     });
     expect(options.status).toBe(200);
     const { challengeHandle } = (await options.json()) as { challengeHandle: string };
@@ -573,19 +576,20 @@ describe("passkey registration's own-credential check", () => {
     return app;
   }
 
-  it("refuses options without a current password, naming the field", async () => {
+  it("requires the shared confirmation before issuing registration options", async () => {
     await setupTenant();
     const app = mountApp();
-    const cookie = await login(app, MANAGER_EMAIL);
+    const cookie = await login(app, MANAGER_EMAIL, PASSWORD, false);
     const res = await app.request("/management-api/passkey/register/options", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: 1234 }),
+      body: "{}",
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "currentPassword" } },
+      error: { code: "management_session.proof_required", params: {} },
     });
+    expect(suite.db.all(sql`select id from webauthn_challenges`)).toEqual([]);
   });
 
   it("passes the authenticator code through for a person with two-factor sign-in", async () => {
@@ -602,11 +606,10 @@ describe("passkey registration's own-credential check", () => {
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify(body),
       });
-    const withoutCode = await options({ currentPassword: PASSWORD });
+    const withoutCode = await options({});
     expect(withoutCode.status).toBe(401);
     expect(await withoutCode.json()).toEqual({ error: { code: "totp.invalid", params: {} } });
     const withCode = await options({
-      currentPassword: PASSWORD,
       totp: generateSync({ secret: SECRET }),
     });
     expect(withCode.status).toBe(200);
@@ -692,12 +695,13 @@ it("offers staff-host passkey registration and authentication separately from th
   });
   expect(signed.status).toBe(200);
   const cookie = signed.headers.get("set-cookie")!.split(";")[0]!;
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie));
   const options = await staff.request(
     "https://staff.example.test/management-api/passkey/register/options",
     {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ currentPassword: PASSWORD }),
+      body: JSON.stringify({}),
     },
   );
   expect(options.status).toBe(200);
