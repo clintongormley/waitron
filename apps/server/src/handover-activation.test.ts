@@ -601,6 +601,37 @@ describe("when the operation is not ready", () => {
     expect((await store.venue.select().from(managementSessions)).length).toBe(sessions);
   }, 60_000);
 
+  it("with no operation ready to promote, a right and a wrong password get the same refusal", async () => {
+    const store = await placedSpare({ recordPlaced: false });
+    const { app } = spareOn(store);
+    const wrongSignIn = { email: ADMIN_EMAIL, password: "not-the-password" };
+    const answers = async (operationId: string) => {
+      const body = { moduleOperation: { binding, input: null }, signIn };
+      const right = await request(app, "activate", body, { operationId });
+      const wrong = await request(
+        app,
+        "activate",
+        { ...body, signIn: wrongSignIn },
+        { operationId },
+      );
+      return { right, wrong };
+    };
+    const unknown = await answers("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    expect(unknown.right).toEqual(unknown.wrong);
+    expect(unknown.right).toMatchObject({
+      status: 404,
+      body: { error: { code: "handover.operation_unknown" } },
+    });
+    const early = await answers(OPERATION);
+    expect(early.right).toEqual(early.wrong);
+    expect(early.right).toMatchObject({
+      status: 409,
+      body: { error: { code: "handover.step_out_of_order" } },
+    });
+    expect((await operationRow(store))?.state).toBe("filing_assumed");
+    expect(await activations(store)).toEqual([]);
+  }, 60_000);
+
   it("an unknown operation, and an over-long id, are refused", async () => {
     const store = await placedSpare();
     const { app } = spareOn(store);

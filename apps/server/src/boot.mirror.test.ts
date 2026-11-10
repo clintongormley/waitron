@@ -635,32 +635,29 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     ).resolves.toMatchObject({ role: "admin" });
   }, 60_000);
 
-  it("refuses a non-loopback mirror without the existing opt-in", async () => {
-    let server: Awaited<ReturnType<typeof startServer>> | undefined;
-    let caught: unknown;
+  it("a mirror boot listens on a non-loopback host", async () => {
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: venueDir.mirror,
+      WAITRON_HTTP_HOST: "0.0.0.0",
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
     try {
-      server = await startServer({
-        ...KEY_ENV,
-        WAITRON_VENUE_DIR: venueDir.mirror,
-        WAITRON_HTTP_HOST: "0.0.0.0",
-        WAITRON_HTTP_PORT: String(await freePort()),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      });
-    } catch (error) {
-      caught = error;
+      const answer = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+      expect(answer.status).toBe(200);
+      await answer.arrayBuffer();
     } finally {
-      await server?.close();
+      await server.close();
     }
-    expect(caught).toMatchObject({ code: "server.mirror_bind_exposed" });
   }, 60_000);
 
-  it("keeps private reads closed with the existing non-loopback opt-in", async () => {
+  it("keeps private reads closed on a non-loopback host", async () => {
     const port = await freePort();
     const server = await startServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: venueDir.mirror,
       WAITRON_HTTP_HOST: "0.0.0.0",
-      WAITRON_MIRROR_ALLOW_EXPOSED: "true",
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -686,7 +683,6 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
           ...KEY_ENV,
           WAITRON_VENUE_DIR: venueDir[venue],
           WAITRON_HTTP_HOST: "0.0.0.0",
-          WAITRON_MIRROR_ALLOW_EXPOSED: "true",
           WAITRON_HTTP_PORT: String(await freePort()),
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
         },

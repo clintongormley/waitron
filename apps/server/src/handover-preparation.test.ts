@@ -571,6 +571,35 @@ describe("the handover's preparation route", () => {
     expect(external.hashes).toBe(0);
   });
 
+  it("with no operation ready to promote, a right and a wrong password get the same refusal", async () => {
+    const app = route(service());
+    const wrongSignIn = { email: ADMIN_EMAIL, password: "not-the-password" };
+    const answers = async (operationId: string) => {
+      const right = await post(app, request({ action: "clock-challenge" }), { operationId });
+      const wrong = await post(
+        app,
+        request({ action: "clock-challenge" }, { signIn: wrongSignIn }),
+        { operationId },
+      );
+      return { right, wrong };
+    };
+    const unknown = await answers("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    expect(unknown.right).toEqual(unknown.wrong);
+    expect(unknown.right).toMatchObject({
+      status: 404,
+      body: { error: { code: "handover.operation_unknown" } },
+    });
+    await beginOperation("controlled");
+    await advanceHandover(store(), OPERATION, "copy_accepted", {});
+    await recordPlaced();
+    const early = await answers(OPERATION);
+    expect(early.right).toEqual(early.wrong);
+    expect(early.right).toMatchObject({
+      status: 409,
+      body: { error: { code: "handover.step_out_of_order" } },
+    });
+  });
+
   it("an over-long id is refused without being looked up or echoed", async () => {
     const answer = await post(route(service()), request(null), { operationId: "a".repeat(65) });
     expect(answer).toMatchObject({

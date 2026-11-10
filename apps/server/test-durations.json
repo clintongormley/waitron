@@ -727,7 +727,6 @@
   "src/menu-patch-open-lines.test.ts": 2.2,
   "src/menu-publication-time.test.ts": 0.9,
   "src/menu-undo-photo.test.ts": 3.1,
-  "src/mirror-bind-guard.test.ts": 0.1,
   "src/mirror-bundle-api.test.ts": 8.4,
   "src/mirror-bundle-fetch.test.ts": 7,
   "src/mirror-bundle.test.ts": 2.9,
