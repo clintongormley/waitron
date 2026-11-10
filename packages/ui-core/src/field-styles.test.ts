@@ -1,5 +1,7 @@
 import { render } from "lit";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { cleanup, mount } from "./test-helpers.js";
+import "./components/wt-input.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "./field-styles.js";
 
 test("a label rests only while there is no value, hint or placeholder, and the type is not a date or time", () => {
@@ -48,4 +50,36 @@ test("the field label points at its control, holds its text in the part an ellip
   render(fieldLabel("price", "Price", false), box);
   expect(box.querySelector("[data-required]")).toBeNull();
   expect(box.querySelector("label")!.textContent).toBe("Price");
+});
+
+afterEach(cleanup);
+test("an error wraps within its field without widening its neighbour", async () => {
+  const row = await mount(
+    '<div style="display:inline-flex"><wt-input label="Code" value="x" style="width:max-content"></wt-input><span>Next</span></div>',
+  );
+  const field = row.querySelector("wt-input")!;
+  await field.updateComplete;
+  const neighbour = row.querySelector("span")!;
+  const before = {
+    width: field.getBoundingClientRect().width,
+    left: neighbour.getBoundingClientRect().left,
+  };
+  field.error = "Choose an available configuration for the counterrevolutionaries.";
+  await field.updateComplete;
+  expect(field.getBoundingClientRect().width).toBe(before.width);
+  expect(neighbour.getBoundingClientRect().left).toBe(before.left);
+  field.style.width = "72px";
+  const error = field.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+  expect(error.scrollWidth).toBeLessThanOrEqual(error.clientWidth);
+  const range = document.createRange();
+  range.selectNodeContents(error);
+  expect(
+    new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size,
+  ).toBeGreaterThan(1);
+  expect(range.getBoundingClientRect().height).toBeLessThanOrEqual(
+    error.getBoundingClientRect().height,
+  );
+  expect(
+    field.shadowRoot!.querySelector("input")!.getAttribute("aria-describedby")?.split(" "),
+  ).toContain(error.id);
 });

@@ -466,6 +466,25 @@ describe("layout", () => {
     await page.viewport(restore.width, restore.height);
   });
 
+  it("a code error keeps the picker and tag beside the native code box", async () => {
+    const { el } = await rowAt(1280, "primary");
+    el.draft = setHand(el.draft, "light", "primary", "#225588");
+    el.derived = deriveTheme(el.draft.choices);
+    await el.updateComplete;
+    const input = codeField(el, "light", "primary").shadowRoot!.querySelector("input")!;
+    const tag = q(el, "[data-test=hand-status-light-primary]");
+    const before = box(tag);
+    el.errors = { "handSet.light.primary": t("appearance.bad_code") };
+    await el.updateComplete;
+    await codeField(el, "light", "primary").updateComplete;
+    expect(codeField(el, "light", "primary").error).not.toBe("");
+    expect(Math.abs(centre(box(picker(el, "light", "primary"))) - centre(box(input)))).toBeLessThan(
+      2,
+    );
+    expect(Math.abs(box(tag).left - before.left)).toBeLessThan(2);
+    expect(Math.abs(box(tag).top - before.top)).toBeLessThan(2);
+  });
+
   it("stacks name, Light and Dark at phone width", async () => {
     const { row, name, light, dark } = await rowAt(390, "bg");
     expect(Math.abs(box(light).left - box(name).left)).toBeLessThanOrEqual(1);

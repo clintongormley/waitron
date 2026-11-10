@@ -1274,6 +1274,34 @@ describe("a refused text setting and Advanced's closed line", () => {
     expect(await bottom(el)).toBe(t("form.fix_fields"));
   });
 
+  it("Spanish text errors at 130% keep the family and weight widths and remain inside them", async () => {
+    const viewport = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 900);
+    setLocale("es-ES");
+    try {
+      const { el, saveTheme } = await mountEditing();
+      el.style.setProperty("--wt-font-size-md", "18.2px");
+      el.style.setProperty("--wt-font-size-sm", "15.6px");
+      await choose(el, "text.family", "serif");
+      for (const name of ["text.family", "text.weight.bold"] as const) {
+        const field = choice(el, name);
+        const before = field.getBoundingClientRect().width;
+        await refusedOn(el, saveTheme, name);
+        expect(field.error).not.toBe("");
+        expect(field.getBoundingClientRect().width).toBeCloseTo(before, 0);
+        const error = field.shadowRoot!.querySelector<HTMLElement>(".error")!;
+        expect(error.scrollWidth).toBeLessThanOrEqual(error.clientWidth);
+        const range = document.createRange();
+        range.selectNodeContents(error);
+        expect(range.getBoundingClientRect().right).toBeLessThanOrEqual(
+          error.getBoundingClientRect().right + 1,
+        );
+      }
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
+  });
+
   it("a refusal naming text goes to the bottom only", async () => {
     const { el, saveTheme } = await mountEditing();
     await choose(el, "text.family", "serif");
@@ -1354,4 +1382,30 @@ describe("a refused text setting and Advanced's closed line", () => {
     const small = await mountChoices({ ...LUCIA, text: { size: { sm: 10 } } });
     expect(disclosure(small.el).summary).toBe("1 set by hand: Small text · 1 hard to read");
   });
+});
+
+it.each([
+  ["en-GB", 320],
+  ["es-ES", 320],
+  ["es-ES", 390],
+] as const)("Fix all stays on one line inside the card at %s/%s", async (locale, width) => {
+  const viewport = { width: innerWidth, height: innerHeight };
+  await page.viewport(width, 844);
+  setLocale(locale);
+  try {
+    const { el } = await mountEditing();
+    await typeHand(el, "light", "text", "#6a6a6a");
+    await typeHand(el, "light", "surface-sunken", "#bbbbbb");
+    const fix = button(el, "fix-all");
+    const range = document.createRange();
+    range.selectNodeContents(fix);
+    const lines = new Set(
+      [...range.getClientRects()].filter((r) => r.height > 0).map((r) => Math.round(r.top)),
+    );
+    expect(lines.size).toBe(1);
+    expect(fix.getBoundingClientRect().right).toBeLessThanOrEqual(el.getBoundingClientRect().right);
+    expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+  } finally {
+    await page.viewport(viewport.width, viewport.height);
+  }
 });

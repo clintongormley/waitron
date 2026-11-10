@@ -14,6 +14,9 @@ export const fixLineStyles = css`
     flex-shrink: 0;
     color: inherit;
   }
+  .warning > wt-button {
+    flex: none;
+  }
   .fixed {
     display: flex;
     flex-wrap: wrap;

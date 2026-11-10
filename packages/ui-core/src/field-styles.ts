@@ -147,6 +147,8 @@ export const fieldStyles = css`
     margin-inline-start: var(--wt-space-1);
   }
   .error {
+    contain: inline-size;
+    overflow-wrap: anywhere;
     margin: var(--wt-space-1) 0 0;
     font-size: var(--wt-font-size-sm);
   }

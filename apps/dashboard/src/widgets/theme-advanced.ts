@@ -100,7 +100,7 @@ export class ThemeAdvanced extends LitElement {
       .line {
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
+        align-items: baseline;
         gap: var(--wt-space-2);
         min-width: 0;
       }
