@@ -254,7 +254,7 @@ it("reads a whole-invoice credit as consuming every line", async () => {
 // from its lines (21%: -0.87/-0.18). Each case changes one fact of it, or of the invoice.
 interface Change {
   invoiceGross?: null;
-  correctionGross?: string | null;
+  correctionLines?: [lineTotal: string, lineGross: string | null][];
   namesLine?: false;
   readCorrection?: true;
   readUnknown?: true;
@@ -267,19 +267,21 @@ async function history(change: Change) {
   const { saleId, ids } = await sell(lines);
   const write = (...args: Parameters<typeof correct>) =>
     change.storedSplit ? correctStoring(change.storedSplit, ...args) : correct(...args);
-  const correction = await write(saleId, "-1.05", [
-    {
-      lineNo: 1,
+  const correction = await write(
+    saleId,
+    "-1.05",
+    (change.correctionLines ?? [["-0.87", "-1.05"]]).map(([lineTotal, lineGross], index) => ({
+      lineNo: index + 1,
       name: "Steak",
       descriptions: { "es-ES": "Steak" },
       quantity: "-1",
       unitPrice: "10.00",
       vatRate: "21.00",
-      lineTotal: "-0.87",
-      lineGross: change.correctionGross === undefined ? "-1.05" : change.correctionGross,
+      lineTotal,
+      lineGross,
       correctsLineId: change.namesLine === false ? null : ids[1],
-    },
-  ]);
+    })),
+  );
   const target = change.readUnknown
     ? brandSaleId(newId())
     : change.readCorrection
@@ -301,8 +303,13 @@ it.each<[name: string, change: Change, code: string]>([
   ["a corrective invoice's own id", { readCorrection: true }, "sale.correction_history_unusable"],
   ["an invoice line with no gross", { invoiceGross: null }, "sale.correction_history_unusable"],
   [
-    "an earlier correction line with no gross",
-    { correctionGross: null },
+    "an earlier correction line with no gross, its correction's split agreeing with the rest",
+    {
+      correctionLines: [
+        ["-0.50", null],
+        ["-0.37", "-1.05"],
+      ],
+    },
     "sale.correction_history_unusable",
   ],
   [
@@ -312,7 +319,7 @@ it.each<[name: string, change: Change, code: string]>([
   ],
   [
     "an earlier correction whose lines disagree with its stored split",
-    { correctionGross: "-1.06" },
+    { correctionLines: [["-0.87", "-1.06"]] },
     "sale.correction_history_unusable",
   ],
   [
