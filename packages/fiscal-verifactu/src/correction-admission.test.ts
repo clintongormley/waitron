@@ -200,8 +200,25 @@ describe("unreadable figures", () => {
     TipoRecargoEquivalencia: "5.20",
     CuotaRecargoEquivalencia: "0.52",
   };
-  it.each<[string, Figures]>([
+  it.each<[string, Figures, "F1"?]>([
     ["an equivalence surcharge", { desglose: [surcharge], cuota: "2.10", importe: "12.10" }],
+    [
+      "a regime other than the general one",
+      {
+        desglose: [{ ...detail("21.00", "10.00", "2.10"), ClaveRegimen: "03" }],
+        cuota: "2.10",
+        importe: "12.10",
+      },
+    ],
+    [
+      "a reverse-charged operation",
+      {
+        desglose: [{ ...detail("0.00", "12.10", "0.00"), CalificacionOperacion: "S2" }],
+        cuota: "0.00",
+        importe: "12.10",
+      },
+      "F1",
+    ],
     [
       "two details at one rate",
       {
@@ -212,8 +229,8 @@ describe("unreadable figures", () => {
     ],
     ["details not summing to the total", { ...AT_21, importe: "12.11" }],
     ["VAT not summing to the VAT total", { ...AT_21, cuota: "2.11" }],
-  ])("%s", async (_name, figures) => {
-    const { saleId } = await file({ figures, estado: "aceptado" });
+  ])("%s", async (_name, figures, tipo) => {
+    const { saleId } = await file({ figures, estado: "aceptado", ...(tipo ? { tipo } : {}) });
     expect((await figuresFor(saleId)).get(saleId)).toEqual({ readable: false });
   });
 
