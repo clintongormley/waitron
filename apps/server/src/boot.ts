@@ -971,7 +971,10 @@ export interface StartServerSeams {
   /** For the free-space watch and the spare's room check only. */
   freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
+  /** Replaces `requestFromBox`, the check for what a request from the box only withholds. */
   requestFromBox?: (c: Context) => boolean;
+  /** Replaces `requestProvenFromBox`, the fail-closed check for what only the box may do. */
+  requestProvenFromBox?: (c: Context) => boolean;
   /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
   /** The box's host requests; unset, the server talks to the host's socket. */
@@ -1336,7 +1339,7 @@ async function bootServer(
   // Help, guide pages and certificate downloads precede every mode-specific gate and SPA catch-all.
   // Machine discovery remains setup-only; the fallback CA does not certify operator TLS.
   let spare = false;
-  const fromBox = seams.requestFromBox ?? requestProvenFromBox;
+  const fromBox = seams.requestProvenFromBox ?? requestProvenFromBox;
   mountDiscovery(
     app,
     {
@@ -3684,6 +3687,7 @@ async function bootServer(
       modules: setsToMigrate,
       run: promoteRun,
       requestFromBox: seams.requestFromBox,
+      requestProvenFromBox: seams.requestProvenFromBox,
       isMirror,
       nodePreparation,
     },

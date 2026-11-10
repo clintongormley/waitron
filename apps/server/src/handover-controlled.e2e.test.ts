@@ -35,7 +35,8 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 //   The pending-card loop sleeps at most 50 ms between passes.
 // - `restart` and a spied `process.kill` stand for the SIGTERM that ends a real process; the test
 //   starts the box again in this process.
-// - `requestFromBox` says no request comes from the box itself: every client here is on loopback.
+// - `requestFromBox` and `requestProvenFromBox` say no request comes from the box itself: every
+//   client here is on loopback.
 //
 // - `@waitron/fiscal-verifactu/src/hour-release.js` and `hour-clock-internet.js`: the switch-on's
 //   release date and internet clock. The browser's clock sample comes from the test.
@@ -340,6 +341,7 @@ interface Boxes {
 function seamsFor(box: Box): StartServerSeams {
   return {
     requestFromBox: () => false,
+    requestProvenFromBox: () => false,
     stepdown: { mount: () => {}, restart: () => box.restartAsked.release() },
     cardPool: ({ db }) => {
       const card = new FakePaymentProvider(db);

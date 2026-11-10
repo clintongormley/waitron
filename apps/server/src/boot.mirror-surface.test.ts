@@ -163,7 +163,12 @@ async function boot(
   const mdns = fakeMdnsSocket();
   const seams: StartServerSeams = {
     observeApp: (observed) => (app = observed),
-    ...(options.fromBox === undefined ? {} : { requestFromBox: () => options.fromBox!.current }),
+    ...(options.fromBox === undefined
+      ? {}
+      : {
+          requestFromBox: () => options.fromBox!.current,
+          requestProvenFromBox: () => options.fromBox!.current,
+        }),
     mdnsSocket: () => mdns.socket,
   };
   served.splice(0);

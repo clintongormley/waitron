@@ -538,7 +538,9 @@ describe("on a mirror, promotion answers only the box itself", () => {
         prepare,
         withPromotion: vi.fn(),
       } as unknown as PromoteApiDeps["nodePreparation"],
-      ...(fromBox === undefined ? {} : { requestFromBox: () => fromBox }),
+      ...(fromBox === undefined
+        ? {}
+        : { requestFromBox: () => fromBox, requestProvenFromBox: () => fromBox }),
       isMirror,
     });
     return { app, run, prepare };
@@ -646,6 +648,32 @@ describe("on a mirror, promotion answers only the box itself", () => {
     });
     expect([res.status, await res.json()]).toEqual([200, { prepared: true }]);
     expect((prepare.mock.calls[0] as unknown[])[4]).toEqual({ onBox: true });
+  });
+
+  it("a mirror's from-box refusal and the preparation's on-box answer are two checks", async () => {
+    const prepare = vi.fn(async () => ({ prepared: true }));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: fakeDb,
+      nodeDb: fakeNode,
+      nodeId: NODE,
+      run: vi.fn(),
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: {
+        prepare,
+        withPromotion: vi.fn(),
+      } as unknown as PromoteApiDeps["nodePreparation"],
+      requestProvenFromBox: () => true,
+      requestFromBox: () => false,
+      isMirror: true,
+    });
+    const res = await overHttps(app, "/preparation", {
+      moduleOperation: { binding, input: null },
+      personId: PERSON,
+      password: "pw",
+    });
+    expect([res.status, await res.json()]).toEqual([200, { prepared: true }]);
+    expect((prepare.mock.calls[0] as unknown[])[4]).toEqual({ onBox: false });
   });
 
   describe("over a real connection the client resets before the route runs", () => {

@@ -47,8 +47,10 @@ export interface PromoteApiDeps {
   credentialKeyRing: TotpKeyRing;
   modules?: readonly WaitronModule[];
   nodePreparation?: ReturnType<typeof createNodeOperationPreparation>;
-  /** Whether a request came from a browser on the box itself; tests replace it. */
+  /** Whether a request came from a browser on the box itself, for what it only withholds; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
+  /** The fail-closed check a mirror's promotion needs; tests replace it. */
+  requestProvenFromBox?: (c: Context) => boolean;
   isMirror?: boolean;
   run: (
     attestation: FenceAttestation,
@@ -117,7 +119,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
   };
 
   const refuseFromNetworkOnMirror = (c: Context): void => {
-    if (deps.isMirror === true && !(deps.requestFromBox ?? requestProvenFromBox)(c))
+    if (deps.isMirror === true && !(deps.requestProvenFromBox ?? requestProvenFromBox)(c))
       throw new AppError("promotion.from_box_only", {});
   };
 
