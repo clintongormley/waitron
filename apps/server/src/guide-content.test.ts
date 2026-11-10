@@ -113,6 +113,7 @@ describe("the user guides", () => {
       "progress",
       "cases",
       "export",
+      "missing-history",
     ]);
   });
 
