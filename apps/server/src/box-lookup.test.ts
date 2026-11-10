@@ -13,6 +13,7 @@ import {
   RememberedAnswers,
   type MdnsQuerySocket,
 } from "./box-lookup.js";
+import { MDNS_TTL_SECONDS } from "./mdns.js";
 
 const NAME = "box-a1b2.waitron.local";
 const OWN = "192.168.10.5";
@@ -54,6 +55,7 @@ function fakeSocket(packets: Answer[][]) {
 }
 
 const VENUE = "waitron.local";
+const fresh = (...addresses: string[]) => ({ addresses, remembered: false });
 const a = (data: string, name = NAME): Answer => ({ name, type: "A", data });
 
 function opts(fake: ReturnType<typeof fakeSocket>, timeoutMs = 20) {
@@ -79,11 +81,9 @@ describe("lookupBoxName", () => {
       [a("192.168.10.7"), a("10.0.0.7")],
       [a("192.168.10.7"), a("192.168.10.8")],
     ]);
-    await expect(lookupBoxName(NAME, opts(fake))).resolves.toEqual([
-      "192.168.10.7",
-      "10.0.0.7",
-      "192.168.10.8",
-    ]);
+    await expect(lookupBoxName(NAME, opts(fake))).resolves.toEqual(
+      fresh("192.168.10.7", "10.0.0.7", "192.168.10.8"),
+    );
     expect(fake.queries).toEqual([{ questions: [{ name: NAME, type: "A" }] }]);
     expect(fake.isDestroyed()).toBe(true);
   });
@@ -93,12 +93,12 @@ describe("lookupBoxName", () => {
       [a("192.168.10.9", "box-ffff.waitron.local"), { name: NAME, type: "AAAA", data: "fe80::1" }],
       [a("192.168.10.7", NAME.toUpperCase())],
     ]);
-    await expect(lookupBoxName(NAME, opts(fake))).resolves.toEqual(["192.168.10.7"]);
+    await expect(lookupBoxName(NAME, opts(fake))).resolves.toEqual(fresh("192.168.10.7"));
   });
 
   it("a box in setup mode does not resolve the venue's name to itself", async () => {
     const fake = fakeSocket([[a(OWN, VENUE)], [a("192.168.10.7", VENUE)]]);
-    await expect(lookupBoxName(VENUE, opts(fake))).resolves.toEqual(["192.168.10.7"]);
+    await expect(lookupBoxName(VENUE, opts(fake))).resolves.toEqual(fresh("192.168.10.7"));
   });
 
   it("refuses when only its own answer comes back", async () => {
@@ -116,7 +116,7 @@ describe("lookupBoxName", () => {
     const fake = fakeSocket([[...own, "127.0.0.1", "192.0.2.77"].map((ip) => a(ip))]);
     await expect(
       lookupBoxName(NAME, { timeoutMs: 20, makeSocket: () => fake.socket }),
-    ).resolves.toEqual(["192.0.2.77"]);
+    ).resolves.toEqual(fresh("192.0.2.77"));
   });
 
   it("refuses after its time limit", async () => {
@@ -146,7 +146,7 @@ describe("lookupBoxName", () => {
       await vi.advanceTimersByTimeAsync(1999);
       expect(settled).toBe(false);
       await vi.advanceTimersByTimeAsync(1);
-      await expect(pending).resolves.toEqual(["192.168.10.7"]);
+      await expect(pending).resolves.toEqual(fresh("192.168.10.7"));
     } finally {
       vi.useRealTimers();
     }
@@ -175,17 +175,18 @@ describe("lookupBoxName", () => {
       { address: "2001:db8::4", family: 6 },
     ]);
     const makeSocket = vi.fn();
-    await expect(lookupBoxName("box.example.com", { makeSocket })).resolves.toEqual([
-      "203.0.113.4",
-      "2001:db8::4",
-    ]);
+    await expect(lookupBoxName("box.example.com", { makeSocket })).resolves.toEqual(
+      fresh("203.0.113.4", "2001:db8::4"),
+    );
     expect(systemLookup).toHaveBeenCalledWith("box.example.com", { all: true });
     expect(makeSocket).not.toHaveBeenCalled();
   });
 
   it("returns a literal address as it is", async () => {
     const makeSocket = vi.fn();
-    await expect(lookupBoxName("192.168.10.7", { makeSocket })).resolves.toEqual(["192.168.10.7"]);
+    await expect(lookupBoxName("192.168.10.7", { makeSocket })).resolves.toEqual(
+      fresh("192.168.10.7"),
+    );
     expect(systemLookup).not.toHaveBeenCalled();
     expect(makeSocket).not.toHaveBeenCalled();
   });
@@ -200,7 +201,8 @@ describe("lookupBoxName keeping answers", () => {
     const remembered = new RememberedAnswers(() => nowMs);
     return {
       fake,
-      ask: () => lookupBoxName(NAME, { ...opts(fake), remembered }),
+      ask: (more: { fresh?: boolean } = {}) =>
+        lookupBoxName(NAME, { ...opts(fake), remembered, ...more }),
       pass: (ms: number) => (nowMs += ms),
     };
   }
@@ -208,13 +210,43 @@ describe("lookupBoxName keeping answers", () => {
   it("asks a name once while the shortest of its records lives, and again once it has ended", async () => {
     const k = keeping([[lived("192.168.10.7", 120), lived("192.168.10.8", 60)]]);
     const both = ["192.168.10.7", "192.168.10.8"];
-    await expect(k.ask()).resolves.toEqual(both);
+    await expect(k.ask()).resolves.toEqual({ addresses: both, remembered: false });
     k.pass(59_999);
-    await expect(k.ask()).resolves.toEqual(both);
+    await expect(k.ask()).resolves.toEqual({ addresses: both, remembered: true });
     expect(k.fake.queries).toHaveLength(1);
     k.pass(1);
-    await expect(k.ask()).resolves.toEqual(both);
+    await expect(k.ask()).resolves.toEqual({ addresses: both, remembered: false });
     expect(k.fake.queries).toHaveLength(2);
+  });
+
+  it("keeps an answer no longer than a Waitron box's own records live, whatever lifetime it gives", async () => {
+    const k = keeping([[lived("192.168.10.7", 2_147_483_647)]]);
+    await k.ask();
+    k.pass(MDNS_TTL_SECONDS * 1000 - 1);
+    await expect(k.ask()).resolves.toMatchObject({ remembered: true });
+    k.pass(1);
+    await expect(k.ask()).resolves.toMatchObject({ remembered: false });
+    expect(k.fake.queries).toHaveLength(2);
+  });
+
+  it("a fresh ask passes over what was kept, and keeps the new answer in its place", async () => {
+    const packets = [[lived("192.168.10.7", 120)]];
+    const k = keeping(packets);
+    await k.ask();
+    packets.splice(0, 1, [lived("192.168.10.9", 120)]);
+    await expect(k.ask({ fresh: true })).resolves.toEqual(fresh("192.168.10.9"));
+    await expect(k.ask()).resolves.toEqual({ addresses: ["192.168.10.9"], remembered: true });
+    expect(k.fake.queries).toHaveLength(2);
+  });
+
+  it("a fresh ask nobody answers leaves nothing kept", async () => {
+    const packets = [[lived("192.168.10.7", 120)]];
+    const k = keeping(packets);
+    await k.ask();
+    packets.splice(0, 1);
+    expect((await refusal(k.ask({ fresh: true }))).code).toBe("mirror.peer_unresolved");
+    await refusal(k.ask());
+    expect(k.fake.queries).toHaveLength(3);
   });
 
   it("keeps nothing from records that give no lifetime, or a lifetime of none", async () => {
@@ -238,12 +270,12 @@ describe("lookupBoxName keeping answers", () => {
     const remembered = new RememberedAnswers(() => 0);
     await lookupBoxName(NAME, { ...opts(fake), remembered });
     const other = fakeSocket([[{ ...a("192.168.10.9", VENUE), ttl: 120 }]]);
-    await expect(lookupBoxName(VENUE, { ...opts(other), remembered })).resolves.toEqual([
-      "192.168.10.9",
-    ]);
+    await expect(lookupBoxName(VENUE, { ...opts(other), remembered })).resolves.toEqual(
+      fresh("192.168.10.9"),
+    );
     await expect(
       lookupBoxName(NAME.toUpperCase(), { ...opts(other), remembered }),
-    ).resolves.toEqual(["192.168.10.7"]);
+    ).resolves.toEqual({ addresses: ["192.168.10.7"], remembered: true });
   });
 });
 
