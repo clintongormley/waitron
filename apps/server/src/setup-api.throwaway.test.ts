@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -167,22 +166,21 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
     ]);
   });
 
-  it.each<[string, Mode]>([
-    ["Demo", "demo"],
-    ["Preparation", "prepare"],
+  it.each<[string, Mode, boolean]>([
+    ["Demo without supplied operations", "demo", false],
+    ["Demo with supplied operations", "demo", true],
+    ["Preparation without supplied operations", "prepare", false],
+    ["Preparation with supplied operations", "prepare", true],
   ])(
-    "%s on a WAITRON_ENV=production box is marked with the box's environment, and the allocation's refusal reaches the client as 400",
-    async (_l, mode) => {
-      const { post, received, throwawayLines } = harness(PRODUCTION_BOX, async () => {
-        throw new AppError("sif.throwaway_allocation_refused", { environment: "production" });
+    "refuses %s on a WAITRON_ENV=production box before provisioning",
+    async (_l, mode, supplied) => {
+      const { post, received, throwawayLines } = harness(PRODUCTION_BOX);
+
+      const res = await post({
+        ...body(mode),
+        ...(supplied ? { initialOperations: INITIAL_OPERATIONS } : {}),
       });
 
-      const res = await post(body(mode));
-
-      expect(received[0].initialAllocation).toEqual({
-        kind: "throwaway",
-        hostEnvironment: "production",
-      });
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         error: {
@@ -190,6 +188,7 @@ describe("POST /setup-api/provision — which requests the route marks for a thr
           params: { environment: "production" },
         },
       });
+      expect(received).toEqual([]);
       expect(throwawayLines()).toEqual([]);
     },
   );
