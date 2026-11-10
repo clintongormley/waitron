@@ -8,7 +8,7 @@
 import { Buffer } from "node:buffer";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { pathToFileURL } from "node:url";
+import { isMainScript } from "./is-main-script.mjs";
 import { TextDecoder } from "node:util";
 import { inflateRawSync } from "node:zlib";
 
@@ -353,7 +353,7 @@ export async function main(argv, { stdout, stderr, fetch }) {
 }
 
 /* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainScript(import.meta.url)) {
   process.exitCode = await main(process.argv.slice(2), {
     stdout: console.log,
     stderr: console.error,

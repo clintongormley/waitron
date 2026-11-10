@@ -2,8 +2,8 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter, once } from "node:events";
-import { URL } from "node:url";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { URL, fileURLToPath } from "node:url";
+import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -257,6 +257,30 @@ describe("test process deadline", () => {
       { timeout: 2000 },
     );
     expect(failure.status).toBe(7);
+  });
+
+  it("the CLI runs its command when started through a symlinked directory", () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-deadline-link-"));
+    try {
+      const link = join(dir, "repo");
+      symlinkSync(fileURLToPath(new URL("..", import.meta.url)), link);
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(link, "scripts", "run-with-deadline.mjs"),
+          "5",
+          "--",
+          process.execPath,
+          "-e",
+          'console.log("CHILD_RAN")',
+        ],
+        { encoding: "utf8", timeout: 5000 },
+      );
+      expect(result.stdout).toContain("CHILD_RAN");
+      expect(result.status).toBe(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("preserves success and failure exit codes", async () => {

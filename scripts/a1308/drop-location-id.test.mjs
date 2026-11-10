@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -226,6 +226,22 @@ describe("location-column codemod", () => {
       expect(readFileSync(path, "utf8")).toBe(written);
     } finally {
       stdout.mockRestore();
+      rmSync(dir, { recursive: true });
+    }
+  });
+  it("runs as a command when started through a symlinked directory", () => {
+    const dir = mkdtempSync(join(tmpdir(), "a1308-location-link-"));
+    try {
+      symlinkSync(import.meta.dirname, join(dir, "linked"));
+      const missing = join(dir, "missing.ts");
+      const run = spawnSync(
+        process.execPath,
+        [join(dir, "linked", "drop-location-id.mjs"), missing],
+        { encoding: "utf8" },
+      );
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain(`ENOENT: no such file or directory, open '${missing}'`);
+    } finally {
       rmSync(dir, { recursive: true });
     }
   });

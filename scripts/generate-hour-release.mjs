@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { URL, fileURLToPath, pathToFileURL } from "node:url";
+import { URL, fileURLToPath } from "node:url";
+import { isMainScript } from "./is-main-script.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const GENERATOR = "scripts/generate-hour-release.mjs:v1";
@@ -121,7 +122,7 @@ export function readBuildHourRelease({ cwd = ROOT } = {}) {
 }
 
 /* v8 ignore start -- CLI is exercised in child processes. */
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+if (isMainScript(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
     if (

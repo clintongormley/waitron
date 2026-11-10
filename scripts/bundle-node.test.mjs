@@ -29,6 +29,7 @@ function plainBundleCommand(directory) {
     "generate-hour-release.mjs",
     "npm-bundle-notices.mjs",
     "backup-verification-runtime.mjs",
+    "is-main-script.mjs",
   ])
     copyFileSync(join(ROOT, "scripts", file), join(scripts, file));
   return realpathSync(join(scripts, "bundle-node.mjs"));

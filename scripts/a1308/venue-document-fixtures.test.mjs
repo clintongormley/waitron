@@ -1,6 +1,6 @@
 import { main, transformSource } from "./venue-document-fixtures.mjs";
 import ts from "typescript";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -95,6 +95,17 @@ it("runs as a command and previews without changing the file", () => {
   main(args.slice(1), (line) => output.push(line));
   expect(output.join("\n")).toContain("would change");
   expect(readFileSync(file, "utf8")).toBe(source);
+});
+it("runs as a command when started through a symlinked directory", () => {
+  const dir = mkdtempSync(join(tmpdir(), "venue-document-link-"));
+  dirs.push(dir);
+  symlinkSync(import.meta.dirname, join(dir, "linked"));
+  const run = spawnSync(process.execPath, [join(dir, "linked", "venue-document-fixtures.mjs")], {
+    encoding: "utf8",
+    timeout: 30000,
+  });
+  expect(run.status).toBe(1);
+  expect(run.stderr).toContain("Expected --move field=helper [--write] file...");
 });
 it.each([[], ["--move", "bad", "fixture.ts"], ["fixture.ts"], ["--move"]].map((args) => [args]))(
   "refuses incomplete arguments %j",

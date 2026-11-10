@@ -58,6 +58,7 @@ function fixture(
       "scripts/changed-packages.mjs",
       "scripts/changed-scope.mjs",
       "scripts/run-with-deadline.mjs",
+      "scripts/is-main-script.mjs",
     ]) {
       mkdirSync(dirname(join(dir, file)), { recursive: true });
       cpSync(join(root, file), join(dir, file));

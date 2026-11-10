@@ -74,10 +74,8 @@ function fixture() {
   );
   const cwd = directory();
   mkdirSync(join(cwd, "scripts"));
-  copyFileSync(
-    join(ROOT, "scripts/generate-hour-release.mjs"),
-    join(cwd, "scripts/generate-hour-release.mjs"),
-  );
+  for (const file of ["generate-hour-release.mjs", "is-main-script.mjs"])
+    copyFileSync(join(ROOT, "scripts", file), join(cwd, "scripts", file));
   const bin = join(cwd, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "git"), `#!/bin/sh\necho forbidden-git >> "$FETCH_LOG"; exit 97\n`);

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { isMainScript } from "../is-main-script.mjs";
 
 function walk(node, visit) {
   visit(node);
@@ -250,5 +250,4 @@ export function main(args) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  main(process.argv.slice(2));
+if (isMainScript(import.meta.url)) main(process.argv.slice(2));

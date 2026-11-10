@@ -221,4 +221,26 @@ describe("the bench command, in a process of its own", () => {
       /^not compared: bench: the two results differ in seed: 1 against 2\n$/,
     );
   });
+
+  it("imports cleanly when the process was started from no file", async () => {
+    const { stdout } = await run(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "--input-type=module",
+        "-e",
+        'const cli = await import("./scripts/bench/cli.ts"); console.log(typeof cli.runCli);',
+        "-",
+      ],
+      {
+        cwd: SERVER_DIR,
+        timeout: STEP_TIMEOUT_MS,
+        env: Object.fromEntries(
+          Object.entries(process.env).filter(([name]) => !name.startsWith("VITEST")),
+        ),
+      },
+    );
+    expect(stdout).toBe("function\n");
+  });
 });

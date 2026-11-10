@@ -14,8 +14,9 @@ import { createHash } from "node:crypto";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { downloadRelease } from "./download-release.mjs";
+import { isMainScript } from "./is-main-script.mjs";
 
 export const VERSITYGW_VERSION = "1.8.0";
 
@@ -116,7 +117,7 @@ export async function install({ platform, arch, assets, fetchImpl, sleep, log, d
 
 // The process wiring alone; the suite calls `install` with the download and the platform injected.
 /* v8 ignore start */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainScript(import.meta.url)) {
   const { dest, downloaded } = await install({
     platform: process.platform,
     arch: process.arch,

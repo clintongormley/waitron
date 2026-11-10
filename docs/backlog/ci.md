@@ -656,18 +656,6 @@ A1424's live qualification was added on 7 November 2026.
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action.
   [Detail](ci.md#a1213-does-a-re-run-till-shards-report-reach-test-till-merge).
 
-## Bundle: One shared "am I the main script?" helper
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The deadline command can exit successfully without running its child through a directory symlink.**
-  Qualify its entrypoint check with symlink and physical-path controls, then make both run the
-  child. [Observed reproduction](ci.md#deadline-command-through-a-directory-symlink).
-- **The bundle CLI can return success without creating output through a symlink-spelled path.**
-  A994's temporary `/var/folders` invocation skipped its entry block; the canonical path worked.
-  Check supported entry paths before changing the production predicate.
-  [Detail](ci.md#the-bundle-clis-entry-predicate-can-skip-a-symlink-spelled-path).
-
 ## Bundle: What the mutation score counts: db static mutants, the pointer test helper
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -1103,20 +1091,6 @@ minutes (`grep -h -E '^    timeout-minutes:' .github/workflows/*.yml`) — and a
 Receipt for the checkout half:
 [ci-and-gates.md](../developers/ci-and-gates.md#every-checkout-is-bounded).
 
-## The bundle CLI's entry predicate can skip a symlink-spelled path
-
-A994's copied CLI returned status 0 without producing output when Node received its macOS
-`/var/folders/.../scripts/bundle-node.mjs` path. Returning `realpathSync()` from the fixture helper
-made all three real-bundle cases pass. `scripts/bundle-node.mjs:75` compares the argument's file URL
-with the resolved module URL; A994 leaves that production predicate unchanged. Check which supported entry paths can use an alias before deciding whether to change this
-predicate or other CLI predicates.
-
-The failing and corrected focused commands are retained in lane G's
-`receipts/a994-20261022-022554/plain-bundle-mode-green.log` (status-zero CLI with missing files)
-and `plain-bundle-mode-green2.log` (15 passed). The copied source bytes were unchanged; only the
-fixture command path changed between those probes.
-
-
 ## Whether the 2026-10-20 checkout stalls were a GitHub-side incident was not checked (A935)
 
 In which phase they stalled is unknown: the action passes no `--progress`, so its log is
@@ -1545,19 +1519,6 @@ both `:main` images. PR #2365's tested head tree
 skipped. The API tree pairs, job scopes and publication logs are retained in
 Lane E `receipts/a696-resume-20261101/`.
 
-
-## Deadline command through a directory symlink
-
-On 1 November 2026, A1251's local control invoked `scripts/run-with-deadline.mjs` through a
-symlinked temporary checkout. It returned status 0 with no child output. The same command
-through the physical path returned status 0 and printed `CHILD_RAN`. An explicit directory
-symlink reproduced the same pair; the initial blank test logs were discarded as invalid evidence.
-
-The command was `node <checkout>/scripts/run-with-deadline.mjs 5 -- node -e
-'console.log("CHILD_RAN")'`. Its CLI check compares `import.meta.url` with
-`pathToFileURL(process.argv[1]).href`; those paths differed in the observed symlink invocation.
-Make entrypoint detection account for the physical path and retain both controls. This finding
-was recorded separately from the certificate-test repair; the wrapper is unchanged.
 
 ## Real-source bundle tests repeat metadata work
 

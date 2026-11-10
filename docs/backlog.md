@@ -132,7 +132,7 @@ no design yet.
 **5. Important work.** The bundles marked important under each area, taken by theme so that a lane
 stays in one area.
 
-**6. After the first venue.** The 89 remaining bundles, which are nice to have. Take
+**6. After the first venue.** The remaining bundles, which are nice to have. Take
 them only when a lane has nothing better.
 
 **Features the owner ranked on 2026-10-16 that are still open:** A803 bills and tables, A646 the
@@ -2071,8 +2071,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/ci.md#a1251-finish-qualifying-and-reviewing-historical-prs-that-skipped-the-claude-run-it-review).
 
 - **One throwaway branch that interrupts an upload and re-runs a shard** (bundle of 2, size S). Holds A1251, A1213. [Detail](backlog/ci.md#bundle-one-throwaway-branch-that-interrupts-an-upload-and-re-runs-a-shard)
-
-- **One shared "am I the main script?" helper** (bundle of 2, size S). [Detail](backlog/ci.md#bundle-one-shared-am-i-the-main-script-helper)
 
 - **The node-identity text guard misses a retired setting after an escaped newline.**
   Inspect decoded string/template values as well as raw text, retaining legitimate negative and

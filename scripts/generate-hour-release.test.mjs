@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { generateHourRelease, readBuildHourRelease } from "./generate-hour-release.mjs";
 import { bundle } from "./bundle-node.mjs";
 
@@ -421,6 +421,7 @@ child.stdout.on('data', bytes => {
       "generate-hour-release.mjs",
       "npm-bundle-notices.mjs",
       "backup-verification-runtime.mjs",
+      "is-main-script.mjs",
     ])
       copyFileSync(join(ROOT, "scripts", file), join(cwd, "scripts", file));
     const manifests = ["apps/server/package.json", "packages/provisioning/package.json"];
@@ -484,4 +485,18 @@ child.stdout.on('data', bytes => {
       }
     }
   }, 400_000);
+});
+
+it("imports cleanly when the process was started from no file", async () => {
+  const originalArgv = process.argv;
+  try {
+    process.argv = [process.execPath, "-"];
+    vi.resetModules();
+    await expect(import("./generate-hour-release.mjs")).resolves.toHaveProperty(
+      "generateHourRelease",
+    );
+  } finally {
+    process.argv = originalArgv;
+    vi.resetModules();
+  }
 });
