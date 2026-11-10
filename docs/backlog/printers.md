@@ -324,8 +324,8 @@ checked on the box).
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; lane B: PR 1, details in a window, landed #2492; PR 2, Used by, landed #2511; PR 3, one table, landed #2661; PR 4 to come).** A modal means the printer page is no longer a sub-page, so the owner
   dropped lane B's A398 redraw of the printer page's heading (2026-10-08).
   3. **No way to pair a Bluetooth printer again after Unpair.** A succeeded Unpair switches the
-     printer off (C109, #960), and the only way back is adding it again as a new printer. Offer
-     "Pair again" (or similar) on the same printer record.
+     printer off (C109, #960). Add restores its existing registration and settings. Offer
+     "Pair again" (or similar) directly on the same printer record.
   4. **Reprint on the print queue lets the person choose a different printer**, for when the
      original is out of service. Offer active printers, the original chosen by default. Drawer jobs
      stay unresendable (CLAUDE.md §5).
@@ -670,7 +670,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 ## Bundle: Bluetooth pairing commands
 
-6 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+5 entries, size M.
 
 - **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
 - **A command queued behind a slow pair can run out of time.** A second command waiting behind that
@@ -680,11 +680,9 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 - **A failed Pair or Unpair shows the agent's reason as the agent wrote it, in English on both
   languages' screens** (a wrong PIN would read "No se pudo emparejar: wrong PIN").
   [Detail](printers.md#a-failed-pair-or-unpair-shows-the-agents-reason-as-the-agent-wrote-it-in-english-on-both-languages-screens)
-- **Left open by C109 (#960):** the printer details' Active switch can still switch a paired
-  Bluetooth printer off without unpairing it. [Detail](printers.md#left-open-by-c109-960)
 - **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
   (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
-  switch it off with Disable, which the row then shows.
+  delete the printer to stop it and end its waiting jobs.
   [Detail](printers.md#an-unpair-outcome-that-reaches-the-server-after-it-dropped-the-command-leaves-the-printer-on)
 - **RFCOMM always uses channel 1.** Nothing looks up a printer's channel, so a printer whose serial
   port is on another channel fails each job with the connection error.
