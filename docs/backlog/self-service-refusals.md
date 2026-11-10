@@ -221,6 +221,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:190` and `apps/dashboard/src/i18n/alert-messages.ts:191`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.registro_rechazado`.
+
 State: An AEAT response rejects a record and opens a filing case. An external refusal is not proof of a Waitron bug. Receipt: `packages/fiscal-verifactu/src/drain.ts:1445`.
 
 Route: Missing in the searched server routes: a filing-case decision action. The evidence page exists (**Reporting → Fiscal filing**, W41s-9 slice 1, 2026-11-10) and decides nothing; W41s-8's remedies are not enabled, and a library function or a planned screen is not a product recovery path.
@@ -251,6 +253,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:206` and `apps/dashboard/src/i18n/alert-messages.ts:207`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.duplicado_anulado`.
+
 State: The duplicate outcome is annulled; the drain rejects the row and opens a filing case. AEAT-held state is external evidence, not a bug-only receipt. Receipt: `packages/fiscal-verifactu/src/drain.ts:1773`.
 
 Route: Missing: a supported filing-case resolution route. Keep the existing stop until a valid decision is made.
@@ -266,6 +270,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:210` and `apps/dashboard/src/i18n/alert-messages.ts:211`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.anulacion_retenida`.
+
 State: A cancellation whose original record was refused is set aside and gets its own case. It does not become sendable just by waiting. Receipt: `packages/fiscal-verifactu/src/drain.ts:862`.
 
 Route: Missing: a case decision route; do not tell the owner to resend the cancellation unchanged.
@@ -280,6 +286,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | La huella de un registro de facturación no coincide con la copia de la AEAT. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:214` and `apps/dashboard/src/i18n/alert-messages.ts:215`.
+
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.huella_divergente`.
 
 State: A duplicate lookup identifies a different fingerprint and opens a case. External or restored-data disagreement is not proved to be bug-only. Receipt: `packages/fiscal-verifactu/src/drain.ts:1773`.
 
@@ -371,6 +379,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:258` and `apps/dashboard/src/i18n/alert-messages.ts:259`.
 
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.filing_cases_open`.
+
 State: The query finds open filing cases. They require a decision; elapsed time does not make that decision. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:64`.
 
 Route: Missing: the supported filing-case decision action; the evidence page, **Reporting → Fiscal filing**, exists (W41s-9 slice 1, 2026-11-10). Keep W41s-8 and A696 dependencies visible instead of directing the owner to support.
@@ -385,6 +395,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [fiscal-
 | ES | La AEAT ha rechazado {count} registros fiscales seguidos con el código {codigo}. Waitron reintenta cada hora el primer registro detenido que puede enviar. Una aceptación o un rechazo distinto puede reanudar el envío. Contacta con soporte. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:262` and `apps/dashboard/src/i18n/alert-messages.ts:263`.
+
+Reworded 2026-11-10 (W41s-9 slice 1): the words above no longer end with a support referral; they say the record is on **Reporting → Fiscal filing**, and the bell's Go to opens that page. Current text: `apps/dashboard/src/i18n/alert-messages.ts`, key `fiscal.refusals_repeated`.
 
 State: A chain has a run of same-code refusals and eligible stopped work. A refusal run is not a bug-only state. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:143`.
 
