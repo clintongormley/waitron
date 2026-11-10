@@ -1576,8 +1576,13 @@ gutters. A table takes its natural height up to that cap. Short and empty tables
 action directly below them; there is no row-height minimum. This applies to Products, Structure
 and other dashboard tables without a screen-specific flag or a chain of flex containers.
 
-The page heading and tabs can scroll away. On a phone, drag the page heading or table toolbar to
-move the content column, or drag a row to scroll the rows inside the table. The toolbar stays above
+In landscape at a viewport height of at most `25rem` (normally 400px), the shell removes the cap.
+Rows, toolbar and headings then scroll together in the content column, giving short screens room
+to show rows. After selecting lower rows, scroll back to use the selection actions. The cutoff is
+a chosen boundary; taller landscape screens have no whole-row minimum.
+
+With the cap in place, the page heading and tabs can scroll away. On a phone, drag the page heading
+or table toolbar to move the content column, or drag a row to scroll the rows inside the table. The toolbar stays above
 the rows' box. Column headings stay at its top and line up with their columns while scrolling
 sideways; the pinned heading stays over the other headings and the pinned cells. Headings paint
 `--wt-color-surface` and draw their lower line in `--wt-color-border`; filtered headings keep their

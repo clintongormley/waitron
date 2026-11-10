@@ -636,6 +636,12 @@ export class DashboardApp extends LitElement {
         flex-direction: column;
       }
 
+      @media (orientation: landscape) and (max-height: 25rem) {
+        .main {
+          --wt-table-max: none;
+        }
+      }
+
       .brand-banner {
         display: flex;
         align-items: center;
