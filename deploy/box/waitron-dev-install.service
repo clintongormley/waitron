@@ -2,7 +2,8 @@
 Description=Install the emulator-only Waitron development disk
 After=local-fs.target
 Requires=local-fs.target
-OnFailure=poweroff.target
+SuccessAction=poweroff
+FailureAction=poweroff
 
 [Service]
 Type=oneshot

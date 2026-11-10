@@ -11,7 +11,12 @@ import { mkdir, readFile, writeFile, copyFile, truncate, open } from "node:fs/pr
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { parseRigArgs } from "../../scripts/box/rig-contract.mjs";
-import { recipeFailures, installedFailures, rigLine } from "../../scripts/box/recipe-setup.mjs";
+import {
+  recipeFailures,
+  installedFailures,
+  rigLine,
+  installSucceeded,
+} from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
 const started = Date.now();
@@ -249,7 +254,6 @@ async function installedRun() {
     for await (const bytes of createReadStream(path)) digest.update(bytes);
     return digest.digest("hex");
   };
-  const sourceHash = await diskHash(stick);
   const common = [
     "-machine",
     "q35,accel=tcg",
@@ -283,7 +287,7 @@ async function installedRun() {
     if (source)
       args.push(
         "-drive",
-        `file=${stick},format=raw,if=none,id=stick,snapshot=on`,
+        `file=${stick},format=raw,if=none,id=stick,readonly=on`,
         "-device",
         "qemu-xhci,id=usb",
         "-device",
@@ -355,7 +359,9 @@ async function installedRun() {
         );
       });
       return {
-        serial,
+        get serial() {
+          return serial;
+        },
         stop: async () => {
           clearTimeout(timer);
           await stop();
@@ -390,6 +396,8 @@ async function installedRun() {
     const install = await boot("install", true, "B3_INSTALL_OK:", 900000);
     const installedUuid = rigLine(install.serial, "B3_INSTALL_OK:").trim();
     await install.stop();
+    if (!installSucceeded(install.serial))
+      throw new Error("install service did not report success");
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
     const { chromium } = require("playwright");
     async function inspect(name) {
@@ -435,7 +443,6 @@ async function installedRun() {
     );
     if (failures.length) throw new Error(failures.join(", "));
   }
-  if ((await diskHash(stick)) !== sourceHash) throw new Error("source image changed");
   await writeFile(
     join(runDir, "timing.json"),
     JSON.stringify({ started, elapsedMs: Date.now() - started }),

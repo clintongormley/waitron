@@ -19,7 +19,7 @@ terminal_input serial
 terminal_output serial
 set timeout=0
 search --no-floppy --fs-uuid --set=root $installer_uuid
-linux /boot/vmlinuz-$kernel root=UUID=$installer_uuid rootfstype=ext4 rw console=ttyS0,115200 systemd.unit=waitron-dev-install.service rd.shell=0
+linux /boot/vmlinuz-$kernel root=UUID=$installer_uuid rootfstype=ext4 ro systemd.volatile=overlay console=ttyS0,115200 systemd.unit=waitron-dev-install.service rd.shell=0
 initrd /boot/initrd.img-$kernel
 boot
 CONFIG

@@ -27,6 +27,9 @@ cd "$output"
 timeout -k 10 600 mkosi --directory="$repo/deploy/box" --sandbox-tree="$output/sandbox" \
   --output-directory="$output" "${packages[@]}" build
 root="$output/recipe-root"
+install -d -m 0755 "$root/app/third-party"
+chroot "$root" sh -c 'tar -chf - /usr/share/doc/*/copyright /usr/share/common-licenses/*' \
+  | tar -xf - -C "$root/app/third-party"
 install -d -m 0755 "$root/opt/waitron" "$root/etc/dracut.conf.d"
 install -D -m 0755 "$repo/deploy/box/start-dev.sh" "$root/usr/local/sbin/waitron-dev-start"
 install -D -m 0644 "$repo/deploy/box/waitron-dev.service" "$root/etc/systemd/system/waitron-dev.service"

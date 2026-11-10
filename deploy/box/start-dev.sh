@@ -5,11 +5,13 @@ cd /opt/waitron
 apparmor_parser -r /etc/apparmor.d/waitron-print-agent
 export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
 docker compose up -d --pull never
+ready=false
 for attempt in $(seq 1 90); do
-  if curl -kfsS -o /run/waitron-status.json https://127.0.0.1/setup-api/status; then break; fi
+  if curl -kfsS -o /dev/null https://127.0.0.1/health; then ready=true; break; fi
   sleep 1
 done
-test -s /run/waitron-status.json
+test "$ready" = true
+if ! curl -kfsS -o /run/waitron-status.json https://127.0.0.1/setup-api/status; then exit 0; fi
 images="$(docker compose config --format json | jq -c '.services | with_entries(.value = .value.image)')"
 for name in app print-agent mailpit; do
   tag="$(jq -r --arg name "$name" '.[$name]' <<< "$images")"

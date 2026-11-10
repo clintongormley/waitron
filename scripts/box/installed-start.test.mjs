@@ -16,17 +16,23 @@ case "$name" in
   */product_name) echo "\${DMI:-Waitron-B3-dev}" ;;
   */waitron-dev-root) echo installed-root ;;
   *) echo machine-a ;; esac ;;
- findmnt) if [[ "$*" == *UUID* ]]; then echo "\${ROOT_UUID:-wrong-root}"; else echo "\${SOURCE_ROOT:-/dev/vda2}"; fi ;;
+ findmnt) echo "\${ROOT_UUID:-wrong-root}" ;;
+ readlink) [ "$*" = "-f /run/systemd/volatile-root" ] || exit 99; echo "\${SOURCE_ROOT:-/dev/vda2}" ;;
  lsblk)
   if [[ "$*" == *MOUNTPOINTS* ]]; then echo "\${MOUNTED:-}"
   elif [[ "$*" == *PKNAME* ]]; then echo "\${SOURCE_PARENT:-vda}"
   elif [[ "$*" == *SERIAL* && "$*" != *json* ]]; then echo "\${SERIAL:-waitron-dev-target}"
   else printf '%s\n' "$DISKS"; fi ;;
  ls) echo "\${HOLDERS:-}" ;;
- blockdev) echo 12884901888 ;;
+ blockdev)
+  read -r count < "$SIZE_CALLS"
+  printf '%s\n' "$((count + 1))" > "$SIZE_CALLS"
+  if [ "$count" = 0 ]; then echo "\${DISK_SIZE:-12884901888}"; else echo "\${FINAL_SIZE:-12884901888}"; fi ;;
+ sleep) : ;;
+ curl) echo "curl $*" >> "$WRITES"; if [[ "$*" == */health ]]; then exit 0; else exit 22; fi ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
- docker) echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"; exit 43 ;;
+ docker) echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"; exit "\${DOCKER_EXIT:-43}" ;;
  sfdisk) echo "$*" >> "$WRITES"; exit 42 ;;
  *) echo "unexpected $name $*" >&2; exit 99 ;;
 esac
@@ -36,6 +42,9 @@ esac
 for (const name of [
   "cat",
   "findmnt",
+  "readlink",
+  "sleep",
+  "curl",
   "lsblk",
   "blockdev",
   "cmp",
@@ -55,11 +64,14 @@ const source = disk("/dev/vda", "waitron-dev-stick");
 function writer(env = {}, args = []) {
   const writes = join(scratch, "writes");
   writeFileSync(writes, "");
+  const sizeCalls = join(scratch, "size-calls");
+  writeFileSync(sizeCalls, "0\n");
   const result = spawnSync("bash", [resolve("deploy/box/install-dev.sh"), ...args], {
     env: {
       ...process.env,
       PATH: `${scratch}:${process.env.PATH}`,
       WRITES: writes,
+      SIZE_CALLS: sizeCalls,
       DISKS: JSON.stringify({ blockdevices: [source, disk()] }),
       ...env,
     },
@@ -80,6 +92,10 @@ describe("development disk writer", () => {
     ],
     ["disk-count", { DISKS: JSON.stringify({ blockdevices: [source] }) }],
     ["occupied", { OCCUPIED: "1" }],
+    ["device", { DISKS: JSON.stringify({ blockdevices: [source, disk("/dev/sdb")] }) }],
+    ["size", { DISK_SIZE: "12884901887", FINAL_SIZE: "12884901887" }],
+    ["size", { FINAL_SIZE: "12884901889" }],
+    ["serial", { SERIAL: "replacement-disk" }],
     ["mounted", { MOUNTED: "/personal" }],
     ["holders", { HOLDERS: "dm-0" }],
   ])("refuses %s before any partition write", (reason, env, args = []) => {
@@ -130,6 +146,26 @@ describe("installed startup", () => {
     });
     expect(result.status).toBe(code);
     expect(readFileSync(writes, "utf8")).toBe(calls);
+  });
+  it("starts an already set-up server without waiting for the absent setup route", () => {
+    const writes = join(scratch, "set-up-start-calls");
+    writeFileSync(writes, "");
+    const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
+      env: {
+        ...process.env,
+        PATH: `${scratch}:${process.env.PATH}`,
+        ROOT_UUID: "installed-root",
+        BASH_ENV: bashEnv,
+        B3_TEST_CWD: scratch,
+        WRITES: writes,
+        DOCKER_EXIT: "0",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).not.toContain("B3_INSTALLED:");
+    expect(readFileSync(writes, "utf8")).toContain("https://127.0.0.1/health");
   });
   it("refuses the wrong mounted root before Docker starts", () => {
     const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {

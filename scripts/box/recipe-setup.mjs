@@ -55,3 +55,7 @@ export function rigLine(serial, prefix) {
     .find((line) => line.startsWith(prefix))
     ?.slice(prefix.length);
 }
+
+export function installSucceeded(serial) {
+  return /unit=waitron-dev-install [^\r\n]*res=success(?:'|\s)/.test(serial);
+}

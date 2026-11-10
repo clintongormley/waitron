@@ -3,7 +3,8 @@ set -euo pipefail
 refuse() { printf 'install.refused:%s\n' "$1" >&2; exit 1; }
 [ "$#" = 0 ] || refuse arguments
 [ "$(cat /sys/class/dmi/id/product_name)" = Waitron-B3-dev ] || refuse machine
-source_root="$(findmnt -nro SOURCE /)"
+# Volatile boot exposes its backing device through systemd's link.
+source_root="$(readlink -f /run/systemd/volatile-root)"
 source_disk="/dev/$(lsblk -nro PKNAME "$source_root")"
 disks="$(lsblk --json -bdno PATH,TYPE,SERIAL,SIZE)"
 targets="$(jq -c --arg source "$source_disk" '[.blockdevices[] | select(.type == "disk" and .path != $source)]' <<< "$disks")"
@@ -11,12 +12,10 @@ targets="$(jq -c --arg source "$source_disk" '[.blockdevices[] | select(.type ==
 target="$(jq -r '.[0].path' <<< "$targets")"
 [ "$(jq -r '.[0].serial' <<< "$targets")" = waitron-dev-target ] || refuse serial
 [[ "$target" = /dev/vd? ]] || refuse device
-[ "$target" != "$source_disk" ] || refuse source
 size="$(blockdev --getsize64 "$target")"
 [ "$size" -ge 12884901888 ] || refuse size
 [ -z "$(lsblk -nro MOUNTPOINTS "$target")" ] || refuse mounted
 [ -z "$(ls -A "/sys/class/block/${target##*/}/holders")" ] || refuse holders
-[ "$(lsblk -nro SERIAL "$target")" = waitron-dev-target ] || refuse serial
 cmp -n "$size" "$target" /dev/zero >/dev/null 2>&1 || refuse occupied
 [ "$(blockdev --getsize64 "$target")" = "$size" ] || refuse size
 [ "$(lsblk -nro SERIAL "$target")" = waitron-dev-target ] || refuse serial
@@ -85,4 +84,3 @@ sync
 cleanup
 trap - EXIT
 printf 'B3_INSTALL_OK:%s\n' "$uuid"
-systemctl poweroff

@@ -181,6 +181,17 @@ describe("installed boot evidence", () => {
       failure,
     );
   });
+  it.each([
+    ["source UUID", expected.uuid, { uuid: expected.uuid }, "root-uuid"],
+    ["missing UUID", undefined, { uuid: undefined }, "root-uuid"],
+    ["blank identity", "installed-root", { machineId: "" }, "machine-id"],
+    ["blank CA", "installed-root", { ca: "" }, "ca"],
+  ])("rejects two matching but unusable boots (%s)", async (_name, uuid, patch, failure) => {
+    const { installedFailures } = await import("./recipe-setup.mjs");
+    expect(
+      installedFailures(expected, uuid, { ...first, ...patch }, { ...first, ...patch }),
+    ).toContain(failure);
+  });
 });
 
 it.each(["installed-setup", "installed-refusals"])(
@@ -205,4 +216,13 @@ it("waits for a complete serial record before parsing its JSON", async () => {
   expect(rigLine('kernel boot\nB3_INSTALLED:{"uuid":"root"}\r\n', "B3_INSTALLED:")).toBe(
     '{"uuid":"root"}',
   );
+});
+
+it.each([
+  ["unit=waitron-dev-install comm=systemd res=success'\n", true],
+  ["B3_INSTALL_OK:root\nunit=waitron-dev-install comm=systemd res=failed'\n", false],
+  ["B3_INSTALL_OK:root\n", false],
+])("requires the installer unit's success, beyond its marker", async (serial, expected) => {
+  const { installSucceeded } = await import("./recipe-setup.mjs");
+  expect(installSucceeded(serial)).toBe(expected);
 });
