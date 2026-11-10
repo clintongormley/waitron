@@ -202,6 +202,7 @@ async function reserve(standby = generateStandbyIdentity()) {
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
+    advertisedOrigin: "https://box.test",
     accountKey: "test-account-key",
     designated: { nodeId: PRIMARY },
     credentialKeyRing: TOTP_KEY_RING,

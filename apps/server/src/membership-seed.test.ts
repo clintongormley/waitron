@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   CORE_MIGRATIONS,
@@ -27,7 +27,7 @@ describe("seedTermZeroMembership", () => {
   let db: Database;
   let nodeId: NodeId;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     db = suite.db;
     await seedVenue(db, {
       name: "Barra",
@@ -52,5 +52,21 @@ describe("seedTermZeroMembership", () => {
     const trust = await readMembershipTrustSet(db);
     expect(verifyMembershipDocument(held!, trust).valid).toBe(true);
     expect(held?.endorsements).toEqual([]);
+  });
+
+  it("the first box's chart row names its own address", async () => {
+    await seedTermZeroMembership(
+      { db, node: suite.node, ring: RING },
+      nodeId,
+      "https://waitron.local:8443",
+    );
+    const held = await readNodeMembership(db);
+    expect(held?.body.nodes).toEqual([
+      {
+        nodeId,
+        contactUrl: `https://box-${nodeId.slice(0, 4)}.waitron.local:8443`,
+        standing: "serving-primary",
+      },
+    ]);
   });
 });

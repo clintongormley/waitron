@@ -42,6 +42,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
+import { ownContactUrl } from "./box-name.js";
 
 // A missing standby relay refuses `mirror.no_relay`; the staff tunnel carries dashboard requests only.
 export interface MirrorBundleApiDeps {
@@ -51,6 +52,8 @@ export interface MirrorBundleApiDeps {
   stateDir: string;
   relayUrl: string | undefined;
   boxHostname: string;
+  /** This box's `advertisedOrigin`; its own chart row carries `ownContactUrl` of it. */
+  advertisedOrigin: string;
   designated: AdoptResult;
   accountKey: string;
   credentialKeyRing: TotpKeyRing;
@@ -203,6 +206,7 @@ async function appendStandbyToChart(
   standbyContactUrl: string,
   endorsement: Endorsement,
 ): Promise<void> {
+  const signerContactUrl = ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId);
   for (let round = 1; round <= MAX_CHART_WRITE_ROUNDS; round += 1) {
     const held = await readNodeMembership(deps.appDb);
     assertHeldDocumentReadable(held);
@@ -212,7 +216,9 @@ async function appendStandbyToChart(
       { db: deps.appDb, node: deps.node, ring: deps.ring, signerPrivateKey: signingKey },
       {
         heldDocument: held,
-        nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl),
+        nodes: withMember(held?.body.nodes ?? [], standbyNodeId, standbyContactUrl).map((n) =>
+          n.nodeId === deps.designated.nodeId ? { ...n, contactUrl: signerContactUrl } : n,
+        ),
         signerNodeId: deps.designated.nodeId,
         verifyHeld: "stored-keys",
         endorsements: [endorsement],

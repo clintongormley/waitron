@@ -24,6 +24,7 @@ import { reissueBoxLeaf } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { readStreamSettings } from "./stream-host.js";
+import { ownContactUrl } from "./box-name.js";
 import "./errors.js";
 
 /** Left in the state folder by `writeValidated` (restore.ts) whenever a restore takes on the
@@ -38,8 +39,8 @@ export interface RebuildDeps {
   node: NodeDatabase;
   ring: KeyRing;
   nodeId: string;
-  /** This machine's `advertisedOrigin`, what tills route on. */
-  contactUrl: string;
+  /** This machine's `advertisedOrigin`; its chart row carries `ownContactUrl` of it. */
+  advertisedOrigin: string;
   hostnames: string[];
   listIpv4: () => string[];
   now: () => Date;
@@ -118,12 +119,11 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
     listIpv4: deps.listIpv4,
   });
   const held = await readNodeMembership(deps.db);
+  const contactUrl = ownContactUrl(deps.advertisedOrigin, deps.nodeId);
   const nodes =
     held === null
-      ? [{ nodeId: deps.nodeId, contactUrl: deps.contactUrl, standing: "serving-primary" as const }]
-      : held.body.nodes.map((n) =>
-          n.nodeId === deps.nodeId ? { ...n, contactUrl: deps.contactUrl } : n,
-        );
+      ? [{ nodeId: deps.nodeId, contactUrl, standing: "serving-primary" as const }]
+      : held.body.nodes.map((n) => (n.nodeId === deps.nodeId ? { ...n, contactUrl } : n));
   // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
   // higher term.
   const pointerTerm = (await deps.pointerTerm?.()) ?? null;

@@ -1989,7 +1989,7 @@ async function bootServer(
         node: store.node,
         ring,
         nodeId: config.node.nodeId,
-        contactUrl: config.advertisedOrigin,
+        advertisedOrigin: config.advertisedOrigin,
         hostnames: BOX_LEAF_HOSTNAMES,
         listIpv4: boxAddresses,
         now,
@@ -3414,6 +3414,7 @@ async function bootServer(
         // Staff access carries no standby protocol; adoption remains refused without a relay.
         relayUrl: undefined,
         boxHostname: BOX_HOSTNAME,
+        advertisedOrigin: config.advertisedOrigin,
         designated: config.node,
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,

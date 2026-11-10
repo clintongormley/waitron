@@ -249,6 +249,7 @@ async function boot(
       stateDir: dir,
       relayUrl: "https://relay.example",
       boxHostname: "waitron.local",
+      advertisedOrigin: OWN_URL,
       designated: { nodeId },
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,

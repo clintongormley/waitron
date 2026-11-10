@@ -191,6 +191,7 @@ async function bundleApp() {
     stateDir: stateDir!,
     relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
+    advertisedOrigin: "https://box.test",
     designated: { nodeId: PRIMARY },
     accountKey: "test-account",
     credentialKeyRing: TOTP_KEY_RING,
