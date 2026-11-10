@@ -130,13 +130,14 @@ export function isRootScopePath(path) {
 }
 
 /**
- * Files outside `deploy/` that image-smoke runs, so a change to one is run against the box image
- * nowhere else. The print agent's Bluetooth sender is one: only image-smoke runs it against the
+ * Files outside `deploy/` that image-smoke runs or reads, so a change to one is run against the box
+ * image nowhere else. The print agent's Bluetooth sender is one: only image-smoke runs it against the
  * real socket module, under the shipped profile. It must hold every `scripts/` file
- * `.github/workflows/image-smoke.yml` runs. Guard: the image-smoke case in
- * scripts/changed-scope.test.mjs, weaker than its name — it reads the workflow as text and sees
- * only literal `scripts/…` paths. The workflow file itself is not an image input, by a recorded
- * decision (ci.yml's `image` job comment): an edit to it is left to image-nightly.yml.
+ * `.github/workflows/image-smoke.yml` names; `scripts/setup-s3-test-server.mjs` is read for the
+ * versitygw pin. Guard: the image-smoke case in scripts/changed-scope.test.mjs, weaker than its
+ * name — it reads the workflow as text and sees only literal `scripts/…` paths. The workflow file
+ * itself is not an image input, by a recorded decision (ci.yml's `image` job comment): an edit to it
+ * is left to image-nightly.yml.
  */
 const IMAGE_SMOKE_FILES = [
   "scripts/tunnel-container-smoke.sh",
@@ -149,6 +150,7 @@ const IMAGE_SMOKE_FILES = [
   "scripts/fake-bluez.py",
   "scripts/bluetoothctl-pair.mjs",
   "apps/print-agent/src/rfcomm-send.py",
+  "scripts/setup-s3-test-server.mjs",
 ];
 
 /**
