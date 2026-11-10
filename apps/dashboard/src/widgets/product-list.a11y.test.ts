@@ -24,7 +24,7 @@ const products: Product[] = [
     catalogueId: "c1",
     categoryId: "cat-1",
     primaryCategoryId: "cat-1",
-    name: "Croquetas de jamón",
+    name: "Ham croquettes",
     customerName: { es: "Croquetas caseras de jamón ibérico" },
     unitId: "u1",
     unit: {
@@ -59,7 +59,7 @@ const products: Product[] = [
     catalogueId: "c1",
     categoryId: null,
     primaryCategoryId: null,
-    name: "Agua mineral",
+    name: "Bottled mineral water",
     customerName: { es: "Agua mineral con gas" },
     unitId: "u1",
     unit: {
@@ -94,7 +94,7 @@ const products: Product[] = [
     catalogueId: "c1",
     categoryId: "cat-2",
     primaryCategoryId: "cat-2",
-    name: "Tarta de queso",
+    name: "Traditional cheesecake",
     customerName: { es: "Tarta de queso de la abuela" },
     unitId: "u-kg",
     unit: {
@@ -135,7 +135,7 @@ const products: Product[] = [
     catalogueId: "c1",
     categoryId: "cat-1",
     primaryCategoryId: "cat-1",
-    name: "Vino por copa",
+    name: "Wine by the glass",
     customerName: { es: "Vino de la casa por copa" },
     unitId: "u1",
     unit: {
@@ -164,7 +164,7 @@ const products: Product[] = [
     variants: [
       {
         id: "v1",
-        name: "Vino 175",
+        name: "Wine 175",
         customerName: { es: "Copa grande" },
         kitchenName: "V175",
         image: "v1.webp",
@@ -183,7 +183,7 @@ const products: Product[] = [
       },
       {
         id: "v2",
-        name: "Vino 250",
+        name: "Wine 250",
         customerName: { es: "Copa doble" },
         kitchenName: "V250",
         image: null,
@@ -266,7 +266,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
         "dashboard-product-list",
         {
           products: [products[0]!],
-          categories: [{ id: "cat-1", name: "Comida", parentId: null, color: null }],
+          categories: [{ id: "cat-1", name: "Food", parentId: null, color: null }],
           reordering: false,
         },
         theme,
@@ -275,7 +275,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       await table.updateComplete;
       await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
       const row = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:cat-1"]')!;
-      await expect.element(row, { timeout: 1000 }).toHaveAccessibleName(/Comida.*1 product/);
+      await expect.element(row, { timeout: 1000 }).toHaveAccessibleName(/Food.*1 product/);
       await expectNoA11yViolations(host);
     } finally {
       setLocale(before.locale);
@@ -519,7 +519,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       "dashboard-product-list",
       {
         products,
-        categories: [{ id: "cat-1", name: "Comida", parentId: null, color: null }],
+        categories: [{ id: "cat-1", name: "Food", parentId: null, color: null }],
         canAddProduct: true,
       },
       theme,
@@ -540,8 +540,8 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       {
         products,
         categories: [
-          { id: "cat-1", name: "Comida", parentId: null, color: "#b12525" },
-          { id: "cat-2", name: "Postres", parentId: null, color: null },
+          { id: "cat-1", name: "Food", parentId: null, color: "#b12525" },
+          { id: "cat-2", name: "Sweet dishes", parentId: null, color: null },
         ],
       },
       theme,
@@ -560,8 +560,8 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
           product.id === "p3" ? { ...product, primaryCategoryId: "cat-2" } : product,
         ),
         categories: [
-          { id: "cat-1", name: "Comida", parentId: null, color: "#b12525" },
-          { id: "cat-2", name: "Postres", parentId: "cat-1", color: null },
+          { id: "cat-1", name: "Food", parentId: null, color: "#b12525" },
+          { id: "cat-2", name: "Sweet dishes", parentId: "cat-1", color: null },
         ],
         defaultColor: "#256bb1",
       },
@@ -606,7 +606,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
   it("renders accessibly mid-drag", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
-      { products, categories: [{ id: "drinks", name: "Bebidas", parentId: null, color: null }] },
+      { products, categories: [{ id: "drinks", name: "Drinks", parentId: null, color: null }] },
       theme,
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
