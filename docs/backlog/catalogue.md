@@ -1111,7 +1111,7 @@ tests. Media still validates required image names and translates its refusal to
 
 ## Bundle: After A760 moves the bundle format: An import checks rows as a save does
 
-4 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+4 entries, size S.
 
 - **Loose ends left by A380 (#1385).** A configuration import stores a fixed folder name as given,
   spaces included, where a save through the dialog or the route trims it.
