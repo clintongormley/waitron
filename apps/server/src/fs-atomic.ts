@@ -6,6 +6,5 @@ export {
   stageFileDurable,
   syncFolderHolding,
   syncNewFolders,
-  writeFileAtomic,
   writeFileDurable,
 } from "@waitron/provisioning";

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -17,6 +17,27 @@ import {
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
+
+const { flushEvents } = vi.hoisted(() => ({ flushEvents: [] as string[] }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const handle = await actual.open(...args);
+      const sync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        flushEvents.push(`sync ${String(args[0])}`);
+        await sync();
+      };
+      return handle;
+    },
+    rename: async (...args: Parameters<typeof actual.rename>) => {
+      flushEvents.push(`rename ${String(args[1])}`);
+      await actual.rename(...args);
+    },
+  };
+});
 
 describe("levelFor", () => {
   it("escalates normal → recovery at 3", () => {
@@ -47,6 +68,23 @@ describe("afterFailure", () => {
 });
 
 describe("readRecoveryState", () => {
+  it("the failed-start record is flushed and its folder synced", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "wt-rec-flush-"));
+    flushEvents.length = 0;
+    try {
+      const state = afterFailure(FRESH, "module.config_invalid", new Date("2026-11-10T12:00:00Z"));
+      await writeRecoveryState(dir, state);
+      expect(await readRecoveryState(dir)).toEqual(state);
+      expect(flushEvents).toEqual([
+        `sync ${join(dir, "recovery.json.tmp")}`,
+        `rename ${join(dir, "recovery.json")}`,
+        `sync ${dir}`,
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("is FRESH when the file is absent — an unprovisioned box is not a failing one", async () => {
     const dir = await mkdtemp(join(tmpdir(), "wt-rec-"));
     expect(await readRecoveryState(dir)).toEqual(FRESH);

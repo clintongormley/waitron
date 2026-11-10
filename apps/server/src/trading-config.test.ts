@@ -1,8 +1,29 @@
 import { mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { clearTradingEnv, writeTradingEnv, type TradingConfig } from "./trading-config.js";
+
+const { flushEvents } = vi.hoisted(() => ({ flushEvents: [] as string[] }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    open: async (...args: Parameters<typeof actual.open>) => {
+      const handle = await actual.open(...args);
+      const sync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        flushEvents.push(`sync ${String(args[0])}`);
+        await sync();
+      };
+      return handle;
+    },
+    rename: async (...args: Parameters<typeof actual.rename>) => {
+      flushEvents.push(`rename ${String(args[1])}`);
+      await actual.rename(...args);
+    },
+  };
+});
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -22,6 +43,18 @@ const cfg: TradingConfig = {
 };
 
 describe("writeTradingEnv", () => {
+  it("trading.env is flushed before it is renamed into place", async () => {
+    const dir = await newDir();
+    flushEvents.length = 0;
+    await writeTradingEnv(dir, cfg);
+    expect(flushEvents).toEqual([
+      `sync ${join(dir, "trading.env.tmp")}`,
+      `rename ${join(dir, "trading.env")}`,
+      `sync ${dir}`,
+    ]);
+    expect(await readFile(join(dir, "trading.env"), "utf8")).toContain("WAITRON_NODE_ID=node-3\n");
+  });
+
   it("persists node without a cached invoice series", async () => {
     const env = await readFile(await writeTradingEnv(await newDir(), cfg), "utf8");
     expect(env).not.toContain("WAITRON_TILL_SERIES_ID");

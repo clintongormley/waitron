@@ -170,6 +170,6 @@ it("lifetime: a restore placement leaves the moved files, and a backup naming on
       stateDir: roots.stateDir,
       log: () => {},
     }),
-  ).rejects.toMatchObject({ code: "recovery.bundle_invalid" });
+  ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe" });
   expect(await kept(roots)).toEqual(before);
 });

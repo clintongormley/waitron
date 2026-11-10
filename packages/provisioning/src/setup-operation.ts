@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 export type SetupOperationKind = "provision" | "adopt" | "restore" | "import";
@@ -182,7 +182,7 @@ export function createSetupOperationStore(
             data: {},
             updatedAt: new Date().toISOString(),
           };
-          if (existing === null) await writeFileAtomic(statePath, JSON.stringify(state), 0o600);
+          if (existing === null) await writeFileDurable(statePath, JSON.stringify(state), 0o600);
           const persist = async (
             phase: SetupOperationPhase,
             data?: Record<string, unknown>,
@@ -193,7 +193,7 @@ export function createSetupOperationStore(
               data: data ?? state.data,
               updatedAt: new Date().toISOString(),
             };
-            await writeFileAtomic(statePath, JSON.stringify(state), 0o600);
+            await writeFileDurable(statePath, JSON.stringify(state), 0o600);
             Object.assign(operation, state);
           };
           const operation: ActiveSetupOperation = {

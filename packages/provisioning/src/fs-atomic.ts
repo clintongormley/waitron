@@ -26,18 +26,6 @@ export async function stageFile(
   return tmp;
 }
 
-/**
- * {@link stageFile}, then rename the working copy onto `path`, so a reader sees `path` absent or
- * whole. Atomic VISIBILITY only: it does not fsync.
- */
-export async function writeFileAtomic(
-  path: string,
-  data: string | Uint8Array,
-  mode: number,
-): Promise<void> {
-  await rename(await stageFile(path, data, mode), path);
-}
-
 const folderSyncFailures = new WeakSet<object>();
 
 /** Sync the folder holding `path`, following it when it is a link: a box's `tls` folder may be one,

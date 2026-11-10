@@ -34,7 +34,7 @@ import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { stagedPath, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
+import { stagedPath, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
@@ -256,13 +256,13 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
     if (request.kind === "stream") {
       await rename(request.databasePath, join(stateDir, STREAM_DB));
       await chmod(join(stateDir, STREAM_DB), 0o600);
-      await writeFileAtomic(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
+      await writeFileDurable(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
     } else {
-      await writeFileAtomic(join(stateDir, ARTIFACT), request.artifact, 0o600);
-      await writeFileAtomic(join(stateDir, KEY), request.recoveryKey, 0o600);
+      await writeFileDurable(join(stateDir, ARTIFACT), request.artifact, 0o600);
+      await writeFileDurable(join(stateDir, KEY), request.recoveryKey, 0o600);
     }
-    if (secret !== undefined) await writeFileAtomic(join(stateDir, NODE_KEY), secret, 0o600);
-    await writeFileAtomic(
+    if (secret !== undefined) await writeFileDurable(join(stateDir, NODE_KEY), secret, 0o600);
+    await writeFileDurable(
       join(stateDir, MARKER),
       JSON.stringify({
         version: snapshot ? 2 : 1,
@@ -676,7 +676,7 @@ async function runHeld(
     managedCloud = marker.managedCloud as typeof managedCloud;
     if (marker.nodeRecoveryKey === true && !resuming) {
       if (marker.kind === "stream") await flushPath(join(deps.stateDir, STREAM_DB));
-      await writeFileAtomic(
+      await writeFileDurable(
         join(deps.stateDir, MARKER),
         JSON.stringify({ ...marker, placementStarted: true }),
         0o600,

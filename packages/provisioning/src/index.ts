@@ -112,7 +112,6 @@ export {
   stageFileDurable,
   syncFolderHolding,
   syncNewFolders,
-  writeFileAtomic,
   writeFileDurable,
 } from "./fs-atomic.js";
 

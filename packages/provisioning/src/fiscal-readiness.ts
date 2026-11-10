@@ -3,7 +3,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import "./errors.js";
 
 const EVIDENCE_FILE = FISCAL_READINESS_FILE;
@@ -120,7 +120,7 @@ export function createFiscalReadinessStore(
         testedAt,
         status: "accepted",
       } as const;
-      await writeFileAtomic(
+      await writeFileDurable(
         join(stateDir, EVIDENCE_FILE),
         JSON.stringify({ ...evidence, mac: evidenceMac(evidenceKey, evidence) } satisfies Evidence),
         0o600,

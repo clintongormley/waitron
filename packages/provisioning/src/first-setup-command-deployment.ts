@@ -31,7 +31,7 @@ import { AppError } from "@waitron/shared";
 import type { FirstSetupCommandDeployment } from "./first-setup-command-activation.js";
 import type { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { firstSetupPublicationDigest } from "./first-setup-publication-digest.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import { initialVenueApplyInput } from "./initial-venue-input.js";
 import { applyVenue } from "./venue-apply.js";
 import { planVenue } from "./venue-plan.js";
@@ -156,7 +156,7 @@ export function createFirstSetupCommandDeployment(options: {
         deps: {
           clearConfiguration: () => clearStagedConfigurationImport(state.stateDir),
           publishSelection: async () => {
-            await writeFileAtomic(
+            await writeFileDurable(
               join(state.stateDir, MODULES_FILE),
               JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n",
               0o600,
@@ -220,7 +220,7 @@ export function createFirstSetupCommandDeployment(options: {
               WAITRON_ONBOARDING_INTENT: "live",
               WAITRON_ACCOUNT_KEY: accountKey,
             };
-            await writeFileAtomic(
+            await writeFileDurable(
               join(current.stateDir, TRADING_ENV_FILE),
               Object.entries(entries)
                 .map(([name, value]) => `${name}=${value}\n`)

@@ -142,7 +142,7 @@ export interface EnsureBoxSecretsDeps {
  * retained TLS or vault material.
  *
  * Each file is written 0600 through a newly created working copy. A real `tls/` folder ends 0700
- * whether or not it already existed, as `unpackBundleToDir` leaves it on a restore. A `tls/` that
+ * whether or not it already existed, as `unpackStateFiles` leaves it on a restore. A `tls/` that
  * is a symlink keeps the mode of the folder it points to; a restore refuses one pointing outside
  * the destination.
  */

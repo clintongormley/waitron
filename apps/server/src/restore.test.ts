@@ -787,7 +787,7 @@ describe("restore steps (R3 composition)", () => {
         stateDir,
         log: noopLog,
       }),
-    ).rejects.toMatchObject({ code: "recovery.bundle_invalid", params: { reason: "unsafe_path" } });
+    ).rejects.toMatchObject({ code: "recovery.archive_path_unsafe", params: {} });
   });
 
   it("restoreSecrets catches a symlinked-parent escape", async () => {
@@ -801,15 +801,15 @@ describe("restore steps (R3 composition)", () => {
           log: noopLog,
         }),
       ).rejects.toMatchObject({
-        code: "recovery.bundle_invalid",
-        params: { reason: "unsafe_path" },
+        code: "recovery.archive_path_unsafe",
+        params: {},
       });
     } finally {
       await rm(outside, { recursive: true, force: true });
     }
   });
 
-  it("restoreSecrets strips the prefix and writes via unpackBundleToDir", async () => {
+  it("restoreSecrets strips the prefix and writes via unpackStateFiles", async () => {
     await restoreSecrets({
       entries: [
         { name: "secrets/secrets.env", bytes: Buffer.from(SECRET) },

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { parseModuleConfig, serializeModuleConfig, type ModuleConfig } from "@waitron/module";
 import { ALL_MODULES } from "./modules.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 
 /**
  * Read `<stateDir>/modules.json` into the desired ModuleConfig. Absent file = every module enabled. A
@@ -33,6 +33,6 @@ export async function readModuleConfig(stateDir: string): Promise<ModuleConfig> 
 export async function writeModuleConfig(stateDir: string, config: ModuleConfig): Promise<string> {
   const body = JSON.stringify({ modules: serializeModuleConfig(config) }, null, 2) + "\n";
   const path = join(stateDir, MODULES_FILE);
-  await writeFileAtomic(path, body, 0o600);
+  await writeFileDurable(path, body, 0o600);
   return path;
 }

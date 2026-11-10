@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { VENUE_HOLDER_KINDS, type VenueHolderKind } from "@waitron/db";
 import type { ErrorCode } from "@waitron/shared";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 
 /** Where a box sits on the escalation, and therefore whether it can still SELL. */
 export type RecoveryLevel = "normal" | "recovery";
@@ -132,7 +132,7 @@ function triggersIn(value: unknown): RefusedTriggers | undefined {
 
 /** 0600: it sits beside the vault key in the state volume. */
 export async function writeRecoveryState(stateDir: string, state: RecoveryState): Promise<void> {
-  await writeFileAtomic(
+  await writeFileDurable(
     join(stateDir, RECOVERY_STATE_FILE),
     `${JSON.stringify(state, null, 2)}\n`,
     0o600,
