@@ -1440,7 +1440,7 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Reorder controller** (bundle of 3, size S). Holds A901. [Detail](backlog/dashboard.md#bundle-reorder-controller)
 
-- **Contrast pass** (bundle of 2, 1 important, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
+- **Contrast pass** (prep stations contrast remains unmeasured). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
 - **Theme logo** (bundle of 2, size M). [Detail](backlog/dashboard.md#bundle-theme-logo)
 

@@ -1013,12 +1013,14 @@ describe("product-list", () => {
         product({ id: "c-off", name: "C", active: false }),
       ],
     });
+    el.style.setProperty("--wt-color-text-muted", "rgb(16, 17, 18)");
     // An archived product is hidden until Show archived is on.
     await showArchived(el);
     const badges = (await tableRoot(el)).querySelectorAll<HTMLElement>(
       "[data-test=availability-badge]",
     );
     expect(badges.length).toBe(2);
+    expect(getComputedStyle(badges[0]!).borderTopColor).toBe("rgb(16, 17, 18)");
     expect(badges[0]!.getAttribute("data-state")).toBe("unavailable");
     expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
     expect(badges[1]!.getAttribute("data-state")).toBe("archived");

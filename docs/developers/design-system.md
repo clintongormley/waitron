@@ -451,7 +451,7 @@ The five `--wt-color-field-*` tokens paint the filled form field (see "The field
 | Token                            | Light     | Dark      | Paints                                                    |
 | -------------------------------- | --------- | --------- | --------------------------------------------------------- |
 | `--wt-color-field-fill`          | `#f0f1f4` | `#262a33` | the field's background                                    |
-| `--wt-color-field-line`          | `#7d8390` | `#7a8291` | the bottom line at rest, and the dashed one when disabled |
+| `--wt-color-field-line`          | `#7d8390` | `#7a8291` | the bottom line at rest, the dashed one when disabled, and the off switch track |
 | `--wt-color-field-label-focus`   | `#1a5fd0` | `#5c98ff` | the label of the focused field                            |
 | `--wt-color-field-fill-disabled` | `#f7f7f8` | `#1f2229` | a disabled field's background                             |
 | `--wt-color-field-value`         | `#000000` | `#ffffff` | the value typed or chosen                                 |

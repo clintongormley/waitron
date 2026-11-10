@@ -137,6 +137,7 @@ export const CONTRAST_GROUPS: readonly ContrastGroup[] = [
   group(
     "field",
     MODES,
+    ["at-least", 3, [["field-line", "surface-raised"]]],
     [
       "at-least",
       3,

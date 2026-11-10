@@ -592,15 +592,8 @@ probes do not settle it. This stays inside the existing bundle rather than becom
 
 ## Bundle: Contrast pass
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
-  2026-10-19).**
-  [Detail](dashboard.md#an-off-wt-switch-is-hard-to-see-worst-in-a-dark-dialog-seen-in-a757-slice-1s-look-2026-10-19)
-- **On a hovered Products row in the dark theme, status and allergen badge borders appear to
-  disappear into the row** — the earlier screenshot-only observation remains open. Contrast for those
-  borders and the prep stations screen remains unmeasured. Left open by
-  A319 (hover contrast after A306, #1347).
+The off-switch and Products badge entries are delivered. The prep stations screen's contrast
+remains unmeasured, left open by A319 (hover contrast after A306, #1347).
 
 ## Bundle: Quantity display
 
@@ -1006,23 +999,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   unfilled (`Table 3 is now {index} of 5.`). `git blame` puts these lines in
   524dbadd5 (2026-09-16) and 5b725d672 (2026-10-01), so I believe it predates A757 slice 7. Fix with
   a single-pass formatter like `format()` in `packages/venue-service/src/dashboard/hours-view.ts:5`.
-
-
-## An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look, 2026-10-19).
-
-The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:71`)
-  and a dialog's background is `--wt-color-surface-raised` (`packages/ui/src/components/wt-dialog.ts:57`).
-  Computed with the WCAG contrast formula from the values declared in
-  `packages/ui-core/src/tokens/colors.css`: dark `#333945` on `#22262e` is 1.31:1 (1.47:1 on
-  `--wt-color-surface`, `#191c22`); light `#d6d9e0` on `#ffffff` is 1.41:1. WCAG 2.1's non-text
-  contrast criterion (1.4.11) asks 3:1. Not measured on a rendered page. Fix it in the primitive,
-  not per screen.
-
-- **A switched-off `wt-switch` may be too faint to see** — seen in A639's screenshots of the Backups
-  screen, not fixed: its track measured roughly 1.3 to 1 against the light page and 1.6 to 1 against
-  the dark one, read from pixel colours in those screenshots, where WCAG 1.4.11 asks 3 to 1 for a
-  control's boundary. Not measured from the component's tokens; `wt-switch` itself was not changed
-  by A639 (last changed by W97, #1311).
 
 
 ## The box's trust page still follows the device's setting, not the Theme choice (left open by A681).

@@ -420,3 +420,11 @@ test("describes the switch by its description, and by nothing without one", asyn
   await (el as import("./wt-switch.js").WtSwitch).updateComplete;
   expect(input.hasAttribute("aria-describedby")).toBe(false);
 });
+
+test("off track paints from the field-line token", async () => {
+  const el = await mount("<wt-switch></wt-switch>");
+  host.style.setProperty("--wt-color-field-line", "rgb(16, 17, 18)");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".track")!).backgroundColor).toBe(
+    "rgb(16, 17, 18)",
+  );
+});
