@@ -334,6 +334,7 @@ function fakeMdnsSocket() {
     socket,
     query: (name: string) => onQuery?.({ questions: [{ name, type: "A" }] }),
     answered: () => [...new Set(responses.flatMap((r) => r.answers.map((a) => a.name)))],
+    clear: () => responses.splice(0),
   };
 }
 
@@ -890,6 +891,67 @@ describe("the start check on a real start", () => {
     const own = boxHostnameFor(booted.nodeId);
     for (const name of [own, "waitron.local"]) mdns.query(name);
     expect(mdns.answered()).toEqual([own]);
+  }, 60_000);
+
+  it("a stepped-down box stops answering the venue's name at once, while an admitted request is still held, and keeps its own", async () => {
+    const mdns = fakeMdnsSocket();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let entered!: () => void;
+    const inside = new Promise<void>((resolve) => (entered = resolve));
+    const restart = vi.fn();
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      httpHost: "0.0.0.0",
+      seams: {
+        peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
+        mdnsSocket: () => mdns.socket,
+        stepdown: {
+          restart,
+          mount: (app, stepDown) => {
+            app.get("/test/held", async (c) => {
+              entered();
+              await held;
+              return c.text("done");
+            });
+            app.post("/test/stepdown", async (c) =>
+              c.json(
+                await stepDown({
+                  kind: "superseded",
+                  successorNodeId: null,
+                  membershipTerm: 1,
+                  self: c,
+                }),
+              ),
+            );
+          },
+        },
+      },
+    });
+    expect(booted.acceptingSales).toBe(true);
+    const own = boxHostnameFor(booted.nodeId);
+    const base = `http://127.0.0.1:${httpPort()}`;
+    mdns.query("waitron.local");
+    expect(mdns.answered()).toEqual(["waitron.local"]);
+    const holding = fetch(`${base}/test/held`);
+    try {
+      await inside;
+      const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
+      expect(await asked.json()).toEqual({ restarting: true, replayed: false });
+      const refused = await fetch(`${base}/api/pay`, { method: "POST" });
+      expect(refused.status).toBe(503);
+      await refused.text();
+      mdns.clear();
+      mdns.query("waitron.local");
+      mdns.query(own);
+      expect(mdns.answered()).toEqual([own]);
+      expect(restart).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await (await holding).text();
+    }
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
   }, 60_000);
 
   it("the seam's superseded with a successor takes the restricted start", async () => {

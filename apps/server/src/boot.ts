@@ -3832,7 +3832,11 @@ async function bootServer(
   });
 
   const mdns = startMdnsResponder({
-    names: () => [ownHostname, ...(acceptingSales ? [BOX_HOSTNAME] : [])],
+    // A stepdown closes the gate while admitted requests drain; tills must stop finding it then.
+    names: () => [
+      ownHostname,
+      ...(acceptingSales && !handoverGate.isClosed() ? [BOX_HOSTNAME] : []),
+    ],
     makeSocket: seams.mdnsSocket,
     devMode: config.devMode,
     httpHost: config.httpHost,
