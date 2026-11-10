@@ -185,13 +185,11 @@ const large: EditorVariant = {
   available: false,
   active: true,
 };
-// Named in the venue's own content language (the harness mounts a Spanish venue), so a chip shows
-// a real word rather than falling back to its id.
 const categories: CategorySummary[] = [
-  { id: "drinks", name: "Bebidas", parentId: null, color: null },
-  { id: "snacks", name: "Aperitivos", parentId: null, color: null },
+  { id: "drinks", name: "Drinks", parentId: null, color: null },
+  { id: "snacks", name: "Appetisers", parentId: null, color: null },
   // A category with no colour of its own: the reporting mark has to survive this one being chosen.
-  { id: "plates", name: "Platos", parentId: null, color: null },
+  { id: "plates", name: "Plates", parentId: null, color: null },
 ];
 const reduced = [{ id: "reduced" as const, rate: "10.00", label: "Reduced" }];
 
@@ -1223,7 +1221,7 @@ it("puts a refusal for a folded field under it, opening its section, until that 
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveButton(el).disabled).toBe(false);
 
-  await input(el, "name", "Coffee grande");
+  await input(el, "name", "Large coffee");
   expect(description.getAttribute("aria-invalid")).toBe("true");
   expect(saveButton(el).disabled).toBe(false);
 
@@ -1481,7 +1479,7 @@ const extraLists: ExtraList[] = [
     id: "sauces",
     name: "Sauces",
     customerName: { en: "Choose a sauce", es: "Elige una salsa" },
-    kitchenName: "SALSA",
+    kitchenName: "SAUCE",
     minPicks: 0,
     maxPicks: null,
     active: true,
@@ -1491,7 +1489,7 @@ const extraLists: ExtraList[] = [
     id: "shared",
     name: "Extra bread",
     customerName: { en: "More bread", es: "Mas pan" },
-    kitchenName: "PAN",
+    kitchenName: "BREAD",
     minPicks: 0,
     maxPicks: null,
     active: true,
@@ -1503,7 +1501,7 @@ const optionLists: OptionList[] = [
     id: "cooked",
     name: "Cooked",
     customerName: { en: "How would you like it?", es: "Punto de la carne" },
-    kitchenName: "PUNTO",
+    kitchenName: "COOK",
     defaultLabelId: null,
     active: true,
     labels: [],
@@ -1512,7 +1510,7 @@ const optionLists: OptionList[] = [
     id: "shared",
     name: "Cut",
     customerName: { en: "How shall we cut it?", es: "Como lo cortamos" },
-    kitchenName: "CORTE",
+    kitchenName: "CUT",
     defaultLabelId: null,
     active: true,
     labels: [],
@@ -2403,10 +2401,10 @@ it("offers No category as the main category, and saves it as none", async () => 
 // "wine" has no colour of its own and takes its parent's, so a chooser that read only the main
 // category's own colour would say "no colour" here.
 const colouredCategories: CategorySummary[] = [
-  { id: "drinks", name: "Bebidas", parentId: null, color: "#25b125" },
-  { id: "wine", name: "Vino", parentId: "drinks", color: null },
-  { id: "snacks", name: "Aperitivos", parentId: null, color: "#256bb1" },
-  { id: "plates", name: "Platos", parentId: null, color: null },
+  { id: "drinks", name: "Drinks", parentId: null, color: "#25b125" },
+  { id: "wine", name: "Wine", parentId: "drinks", color: null },
+  { id: "snacks", name: "Appetisers", parentId: null, color: "#256bb1" },
+  { id: "plates", name: "Plates", parentId: null, color: null },
 ];
 async function mountColoured(value: Partial<ProductEditorDraft> = {}) {
   return (
@@ -2634,14 +2632,14 @@ it("shows a refused colour under the chooser, puts focus there, and drops it onc
 // Listed out of order, with sibling names that sort differently by name and by id, so a tree read
 // in list order, or siblings sorted by id, fails.
 const tree: CategorySummary[] = [
-  { id: "c-plates", name: "Platos", parentId: null, color: null },
-  { id: "a-soft", name: "Refrescos", parentId: "drinks", color: null },
-  { id: "cocktails", name: "Cócteles", parentId: "b-alcohol", color: null },
-  { id: "drinks", name: "Bebidas", parentId: null, color: null },
-  { id: "b-alcohol", name: "Bebidas alcohólicas", parentId: "drinks", color: null },
-  { id: "z-snacks", name: "Aperitivos", parentId: null, color: null },
+  { id: "c-plates", name: "Plates", parentId: null, color: null },
+  { id: "a-soft", name: "Soft drinks", parentId: "drinks", color: null },
+  { id: "cocktails", name: "Cocktails", parentId: "b-alcohol", color: null },
+  { id: "drinks", name: "Drinks", parentId: null, color: null },
+  { id: "b-alcohol", name: "Drinks with alcohol", parentId: "drinks", color: null },
+  { id: "z-snacks", name: "Appetisers", parentId: null, color: null },
 ];
-const cocktailsPath = "Bebidas › Bebidas alcohólicas › Cócteles";
+const cocktailsPath = "Drinks › Drinks with alcohol › Cocktails";
 
 type LinkCombobox = HTMLElement & {
   value: string;
@@ -2702,17 +2700,17 @@ it("lists No category and then every category as a tree, each under its parent a
   expect(link.showEmptyOption).toBe(true);
   expect(link.options).toEqual([
     { value: "", label: t("categories.none") },
-    { value: "z-snacks", label: "Aperitivos", depth: 0, valueLabel: "Aperitivos" },
-    { value: "drinks", label: "Bebidas", depth: 0, valueLabel: "Bebidas" },
+    { value: "z-snacks", label: "Appetisers", depth: 0, valueLabel: "Appetisers" },
+    { value: "drinks", label: "Drinks", depth: 0, valueLabel: "Drinks" },
     {
       value: "b-alcohol",
-      label: "Bebidas alcohólicas",
+      label: "Drinks with alcohol",
       depth: 1,
-      valueLabel: "Bebidas › Bebidas alcohólicas",
+      valueLabel: "Drinks › Drinks with alcohol",
     },
-    { value: "cocktails", label: "Cócteles", depth: 2, valueLabel: cocktailsPath },
-    { value: "a-soft", label: "Refrescos", depth: 1, valueLabel: "Bebidas › Refrescos" },
-    { value: "c-plates", label: "Platos", depth: 0, valueLabel: "Platos" },
+    { value: "cocktails", label: "Cocktails", depth: 2, valueLabel: cocktailsPath },
+    { value: "a-soft", label: "Soft drinks", depth: 1, valueLabel: "Drinks › Soft drinks" },
+    { value: "c-plates", label: "Plates", depth: 0, valueLabel: "Plates" },
   ]);
 });
 
@@ -2733,10 +2731,10 @@ it("orders numbered sibling categories by value, as the category list does", asy
 it("changes the category from Change: the path shown follows, and Save sends the chosen one", async () => {
   const el = await mountCategorised({ primaryCategoryId: "c-plates" });
   const link = await categoryLink(el);
-  expect(linkPath(link)).toBe("Platos");
+  expect(linkPath(link)).toBe("Plates");
   await userEvent.click(link.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
   const row = [...link.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (option) => option.textContent!.trim() === "Cócteles",
+    (option) => option.textContent!.trim() === "Cocktails",
   )!;
   await userEvent.click(row);
   await el.updateComplete;
@@ -3060,14 +3058,14 @@ it("saves course with a new product, without a separate routing event", async ()
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await openSection(el, "kitchen");
-  await input(el, "name", "Tortilla");
+  await input(el, "name", "Omelette");
   await chooseOption(combobox(el, "product-course")!, "course-1");
   await el.updateComplete;
   save(el);
   expect(routed).not.toHaveBeenCalled();
   expect(submit).toHaveBeenCalledOnce();
   expect(submit.mock.calls[0]![0].detail.value).toEqual({
-    name: "Tortilla",
+    name: "Omelette",
     customerName: null,
     description: null,
     kitchenName: null,
@@ -3857,7 +3855,7 @@ it.each([
             ...extraLists[0]!,
             name: "Sauces, dips and dressings made in the kitchen every morning, served cold",
           },
-          { ...extraLists[1]!, name: "Panaderíaartesanaldelbarriodesdemilnovecientos" },
+          { ...extraLists[1]!, name: "Neighbourhoodartisanbakerysinceeighteenseventy" },
         ],
         optionLists: [optionLists[0]!],
       });
@@ -3931,14 +3929,14 @@ it("names the product in the variant window as its form holds the name now, unsa
       units: [unit],
       taxChoices: reduced,
     });
-    await input(el, "name", "Cortado");
+    await input(el, "name", "Flat white");
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-variant]")!.click();
     await el.updateComplete;
     const form = variantForm(el);
     await form.updateComplete;
     const modal = form.shadowRoot!.querySelector("wt-modal")!;
     await modal.updateComplete;
-    expect(modal.shadowRoot!.querySelector("h2")!.textContent).toBe("Add variant to: Cortado");
+    expect(modal.shadowRoot!.querySelector("h2")!.textContent).toBe("Add variant to: Flat white");
   } finally {
     setLocale("es-ES");
   }
@@ -3964,7 +3962,7 @@ it("adds nothing when the first Add variant is cancelled", async () => {
 });
 
 it("puts a unit holding a replacement pattern into the price labels as written", async () => {
-  const odd = { ...unit, abbreviation: { en: "ud $&" } };
+  const odd = { ...unit, abbreviation: { en: "ea $&" } };
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, variants: [small, large] },
@@ -3975,8 +3973,8 @@ it("puts a unit holding a replacement pattern into the price labels as written",
   const price = el.shadowRoot!.querySelector<HTMLElement & { label: string; unit: string }>(
     "[name=unit-price]",
   )!;
-  expect(price.label).toBe(t("editor.base_price_unit").split("{unit}").join("ud $&"));
-  expect(price.unit).toBe(t("editor.per_unit").split("{unit}").join("ud $&"));
+  expect(price.label).toBe(t("editor.base_price_unit").split("{unit}").join("ea $&"));
+  expect(price.unit).toBe(t("editor.per_unit").split("{unit}").join("ea $&"));
 });
 
 it("keeps the price field beside the variants, labelled as the base price", async () => {
@@ -4542,7 +4540,7 @@ it("marks a variant's own choice selected over the parent's value", async () => 
 
 it("shows the parent's category, inherited nutritional values and photo", async () => {
   const el = await mountVariant();
-  expect(variantPath(el)).toBe(`${t("editor.classification")}: Bebidas`);
+  expect(variantPath(el)).toBe(`${t("editor.classification")}: Drinks`);
   expect(inheritedNutrition(el, "allergens")).toBe(
     `${t("modifiers.allergens")}: ${allergenName("milk")}`,
   );
@@ -4883,9 +4881,9 @@ it.each(
           ...product,
           unitId,
           variants: [
-            { ...small, name: "Vino tinto de la casa, copa grande 125 ml", unitPrice: null },
-            { ...large, name: "Vino 175 ml" },
-            { ...large, id: "w250", name: "Vino 250 ml", unitPrice: "1250.00" },
+            { ...small, name: "House red wine, one large glass of 125 ml", unitPrice: null },
+            { ...large, name: "Wine 175 ml" },
+            { ...large, id: "w250", name: "Wine 250 ml", unitPrice: "1250.00" },
           ],
         },
         locales: ["en"],
