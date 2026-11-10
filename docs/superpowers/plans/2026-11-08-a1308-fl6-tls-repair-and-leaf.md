@@ -123,6 +123,8 @@ Step 1 runs the box's own health check over the file the code writes, under CI's
 | `tls/venue-ca.*` | Adoption (U5); unchanged | — |
 | Operator TLS (`config.ts:472-480`) | Operator-supplied paths; unchanged | — |
 
+**2026-11-10 (A947 3b-3):** `tls/venue-ca.*` are gone: a joined box's authority is its own `tls/ca.*`, installed by `apps/server/src/box-tls-install.ts` (`<name>.tmp` working files and the `tls/install.json` list), and `ensureLeaf` (`apps/server/src/box-secrets.ts`) checks `server.crt` at every start. A rewrite of the leaf's files has those readers too.
+
 ## Files
 
 - Modify: `packages/store/src/state-layout.ts`, `apps/server/src/box-tls-repair.ts`,

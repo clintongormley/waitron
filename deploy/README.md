@@ -432,7 +432,7 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate and the Start-again records
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate (unless the box joined another server) and the Start-again records
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
