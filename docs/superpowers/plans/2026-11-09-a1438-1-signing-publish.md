@@ -1,6 +1,6 @@
 # A1438-1: shared signing formats and private publication
 
-**2026-11-10 status:** A1437-1 landed as `049ddd9`; the build condition is met. The watcher
+**2026-11-10 status:** A1437-1's initial proof check landed as `049ddd9`; this plan's build condition is met. The watcher
 cleared the as-built core and box use at about 1,550 changed lines, with a stop at 2,325, followed
 by the publisher at about 500, with a stop at 750 (Lane K questions.md, 12:48).
 The core is under review; publication and authenticated registry qualification remain open.

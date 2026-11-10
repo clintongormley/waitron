@@ -79,8 +79,8 @@ it("enforces the 12000-character encoded payload limit on valid signed claims", 
   const boundary = proof(value);
   expect(boundary.payload).toHaveLength(12000);
   expect(check(boundary)).toEqual(value);
-  const oversized = proof({ ...value, body: value.body + "aa" });
-  expect(oversized.payload).toHaveLength(12003);
+  const oversized = proof({ ...value, body: value.body + "a" });
+  expect(oversized.payload).toHaveLength(12002);
   expect(() => check(oversized)).toThrow(InstallationError);
 });
 it.each([

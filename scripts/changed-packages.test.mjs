@@ -194,31 +194,31 @@ describe("scopeForPaths", () => {
     });
   });
 
+  it("selects both installed package consumers when their shared checker changes", () => {
+    const packages = workspacePackages(
+      ls(
+        member("@waitron/ui-core", "packages/ui-core"),
+        member("@waitron/contract", "packages/contract"),
+      ),
+      ROOT,
+    );
+    expect(
+      scopeForPaths(["packages/ui-core/test/package-consumer.test.mjs"], workspace(packages)),
+    ).toMatchObject({
+      kind: "packages",
+      packages: ["@waitron/contract", "@waitron/ui-core"],
+      root: false,
+    });
+  });
+
+  it("runs everything when the shared installed check's reader is missing", () => {
+    const packages = workspacePackages(ls(member("@waitron/ui-core", "packages/ui-core")), ROOT);
+    expect(
+      scopeForPaths(["packages/ui-core/test/package-consumer.test.mjs"], workspace(packages)),
+    ).toMatchObject({ kind: "global", packages: [], root: false });
+  });
+
   describe("a root file a workspace member depends on", () => {
-    it("selects both installed package consumers when their shared checker changes", () => {
-      const packages = workspacePackages(
-        ls(
-          member("@waitron/ui-core", "packages/ui-core"),
-          member("@waitron/contract", "packages/contract"),
-        ),
-        ROOT,
-      );
-      expect(
-        scopeForPaths(["packages/ui-core/test/package-consumer.test.mjs"], workspace(packages)),
-      ).toMatchObject({
-        kind: "packages",
-        packages: ["@waitron/contract", "@waitron/ui-core"],
-        root: false,
-      });
-    });
-
-    it("runs everything when the shared installed check's reader is missing", () => {
-      const packages = workspacePackages(ls(member("@waitron/ui-core", "packages/ui-core")), ROOT);
-      expect(
-        scopeForPaths(["packages/ui-core/test/package-consumer.test.mjs"], workspace(packages)),
-      ).toMatchObject({ kind: "global", packages: [], root: false });
-    });
-
     const consumers = workspacePackages(
       ls(
         member("@waitron/server", "apps/server"),
