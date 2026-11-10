@@ -385,8 +385,8 @@ until A977).
   A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  Shared fixture names remain in the server split suites, along with shared helper consumers
-  such as `made-here.test.ts`. Record and submission names also remain in server seed,
+  The server split suites' comments and private bill/party helper bindings remain.
+  Record and submission names also remain in server seed,
   snapshot and fiscal-identity suites; check protected fixtures and fiscal-provider contracts.
   Fixture strings remain separate from this naming work. Shared helpers' Spanish dish samples
   and their consumers stay with A976, as do the filing order-portion samples.
@@ -764,7 +764,6 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A974. Finish the remaining English names in general code.** Remaining names include shared
   fixture names in the server split suites, shared helper consumers and file names.
-  Shared fixture property names such as `cafeId` remain open.
   Private drink bindings remain in `sale-till-source.receipt.test.ts`,
   `issuance-pass.fiscal-identity.test.ts`, `list-unit-price.fiscal-identity.test.ts` and
   `served-at-huella.test.ts`; audit their fiscal fixture boundaries before renaming.

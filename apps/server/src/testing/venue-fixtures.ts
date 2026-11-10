@@ -30,8 +30,8 @@ export interface Venue {
   /** The venue's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
-  cafeId: string;
-  aguaId: string;
+  coffeeId: string;
+  waterId: string;
   /** A live MANAGEMENT session cookie for a `manager` (holds `hardware.manage`). */
   managerCookie: string;
   /** A live MANAGEMENT session cookie for a `staff` person (holds none of the management
@@ -102,18 +102,18 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: `Delicatessen ${venueId}` });
-    const bebidas = await createCategory(tx, { name: "Bebidas" });
-    const cafe = await createProduct(tx, {
+    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const coffee = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
     });
-    const agua = await createProduct(tx, {
+    const water = await createProduct(tx, {
       catalogueId: cat.id,
-      categoryId: bebidas.id,
+      categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
@@ -132,8 +132,8 @@ export async function setupVenue(db: Database): Promise<Venue> {
     const managerSession = await startManagementSession(tx, { personId: mgr!.id });
     const staffSession = await startManagementSession(tx, { personId: stf!.id });
     return {
-      cafeId: cafe.id,
-      aguaId: agua.id,
+      coffeeId: coffee.id,
+      waterId: water.id,
       managerSid: managerSession.token,
       staffSid: staffSession.token,
     };
@@ -146,8 +146,8 @@ export async function setupVenue(db: Database): Promise<Venue> {
     cfg,
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     defaultStationId: rows[0]!.id,
-    cafeId: seeded.cafeId,
-    aguaId: seeded.aguaId,
+    coffeeId: seeded.coffeeId,
+    waterId: seeded.waterId,
     managerCookie: `${MANAGEMENT_COOKIE}=${seeded.managerSid}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${seeded.staffSid}`,
   };

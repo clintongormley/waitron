@@ -121,7 +121,7 @@ async function sell() {
     saleCfg,
     {
       zoneId: offers.zoneId,
-      lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+      lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     },
   );

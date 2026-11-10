@@ -133,7 +133,7 @@ async function waitingItem(
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,
-    lines: offers.toOfferLines([{ productId: venue.cafeId, quantity: "1" }]),
+    lines: offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
     label: "Mesa 7",
   });
   const clock = {

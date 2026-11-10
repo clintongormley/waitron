@@ -247,7 +247,7 @@ it("rechecks a real sale after GET before accepting any clock patch", async () =
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
   await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
     zoneId: offers.zoneId,
-    lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+    lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
     tender: { method: "cash", amount: "1.50" },
   });
   const before = suite.db.all(sql`select * from locations`);

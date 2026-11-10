@@ -127,7 +127,7 @@ async function paymentInProgress(venue: Venue, deviceId: string): Promise<void> 
   await parkOrder({ db: suite.db }, venue.cfg, {
     id: orderId,
     zoneId: offers.zoneId,
-    lines: offers.toOfferLines([{ productId: venue.cafeId, quantity: "1" }]),
+    lines: offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
     label: "Table 1",
   });
   await suite.db.insert(payments).values({

@@ -121,8 +121,8 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
     id: orderId,
     zoneId: offers.zoneId,
     lines: offers.toOfferLines([
-      { productId: venue.cafeId, quantity: "1" },
-      { productId: venue.aguaId, quantity: "1" },
+      { productId: venue.coffeeId, quantity: "1" },
+      { productId: venue.waterId, quantity: "1" },
     ]),
     label: "Table 7",
   });
@@ -3991,7 +3991,7 @@ describe("a device's approved profiles and switching its active one", () => {
     await parkOrder({ db: suite.db }, venue.cfg, {
       id: orderId,
       zoneId: offers.zoneId,
-      lines: offers.toOfferLines([{ productId: venue.cafeId, quantity: "1" }]),
+      lines: offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
       label: "Table 1",
     });
     const [row] = await suite.db

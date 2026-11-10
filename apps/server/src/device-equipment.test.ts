@@ -211,7 +211,7 @@ async function cashSale(venue: Venue, deviceId: string): Promise<void> {
     cfg,
     {
       zoneId: offers.zoneId,
-      lines: offers.toOfferLines([{ productId: venue.aguaId, quantity: "1" }]),
+      lines: offers.toOfferLines([{ productId: venue.waterId, quantity: "1" }]),
       tender: { method: "cash", amount: "2.00" },
     },
     OPERATOR,

@@ -90,13 +90,13 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const bar = await createStation(tx, { name: "Bar" });
       const downstairs = await createStation(tx, { name: "Downstairs bar" });
-      await routeProductTo(tx, venue.cafeId, bar.id);
+      await routeProductTo(tx, venue.coffeeId, bar.id);
       const downstairsPrinter = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, bar.id);
       await setStationToday(tx, bar.id, "closed", new Date(), downstairs.id);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const lager = await rawLine(tx, orderId, venue.cafeId, 1);
+      const lager = await rawLine(tx, orderId, venue.coffeeId, 1);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [lager]);
 
       const [item] = await tx
@@ -114,7 +114,7 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill" });
-      await routeProductTo(tx, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.waterId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
       const first = await createCourse(tx, { name: "First", displayOrder: 1 });
@@ -123,8 +123,8 @@ describe("device made-here stations", () => {
       const cfg = { ...venue.cfg, sendingDeviceId: deviceId };
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
-      const drink = await rawLine(tx, orderId, venue.cafeId, 2, second.id);
+      const burger = await rawLine(tx, orderId, venue.waterId, 1, first.id);
+      const drink = await rawLine(tx, orderId, venue.coffeeId, 2, second.id);
       await fireLines(tx, cfg, orderId, [burger, drink]);
       const [made] = await tx
         .select()
@@ -169,7 +169,7 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      const line = await rawLine(tx, orderId, venue.coffeeId, 1);
       lineId = line.id;
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [line]);
     });
@@ -202,12 +202,12 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const drink = await rawLine(tx, orderId, venue.cafeId, 1);
+      const drink = await rawLine(tx, orderId, venue.coffeeId, 1);
       await tx.insert(workingOrderLines).values({
         workingOrderId: orderId,
         parentLineId: drink.id,
         lineNo: 2,
-        productId: venue.aguaId,
+        productId: venue.waterId,
         name: "Jamón",
         descriptions: { "es-ES": "Jamón" },
         quantity: 150,
@@ -228,14 +228,14 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill" });
-      await routeProductTo(tx, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.waterId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const bar = await rawLine(tx, orderId, venue.cafeId, 1);
-      const food = await rawLine(tx, orderId, venue.aguaId, 2);
+      const bar = await rawLine(tx, orderId, venue.coffeeId, 1);
+      const food = await rawLine(tx, orderId, venue.waterId, 2);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [bar, food]);
       const items = await tx
         .select()
@@ -264,12 +264,12 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const downstairs = await createStation(tx, { name: "Downstairs bar" });
-      await routeProductTo(tx, venue.cafeId, downstairs.id);
+      await routeProductTo(tx, venue.coffeeId, downstairs.id);
       const printer = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      const line = await rawLine(tx, orderId, venue.coffeeId, 1);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [line]);
       const [item] = await tx
         .select()
@@ -289,8 +289,8 @@ describe("device made-here stations", () => {
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const ordinary = await rawLine(tx, orderId, venue.cafeId, 1);
-      const changed = await rawLine(tx, orderId, venue.cafeId, 2);
+      const ordinary = await rawLine(tx, orderId, venue.coffeeId, 1);
+      const changed = await rawLine(tx, orderId, venue.coffeeId, 2);
       await fireLines(
         tx,
         { ...venue.cfg, sendingDeviceId: deviceId },
@@ -327,7 +327,7 @@ describe("device made-here stations", () => {
       };
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      const line = await rawLine(tx, orderId, venue.coffeeId, 1);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: device!.id }, orderId, [line], {
         keepMadeHere: new Map([[line.id, { madeHere: true, stationId: venue.defaultStationId }]]),
       });
@@ -357,7 +357,7 @@ describe("device made-here stations", () => {
       expect(other!.id).not.toBe(barDeviceId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      const line = await rawLine(tx, orderId, venue.coffeeId, 1);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: other!.id }, orderId, [line]);
       const [item] = await tx
         .select()
@@ -376,7 +376,7 @@ describe("device made-here stations", () => {
       const printer = await stationPrinter(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
-      const line = await rawLine(tx, orderId, venue.cafeId, 1);
+      const line = await rawLine(tx, orderId, venue.coffeeId, 1);
       await fireLines(tx, venue.cfg, orderId, [line]);
       const [item] = await tx
         .select()
@@ -393,15 +393,15 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill" });
-      await routeProductTo(tx, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.waterId, grill.id);
       const barPrinter = await stationPrinter(tx, venue.defaultStationId);
       const grillPrinter = await stationPrinter(tx, grill.id);
       const first = await createCourse(tx, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = await createTableKitchenOrder(tx, venue.cfg);
-      const drink = await rawLine(tx, orderId, venue.cafeId, 1, first.id);
-      const burger = await rawLine(tx, orderId, venue.aguaId, 2, second.id);
+      const drink = await rawLine(tx, orderId, venue.coffeeId, 1, first.id);
+      const burger = await rawLine(tx, orderId, venue.waterId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [drink, burger]);
       const initial = await tx
         .select()
@@ -437,13 +437,13 @@ describe("device made-here stations", () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, { name: "Grill" });
-      await routeProductTo(tx, venue.aguaId, grill.id);
+      await routeProductTo(tx, venue.waterId, grill.id);
       const first = await createCourse(tx, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.defaultStationId);
       const orderId = await createTableKitchenOrder(tx, venue.cfg);
-      const burger = await rawLine(tx, orderId, venue.aguaId, 1, first.id);
-      const drink = await rawLine(tx, orderId, venue.cafeId, 2, second.id);
+      const burger = await rawLine(tx, orderId, venue.waterId, 1, first.id);
+      const drink = await rawLine(tx, orderId, venue.coffeeId, 2, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [burger, drink]);
       const [madeDrink] = await tx
         .select()
@@ -452,7 +452,7 @@ describe("device made-here stations", () => {
       expect(madeDrink).toMatchObject({ madeHere: true, state: "ready" });
       expect(madeDrink!.firedAt).toEqual(expect.any(String));
       expect(madeDrink!.readyAt).toBe(madeDrink!.firedAt);
-      const steak = await rawLine(tx, orderId, venue.aguaId, 3, second.id);
+      const steak = await rawLine(tx, orderId, venue.waterId, 3, second.id);
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: deviceId }, orderId, [steak]);
       const [item] = await tx
         .select()
@@ -479,7 +479,7 @@ describe("device made-here stations", () => {
         .values({
           workingOrderId: orderId,
           lineNo: 1,
-          productId: venue.cafeId,
+          productId: venue.coffeeId,
           name: "Café",
           descriptions: { "es-ES": "Café" },
           quantity: 1000,
@@ -492,7 +492,7 @@ describe("device made-here stations", () => {
       await fireLines(tx, { ...venue.cfg, sendingDeviceId: device!.id }, orderId, [
         {
           id: line!.id,
-          productId: venue.cafeId,
+          productId: venue.coffeeId,
           parentLineId: null,
           courseId: null,
           note: null,

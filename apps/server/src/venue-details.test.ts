@@ -234,7 +234,7 @@ async function prepareSale(observeClock?: () => void) {
   return () =>
     recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
       zoneId: offers.zoneId,
-      lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+      lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
 }
@@ -1185,7 +1185,7 @@ describe("venue detail consumer reads", () => {
     });
     await recordTillSale({ admission: testTradingAdmission(), db: suite.db, backend, clock }, cfg, {
       zoneId: offers.zoneId,
-      lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+      lines: [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
     const app = new Hono();
@@ -1563,7 +1563,7 @@ describe("open kitchen work during venue corrections", () => {
         tx,
         cfg,
         id,
-        [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+        [{ menuItemId: offers.offerFor(venue.coffeeId), quantity: "1" }],
         "Kitchen work",
         { zoneId: offers.zoneId },
       ),
