@@ -25,7 +25,7 @@ Prefixes S=`apps/server/src`, T=`apps/till/src`, D=`apps/dashboard/src`, P=`pack
 
 **Decisions:** PR1 adds practice-only `resolveAbandonedAttempt` and simulator lookup, never timed release; reservation already exists. PR2 deletes every use of the legacy reader id, both constants and boot's row update, including box-health, alert-sources and payments-api. Before go-live there is no compatibility cleanup; old installs are reset. Provisional PR3/4 freeze requested printer/language and historical money/balance, not layout/reader-setting/false choices. Received reader-card money alone permits slips; cash/manual never do. Copy audit uses `recordActivity`, never product decisions. Persistence covers restart after capture; no document intent enters it.
 
-**10 November 13:09 update:** the cut 7 split below supersedes the single-bill-split response named in this paragraph.
+**10 November 13:09 update:** the cut 7 split below supersedes the PR7 paragraph that follows: its chooser/paper work is 7(b), and draft/single-bill-split responses are dropped.
 
 PR7 suppresses automatic receipts centrally for order-linked sales, including loop/manager completion; keep collection tickets and already staged A4/email. Default F1 Receipt selection is not a Print command. Remove auto-zone hiding of Print original and every now-ineffective department receipt-print control, including service-settings-fields, department-settings and departments-list. Return existing issuance results to the initiating save/submit/line-edit/adjustment/discard/cancel/move/single-bill-split caller; multi-bill split/background/no editor means None. Preserve issuance calls, sent dishes, reservations and drawer checks. No management editor is invented.
 
