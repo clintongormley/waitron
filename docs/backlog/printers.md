@@ -439,27 +439,13 @@ actually happened.
   follow-up could translate the known phrases into dashboard wording in both languages and keep the
   raw text as a detail; nothing here says what a given BlueZ error always means on a real printer.
 
-## Left open by C109 (#960)
-
-- **Left open by C109 (#960):** the printer details' Active switch can still switch a paired Bluetooth
-  printer off without unpairing it. Leaving the Printers screen mid-calibration asks the server to
-  switch the printer off; if that request fails nothing reports it and the printer stays on, and
-  closing the browser tab mid-wizard does not switch it off. Leaving the screen while a Save is in
-  flight and that save then fails, or in the moment between Enable switching the printer on and
-  the wizard opening, also leaves it on. While it is on during calibration, jobs already queued for
-  it can be handed out (since A163, jobs a succeeded Unpair ended no longer print; jobs kept in the
-  cases the next item lists, and a printer switched off with Disable, can still print after
-  Enable). Keeping the printer off until calibration is saved would need a calibration-only
-  print path for a switched-off printer, since `enqueuePrintJob` refuses one and `claimPrintJobs`
-  claims only switched-on printers' jobs.
-
 ## An Unpair outcome that reaches the server after it dropped the command leaves the printer on
 
 - **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
   (120 seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`); the owner can
-  switch it off with Disable, which the row then shows. The printer's waiting jobs are kept in that
-  case, after a server restart (the command store is held in memory), and for a printer unpaired
-  outside Waitron; Disable keeps them too.
+  delete the printer to stop it and end its waiting jobs. The printer's waiting jobs otherwise stay
+  in that case, after a server restart (the command store is held in memory), and for a printer
+  unpaired outside Waitron.
 
 ## A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN
 
@@ -569,8 +555,6 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 - A freshly added printer's wizard opens with a blue Save — the campaign runner's ruling of
   2026-10-08, for the owner to confirm.
-- The printer name dialog is titled "Add a printer" when its button says Enable — seen and not
-  changed.
 
 ## A department's receipt logo save re-checks only the image's revision, not its id
 

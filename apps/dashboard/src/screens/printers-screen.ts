@@ -1011,9 +1011,6 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
-  /** A retained printer that Enable switched on so its calibration can print; closing the wizard
-   * without saving switches it off again. */
-
   @state() private errorKey: string | null = null;
   /** Printers whose test page request has not answered yet. */
   @state() private testPagesPrinting: ReadonlySet<string> = new Set();
@@ -1495,8 +1492,7 @@ export class PrintersScreen extends LitElement {
   #officeRow(device: DiscoveredPrinter): OfficeRow | undefined {
     if (device.office === undefined && device.pagePrinter !== true && device.ippOnly !== true)
       return undefined;
-    if (device.retainedName !== undefined || this.#disabledPrinter(device) !== undefined)
-      return undefined;
+    if (this.#disabledPrinter(device) !== undefined) return undefined;
     const report = device.office;
     if (report === undefined || !device.host)
       return { kind: "refused", reason: "printers.page_printer_no_answer" };
@@ -3413,7 +3409,7 @@ export class PrintersScreen extends LitElement {
               @click=${(event: Event) =>
                 this.#showPrinterStatus(idOf(r), event.currentTarget as HTMLElement)}
               >${nameOf(r)}</wt-button
-            >${r.kind === "a4" ? pages.noteFor(r.row) : nothing}`,
+            >${r.kind === "a4" ? pages.noteFor(r.row) : r.printer.active ? nothing : html`<div part="printer-meta" data-test=${`printer-add-again-${r.printer.id}`}>${t("printers.add_again_hint")}</div>`}`,
       },
       {
         key: "paper",

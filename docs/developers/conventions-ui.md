@@ -1019,11 +1019,11 @@ screens do with events such as `advance-ticket-item` and `mark-collected`.
 
 **Printing and hardware**
 
-## A retained hardware registration must remain re-addable after deactivation
+## Hardware Delete and Add preserve the intended registration
 
 Receipt/kitchen printers offer Delete and Add, with no manual on/off control or status filter.
 Delete keeps identity, name, calibration and history, while clearing live assignments and ending
-pending work. Add restores an inactive undeleted endpoint match, otherwise the latest deleted
+pending work. With no active endpoint match, Add restores an inactive undeleted match, otherwise the latest deleted
 match, using transport/local key, network host/port or cloud-poll id. Active local-key duplicates
 still refuse; active network/cloud matches still insert. A recognised restoration skips naming and
 calibration. System-unpaired printers stay listed. Guards: `packages/printing/src/printers.test.ts`

@@ -3010,7 +3010,8 @@ and the staffing grid's block editor in the A761 entry):
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
   button disabled because its row's own state rules the action out: it is drawn `secondary` while
   ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
-  these under it: Disable on a printer that is already disabled; Publish on a menu's Preview while the menu has clashes, which
+  these under it: Disable on a printer that is already disabled (receipt-printer Disable was removed
+  by A1484 on 2026-11-10; A4 still has it); Publish on a menu's Preview while the menu has clashes, which
   keeps its own variant while its own publish is being sent; and a modifier's Remove in the product
   editor while the variant window, the image picker or any window the Products screen opens for the
   editor is open, which keeps its own variant while the Products screen is sending a request for the
@@ -3188,7 +3189,7 @@ These open already savable:
 - the Backups screen's Turn on backups when the stored settings are switched off: the form opens
   filled in from them, and turning them back on is itself the change (`#applyAction` in
   `apps/dashboard/src/screens/backup-screen.ts`);
-- the printers' name dialog (Add, or Enable for a switched-off printer): pressing it is the add;
+- a new receipt printer's name dialog: pressing Add is the add;
 - an office printer's Add as A4 printer, when discovery found a name or address: the dialog opens
   holding it, and pressing Add is the add (`suggestedName` in
   `apps/dashboard/src/widgets/page-printer-add.ts`); with nothing found it opens quiet;
@@ -5621,10 +5622,11 @@ delete succeeds. A failed read goes in `readError` and a refused delete in `acti
 alone leaves Delete usable. The Themes card builds its impact on the screen instead of reading it;
 see "Appearance (venue themes)" above.
 
-A printer offers both. **Disable** switches the printer off and keeps its id, and Enable brings it
-back. **Delete** is permanent: it ends the printer's waiting work and removes the settings that name
-it, and the row is kept only as history, so its old print jobs still show its name. Nothing brings a
-deleted printer back; found again, it is added as a new printer.
+A receipt or kitchen printer offers **Delete** and **Add**. Delete ends its waiting work and removes
+its assignments, while keeping the printer's identity, name, calibration and history. Add restores
+a matching retained registration with those settings; cleared assignments and ended work do not
+return. A recognised printer skips naming and calibration. System-switched-off printers stay
+listed with an Add-again hint. A4 printers retain their on/off controls until their A1484 slice.
 
 A device offers both too. **Disable** switches it off and keeps its id; its browser can knock again
 and come back as the same device. **Delete** is permanent: it signs the device out, ends what it

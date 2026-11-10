@@ -3875,6 +3875,8 @@ it("lists system-switched-off printers without a status filter or manual on/off 
     q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector('[name="status-filter"]'),
   ).toBeNull();
   expect(q(el, '[data-test^="deactivate-printer-"]')).toBeNull();
+  expect(q(el, '[data-test="printer-add-again-p2"]')).not.toBeNull();
+  expect(q(el, '[data-test="printer-add-again-p1"]')).toBeNull();
   await openPrinterDetails(el);
   expect(q(el, '[name="printer-detail-active"]')).toBeNull();
 });
@@ -3882,7 +3884,7 @@ it("lists system-switched-off printers without a status filter or manual on/off 
 it.each(["usb", "bluetooth", "network_tcp"] as const)(
   "Add restores a retained %s printer without asking for a new name",
   async (transport) => {
-    let active = false;
+    let restored = false;
     const stored = {
       ...printers[2]!,
       name: "Saved kitchen name",
@@ -3898,13 +3900,17 @@ it.each(["usb", "bluetooth", "network_tcp"] as const)(
       port: stored.port,
       localKey: stored.localKey ?? undefined,
       retainedName: stored.name,
+      alreadyRegistered: false,
+      printerId: null,
       ...(transport === "bluetooth" ? { printerLike: true as const, paired: true as const } : {}),
     };
     const api = stubApi({
-      listPrinters: vi.fn().mockImplementation(async () => [{ ...stored, active }]),
+      listPrinters: vi
+        .fn()
+        .mockImplementation(async () => (restored ? [{ ...stored, active: true }] : [])),
       listDiscoveredPrinters: vi.fn().mockResolvedValue([device]),
       createPrinter: vi.fn().mockImplementation(async () => {
-        active = true;
+        restored = true;
         return { id: stored.id };
       }),
     });
@@ -10255,7 +10261,7 @@ describe("Deleting a printer", () => {
       "Cajón predeterminado que usa 1 dispositivo: Bar till",
       "Imprime para 1 estación: Grill",
     ]);
-    expect(dialogOf(el)!.shadowRoot!.textContent).toContain(t("printers.delete_irreversible"));
+    expect(dialogOf(el)!.shadowRoot!.textContent).toContain(t("printers.delete_retained"));
   });
 
   it("draws a target's name as text, not markup", async () => {
@@ -11194,12 +11200,20 @@ describe("office printers in discovery", () => {
       office({ host: "10.0.0.59", office: undefined }),
       // The receipt-printer marks never hide an office printer's row.
       office({ host: "10.0.0.60", alreadyRegistered: true, printerId: "p1" }),
+      office({
+        host: "10.0.0.61",
+        retainedName: "Old kitchen",
+        alreadyRegistered: false,
+        printerId: null,
+      }),
     ]);
     expect(q(el, "[data-test='register-10.0.0.77:9100']")).not.toBeNull();
     expect(text(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")).toBe(
       t("printers.page_printer_add"),
     );
     expect(q(el, "[data-test='add-page-printer-a1:10.0.0.60:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.61:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='register-10.0.0.61:9100']")).toBeNull();
     for (const key of ["10.0.0.56:9100", "10.0.0.57:9100", "10.0.0.58:631", "10.0.0.59:9100"]) {
       // Fails if an office printer's row falls through to the receipt Add.
       expect(q(el, `[data-test='register-${key}']`)).toBeNull();
@@ -11224,6 +11238,7 @@ describe("office printers in discovery", () => {
       "10.0.0.77",
       "10.0.0.56",
       "10.0.0.60",
+      "10.0.0.61",
       "10.0.0.57",
       "10.0.0.58",
       "10.0.0.59",

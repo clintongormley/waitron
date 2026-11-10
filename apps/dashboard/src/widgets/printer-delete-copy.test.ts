@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { DeleteImpactItem } from "@waitron/shared";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { printerDeleteCopy } from "./printer-delete-copy.js";
 
@@ -29,7 +30,7 @@ describe("a printer's delete dialog copy, in English", () => {
     ]).toEqual([
       "Delete printer?",
       "Work that ends",
-      "Settings that are removed",
+      "Assignments that are removed",
       "History and printer settings are kept. Assignments and ended work are not restored. Add it again to use it.",
       "Delete",
       "Cancel",
@@ -94,8 +95,8 @@ describe("a printer's delete dialog copy, in Spanish", () => {
     ]).toEqual([
       "¿Eliminar la impresora?",
       "Trabajo que finaliza",
-      "Configuración que se elimina",
-      "Se conservan el historial y los ajustes de la impresora. Las asignaciones y el trabajo finalizado no se restauran. Para usarla, añádela de nuevo.",
+      es["printers.delete_assignments"],
+      es["printers.delete_retained"],
       "Eliminar",
       "Cancelar",
     ]);

@@ -756,8 +756,7 @@ export const en = {
   "printers.status_disabled": "Disabled",
   "printers.filter_all": "All printers",
   "printers.enable": "Enable",
-  "printers.enable_hint":
-    "Disabled printer. Enabling it restores its settings, and any jobs still waiting for it can print once it is on.",
+  "printers.add_again_hint": "Add this printer again to use it.",
   "printers.used_by": "Used by",
   "printers.used_by_stations": "Prep stations",
   "printers.used_by_departments": "Departments",
@@ -1664,7 +1663,9 @@ export const en = {
   "printers.delete_refusals": "Why it can't be deleted",
   "printers.delete_ends": "Work that ends",
   "printers.delete_removes": "Settings that are removed",
-  "printers.delete_irreversible":
+  "printers.delete_irreversible": "This can't be undone.",
+  "printers.delete_assignments": "Assignments that are removed",
+  "printers.delete_retained":
     "History and printer settings are kept. Assignments and ended work are not restored. Add it again to use it.",
   "printers.delete_retry": "Try again",
   "printers.delete_loading": "Checking what changes…",
@@ -4588,8 +4589,7 @@ export const es: Record<StringKey, string> = {
   "printers.status_disabled": "Deshabilitada",
   "printers.filter_all": "Todas las impresoras",
   "printers.enable": "Habilitar",
-  "printers.enable_hint":
-    "Impresora deshabilitada. Al habilitarla se restauran sus ajustes, y los trabajos que sigan pendientes pueden imprimirse cuando esté activa.",
+  "printers.add_again_hint": "Vuelve a añadir esta impresora para usarla.",
   "printers.used_by": "Se usa en",
   "printers.used_by_stations": "Estaciones de preparación",
   "printers.used_by_departments": "Departamentos",
@@ -5513,7 +5513,9 @@ export const es: Record<StringKey, string> = {
   "printers.delete_refusals": "Por qué no se puede eliminar",
   "printers.delete_ends": "Trabajo que finaliza",
   "printers.delete_removes": "Configuración que se elimina",
-  "printers.delete_irreversible":
+  "printers.delete_irreversible": "Esta acción no se puede deshacer.",
+  "printers.delete_assignments": "Asignaciones que se eliminan",
+  "printers.delete_retained":
     "Se conservan el historial y los ajustes de la impresora. Las asignaciones y el trabajo finalizado no se restauran. Para usarla, añádela de nuevo.",
   "printers.delete_retry": "Reintentar",
   "printers.delete_loading": "Comprobando qué cambia…",

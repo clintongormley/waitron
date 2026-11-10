@@ -155,6 +155,9 @@ describe("createPrinter", () => {
     expect((await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Scan" }))).id).toBe(
       newer.id,
     );
+    await asTx(cfg, (tx) =>
+      tx.update(printers).set({ active: false, deletedAt: null }).where(eq(printers.id, older.id)),
+    );
     const fresh = await asTx(cfg, (tx) => createPrinter(tx, { ...endpoint, name: "Another" }));
     expect(fresh.id).not.toBe(newer.id);
     expect(fresh.id).not.toBe(older.id);

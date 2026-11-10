@@ -1048,8 +1048,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               address !== undefined && isListed(e.pairedAt, now) ? (true as const) : undefined,
             bluetoothCommand:
               address === undefined ? undefined : bluetoothCommands.latest(e.agentId, address),
-            retainedName:
-              match && (!match.active || match.deletedAt !== null) ? match.name : undefined,
+            retainedName: match && match.deletedAt !== null ? match.name : undefined,
             alreadyRegistered: printerId !== null,
             printerId,
             lastSeenAt: new Date(e.lastSeenAt).toISOString(),
