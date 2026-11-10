@@ -237,7 +237,9 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
   vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
   vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
   vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
-  onTestFinished(() => vi.unstubAllEnvs());
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
   registerModulePermissions(FISCAL_PERMISSIONS);
   const [admin] = await suite.db
     .insert(persons)
