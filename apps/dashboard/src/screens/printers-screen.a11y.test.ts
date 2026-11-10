@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { expect, afterEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
@@ -25,6 +26,8 @@ import type {
   Printer,
   PrinterProfileOffer,
 } from "../api/client.js";
+
+useLocale("es-ES");
 
 const agents: PrintAgentRow[] = [
   {

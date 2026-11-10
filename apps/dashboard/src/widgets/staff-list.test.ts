@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -6,6 +7,8 @@ import { roleName, statusName } from "../i18n/domain.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { PersonSummary } from "../api/client.js";
 import { StaffList } from "./staff-list.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 function forgetStaffView() {

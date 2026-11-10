@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -10,6 +11,8 @@ import type { StaffList } from "../widgets/staff-list.js";
 import type { PersonForm } from "../widgets/person-form.js";
 import type { PersonEdit } from "../widgets/person-edit.js";
 import { StaffScreen } from "./staff-screen.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 

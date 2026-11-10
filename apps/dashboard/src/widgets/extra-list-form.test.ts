@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
@@ -9,6 +10,8 @@ import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { ExtraListForm } from "./extra-list-form.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+
+useLocale("en-GB");
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -370,6 +373,7 @@ it("refuses a pick bound that is not a whole number within the allowed limit", a
 });
 
 it("refuses an active list with no products, and saves the same list once it is disabled", async () => {
+  setLocale("es-ES");
   const { el, host } = await mount();
   const submitted = record(host);
 
@@ -378,7 +382,6 @@ it("refuses an active list with no products, and saves the same list once it is 
 
   expect(submitted).toEqual([]);
   expect(text(el, "items-error")).toContain(t("extras.items_required"));
-  // es-ES is the suite's language.
   expect(text(el, "items-error")).toContain("Añade un producto, o deshabilita esta lista.");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);

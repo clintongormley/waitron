@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
@@ -21,6 +22,8 @@ import type {
   Product,
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());

@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HomeTile, MenuDocument } from "../api/client.js";
 import type { DocumentTile } from "@waitron/shared";
@@ -12,6 +13,8 @@ import {
 import { page, userEvent } from "vitest/browser";
 import "./device-home-preview.js";
 import type { DeviceHomePreview } from "./device-home-preview.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 

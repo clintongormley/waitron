@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -7,9 +8,10 @@ import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { setLocale, t } from "../i18n/t.js";
 import { PersonEdit } from "./person-edit.js";
 
+useLocale("es-ES");
+
 afterEach(() => {
   cleanupWidgets();
-  setLocale("es-ES");
 });
 
 const person: PersonSummary = {

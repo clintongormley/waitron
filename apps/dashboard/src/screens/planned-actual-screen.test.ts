@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
@@ -8,6 +9,8 @@ import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/cli
 import { PlannedActualScreen } from "./planned-actual-screen.js";
 import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 import type { WtInput } from "@waitron/ui";
+
+useLocale("es-ES");
 
 const staff: PersonSummary[] = [
   {

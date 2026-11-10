@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
 import { LeaveController, setHelpMode } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
@@ -48,6 +49,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
+
+useLocale("es-ES");
 
 class MenuProductsLeaveHost extends LitElement {
   readonly leave = new LeaveController(this);
@@ -4063,9 +4066,9 @@ describe("a row's own Delete section confirm and another menu", () => {
     return { el, client };
   }
 
-  const refusedInLunch = t("menus.change_not_saved")
+  const refusedInLunch = t("menus.change_not_saved", "es-ES")
     .replace("{name}", "Lunch Menu")
-    .replace("{reason}", codeMessage("menu_section.not_found"));
+    .replace("{reason}", codeMessage("menu_section.not_found", "es-ES"));
 
   it("shows a refusal in the confirm while its menu is open, and nowhere else", async () => {
     const answer = deferred<void>();

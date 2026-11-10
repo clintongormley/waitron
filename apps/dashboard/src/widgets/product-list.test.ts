@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { setContentLanguages } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -20,6 +21,8 @@ import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
+
+useLocale("es-ES");
 
 useMediaPresentations();
 registerIcons(DASHBOARD_ICONS);

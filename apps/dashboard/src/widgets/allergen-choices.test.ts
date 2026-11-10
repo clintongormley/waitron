@@ -1,7 +1,10 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { afterEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { AllergenPicker } from "./allergen-picker.js";
 import { AllergenDietaryPicker } from "./allergen-dietary-picker.js";
+
+useLocale("es-ES");
 
 // Losing a kind during seeding or rebuilding a declaration must change these exact saved values.
 afterEach(cleanupWidgets);

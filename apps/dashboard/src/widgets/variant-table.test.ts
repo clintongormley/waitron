@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { reorder, setHelpMode, type WtHelpTooltip, type WtRowActions } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
@@ -7,6 +8,8 @@ import type { VariantTable } from "./variant-table.js";
 import "./variant-table.js";
 import type { ProductEditorVariant } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+
+useLocale("es-ES");
 
 afterEach(cleanupWidgets);
 

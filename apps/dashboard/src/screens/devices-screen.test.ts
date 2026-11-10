@@ -1,3 +1,4 @@
+import { useLocale } from "../testing/locale-setup.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
@@ -31,6 +32,8 @@ import type {
   Station,
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
+
+useLocale("es-ES");
 
 // Fake provider panels, so the reader-label tests never depend on the real SumUp/Stripe panels; only
 // `displayNameKey` is read by this screen.
@@ -4391,12 +4394,12 @@ describe("add a device", () => {
     {
       name: "a refusal naming a field",
       refusal: { code: "device.name_taken" },
-      bottom: t("form.fix_fields"),
+      bottom: t("form.fix_fields", "es-ES"),
     },
     {
       name: "a refusal naming no field",
       refusal: { code: "join_request.not_found" },
-      bottom: codeMessage("join_request.not_found"),
+      bottom: codeMessage("join_request.not_found", "es-ES"),
     },
   ])("every settings field takes a value again after $name", async ({ refusal, bottom }) => {
     const api = stubApi({ acceptDeviceJoinRequest: vi.fn().mockRejectedValue(refusal) });
