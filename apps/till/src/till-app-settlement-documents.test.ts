@@ -56,7 +56,7 @@ it("offers documents to the active editor when changing a line settles its bill"
   });
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+  expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   expect(
     el
       .shadowRoot!.querySelector("till-settlement-document-dialog")!
@@ -74,7 +74,7 @@ it("offers documents after the retained whole-payment handler completes", async 
   emit(order, "pay-tab", { method: "cash", amount: "120.00" });
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
-  expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+  expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
 });
 
 it("reads an unprinted F2 original when it is opened later from Find bill", async () => {

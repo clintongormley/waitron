@@ -6066,9 +6066,7 @@ describe("till-app: a bill payment on the card reader", () => {
         await press(el, "[data-pay-confirm]");
         expect(sent()).toEqual([original, original]);
         expect(
-          el.shadowRoot!.querySelector(
-            "till-ticket-view, till-paid-view, till-settlement-document-dialog",
-          ),
+          el.shadowRoot!.querySelector("till-ticket-view, till-settlement-document-dialog"),
         ).toBeNull();
       } finally {
         setLocale("en-GB");

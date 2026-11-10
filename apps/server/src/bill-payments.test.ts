@@ -1536,6 +1536,9 @@ describe("the invoice at full payment", () => {
       const [sale] = await inTx((tx) =>
         tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
       );
+      expect(
+        await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
+      ).toEqual([]);
       await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
       const jobs = await inTx((tx) =>
         tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),

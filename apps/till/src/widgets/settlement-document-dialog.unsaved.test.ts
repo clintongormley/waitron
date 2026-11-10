@@ -48,7 +48,7 @@ it("a disconnected till discards the final choice instead of reopening it on rec
   await flush(el);
   expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
 
-  expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+  expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   el.remove();
   host.appendChild(el);
   await flush(el);

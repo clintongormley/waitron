@@ -1703,7 +1703,7 @@ describe("till-app receipt issuance", () => {
     await flush(el);
     const workingOrderId = vi.mocked(api.recordSale).mock.calls[0]![2];
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
 
     emit(ticket(el)!, "print-receipt");
     await flush(el);
@@ -2325,7 +2325,7 @@ describe("till-app counter: the guests the receipt prints", () => {
       [c.store.id, { method: "cash", amount: "5" }, undefined, 2, null],
     ]);
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   });
 
   it("a zero-total completion with a full invoice chosen shows no field and sends no guests", async () => {
@@ -3434,7 +3434,7 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
     expect(api.recordSale).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   });
 
   it.each(["en-GB", "es-ES"])(
@@ -5906,7 +5906,7 @@ describe("own card payment and idle sign-out (A532)", () => {
     await vi.advanceTimersByTimeAsync(0);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
     await vi.advanceTimersByTimeAsync(299_999);
     expect(privateState<string>(el, "operatorName")).toBe("Ana");
     await vi.advanceTimersByTimeAsync(1);

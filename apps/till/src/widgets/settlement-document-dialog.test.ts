@@ -168,7 +168,7 @@ it("keeps failed F2 original recovery in the document choice", async () => {
 });
 
 it.each(["cash", "card"] as const)(
-  "uses the last %s payment for final cash change",
+  "shows the completion’s cash change for %s despite an earlier cash tender",
   async (method) => {
     const { el } = await mountWidget<TillSettlementDocumentDialog>(
       "till-settlement-document-dialog",
@@ -205,5 +205,27 @@ it.each(["cash", "card"] as const)(
       expect(change?.textContent).toContain("10.00");
       expect(change?.textContent).not.toContain("20.00");
     } else expect(change).toBeNull();
+  },
+);
+
+it.each(["queued", "failed"] as const)(
+  "keeps a fresh F2 original's %s recovery without offering a copy",
+  async (status) => {
+    const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
+    const { el } = await mountWidget<TillSettlementDocumentDialog>(
+      "till-settlement-document-dialog",
+      {
+        result: { ...invoiceOf("30.00"), invoiceType: "F2" },
+        invoicePrintersEnabled: true,
+        originalReceiptPrint: { status, jobId: "original", canRetry: status === "failed" },
+        receiptEquipment: { ...roleOf("receipt", bar, [bar]), default: bar },
+      },
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=print-receipt], [data-test=reprint]"),
+    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
+    if (status === "failed")
+      expect(el.shadowRoot!.querySelector("[data-test=retry-receipt]")).not.toBeNull();
   },
 );
