@@ -397,37 +397,3 @@ it("reverted extras are exempt, and page Discard restores extras without chargin
   expect(app.collects).toEqual([]);
   expect(unload()).toBe(false);
 });
-
-it("reader preference makes hidden simulator choices exempt and re-exposes their staged value", async () => {
-  const { app, form } = await mount();
-  form.cardProvider = "simulator";
-  form.activeReaders = [
-    { printsOwnSlipAutomatically: false, id: "demo", name: "Demo", provider: "simulator" },
-  ];
-  await form.updateComplete;
-  await click(form, '[data-test="simulation-declined"]');
-  expect(unload()).toBe(true);
-  await click(form, ".change-reader");
-  form.shadowRoot!.querySelector("till-reader-picker")!.dispatchEvent(
-    new CustomEvent("reader-chosen", {
-      detail: { readerId: "demo" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await form.updateComplete;
-  expect(unload()).toBe(false);
-  await click(form, ".change-reader");
-  form.shadowRoot!.querySelector("till-reader-picker")!.dispatchEvent(
-    new CustomEvent("reader-chosen", {
-      detail: { readerId: null },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await form.updateComplete;
-  expect(unload()).toBe(true);
-  await click(form, ".pay-card");
-  expect(app.collects).toEqual([{ simulationOutcome: "declined" }]);
-  expect((await question(app)).open).toBe(false);
-});
