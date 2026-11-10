@@ -14,6 +14,8 @@ For whole or part payments at a table, open **Pay** and use the [payment window]
 
 To split a Counter payment between guests, follow [Share a Counter bill](table-service.md#counter-part-payments).
 
+After the final payment, follow [Choose documents after paying](table-service.md#settlement-document) to print a receipt or keep serving without one.
+
 ## Retry a counter send after a lost reply {#counter-send-retry}
 
 If the till cannot confirm a counter send, retry with the basket unchanged. When the first send

@@ -18,7 +18,7 @@ const inherited: ServiceSettingsValue = {
   collectionNumber: null,
   receiptPrintMode: null,
 };
-const fields = ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"] as const;
+const fields = ["orderStart", "paidWhen", "collectionNumber"] as const;
 beforeEach(() => setLocale("en"));
 afterEach(() => {
   cleanup();
@@ -39,6 +39,11 @@ async function mount(value = department, follows?: ServiceSettingsValue, disable
   await settle(el);
   return el;
 }
+it("offers service choices without automatic receipt printing", async () => {
+  const el = await mount();
+  expect(el.shadowRoot!.querySelector('[name="receiptPrintMode"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[name="collectionNumber"]')).not.toBeNull();
+});
 async function settle(el: ServiceSettingsFields) {
   await el.updateComplete;
   await Promise.all(
@@ -95,7 +100,6 @@ it("draws the department's stored choices, with semantic names and no empty choi
   for (const [field, text] of [
     ["orderStart", "Table service"],
     ["paidWhen", "Paid before preparation"],
-    ["receiptPrintMode", "Always"],
   ] as const) {
     const control = box(el, field);
     expect(control.shadowRoot!.querySelector(".value")!.textContent).toBe(text);
@@ -112,7 +116,6 @@ it("draws the department's stored choices, with semantic names and no empty choi
 it.each([
   ["orderStart", "counter"],
   ["paidWhen", "ticket_then_pay"],
-  ["receiptPrintMode", "on_request"],
 ] as const)("changing department %s forwards exactly one whole value", async (field, value) => {
   const el = await mount();
   await emitted(el, () => choose(el, field, value), { ...department, [field]: value });
@@ -133,10 +136,10 @@ it.each(["numbered", "none"] as const)(
   },
 );
 describe.each([
-  ["en", ["Table service", "Paid before preparation", "Print", "Always"], "Same as department"],
+  ["en", ["Table service", "Paid before preparation", "Print"], "Same as department"],
   [
     "es",
-    ["Servicio de mesa", "Se paga antes de preparar", "Imprimir", "Siempre"],
+    ["Servicio de mesa", "Se paga antes de preparar", "Imprimir"],
     "Igual que el departamento",
   ],
 ] as const)("zone inheritance in %s", (locale, placeholders, clearLabel) => {
@@ -166,8 +169,8 @@ describe.each([
     });
     const want =
       locale === "en"
-        ? ["Counter service", "Paid at collection", "Don't print", "On request"]
-        : ["Servicio en mostrador", "Se paga al recoger", "No imprimir", "A petición"];
+        ? ["Counter service", "Paid at collection", "Don't print"]
+        : ["Servicio en mostrador", "Se paga al recoger", "No imprimir"];
     fields.forEach((field, index) =>
       expect(box(el, field).shadowRoot!.querySelector(".value.placeholder")!.textContent).toBe(
         want[index],
@@ -191,11 +194,11 @@ it.each(["light", "dark"] as const)(
     const value = (field: keyof ServiceSettingsValue) =>
       box(el, field).shadowRoot!.querySelector<HTMLElement>(".value")!;
     const muted = getComputedStyle(value("collectionNumber")).color;
-    expect(getComputedStyle(value("receiptPrintMode")).color).toBe(muted);
+    expect(getComputedStyle(value("orderStart")).color).toBe(muted);
     expect(getComputedStyle(value("paidWhen")).color).toBe(muted);
     await choose(el, "paidWhen", "ticket_then_pay");
     expect(getComputedStyle(value("paidWhen")).color).not.toBe(muted);
-    expect(getComputedStyle(value("receiptPrintMode")).color).toBe(muted);
+    expect(getComputedStyle(value("orderStart")).color).toBe(muted);
   },
 );
 it.each([
@@ -211,20 +214,7 @@ it.each([
     collectionNumber: value,
   });
 });
-it.each([false, true])("receipt choices send only auto/on_request (zone=%s)", async (zone) => {
-  const el = await mount(zone ? inherited : department, zone ? department : undefined);
-  const control = box(el, "receiptPrintMode");
-  expect(control.options.filter((option) => option.value).map((option) => option.value)).toEqual([
-    "auto",
-    "on_request",
-  ]);
-  for (const value of ["on_request", "auto"] as const) {
-    await emitted(el, () => choose(el, "receiptPrintMode", value), {
-      ...el.value,
-      receiptPrintMode: value,
-    });
-  }
-});
+
 it.each(["en", "es"] as const)(
   "department table-service hint and field labels in %s",
   async (locale) => {
@@ -236,9 +226,6 @@ it.each(["en", "es"] as const)(
     expect(box(el, "paidWhen").label).toBe(
       locale === "en" ? "When counter service is used" : "Cuando se usa el servicio en mostrador",
     );
-    expect(box(el, "receiptPrintMode").label).toBe(
-      locale === "en" ? "Print a receipt" : "Imprimir el recibo",
-    );
     expect(box(el, "paidWhen").hint).toBe(
       locale === "en"
         ? "Also used by zones set to counter service"
@@ -249,7 +236,7 @@ it.each(["en", "es"] as const)(
   },
 );
 it.each([false, true])(
-  "disables all four native controls and blocks synthetic changes (zone=%s)",
+  "disables all native controls and blocks synthetic changes (zone=%s)",
   async (zone) => {
     const el = await mount(department, zone ? department : undefined, true);
     const heard: unknown[] = [];
@@ -302,25 +289,5 @@ it.each([false, true])(
           el.errors[field],
         );
     }
-  },
-);
-
-it.each([
-  ["en", "Search", "No results"],
-  ["es", "Buscar", "Sin resultados"],
-] as const)(
-  "the zone receipt picker's native search and empty result are localized in %s",
-  async (locale, search, empty) => {
-    setLocale(locale);
-    const el = await mount(inherited, department);
-    const control = box(el, "receiptPrintMode");
-    await userEvent.click(control.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
-    await control.updateComplete;
-    const native = control.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    expect(native, "receipt search input is available").not.toBeNull();
-    expect(native.placeholder).toBe(search);
-    await userEvent.fill(page.elementLocator(native), "no receipt option has this name");
-    await control.updateComplete;
-    expect(control.shadowRoot!.textContent).toContain(empty);
   },
 );

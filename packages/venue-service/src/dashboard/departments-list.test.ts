@@ -151,18 +151,17 @@ describe("department list", () => {
       ["name", "Name"],
       ["orderStart", "How orders start"],
       ["paidWhen", "When counter service is used"],
-      ["receiptPrintMode", "Print a receipt"],
       ["also", "Also edit"],
       ["actions", "Actions"],
     ]);
     expect(list.columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
     expect(
       rows(el).map((row) =>
-        [...row.querySelectorAll("td")].slice(0, 4).map((cell) => cell.textContent!.trim()),
+        [...row.querySelectorAll("td")].slice(0, 3).map((cell) => cell.textContent!.trim()),
       ),
     ).toEqual([
-      ["Restaurant and bar", "Counter service", "Paid before preparation", "Always"],
-      ["Deli", "Counter service", "Paid before preparation", "Always"],
+      ["Restaurant and bar", "Counter service", "Paid before preparation"],
+      ["Deli", "Counter service", "Paid before preparation"],
     ]);
     expect(list.shadowRoot!.querySelector('[part="disabled-note"]')).toBeNull();
   });
@@ -360,7 +359,6 @@ describe("department list", () => {
       "Nombre",
       "Cómo empiezan los pedidos",
       "Cuando se usa el servicio en mostrador",
-      "Imprimir el recibo",
       "Editar también",
       "Acciones",
     ]);

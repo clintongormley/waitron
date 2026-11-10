@@ -21,6 +21,11 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
+it("keeps receipt decoration without an automatic-print switch", async () => {
+  const { el } = await mountReceiptEditor();
+  expect(receiptRoot(el).querySelector('[name="receiptPrintMode"]')).toBeNull();
+  expect(receiptRoot(el).querySelector('[name="printTradingName"]')).not.toBeNull();
+});
 it("opens with required description, bare languages and no inherited content or no-op write", async () => {
   const { el, api } = await mountReceiptEditor();
   expect(receiptField(el, "operationDescription").required).toBe(true);
@@ -216,7 +221,7 @@ it("shows missing translations in the offered languages and clears the warning a
   await editReceipt(el, "headerSubtitle-ca-ES", "Bar català");
   expect(receiptRoot(el).querySelector("[data-test=translation-warning]")).toBeNull();
 });
-it.each(["printTradingName", "receiptPrintMode"] as const)(
+it.each(["printTradingName"] as const)(
   "a %s policy refusal is visible beside its switch as well as in the bottom summary",
   async (field) => {
     const api = receiptApi();
@@ -240,7 +245,7 @@ it.each(["printTradingName", "receiptPrintMode"] as const)(
 );
 it("draft address and policy switches affect both preview and the exact submitted receipt", async () => {
   const { el, api } = await mountReceiptEditor();
-  for (const name of ["printAddress", "printTradingName", "receiptPrintMode"]) {
+  for (const name of ["printAddress", "printTradingName"]) {
     const toggle = receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
       `[name=${name}]`,
     )!;
@@ -252,12 +257,12 @@ it("draft address and policy switches affect both preview and the exact submitte
     .toMatchObject({
       departmentId: "bar",
       receipt: { printAddress: true },
-      policy: { receiptPrintMode: "on_request", printTradingName: false },
+      policy: { receiptPrintMode: "auto", printTradingName: false },
     });
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1]).toMatchObject({
     receipt: { printAddress: true },
-    policy: { receiptPrintMode: "on_request", printTradingName: false },
+    policy: { receiptPrintMode: "auto", printTradingName: false },
   });
 });
 it("returning an initially absent address switch to off restores the quiet Save baseline", async () => {
@@ -478,35 +483,6 @@ it.each(["success", "refusal"] as const)(
     expect(receiptModel.policy.printTradingName).toBe(true);
   },
 );
-
-it("a refused receipt print choice returns to its baseline without another write", async () => {
-  const api = receiptApi();
-  api.putDepartmentReceipt.mockRejectedValue(new Error("offline"));
-  const { el } = await mountReceiptEditor(api);
-  const toggle =
-    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!;
-  await toggle.updateComplete;
-  const label = toggle.shadowRoot!.querySelector("label")!;
-  const native = toggle.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  expect(native.checked).toBe(true);
-  await userEvent.click(page.elementLocator(label));
-  await el.updateComplete;
-  await clickReceiptSave(el);
-  await expect
-    .poll(() => receiptRoot(el).querySelector("wt-form-actions")!.error)
-    .toBe("Something went wrong, try again");
-  expect(native.checked).toBe(false);
-  expect(api.putDepartmentReceipt.mock.calls).toHaveLength(1);
-  expect(api.putDepartmentReceipt.mock.lastCall?.[1].policy.receiptPrintMode).toBe("on_request");
-  await userEvent.click(page.elementLocator(label));
-  await el.updateComplete;
-  expect(native.checked).toBe(true);
-  await clickReceiptSave(el);
-  expect(api.putDepartmentReceipt.mock.calls).toHaveLength(1);
-  expect(receiptSave(el).disabled).toBe(true);
-  expect(receiptSave(el).variant).toBe("secondary");
-  expect(receiptRoot(el).querySelector("wt-form-actions")!.error).toBe("");
-});
 
 it("after Save the editor stays, shows the saved values with Save quiet, and reports saved", async () => {
   const { el, api, events } = await mountReceiptEditor();

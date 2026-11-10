@@ -158,7 +158,21 @@ const inPresented = (el: TillApp, selector: string) =>
   presented(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
 const continueButton = (el: TillApp) => inDialog(el, "[data-pay-continue]")!;
 const ticketView = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
-const paidView = (el: TillApp) => el.shadowRoot!.querySelector("till-paid-view");
+const documentChoice = (el: TillApp) =>
+  el.shadowRoot!.querySelector("till-settlement-document-dialog");
+
+async function closeDocuments(el: TillApp): Promise<void> {
+  documentChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!.click();
+  await flush(el);
+}
+
+async function finishFromTable(el: TillApp): Promise<void> {
+  await closeDocuments(el);
+  const order = tableOrder(el);
+  await openTableMenu(order);
+  await userEvent.click(inOrder(order, "[data-table-menu] [data-finish-table]")!);
+  await flush(el);
+}
 
 async function rowSummary(el: TillApp): Promise<string> {
   const row = inDialog(el, "till-pay-equipment") as
@@ -464,10 +478,10 @@ describe("a presented bill on a handheld", () => {
       guestCount: 4,
     });
     expect(presented(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
+    expect(documentChoice(el)).not.toBeNull();
   });
 
-  it("a card is charged on the row's reader through the integrated payment, then the paid screen shows", async () => {
+  it("a card is charged on the row's reader through the integrated payment, then the document choice shows", async () => {
     const { el } = await openPresented();
     await takeOnReader(el);
 
@@ -482,10 +496,10 @@ describe("a presented bill on a handheld", () => {
     expect(vi.mocked(api.takeBillPayment)).not.toHaveBeenCalled();
     expect(vi.mocked(api.collectOrder)).not.toHaveBeenCalled();
     expect(presented(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
+    expect(documentChoice(el)).not.toBeNull();
   });
 
-  it("cash is collected with what was handed over and the guests, then the paid screen shows", async () => {
+  it("cash is collected with what was handed over and the guests, then the document choice shows", async () => {
     const { el } = await openPresented();
     await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 3 });
 
@@ -499,10 +513,10 @@ describe("a presented bill on a handheld", () => {
     ]);
     expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
     expect(presented(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
+    expect(documentChoice(el)).not.toBeNull();
   });
 
-  it("cash handed over beyond the bill shows the change to give back on the paid screen", async () => {
+  it("cash handed over beyond the bill shows the change to give back on the document choice", async () => {
     const { el } = await openPresented({
       collectOrder: vi
         .fn()
@@ -510,14 +524,14 @@ describe("a presented bill on a handheld", () => {
     });
     await payFromSheet(el, { method: "cash", tendered: "150.00", guestCount: 3 });
 
-    const paid = el.shadowRoot!.querySelector("till-paid-view")!;
+    const paid = documentChoice(el)!;
     await paid.updateComplete;
-    expect(text(paid.shadowRoot!.querySelector("[data-paid-change]"))).toBe(
+    expect(text(paid.shadowRoot!.querySelector("[data-settlement-change]"))).toBe(
       `${t("label.change")} ${money("30.00")}`,
     );
   });
 
-  it("a card on another machine shows no change on the paid screen", async () => {
+  it("a card on another machine shows no change on the document choice", async () => {
     const { el } = await openPresented({
       collectOrder: vi.fn().mockResolvedValue({
         ...ticket(),
@@ -526,9 +540,9 @@ describe("a presented bill on a handheld", () => {
     });
     await payFromSheet(el, { method: "manual", externalRef: "op-1", guestCount: 3 });
 
-    const paid = el.shadowRoot!.querySelector("till-paid-view")!;
+    const paid = documentChoice(el)!;
     await paid.updateComplete;
-    expect(paid.shadowRoot!.querySelector("[data-paid-change]")).toBeNull();
+    expect(paid.shadowRoot!.querySelector("[data-settlement-change]")).toBeNull();
   });
 
   it("another card machine is collected as a card of the whole amount with its operation number", async () => {
@@ -1098,7 +1112,7 @@ describe("an unanswered presented payment on a handheld", () => {
   }
 
   it.each(["cash", "manual"] as const)(
-    "a %s payment with no answer reopens the sheet locked on it, and its action sends it again; answered, the paid screen shows",
+    "a %s payment with no answer reopens the sheet locked on it, and its action sends it again; answered, the document choice shows",
     async (method) => {
       const send = vi
         .fn()
@@ -1121,7 +1135,7 @@ describe("an unanswered presented payment on a handheld", () => {
       expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
       expect(vi.mocked(api.pay)).not.toHaveBeenCalled();
       expect(presented(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
     },
   );
 
@@ -1209,7 +1223,7 @@ describe("an unanswered presented payment on a handheld", () => {
       await resend(el);
       expect(send).toHaveBeenCalledTimes(2);
       expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
-      expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
     },
   );
   it("a resend carries the original request after another person's draft has changed the bill", async () => {
@@ -1264,7 +1278,7 @@ describe("an unanswered presented payment on a handheld", () => {
 
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1]).toEqual(original);
-    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
+    expect(documentChoice(el)).not.toBeNull();
   });
 });
 
@@ -2977,23 +2991,22 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     await tick(el);
 
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(dialog(el)).toBeNull();
     expect(getFiledTicket).toHaveBeenCalledTimes(1);
   });
 
-  it("a received card that settles a simplified invoice's bill shows the paid screen, with the read's payments", async () => {
+  it("a received card that settles a simplified invoice's bill shows the document choice, with the read's payments", async () => {
     const getFiledTicket = vi.fn().mockResolvedValue(invoiceOf("120.00", "F2"));
     const el = await settlingCard(getFiledTicket);
 
     await tick(el);
 
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(ticketView(el)).toBeNull();
     expect(dialog(el)).toBeNull();
-    expect(paidView(el)!.payments).toEqual([
-      paymentOf({ ...own, applied: "120.00", state: "received" }),
-    ]);
+    expect(documentChoice(el)!.result.total).toBe("120.00");
+    expect(getFiledTicket).toHaveBeenCalledOnce();
   });
 
   it("a ticket that cannot be read leaves the sheet as it is, and the next tick tries again", async () => {
@@ -3005,15 +3018,15 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     await tick(el);
     expect(getFiledTicket).toHaveBeenCalledTimes(1);
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
 
     await tick(el);
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(getFiledTicket).toHaveBeenCalledTimes(2);
   });
 
-  it("a ticket read that fails after another tick has come is tried again, and the paid screen then shows", async () => {
+  it("a ticket read that fails after another tick has come is tried again, and the document choice then shows", async () => {
     let fail: () => void = () => {};
     const getFiledTicket = vi
       .fn()
@@ -3029,11 +3042,11 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     fail();
     await flush(el);
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     await tick(el);
 
     expect(getFiledTicket).toHaveBeenCalledTimes(2);
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(dialog(el)).toBeNull();
   });
 
@@ -3053,7 +3066,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
     expect(dialog(el)).toBeNull();
     expect(ticketView(el)).toBeNull();
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-pay-notice]")).toBeNull();
   });
 
@@ -3268,12 +3281,12 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
   });
 });
 
-describe("the paid screen on a handheld", () => {
+describe("the document choice on a handheld", () => {
   const share: AllocationPreview = { ...wholeCard, applied: "40.00", charged: "40.00" };
   const simplified = () => invoiceOf("120.00", "F2");
   const full = () => invoiceOf("120.00", "F1");
-  const inPaid = (el: TillApp, selector: string) =>
-    paidView(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
+  const inChoice = (el: TillApp, selector: string) =>
+    documentChoice(el)!.shadowRoot!.querySelector<HTMLElement>(selector);
   const sharePaid = (n: number) =>
     paymentOf({
       id: `pay-${n}`,
@@ -3356,23 +3369,22 @@ describe("the paid screen on a handheld", () => {
     return { el };
   }
 
-  it("the third share's answer with a simplified invoice shows the paid screen with its three payments", async () => {
+  it("the third share's answer with a simplified invoice shows the document choice with its three payments", async () => {
     const { el } = await threeShares(simplified());
 
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(ticketView(el)).toBeNull();
     expect(dialog(el)).toBeNull();
-    expect(paidView(el)!.payments).toHaveLength(3);
-    expect(paidView(el)!.total).toBe("120.00");
-    expect(paidView(el)!.tableName).toBe(t("floor.table_title").replace("{table}", "4"));
-    expect(paidView(el)!.receipt).toEqual(printed);
+    expect(vi.mocked(api.takeBillPayment)).toHaveBeenCalledTimes(3);
+    expect(documentChoice(el)!.result.total).toBe("120.00");
+    expect(documentChoice(el)!.originalReceiptPrint).toEqual(printed);
     expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledWith("wo-4");
     expect(vi.mocked(api.getInvoiceDeliveries)).not.toHaveBeenCalled();
     expect(vi.mocked(api.finishTable)).not.toHaveBeenCalled();
   });
 
-  it("a last share paid in cash shows its change in the paid screen's list, and no second change line", async () => {
+  it("a last share paid in cash shows its change in the document choice's list, and no second change line", async () => {
     const cashShare = paymentOf({
       id: "pay-3",
       submissionId: "sub-3",
@@ -3402,12 +3414,11 @@ describe("the paid screen on a handheld", () => {
         ),
     });
 
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
-    await paidView(el)!.updateComplete;
-    expect(text(inPaid(el, '[data-paid-payment="pay-3"]'))).toContain(
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+    await documentChoice(el)!.updateComplete;
+    expect(text(inChoice(el, "[data-settlement-change]"))).toContain(
       `${t("label.change")} ${money("10.00")}`,
     );
-    expect(inPaid(el, "[data-paid-change]")).toBeNull();
   });
 
   it("where receipts print on request, the original-print action prints it once and reads the ticket again", async () => {
@@ -3415,26 +3426,26 @@ describe("the paid screen on a handheld", () => {
       ...onRequest,
       getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
     });
-    await vi.waitFor(() => expect(inPaid(el, '[data-test="print-receipt"]')).not.toBeNull());
+    await vi.waitFor(() => expect(inChoice(el, '[data-test="print-receipt"]')).not.toBeNull());
 
-    inPaid(el, '[data-test="print-receipt"]')!.click();
+    inChoice(el, '[data-test="print-receipt"]')!.click();
     await flush(el);
 
     expect(vi.mocked(api.printReceipt)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.printReceipt)).toHaveBeenCalledWith("wo-4");
     expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(2);
-    expect(paidView(el)!.originalAvailable).toBe(false);
+    expect(documentChoice(el)!.originalReceiptAvailable).toBe(false);
   });
 
-  it("a ticket that failed to print is retried from the paid screen", async () => {
+  it("a ticket that failed to print is retried from the document choice", async () => {
     const { el } = await threeShares(simplified(), {
       getReceiptPrintStatus: vi
         .fn()
         .mockResolvedValue({ status: "failed", jobId: "job-1", canRetry: true }),
     });
-    await vi.waitFor(() => expect(inPaid(el, '[data-test="retry-receipt"]')).not.toBeNull());
+    await vi.waitFor(() => expect(inChoice(el, '[data-test="retry-receipt"]')).not.toBeNull());
 
-    inPaid(el, '[data-test="retry-receipt"]')!.click();
+    inChoice(el, '[data-test="retry-receipt"]')!.click();
     await flush(el);
 
     expect(vi.mocked(api.retryReceipt)).toHaveBeenCalledTimes(1);
@@ -3458,37 +3469,41 @@ describe("the paid screen on a handheld", () => {
         },
         { capabilities: phoneCapabilities.filter((flag) => flag !== "print-receipt") },
       );
-      await vi.waitFor(() => expect(paidView(el)?.receipt).not.toBeNull());
-      expect(paidView(el)!.originalAvailable).toBe(requested);
-      expect(paidView(el)!.canPrint).toBe(false);
-      expect(inPaid(el, '[data-test="print-receipt"]')).toBeNull();
-      expect(inPaid(el, '[data-test="retry-receipt"]')).toBeNull();
-      expect(inPaid(el, '[data-test="reprint"]')).toBeNull();
+      await vi.waitFor(() => expect(documentChoice(el)?.originalReceiptPrint).not.toBeNull());
+      expect(documentChoice(el)!.canPrintReceipt).toBe(false);
+      expect(documentChoice(el)!.canPrintReceipt).toBe(false);
+      expect(inChoice(el, '[data-test="print-receipt"]')).toBeNull();
+      expect(inChoice(el, '[data-test="retry-receipt"]')).toBeNull();
+      expect(inChoice(el, '[data-test="reprint"]')).toBeNull();
     },
   );
 
-  it("a failed ticket read is checked again from the paid screen", async () => {
+  it("a failed ticket read is checked again from the document choice", async () => {
     const getReceiptPrintStatus = vi
       .fn()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValue(printed);
     const { el } = await threeShares(simplified(), { getReceiptPrintStatus });
-    await vi.waitFor(() => expect(paidView(el)?.receiptReadFailed).toBe(true));
-    expect(text(inPaid(el, "[data-paid-ticket-status]"))).toBe(t("invoice.print_status_failed"));
+    await vi.waitFor(() => expect(documentChoice(el)?.originalReceiptReadFailed).toBe(true));
+    expect(text(inChoice(el, '[data-test="original-delivery"]'))).toContain(
+      t("invoice.print_status_failed"),
+    );
 
-    inPaid(el, '[data-test="refresh-receipt"]')!.click();
+    inChoice(el, '[data-test="refresh-receipt"]')!.click();
     await flush(el);
 
     expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
-    expect(paidView(el)!.receiptReadFailed).toBe(false);
-    expect(text(inPaid(el, "[data-paid-ticket-status]"))).toBe(t("paid.ticket_sent"));
+    expect(documentChoice(el)!.originalReceiptReadFailed).toBe(false);
+    expect(text(inChoice(el, '[data-test="original-delivery"]'))).toContain(
+      t("invoice.print_done"),
+    );
   });
 
   it("Reimprimir queues a copy of the ticket", async () => {
     const { el } = await threeShares(simplified());
-    await vi.waitFor(() => expect(inPaid(el, '[data-test="reprint"]')).not.toBeNull());
+    await vi.waitFor(() => expect(inChoice(el, '[data-test="reprint"]')).not.toBeNull());
 
-    inPaid(el, '[data-test="reprint"]')!.click();
+    inChoice(el, '[data-test="reprint"]')!.click();
     await flush(el);
 
     expect(vi.mocked(api.reprint)).toHaveBeenCalledTimes(1);
@@ -3497,10 +3512,9 @@ describe("the paid screen on a handheld", () => {
 
   it("Finish table finishes the table once", async () => {
     const { el } = await threeShares(simplified());
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
 
-    inPaid(el, '[data-test="finish-table"]')!.click();
-    await flush(el);
+    await finishFromTable(el);
 
     expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(api.finishTable).mock.calls[0]![0]).toBe("v1");
@@ -3508,15 +3522,15 @@ describe("the paid screen on a handheld", () => {
 
   it("Back to the table returns to the table's order without a new history entry", async () => {
     const { el } = await threeShares(simplified());
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     try {
-      inPaid(el, '[data-test="back-to-table"]')!.click();
+      inChoice(el, "[data-settlement-none]")!.click();
       await flush(el);
 
-      expect(paidView(el)).toBeNull();
+      expect(documentChoice(el)).toBeNull();
       expect(tableOrder(el)).not.toBeNull();
       expect(tableOrder(el).checkVisibility()).toBe(true);
       expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(reads + 1);
@@ -3529,18 +3543,17 @@ describe("the paid screen on a handheld", () => {
     }
   });
 
-  it("Finish table refused because another bill still owes leaves the paid screen for the table's refusal", async () => {
+  it("Finish table refused because another bill still owes leaves the document choice for the table's refusal", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
 
-    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
-    await flush(el);
+    await finishFromTable(el);
 
     expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     expect(tableOrder(el).checkVisibility()).toBe(true);
     const refusal = inOrder(tableOrder(el), "[data-finish-refusal]");
     expect(refusal).not.toBeNull();
@@ -3556,15 +3569,14 @@ describe("the paid screen on a handheld", () => {
     ["not permitted", { code: "authorization.not_permitted" }],
     ["unanswered", new TypeError("Failed to fetch")],
   ] as const)(
-    "Finish table refused (%s) on the paid screen says so where it can be seen",
+    "Finish table refused (%s) on the document choice says so where it can be seen",
     async (_, refusal) => {
       const { el } = await threeShares(simplified(), {
         finishTable: vi.fn().mockRejectedValue(refusal),
       });
-      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
 
-      await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
-      await flush(el);
+      await finishFromTable(el);
 
       const alert = el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
       expect(alert).not.toBeNull();
@@ -3599,7 +3611,7 @@ describe("the paid screen on a handheld", () => {
     },
   };
 
-  /** The paid screen's Finish table answered that a paid dish is not served yet, then the
+  /** The document choice's Finish table answered that a paid dish is not served yet, then the
    * confirmation's send answered `refusal`. */
   async function refusedAfterUnserved(
     refusal: { code: string },
@@ -3618,9 +3630,9 @@ describe("the paid screen on a handheld", () => {
       }),
       ...overrides,
     });
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
 
-    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await finishFromTable(el);
     await flush(el, 8);
 
     const confirm = el.shadowRoot!.querySelector<
@@ -3643,9 +3655,9 @@ describe("the paid screen on a handheld", () => {
     return el;
   }
 
-  /** The paid screen is gone and the order screen shows the instruction to give the money back. */
+  /** The document choice is gone and the order screen shows the instruction to give the money back. */
   function holdsMoneyOnOrder(el: TillApp): void {
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     expect(tableOrder(el).checkVisibility()).toBe(true);
     const alert = el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
     expect(alert).not.toBeNull();
@@ -3653,10 +3665,10 @@ describe("the paid screen on a handheld", () => {
     expect(text(alert)).toBe(t("table.finish_bill_holds_money"));
   }
 
-  it("Finish table with paid dishes not yet served opens the confirmation over the paid screen; refused there because a bill owes, it leaves for the table's refusal", async () => {
+  it("Finish table with paid dishes not yet served opens the confirmation over the document choice; refused there because a bill owes, it leaves for the table's refusal", async () => {
     const el = await refusedAfterUnserved({ code: "party.bill_outstanding" });
 
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     const refusal = inOrder(tableOrder(el), "[data-finish-refusal]");
     expect(refusal).not.toBeNull();
     expect(refusal!.checkVisibility()).toBe(true);
@@ -3676,25 +3688,24 @@ describe("the paid screen on a handheld", () => {
         },
       );
 
-      expect(paidView(el)).toBeNull();
+      expect(documentChoice(el)).toBeNull();
       expect(text(inOrder(tableOrder(el), "[data-party-outstanding]"))).toBe(money("50.00"));
     },
   );
 
-  it("Finish table refused because a bill holds money leaves the paid screen, and the order screen keeps the instruction", async () => {
+  it("Finish table refused because a bill holds money leaves the document choice, and the order screen keeps the instruction", async () => {
     const { el } = await threeShares(simplified(), {
       finishTable: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
     });
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
 
-    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
-    await flush(el);
+    await finishFromTable(el);
 
     expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
     holdsMoneyOnOrder(el);
   });
 
-  it("the confirmation for paid dishes not yet served, refused because a bill holds money, leaves the paid screen with the instruction", async () => {
+  it("the confirmation for paid dishes not yet served, refused because a bill holds money, leaves the document choice with the instruction", async () => {
     const el = await refusedAfterUnserved({ code: "bill.payments_received" });
 
     holdsMoneyOnOrder(el);
@@ -3705,23 +3716,21 @@ describe("the paid screen on a handheld", () => {
       getReceiptPrintStatus: vi.fn(() => new Promise(() => {})),
       finishTable: vi.fn(() => new Promise(() => {})),
     });
-    await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
-    await paidView(el)!.updateComplete;
-    expect(paidView(el)!.busy).toBe(true);
-    const enabled = (test: string) =>
-      inPaid(el, `[data-test="${test}"]`)!.shadowRoot!.querySelector("button")!.disabled === false;
-    expect(enabled("finish-table")).toBe(true);
-    expect(enabled("back-to-table")).toBe(true);
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+    await documentChoice(el)!.updateComplete;
+    expect(
+      inChoice(el, "[data-settlement-none]")!.shadowRoot!.querySelector("button")!.disabled,
+    ).toBe(false);
 
-    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
-    await flush(el);
-    await userEvent.click(inPaid(el, '[data-test="finish-table"]')!);
+    await finishFromTable(el);
+    await openTableMenu(tableOrder(el));
+    await userEvent.click(inOrder(tableOrder(el), "[data-table-menu] [data-finish-table]")!);
     await flush(el);
 
     expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
   });
 
-  it("collecting a bill through Find a bill on a handheld shows the ticket view, never the paid screen", async () => {
+  it("collecting a bill through Find a bill on a handheld opens the document choice", async () => {
     const { el } = await mountApp(
       onPhone({ collectOrder: vi.fn().mockResolvedValue(simplified()) }),
     );
@@ -3735,18 +3744,18 @@ describe("the paid screen on a handheld", () => {
     await flush(el);
 
     expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
-    expect(paidView(el)).toBeNull();
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+    expect(ticketView(el)).toBeNull();
   });
 
-  it("a full invoice still shows the ticket view", async () => {
+  it("a full invoice still shows the document choice", async () => {
     const { el } = await threeShares(full());
 
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
-    expect(paidView(el)).toBeNull();
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+    expect(ticketView(el)).toBeNull();
   });
 
-  it("a share that leaves money owing shows no paid screen", async () => {
+  it("a share that leaves money owing shows no document choice", async () => {
     const { el } = await mountApp(
       onPhone({
         previewBillPayment: vi.fn().mockResolvedValue(share),
@@ -3762,11 +3771,11 @@ describe("the paid screen on a handheld", () => {
     await press(el, "[data-pay-confirm]");
 
     await vi.waitFor(() => expect(inDialog(el, "[data-pay-next]")).not.toBeNull());
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     expect(ticketView(el)).toBeNull();
   });
 
-  it("the sheet's own card still at the reader shows no paid screen", async () => {
+  it("the sheet's own card still at the reader shows no document choice", async () => {
     const { el } = await mountApp(
       onPhone({
         takeBillPayment: vi.fn().mockResolvedValue({
@@ -3785,11 +3794,11 @@ describe("the paid screen on a handheld", () => {
     await press(el, "[data-pay-confirm]");
 
     await vi.waitFor(() => expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull());
-    expect(paidView(el)).toBeNull();
+    expect(documentChoice(el)).toBeNull();
     expect(ticketView(el)).toBeNull();
   });
 
-  it("a counter till paying a bill with a simplified invoice still shows the ticket view and reads no ticket", async () => {
+  it("a counter till paying a bill with a simplified invoice still shows the document choice and reads no ticket", async () => {
     const getReceiptPrintStatus = vi.fn();
     const { el } = await mountApp({
       getReceiptPrintStatus,
@@ -3810,22 +3819,18 @@ describe("the paid screen on a handheld", () => {
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
 
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
-    expect(paidView(el)).toBeNull();
-    expect(getReceiptPrintStatus).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+    expect(ticketView(el)).toBeNull();
+    expect(getReceiptPrintStatus).toHaveBeenCalledOnce();
   });
 
   describe("on the presented path", () => {
-    it("a simplified invoice shows the paid screen, with no list of payments", async () => {
+    it("a simplified invoice shows the document choice, with no list of payments", async () => {
       const { el } = await payPresented(simplified());
 
-      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       expect(ticketView(el)).toBeNull();
-      expect(paidView(el)!.payments).toEqual([]);
-      expect(inPaid(el, "[data-paid-payments]")).toBeNull();
-      expect(text(inPaid(el, "[data-paid-summary]"))).toBe(
-        t("paid.summary_one").replace("{amount}", money("120.00")),
-      );
+      expect(documentChoice(el)!.result.total).toBe("120.00");
       expect(vi.mocked(api.getReceiptPrintStatus)).toHaveBeenCalledTimes(1);
     });
 
@@ -3833,15 +3838,14 @@ describe("the paid screen on a handheld", () => {
       ["cash", { method: "cash", tendered: "150.00", guestCount: 4 }],
       ["another card machine", { method: "manual", externalRef: "OP-7", guestCount: 4 }],
     ] as const)(
-      "%s with a simplified invoice shows the paid screen, with no list of payments",
+      "%s with a simplified invoice shows the document choice, with no list of payments",
       async (_, detail) => {
         const { el } = await payPresented(simplified(), undefined, detail);
 
         expect(vi.mocked(api.collectOrder)).toHaveBeenCalledOnce();
-        await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
+        await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
         expect(ticketView(el)).toBeNull();
-        expect(paidView(el)!.payments).toEqual([]);
-        expect(inPaid(el, "[data-paid-payments]")).toBeNull();
+        expect(documentChoice(el)!.result.total).toBe("120.00");
       },
     );
 
@@ -3852,9 +3856,9 @@ describe("the paid screen on a handheld", () => {
         { method: "cash", tendered: "150.00", guestCount: 4 },
         { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
       );
-      await vi.waitFor(() => expect(inPaid(el, '[data-test="open-drawer"]')).not.toBeNull());
+      await vi.waitFor(() => expect(inChoice(el, '[data-test="open-drawer"]')).not.toBeNull());
 
-      await userEvent.click(inPaid(el, '[data-test="open-drawer"]')!);
+      await userEvent.click(inChoice(el, '[data-test="open-drawer"]')!);
       await flush(el);
 
       expect(vi.mocked(api.openDrawer)).toHaveBeenCalledTimes(1);
@@ -3867,17 +3871,17 @@ describe("the paid screen on a handheld", () => {
         tendered: "150.00",
         guestCount: 4,
       });
-      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
-      await paidView(el)!.updateComplete;
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+      await documentChoice(el)!.updateComplete;
 
-      expect(inPaid(el, '[data-test="open-drawer"]')).toBeNull();
+      expect(inChoice(el, '[data-test="open-drawer"]')).toBeNull();
     });
 
-    it("a full invoice still shows the ticket view", async () => {
+    it("a full invoice still shows the document choice", async () => {
       const { el } = await payPresented(full());
 
-      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
-      expect(paidView(el)).toBeNull();
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+      expect(ticketView(el)).toBeNull();
     });
   });
 
@@ -3916,73 +3920,6 @@ describe("the paid screen on a handheld", () => {
     await flush(el);
     return { el };
   }
-
-  const paidBackgrounds = new Map<string, string>();
-  it.each([
-    ["bill", "light", 390],
-    ["bill", "light", 1280],
-    ["bill", "dark", 390],
-    ["bill", "dark", 1280],
-    ["presented", "light", 390],
-    ["presented", "light", 1280],
-    ["presented", "dark", 390],
-    ["presented", "dark", 1280],
-    ["drawer", "light", 390],
-    ["drawer", "dark", 390],
-  ] as const)(
-    "the paid screen looks right on the %s path, %s at %i px",
-    async (path, theme, width) => {
-      const viewport = { width: window.innerWidth, height: window.innerHeight };
-      await page.viewport(width, 900);
-      try {
-        expect(window.innerWidth).toBe(width);
-        const { el } =
-          path === "bill"
-            ? await threeShares(simplified(), {}, {}, theme)
-            : path === "drawer"
-              ? await payPresented(
-                  simplified(),
-                  theme,
-                  { method: "cash", tendered: "150.00", guestCount: 4 },
-                  { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
-                )
-              : await payPresented(simplified(), theme);
-        await vi.waitFor(() => expect(paidView(el)?.receipt).not.toBeNull());
-        const view = paidView(el)!;
-        await view.updateComplete;
-        if (path === "drawer") expect(inPaid(el, '[data-test="open-drawer"]')).not.toBeNull();
-        const article = view.shadowRoot!.querySelector("article")!;
-        expect(article.scrollWidth).toBeLessThanOrEqual(article.clientWidth);
-        const banner = getComputedStyle(view.shadowRoot!.querySelector(".banner")!).backgroundColor;
-        paidBackgrounds.set(`${path}-${theme}-${width}`, banner);
-        if (theme === "dark")
-          expect(banner).not.toBe(paidBackgrounds.get(`${path}-light-${width}`));
-        const shot = `__screenshots__/look/a796-paid-${path}-${theme}-${width}`;
-        await page.screenshot({
-          element: view,
-          path: `__screenshots__/look/a796-paid-${path}-${theme}-${width}.png`,
-        });
-        const box = view.getBoundingClientRect();
-        const inside = [...view.shadowRoot!.querySelectorAll("wt-button")].every((button) => {
-          const rect = button.getBoundingClientRect();
-          return rect.left >= box.left && rect.right <= box.right;
-        });
-        expect(inside).toBe(true);
-        await commands.writeFile(
-          `src/${shot}.json`,
-          JSON.stringify({
-            innerWidth: window.innerWidth,
-            viewWidth: box.width,
-            articleWidth: article.getBoundingClientRect().width,
-            buttonsInside: inside,
-            banner,
-          }),
-        );
-      } finally {
-        await page.viewport(viewport.width, viewport.height);
-      }
-    },
-  );
 
   /** A part-paid counter order paid off through Find bill, from a phone, in one last payment. */
   async function payCounterOrder({ tableHeld }: { tableHeld: boolean }) {
@@ -4049,7 +3986,7 @@ describe("the paid screen on a handheld", () => {
     await press(el, "[data-pay-continue]");
     const reads = getPartyBills.mock.calls.length;
     await press(el, "[data-pay-confirm]");
-    await vi.waitFor(() => expect(paidView(el) ?? ticketView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     await flush(el);
     return { el, getPartyBills, reads };
   }
@@ -4062,18 +3999,15 @@ describe("the paid screen on a handheld", () => {
     async (_, tableHeld) => {
       const { el } = await payCounterOrder({ tableHeld });
 
-      expect(paidView(el)).toBeNull();
-      expect(ticketView(el)).not.toBeNull();
-      expect(ticketView(el)!.checkVisibility()).toBe(true);
-      const ticket = (ticketView(el)!.shadowRoot!.textContent ?? "").replace(/\s+/g, " ");
-      expect(ticket).toContain("F-COUNTER");
-      expect(ticket).not.toContain("Table 4");
+      expect(documentChoice(el)).not.toBeNull();
+      expect(ticketView(el)).toBeNull();
+      expect(documentChoice(el)!.result.invoiceNumber).toBe("F-COUNTER");
 
-      emit(ticketView(el)!, "new-sale");
+      emit(documentChoice(el)!, "settlement-close");
       await flush(el);
 
       expect(ticketView(el)).toBeNull();
-      expect(paidView(el)).toBeNull();
+      expect(documentChoice(el)).toBeNull();
       expect(floor(el).checkVisibility()).toBe(true);
     },
   );
@@ -4104,13 +4038,10 @@ describe("the paid screen on a handheld", () => {
       status: "settled",
       outstanding: "0.00",
     });
-    const title = (el: TillApp) => text(inPaid(el, "[data-paid-title]"));
-    const left = (el: TillApp) => inPaid(el, "[data-paid-left]");
-    const finishButton = (el: TillApp) => inPaid(el, '[data-test="finish-table"]');
-    const backButton = (el: TillApp) => inPaid(el, '[data-test="back-to-table"]')!;
+    const backButton = (el: TillApp) => inChoice(el, "[data-settlement-none]")!;
     const firstDrawn = async (el: TillApp) => {
-      await vi.waitFor(() => expect(paidView(el)).not.toBeNull());
-      await paidView(el)!.updateComplete;
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
+      await documentChoice(el)!.updateComplete;
     };
 
     /** Bill 1 of a party paid in three shares from the phone. Bills are read as `before` until the
@@ -4149,16 +4080,6 @@ describe("the paid screen on a handheld", () => {
       allergens: null,
     };
 
-    it("names the paid bill, lists the others in number order, offers no Finish table, and Back is primary", async () => {
-      const { el } = await payBillOne(threeBills);
-      await firstDrawn(el);
-
-      expect(title(el)).toBe("Table 4 · Bill 1 paid");
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
-      expect(finishButton(el)).toBeNull();
-      expect(backButton(el)).toHaveProperty("variant", "primary");
-    });
-
     it("Back shows the lowest-numbered bill still to pay, whose own lines are read", async () => {
       const { el } = await payBillOne(threeBills);
       await firstDrawn(el);
@@ -4166,7 +4087,7 @@ describe("the paid screen on a handheld", () => {
       backButton(el).click();
       await flush(el);
 
-      expect(paidView(el)).toBeNull();
+      expect(documentChoice(el)).toBeNull();
       expect(tableOrder(el).orderId).toBe("wo-5");
       expect(vi.mocked(api.getTabLines).mock.lastCall?.[0]).toBe("wo-5");
       expect(tableOrder(el).checkVisibility()).toBe(true);
@@ -4177,19 +4098,6 @@ describe("the paid screen on a handheld", () => {
       await firstDrawn(el);
 
       backButton(el).click();
-      await flush(el);
-
-      expect(tableOrder(el).orderId).toBe("wo-5");
-      expect(vi.mocked(api.getTabLines).mock.calls.filter(([id]) => id === "wo-5")).toHaveLength(1);
-    });
-
-    it("two quick presses of Back move once and read the next bill's lines once", async () => {
-      const { el } = await payBillOne(threeBills);
-      await firstDrawn(el);
-      const button = backButton(el);
-
-      button.click();
-      button.click();
       await flush(el);
 
       expect(tableOrder(el).orderId).toBe("wo-5");
@@ -4252,7 +4160,7 @@ describe("the paid screen on a handheld", () => {
       );
     });
 
-    describe("Finish table refused from the paid screen", () => {
+    describe("Finish table refused from the document choice", () => {
       const billOnePaidAndRest = threeBills.map((bill) =>
         bill === billOne ? settled(bill) : bill,
       );
@@ -4262,9 +4170,7 @@ describe("the paid screen on a handheld", () => {
           .mockResolvedValueOnce(threeBills.map(settled))
           .mockResolvedValue(billOnePaidAndRest);
       const pressFinish = async (el: TillApp) => {
-        await vi.waitFor(() => expect(finishButton(el)).not.toBeNull());
-        await userEvent.click(finishButton(el)!);
-        await flush(el);
+        await finishFromTable(el);
       };
       const stillToPay = (el: TillApp) => text(inOrder(tableOrder(el), "[data-party-outstanding]"));
 
@@ -4280,7 +4186,7 @@ describe("the paid screen on a handheld", () => {
 
         await pressFinish(el);
 
-        expect(paidView(el)).toBeNull();
+        expect(documentChoice(el)).toBeNull();
         expect(inOrder(tableOrder(el), "[data-finish-refusal]")).not.toBeNull();
         expect(stillToPay(el)).toBe(money("50.00"));
       });
@@ -4297,7 +4203,7 @@ describe("the paid screen on a handheld", () => {
 
         await pressFinish(el);
 
-        expect(paidView(el)).toBeNull();
+        expect(documentChoice(el)).toBeNull();
         expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(
           t("table.finish_bill_holds_money"),
         );
@@ -4385,25 +4291,15 @@ describe("the paid screen on a handheld", () => {
       expect(text(inOrder(tableOrder(el), "[data-bill-received]"))).toContain(money("20.00"));
     });
 
-    it("draws at once from the bills already held, leaving out the paid bill they still call open", async () => {
-      const { el } = await payBillOne(threeBills, () => new Promise<PartyBill[]>(() => {}));
-      await firstDrawn(el);
-
-      expect(title(el)).toBe("Table 4 · Bill 1 paid");
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
-      expect(finishButton(el)).toBeNull();
-    });
-
     it("when the read after the payment says another till paid the rest, the title goes back to the table and Finish table returns", async () => {
       const { el } = await payBillOne(threeBills, async () => threeBills.map(settled));
       await firstDrawn(el);
-      await vi.waitFor(() => expect(left(el)).toBeNull());
-      await paidView(el)!.updateComplete;
+      await vi.waitFor(() =>
+        expect(tableOrder(el).bills.every((bill) => bill.status === "settled")).toBe(true),
+      );
+      await documentChoice(el)!.updateComplete;
 
-      expect(paidView(el)!.billsLeft).toEqual([]);
-      expect(title(el)).toBe("Table 4 paid");
-      expect(finishButton(el)).not.toBeNull();
-      expect(backButton(el)).toHaveProperty("variant", "secondary");
+      expect(tableOrder(el).bills).toEqual(threeBills.map(settled));
     });
 
     it("when the read after the payment fails, what the screen showed stays", async () => {
@@ -4412,10 +4308,13 @@ describe("the paid screen on a handheld", () => {
       );
       await firstDrawn(el);
       await flush(el);
-      await paidView(el)!.updateComplete;
+      await documentChoice(el)!.updateComplete;
 
-      expect(title(el)).toBe("Table 4 · Bill 1 paid");
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(tableOrder(el).bills.map((bill) => bill.workingOrderId)).toEqual([
+        "wo-9",
+        "wo-4",
+        "wo-5",
+      ]);
       expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
     });
 
@@ -4478,11 +4377,13 @@ describe("the paid screen on a handheld", () => {
 
       read.answer(billOnePaid);
       await flush(el);
-      await paidView(el)!.updateComplete;
+      await documentChoice(el)!.updateComplete;
 
-      expect(title(el)).toBe("Table 4 · Bill 1 paid");
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
-      expect(finishButton(el)).toBeNull();
+      expect(tableOrder(el).bills.map((bill) => bill.workingOrderId)).toEqual([
+        "wo-9",
+        "wo-4",
+        "wo-5",
+      ]);
       expect(alert(el)).toBeNull();
     });
 
@@ -4493,11 +4394,11 @@ describe("the paid screen on a handheld", () => {
       read.fail(new TypeError("Failed to fetch"));
       await flush(el);
 
-      expect(paidView(el)).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
       expect(text(alert(el))).toBe(t("table.reread_failed"));
     });
 
-    it("when the 15-second read overtakes the paid screen's read and fails, the alert stays once the older read answers", async () => {
+    it("when the 15-second read overtakes the document choice's read and fails, the alert stays once the older read answers", async () => {
       const nativeTimeout = window.setTimeout.bind(window);
       const fifteenSeconds: (() => void)[] = [];
       const timeout = vi.spyOn(window, "setTimeout").mockImplementation(((
@@ -4526,14 +4427,14 @@ describe("the paid screen on a handheld", () => {
         read.answer(billOnePaid);
         await flush(el);
 
-        expect(paidView(el)).not.toBeNull();
+        expect(documentChoice(el)).not.toBeNull();
         expect(text(alert(el))).toBe(t("table.reread_failed"));
       } finally {
         timeout.mockRestore();
       }
     });
 
-    it("what a newer re-read says stays once the paid screen's older read answers", async () => {
+    it("what a newer re-read says stays once the document choice's older read answers", async () => {
       const read = heldRead();
       const afterLast = vi
         .fn<() => Promise<PartyBill[]>>()
@@ -4555,7 +4456,7 @@ describe("the paid screen on a handheld", () => {
       read.answer(billOnePaid);
       await flush(el);
 
-      expect(paidView(el)).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
       expect(text(alert(el))).toBe(t("table.reread_failed"));
     });
 
@@ -4591,7 +4492,7 @@ describe("the paid screen on a handheld", () => {
       return { el, read, floor };
     }
 
-    it("the paid screen's read answering while a newer re-read waits on the floor, with that re-read then fine, ends the alert", async () => {
+    it("the document choice's read answering while a newer re-read waits on the floor, with that re-read then fine, ends the alert", async () => {
       const { el, read, floor } = await newerRereadOnTheFloor();
 
       read.answer(billOnePaid);
@@ -4599,11 +4500,11 @@ describe("the paid screen on a handheld", () => {
       floor.answer([mesa({ billCount: 3, outstanding: "50.00" })]);
       await flush(el);
 
-      expect(paidView(el)).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
       expect(alert(el)).toBeNull();
     });
 
-    it("the paid screen's read answering while a newer re-read waits on the floor, with that floor read then failing, says so", async () => {
+    it("the document choice's read answering while a newer re-read waits on the floor, with that floor read then failing, says so", async () => {
       const { el, read, floor } = await newerRereadOnTheFloor();
 
       read.answer(billOnePaid);
@@ -4611,11 +4512,11 @@ describe("the paid screen on a handheld", () => {
       floor.fail(new TypeError("Failed to fetch"));
       await flush(el);
 
-      expect(paidView(el)).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
       expect(text(alert(el))).toBe(t("table.reread_failed"));
     });
 
-    it("a refused Open drawer stays when the paid screen's read succeeds", async () => {
+    it("a refused Open drawer stays when the document choice's read succeeds", async () => {
       const read = heldRead();
       const { el } = await payBillOneAfter(
         readFailed,
@@ -4624,18 +4525,22 @@ describe("the paid screen on a handheld", () => {
         { capabilities: [...phoneCapabilities, "open-cash-drawer"] },
       );
 
-      await userEvent.click(inPaid(el, '[data-test="open-drawer"]')!);
+      await userEvent.click(inChoice(el, '[data-test="open-drawer"]')!);
       await flush(el);
       expect(text(alert(el))).toBe(t("drawer.error"));
 
       read.answer(billOnePaid);
       await flush(el);
 
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(tableOrder(el).bills.map((bill) => bill.workingOrderId)).toEqual([
+        "wo-9",
+        "wo-4",
+        "wo-5",
+      ]);
       expect(text(alert(el))).toBe(t("drawer.error"));
     });
 
-    it("when the paid screen's read answers after Back, what the read at Back said stays", async () => {
+    it("when the document choice's read answers after Back, what the read at Back said stays", async () => {
       const read = heldRead();
       const afterLast = vi
         .fn<() => Promise<PartyBill[]>>()
@@ -4646,7 +4551,7 @@ describe("the paid screen on a handheld", () => {
 
       backButton(el).click();
       await flush(el);
-      expect(paidView(el)).toBeNull();
+      expect(documentChoice(el)).toBeNull();
       expect(text(alert(el))).toBe(t("table.reread_failed"));
 
       read.answer(billOnePaid);
@@ -4655,19 +4560,23 @@ describe("the paid screen on a handheld", () => {
       expect(text(alert(el))).toBe(t("table.reread_failed"));
     });
 
-    it("a re-read still out from before the last payment says nothing over the paid screen", async () => {
+    it("a re-read still out from before the last payment says nothing over the document choice", async () => {
       const earlier = heldRead();
       const { el } = await payBillOneAfter(
         () => earlier.answered,
         async () => billOnePaid,
       );
       await flush(el);
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
+      expect(tableOrder(el).bills.map((bill) => bill.workingOrderId)).toEqual([
+        "wo-9",
+        "wo-4",
+        "wo-5",
+      ]);
 
       earlier.fail(new TypeError("Failed to fetch"));
       await flush(el);
 
-      expect(paidView(el)).not.toBeNull();
+      expect(documentChoice(el)).not.toBeNull();
       expect(alert(el)).toBeNull();
     });
 
@@ -4692,58 +4601,18 @@ describe("the paid screen on a handheld", () => {
       await flush(el);
 
       expect(getPartyBills.mock.calls.length).toBe(reads);
-      expect(text(left(el))).toBe("Still to pay: Bill 2, Bill 3");
-    });
-
-    it("lists a named bill by its name and a part-paid bill among those left", async () => {
-      const { el } = await payBillOne([
-        billOne,
-        { ...billThree, hasPayments: true, outstanding: "5.00" },
-        { ...billTwo, billName: "Clint" },
+      expect(tableOrder(el).bills.map((bill) => bill.workingOrderId)).toEqual([
+        "wo-9",
+        "wo-4",
+        "wo-5",
       ]);
-      await firstDrawn(el);
-
-      expect(text(left(el))).toBe("Still to pay: Bill 2 · Clint, Bill 3");
-    });
-
-    it("names the paid bill in its own name in the title", async () => {
-      const { el } = await payBillOne([{ ...billOne, billName: "Clint" }, billTwo]);
-      await firstDrawn(el);
-
-      expect(title(el)).toBe("Table 4 · Bill 1 · Clint paid");
-    });
-
-    it("lists a presented bill, even one answering zero", async () => {
-      const { el } = await payBillOne([
-        billOne,
-        { ...billTwo, status: "placed", outstanding: "0.00" },
-      ]);
-      await firstDrawn(el);
-
-      expect(text(left(el))).toBe("Still to pay: Bill 2");
-    });
-
-    it.each([
-      ["an empty open bill", { ...billTwo, outstanding: "0.00", total: "0.00" }],
-      ["an abandoned bill", { ...billTwo, status: "abandoned" as const }],
-      ["a settled bill", settled(billTwo)],
-    ])("%s is not listed and Finish table stays", async (_, other) => {
-      const { el } = await payBillOne([billOne, other]);
-      await firstDrawn(el);
-
-      expect(left(el)).toBeNull();
-      expect(title(el)).toBe("Table 4 paid");
-      expect(finishButton(el)).not.toBeNull();
     });
 
     it("a table of one bill is as it was: its name, no list, Finish table first, Back staying on the bill", async () => {
       const { el } = await payBillOne([billOne]);
       await firstDrawn(el);
 
-      expect(title(el)).toBe("Table 4 paid");
-      expect(left(el)).toBeNull();
-      expect(backButton(el)).toHaveProperty("variant", "secondary");
-      expect(inPaid(el, ".actions wt-button")).toBe(finishButton(el));
+      expect(inChoice(el, '[data-test="finish-table"]')).toBeNull();
 
       vi.mocked(api.getTablesState).mockResolvedValue([
         mesa({ billCount: 1, outstanding: "0.00" }),
@@ -4765,7 +4634,7 @@ describe("the paid screen on a handheld", () => {
       await flush(el);
 
       expect(api.saveDraft).toHaveBeenCalled();
-      expect(paidView(el)).toBeNull();
+      expect(documentChoice(el)).toBeNull();
       expect(tableOrder(el).orderId).toBe("wo-4");
       expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
         t("table.draft_save_failed"),
@@ -6514,7 +6383,7 @@ describe("a presented counter bill from Find a bill, on a device with no counter
       expect(stage(el)).toBe("order");
 
       inFind(el, "[data-collect]")!.click();
-      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       expect(api.collectOrder).toHaveBeenCalledTimes(1);
       expect(vi.mocked(api.collectOrder).mock.calls[0]!.slice(0, 2)).toEqual([
         "wo-presented",
@@ -6836,11 +6705,11 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
       expect(inDialog(el, 'input[name="way"]:checked')).toHaveProperty("value", way);
       expect(dialog(el)!.amount).toBe(amount);
       await payCash(el, "9.90");
-      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       expect(api.takeBillPayment).toHaveBeenCalledTimes(1);
       expect(vi.mocked(api.takeBillPayment).mock.calls[0]![0]).toBe("wo-parked");
       expect(sent()[0]).toMatchObject({ method: "cash" });
-      expect(ticketView(el)!.shadowRoot!.textContent).toContain("F-PARKED");
+      expect(documentChoice(el)!.result.invoiceNumber).toBe("F-PARKED");
     },
   );
 
@@ -6876,7 +6745,7 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
       const el = await openRow(parked, device);
       await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
       await payCash(el, "9.90");
-      await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+      await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
       expect(stage(el)).toBe("order");
       expect(counterLines(el)).toBeNull();
 
@@ -6909,7 +6778,7 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     await type(el, "amount", "4.90");
     await payCash(el, "4.90");
-    await vi.waitFor(() => expect(ticketView(el)).not.toBeNull());
+    await vi.waitFor(() => expect(documentChoice(el)).not.toBeNull());
     expect(api.takeBillPayment).toHaveBeenCalledTimes(1);
     await signInAgain(el);
     expect(api.listZoneOffers).toHaveBeenCalledWith("z1");

@@ -257,7 +257,6 @@ async function resolvePrinterAndReceipt(
   return { printer, receiptBytes };
 }
 
-/** Receipt policy applies to F2; an F1 follows its saved original delivery choice. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: OriginConfig,
@@ -277,10 +276,7 @@ export async function enqueueSaleReceipt(
       await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
     }
     if ((await reserveStagedInvoiceDelivery(tx, saleId)) !== false) return;
-    const mode = context
-      ? (await VENUE_SERVICE.resolveSalePolicy(tx, context.zoneId)).receiptPrintMode
-      : "auto";
-    if (ticket.invoiceType !== "F1" && mode !== "auto") return;
+    if (sale?.workingOrderId != null) return;
     await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
   });
 }

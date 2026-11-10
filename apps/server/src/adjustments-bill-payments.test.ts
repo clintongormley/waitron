@@ -1,3 +1,4 @@
+import { printSaleReceipt } from "./till-sale.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -242,6 +243,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
     expect(await tendersOfBill(venue, billId)).toEqual([
       expect.objectContaining({ method: "cash", amount: 4000, tip: 0, billPaymentId: paymentId }),
     ]);
+    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
     const printed = await newTicket(jobsBefore);
     // The comped line prints at its price, with the comp on its own line beneath it.
     const pulpo = printed.findIndex((line) => line.endsWith(" Pulpo a la gallega 20,00"));

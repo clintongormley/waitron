@@ -343,6 +343,11 @@ export const en = {
   "mode.live": "Live",
   // Counter receipt and drawer
   "document.print": "Print/Reprint",
+  "settlement.document": "Customer document",
+  "settlement.full_invoice": "Full invoice",
+  "settlement.none": "None",
+  "settlement.replacement_unavailable":
+    "Full invoice replacement is not available yet. You can print the receipt.",
   "document.receipt": "Receipt",
   "document.invoice": "Invoice",
   "document.printer_read_failed": "Could not read the receipt printers. Refresh to try again.",
@@ -2328,6 +2333,11 @@ export const es: Record<StringKey, string> = {
   "mode.prepare": "Preparación",
   "mode.live": "En vivo",
   "document.print": "Imprimir/Reimprimir",
+  "settlement.document": "Documento para el cliente",
+  "settlement.full_invoice": "Factura completa",
+  "settlement.none": "Ninguno",
+  "settlement.replacement_unavailable":
+    "El cambio por una factura completa aún no está disponible. Puedes imprimir el recibo.",
   "document.receipt": "Recibo",
   "document.invoice": "Factura",
   "document.printer_read_failed":

@@ -14,6 +14,16 @@ seleccionada; también puedes indicar una cantidad, dividir a partes iguales o e
 Elige **Efectivo** o **Tarjeta** en cada pago. Después de un pago parcial, comprueba **Queda por pagar**
 antes de cobrar el siguiente.
 
+## Elegir documentos después de cobrar {#settlement-document}
+
+Después del último pago, elige **Recibo**, **Factura completa** o **Ninguno**. Un cambio que deja
+la cuenta pagada ofrece la misma elección. Para imprimir, espera a que **Imprimir en {printer}**
+nombre el destino y púlsalo. Una factura completa conserva el cliente registrado; su acción
+**Enviar por correo** es independiente de **Imprimir**.
+
+Elige **Ninguno** o cierra la ventana para continuar sin imprimir. Cierras la mesa por separado.
+Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
+
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
 
 Si al cancelar un pedido se indica que hay un pago con tarjeta pendiente, espera a que termine el

@@ -3041,8 +3041,32 @@ describe("A790 recorded document then printer", () => {
     expect(actions).toEqual(["print-receipt"]);
   });
 
+  it.each([
+    ["not_queued", "print-receipt"],
+    ["done", "reprint"],
+  ] as const)("a later F2 receipt follows its server history: %s", async (status, action) => {
+    const { el } = await mountChoice(
+      {
+        historical: true,
+        originalReceiptAvailable: false,
+        originalReceiptPrint:
+          status === "not_queued" ? { status } : { status, jobId: "original", canRetry: false },
+      },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(part(el, action)).not.toBeNull();
+    expect(part(el, action === "reprint" ? "print-receipt" : "reprint")).toBeNull();
+  });
+
   it("opens F2 directly at its Receipt printer and explicitly confirms a copy", async () => {
-    const { el } = await mountChoice({ originalReceiptAvailable: false }, "F2");
+    const { el } = await mountChoice(
+      {
+        originalReceiptAvailable: false,
+        originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
+      },
+      "F2",
+    );
     const copies: Event[] = [];
     el.addEventListener("reprint", (event) => copies.push(event));
     await press(el, "document-print-toggle");

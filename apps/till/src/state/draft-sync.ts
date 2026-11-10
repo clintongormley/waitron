@@ -166,7 +166,7 @@ export interface DraftSyncOptions {
   onRefused: (code: string, ownerName?: string) => void;
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;
-  onSaved?: () => void;
+  onSaved?: (snapshot: BillDraftSnapshot) => void;
   /** How long one read or save may stay out before it is cut off. */
   requestLimitMs: number;
   candidates?: Map<string, RetainedDraftCandidate>;
@@ -982,16 +982,13 @@ export class DraftSync {
     const saved = snapshot.draft;
     if (saved === null) {
       this.#show(null);
-      this.#lockAuthority();
-      return "saved";
-    }
-    if (this.#unsaved) {
+    } else if (this.#unsaved) {
       this.#take(saved);
       this.#attachSavedIds(saved, pending, lines, selections);
     } else if (sameLines(lines, saved.lines)) this.#keep(saved);
     else this.#show(saved);
     this.#lockAuthority();
-    this.#options.onSaved?.();
+    this.#options.onSaved?.(snapshot);
     return "saved";
   }
 

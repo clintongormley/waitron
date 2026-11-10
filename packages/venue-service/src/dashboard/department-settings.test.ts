@@ -291,18 +291,14 @@ it("a save that does not touch the steps sends none", async () => {
 it("lists exactly differing stored overrides as zone links", async () => {
   const { el } = await mount();
   const links = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("[data-zone]")];
-  expect(links.map((a) => a.textContent!.trim())).toEqual([
-    "Terrace (Counter service)",
-    "Bar (Receipt on request)",
-  ]);
+  expect(links.map((a) => a.textContent!.trim())).toEqual(["Terrace (Counter service)"]);
   expect(links.map((a) => a.getAttribute("href"))).toEqual([
     "/manage/venue-operations/department/d1/view/zones/zone/z1",
-    "/manage/venue-operations/department/d1/view/zones/zone/z2",
   ]);
   const heard: unknown[] = [];
   el.addEventListener("zone-change", (e) => heard.push((e as CustomEvent).detail));
-  links[1]!.click();
-  expect(heard).toEqual([{ zoneId: "z2" }]);
+  links[0]!.click();
+  expect(heard).toEqual([{ zoneId: "z1" }]);
 });
 it("a receipt refusal belongs to its department and reveals its Save control", async () => {
   const { el } = await mount();

@@ -273,25 +273,3 @@ describe.each(["light", "dark"] as const)("special-day clash warning (%s)", (the
     },
   );
 });
-
-for (const theme of ["light", "dark"] as const) {
-  for (const locale of ["en", "es"] as const) {
-    it(`Receipt policy columns are accessible in ${theme}/${locale}`, async () => {
-      setLocale(locale);
-      const el = (await mountThemed(
-        "<departments-list></departments-list>",
-        theme,
-      )) as HTMLElementTagNameMap["departments-list"];
-      el.model = structuredClone(model);
-      await el.updateComplete;
-      const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      await table.updateComplete;
-      expect(
-        table
-          .shadowRoot!.querySelector('[data-row-key="department:d1"] td:nth-child(4)')
-          ?.textContent?.trim(),
-      ).toBe(locale === "es" ? "Siempre" : "Always");
-      await expectNoA11yViolations(host);
-    });
-  }
-}

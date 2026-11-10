@@ -401,13 +401,13 @@ export class DepartmentReceiptEditor extends LitElement {
     this.#scope?.changed();
     this.#queuePreview();
   }
-  #policy(field: "receiptPrintMode" | "printTradingName", checked: boolean): void {
+  #policy(field: "printTradingName", checked: boolean): void {
     if (this.busy) return;
     this.draft = {
       ...this.draft,
       policy: {
         ...this.draft.policy,
-        [field]: field === "receiptPrintMode" ? (checked ? "auto" : "on_request") : checked,
+        [field]: checked,
       },
     };
     const errors = { ...this.errors };
@@ -653,20 +653,6 @@ export class DepartmentReceiptEditor extends LitElement {
                   this.focusedField = "";
                 }}
               >
-                <div>
-                  <wt-switch
-                    name="receiptPrintMode"
-                    label=${t("receipts.print_receipt")}
-                    .description=${errors.receiptPrintMode ?? ""}
-                    .checked=${this.draft.policy.receiptPrintMode === "auto"}
-                    ?disabled=${this.busy}
-                    @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                      event.stopPropagation();
-                      this.#policy("receiptPrintMode", event.detail.checked);
-                    }}
-                  ></wt-switch
-                  >${errors.receiptPrintMode ? html`<p class="error" data-field-error="receiptPrintMode">${errors.receiptPrintMode}</p>` : nothing}
-                </div>
                 <div>
                   <wt-switch
                     name="printTradingName"

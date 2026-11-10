@@ -16,6 +16,8 @@ Para cobrar toda la cuenta o una parte en una mesa, abre **Cobrar** y usa la [ve
 
 Para repartir un cobro del mostrador entre varias personas, sigue [Repartir una cuenta del mostrador](table-service.md#counter-part-payments).
 
+Después del último pago, sigue [Elegir documentos después de cobrar](table-service.md#settlement-document) para imprimir un recibo o continuar atendiendo sin imprimirlo.
+
 ## Reintenta un envío de mostrador si se pierde la respuesta {#counter-send-retry}
 
 Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el

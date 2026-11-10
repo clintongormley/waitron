@@ -38,7 +38,6 @@ export class ServiceSettingsFields extends LitElement {
   @property({ attribute: false }) follows?: ServiceSettingsValue;
   @property({ attribute: false }) errors: Partial<Record<Field, string>> = {};
   @property({ type: Boolean }) disabled = false;
-  @property({ type: Boolean }) showReceiptMode = true;
 
   #change<K extends Field>(event: Event, field: K, value: ServiceSettingsValue[K]) {
     event.stopPropagation();
@@ -66,7 +65,7 @@ export class ServiceSettingsFields extends LitElement {
     return html`<wt-combobox
       name=${field}
       label=${label}
-      search=${field === "receiptPrintMode" ? "always" : "never"}
+      search="never"
       searchPlaceholder=${t("venue.combobox_search")}
       noResultsLabel=${t("venue.combobox_no_results")}
       .options=${following ? [{ value: "", label: t("venue.same_as_department").replace("{value}", placeholder) }, ...options] : options}
@@ -126,14 +125,6 @@ export class ServiceSettingsFields extends LitElement {
               { value: "numbered", label: t("venue.print") },
               { value: "none", label: t("venue.dont_print") },
             ])
-      }
-      ${
-        this.showReceiptMode
-          ? this.#choice("receiptPrintMode", t("venue.print_receipt"), [
-              { value: "auto", label: t("venue.always") },
-              { value: "on_request", label: t("venue.on_request") },
-            ])
-          : nothing
       }
     `;
   }
