@@ -1167,9 +1167,7 @@ product failures.
   Menu-preview accessibility states still use `Terraza` as a sample menu name.
   Audit the remaining `Terraza` occurrences in the menu-screen, look-card and equipment-label
   test suites before the next cleanup slices.
-  The printers-screen accessibility and save-state suites use English samples, but
-  `printers-screen.test.ts` still carries Spanish printer, agent and profile sample names.
-  Order, printer and API suites also need their printer/venue samples audited.
+  Order and API suites also need their printer/venue samples audited.
   The order-detail suite does not check its `row.tables` sample independently of `party.tables`.
   Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
   fixture `Gin & Tónic`. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`,

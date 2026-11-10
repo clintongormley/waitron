@@ -35,3 +35,5 @@
 **Conditional future deviation.** `scripts/english-only-still-to-clean.ts` is outside these four paths. Reduce only its matching entry/count if A977 lands before build AND the watcher explicitly approves that reduction after confirming this whole file qualifies. Otherwise stop for deviation approval; never silently add the path or infer permission from the device slice.
 
 **Finish line: names only, same product behavior.**
+
+**Approval, 2026-11-10.** Lane J’s watcher approved this corrected four-path scope at 01:54 and reconfirmed it at 01:57 in `/Users/clintongormley/waitron-campaign-j/questions.md` (heading “A1241 printer-screen plan 1851bfa534: APPROVED”): “Four paths, the Receipt desk and hostname mappings as corrected; stop 516 lines. … Build and land.”
