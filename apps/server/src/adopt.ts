@@ -67,8 +67,7 @@ export interface AdoptDeps {
   ring: KeyRing;
   /** Replaces `secrets.env` whole with the main box's ring, so the next boot opens what it sealed. */
   persistCredentialsRing: (ring: EncodedKeyRing) => Promise<void>;
-  /** Sends the standby identity so the primary can reserve and endorse it. The fetcher, not this
-   * orchestrator, throws `mirror.bundle_fetch_failed`. */
+  /** Sends the standby identity so the primary can reserve and endorse it. */
   fetchBundle: (
     primaryUrl: string,
     credential: AdoptCredential,

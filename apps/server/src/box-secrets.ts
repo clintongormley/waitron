@@ -198,13 +198,14 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
 
 /**
  * Replace the leaf with one naming THIS machine's addresses, signed by the authority already in
- * `<stateDir>/tls`, which stays untouched. The new pair goes through `stageTlsInstall`, so a process
- * stop part-way leaves the old pair or one `finishTlsInstall` completes at the next start. A throw
- * instead leaves a pair the listener can load: a failed write removes the working files and the
- * list, and a failed key rename puts the old certificate back unless that rename fails too, when
- * the old certificate is kept as `server.crt.previous` until the next reissue overwrites it and
- * the new certificate stays beside the old key. A failed folder sync after both renames throws with
- * the new pair in place and the old certificate kept as `server.crt.previous`.
+ * `<stateDir>/tls`, which stays untouched. The new pair goes through `stageTlsInstall`, so a stop
+ * during the writes or renames leaves the old pair or one `finishTlsInstall` completes at the next
+ * start. A failed write removes the working files and the list. A failed key rename puts the old
+ * certificate back. If that rename fails too, the old certificate is kept as `server.crt.previous`
+ * and the new certificate stays beside the old key. A stop while the put-back runs can also leave a
+ * certificate and key that do not belong together. `ensureLeaf` reissues either at the next start.
+ * A failed folder sync after both renames throws with the new pair in place and the old certificate
+ * kept as `server.crt.previous`.
  */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;

@@ -3598,7 +3598,7 @@ same `tls/` still goes to repair.
 leaf when it lacks one of the box's names or a current address, does not verify under
 `tls/ca.crt`, or is not the certificate of `tls/server.key`, and otherwise leaves it byte for
 byte. A start that refuses, and a box another box has fenced, leave `tls/` as it was; a failed
-reissue logs `tls.leaf_reissue_failed` and the box serves the old leaf, because a wrong name is no
+reissue logs `tls.leaf_reissue_failed` and the start carries on, because a wrong name is no
 reason to stop selling.
 
 **Guards.** `apps/server/src/box-tls-install.test.ts` (every crash point of the install),

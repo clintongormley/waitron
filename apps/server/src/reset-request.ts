@@ -79,8 +79,9 @@ async function refusal(deps: StagedResetDeps, raw: string): Promise<string | nul
 }
 
 /**
- * Whether a reset is staged that passes every check needing no database and will empty `tls/`
- * because this box joined another; `runStagedReset` repeats every check under the venue lock.
+ * Whether a staged reset passes `refusal`'s marker, `trading.env` and operation-record checks and
+ * will empty `tls/` because this box joined another; `runStagedReset` repeats those, and the rest,
+ * under the venue lock.
  */
 export async function stagedResetEmptiesTls(stateDir: string): Promise<boolean> {
   const raw = await readFile(join(stateDir, MARKER), "utf8").catch(() => null);

@@ -155,9 +155,8 @@ function listedFiles(value: unknown): TlsSetFile[] {
 
 /**
  * Moves into place what a listed install left, and deletes every other
- * working file of the set and of the list. Runs before anything reads `tls/`, and ahead of the
- * start's full-disk handling, so with none of those files present it takes no lock and writes
- * nothing.
+ * working file of the set and of the list. Each entry runs it before it first reads `tls/`, on a
+ * disk that may be full, so with none of those files present it takes no lock and writes nothing.
  */
 export async function finishTlsInstall(
   stateDir: string,
