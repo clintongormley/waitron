@@ -111,7 +111,9 @@ function bitmapUrl(run: ImageRun): string {
 }
 
 /** One printed raster as a PNG data URL. */
-export function rasterUrl(picture: NonNullable<ThemeLogoPrint["picture"]>): string {
+export function rasterUrl(
+  picture: NonNullable<ThemeLogoPrint["papers"]["80mm"]["picture"]>,
+): string {
   return stackedUrl(picture.widthDots, picture.heightDots, [
     { height: picture.heightDots, data: picture.data },
   ]);
