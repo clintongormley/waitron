@@ -3313,24 +3313,29 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     ["en-GB", "This passphrase does not open the export. Check it and try again."],
     ["es-ES", "Esta frase de contraseña no abre la exportación. Revísala e inténtalo de nuevo."],
   ])("forwards a configuration passphrase refusal to its field (%s)", async (locale, message) => {
-    const el = await mountSetupApp(
-      stubApi({
-        stageConfiguration: vi
-          .fn()
-          .mockRejectedValue({ code: "recovery.passphrase_invalid", params: {}, status: 422 }),
-      }),
-    );
-    setLocale(locale);
-    configurationRequest(
-      el,
-      new File(["encrypted"], "prepared.waitron-config"),
-      "wrong-passphrase",
-    );
-    await flush(el);
-    const source = await screenHost(el, "live-source");
-    const field = source.shadowRoot!.querySelector("wt-input")!;
-    expect(field.error).toBe(message);
-    expect(readDraft(el).configurationImport).toBeUndefined();
+    const before = currentLocale();
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "recovery.passphrase_invalid", params: {}, status: 422 }),
+        }),
+      );
+      setLocale(locale);
+      configurationRequest(
+        el,
+        new File(["encrypted"], "prepared.waitron-config"),
+        "wrong-passphrase",
+      );
+      await flush(el);
+      const source = await screenHost(el, "live-source");
+      const field = source.shadowRoot!.querySelector("wt-input")!;
+      expect(field.error).toBe(message);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("returns a configuration export that cannot be opened to the live-source form", async () => {

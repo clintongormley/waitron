@@ -143,7 +143,7 @@ export class ProductAppearance extends LitElement {
         class=${!this.image && this.inheritedImage ? "thumb inherited" : "thumb"}
         style=${isHexColor(this.color ?? "") ? `background:${this.color}` : nothing}
         aria-label=${`${t("image.label")} · ${t("editor.color")}`}
-        aria-describedby=${!this.image && this.inheritedImage ? this.#captionId : nothing}
+        aria-describedby=${!this.error && !this.image && this.inheritedImage ? this.#captionId : nothing}
         aria-invalid=${this.invalid ? "true" : nothing}
         aria-description=${this.error || nothing}
         aria-haspopup="dialog"

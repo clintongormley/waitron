@@ -464,20 +464,25 @@ describe("bookings-screen", () => {
     ["en", "That table no longer exists"],
     ["es", "Esa mesa ya no existe"],
   ])("puts table.not_found with its actual tableId under Table (%s)", async (locale, sentence) => {
-    setLocale(locale);
-    const api = stubApi({
-      createBooking: vi
-        .fn()
-        .mockRejectedValue({ code: "table.not_found", params: { tableId: "t-1" } }),
-    });
-    const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
-    await flush(el);
-    await click(el, "add-booking");
-    emitFromChild(form(el), "create-booking", { ...booking(), tableId: "t-1" });
-    await flush(el);
-    const table = form(el).shadowRoot!.querySelector("wt-combobox")!;
-    expect(table.error).toBe(sentence);
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      const api = stubApi({
+        createBooking: vi
+          .fn()
+          .mockRejectedValue({ code: "table.not_found", params: { tableId: "t-1" } }),
+      });
+      const { el } = await mountWidget<BookingsScreen>("dashboard-bookings-screen", { api });
+      await flush(el);
+      await click(el, "add-booking");
+      emitFromChild(form(el), "create-booking", { ...booking(), tableId: "t-1" });
+      await flush(el);
+      const table = form(el).shadowRoot!.querySelector("wt-combobox")!;
+      expect(table.error).toBe(sentence);
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    } finally {
+      setLocale(before);
+    }
   });
 
   const refusedTable = {
