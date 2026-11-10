@@ -1,3 +1,4 @@
+import { venueMenus } from "../../src/testing/venue-menus.js";
 /**
  * `seedDemoRestaurant` runs every sub-seed. `WAITRON_ENV` is left unset, so `deploymentEnvironment`
  * resolves to `preproduction` for the seeded sales; one case stubs it to `production` and proves the
@@ -13,7 +14,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createCategory,
   createProduct,
-  listAccessibleCatalogues,
   listAvailableProducts,
   listTranslationGapReport,
   menuStatus,
@@ -255,7 +255,7 @@ describe("seedDemoRestaurant", () => {
   it("refuses a production environment before writing anything", async () => {
     const venue = await provisionVenue();
     const before = await withTransaction(suite.db, async (tx) => ({
-      menus: (await listAccessibleCatalogues(tx)).length,
+      menus: (await venueMenus(tx)).length,
       products: (await listAvailableProducts(tx)).products.length,
     }));
     vi.stubEnv("WAITRON_ENV", "production");
@@ -271,7 +271,7 @@ describe("seedDemoRestaurant", () => {
     ).rejects.toMatchObject({ code: "deployment.demo_data_refused" });
 
     const after = await withTransaction(suite.db, async (tx) => ({
-      menus: (await listAccessibleCatalogues(tx)).length,
+      menus: (await venueMenus(tx)).length,
       products: (await listAvailableProducts(tx)).products.length,
       sales: (
         await tx.execute<{ n: number }>(sql`select cast(count(*) as integer) as n from sales`)
@@ -326,7 +326,7 @@ describe("seedDemoRestaurant", () => {
         ]),
       );
 
-      const [menu] = await listAccessibleCatalogues(tx);
+      const [menu] = await venueMenus(tx);
       const folder = await createCategory(tx, { name: "Test-only packaged snacks" });
       const snack = await createProduct(tx, {
         catalogueId: menu!.id,
@@ -454,7 +454,7 @@ describe("seedDemoRestaurant", () => {
     });
 
     const read = await withTransaction(suite.db, async (tx) => {
-      const menus = await listAccessibleCatalogues(tx);
+      const menus = await venueMenus(tx);
       const { products } = await listAvailableProducts(tx);
       const { rows: tableRows } = await tx.execute<{ n: number }>(
         sql`select cast(count(*) as integer) as n from dining_tables`,

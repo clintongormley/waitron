@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { locations, printJobs, sales, tenantReceipts } from "@waitron/db";
+import { locations, printJobs, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { contentLanguages } from "@waitron/catalogue";
@@ -42,15 +42,6 @@ beforeEach(async () => {
       target: departmentReceipts.departmentId,
       set: { receipt: { footerMessage: { "eu-ES": "Hidden Basque" } } },
     });
-  await suite.db.insert(tenantReceipts).values({
-    receipt: {
-      headerSubtitle: "Global subtitle",
-      footerMessage: "Global footer",
-      phone: "910000000",
-      email: "global@example.test",
-      printAddress: true,
-    },
-  });
 });
 function ask(input: unknown, cookie = venue.managerCookie) {
   const app = new Hono();
@@ -86,7 +77,7 @@ async function snapshot() {
   return {
     receipts: await suite.db.select().from(departmentReceipts),
     policies: await suite.db.select().from(departmentSalePolicies),
-    defaults: await suite.db.select().from(tenantReceipts),
+
     sales: await suite.db.select().from(sales),
     jobs: await suite.db.select().from(printJobs),
   };

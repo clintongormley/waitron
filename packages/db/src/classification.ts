@@ -140,7 +140,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("printer_holders", "state", STATE),
   classify("invoice_series", "state", STATE),
   classify("catalogues", "state", STATE),
-  classify("location_catalogues", "state", STATE),
   classify("categories", "state", STATE),
   classify("products", "state", STATE),
   classify("floor_zones", "state", STATE),
@@ -170,7 +169,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("page_printers", "state", STATE),
   classify("print_agents", "state", STATE),
   classify("custom_themes", "state", STATE),
-  classify("tenant_receipts", "state", STATE),
   classify("incidents", "state", STATE),
   classify("working_orders", "state", "orders in flight; copied to a standby, never drained back"),
   classify(

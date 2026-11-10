@@ -125,52 +125,6 @@ describe("department receipt validation", () => {
   });
 });
 
-describe("venue default subset validation", () => {
-  it("retains global strings verbatim and accepts false", () => {
-    expect(
-      validation.validateVenueReceiptSettings({
-        logo,
-        headerSubtitle: "  ",
-        footerMessage: "",
-        printAddress: false,
-      }),
-    ).toEqual({ logo, headerSubtitle: "  ", footerMessage: "", printAddress: false });
-    expect(validation.validateVenueReceiptSettings({ printAddress: true })).toEqual({
-      printAddress: true,
-    });
-    expect(validation.validateVenueReceiptSettings({})).toEqual({});
-  });
-  it.each([null, [], Object.create({ printAddress: false })])(
-    "refuses a non-plain defaults root %j",
-    (input) => {
-      const error = refusal(() => validation.validateVenueReceiptSettings(input));
-      expect(error.code).toBe("receipt.invalid");
-      expect(error.params).toEqual({ reason: "not_object" });
-    },
-  );
-  it.each(["phone", "email", "unknown", "__proto__"])(
-    "does not let the defaults patch write %s",
-    (field) => {
-      const error = refusal(() => validation.validateVenueReceiptSettings({ [field]: "x" }));
-      expect(error.code).toBe("receipt.invalid");
-      expect(error.params).toEqual({ reason: "unknown_field" });
-    },
-  );
-  it.each([
-    [{ printAddress: null }, { reason: "not_boolean", field: "printAddress" }],
-    [{ headerSubtitle: { "es-ES": "Map" } }, { reason: "not_string", field: "headerSubtitle" }],
-    [
-      { footerMessage: "x".repeat(201) },
-      { reason: "too_long", field: "footerMessage", maxLength: 200 },
-    ],
-    [{ logo: "bad" }, { reason: "invalid_logo", field: "logo" }],
-  ])("retains global validation for %j", (input, params) => {
-    const error = refusal(() => validation.validateVenueReceiptSettings(input));
-    expect(error.code).toBe("receipt.invalid");
-    expect(error.params).toEqual(params);
-  });
-});
-
 describe("department address and description fields", () => {
   it.each([true, false])("accepts printAddress %s and an authored description", (printAddress) => {
     const input = { printAddress, operationDescription: "Dining service" };

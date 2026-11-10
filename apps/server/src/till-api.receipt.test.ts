@@ -21,7 +21,6 @@ import {
   receiptReprints,
   tenants,
   workingOrders,
-  tenantReceipts,
   products,
   withTransaction,
   venueLocationId,
@@ -2615,13 +2614,7 @@ it("duplicates use the filed issuer identity while optional trim follows the cur
         },
       },
     });
-  await suite.db
-    .insert(tenantReceipts)
-    .values({ receipt: { headerSubtitle: "Global welcome", footerMessage: "Global farewell" } })
-    .onConflictDoUpdate({
-      target: tenantReceipts.id,
-      set: { receipt: { headerSubtitle: "Global welcome", footerMessage: "Global farewell" } },
-    });
+
   const res = await app.request(`/api/sales/${id}/reprint`, {
     method: "POST",
     headers: { cookie },

@@ -494,11 +494,6 @@ export interface CatalogueSummary {
   version: number;
 }
 
-export interface VenueCatalogueSummary extends CatalogueSummary {
-  sellable: boolean;
-  isDefault: boolean;
-}
-
 export interface CategorySummary {
   id: string;
   name: string;
@@ -3101,20 +3096,6 @@ export class DashboardApi {
       "PATCH",
       { price },
     );
-  }
-
-  // ── The venue's menus (which catalogues the venue sells) ──────────────────────────────────────
-
-  listVenueCatalogues(): Promise<VenueCatalogueSummary[]> {
-    return this.#request<VenueCatalogueSummary[]>("/management-api/venue/catalogues", "GET");
-  }
-
-  addVenueCatalogue(catalogueId: string): Promise<void> {
-    return this.#request<void>("/management-api/venue/catalogues", "POST", { catalogueId });
-  }
-
-  removeVenueCatalogue(catalogueId: string): Promise<void> {
-    return this.#request<void>(`/management-api/venue/catalogues/${catalogueId}`, "DELETE");
   }
 
   setVenueDefaultCatalogue(catalogueId: string): Promise<void> {

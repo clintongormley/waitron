@@ -14,7 +14,6 @@ import {
   sales,
   saleLines,
   tenants,
-  tenantReceipts,
   workingOrders,
   withTransaction,
 } from "@waitron/db";
@@ -231,13 +230,7 @@ describe("stored invoice document projection", () => {
         taxId: "B87654321",
         taxpayerDomicile: "Changed domicile",
       });
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ receipt: { footerMessage: "Current footer", email: "current@example.test" } })
-        .onConflictDoUpdate({
-          target: tenantReceipts.id,
-          set: { receipt: { footerMessage: "Current footer", email: "current@example.test" } },
-        });
+
       const after = await read(venue.backend, sale.saleId);
       expect(after.result).toEqual(before.result);
       expect(after.issuer).toEqual({
@@ -261,7 +254,6 @@ describe("stored invoice document projection", () => {
         taxId: taxpayer!.taxId,
         taxpayerDomicile: taxpayer!.taxpayerDomicile,
       });
-      await suite.db.delete(tenantReceipts);
     }
   });
 
@@ -498,36 +490,8 @@ describe("current department A4 document", () => {
       tradingName: "Recorded dining",
       printTradingName: true,
     });
-    const logo = `${"a".repeat(64)}.png`;
-    const pair = {
-      "58mm": { widthDots: 8, heightDots: 1, data: "gA==" },
-      "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
-    };
-    const [original] = await suite.db.select().from(tenantReceipts);
-    try {
-      await suite.db
-        .insert(tenantReceipts)
-        .values({
-          receipt: {
-            logo,
-            headerSubtitle: "Venue subtitle",
-            footerMessage: "Venue footer",
-            email: "venue@example.com",
-            logoRasters: pair,
-          },
-        })
-        .onConflictDoUpdate({
-          target: tenantReceipts.id,
-          set: {
-            receipt: {
-              logo,
-              headerSubtitle: "Venue subtitle",
-              footerMessage: "Venue footer",
-              email: "venue@example.com",
-              logoRasters: pair,
-            },
-          },
-        });
+
+    {
       await suite.db.insert(departmentReceipts).values({
         departmentId: department!.id,
         receipt: {
@@ -575,9 +539,6 @@ describe("current department A4 document", () => {
       expect(reprint.receipt).toEqual({ footerMessage: "Changed footer" });
       expect(reprint.receipt.phone).toBeUndefined();
       expect(reprint.receipt.email).toBeUndefined();
-    } finally {
-      if (original) await suite.db.update(tenantReceipts).set({ receipt: original.receipt });
-      else await suite.db.delete(tenantReceipts);
     }
   });
 });
@@ -585,21 +546,11 @@ describe("current department A4 document", () => {
 describe("A4 current optional source matrix", () => {
   it.each([true, false, undefined])(
     "ignores venue defaults and keeps filed domicile with printAddress %s",
-    async (printAddress) => {
+    async () => {
       const backend = none();
       const issued = await issue(backend);
-      const [previous] = await suite.db.select().from(tenantReceipts);
-      try {
-        const receipt = {
-          headerSubtitle: "Venue only subtitle",
-          footerMessage: "Venue only footer",
-          email: "venue@example.com",
-          printAddress,
-        };
-        await suite.db
-          .insert(tenantReceipts)
-          .values({ receipt })
-          .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
+
+      {
         const document = await read(backend, issued.saleId);
         expect(document.venueAddress).toEqual([]);
         expect(document.receiptHeader).toBeUndefined();
@@ -609,9 +560,6 @@ describe("A4 current optional source matrix", () => {
           .join("\n");
         expect(text).toContain("Saved domicile");
         expect(text).not.toContain("Current street differs");
-      } finally {
-        if (previous) await suite.db.update(tenantReceipts).set({ receipt: previous.receipt });
-        else await suite.db.delete(tenantReceipts);
       }
     },
   );
@@ -628,17 +576,9 @@ describe("A4 current optional source matrix", () => {
       tradingName: "Saved explicit",
       printTradingName: true,
     });
-    const [previous] = await suite.db.select().from(tenantReceipts);
-    const global = {
-      logo: `${"b".repeat(64)}.png`,
-      logoRasters: { "80mm": { widthDots: 8, heightDots: 1, data: "gA==" } },
-    };
+
     const own = { logo: `${"c".repeat(64)}.png` };
-    try {
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ receipt: global })
-        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
+    {
       await suite.db.insert(departmentReceipts).values({
         departmentId: department!.id,
         receipt: own,
@@ -665,9 +605,6 @@ describe("A4 current optional source matrix", () => {
         .set({ receipt: {}, logoRasters: null })
         .where(eq(departmentReceipts.departmentId, department!.id));
       expect((await read(backend, issued.saleId)).logo).toBeNull();
-    } finally {
-      if (previous) await suite.db.update(tenantReceipts).set({ receipt: previous.receipt });
-      else await suite.db.delete(tenantReceipts);
     }
   });
   it("resolves only the printed and current department languages", async () => {
@@ -683,13 +620,8 @@ describe("A4 current optional source matrix", () => {
       tradingName: "Saved language",
       printTradingName: true,
     });
-    const [previous] = await suite.db.select().from(tenantReceipts);
-    try {
-      const receipt = { headerSubtitle: "Global subtitle", footerMessage: "Global footer" };
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ receipt })
-        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
+
+    {
       await suite.db.insert(departmentReceipts).values({
         departmentId: department!.id,
         receipt: {
@@ -712,9 +644,6 @@ describe("A4 current optional source matrix", () => {
       expect((await read(backend, issued.saleId)).receipt).toEqual({
         headerSubtitle: "Buenos días",
       });
-    } finally {
-      if (previous) await suite.db.update(tenantReceipts).set({ receipt: previous.receipt });
-      else await suite.db.delete(tenantReceipts);
     }
   });
 });
@@ -895,24 +824,13 @@ describe("A4 department-only decoration", () => {
       },
     });
     const before = await read(backend, issued.saleId);
-    const session = (
-      suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
-    ).session;
-    const prepare = session.prepareQuery.bind(session);
-    const globalReads: string[] = [];
-    const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
-      const query = args[0] as { sql: string };
-      if (query.sql.startsWith("select") && query.sql.includes('"tenant_receipts"'))
-        globalReads.push(query.sql);
-      return prepare(...args);
-    });
-    try {
+
+    {
       await suite.db
         .update(departments)
         .set({ active: false, tradingName: "Changed brand" })
         .where(eq(departments.id, department!.id));
       const document = await read(backend, issued.saleId);
-      expect(globalReads).toEqual([]);
       expect(document.result).toEqual(before.result);
       expect(document.receipt).toEqual({
         headerSubtitle: "Own subtitle",
@@ -932,8 +850,6 @@ describe("A4 department-only decoration", () => {
       expect(text).toContain("Own subtitle");
       expect(text).toContain("Own footer");
       expect(text).not.toContain("Never printed description");
-    } finally {
-      spy.mockRestore();
     }
   });
 });

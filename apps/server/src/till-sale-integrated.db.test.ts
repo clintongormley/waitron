@@ -39,7 +39,6 @@ import {
   parties,
   printJobs,
   sales,
-  tenantReceipts,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -3706,9 +3705,7 @@ describe("integrated answer receipt presentation", () => {
     suite.db.run(
       sql`insert into department_receipts (department_id, receipt, updated_at) values (${departmentId}, '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Connected subtitle"},"printAddress":true}', '2026-10-10T00:00:00Z')`,
     );
-    await suite.db
-      .insert(tenantReceipts)
-      .values({ receipt: { headerSubtitle: "Retired subtitle", printAddress: false } });
+
     const provider = new SimulatorPaymentProvider(suite.db);
     const req = {
       id: randomUUID(),
@@ -3776,13 +3773,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       values (${departmentId}, '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Bon dia","es-ES":"Buenos días"},"email":"counter@example.test","printAddress":true}', '2026-10-10T00:00:00Z')`);
       suite.db.run(sql`insert into department_receipts (department_id, receipt, updated_at)
       values (${otherId}, '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"ca-ES":"Other subtitle"},"phone":"910999999"}', '2026-10-10T00:00:00Z')`);
-      await suite.db.insert(tenantReceipts).values({
-        receipt: {
-          phone: "910000000",
-          email: "venue@example.test",
-          printAddress: true,
-        },
-      });
+
       await makeReceiptPrinter(cfg);
       const id = randomUUID();
       if (issued) {
@@ -3861,7 +3852,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
       suite.db.run(
         sql`update department_receipts set receipt = '{"operationDescription":"Venta en establecimiento","headerSubtitle":{"es-ES":"Texto actual"}}' where department_id = ${departmentId}`,
       );
-      suite.db.run(sql`update tenant_receipts set receipt = '{"printAddress":false}'`);
+
       suite.db.run(
         sql`update locations set invoice_locales = '["es-ES"]' where id = ${cfg.locationId}`,
       );

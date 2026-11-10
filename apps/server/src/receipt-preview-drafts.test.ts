@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { locations, sales, printJobs, tenantReceipts } from "@waitron/db";
+import { locations, sales, printJobs } from "@waitron/db";
 import { departments, departmentReceipts } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -119,7 +119,7 @@ describe("POST receipt draft preview", () => {
     const snapshot = async () => ({
       departments: await suite.db.select().from(departments),
       receipts: await suite.db.select().from(departmentReceipts),
-      defaults: await suite.db.select().from(tenantReceipts),
+
       sales: await suite.db.select().from(sales),
       jobs: await suite.db.select().from(printJobs),
     });
@@ -139,17 +139,7 @@ describe("POST receipt draft preview", () => {
     await suite.db
       .insert(departmentReceipts)
       .values({ departmentId, receipt: { headerSubtitle: { "es-ES": "Stored department" } } });
-    await suite.db.insert(tenantReceipts).values({
-      receipt: {
-        phone: "910000000",
-        email: "venue@example.test",
-        headerSubtitle: "Saved venue text",
-      },
-    });
-    const before = {
-      own: await suite.db.select().from(departmentReceipts),
-      global: await suite.db.select().from(tenantReceipts),
-    };
+
     const response = await ask({
       departmentId: null,
       receipt: { headerSubtitle: { "es-ES": "Unsaved venue" }, printAddress: true },
@@ -159,19 +149,8 @@ describe("POST receipt draft preview", () => {
     expect(await response.json()).toEqual({
       error: { code: "management.request_invalid", params: { field: "departmentId" } },
     });
-    expect({
-      own: await suite.db.select().from(departmentReceipts),
-      global: await suite.db.select().from(tenantReceipts),
-    }).toEqual(before);
   });
   it("department previews never inherit current venue contacts or text", async () => {
-    await suite.db.insert(tenantReceipts).values({
-      receipt: {
-        phone: "910000000",
-        email: "venue@example.test",
-        headerSubtitle: "Saved venue text",
-      },
-    });
     const picked = await drawn(draft());
     expect(lines(picked).join("\n")).not.toContain("910000000");
     expect(lines(picked).join("\n")).not.toContain("venue@example.test");
@@ -181,7 +160,7 @@ describe("POST receipt draft preview", () => {
   it("does not persist the draft, a sale or a print job", async () => {
     const snapshot = async () => ({
       receipt: await suite.db.select().from(departmentReceipts),
-      defaults: await suite.db.select().from(tenantReceipts),
+
       sales: await suite.db.select().from(sales),
       jobs: await suite.db.select().from(printJobs),
     });
@@ -257,15 +236,13 @@ describe("POST receipt draft preview", () => {
       heightDots: 2,
       data: Buffer.from([1, 2, 3, 4]).toString("base64"),
     };
-    const global = { widthDots: 8, heightDots: 1, data: Buffer.from([255]).toString("base64") };
+
     await suite.db.insert(departmentReceipts).values({
       departmentId,
       receipt: { logo: stored.filename },
       logoRasters: { "58mm": own, "80mm": own },
     });
-    await suite.db.insert(tenantReceipts).values({
-      receipt: { logo: stored.filename, logoRasters: { "58mm": global, "80mm": global } },
-    });
+
     const ownPreview = await drawn({
       ...draft(),
       receipt: { logo: stored.filename },
@@ -371,8 +348,6 @@ it.each([null, "true", 1, []])("refuses a non-boolean passive preview flag %#", 
 });
 
 it("keeps department contacts in the draft and never replaces them with stored venue contacts", async () => {
-  const contact = { phone: "+34 912 345 678", email: "venue@example.com" };
-  await suite.db.insert(tenantReceipts).values({ receipt: contact });
   const answer = await drawn({
     ...draft(),
     receipt: {
@@ -390,7 +365,6 @@ it("keeps department contacts in the draft and never replaces them with stored v
   expect(lines(answer)).toContain("Department draft");
   expect(lines(answer)).toContain("Thanks");
   expect(answer.marks.address).toBeNull();
-  expect((await suite.db.select().from(tenantReceipts))[0]!.receipt).toEqual(contact);
 });
 
 it("retires GET previews while the authored POST still draws without saving or printing", async () => {
@@ -415,7 +389,7 @@ it("retires GET previews while the authored POST still draws without saving or p
   const answer = (await response.json()) as ReceiptPreviewResponse;
   expect(lines(answer)).toContain("Unsaved POST");
   expect(lines(answer)).toContain("Still a sample");
-  expect(await suite.db.select().from(tenantReceipts)).toEqual([]);
+
   expect(await suite.db.select().from(printJobs)).toEqual([]);
   expect(await suite.db.select().from(sales)).toEqual([]);
 });

@@ -122,7 +122,6 @@ export const PATH_PATTERNS = [
   "/management-api/venue-privacy",
   "/management-api/venue-service/departments-and-zones",
   "/management-api/venue-service/routing",
-  "/management-api/venue/catalogues",
   "/management-api/venue/default-catalogue",
   "/management-api/zones",
   "/api/sales",

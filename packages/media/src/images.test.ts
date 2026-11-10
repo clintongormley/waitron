@@ -5,7 +5,6 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   products,
-  tenantReceipts,
   workingOrderLines,
   type Transaction,
   mediaImageData,
@@ -879,8 +878,7 @@ it("ignores a retired venue logo for usage counts and deletion", async () => {
       { image: await prepare(21), names: { en: "Other" } },
       {},
     );
-    const receipt = { logo: image.filename, phone: "912" };
-    await tx.insert(tenantReceipts).values({ receipt });
+
     expect(await listImageUsages(tx, image.id)).toEqual([]);
     expect(await listImageUsages(tx, other.id)).toEqual([]);
     expect((await readImage(tx, image.id)).usageCount).toBe(0);
@@ -893,7 +891,7 @@ it("ignores a retired venue logo for usage counts and deletion", async () => {
       });
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
     expect(await readImageBytes(tx, image.filename)).toBeNull();
-    expect((await tx.select().from(tenantReceipts))[0]!.receipt).toEqual(receipt);
+
     expect((await readImage(tx, other.id)).usageCount).toBe(0);
   });
 });

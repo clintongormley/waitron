@@ -20,8 +20,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { tenantReceipts, withTransaction } from "@waitron/db";
-import { getPrintedReceipt } from "@waitron/layouts";
+import { withTransaction } from "@waitron/db";
 import { contentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -2424,11 +2423,10 @@ describe("independent department receipt routes", () => {
       await setupTenant();
       const app = mountApp();
       const cookie = await login(app, MANAGER_EMAIL);
-      const before = await suite.db.select().from(tenantReceipts);
+
       expect((await putTrim(app, cookie, "/management-api/receipt-settings", body)).status).toBe(
         404,
       );
-      expect(await suite.db.select().from(tenantReceipts)).toEqual(before);
     },
   );
   it("omitting the department address switch clears it without inventing defaults", async () => {
@@ -2662,18 +2660,12 @@ describe("department logo ownership and route failure boundaries", () => {
 });
 
 describe("optional receipt source failures within one transaction", () => {
-  it.each([
-    [true, false],
-    [false, true],
-    [true, true],
-  ])(
-    "global refusal %s, department refusal %s retains the other source and commits",
-    async (failGlobal, failDepartment) => {
+  it.each([[false, true]])(
+    "department refusal retains the transaction",
+    async (_failGlobal, failDepartment) => {
       await setupTenant();
       const id = await departmentFixture();
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ receipt: { footerMessage: "Venue", printAddress: false } });
+
       await suite.db
         .insert(departmentReceipts)
         .values({ departmentId: id, receipt: { headerSubtitle: { "es-ES": "Sala" } } });
@@ -2682,11 +2674,6 @@ describe("optional receipt source failures within one transaction", () => {
       const select = vi.spyOn(suite.db, "select");
       try {
         await withTransaction(suite.db, async (tx) => {
-          if (failGlobal)
-            select.mockImplementationOnce(() => {
-              throw new Error("global SELECT");
-            });
-          const global = await getPrintedReceipt(tx, "80mm", (event) => events.push(event));
           if (failDepartment)
             select.mockImplementationOnce(() => {
               throw new Error("department SELECT");
@@ -2701,21 +2688,13 @@ describe("optional receipt source failures within one transaction", () => {
             id,
             "80mm",
           );
-          expect(global).toEqual({
-            receipt: failGlobal ? {} : { footerMessage: "Venue", printAddress: false },
-            logo: null,
-          });
           expect(department).toEqual({
             receipt: failDepartment ? {} : { headerSubtitle: { "es-ES": "Sala" } },
             logo: null,
             ...(failDepartment ? { unreadable: true } : {}),
           });
-          await tx.update(tenantReceipts).set({ updatedAt: "2026-10-10T02:00:00Z" });
         });
         expect(events).toEqual([
-          ...(failGlobal
-            ? [{ operation: "getPrintedReceipt", receiptId: 1, code: "receipt.read_failed" }]
-            : []),
           ...(failDepartment
             ? [
                 {
@@ -2726,9 +2705,6 @@ describe("optional receipt source failures within one transaction", () => {
               ]
             : []),
         ]);
-        expect((await suite.db.select().from(tenantReceipts))[0]!.updatedAt).toBe(
-          "2026-10-10T02:00:00Z",
-        );
       } finally {
         select.mockRestore();
       }

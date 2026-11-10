@@ -1237,9 +1237,6 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   with repeated kinds.
 - **Catalogue names (W72): there is no unique index, and no backfill.**
   [Detail](catalogue.md#catalogue-no-two-categories-with-one-parent-and-no-two-active-products-share-a-name-w72-to-w72h-left-open)
-- **The venue's menu list is read by no sale.** **Next action:** owner to decide whether to retire
-  `location_catalogues` and the management routes `/management-api/venue/catalogues…`.
-  [Detail](catalogue.md#the-venues-menu-list-is-read-by-no-sale)
 - **Two signals say whether a dish is sold by weight, and they can disagree in storage.** Since B4
   the order path reads only the unit (`priceOrderLines`), so no sale reads `products.pricing_unit`.
   **Next action:** keep it in step with the unit or drop it.
@@ -1266,21 +1263,16 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **`content_languages`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`daily_close_chain`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-- **`location_catalogues`: decide the remaining UPDATE restriction (A805 follow-up).**
 - **`locations`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`media_image_data`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 - **`payment_policy`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`payment_refunds`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`station_printers`: decide the remaining UPDATE restriction (A805 follow-up).**
-- **`tenant_receipts`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`workforce_chains`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`working_order_counters`: decide the remaining DELETE restriction (A805 follow-up).**
 - **`DrainResult.tenantsWithWork` is named for a count that can now only be 0 or 1** — left behind
   by the tenant-column removal (#378, 2026-09-16).
   [Detail](architecture.md#drainresulttenantswithwork-is-named-for-a-count-that-can-now-only-be-0-or-1)
-- **Half of an older receipt test can no longer fail.**
-  Owner's call: delete the old test, or keep only its corrupt-picture half.
-  [Detail](printers.md#half-of-an-older-receipt-test-can-no-longer-fail)
 - **A department's receipt logo save re-checks only the image's revision, not its id** — found in
   A841 slice 7's review, read, not run.
   [Detail](printers.md#a-departments-receipt-logo-save-re-checks-only-the-images-revision-not-its-id)

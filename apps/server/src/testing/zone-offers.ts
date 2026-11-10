@@ -1,13 +1,7 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { catalogues, floorZones, products, locations } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import {
-  addProducts,
-  createCatalogue,
-  menuItems,
-  requireMenuRoot,
-  resolveAccessibleCatalogueIds,
-} from "@waitron/catalogue";
+import { addProducts, createCatalogue, menuItems, requireMenuRoot } from "@waitron/catalogue";
 import {
   configureZone,
   createDepartment,
@@ -180,12 +174,14 @@ async function ownMenu(tx: Transaction): Promise<string> {
 }
 
 async function topLevelProducts(tx: Transaction): Promise<string[]> {
-  const { ids } = await resolveAccessibleCatalogueIds(tx);
-  if (ids.length === 0) return [];
   const rows = await tx
     .select({ id: products.id })
     .from(products)
-    .where(and(inArray(products.catalogueId, ids), isNull(products.parentId)))
+    .innerJoin(
+      catalogues,
+      and(eq(catalogues.id, products.catalogueId), eq(catalogues.active, true)),
+    )
+    .where(isNull(products.parentId))
     .orderBy(products.id);
   return rows.map((row) => row.id);
 }

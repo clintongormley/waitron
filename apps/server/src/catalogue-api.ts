@@ -16,7 +16,6 @@ import {
 } from "@waitron/shared";
 import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
-  addCatalogueToVenue,
   moveCatalogueItems,
   deleteCatalogueItems,
   summariseFolders,
@@ -64,7 +63,6 @@ import {
   type CategoryInput,
   createProduct,
   listCatalogues,
-  listCataloguesForVenue,
   listCategories,
   menuPrices,
   menuStatus,
@@ -92,7 +90,6 @@ import {
   extraListDependants,
   extraOfferUsageForUnitChange,
   listProducts,
-  removeCatalogueFromVenue,
   setVenueDefaultCatalogue,
   updateMenuDetails,
   updateMenuItem,
@@ -1273,35 +1270,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       await gated(c, sessionId, (tx) =>
         setMenuVariantPrice(tx, menuItemId, variantId, price, menuId),
       );
-      return c.body(null, 204);
-    }),
-  );
-
-  // The venue's menu list: its default plus member rows.
-  // PUT sets the default; the old default is demoted to a member, never dropped. DELETE needs no
-  // catalogue guard: removing a non-member row is a no-op.
-  app.get("/management-api/venue/catalogues", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const rows = await gated(c, sessionId, (tx) => listCataloguesForVenue(tx));
-      return c.json(rows);
-    }),
-  );
-
-  app.post("/management-api/venue/catalogues", (c) =>
-    runBodyMenu(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const catalogueId = await requireCatalogueIdBody(c);
-      await gated(c, sessionId, (tx) => addCatalogueToVenue(tx, catalogueId));
-      return c.body(null, 204);
-    }),
-  );
-
-  app.delete("/management-api/venue/catalogues/:catalogueId", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const catalogueId = requireUuidParam(c.req.param("catalogueId"), "CatalogueId");
-      await gated(c, sessionId, (tx) => removeCatalogueFromVenue(tx, catalogueId));
       return c.body(null, 204);
     }),
   );

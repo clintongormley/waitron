@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, tenantReceipts, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -38,7 +38,7 @@ it("counts only department logos and protects each until cleared despite retired
       { image: photo, names: { en: "Logo" } },
       { fallbackLanguage: "en" },
     );
-    await tx.insert(tenantReceipts).values({ receipt: { logo: image.filename } });
+
     await tx.insert(departmentReceipts).values([
       { departmentId: rows[0]!.id, receipt: { logo: image.filename } },
       { departmentId: rows[1]!.id, receipt: { logo: image.filename } },
@@ -66,7 +66,7 @@ it("counts only department logos and protects each until cleared despite retired
       deleted: false,
       uses: [departmentUses[0]],
     });
-    await tx.update(tenantReceipts).set({ receipt: {} });
+
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses: [departmentUses[0]] });
     expect((await readImage(tx, image.id)).usageCount).toBe(1);
     await tx

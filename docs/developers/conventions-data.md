@@ -1865,6 +1865,10 @@ A1308 slice 1b-ii (format 11) moves the comp limit from `adjustment_settings` to
 A1308 slice 4a-i (format 12) removes the recipe tables and derivation columns;
 a format-11 export is refused as outdated.
 
+**2026-11-10, A1308 slice 4a-ii:** format 15 removes the venue's extra-menu list
+(`location_catalogues`) from configuration exports; a format-14 export is refused as
+`setup.configuration_outdated`.
+
 **2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
 staff and booking tables and makes `convenio_config` a singleton with integer id 1.
 The format-11 refusal is exercised by `apps/server/src/configuration-import.test.ts`.

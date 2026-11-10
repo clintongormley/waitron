@@ -340,14 +340,6 @@ describe("Catalogue API — option groups, gates, by-id FKs", () => {
       }),
     );
     await expect403(
-      await send(app, "POST", "/management-api/venue/catalogues", staffCookie, {
-        catalogueId: ZERO_UUID,
-      }),
-    );
-    await expect403(
-      await send(app, "DELETE", `/management-api/venue/catalogues/${ZERO_UUID}`, staffCookie),
-    );
-    await expect403(
       await send(app, "PUT", "/management-api/venue/default-catalogue", staffCookie, {
         catalogueId: ZERO_UUID,
       }),

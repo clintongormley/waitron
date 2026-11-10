@@ -1023,14 +1023,6 @@ CREATE INDEX `products_name_key_idx` ON `products` (`name_key`);--> statement-br
 CREATE INDEX `products_course_idx` ON `products` (`course_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_id_catalogue_key` ON `products` (`id`,`catalogue_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `products_parent_id_key` ON `products` (`parent_id`,`id`);--> statement-breakpoint
-CREATE TABLE `location_catalogues` (
-	`location_id` text NOT NULL,
-	`catalogue_id` text NOT NULL,
-	PRIMARY KEY(`location_id`, `catalogue_id`),
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`catalogue_id`) REFERENCES `catalogues`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
 CREATE TABLE `purchase_invoice_vat` (
 	`id` text PRIMARY KEY NOT NULL,
 	`purchase_invoice_id` text NOT NULL,
@@ -1115,13 +1107,6 @@ CREATE TABLE `custom_themes` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_name_key_uq` ON `custom_themes` (`name_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_in_use_uq` ON `custom_themes` (`in_use`);--> statement-breakpoint
-CREATE TABLE `tenant_receipts` (
-	`id` integer PRIMARY KEY DEFAULT 1 NOT NULL,
-	`receipt` text NOT NULL,
-	`updated_at` text NOT NULL,
-	CONSTRAINT "tenant_receipts_singleton_ck" CHECK("tenant_receipts"."id" = 1)
-);
---> statement-breakpoint
 CREATE TABLE `working_order_counters` (
 	`node_id` text PRIMARY KEY NOT NULL,
 	`next_number` integer DEFAULT 1 NOT NULL,

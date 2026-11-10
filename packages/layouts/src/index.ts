@@ -1,12 +1,10 @@
 export type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
-export { DEFAULT_RECEIPT } from "./defaults.js";
 export {
   MAX_RECEIPT_EMAIL_LENGTH,
   MAX_RECEIPT_FIELD_LENGTH,
   MAX_RECEIPT_PHONE_LENGTH,
   validateReceiptConfig,
   validateDepartmentReceipt,
-  validateVenueReceiptSettings,
 } from "./validate.js";
 
 export {
@@ -73,16 +71,7 @@ export type {
   SelectDevicePrinterResult,
 } from "./device-equipment.js";
 export type { PrinterRole, ProfilePrinterRole, ProfilePrinterLists } from "./device-printers.js";
-export {
-  encodeLogoRaster,
-  getPrintedReceipt,
-  getReceipt,
-  getStoredLogoRasters,
-  getVenueReceiptSettings,
-  putVenueReceiptSettings,
-  printableLogoRasters,
-  putReceipt,
-} from "./receipt-store.js";
+export { encodeLogoRaster, printableLogoRasters } from "./logo-rasters.js";
 export { validateThemeConfiguration } from "./theme-configuration.js";
 export {
   createCustomTheme,

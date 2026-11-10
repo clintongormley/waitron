@@ -9,7 +9,6 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
-  tenantReceipts,
   products,
   saleLines,
   sales,
@@ -2904,17 +2903,7 @@ describe("per-answer receipt presentation", () => {
     async (method) => {
       const { cfg, zoneId, waterOfferId } = await setupVenue();
       const [department] = await suite.db.select().from(departments);
-      const global = {
-        headerSubtitle: "Venue subtitle",
-        footerMessage: "Venue footer",
-        phone: "+34910000000",
-        email: "venue@example.test",
-        printAddress: true,
-      };
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ id: 1, receipt: global })
-        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
+
       await suite.db
         .update(departmentReceipts)
         .set({
@@ -2958,9 +2947,9 @@ describe("per-answer receipt presentation", () => {
         .update(departmentReceipts)
         .set({ receipt: { footerMessage: { "es-ES": "New department footer" } } })
         .where(eq(departmentReceipts.departmentId, department!.id));
-      await suite.db
-        .update(tenantReceipts)
-        .set({ receipt: { headerSubtitle: "New venue subtitle", printAddress: false } });
+      await suite.db.set({
+        receipt: { headerSubtitle: "New venue subtitle", printAddress: false },
+      });
       await seedVenueSettings(suite.db, { addressLine1: "Current street" });
       const replay = await recordTillSale({ ...deps, admission: testTradingAdmission() }, cfg, req);
       expect(replay).toMatchObject({
@@ -2996,17 +2985,7 @@ describe("per-answer receipt presentation", () => {
 describe("receipt presentation sources", () => {
   it("omits optional values for absent and null saved departments despite retired defaults", async () => {
     const { cfg, seriesId } = await setupVenue();
-    const global = {
-      headerSubtitle: "Venue subtitle",
-      footerMessage: "Venue footer",
-      phone: "+34910000000",
-      email: "venue@example.test",
-      printAddress: false,
-    };
-    await suite.db
-      .insert(tenantReceipts)
-      .values({ id: 1, receipt: global })
-      .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt: global } });
+
     const absent = await withTransaction(suite.db, (tx) =>
       readReceiptPresentation(tx, randomUUID(), "en-GB"),
     );
@@ -3051,7 +3030,7 @@ describe("receipt presentation sources", () => {
       readReceiptPresentation(tx, sale.saleId, "es-ES"),
     );
     expect(noDepartment).toEqual(absent);
-    await suite.db.update(tenantReceipts).set({ receipt: {} });
+
     expect(
       await withTransaction(suite.db, (tx) => readReceiptPresentation(tx, randomUUID(), "en-GB")),
     ).toEqual({
@@ -3062,18 +3041,12 @@ describe("receipt presentation sources", () => {
     });
   });
 
-  it.each(["venue", "department", "both"] as const)(
+  it.each(["department"])(
     "keeps surviving fields when the %s optional source cannot be read",
     async (source) => {
       const { cfg, zoneId, waterOfferId } = await setupVenue();
       const [department] = await suite.db.select().from(departments);
-      await suite.db
-        .insert(tenantReceipts)
-        .values({ id: 1, receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } })
-        .onConflictDoUpdate({
-          target: tenantReceipts.id,
-          set: { receipt: { headerSubtitle: "Venue subtitle", phone: "+34910000000" } },
-        });
+
       await suite.db
         .update(departmentReceipts)
         .set({
@@ -3097,11 +3070,8 @@ describe("receipt presentation sources", () => {
       );
       const [saved] = await suite.db.select().from(saleReceiptHeaders);
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
-      const hiddenVenue = source !== "department";
       const hiddenDepartment = source !== "venue";
       try {
-        if (hiddenVenue)
-          await suite.db.execute(sql`alter table tenant_receipts rename to test_hidden_receipts`);
         if (hiddenDepartment)
           await suite.db.execute(
             sql`alter table department_receipts rename to test_hidden_department_receipts`,
@@ -3133,8 +3103,6 @@ describe("receipt presentation sources", () => {
           await suite.db.execute(
             sql`alter table test_hidden_department_receipts rename to department_receipts`,
           );
-        if (hiddenVenue)
-          await suite.db.execute(sql`alter table test_hidden_receipts rename to tenant_receipts`);
         warning.mockRestore();
       }
     },

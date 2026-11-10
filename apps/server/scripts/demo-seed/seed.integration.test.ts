@@ -1,3 +1,4 @@
+import { venueMenus } from "../../src/testing/venue-menus.js";
 // The whole demo seed, end to end: the reports light up, the menus are accessible, a seeded
 // product's `image` resolves to stored bytes, and a working order MIXING a Casa Delgado offer with
 // a Menú del Día offer parks and retrieves in the counter zone. `WAITRON_ENV` is left unset, so
@@ -10,7 +11,6 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  listAccessibleCatalogues,
   listAvailableProducts,
   menuItems,
   readLiveDocuments,
@@ -116,7 +116,7 @@ describe("demo seed end-to-end", () => {
     expect(origins.rows).toEqual([{ source: "demo_seed", device_id: null }]);
 
     const read = await withTransaction(suite.db, async (tx) => {
-      const menus = await listAccessibleCatalogues(tx);
+      const menus = await venueMenus(tx);
       const { products } = await listAvailableProducts(tx);
       const documents = await readLiveDocuments(
         tx,

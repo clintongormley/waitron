@@ -1079,11 +1079,3 @@ A231q changed how a job the printer is holding is reported. Left open by A231q.
   the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
   removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
   hint.
-
-## Half of an older receipt test can no longer fail.
-
-In `apps/server/src/receipt-print.test.ts`,
-"omits a corrupt explicit department picture without substituting the `tenant_receipts` logo"
-checks that no `tenant_receipts` logo is substituted, but printing never passed that logo (found
-by #2050's review); the newer case for a department naming a logo whose pictures are bad covers
-the real rule. Owner's call: delete the old test, or keep only its corrupt-picture half.

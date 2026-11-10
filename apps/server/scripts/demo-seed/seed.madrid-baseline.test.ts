@@ -72,7 +72,10 @@ const ADDED_TABLES = [
   "working_line_portions",
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
+// Dropped by A1308 4a-ii; the seed wrote its rows.
+const REMOVED_TABLES_WITH_ROWS = ["location_catalogues"];
 const REMOVED_TABLES = [
+  "tenant_receipts",
   "ingredients",
   "recipe_lines",
   "attendance_mail",
@@ -329,6 +332,10 @@ for (const locale of ["en", "es"] as const) {
         expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeUndefined();
         expected[phase].tables[name] = structuredClone(added!);
         phases[phase]![name] = 0;
+      }
+      for (const name of REMOVED_TABLES_WITH_ROWS) {
+        delete expected[phase].tables[name];
+        delete phases[phase]![name];
       }
       for (const name of REMOVED_TABLES) {
         const removed = expected[phase].tables[name];

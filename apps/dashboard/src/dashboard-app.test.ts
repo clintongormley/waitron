@@ -203,7 +203,6 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
-    putReceipt: vi.fn().mockResolvedValue(undefined),
     listCourses: vi.fn().mockResolvedValue([]),
     getReceiptLanguage: vi
       .fn()
