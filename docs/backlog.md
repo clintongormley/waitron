@@ -1122,7 +1122,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Design the fixed screens for each kind of device (A182 part 1, owner 2026-10-01).** Counter
   custom items (A738 residual) and the payment window (A739) remain. What is left of A797:
-  slices 11 and 12b: [build
+  slice 12b: [build
   plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [design](superpowers/specs/2026-10-18-a797-device-screens-design.md).
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)

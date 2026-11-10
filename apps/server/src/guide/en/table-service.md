@@ -236,7 +236,7 @@ On a busy shift it is easy to start an order at one table, get called to another
 dishes you never sent. So on a phone or tablet the bar at the top shows **Floor**, then a button
 such as **✎ T4**, by the table's short name, for each table where you have dishes not yet sent;
 however many of your bills there hold unsent dishes, a table gets one button. Tap a button to go
-back to that table. The table you are at is highlighted. Once nothing of yours is unsent there, for
+back to that table, on the bill you added to last. The table you are at is highlighted. Once nothing of yours is unsent there, for
 example after you send everything, its button stays highlighted without the ✎ until you leave, and
 then goes, while a table you leave with dishes still unsent keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
 table you are at, and at any other table when the Floor next updates its tables. When there are
@@ -296,7 +296,9 @@ At the counter, use **Parked orders** to retrieve or discard a table's bill.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
 name, what it still owes or **Paid ✓**, and a line such as **Ana has an unsent order: 3 items** for
-each person with dishes on that bill not yet sent. Choose a row to put that bill on screen. A paid
+each person with dishes on that bill not yet sent. When another bill holds dishes you have not
+sent, the switcher says so, such as **✎ Bill 2 unsent**, and the list marks that bill **✎ Unsent**.
+Choose a row to put that bill on screen. A paid
 bill opens too, so you can name it or, when it has a receipt, print a copy, but it takes no new
 dishes. **+ New bill** is always last in the list: it starts a new, empty bill at the table and puts
 it on screen.

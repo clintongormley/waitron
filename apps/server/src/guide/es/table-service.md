@@ -247,7 +247,8 @@ En un turno con mucho trabajo es fácil empezar un pedido en una mesa, que te ll
 olvidar los platos que no llegaste a enviar. Por eso, en un móvil o una tableta, la barra de arriba
 muestra **Sala** y después un botón como **✎ M4**, con el nombre corto de la mesa, por cada mesa
 donde tienes platos sin enviar; aunque varias cuentas tuyas tengan platos sin enviar allí, la mesa
-tiene un solo botón. Toca un botón para volver a esa mesa. La mesa en la que estás aparece
+tiene un solo botón. Toca un botón para volver a esa mesa, en la cuenta a la que añadiste platos por
+última vez. La mesa en la que estás aparece
 resaltada. Cuando ya no queda nada tuyo sin enviar en ella, por ejemplo después de enviarlo todo, su
 botón sigue resaltado sin el ✎ hasta que sales, y entonces desaparece, mientras que una mesa de la
 que sales con platos aún sin enviar conserva su botón con ✎. Si
@@ -315,8 +316,9 @@ En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta 
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un
-pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Elige una
-fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
+pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
+cuenta tiene platos tuyos sin enviar, el selector lo indica, como **✎ Cuenta 2 sin enviar**, y la
+lista marca esa cuenta con **✎ Sin enviar**. Elige una fila para poner esa cuenta en pantalla. Una cuenta pagada también se abre, para que puedas ponerle
 nombre o, si tiene ticket, imprimir una copia, pero no admite platos nuevos. **+ Cuenta nueva** está
 siempre al final de la lista: abre una cuenta nueva y vacía en la mesa y la pone en pantalla.
 
