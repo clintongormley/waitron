@@ -339,11 +339,21 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Filing investigation (W41s-9) and the complete old-backup/new-hardware exercise (W41s-11)
-remain queued. Signed witnesses and fencing (W41s-10b) were retired on 9 November 2026: A1342
+The filing investigation screen (W41s-9) comes in two slices; slice 2, possibly missing history,
+remains queued, and the complete old-backup/new-hardware exercise (W41s-11) waits for it. Signed witnesses and fencing (W41s-10b) were retired on 9 November 2026: A1342
 (#2654) stops a returning old main box on signed newer evidence in the backup bucket, and A1418
 with A1425 cover a one-box venue restored from its backup. Keep their authority, recovery and
 public fiscal-enablement gates. W41s-10a's remaining qualification work follows.
+
+**2026-11-10, W41s-9 slice 1** (branch `feat/w41s-9-fiscal-filing`,
+[plan](../superpowers/plans/2026-11-09-w41s-9-fiscal-filing-screen.md)): **Reporting → Fiscal
+filing**, for managers and administrators, reads sending progress, open filing cases with each
+case's record and AEAT's answers, active identity conflicts with a link to conflict recovery, and
+held records with no case. It lists the newest 200 cases with the total, and its export reads every
+open case (`?cases=all`). Measured once on a Mac with `node:sqlite` (commit "read model for the
+Fiscal filing screen"): with 10,000 held records and 2,000 open cases the read took 55–100 ms
+limited to 200 cases and 79–119 ms unlimited. The bell's filing alerts open it. It takes no action on a case, does not yet list
+possibly missing history (slice 2), and imports no recovered history.
 
 ### Qualify reconciliation against live AEAT
 

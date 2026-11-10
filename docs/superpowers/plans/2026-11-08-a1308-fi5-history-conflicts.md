@@ -195,6 +195,10 @@ unique `event_key` … the FK to records. The case FK goes with `case_id`").
 
 fi4b (and so fi4a).
 
+W41s-9 slice 1 (2026-11-10) added a reader of `fiscal_conflict_evidence` and
+`fiscal_lookup_conflicts`, which this slice moves: `packages/fiscal-verifactu/src/filing-overview.ts`.
+It lists them beside the cases from `openFilingCases` in `filing-cases.ts`. The Fiscal filing screen and its export name each case by its record id (`registroId`).
+
 **Landed by: owner.**
 
 ---

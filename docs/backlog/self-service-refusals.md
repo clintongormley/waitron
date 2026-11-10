@@ -223,7 +223,7 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:190` and `apps/dashboard/src
 
 State: An AEAT response rejects a record and opens a filing case. An external refusal is not proof of a Waitron bug. Receipt: `packages/fiscal-verifactu/src/drain.ts:1445`.
 
-Route: Missing in the searched server routes: a filing-case decision screen/action. W41s-8 and W41s-9 remain queued; a library function or a planned screen is not a product recovery path.
+Route: Missing in the searched server routes: a filing-case decision action. The evidence page exists (**Reporting → Fiscal filing**, W41s-9 slice 1, 2026-11-10) and decides nothing; W41s-8's remedies are not enabled, and a library function or a planned screen is not a product recovery path.
 
 ### `fiscal.respuesta_descuadrada`
 
@@ -373,7 +373,7 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:258` and `apps/dashboard/src
 
 State: The query finds open filing cases. They require a decision; elapsed time does not make that decision. Receipt: `packages/fiscal-verifactu/src/submission-alerts.ts:64`.
 
-Route: Missing: the supported filing-case screen/action. Keep W41s-8/W41s-9 and A696 dependencies visible instead of directing the owner to support.
+Route: Missing: the supported filing-case decision action; the evidence page, **Reporting → Fiscal filing**, exists (W41s-9 slice 1, 2026-11-10). Keep W41s-8 and A696 dependencies visible instead of directing the owner to support.
 
 ### `fiscal.refusals_repeated`
 
@@ -933,7 +933,7 @@ Both options require separate implementation approval; the product referrals rem
 
 ### fiscal-cases
 
-**Fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+**Fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for W41s-8's remedies to be enabled (`ENABLED_REMEDIES` is empty); until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
 
 ### fiscal-reply
 

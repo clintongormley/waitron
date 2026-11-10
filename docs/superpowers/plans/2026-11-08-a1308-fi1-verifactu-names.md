@@ -345,6 +345,10 @@ Every other A1308 area, A802 and A1325 (build order). Slice 1a's rebuild command
 (`pnpm --filter @waitron/server migration-baseline rebuild --set fiscal-verifactu`). Slice 0's
 protection list.
 
+W41s-9 slice 1 (2026-11-10) added readers of `registros_facturacion`, `envios` and `registro_sif`,
+which this slice renames: `packages/fiscal-verifactu/src/filing-overview.ts`, and
+`openFilingCases` in `filing-cases.ts`, which reads the cases' records. The Fiscal filing screen and its export name each case by its record id (`registroId`).
+
 **Landed by: owner.**
 
 ---

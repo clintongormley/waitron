@@ -206,7 +206,7 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   review; implementation and qualification remain open. The first retained warning may differ from
   the latest reply; persistent repair requires a separate owner decision.
 
-- **A1089: fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
+- **A1089: fiscal filing-case alerts need a real decision route.** The evidence page exists: **Reporting → Fiscal filing** (W41s-9 slice 1, 2026-11-10), which the bell's filing alerts open. It decides nothing, so the decision step still waits for W41s-8's remedies to be enabled (`ENABLED_REMEDIES` is empty); until then keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
   [Audit](backlog/self-service-refusals.md#fiscal-cases).
 
 - **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
@@ -286,8 +286,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
   [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
-- **W41s. Fiscal prevention and offline recovery.** Filing investigation (W41s-9) and the complete
-  old-backup/new-hardware exercise (W41s-11) remain queued. Signed witnesses and fencing (W41s-10b)
+- **W41s. Fiscal prevention and offline recovery.** The filing investigation screen (W41s-9) comes
+  in two slices: slice 1, **Reporting → Fiscal filing** with progress, cases, conflicts, held records
+  and export, is on branch `feat/w41s-9-fiscal-filing`; slice 2, possibly missing history, remains
+  queued, and the complete old-backup/new-hardware exercise (W41s-11) waits for it. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) and A1418 with A1425 cover them. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
   restored server, and history before the oldest known month. Task 8's disputed production remedies
   remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision. Once its original's
@@ -302,10 +304,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [detail](backlog/fiscal.md#w41s-4-adoption-boundary-checkpoint-2026-10-14).
 
 - **Settle the hold and the brake once** (bundle of 2, 2 important, size S, needs the adviser). [Detail](backlog/fiscal.md#bundle-settle-the-hold-and-the-brake-once)
-
-- **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
-  paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
-  yet, so the screen should add an open-only filter or paging when it calls them. From W41s.
 
 - **The reconcile sweep may raise a second "accepted with errors" warning.**
   [Detail](backlog/fiscal.md#the-reconcile-sweep-may-raise-a-second-accepted-with-errors-warning).
