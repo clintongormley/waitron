@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect, createServer } from "node:tls";
 import type { AddressInfo } from "node:net";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   finishTlsInstall,
   installVenueAuthority,
@@ -12,6 +12,25 @@ import {
   markJoined,
 } from "./box-tls-install.js";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+import {
+  syncsAndRenames as recordSyncsAndRenames,
+  writtenDurably,
+} from "./testing/durable-writes.js";
+
+const { mkdirMock, openMock, renameMock } = vi.hoisted(() => ({
+  mkdirMock: vi.fn(),
+  openMock: vi.fn(),
+  renameMock: vi.fn(),
+}));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  mkdirMock.mockImplementation(actual.mkdir);
+  openMock.mockImplementation(actual.open);
+  renameMock.mockImplementation(actual.rename);
+  return { ...actual, mkdir: mkdirMock, open: openMock, rename: renameMock };
+});
+const syncsAndRenames = (run: () => Promise<unknown>) =>
+  recordSyncsAndRenames({ mkdir: mkdirMock, open: openMock, rename: renameMock }, run);
 
 const OWN_NAME = "box-7f3a.waitron.local";
 const HOSTNAMES = [OWN_NAME, "waitron.local", "localhost"];
@@ -157,6 +176,27 @@ describe("installVenueAuthority", () => {
     expect(await handshake(stateDir, own.caCertPem, "waitron.local")).toBe("verified");
   });
 
+  it("writes the four working files and the list durably before the renames, and syncs the folder before and after the list goes", async () => {
+    const stateDir = await ownBox();
+    const tls = join(stateDir, "tls");
+    const events = await syncsAndRenames(() => install(stateDir));
+    for (const name of [...INSTALLED.map((n) => `${n}.install`), "install.json"]) {
+      expect(writtenDurably(events, join(tls, name), tls), name).toBe(true);
+    }
+    const listWritten = events.indexOf(
+      `rename ${join(tls, "install.json.tmp")} ${join(tls, "install.json")}`,
+    );
+    const moves = INSTALLED.map((name) =>
+      events.indexOf(`rename ${join(tls, `${name}.install`)} ${join(tls, name)}`),
+    );
+    for (const moved of moves) expect(moved).toBeGreaterThan(listWritten);
+    // One sync before the list is removed and one after it.
+    const syncsAfterMoves = events
+      .slice(Math.max(...moves))
+      .filter((event) => event === `sync ${tls}`);
+    expect(syncsAfterMoves).toHaveLength(2);
+  });
+
   it("a box with no tls folder has nothing to finish", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-tls-install-"));
     dirs.push(stateDir);
@@ -165,6 +205,17 @@ describe("installVenueAuthority", () => {
 });
 
 describe("markJoined", () => {
+  it("writes the marker durably, syncing the state folder after creating tls in it", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-tls-joined-"));
+    dirs.push(stateDir);
+    const tls = join(stateDir, "tls");
+    const events = await syncsAndRenames(() => markJoined(stateDir, "origin"));
+    expect(writtenDurably(events, join(tls, "joined.json"), tls)).toBe(true);
+    const created = events.indexOf(`mkdir ${tls}`);
+    expect(created).not.toBe(-1);
+    expect(events.indexOf(`sync ${stateDir}`, created)).toBeGreaterThan(created);
+  });
+
   it("records the main box's node id, and only a box that joined reads as joined", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-tls-joined-"));
     dirs.push(stateDir);

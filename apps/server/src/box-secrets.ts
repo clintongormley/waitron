@@ -92,20 +92,6 @@ export function keyRingEnv(ring: EncodedKeyRing): Record<string, string> {
   return env;
 }
 
-/**
- * Keeps the main box's certificate authority beside this box's own, under names the listener does
- * not read.
- */
-export async function writeVenueAuthority(
-  stateDir: string,
-  authority: { certPem: string; keyPem: string },
-): Promise<void> {
-  const tlsDir = join(stateDir, TLS_DIR);
-  await mkdirDurable(tlsDir, 0o700);
-  await writeFileDurable(join(tlsDir, "venue-ca.crt"), authority.certPem, 0o600);
-  await writeFileDurable(join(tlsDir, "venue-ca.key"), authority.keyPem, 0o600);
-}
-
 export function leafIpv4s(listIpv4: () => string[]): string[] {
   return Array.from(new Set(["127.0.0.1", ...listIpv4()])).filter(isPermittedLeafIpv4);
 }

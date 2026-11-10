@@ -13,9 +13,12 @@ import {
   reissueBoxLeaf,
   tightenTlsDir,
   writeCredentialsRing,
-  writeVenueAuthority,
 } from "./box-secrets.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import {
+  syncsAndRenames as recordSyncsAndRenames,
+  writtenDurably,
+} from "./testing/durable-writes.js";
 
 // `access`, `copyFile`, `mkdir`, `open` and `rename` are wrapped so a test can inject a failure for
 // a single path or record a call; every other call forwards to the real implementation.
@@ -67,47 +70,8 @@ const deps = (stateDir: string) => ({
   listIpv4: () => ["192.168.1.50"],
 });
 
-/** Each sync of an opened file or folder, each rename and each `mkdir` that created a folder, in
- * order, while `run` runs. */
-async function syncsAndRenames(run: () => Promise<unknown>): Promise<string[]> {
-  const events: string[] = [];
-  const mkdirThrough = mkdirMock.getMockImplementation()!;
-  mkdirMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
-    const created = await (mkdirThrough as (...a: unknown[]) => Promise<unknown>)(p, ...rest);
-    if (created !== undefined) events.push(`mkdir ${String(p)}`);
-    return created;
-  });
-  const openThrough = openMock.getMockImplementation()!;
-  const renameThrough = renameMock.getMockImplementation()!;
-  openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
-    const handle = (await (openThrough as (...a: unknown[]) => unknown)(p, ...rest)) as FileHandle;
-    const realSync = handle.sync.bind(handle);
-    handle.sync = async () => {
-      events.push(`sync ${String(p)}`);
-      return realSync();
-    };
-    return handle;
-  });
-  renameMock.mockImplementation(async (from: string, to: string) => {
-    events.push(`rename ${from} ${to}`);
-    return renameThrough(from, to);
-  });
-  try {
-    await run();
-  } finally {
-    mkdirMock.mockImplementation(mkdirThrough);
-    openMock.mockImplementation(openThrough);
-    renameMock.mockImplementation(renameThrough);
-  }
-  return events;
-}
-
-/** Whether `file`'s working copy was synced before it was renamed into place, and its folder after. */
-function writtenDurably(events: string[], file: string, folder: string): boolean {
-  const synced = events.indexOf(`sync ${file}.tmp`);
-  const renamed = events.indexOf(`rename ${file}.tmp ${file}`);
-  return synced !== -1 && renamed > synced && events.indexOf(`sync ${folder}`, renamed) > renamed;
-}
+const syncsAndRenames = (run: () => Promise<unknown>) =>
+  recordSyncsAndRenames({ mkdir: mkdirMock, open: openMock, rename: renameMock }, run);
 
 describe("ensureBoxSecrets", () => {
   it("syncs every new file before it is renamed into place, and its folder after", async () => {
@@ -341,30 +305,6 @@ describe("ensureBoxSecrets", () => {
     await expect(readFile(join(d, "secrets.env"), "utf8")).rejects.toMatchObject({
       code: "ENOENT",
     });
-  });
-});
-
-describe("writeVenueAuthority", () => {
-  it("syncs the state folder after creating tls in it", async () => {
-    const d = await newDir();
-    const events = await syncsAndRenames(() =>
-      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
-    );
-    const created = events.indexOf(`mkdir ${join(d, "tls")}`);
-    expect(created).not.toBe(-1);
-    expect(events.indexOf(`sync ${d}`, created)).toBeGreaterThan(created);
-  });
-
-  it("syncs both files before they are renamed into place, and the folder after", async () => {
-    const d = await newDir();
-    const tls = join(d, "tls");
-    const events = await syncsAndRenames(() =>
-      writeVenueAuthority(d, { certPem: "cert", keyPem: "key" }),
-    );
-    expect(writtenDurably(events, join(tls, "venue-ca.crt"), tls)).toBe(true);
-    expect(writtenDurably(events, join(tls, "venue-ca.key"), tls)).toBe(true);
-    expect(await readFile(join(tls, "venue-ca.key"), "utf8")).toBe("key");
-    expect((await stat(join(tls, "venue-ca.key"))).mode & 0o777).toBe(0o600);
   });
 });
 

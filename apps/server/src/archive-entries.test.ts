@@ -85,16 +85,12 @@ async function collectAndRestore(stateDir: string): Promise<{ names: string[]; r
   return { names: entries.map((entry) => entry.name), restored };
 }
 
-it("a box that never joined another is backed up and restored without a venue authority", async () => {
+it("a box's own authority is backed up and restored", async () => {
   const stateDir = await stateWithRecoveryFiles();
 
-  const { names, restored } = await collectAndRestore(stateDir);
+  const { restored } = await collectAndRestore(stateDir);
 
-  expect(names.filter((name) => name.includes("venue-ca"))).toEqual([]);
   expect(await readFile(join(restored, "tls/ca.key"), "utf8")).toBe("tls/ca.key-contents");
-  await expect(readFile(join(restored, "tls/venue-ca.key"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
 });
 
 it("a failing state read waits for the node copy to finish before it rejects", async () => {

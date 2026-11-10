@@ -33,8 +33,6 @@ describe("the node-local manifest", () => {
       "tls/ca.key|state|destination-owned",
       "tls/server.crt|state|destination-owned",
       "tls/server.key|state|destination-owned",
-      "tls/venue-ca.crt|state|destination-owned",
-      "tls/venue-ca.key|state|destination-owned",
       "backup.env|state|transferred",
       "modules.json|state|transferred",
       "module-preparation-state.json|state|transferred",

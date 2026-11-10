@@ -153,8 +153,6 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
   { item: "tls/ca.key", where: "state", class: "destination-owned", treatment: TLS },
   { item: "tls/server.crt", where: "state", class: "destination-owned", treatment: TLS },
   { item: "tls/server.key", where: "state", class: "destination-owned", treatment: TLS },
-  { item: "tls/venue-ca.crt", where: "state", class: "destination-owned", treatment: TLS },
-  { item: "tls/venue-ca.key", where: "state", class: "destination-owned", treatment: TLS },
   {
     item: "backup.env",
     where: "state",
