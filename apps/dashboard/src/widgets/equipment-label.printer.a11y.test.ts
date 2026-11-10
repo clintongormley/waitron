@@ -26,7 +26,7 @@ for (const locale of ["en", "es"] as const)
               : state === "read-failed"
                 ? Promise.reject(new Error("offline"))
                 : Promise.resolve(
-                    state === "empty" ? [] : [{ id: ID, name: "Portable Café", active: true }],
+                    state === "empty" ? [] : [{ id: ID, name: "Portable Cafe", active: true }],
                   ),
           ),
           printEquipmentLabel: vi.fn(() =>
@@ -39,7 +39,7 @@ for (const locale of ["en", "es"] as const)
         };
         const { el, host } = await mountWidget<EquipmentLabel>(
           "dashboard-equipment-label",
-          { itemId: ID, name: "Portable Café", api: api as unknown as DashboardApi },
+          { itemId: ID, name: "Portable Cafe", api: api as unknown as DashboardApi },
           theme,
         );
         const button = (test: string) =>

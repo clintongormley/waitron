@@ -39,7 +39,7 @@ const burger = {
   id: "p-burger",
   name: "Burger",
   customerName: { es: "Hamburguesa" },
-  kitchenName: "BURGER COCINA",
+  kitchenName: "BURGER KITCHEN",
   categoryId: null,
   active: true,
   variants: [],
@@ -556,7 +556,7 @@ describe("the menu editor's heading", () => {
   });
 
   it("breaks a menu name in one word longer than the phone is wide inside the heading", async () => {
-    const el = await onPhone(`Terraza${"brunch".repeat(12)}`);
+    const el = await onPhone(`Terrace${"brunch".repeat(12)}`);
     const tree = q<HTMLElementTagNameMap["dashboard-menu-structure-table"]>(
       el,
       "dashboard-menu-structure-table",

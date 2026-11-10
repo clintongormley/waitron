@@ -112,7 +112,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/widgets/device-home-preview.test.ts",
   "apps/dashboard/src/widgets/email-settings-form.test.ts",
   "apps/dashboard/src/widgets/equipment-label.nfc.test.ts",
-  "apps/dashboard/src/widgets/equipment-label.printer.a11y.test.ts",
   "apps/dashboard/src/widgets/extra-list-form.a11y.test.ts",
   "apps/dashboard/src/widgets/extra-list-form.save-state.test.ts",
   "apps/dashboard/src/widgets/extra-list-form.test.ts",

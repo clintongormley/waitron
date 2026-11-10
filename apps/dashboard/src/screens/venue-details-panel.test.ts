@@ -938,7 +938,7 @@ it("after the legal-name dialog's answer the card reads again, so a change in a 
   vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => held.promise);
   await r.notify(el);
   const fixture = venueDetailsFixture();
-  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "Nuevo SL" } };
+  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "New SL" } };
   const later = { ...venueDetailsFixture({ name: "Other manager" }), issuer: renamed.issuer };
   r.set(later);
   q(el, "dashboard-legal-name-dialog")!.dispatchEvent(
@@ -947,7 +947,7 @@ it("after the legal-name dialog's answer the card reads again, so a change in a 
   await flush(el);
   held.resolve(structuredClone(later));
   await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
-  expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
+  expect(text(q(el, "[data-test=issuer]"))).toContain("New SL");
 });
 
 async function savedBehindReconnectReadThenFollowUpFails(r: ReturnType<typeof rig>) {
@@ -993,7 +993,7 @@ it("a failed read after the legal-name dialog's answer is tried again and ends o
   const r = rig();
   const el = await mount(r.api);
   const fixture = venueDetailsFixture();
-  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "Nuevo SL" } };
+  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "New SL" } };
   r.set({ ...venueDetailsFixture({ name: "Other manager" }), issuer: renamed.issuer });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
@@ -1005,7 +1005,7 @@ it("a failed read after the legal-name dialog's answer is tried again and ends o
     expect(text(q(el, "[data-test=saved-name]"))).toBe("Venue");
     await vi.advanceTimersByTimeAsync(2000);
     await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
-    expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
+    expect(text(q(el, "[data-test=issuer]"))).toContain("New SL");
     expect(q(el, "[data-test=read-error]")).toBeNull();
   } finally {
     vi.useRealTimers();

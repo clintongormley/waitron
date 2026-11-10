@@ -392,7 +392,7 @@ it("names an extra's list and old and new units in both languages", async () => 
         targets: { before: [], after: [] },
         kind: "extra_unit_changed",
         productId: "p-ham",
-        name: "Jamón",
+        name: "Ham",
         listId: "l-extras",
         listName: "Extras",
         from: {
@@ -415,7 +415,7 @@ it("names an extra's list and old and new units in both languages", async () => 
   });
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: Jamón unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
+      "Extras: Ham unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
     ].sort(),
   );
 
@@ -424,7 +424,7 @@ it("names an extra's list and old and new units in both languages", async () => 
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: la unidad de Jamón ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
+      "Extras: la unidad de Ham ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
     ].sort(),
   );
 });
@@ -437,7 +437,7 @@ it("names an extra's list and old and new portions with their units in both lang
         targets: { before: [], after: [] },
         kind: "extra_portion_changed",
         productId: "p-ham",
-        name: "Jamón",
+        name: "Ham",
         listId: "l-extras",
         listName: "Extras",
         from: { portion: "0.050", abbreviation: { en: "kg", es: "kg" } },
@@ -447,14 +447,14 @@ it("names an extra's list and old and new portions with their units in both lang
     ]),
   });
   expect(items(el, "changes")).toEqual(
-    ["Extras: Jamón portion changed from 0.050 kg to 0.100 kg — shared product"].sort(),
+    ["Extras: Ham portion changed from 0.050 kg to 0.100 kg — shared product"].sort(),
   );
 
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
-    ["Extras: la porción de Jamón ha cambiado de 0.050 kg a 0.100 kg — producto compartido"].sort(),
+    ["Extras: la porción de Ham ha cambiado de 0.050 kg a 0.100 kg — producto compartido"].sort(),
   );
 });
 
@@ -466,7 +466,7 @@ it("names an extra's change to no quantity limit in both languages", async () =>
         targets: { before: [], after: [] },
         kind: "extra_max_quantity_changed",
         productId: "p-ham",
-        name: "Jamón",
+        name: "Ham",
         listId: "l-extras",
         listName: "Extras",
         from: 2,
@@ -476,14 +476,14 @@ it("names an extra's change to no quantity limit in both languages", async () =>
     ]),
   });
   expect(items(el, "changes")).toEqual(
-    ["Extras: Jamón maximum quantity changed from 2 to no limit — shared product"].sort(),
+    ["Extras: Ham maximum quantity changed from 2 to no limit — shared product"].sort(),
   );
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: la cantidad máxima de Jamón ha cambiado de 2 a sin límite — producto compartido",
+      "Extras: la cantidad máxima de Ham ha cambiado de 2 a sin límite — producto compartido",
     ].sort(),
   );
 });
