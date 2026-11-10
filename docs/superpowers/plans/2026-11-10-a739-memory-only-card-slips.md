@@ -6,6 +6,8 @@
 
 **Dependencies:** watcher17:32 requires cut 3 to wait until owner-reserved PR #2736 lands; cut 4 follows cut 3. Build from current main in a separate registered worktree; reconcile overlapping till files at rebase. This plan does not release the unpublished chooser's publication hold or #2736's owner-only landing hold.
 
+**Dependency update, 10 November 18:44:** the watcher released cut 3 to build before #2736 lands, from main if independent, or otherwise on that PR's branch. No cut 3 PR opens before #2736 is on main. The watcher's 19:10 owner-requested Fable read still holds #2736 landing.
+
 ## Cut 3: historical balances and a copy before full payment
 
 **Finish:** reopen **Pay → Payments → Print a copy** beside a received reader payment, including an unpaid bill. Reuse the existing sale-level slip action after settlement; change only its first-tender visibility to any eligible reader capture. Add no per-payment ticket controls or history navigation.
