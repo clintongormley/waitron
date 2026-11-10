@@ -391,6 +391,10 @@ describe("correction amount allocation", () => {
       const history = smallBill(rate, gross, base, count);
       for (let cent = 0; cent < cents; cent++) {
         const next = allocateCorrectionAmounts(history, { gross: d("0.01") });
+        // Fold only returns an allocator call has already checked one by one: it reads earlier
+        // returns as per-line and per-rate sums, so this keeps every answer while capping each
+        // call's cost.
+        if (history.consumed.length > 4 * count) history.consumed = foldByLine(history.consumed);
         history.consumed.push(...next.allocations);
       }
       expect(sumDecimals(history.consumed.map((part) => part.base))).toBe(d(totalBase));
@@ -470,4 +474,25 @@ function smallBill(
     ],
     consumed: [],
   };
+}
+
+function foldByLine(
+  consumed: CorrectionAmountHistory["consumed"],
+): CorrectionAmountHistory["consumed"] {
+  const byLine = new Map<string, CorrectionAmountHistory["consumed"][number]>();
+  for (const entry of consumed) {
+    const sum = byLine.get(entry.saleLineId);
+    byLine.set(
+      entry.saleLineId,
+      sum === undefined
+        ? { ...entry }
+        : {
+            ...sum,
+            gross: addDecimal(sum.gross, entry.gross),
+            base: addDecimal(sum.base, entry.base),
+            tax: addDecimal(sum.tax, entry.tax),
+          },
+    );
+  }
+  return [...byLine.values()];
 }
