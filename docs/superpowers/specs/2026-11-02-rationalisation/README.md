@@ -417,7 +417,8 @@ payloads stay with A980, and the bench measures them unpruned.
 - *Slice 0 builds a bench:* a reference venue with a year of trading (about 10 million rows on
   today's schema), and timings of the paths that matter before and after each slice — taking a
   payment, recording a sale, a filing pass, a till's floor read, the kitchen screen, opening the
-  dashboard.
+  dashboard. (2026-11-10: the owner made the bench periodic rather than a step of each slice; see
+  [when the bench runs](../../../developers/testing-guide.md#when-the-bench-runs).)
 - *The specific reads each area flagged* are measured in the slice that introduces them, with the
   result that would change the design written down in advance (each appendix's §8). The main ones:
   - the chain head and next invoice number read from records and sales instead of stored

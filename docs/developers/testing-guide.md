@@ -3416,9 +3416,9 @@ determinism case.
 
 A1308 changes most of the tables, and the paths staff wait on must not get slower. Slice 0 built a
 bench to check that, beside the [protection list](#the-protection-list); it runs from time to time,
-not for every slice ([when it runs](#when-the-bench-runs)). It lives
-in `apps/server/scripts/bench/` and runs from `apps/server` as `pnpm bench <command>`. It does not
-run in CI: only its unit tests do, in `apps/server`'s suite. It refuses a relative path, and a
+not for every slice ([when it runs](#when-the-bench-runs)). It lives in `apps/server/scripts/bench/`
+and runs from `apps/server` as `pnpm bench <command>`. It does not run in CI: only its unit tests
+do, in `apps/server`'s suite. It refuses a relative path, and a
 `--venue` or `--out` inside the repository; a refused command exits 2 through `pnpm bench`
 or `tsx`, and exited 1 through `pnpm -s` (pnpm 9.15.0). `bench compare`, which only
 reads its two files, takes any path.
@@ -3472,9 +3472,10 @@ refuses a different `--seed`, a different `--bills-per-day`, and a `--days` smal
 has finished. Nothing checks that the code is the same, so never resume a folder with code that plans
 the days differently.
 
-Plan for a long run. On 9 November 2026 the full year took 8 h 28 min on an otherwise idle 32-core
-Linux server with Node 26.13.0, from 0.18 s a bill on day 1 to 0.49 s on day 360, and left 12.7
-million rows in a 15.5 GB `venue.db`; each `measure` with the defaults then took about an hour.
+Plan for a long run. On 9 November 2026 the full year took 8 h 28 min on the bench server
+(2.29.240.15), an otherwise idle 32-core Linux server, not the machine the periodic runs use, with
+Node 26.13.0, from 0.18 s a bill on day 1 to 0.49 s on day 360, and left 12.7 million rows in a
+15.5 GB `venue.db`; each `measure` with the defaults then took about an hour.
 
 **Measure it.**
 
@@ -3527,11 +3528,11 @@ filing.pass          8.68 ms to 12.29 ms     10.45 ms        same
 3 samples are too few to trust a verdict: keep the default of 200. A case only one result holds is
 named under the table, as `only in before: …` or `only in after: …`.
 
-`bench compare` exits 0 whenever it can read both files, because a slower case is for a person to
-judge. When the two results differ in Node, SQLite or STAT4, seed, profile or machine, when either
-does not record which Node and SQLite made it, or when a case has no rounds or a round median that is
-not a number, it prints `not compared: …` instead of the table, and still exits 0. So
-read what it prints, never its exit status:
+`bench compare` exits 0 whenever it can read and parse both files, because a slower case is for a
+person to judge. When the two results differ in Node, SQLite or STAT4, seed, profile or machine,
+when either does not record which Node and SQLite made it, or when a case has no rounds or a round
+median that is not a number, it prints `not compared: …` instead of the table, and still exits 0.
+So read what it prints, never its exit status:
 
 ```text
 not compared: bench: the two results differ in seed: 1 against 2
@@ -3567,16 +3568,18 @@ The [protection list](#the-protection-list) still runs before and after every sl
   `Sale-path read changed:` that names the request, so the next run knows which cases to read. A
   sale-path read is one that a request timed in the table above makes.
 - **The 30-day run** (`--days 30`) happens when three flagged slices have landed since the last
-  run, or when the owner asks. The watcher, or the owner, asks one lane to run it; nothing schedules
-  it. It builds current `main` and compares it with the last run's result (see below).
+  run, or on request. The watcher, or the owner, asks one lane to run it; nothing schedules it. It
+  builds current `main` and compares it with an earlier run's result (see below).
 - **The full year** (`--days 360`) runs only when the owner asks.
-- **Where:** the old CI server, 2.29.248.230, which the owner kept for this on 10 November 2026.
-  Keep every run on that one machine, so each result can be compared with the last. The first run
-  there only records a starting result: there is nothing to compare it with yet. Its build and
-  measure times go here once measured.
+- **Where:** the old CI server, 2.29.248.230, once A1479 has moved CI off it (owner, 10 November
+  2026: "we can hang on to the server for this"). Keep every run on that one machine, so each
+  result can be compared with an earlier one. The first run there only records a starting result:
+  there is nothing to compare it with yet. Its build and measure times go here once measured.
 - **The result:** the lane that ran it writes the compare table, with both commits, into the A1308
   entry in `docs/backlog/architecture.md`, and names any case marked `slower` with the flagged
-  slices that could explain it.
+  slices that could explain it. Every run also writes there its commit, date,
+  `--days` and the absolute path of its result file on that machine, so the next run and the
+  watcher's count start from it.
 
 The schedule is the watcher's decision of 10 November 2026, made on the owner's words above; the
 owner has not approved it separately.
@@ -3587,8 +3590,9 @@ owner has not approved it separately.
 2. If the machine has no earlier run, measure the venue a second time and compare the two
    measurements with each other: any case that is not `same` shows how much noise that case has on
    the machine. That is the starting result, and the run ends there.
-3. Otherwise the before side is the last run's measurement. If the last run used another Node or
-   SQLite (`bench compare` prints `not compared: …`), build the bench venue again on the last run's
+3. Otherwise the before side is the measurement of the latest earlier run with the same `--days`;
+   with none, the run takes step 2 for that length. If `bench compare` prints `not compared: …`
+   because the two differ in Node, SQLite or STAT4, build the bench venue again on that run's
    commit, in a throwaway worktree (`git worktree add --detach <dir> <sha>`, then `pnpm install` in
    it), and measure it on the same machine.
 4. Compare the new measurement with the before side. There is no pass mark: the rule is before
