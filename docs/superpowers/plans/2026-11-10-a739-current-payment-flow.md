@@ -29,19 +29,24 @@ Prefixes S=`apps/server/src`, T=`apps/till/src`, D=`apps/dashboard/src`, P=`pack
 
 PR7 suppresses automatic receipts centrally for order-linked sales, including loop/manager completion; keep collection tickets and already staged A4/email. Default F1 Receipt selection is not a Print command. Remove auto-zone hiding of Print original and every now-ineffective department receipt-print control, including service-settings-fields, department-settings and departments-list. Return existing issuance results to the initiating save/submit/line-edit/adjustment/discard/cancel/move/single-bill-split caller; multi-bill split/background/no editor means None. Preserve issuance calls, sent dishes, reservations and drawer checks. No management editor is invented.
 
-PR8 relaxes only F2 email admission, adds a small email-status read, retains null F2 Invoice status and A4/full-invoice restrictions. Use receipt caption/attachment, existing email worker and history; Print/Email coexist while history determines originals/copies in either order. Trace recipient retention/export before delivery changes, without inventing a new policy.
+PR8 relaxes only F2 email admission, adds a small email-status read, retains null F2 Invoice status and A4/full-invoice restrictions. Use receipt caption/attachment, existing email worker and history; Print/Email coexist while history determines originals/copies in either order. Trace recipient retention/export, including the full-invoice recipient snapshot in service_commands, before delivery changes, without inventing a new policy.
 
 **Proof owners:** provider tests own practice outcomes and rejection outside practice; database/API tests own slip recovery, Counter admission, sums, sent/collection facts and receipt/email history; browsers own fields, equipment, cash/change, session/order identity and explicit choices. None tests inspect print_jobs/invoice_deliveries; one disposable restored-auto-print control must fail. Give each property to its new owner: the central stop is tested once in receipt-print.test.ts; each route suite asserts only the choice it returns. PR3 generates packages/payments/drizzle/{0000_baseline.sql,meta/0000_snapshot.json,meta/_journal.json} and scripts/migration-baseline-epoch.json: protection-list before/after, payments baseline rebuild and unchanged schema/append-only/behavioral/starting-migration plus unchanged fiscal src/{inmutabilidad,write-path.e2e}.test.ts. Focused red/green, normal hook and current-head CI per cut. LOOK EN/ES, light/dark, 390/1280: EUR30 cash, three EUR10 payers, settling edit, zero, F1, retry/disconnect and later documents. Physical paper/reader/inbox qualification remains unverified until exercised.
 
 ## 10 November cut 7 split, watcher 13:05 and 13:09
 
 The watcher split this cut after the whole-tree review found handheld paid-screen checks
-still expecting the retired screen. Cut 7(a) returns and caches existing invoice results
-from held/line edits, adjustments, draft save/submit/discard, item cancellation and move dishes.
+still expecting the retired screen. Cut 7(a) returns existing invoices from held/line edits, adjustments, draft save/submit/discard,
+item cancellation and move dishes. Draft discard, kitchen send, adjustments and item cancellation
+cache their original invoice response for replay. Held save, line edit, draft save and move dishes
+return it on the first answer only; their retry is refused with 409 and files no second invoice.
 It adds no chooser and leaves automatic paper and settings unchanged. Cut 7(b) builds the
 chooser, stops automatic order-linked paper and removes the ineffective controls together.
 It preserves final cash change and migrates mixed handheld checks without losing their
-payment, document-recovery or table-action assertions.
+payment, document-recovery or table-action assertions. For held save, line edit, draft save and
+move dishes, cut 7(b) must notice that a bill is now settled after an unclear/refused retry and
+fetch its invoice before opening the chooser. Watcher19:38 added this recovery requirement
+after Fable measured those four 409 responses.
 
 Claude reviewed the plan before the watcher cleared it at 01:26. Watcher 11:21 and 12:18
 cleared moving existing draft/adjustment issuance into completion callbacks so the existing

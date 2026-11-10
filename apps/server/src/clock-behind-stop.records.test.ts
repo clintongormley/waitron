@@ -8,9 +8,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { workingOrderLines } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle } from "@waitron/identity";
-import { deviceId as brandDeviceId } from "@waitron/shared";
+import { deviceId as brandDeviceId, quoteLiteral } from "@waitron/shared";
 import type { Draft } from "./order-drafts.js";
 import { readBillEditState } from "./bill-editing.js";
+import { createAdjustmentReason } from "@waitron/adjustments";
+import { REASONS } from "./testing/adjustment-venue.js";
+import { cancelReasonId } from "./testing/cancel-line.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import { advanceTicketItem } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { heldRow } from "./testing/held-row.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -205,7 +210,160 @@ async function submit(app: Hono, partyId: string, tabId: string, draft: Draft) {
   });
 }
 
+function settlingSnapshot() {
+  return {
+    bills: venue.db.all(sql`select * from working_orders order by id`),
+    lines: venue.db.all(sql`select * from working_order_lines order by id`),
+    drafts: venue.db.all(sql`select * from order_drafts order by id`),
+    commands: venue.db.all(sql`select * from service_commands order by id`),
+    adjustments: venue.db.all(sql`select * from adjustments order by id`),
+    tickets: venue.db.all(sql`select * from ticket_items order by id`),
+    sales: venue.db.all(sql`select * from sales order by id`),
+    records: allRecords(),
+    jobs: printJobs(),
+  };
+}
+
+it.each(["discount", "discard", "cancel", "started cancel"] as const)(
+  "a settling %s stops behind the chain while the earlier command still replays",
+  async (kind) => {
+    const productName = venue.db.get<{ name: string }>(
+      sql`select name from products where unit_price = 300 order by id limit 1`,
+    )!.name;
+    const reasonId =
+      kind === "discount"
+        ? await inTx(venue, async (tx) => (await createAdjustmentReason(tx, REASONS.house)).id)
+        : await inTx(venue, cancelReasonId);
+    async function prepare(now: number) {
+      const party = await seatedWith(venueAt(now), productName, productName);
+      expect(
+        (
+          await send(
+            at(now),
+            venue.cookie,
+            "POST",
+            `/api/working-orders/${party.tabId}/payments`,
+            cashPart("3.00"),
+          )
+        ).status,
+      ).toBe(200);
+      const [line] = venue.db.all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${party.tabId} order by line_no`,
+      );
+      if (kind === "discard") {
+        const recalled = await send(
+          at(now),
+          venue.cookie,
+          "POST",
+          `/api/parties/${party.partyId}/lines/${line!.id}/recall`,
+          {
+            submissionId: randomUUID(),
+            expectedPartyRevision: await partyRevisionOf(venue, party.tabId),
+            expectedEdit: await readBillEditState(venue.db, party.tabId),
+          },
+        );
+        expect(recalled.status).toBe(200);
+        const draft = (recalled.json as { draft: Draft }).draft;
+        return {
+          path: `/api/parties/${party.partyId}/drafts/${draft.id}/discard`,
+          body: {
+            submissionId: randomUUID(),
+            expectedPartyRevision: await partyRevisionOf(venue, party.tabId),
+            revision: draft.revision,
+            expectedRevision: venue.db.get<{ revision: number }>(
+              sql`select revision from working_orders where id = ${party.tabId}`,
+            )!.revision,
+            reasonId,
+            approver: { personId: venue.adminId, pin: ADMIN_PIN },
+            note: null,
+            expectedEdit: await readBillEditState(venue.db, party.tabId),
+          },
+        };
+      }
+      if (kind === "started cancel") {
+        const [item] = venue.db.all<{ id: string }>(
+          sql`select id from ticket_items where working_order_line_id = ${line!.id}`,
+        );
+        expect(item).toBeDefined();
+        await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+      }
+      const [bill] = venue.db.all<{ revision: number }>(
+        sql`select revision from working_orders where id = ${party.tabId}`,
+      );
+      const expectedEdit = await readBillEditState(venue.db, party.tabId);
+      return kind === "discount"
+        ? {
+            path: `/api/working-orders/${party.tabId}/adjustments`,
+            body: {
+              submissionId: randomUUID(),
+              expectedEdit,
+              expectedRevision: bill!.revision,
+              lineId: line!.id,
+              reasonId,
+              approver: { personId: venue.adminId, pin: ADMIN_PIN },
+              note: null,
+              action: "discount_amount",
+              amount: "3.00",
+            },
+          }
+        : {
+            path: `/api/parties/${party.partyId}/lines/${line!.id}/cancel-item`,
+            body: {
+              submissionId: randomUUID(),
+              expectedEdit,
+              expectedPartyRevision: await partyRevisionOf(venue, party.tabId),
+              expectedBillRevision: bill!.revision,
+              expectedContext: await readCancellationContext(venue.db, party.partyId, line!.id),
+              quantity: "1",
+              outcome: "remove_charge",
+              reasonId,
+              ...(kind === "started cancel"
+                ? { approver: { personId: venue.adminId, pin: ADMIN_PIN } }
+                : {}),
+            },
+          };
+    }
+    const first = await prepare(nowMs());
+    const answer = await send(at(nowMs()), venue.cookie, "POST", first.path, first.body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toHaveProperty("invoice.total", "3.00");
+    const second = await prepare(nowMs());
+    const before = settlingSnapshot();
+    const behind = nowMs() - 10 * MINUTE;
+    const refused = await send(at(behind), venue.cookie, "POST", second.path, second.body);
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual(behindChain(behind));
+    expect(settlingSnapshot()).toEqual(before);
+    expect(await send(at(behind), venue.cookie, "POST", first.path, first.body)).toEqual(answer);
+    expect(settlingSnapshot()).toEqual(before);
+    expect((await send(at(nowMs()), venue.cookie, "POST", second.path, second.body)).status).toBe(
+      200,
+    );
+    expect(allRecords()).toBe(before.records + 1);
+  },
+);
+
 describe("a kitchen send", () => {
+  it("rolls back a settling kitchen send when its saved-answer write refuses", async () => {
+    const now = nowMs();
+    const { party, draft } = await recalledDraft(now, true);
+    const before = settlingSnapshot();
+    await venue.db
+      .execute(sql`create trigger refuse_completed_submit before insert on service_commands
+      when new.kind = 'draft.submit' and exists (select 1 from sales where working_order_id = ${sql.raw(quoteLiteral(party.tabId))})
+      begin select raise(abort, 'completed submit probe'); end`);
+    try {
+      const answer = await submit(at(now), party.partyId, party.tabId, draft);
+      expect(answer.status).toBe(500);
+      expect(answer.json).toMatchObject({ code: "server.internal" });
+      expect(settlingSnapshot()).toEqual(before);
+    } finally {
+      await venue.db.execute(sql`drop trigger refuse_completed_submit`);
+    }
+    expect((await submit(at(now), party.partyId, party.tabId, draft)).status).toBe(200);
+    expect(allRecords()).toBe(before.records + 1);
+  });
+
   it("refuses a kitchen send that would complete a part-paid bill, as a whole", async () => {
     const now = nowMs();
     const { party, draft } = await recalledDraft(now, true);
