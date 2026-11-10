@@ -191,14 +191,14 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
 
 ## Stop points (beyond rules §5)
 
-1. **Measure 5** (environment.md §5): Task 2 step 5 times taking a card payment on the slice-0 bench
-   before and after. If the after median is slower by more than the bench's own run-to-run spread for
+1. **Measure 5** (environment.md §5): Task 2 step 5 times taking a card payment before and after. If the after median is slower by more than the bench's own run-to-run spread for
    that path, that is the failing result; the design's fallback is to hold the document in memory and
-   replace it when a save bumps its revision. Ask the watcher before taking it (rules §5.4). If the
-   slice-0 bench has not landed at your base, time it without it: run
+   replace it when a save bumps its revision. Ask the watcher before taking it (rules §5.4). The
+   slice-0 bench has no card case (its `payment.partial` and `payment.final` cases pay cash), so time
+   the card payment without it: run
    `src/bill-payments.test.ts`'s card-payment confirm case 20 times at the base and 20 times on this
    branch on the same machine (`--repeat`-style loop in a throwaway script, not committed), and
-   compare medians and spreads the same way; say in the pull request that the bench was missing.
+   compare medians and spreads the same way; say in the pull request which way it was timed.
 2. A consumer of the card simulator copies `deps.cardProvider` into a variable when routes are
    mounted rather than when a request runs (Task 3 step 1 lists them): the getter would not reach it.
    Stop and ask rather than restructuring that consumer.
@@ -246,7 +246,7 @@ EQUAL. A `payments` row in `settings` is data, not schema. Any line is a stop.
 - [ ] **Step 4: Run** step 2's files and `src/till-api.setup-revision.test.ts`; pass. Add one case
   to the setup-revision suite: `"moves when tips are switched on"` — the revision before and after
   saving `tipsEnabled: true` differ.
-- [ ] **Step 5: Measure 5** (stop point 1): on the bench box, the slice-0 "taking a payment" path,
+- [ ] **Step 5: Measure 5** (stop point 1): the card payment, timed as stop point 1 says,
   base commit and this commit, same machine; paste both medians and spreads into the pull request.
 - [ ] **Step 6: Commit:** `git commit -s -m "Tips are read from the payments document (A1308 env3)"`
 

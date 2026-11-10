@@ -3413,8 +3413,8 @@ determinism case.
 
 ## The bench
 
-A1308 changes most of the tables, and every slice has to show it did not make a path staff wait on
-slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
+A1308 changes most of the tables, and a slice that changes a path staff wait on has to show it did
+not make that path slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
 in `apps/server/scripts/bench/` and runs from `apps/server` as `pnpm bench <command>`. It does not
 run in CI: only its unit tests do, in `apps/server`'s suite. It refuses a relative path, and a
 `--venue` or `--out` inside the repository; a refused command exited 1. `bench compare`, which only
@@ -3456,10 +3456,10 @@ the profile.
 `request-timings.jsonl` holds one line of JSON for each finished day: `day`, `date`, `bills`,
 `dayMs`, `checkpointMs` and `routes`. `routes` gives, for each kind of request (`METHOD /path` with
 every id written `:id`), its `count`, `totalMs`, `medianMs` and `p95Ms`, so a request whose cost grows
-with history shows by name across the days. `checkpointMs` is the time spent copying the venue to
-`last-day/`, measured apart because that copy grows with the database. `dayMs - checkpointMs -
-sum(totalMs)` is the time outside requests: the overnight filing, the attendance passes and the
-daily close. A resumed build adds to the file and keeps each day once.
+with history shows by name across the days. `checkpointMs` is the time spent checkpointing the
+database and copying the venue to `last-day/`, measured apart because that copy grows with the
+database. `dayMs - checkpointMs - sum(totalMs)` is the time outside requests: the bench's own reads
+between them, the overnight filing, the attendance passes and the daily close. A resumed build adds to the file and keeps each day once.
 
 If a build stops, run the same command again. It throws away `venue/`, because a half-traded day
 cannot be removed from the append-only tables, and carries on from `last-day/`. Running it again with
@@ -3519,7 +3519,7 @@ filing.pass          8.68 ms to 12.29 ms     10.45 ms        same
 
 3 samples are too few to trust a verdict: keep the default of 200.
 
-`bench compare` always exits 0, because a slower case is for a person to judge. When the two results
+`bench compare` exits 0 whenever it can read both files, because a slower case is for a person to judge. When the two results
 differ in seed, profile or machine it prints `not compared: …` instead of the table, and still exits
 0. So read what it prints, never its exit status:
 
@@ -3529,7 +3529,8 @@ not compared: bench: the two results differ in seed: 1 against 2
 
 ### How a slice uses it
 
-1. Before the change, on the base commit, build the bench venue and measure it twice. Compare the
+1. Before the change, in a throwaway worktree of the base commit (`git worktree add --detach <dir>
+   <base-sha>`, then `pnpm install` in it), build the bench venue and measure it twice. Compare the
    two measurements with each other: any case that is not `same` shows how much noise that case has
    on your machine.
 2. After the change, build a new bench venue on the new commit, in a new folder, measure it on the
@@ -3542,6 +3543,8 @@ not compared: bench: the two results differ in seed: 1 against 2
 - **The timings are taken on an idle database.** The cases run one at a time and nothing else uses
   the venue meanwhile. A slice that needs timings under load measures them itself.
 - **The dataset is synthetic.** Its volumes and payment mix are the profile's, not a real venue's.
+- **No middleware.** The routes are mounted without the middleware boot puts in front of them, so
+  the timings leave it out.
 - **The bench venue stays open across days.** A real box restarts sometimes; a resumed build
   reopens it, and carries on the attendance scan saved in the folder.
 - **`recordDailyClose` is the bench's own addition.** No boot step or route calls it today:

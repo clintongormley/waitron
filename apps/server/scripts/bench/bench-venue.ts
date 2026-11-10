@@ -123,7 +123,7 @@ export interface BenchVenue {
   db: Database;
   nodeId: NodeId;
   cfg: WithVenueRowId;
-  /** Till, device, print, report, me and management routes, mounted as boot mounts them. */
+  /** Till, device, print, report, me and management routes. */
   app: Hono;
   tills: BenchTill[];
   kitchenScreens: BenchKitchenScreen[];
