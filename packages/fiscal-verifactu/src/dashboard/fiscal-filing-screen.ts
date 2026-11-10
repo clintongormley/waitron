@@ -89,6 +89,25 @@ function recordState(submission: FilingCaseView["submission"]): string | null {
   return state === undefined ? null : t(`fiscal_filing.record_state.${state}`);
 }
 
+/** A case only the check against AEAT opened (`retainLookupConflict`) leaves the record's sending
+ * unchanged; reply evidence means AEAT's reply refused it. A case's conflict stops issuing only when
+ * `readActiveConflicts` lists it, which leaves out a retired identity's conflicts and those on a
+ * record of a box this box took over from. */
+function whatHappensNow(found: FilingCaseView, active: readonly ActiveConflictView[]): string {
+  const lookupOnly =
+    found.cause === "fiscal.huella_divergente" &&
+    found.conflicts.length === 0 &&
+    found.lookups.length > 0;
+  const record = t(lookupOnly ? "fiscal_filing.now.lookup" : `fiscal_filing.now.${found.cause}`);
+  const stops = active.some(
+    (conflict) =>
+      conflict.source === "record" &&
+      conflict.invoiceNumber === found.record.numSerieFactura &&
+      conflict.installationName === found.record.numeroInstalacion,
+  );
+  return stops ? `${record} ${t("fiscal_filing.now.stopped")}` : record;
+}
+
 function technicalDetails(found: FilingCaseView): TemplateResult {
   const { record, submission, evidence } = found;
   const observations = [
@@ -151,7 +170,7 @@ function technicalDetails(found: FilingCaseView): TemplateResult {
   </wt-disclosure>`;
 }
 
-function caseDetails(found: FilingCaseView): TemplateResult {
+function caseDetails(found: FilingCaseView, active: readonly ActiveConflictView[]): TemplateResult {
   const { record, submission, evidence } = found;
   const latest = aeatWords(submission?.mensajeError ?? null);
   const sentAt = submission?.enviadoEn ?? null;
@@ -159,12 +178,12 @@ function caseDetails(found: FilingCaseView): TemplateResult {
       ${field(
         t("fiscal_filing.detail.invoice"),
         `${record.numSerieFactura} · ${record.fechaExpedicionFactura}`,
+        "invoice",
       )}
       ${field(t("fiscal_filing.detail.kind"), recordKind(record), "kind")}
       ${field(t("fiscal_filing.detail.state"), recordState(submission), "state")}
       ${field(t("fiscal_filing.detail.total"), total(record), "total")}
       ${field(t("fiscal_filing.detail.recorded"), formatIsoMinute(record.fechaHoraHusoGenRegistro))}
-      ${field(t("fiscal_filing.detail.issued_by"), t("fiscal_filing.issued_by"), "issued-by")}
       ${field(t("fiscal_filing.detail.then"), aeatWords(evidence.mensaje), "reply-then")}
       ${field(
         t("fiscal_filing.detail.latest"),
@@ -172,7 +191,7 @@ function caseDetails(found: FilingCaseView): TemplateResult {
           ? latest
           : html`${latest} · ${t("fiscal_filing.detail.sent", { time: formatIsoMinute(sentAt) })}`,
       )}
-      ${field(t("fiscal_filing.detail.now"), t(`fiscal_filing.now.${found.cause}`))}
+      ${field(t("fiscal_filing.detail.now"), whatHappensNow(found, active), "now")}
     </dl>
     ${technicalDetails(found)}`;
 }
@@ -507,7 +526,7 @@ export class FiscalFilingScreen extends LitElement {
         close();
       }}
     >
-      ${found === null ? nothing : caseDetails(found)}
+      ${found === null ? nothing : caseDetails(found, this.overview?.activeConflicts ?? [])}
       <div slot="footer" class="footer">
         <wt-button variant="secondary" data-test="close" @click=${close}
           >${t("fiscal_filing.close")}</wt-button

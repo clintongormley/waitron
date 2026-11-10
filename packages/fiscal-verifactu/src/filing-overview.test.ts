@@ -273,6 +273,7 @@ describe("readFilingOverview", () => {
         csv: "CSV-fiscal.huella_divergente",
       },
       record: {
+        fechaExpedicionFactura: "2026-07-20",
         huella: huellaOf(7),
         anteriorHuella: huellaOf(6),
         fechaHoraHusoGenRegistro: "2026-07-20T18:20:30.000Z",

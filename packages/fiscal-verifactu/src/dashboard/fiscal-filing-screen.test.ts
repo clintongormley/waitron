@@ -67,6 +67,13 @@ function flat(el: Element | null): string {
   return (el?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
+/** The element's text with its Technical details fold taken out. */
+function unfolded(el: Element): string {
+  const copy = el.cloneNode(true) as Element;
+  copy.querySelector("wt-disclosure[data-test=technical]")!.remove();
+  return flat(copy);
+}
+
 async function openDetails(screen: FiscalFilingScreen): Promise<HTMLElement> {
   const table = screen.shadowRoot!.querySelector("wt-data-table[data-test=case-table]")!;
   await vi.waitFor(() => expect(table.shadowRoot?.querySelector("tbody tr")).not.toBeNull());
@@ -162,7 +169,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(text(screen, "[data-test=conflict]")).toContain("recovery key");
     const line = text(screen, "[data-test=conflict] li");
     expect(line).toContain("T1/41");
-    expect(line).toContain("Correcta");
+    expect(line).toContain("Correcto");
     expect(line).toContain(THEIRS);
 
     const none = await mount(vi.fn(async () => overview({ activeConflicts: [] })));
@@ -192,7 +199,7 @@ describe("vf-fiscal-filing-screen", () => {
       "AEAT already holds a different record for invoice T1/42, so it refused this box's record.",
     ]);
     expect(flat(items[0]!.querySelector("[data-test=seen]"))).toBe(
-      `Seen ${formatIsoMinute(lookup!.observedAt)}`,
+      `Found ${formatIsoMinute(lookup!.observedAt)}`,
     );
     const fold = items[0]!.querySelector("wt-disclosure[data-test=technical]") as HTMLElement & {
       open: boolean;
@@ -201,7 +208,7 @@ describe("vf-fiscal-filing-screen", () => {
     expect(fold.getAttribute("heading")).toBe("Technical details");
     expect(flat(fold.querySelector("q[lang=es]"))).toBe("Correcto");
     for (const raw of [THEIRS, "BOX-01", "Correcto"]) {
-      expect(flat(items[0]!.querySelector("[data-test=said]"))).not.toContain(raw);
+      expect(unfolded(items[0]!)).not.toContain(raw);
       expect(flat(fold)).toContain(raw);
     }
     expect(flat(items[1]!.querySelector("wt-disclosure q[lang=es]"))).toBe(
@@ -215,6 +222,9 @@ describe("vf-fiscal-filing-screen", () => {
     ).toBe(
       "La AEAT tiene la factura T1/41 como aceptada, y sus datos no coinciden con el registro de este equipo.",
     );
+    expect(
+      flat(spanish.screen.shadowRoot!.querySelector("[data-test=conflict] [data-test=seen]")),
+    ).toBe(`Detectado: ${formatIsoMinute(lookup!.observedAt)}`);
   });
 
   it("says when AEAT holds an invoice under this box's series that this box did not issue", async () => {
@@ -226,7 +236,7 @@ describe("vf-fiscal-filing-screen", () => {
     const { screen } = await mount(vi.fn(answer));
     const line = text(screen, "[data-test=conflict] li");
     expect(line).toContain("AEAT holds invoice T1/99; this box did not issue it.");
-    expect(line).not.toContain("Correcta");
+    expect(line).not.toContain("Correcto");
 
     setLocale("es");
     const spanish = await mount(vi.fn(answer));
@@ -291,18 +301,22 @@ describe("vf-fiscal-filing-screen", () => {
     expect(fold.getAttribute("heading")).toBe("Technical details");
     expect(fold.open).toBe(false);
     const plain = (selector: string) => flat(details.querySelector(selector));
+    expect(plain("[data-test=invoice] dd")).toBe("T1/41 · 2026-11-03");
     expect(plain("[data-test=kind] dd")).toBe(
-      "A new simplified invoice: a till receipt that names no customer.",
+      "A simplified invoice: a till receipt that names no customer.",
     );
     expect(plain("[data-test=state] dd")).toBe("AEAT refused it.");
-    expect(plain("[data-test=total] dd")).toBe("€12.10, of which VAT €2.10");
-    expect(plain("[data-test=issued-by] dd")).toBe("This venue's box.");
+    expect(plain("[data-test=total] dd")).toBe("€12.10, including €2.10 VAT");
+    expect(plain("[data-test=now] dd")).toBe(
+      "This record is refused and is not sent again. While the conflict is active, this box issues no invoices.",
+    );
     const reply = details.querySelector("[data-test=reply-then] q")!;
     expect(reply.getAttribute("lang")).toBe("es");
     expect(flat(reply)).toBe("Registro de facturación duplicado.");
 
-    const outside = flat(details.querySelector("dl"));
+    const outside = unfolded(details);
     const inside = flat(fold);
+    expect(outside).not.toContain("Issued by");
     for (const raw of [OURS, PREVIOUS, THEIRS, "BOX-01", "B12345678", "alta", "F2", "3000"]) {
       expect(outside).not.toContain(raw);
       expect(inside).toContain(raw);
@@ -314,17 +328,100 @@ describe("vf-fiscal-filing-screen", () => {
       "Detalles técnicos",
     );
     expect(flat(spanish.querySelector("[data-test=kind] dd"))).toBe(
-      "Una factura simplificada nueva: un tique que no identifica al cliente.",
+      "Una factura simplificada: un tique que no identifica al cliente.",
     );
     expect(flat(spanish.querySelector("[data-test=total] dd"))).toBe(
-      "12,10 €, de los que 2,10 € son IVA",
+      "12,10 €, IVA de 2,10 € incluido",
     );
   });
 
   it.each([
-    ["alta", "F1", "A new full invoice that names the customer."],
+    ["pendiente", "Waiting to be sent to AEAT."],
+    ["enviando", "Being sent to AEAT now."],
+    ["aceptado", "AEAT accepted it."],
+    ["aceptado_con_errores", "AEAT accepted it and pointed out an error."],
+    ["rechazado", "AEAT refused it."],
+    ["detenido", "Held back: not sent for now."],
+    ["retenido", "Set aside: not sent."],
+  ] as const)("says where a %s record stands", async (estado, line) => {
+    const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+    const found = { ...base, submission: { ...base.submission!, estado } };
+    const details = await openDetails(
+      (await mount(vi.fn(async () => overview({ cases: [found] })))).screen,
+    );
+    expect(flat(details.querySelector("[data-test=state] dd"))).toBe(line);
+  });
+
+  it("does not call a record refused when only the check against AEAT found its conflict", async () => {
+    const base = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+    const found = {
+      ...base,
+      evidence: { codigo: null, mensaje: null, csv: null },
+      submission: { estado: "pendiente", codigoError: null, mensajeError: null, enviadoEn: null },
+      conflicts: [],
+      lookups: [
+        {
+          recordedAt: "2026-11-04T03:00:00.000Z",
+          invoice: {
+            IDEmisorFactura: "B12345678",
+            NumSerieFactura: "T1/41",
+            FechaExpedicionFactura: "03-11-2026",
+          },
+          state: "Correcto",
+          fingerprint: THEIRS,
+          system: null,
+        },
+      ],
+    };
+    const stopped = await openDetails(
+      (await mount(vi.fn(async () => overview({ cases: [found] })))).screen,
+    );
+    expect(flat(stopped.querySelector("[data-test=state] dd"))).toBe("Waiting to be sent to AEAT.");
+    expect(flat(stopped.querySelector("[data-test=now] dd"))).toBe(
+      "Found by looking the invoice up at AEAT. Looking it up does not change how this record is sent. While the conflict is active, this box issues no invoices.",
+    );
+    expect(unfolded(stopped)).not.toContain("refused");
+
+    const refused = { ...found, cause: "fiscal.registro_rechazado" as const };
+    const later = await openDetails(
+      (await mount(vi.fn(async () => overview({ cases: [refused] })))).screen,
+    );
+    expect(flat(later.querySelector("[data-test=now] dd"))).toMatch(
+      /^Later records are still sent\./,
+    );
+
+    setLocale("es");
+    const spanish = await openDetails(
+      (await mount(vi.fn(async () => overview({ cases: [found] })))).screen,
+    );
+    expect(flat(spanish.querySelector("[data-test=now] dd"))).toBe(
+      "Se detectó al consultar la factura en la AEAT. La consulta no cambia cómo se envía este registro. Mientras el conflicto siga activo, este equipo no emite facturas.",
+    );
+  });
+
+  it("says this box issues no invoices only when the case's conflict is one that stops it", async () => {
+    const found = conflictCase("rec-1", "2026-11-03T11:02:00.000Z");
+    const [active] = overview().activeConflicts;
+    for (const others of [
+      [],
+      [{ ...active!, installationName: "BOX-00" }],
+      [{ ...active!, invoiceNumber: "T1/40" }],
+      [{ ...active!, source: "series" as const }],
+    ]) {
+      const details = await openDetails(
+        (await mount(vi.fn(async () => overview({ cases: [found], activeConflicts: others }))))
+          .screen,
+      );
+      expect(flat(details.querySelector("[data-test=now] dd"))).toBe(
+        "This record is refused and is not sent again.",
+      );
+    }
+  });
+
+  it.each([
+    ["alta", "F1", "A full invoice that names the customer."],
     ["alta", "F3", "A full invoice that replaces earlier simplified invoices."],
-    ["alta", "R5", "A corrective invoice that corrects an earlier invoice."],
+    ["alta", "R5", "An invoice that corrects an earlier one."],
     ["anulacion", null, "A cancellation of an earlier invoice."],
     ["alta", "X9", "An invoice record."],
   ] as const)("names the record %s %s in plain words", async (tipoRegistro, tipoFactura, line) => {
