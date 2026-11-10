@@ -10,10 +10,10 @@ import {
 } from "./business-day.js";
 import type { TopSeller, TopSellersInput } from "./types.js";
 
-/** Whether corrections summing to `returned` (negative for a positive line) cover `line_money`. */
-function reaches(returned: SQL): SQL {
-  return sql`(case when line_money >= 0 then line_money + ${returned} <= 0
-    else line_money + ${returned} >= 0 end)`;
+/** Whether corrections summing to `returned` (negative for a positive line) cover `money`. */
+function reaches(money: SQL, returned: SQL): SQL {
+  return sql`(case when ${money} >= 0 then ${money} + ${returned} <= 0
+    else ${money} + ${returned} >= 0 end)`;
 }
 
 /**
@@ -26,7 +26,9 @@ function reaches(returned: SQL): SQL {
  * NOT excluded — their negative lines net the total down. A correction line naming no invoice line
  * nets its own quantity down too. One naming an invoice line takes back that line's quantity only if
  * it is the correction, in issue order, at which the line's corrections first add up to its money
- * (gross where the line stored one, else net); any other counts no dishes.
+ * (gross where the line stored one, else net); any other counts no dishes. The sum leaves out a
+ * correction voided at or before the moment the one being counted was issued, so a day's count
+ * never changes after the day; a void reverses exactly what its sale was counted as.
  *
  * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */
@@ -52,12 +54,28 @@ export async function computeTopSellers(
     quantity: string;
     total: string;
   }>(sql`
+    with lines as (
+      select sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.line_gross, sl.line_no,
+        sl.corrects_line_id, s.id as sale_id, s.issued_at, 1 as sign
+      from sale_lines sl
+      join sales s on s.id = sl.sale_id
+      where ${issuedSalesClause(window)}
+        ${nodeClause}
+      union all
+      select sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.line_gross, sl.line_no,
+        sl.corrects_line_id, s.id, s.issued_at, -1
+      from sale_voids sv
+      join sales s on s.id = sv.sale_id
+      join sale_lines sl on sl.sale_id = s.id
+      where ${reversedSalesClause(window)}
+        ${nodeClause}
+    ),
     -- Materialized so each correction line's earlier sum is taken once, not at every use.
-    with issued as materialized (
-      select sl.name, sl.variant_name, sl.quantity, sl.line_total,
+    counted as materialized (
+      select l.name, l.variant_name, l.sign, l.quantity, l.line_total,
         il.quantity as line_quantity,
         coalesce(il.line_gross, il.line_total) as line_money,
-        case when il.line_gross is null then sl.line_total else coalesce(sl.line_gross, 0) end
+        case when il.line_gross is null then l.line_total else coalesce(l.line_gross, 0) end
           as own,
         case when il.id is not null then (
           -- Null when no correction of this line came earlier.
@@ -66,31 +84,25 @@ export async function computeTopSellers(
           from sales cs indexed by sales_corrects_idx
           join sale_lines cl indexed by sale_lines_sale_idx on cl.sale_id = cs.id
           where cs.corrects_sale_id = il.sale_id and cl.corrects_line_id = il.id
-            and (cs.issued_at, cs.id, cl.line_no) < (s.issued_at, s.id, sl.line_no)
+            and (cs.issued_at, cs.id, cl.line_no) < (l.issued_at, l.sale_id, l.line_no)
+            and not exists (
+              select 1 from sale_voids cv where cv.sale_id = cs.id and cv.voided_at <= l.issued_at
+            )
         ) end as earlier
-      from sale_lines sl
-      join sales s on s.id = sl.sale_id
-      left join sale_lines il on il.id = sl.corrects_line_id
-      where ${issuedSalesClause(window)}
-        ${nodeClause}
+      from lines l
+      left join sale_lines il on il.id = l.corrects_line_id
     ),
     scoped as (
       select name, variant_name,
-        case
+        sign * case
           when line_money is null then quantity
-          when ${reaches(sql`coalesce(earlier, 0) + own`)}
-            and (earlier is null or not ${reaches(sql`earlier`)}) then -line_quantity
+          when ${reaches(sql`line_money`, sql`coalesce(earlier, 0) + own`)}
+            and (earlier is null or not ${reaches(sql`line_money`, sql`earlier`)})
+            then -line_quantity
           else 0
         end as quantity,
-        line_total
-      from issued
-      union all
-      select sl.name, sl.variant_name, -sl.quantity, -sl.line_total
-      from sale_voids sv
-      join sales s on s.id = sv.sale_id
-      join sale_lines sl on sl.sale_id = s.id
-      where ${reversedSalesClause(window)}
-        ${nodeClause}
+        sign * line_total as line_total
+      from counted
     ),
     ranked as (
       select name, sum(quantity) as quantity, sum(line_total) as total

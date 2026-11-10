@@ -215,12 +215,13 @@ export async function computeCategorySales(
     union all
     select s.id, s.issued_at, sl.line_no,
       cast(-sl.line_total as text), cast(-sl.line_gross as text),
-      sl.parent_line_id, sl.product_id, sl.category, sl.classification,
-      dl.product_id, dl.category, dl.classification
+      coalesce(sl.parent_line_id, il.parent_line_id), sl.product_id, sl.category,
+      sl.classification, dl.product_id, dl.category, dl.classification
     from sale_voids sv
     join sales s on s.id = sv.sale_id
     join sale_lines sl on sl.sale_id = s.id
-    left join sale_lines dl on dl.id = sl.parent_line_id
+    left join sale_lines il on il.id = sl.corrects_line_id
+    left join sale_lines dl on dl.id = coalesce(sl.parent_line_id, il.parent_line_id)
     where ${reversedSalesClause(window)}
       ${nodeClause}
   `);
