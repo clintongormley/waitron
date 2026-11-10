@@ -1155,6 +1155,7 @@ export class WtCombobox extends LitElement {
           role="listbox"
           aria-label=${this.label || this.ariaLabel || nothing}
           aria-multiselectable=${this.multiple}
+          aria-required=${this.hasSearchBox ? nothing : this.required}
           tabindex=${this.hasSearchBox ? nothing : "-1"}
           aria-activedescendant=${
             !this.hasSearchBox && this.activeIndex >= 0

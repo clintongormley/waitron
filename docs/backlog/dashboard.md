@@ -458,16 +458,6 @@ wrapper each list puts round its table (`.table-wrap`, or `.wrap` in the variant
 `overflow-x: auto`). The canvas editor's tile drag stays as it is (owner choice, 2026-10-01); A182
 plans to retire the editor.
 
-## A541. A `wt-disclosure` reopened after an animated close snaps open with no animation
-
-- **A541. A `wt-disclosure` reopened after an animated close snaps open with no animation** — OPEN,
-  found by A539's mutation tests, not fixed. The transition-end handler sets `body.hidden = true`
-  directly, so Lit's recorded `?hidden` stays false; on reopen Lit leaves the body hidden while
-  `updated()` measures it, reads 0 → 0 and unhides it at once. Repro:
-  `<wt-disclosure heading="Kitchen" open><div style="height: 200px">body</div></wt-disclosure>`,
-  click the header, let the close finish, click again — no height transition starts.
-  (`packages/ui/src/components/wt-disclosure.ts`.)
-
 ## Bundle: One session with real phones and password managers
 
 13 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
@@ -591,18 +581,6 @@ probes do not settle it. This stays inside the existing bundle rather than becom
   A popover opened after reinsertion still closes in that controlled setup. The fix needs explicit
   Escape routing for the upper dialog and its open popovers; watcher 2026-11-09 18:51 deferred that mechanism.
   Next: name a production trigger and obtain approval for that routing before changing restoration.
-
-## Bundle: Wt popups
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A625. Check whether a row menu still wraps its two-word items after the window is resized to
-  phone width (owner, 2026-10-17: keep as a check).**
-  [Detail](dashboard.md#a625-check-whether-a-row-menu-still-wraps-its-two-word-items-after-the-window-is-resized-to-phone-width-owner-2026-10-17-keep-as-a-check)
-- **`wt-combobox` without a search box never exposes `aria-required`**
-  [Detail](dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
-- **A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).**
-  [Detail](dashboard.md#a903-check-that-the-course-lists-row-menus-stay-on-screen-at-390-px-left-open-by-a827)
 
 ## Bundle: Forms refusal placement
 
@@ -1021,29 +999,6 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
   unverified. Capture the current scroll/limit, pointer position, drag state and visible box
   before attributing it to the scroll helper.
 
-## `wt-combobox` without a search box never exposes `aria-required`
-
-Found by A506-6's review: with `required` set, a combobox without a search box put `aria-required`
-on nothing; one with a search box put it on the search input. The closed trigger is a `<button>`
-that opens a list, and `aria-required` is not an attribute of the button role (axe-core 4.14.0's
-role table in `axe.js` allows `button` only `aria-expanded` and `aria-pressed`, and lists
-`aria-required` among `combobox`'s allowed attributes, with `aria-expanded` and `aria-controls`
-required).
-
-One way to fix it (A775, 2026-10-16): move the trigger to the WAI-ARIA Authoring Practices'
-select-only combobox, `role="combobox"` on the trigger, which can carry `aria-required`. The APG
-marks the button-and-list pattern `wt-combobox` follows as deprecated ("Collapsible Dropdown
-Listbox": _"This pattern has been deprecated … The select-only combobox should be used as an
-alternative"_, <https://www.w3.org/WAI/ARIA/apg/patterns/listbox/examples/listbox-collapsible/>,
-read 2026-10-17). A775 did not make the move. Tried in a throwaway worktree on 2026-10-16,
-`role="combobox"` on the trigger alone gave 44 `aria-required-attr` failures in
-`wt-combobox.a11y.test.ts`, all on the trigger (the role requires `aria-controls`, which the
-trigger does not carry); the move also changes the role every test and screen reader meets,
-and a combobox with a search box would then hold two comboboxes, the trigger and its search input.
-A775 kept the button and named it by its label and its chosen value instead (design-system.md,
-"Accessible names").
-
-
 ## A901. The shared reorder announcement misreads an item name holding `$&` or `{index}` (found in A757 slice 7's review, 2026-10-19).
 
 `ReorderController.#announce` (`packages/ui/src/reorder-table.ts:307-310`) fills `{item}`,
@@ -1089,17 +1044,6 @@ None is a defect; each
   into `packages/ui/src/menu-popover.ts`. (3) Rename the till's `language-chooser-styles.ts`, which
   now places the Theme menu too. (4) Handle a theme pick with a plain handler in each app instead
   of `ThemeChoiceController`'s `applies` option. Take them when next working in those files.
-
-
-## A625. Check whether a row menu still wraps its two-word items after the window is resized to phone width (owner, 2026-10-17: keep as a check).
-
-Seen on the Staff roles page (A585-1's look):
-  after a desktop window was narrowed to 390 px, "Move up" and "Move down" broke onto two centred
-  lines and the menu touched the screen's edge; loaded directly at 390 px it was one line per item,
-  three times out of three. Believed to be the shared `wt-row-actions` popover, not that page; not
-  yet reproduced on another screen. Done by one real-browser run of that resize on `main`: if the
-  items no longer wrap, delete this entry; if they do, fix it. Screenshots kept outside the
-  repository (lane C, `a585-1-shots/11a-…`, `11b-…`, `11c-…`).
 
 
 ## Loose ends left by signing a dashboard tab out when its box has been reset (A485, #1545).
@@ -1159,15 +1103,6 @@ The editor repeats the list title and has no parent link above the heading
     `wt-button` does not pass `aria-pressed` through, and the Structure tab's Reorder and Select
     toggles are hand-built icon buttons for the same reason.
   [Detail](catalogue.md#products-filters-and-select-at-the-start-of-the-tables-toolbar-w83-1193-left-open)
-
-
-## A903. Check that the course list's row menus stay on screen at 390 px (left open by A827).
-
-`apps/dashboard/src/widgets/course-list.ts` also puts a `wt-row-actions` in a plain table. Its
-  390 px cases in `course-list.test.ts` check only that a row's menu sits on the first line of a
-  wrapping name, or level with the rename field, never where the menu ends. Done when it has a
-  390 px case holding every row menu's right edge to the screen's and to the box around its
-  table's.
 
 
 ## A904. Correct the list of users in `--wt-cell-name-max-width`'s comment (`packages/ui-core/src/tokens/structure.css`) (left open by A827, #1889).

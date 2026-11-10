@@ -618,15 +618,39 @@ test("Enter on the active add row also activates it", async () => {
   expect(received).toBe("kosher");
 });
 
-test("marks a required field with a visible asterisk and the search box's aria-required", async () => {
-  const { el, trigger } = await mountCombobox(
-    '<wt-combobox label="Dietary tags" required></wt-combobox>',
-  );
-  expect(el.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
-  await userEvent.click(trigger);
-  const search = el.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
-  expect(search.getAttribute("aria-required")).toBe("true");
-});
+test.each([
+  ["always", 3, false, true],
+  ["never", 3, false, false],
+  ["auto", 7, false, false],
+  ["auto", 8, false, true],
+  ["never", 3, true, true],
+] as const)(
+  "required state follows search=%s, count=%i, allow-add=%s",
+  async (search, count, allowAdd, searchable) => {
+    const { el, trigger } = await mountCombobox(
+      '<wt-combobox label="Dietary tags" required></wt-combobox>',
+    );
+    el.search = search;
+    el.allowAdd = allowAdd;
+    el.options = Array.from({ length: count }, (_, i) => ({
+      value: String(i),
+      label: `Choice ${i}`,
+    }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
+    await userEvent.click(trigger);
+    const input = el.shadowRoot!.querySelector(".search");
+    const list = el.shadowRoot!.querySelector('[role="listbox"]')!;
+    expect(input !== null).toBe(searchable);
+    expect(list.getAttribute("aria-required")).toBe(searchable ? null : "true");
+    if (input) expect(input.getAttribute("aria-required")).toBe("true");
+    el.required = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-required]")).toBeNull();
+    expect(list.getAttribute("aria-required")).toBe(searchable ? null : "false");
+    if (input) expect(input.getAttribute("aria-required")).toBe("false");
+  },
+);
 
 test("links explanatory error text to the trigger and sets aria-invalid", async () => {
   const { el } = await mountCombobox(
