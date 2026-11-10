@@ -18,7 +18,8 @@ Both packages carry built JavaScript, declarations, Elastic License 2.0 and
 `LICENSE-GRANTS.md`. UI also carries CSS and its Lit peer; the signing package has no peers.
 
 For contract, the final step checks the token’s authenticated identity, `write:packages`
-scope and its private Cloud association. It may be absent before its first upload. After upload, the same
+scope and its private Cloud association. The contract package may be absent before
+its first upload. After upload, the same
 check requires its private association; registry output records the numbered version's
 integrity, source commit and repository. A pre-upload pass alone does not establish
 permission to create a new package. Cloud must then install that exact version with

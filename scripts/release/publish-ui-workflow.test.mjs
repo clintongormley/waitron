@@ -254,6 +254,20 @@ if (process.argv[2] === "publish") {
         expect(result.stderr).toContain("identity check returned 401");
         return;
       }
+      if (packageName === "contract") {
+        const identity = { login: "publisher", userId: 17, package: "@waitron-io/contract" };
+        expect(
+          result.stdout
+            .trim()
+            .split("\n")
+            .map((line) => JSON.parse(line)),
+        ).toEqual([
+          { ...identity, visibility: "not published" },
+          ...(status || accessMode === "post-missing"
+            ? []
+            : [{ ...identity, visibility: "private", repository: "waitron-io/waitron-cloud" }]),
+        ]);
+      }
       const uploads = calls.filter((call) => call.args);
       expect(uploads[0]).toEqual({
         args: [

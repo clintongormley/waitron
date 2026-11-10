@@ -114,7 +114,8 @@ failures (`fail-fast: false`). Each row runs the same source/preparation/install
 checks; contract runs in Node with no peers. For contract, the final step authenticates the
 write token, checks its package scope and existing private Cloud association, then repeats
 the association check after upload and prints registry integrity/source metadata. UI keeps
-its existing upload without these new API gates. New-contract metadata may be absent only before upload; first creation and Cloud’s
+its existing upload without these new API gates. New-contract metadata may be absent
+only before upload; first creation and Cloud’s
 own-token installation remain unverified until those operations run. A red final step may
 follow a successful upload; inspect the log before retrying. The run number, and therefore
 the version, stays the same on a retry, which cannot replace an already published version.
