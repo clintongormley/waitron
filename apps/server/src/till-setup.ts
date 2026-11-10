@@ -4,7 +4,7 @@ import { tillProviderForReader, type TillReaderProvider } from "@waitron/shared"
 import { readTenant, type Transaction } from "@waitron/db";
 import { getDeviceProfile } from "@waitron/layouts";
 import type { CapabilityFlag, NavigationScreen } from "@waitron/layouts";
-import { cardReaders, DEMO_READER_ID, resolveDeviceReaderId } from "@waitron/payments";
+import { cardReaders, resolveDeviceReaderId } from "@waitron/payments";
 import type { DeviceBinding } from "./device-session.js";
 import { listCourses } from "./kitchen.js";
 import type { TillApiDeps } from "./till-api.js";
@@ -104,16 +104,7 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
       : (defaultReaderProvider ?? "none")) satisfies TillCardProvider,
     // A venue can have several active readers on one provider, so the till needs the row id.
     defaultReaderId: simulator ? undefined : defaultReaderId,
-    activeReaders: simulator
-      ? [
-          {
-            id: DEMO_READER_ID,
-            name: "Demo card reader",
-            provider: "simulator" as const,
-            printsOwnSlipAutomatically: false,
-          },
-        ]
-      : activeReaders,
+    activeReaders: simulator ? [] : activeReaders,
     tipsEnabled: deps.cfg.tipsEnabled,
     formFactor: device?.formFactor ?? "till",
     capabilities,

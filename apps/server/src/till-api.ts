@@ -35,7 +35,6 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorize,
-  authorizeManager,
   canUseDeviceProfile,
   createPinThrottle,
   endSession,
@@ -46,7 +45,6 @@ import {
   permissionsForRole,
   setPersonLocale,
   sessions,
-  withPassiveManagementRead,
 } from "@waitron/identity";
 import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import { kindOfFormFactor } from "@waitron/layouts";
@@ -56,16 +54,13 @@ import {
   assertReaderStartable,
   cardProviderById,
   cardReaders,
-  DEMO_READER_ID,
-  DEMO_READER_REF,
   readReaderRole,
-  SimulatorPaymentProvider,
 } from "@waitron/payments";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
-import { codeOf, createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import type { OnboardingIntent } from "./trading-config.js";
@@ -417,15 +412,6 @@ export async function resolveCardCollector(
   deviceId: string | undefined,
   requestedReaderId: string | undefined,
 ): Promise<{ provider: PaymentProvider; reader?: { id: string; providerRef: string } }> {
-  if (requestedReaderId === DEMO_READER_ID) {
-    if (deps.cardProvider?.provider !== "simulator") {
-      throw new AppError("reader.not_found", { id: requestedReaderId });
-    }
-    return {
-      provider: deps.cardProvider,
-      reader: { id: DEMO_READER_ID, providerRef: DEMO_READER_REF },
-    };
-  }
   if (deps.cardProvider?.provider === "simulator") {
     if (requestedReaderId !== undefined) {
       throw new AppError("reader.not_found", { id: requestedReaderId });
@@ -1309,9 +1295,6 @@ const TILL_OPEN_WHILE_DISK_FULL: ReadonlySet<string> = new Set([
   "POST /api/working-orders/:id/adjustments/preview",
   "POST /api/parties/:id/allergy/send-preview",
   "POST /api/bills/:id/move/allergy-preview",
-  // Registered only for the practice card simulator; refusing it would leave a practice payment
-  // waiting at the reader.
-  "POST /api/demo-reader/cancel",
 ]);
 
 /** Mount the till routes with the shared error boundary. */
@@ -1353,66 +1336,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       },
       log,
     );
-  const simulator = deps.cardProvider;
-  if (simulator instanceof SimulatorPaymentProvider) {
-    const demoRun = createErrorBoundary(
-      {
-        "management_session.required": 401,
-        "management_session.expired": 401,
-        "person.suspended": 403,
-        "authorization.not_permitted": 403,
-        "reader.not_found": 404,
-        "management.request_invalid": 400,
-      },
-      "till.failed",
-    );
-    const authorizeDemoReader = async (c: Parameters<typeof requireManagementSession>[0]) => {
-      const sessionId = requireManagementSession(c);
-      await withTransaction(deps.db, (tx) =>
-        authorizeManager(tx, { managementSessionId: sessionId, permission: "hardware.manage" }),
-      );
-    };
-    app.get("/management-api/demo-reader/payments", (c) =>
-      demoRun(c, log, async () => {
-        await withPassiveManagementRead(() => authorizeDemoReader(c));
-        return c.json({ payments: simulator.pendingDemoReaderPayments() });
-      }),
-    );
-    app.post("/management-api/demo-reader/payments/:id/decision", (c) =>
-      demoRun(c, log, async () => {
-        await authorizeDemoReader(c);
-        const body = await readRawJsonBody<unknown>(c);
-        const outcome =
-          typeof body === "object" && body !== null && !Array.isArray(body)
-            ? (body as Record<string, unknown>).outcome
-            : undefined;
-        if (outcome !== "captured" && outcome !== "declined") {
-          throw new AppError("management.request_invalid", { field: "outcome" });
-        }
-        const id = c.req.param("id");
-        if (!simulator.decideDemoReaderPayment(id, outcome)) {
-          throw new AppError("reader.not_found", { id });
-        }
-        return c.json({ decided: true });
-      }),
-    );
-    app.post("/api/demo-reader/cancel", (c) =>
-      run(c, log, async () => {
-        const session = await requireSession(deps, c, { permission: "payment.take" });
-        await assertRequestDevice(deps, c, session);
-        const body = await readJsonBody<{ workingOrderId: string; attemptId?: string }>(c);
-        requireUuidParam(body.workingOrderId, "WorkingOrderId");
-        if (body.attemptId !== undefined) requireUuidParam(body.attemptId, "DemoAttemptId");
-        return c.json({
-          cancelled: simulator.cancelDemoReaderPayment(
-            body.workingOrderId,
-            session.device.deviceId,
-            body.attemptId,
-          ),
-        });
-      }),
-    );
-  }
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
   const fiscal = {
     db: deps.db,
@@ -1911,11 +1834,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       );
       if (body.readerId !== undefined) {
         requireUuidParam(body.readerId, "CardReaderId");
-      }
-      if (body.demoAttemptId !== undefined) {
-        requireUuidParam(body.demoAttemptId, "DemoAttemptId");
-        if (deps.cardProvider?.provider !== "simulator")
-          throw new AppError("management.request_invalid", { field: "demoAttemptId" });
       }
       // Resolved after the capability firewall so its refusal keeps its status.
       const saleCfg = sendingCfg(cfg, c, device);

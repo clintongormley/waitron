@@ -1095,46 +1095,6 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(asked[0]!.card).toEqual({ entry: "reader", simulationOutcome: "attempting" });
   });
 
-  it("sends a bill payment to the pretend reader without a browser-chosen result", async () => {
-    const readerId = "00000000-0000-4000-8000-000000000247";
-    const el = await card({
-      cardReader: "simulator",
-      readers: [
-        {
-          printsOwnSlipAutomatically: false,
-          id: readerId,
-          name: "Demo card reader",
-          provider: "simulator",
-        },
-      ],
-    });
-    const asked = capture<PayRequest>(el, "bill-pay-preview");
-
-    await pick(el, "reader", readerId);
-    expect(root(el).querySelector('input[name="simulation"]')).toBeNull();
-    await click(el, "[data-pay-continue]");
-
-    expect(asked[0]!.card).toEqual({ entry: "reader", readerId });
-  });
-
-  it("names the pretend reader in Spanish on a bill", async () => {
-    setLocale("es-ES");
-    const el = await card({
-      cardReader: "simulator",
-      readers: [
-        {
-          printsOwnSlipAutomatically: false,
-          id: "demo",
-          name: "Demo card reader",
-          provider: "simulator",
-        },
-      ],
-    });
-    expect(
-      text(root(el).querySelector('input[name="reader"][value="demo"]')?.closest("label") ?? null),
-    ).toBe("Lector de demostración");
-  });
-
   it("says to present the card while the reader is being asked", async () => {
     const el = await card({ cardReader: "stripe_terminal" });
     await previewed(el, {
@@ -2104,20 +2064,22 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     expect(row(again)!.open).toBe(false);
   });
 
-  it("on a practice venue charges the fixed demo reader, with no reader or outcome to choose", async () => {
+  it("on a practice phone offers instant outcomes without a hardware reader id", async () => {
     const el = await handheld({
       cardReader: "simulator",
       equipment: null,
-      fixedReader: { id: "demo-1", name: "Demo reader" },
+      fixedReader: { name: t("card.instant_simulator") },
     });
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
     expect(root(el).querySelector("[data-pay-reader]")).toBeNull();
-    expect(root(el).querySelector("[data-pay-simulation]")).toBeNull();
+    expect(root(el).querySelector("[data-pay-simulation]")).not.toBeNull();
 
-    await previewed(el, cardPreview);
+    await pick(el, "simulation", "declined");
+    const asked = await previewed(el, cardPreview);
+    expect(asked.card).toEqual({ entry: "reader", simulationOutcome: "declined" });
     await click(el, "[data-pay-confirm]");
-    expect(confirmed).toEqual([{ readerId: "demo-1" }]);
+    expect(confirmed).toStrictEqual([{}]);
 
     el.equipment = equipmentWith(null);
     el.asked = null;

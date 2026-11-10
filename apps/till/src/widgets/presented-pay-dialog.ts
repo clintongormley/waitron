@@ -42,7 +42,7 @@ type Field = "tendered" | "externalRef" | "guests";
 
 /** `presented-pay`'s detail; `guestCount` is absent unless the venue asks for it, null for none. */
 export type PresentedPayDetail =
-  | { method: "card"; readerId: string; guestCount?: number | null }
+  | { method: "card"; readerId?: string; guestCount?: number | null }
   | { method: "cash"; tendered: string; guestCount?: number | null }
   | { method: "manual"; externalRef?: string; guestCount?: number | null };
 
@@ -374,7 +374,7 @@ export class TillPresentedPayDialog extends LitElement {
     this.#sent = reader === null ? null : sentCard(reader, this.amount);
     const detail: PresentedPayDetail =
       reader !== null
-        ? { method: "card", readerId: reader.id, ...guests }
+        ? { method: "card", ...(reader.id === undefined ? {} : { readerId: reader.id }), ...guests }
         : this.method === "cash"
           ? { method: "cash", tendered: typedAmount(this.tendered)!, ...guests }
           : { method: "manual", ...(ref === "" ? {} : { externalRef: ref }), ...guests };

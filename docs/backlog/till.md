@@ -3795,7 +3795,7 @@ Board 1 is the target; board 2 the windows.
 **Reader-setting cut:** the dashboard saves each reader's automatic-slip setting; equipment and
 setup reads carry it, and the existing sale-slip action excludes readers that print their own.
 A1141's Counter retrieval keeps the table bill's edit observation for payment and stored-line
-saves. A790's order-linked till slice is landed (#2677). The [current payment-flow plan](../superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for cuts 1, 2, 5, 6, 7 and 8 in order (watcher, 10 November 01:26); slip cuts 3/4 wait for the owner's recovery decision. Practice-card Approve/Decline/No answer and manager-ended uncertainty are delivered by the first cut. Demo-reader retirement, the shared window and final document choice remain open. No G4/A947, origin file, browser journal or prepare/accept protocol is authorised.
+saves. A790's order-linked till slice is landed (#2677). The [current payment-flow plan](../superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for cuts 1, 2, 5, 6, 7 and 8 in order (watcher, 10 November 01:26); slip cuts 3/4 wait for the owner's recovery decision. Practice-card Approve/Decline/No answer and manager-ended uncertainty are delivered by the first cut. The separate Demo reader and dashboard decision channel are retired. The shared window and final document choice remain open. No G4/A947, origin file, browser journal or prepare/accept protocol is authorised.
 
 **2026-10-27 approved update (owner, about 02:01/02:05/02:12 CET).**
 Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
@@ -3882,11 +3882,6 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
   offline choice by order id. Moving the panel into the payment window must preserve that link:
   switching orders hides it, returning restores it, and a Retry control from the previous order
   cannot start a payment on the replacement. Browser cases: `till-app.test.ts`, “A767 card outcome”.
-- **Remove the Demo card reader** (owner: not needed for the demo; it is missing from the Santet
-  data and nothing on the till says the decision is made on the dashboard). It came from A247
-  (#1172): the reader, `apps/dashboard/src/screens/demo-reader-screen.ts`, its reader-picker entry
-  and the simulator's ten-minute wait. Its open follow-up in `docs/backlog.md` (a till label on
-  each pending amount) goes with it.
 - **No receipt screen after paying** (owner). The counter goes straight to a new order; a strip
   "✓ Paid €30.00 · receipt printed · Reprint" stays until the next product goes in, with the change
   in large type after cash.

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { openFilingCase } from "@waitron/fiscal-verifactu/src/filing-cases.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   devices,
@@ -42,12 +42,9 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import {
   hashPassword,
   hashPin,
-  hashSessionToken,
   loginWithPin,
-  managementSessions,
   permissionsForRole,
   persons,
-  startManagementSession,
 } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -71,7 +68,6 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { buildCardProvider } from "./boot.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { OrderFlow } from "./till-config.js";
 import type { TradingContext } from "./trading-context.js";
@@ -84,11 +80,9 @@ import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { BASIC_ACTIONS } from "./testing/session-device.js";
-import { createDiskFullState } from "./disk-full-state.js";
 
 // `POST /api/sales`, `POST /api/pay` and the `/api/working-orders` routes driven over HTTP to a
 // GENUINE chained fiscal record, including the lost-response pay retry that must replay the ticket
@@ -1507,270 +1501,6 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     expect((await payRes.json()).outcome).toBe("captured");
     // A practice sale touches no real reader, so `payments.reader_id` stays NULL.
     expect(await readerIdOnPayment(workingOrderId)).toBeNull();
-  });
-
-  it("waits for the pretend reader before filing the sale and stamps its reader id", async () => {
-    const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        cfg,
-        secureCookies: false,
-        venueLocale: cfg.locale,
-        cardProvider: provider,
-      },
-      noopLog,
-    );
-    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    const workingOrderId = randomUUID();
-
-    const paying = app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        readerId: "00000000-0000-4000-8000-000000000247",
-      }),
-    });
-    await vi.waitFor(() => expect(provider.pendingDemoReaderPayments()).toHaveLength(1));
-    expect(await readerIdOnPayment(workingOrderId)).toBeNull();
-
-    provider.decideDemoReaderPayment(provider.pendingDemoReaderPayments()[0]!.id, "captured");
-    const response = await paying;
-    const body = await response.json();
-    expect(response.status, JSON.stringify(body)).toBe(200);
-    expect(body.outcome).toBe("captured");
-    expect(await readerIdOnPayment(workingOrderId)).toBe("00000000-0000-4000-8000-000000000247");
-  });
-
-  it("lets the paying till cancel a pending pretend reader payment", async () => {
-    const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
-    const collect = provider.collect.bind(provider);
-    const collecting = new Promise<void>((resolve) => {
-      provider.collect = (params) => {
-        const result = collect(params);
-        resolve();
-        return result;
-      };
-    });
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        cfg,
-        secureCookies: false,
-        venueLocale: cfg.locale,
-        cardProvider: provider,
-      },
-      noopLog,
-    );
-    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
-    const workingOrderId = randomUUID();
-    const paying = app.request("/api/pay", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        readerId: "00000000-0000-4000-8000-000000000247",
-      }),
-    });
-    await Promise.race([
-      collecting,
-      Promise.resolve(paying).then((response) => {
-        throw new Error(`Pay finished before reader collection: HTTP ${response.status}`);
-      }),
-    ]);
-    expect(provider.pendingDemoReaderPayments()).toHaveLength(1);
-
-    const cancelled = await app.request("/api/demo-reader/cancel", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ workingOrderId }),
-    });
-
-    expect(cancelled.status).toBe(200);
-    expect(await cancelled.json()).toEqual({ cancelled: true });
-    expect(provider.pendingDemoReaderPayments()).toEqual([]);
-    expect((await (await paying).json()).outcome).toBe("declined");
-    const rows = await suite.db.execute<{ state: string }>(sql`
-      select state from payments where working_order_id = ${workingOrderId}`);
-    expect(rows.rows).toEqual([{ state: "failed" }]);
-  });
-
-  it("cancels the matching pretend reader attempt before its pay request arrives", async () => {
-    const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        cfg,
-        secureCookies: false,
-        venueLocale: cfg.locale,
-        cardProvider: provider,
-      },
-      noopLog,
-    );
-    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
-    const workingOrderId = randomUUID();
-    const attemptId = randomUUID();
-
-    const cancelled = await app.request("/api/demo-reader/cancel", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ workingOrderId, attemptId }),
-    });
-    expect(await cancelled.json()).toEqual({ cancelled: true });
-
-    const paying = await app.request("/api/pay", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        readerId: "00000000-0000-4000-8000-000000000247",
-        demoAttemptId: attemptId,
-      }),
-    });
-    expect((await paying.json()).outcome).toBe("declined");
-    expect(provider.pendingDemoReaderPayments()).toEqual([]);
-  });
-
-  it("cancels a pretend reader attempt while a save refused for a full disk stands", async () => {
-    const { cfg, operatorId } = await setupVenue();
-    const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
-    const disk = createDiskFullState({
-      dir: "/unused",
-      now: () => new Date(),
-      log: noopLog,
-      statfs: () => Promise.resolve({ bavail: 0, frsize: 1 }),
-    });
-    disk.noteRefused();
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        cfg,
-        secureCookies: false,
-        venueLocale: cfg.locale,
-        cardProvider: provider,
-        disk,
-      },
-      noopLog,
-    );
-    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-
-    const cancelled = await app.request("/api/demo-reader/cancel", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({ workingOrderId: randomUUID(), attemptId: randomUUID() }),
-    });
-    expect(cancelled.status).toBe(200);
-    expect(await cancelled.json()).toEqual({ cancelled: true });
-    expect(disk.noted()).toBe(true);
-  });
-
-  it("lets a manager approve the pending amount on the reader page, but not staff", async () => {
-    const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!;
-    const provider = (await buildCardProvider(suite.db, "demo")) as SimulatorPaymentProvider;
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db: suite.db,
-        backend,
-        clock,
-        cfg,
-        secureCookies: false,
-        venueLocale: cfg.locale,
-        cardProvider: provider,
-      },
-      noopLog,
-    );
-    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
-    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
-    const workingOrderId = randomUUID();
-    const paying = app.request("/api/pay", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
-      body: JSON.stringify({
-        id: workingOrderId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        readerId: "00000000-0000-4000-8000-000000000247",
-      }),
-    });
-    await vi.waitFor(() => expect(provider.pendingDemoReaderPayments()).toHaveLength(1));
-    const sessions = await withTransaction(suite.db, async (tx) => {
-      const [admin] = await tx
-        .select({ id: persons.id })
-        .from(persons)
-        .where(eq(persons.email, "owner@example.test"));
-      return {
-        admin: await startManagementSession(tx, { personId: admin!.id }),
-        staff: await startManagementSession(tx, { personId: operatorId }),
-      };
-    });
-    const path = "/management-api/demo-reader/payments";
-    const managerCookie = `${MANAGEMENT_COOKIE}=${sessions.admin.token}`;
-    const staffCookie = `${MANAGEMENT_COOKIE}=${sessions.staff.token}`;
-    const priorSeenAt = new Date(Date.now() - 60_000).toISOString();
-    await suite.db
-      .update(managementSessions)
-      .set({ lastSeenAt: priorSeenAt })
-      .where(eq(managementSessions.tokenHash, hashSessionToken(sessions.admin.token)));
-
-    expect((await app.request(path)).status).toBe(401);
-    expect((await app.request(path, { headers: { cookie: staffCookie } })).status).toBe(403);
-    const listed = await app.request(path, { headers: { cookie: managerCookie } });
-    expect(listed.status).toBe(200);
-    expect(await listed.json()).toMatchObject({
-      payments: [{ amount: "1.50" }],
-    });
-    const [afterPoll] = await suite.db
-      .select({ lastSeenAt: managementSessions.lastSeenAt })
-      .from(managementSessions)
-      .where(eq(managementSessions.tokenHash, hashSessionToken(sessions.admin.token)));
-    expect(afterPoll?.lastSeenAt).toBe(priorSeenAt);
-    const [pending] = provider.pendingDemoReaderPayments();
-    const decided = await app.request(`${path}/${pending!.id}/decision`, {
-      method: "POST",
-      headers: { cookie: managerCookie, "content-type": "application/json" },
-      body: JSON.stringify({ outcome: "captured" }),
-    });
-    expect(decided.status).toBe(200);
-    expect((await (await paying).json()).outcome).toBe("captured");
   });
 
   it("still 400s an empty walk-up basket — a genuine fault, mapped through run, not a payment outcome", async () => {

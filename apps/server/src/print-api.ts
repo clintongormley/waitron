@@ -1,7 +1,7 @@
 import { readReceiptLanguage } from "@waitron/catalogue";
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
-import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
+import { cardReaders } from "@waitron/payments";
 import { formatEquipmentLabel } from "./equipment-label.js";
 import { createPrinterProbes } from "./printer-probes.js";
 import { createPageTestPages, type PageTestPages } from "./page-test-pages.js";
@@ -1295,7 +1295,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                 .select({ name: cardReaders.name })
                 .from(cardReaders)
                 .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
-        if (label === undefined || (kind === "reader" && id === DEMO_READER_ID))
+        if (label === undefined)
           throw new AppError(kind === "printer" ? "printer.not_found" : "reader.not_found", { id });
         return enqueuePrintJob(
           tx,

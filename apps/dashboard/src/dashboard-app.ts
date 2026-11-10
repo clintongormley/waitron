@@ -109,7 +109,6 @@ import "./screens/servers-screen.js";
 import "./screens/cloud-services-screen.js";
 import "./screens/email-screen.js";
 import "./screens/demo-printer-screen.js";
-import "./screens/demo-reader-screen.js";
 import "./screens/payments-screen.js";
 import "./screens/alerts-screen.js";
 import "./widgets/alerts-bell.js";
@@ -167,7 +166,6 @@ const CORE_SCREENS = [
   "cloud",
   "email",
   "demo-printer",
-  "demo-reader",
   "payments",
   "alerts",
 ] as const;
@@ -308,7 +306,6 @@ const NAV_GROUPS: NavGroup[] = [
 const UNLISTED_SCREENS: ScreenRule[] = [
   { screen: "my-schedule" },
   { screen: "demo-printer", requiresManager: true },
-  { screen: "demo-reader", requiresManager: true },
   { screen: "floor-plan", requiresPermission: "venue.configure" },
 ];
 
@@ -2074,9 +2071,6 @@ export class DashboardApp extends LitElement {
       ...(!authenticated || this.#canOpenScreen("demo-printer")
         ? [{ label: t("demo_printer.title"), href: "/manage/demo-printer" }]
         : []),
-      ...(!authenticated || this.#canOpenScreen("demo-reader")
-        ? [{ label: t("demo_reader.title"), href: "/manage/demo-reader" }]
-        : []),
     ];
     return html`<wt-demo-bar
       data-test="demo-bar"
@@ -2354,7 +2348,7 @@ export class DashboardApp extends LitElement {
     if (this.sessionRole === "staff") return requested === "orders" ? "orders" : "my-schedule";
     if (requested === "alerts") return "alerts";
     if (
-      (requested === "demo-printer" || requested === "demo-reader") &&
+      requested === "demo-printer" &&
       this.onboardingIntent !== "demo" &&
       this.onboardingIntent !== "prepare"
     )
@@ -3062,8 +3056,6 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-demo-printer-screen
           .api=${this.api}
         ></dashboard-demo-printer-screen>`;
-      case "demo-reader":
-        return html`<dashboard-demo-reader-screen .api=${this.api}></dashboard-demo-reader-screen>`;
       case "payments":
         return html`<dashboard-payments-screen
           .api=${this.api}

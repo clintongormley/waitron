@@ -5,7 +5,7 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
 import { hashPin, persons } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
-import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { cardReaders, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { eq, sql } from "drizzle-orm";
 import {
   collectBoxHealth,
@@ -184,11 +184,10 @@ describe("collectBoxHealth", () => {
     ]);
   });
 
-  it("lists only card readers that are switched on, not deleted and not the demo reader", async () => {
+  it("lists only card readers that are switched on, not deleted", async () => {
     const active = await seedReader("Counter");
     await seedReader("Off", { active: false });
     await seedReader("Gone", { deletedAt: "2026-10-01T00:00:00.000Z" });
-    await seedReader("Demo", { id: DEMO_READER_ID });
     const health = await collectBoxHealth(suite.db, stubReaders());
     expect(health.readers).toEqual([{ id: active, name: "Counter" }]);
   });

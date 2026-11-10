@@ -2,7 +2,7 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import { and, eq, inArray, isNotNull, lt, ne, notExists, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt, notExists, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { readActiveSuggestionJob, readSuggestionRun } from "@waitron/catalogue";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -22,7 +22,6 @@ import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
   type CardProviderContribution,
   cardProviderById,
-  DEMO_READER_ID,
   type CardProviderRuntimeDeps,
   cardReaders,
   type ReaderStatus,
@@ -771,7 +770,7 @@ export function batteryAlertSource(deps: {
           name: cardReaders.name,
         })
         .from(cardReaders)
-        .where(and(eq(cardReaders.active, true), ne(cardReaders.id, DEMO_READER_ID)));
+        .where(eq(cardReaders.active, true));
       let timer: ReturnType<typeof setTimeout> | undefined;
       const deadline = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, BATTERY_CHECK_LIMIT_MS);

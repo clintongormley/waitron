@@ -3016,7 +3016,6 @@ export class TillApi {
     allowOffline?: boolean;
     simulationOutcome?: "captured" | "declined" | "attempting";
     readerId?: string;
-    demoAttemptId?: string;
     receiptLanguage?: string;
     kitchenNote?: string | null;
     guestCount?: number | null;
@@ -3026,14 +3025,6 @@ export class TillApi {
       ...req,
       zoneId: req.zoneId ?? this.#serviceZoneId,
     });
-  }
-
-  async cancelDemoReaderPayment(workingOrderId: string, attemptId: string): Promise<boolean> {
-    const result = await this.#request<{ cancelled: boolean }>("/api/demo-reader/cancel", "POST", {
-      workingOrderId,
-      attemptId,
-    });
-    return result.cancelled;
   }
 
   /**

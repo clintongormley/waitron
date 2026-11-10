@@ -2761,11 +2761,9 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   `storage.disk_full_stop_refused` with the route.
 - Open on the till mount (`TILL_OPEN_WHILE_DISK_FULL`, `apps/server/src/till-api.ts`): sign-in,
   sign-out and the session's language, because a refused sign-out keeps someone signed in on a
-  shared till and a refused sign-in keeps the next shift out; the four sale routes, refused inside instead (below); eight POSTs that save nothing
+  shared till and a refused sign-in keeps the next shift out; the four sale routes, refused inside instead (below); POSTs that save nothing
   of their own — the three checks for dishes whose kitchen station is closed or switched off
-  (`/api/dead-ends/*`), four previews, and the practice card simulator's
-  cancel, `POST /api/demo-reader/cancel`, registered only with that simulator, which refused would
-  leave a practice payment waiting at the reader. A refused send-preview would turn into the till's
+  (`/api/dead-ends/*`), four previews. A refused send-preview would turn into the till's
   generic table error and the round would never be sent, so the kitchen send itself is what is
   refused. Open on the device mount (`DEVICE_OPEN_WHILE_DISK_FULL`, `device-api.ts`): the device's
   own joining, zones, equipment, active profile and battery. The schedule mount opens nothing. Each
@@ -2840,8 +2838,7 @@ answered `409 clock.unusable`, and neither refund reached the provider.
   till whose save fails.
 - The sweeps in `till-api.disk-full-gate.test.ts`, `device-api.test.ts` and `schedule-api.test.ts`
   send every write route of a mount built with test deps, so a route registered only in a
-  configuration they do not build is never sent by them. The demo reader's cancel is one; its
-  staying open is pinned by its own case in `till-api.fiscal-sale-paths.test.ts`. They also pick
+  configuration they do not build is never sent by them. They also pick
   routes by the gate's own verbs and `/api/` filter, so a route the gate's selection misses is
   missed by the sweeps too.
 - A resend of a write the gate refuses — a write route of the three mounts that their open lists do

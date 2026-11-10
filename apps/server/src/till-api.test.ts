@@ -80,7 +80,7 @@ import {
   nodeId as brandNodeId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { cardReaders, type PaymentProvider } from "@waitron/payments";
+import type { PaymentProvider } from "@waitron/payments";
 import type { Logger, LogLevel } from "./logger.js";
 import { createTable } from "./testing/live-table.js";
 import { fireDishesAtPayment } from "./till-sale.js";
@@ -1789,64 +1789,27 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(await res.json()).toMatchObject({ cardProvider: "simulator" });
   });
 
-  it("offers the pretend reader only when the local simulator is selected", async () => {
-    const simulator = new Hono();
+  it("offers practice without a hardware reader", async () => {
+    const app = new Hono();
     mountTillApi(
-      simulator,
+      app,
       { ...deps(suite.db), cardProvider: { provider: "simulator" } as PaymentProvider },
       collect([]),
     );
-    const live = new Hono();
-    mountTillApi(live, deps(suite.db), collect([]));
-
-    const demoBody = await (await simulator.request("/api/till")).json();
-    const liveBody = await (await live.request("/api/till")).json();
-    expect(demoBody.activeReaders).toContainEqual({
-      id: "00000000-0000-4000-8000-000000000247",
-      name: "Demo card reader",
-      provider: "simulator",
-      printsOwnSlipAutomatically: false,
-    });
-    expect(liveBody.activeReaders).not.toContainEqual(
-      expect.objectContaining({ id: "00000000-0000-4000-8000-000000000247" }),
-    );
+    const body = await (await app.request("/api/till")).json();
+    expect(body.cardProvider).toBe("simulator");
+    expect(body.activeReaders).toEqual([]);
   });
 
-  it("sends the pretend reader choice to the simulator and refuses another reader in Demo", async () => {
+  it("uses the instant simulator and refuses a hardware reader in practice", async () => {
     const simulator = { provider: "simulator" } as PaymentProvider;
     const practice = { ...deps(suite.db), cardProvider: simulator };
-
-    expect(
-      await resolveCardCollector(practice, undefined, "00000000-0000-4000-8000-000000000247"),
-    ).toEqual({
+    expect(await resolveCardCollector(practice, undefined, undefined)).toEqual({
       provider: simulator,
-      reader: {
-        id: "00000000-0000-4000-8000-000000000247",
-        providerRef: "waitron-demo-reader",
-      },
     });
     await expect(resolveCardCollector(practice, undefined, randomUUID())).rejects.toMatchObject({
       code: "reader.not_found",
     });
-  });
-
-  it("refuses the pretend reader on a Live box even if a row carries its id", async () => {
-    const id = "00000000-0000-4000-8000-000000000247";
-    await withTransaction(suite.db, (tx) =>
-      tx.insert(cardReaders).values({
-        id,
-        provider: "stripe",
-        providerRef: "stray-demo-reader",
-        name: "Stray reader",
-      }),
-    );
-    try {
-      await expect(resolveCardCollector(deps(suite.db), undefined, id)).rejects.toMatchObject({
-        code: "reader.not_found",
-      });
-    } finally {
-      await withTransaction(suite.db, (tx) => tx.delete(cardReaders).where(eq(cardReaders.id, id)));
-    }
   });
 
   it("GET /api/till carries no bump mode, whatever the venue's column holds", async () => {

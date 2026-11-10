@@ -372,12 +372,12 @@ describe("the payment's hold for its equipment", () => {
     chosenId: "p1",
     resolved: { id: "p1", name: "Barra", available: true },
   });
-  const demo = { id: "sim-1", name: "Demo reader" };
+  const simulator = { name: "Instant simulator" };
 
-  it("charges the equipment's ready reader, the demo reader before it, and none before a read", () => {
+  it("charges the equipment's ready reader, the instant simulator before it, and none before a read", () => {
     expect(readyPayReader(ready, null)).toMatchObject({ id: "r1", name: "Lector barra" });
-    expect(readyPayReader(ready, demo)).toEqual(demo);
-    expect(readyPayReader(null, demo)).toEqual(demo);
+    expect(readyPayReader(ready, simulator)).toEqual(simulator);
+    expect(readyPayReader(null, simulator)).toEqual(simulator);
     expect(readyPayReader(null, null)).toBeNull();
     expect(readyPayReader(noReader, null)).toBeNull();
   });
@@ -385,7 +385,7 @@ describe("the payment's hold for its equipment", () => {
   it("holds a card until a reader is ready, and never cash", () => {
     const state = (
       equipment: DeviceEquipment | null,
-      fixedReader = null as typeof demo | null,
+      fixedReader = null as typeof simulator | null,
     ) => ({
       equipment,
       equipmentBusy: false,
@@ -394,23 +394,23 @@ describe("the payment's hold for its equipment", () => {
     expect(heldForEquipment(true, state(ready))).toBe(false);
     expect(heldForEquipment(true, state(noReader))).toBe(true);
     expect(heldForEquipment(true, state(null))).toBe(true);
-    expect(heldForEquipment(true, state(null, demo))).toBe(false);
+    expect(heldForEquipment(true, state(null, simulator))).toBe(false);
     expect(heldForEquipment(false, state(null))).toBe(false);
     expect(heldForEquipment(false, state(noReader))).toBe(false);
   });
 
   it("holds every method while an equipment change is out", () => {
-    const busy = { equipment: ready, equipmentBusy: true, fixedReader: demo };
+    const busy = { equipment: ready, equipmentBusy: true, fixedReader: simulator };
     expect(heldForEquipment(true, busy)).toBe(true);
     expect(heldForEquipment(false, busy)).toBe(true);
   });
 
-  it("opens the row only once the equipment is read, and the demo reader counts as ready", () => {
+  it("opens the row only once the equipment is read, and the instant simulator counts as ready", () => {
     expect(payRowWantsOpen(null, null)).toBe(false);
     expect(payRowWantsOpen(ready, null)).toBe(false);
     expect(payRowWantsOpen(noReader, null)).toBe(true);
-    expect(payRowWantsOpen(noReader, demo)).toBe(false);
-    expect(payRowWantsOpen(equipment({ choices: [counterPrinter] }), demo)).toBe(true);
+    expect(payRowWantsOpen(noReader, simulator)).toBe(false);
+    expect(payRowWantsOpen(equipment({ choices: [counterPrinter] }), simulator)).toBe(true);
   });
 });
 

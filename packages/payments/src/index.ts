@@ -100,7 +100,7 @@ export type {
   SelectDeviceReaderResult,
 } from "./device-readers.js";
 export { MANUAL_PROVIDER, recordManualCardPayment, recordManualRefund } from "./manual.js";
-export { SimulatorPaymentProvider, DEMO_READER_ID, DEMO_READER_REF } from "./simulator.js";
+export { SimulatorPaymentProvider } from "./simulator.js";
 export { IN_PROGRESS_PAYMENT_STATES, refundLookupOf } from "./provider.js";
 export { ChargeNotSavedError, saveCharge } from "./charge-not-saved.js";
 export type { ManualCardPaymentParams, ManualCardPaymentResult } from "./manual.js";

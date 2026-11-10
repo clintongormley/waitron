@@ -479,7 +479,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       ),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
-    cancelDemoReaderPayment: vi.fn().mockResolvedValue(true),
     parkOrder: vi.fn().mockResolvedValue({ id: "wo-1", orderNumber: 5 }),
     setOrderInvoiceChoice: vi.fn().mockResolvedValue({ revision: 1 }),
     getInvoiceDeliveryOptions: vi.fn().mockResolvedValue({ invoicePrinter: null }),
@@ -10972,48 +10971,6 @@ describe("till-app", () => {
       await flush(el);
 
       expect(pay).toHaveBeenCalledWith(expect.objectContaining({ simulationOutcome: "declined" }));
-    });
-
-    it("cancels the pretend reader on the server and does not show its late decline", async () => {
-      let settlePay: (outcome: PayOutcome) => void = () => undefined;
-      const pay = vi.fn<(request: { demoAttemptId?: string }) => Promise<PayOutcome>>(
-        () => new Promise<PayOutcome>((resolve) => (settlePay = resolve)),
-      );
-      const cancelDemoReaderPayment = vi.fn(async () => {
-        settlePay({ outcome: "declined" });
-        return true;
-      });
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          cardProvider: "simulator",
-          activeReaders: [
-            {
-              printsOwnSlipAutomatically: false,
-              id: "00000000-0000-4000-8000-000000000247",
-              name: "Demo card reader",
-              provider: "simulator",
-            },
-          ],
-          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
-        }),
-        pay,
-        cancelDemoReaderPayment,
-      });
-      const c = await toCounter(el);
-      c.store.addProduct(coffee, "2");
-      await flush(el);
-      const orderId = c.store.id;
-
-      emit(c, "collect-card", { readerId: "00000000-0000-4000-8000-000000000247" });
-      await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
-      emit(c, "cancel-demo-reader");
-      await flush(el);
-
-      const payAttemptId = pay.mock.calls[0]?.[0]?.demoAttemptId;
-      expect(payAttemptId).toMatch(/^[0-9a-f-]{36}$/);
-      expect(cancelDemoReaderPayment).toHaveBeenCalledWith(orderId, payAttemptId);
-      expect(tenderPay(el).shadowRoot!.querySelector(".card-outcome")).toBeNull();
     });
 
     it("sends no reader payment when the guests turn bad while the kitchen routes are read", async () => {
@@ -25532,53 +25489,6 @@ describe("request-device refusals keep their recovery instruction", () => {
       expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
         codeMessage("device.unauthorized", locale),
       );
-    },
-  );
-  it.each(["en-GB", "es-ES"] as const)(
-    "shows the device instruction for demo cancel in %s",
-    async (locale) => {
-      let finish!: (outcome: PayOutcome) => void;
-      const pay = vi.fn(
-        () =>
-          new Promise<PayOutcome>((resolve) => {
-            finish = resolve;
-          }),
-      );
-      const readerId = "00000000-0000-4000-8000-000000000247";
-      const { el } = await mountApp({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          cardProvider: "simulator",
-          activeReaders: [
-            {
-              printsOwnSlipAutomatically: false,
-              id: readerId,
-              name: "Demo card reader",
-              provider: "simulator",
-            },
-          ],
-          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
-        }),
-        pay,
-        cancelDemoReaderPayment: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
-      });
-      const c = await toCounter(el);
-      c.store.addProduct(coffee, "2");
-      await flush(el);
-      emit(c, "collect-card", { readerId });
-      await vi.waitFor(() => expect(pay).toHaveBeenCalledOnce());
-      setLocale(locale);
-      await flush(el);
-      try {
-        emit(el.shadowRoot!.querySelector("till-counter-screen")!, "cancel-demo-reader");
-        await flush(el);
-        expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-          codeMessage("device.unauthorized", locale),
-        );
-      } finally {
-        finish({ outcome: "declined" });
-        await flush(el);
-      }
     },
   );
 });

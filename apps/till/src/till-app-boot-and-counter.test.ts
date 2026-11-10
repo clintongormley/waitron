@@ -5727,7 +5727,7 @@ describe("own card payment and idle sign-out (A532)", () => {
           ...till,
           inactivityTimeoutSeconds: 300,
           cardProvider: "simulator",
-          activeReaders: [{ id: "demo", name: "Demo", provider: "simulator" }],
+          activeReaders: [],
         }),
         pay,
         ...overrides,
@@ -5739,25 +5739,10 @@ describe("own card payment and idle sign-out (A532)", () => {
     emit(c, "pointerdown");
     c.store.addProduct(c.products[0]!, "1");
     await el.updateComplete;
-    emit(c, "collect-card", { readerId: "demo" });
+    emit(c, "collect-card", { simulationOutcome: "captured" });
     await vi.advanceTimersByTimeAsync(0);
     return { el, c };
   }
-
-  it("restarts idle sign-out after a confirmed cancellation even if the original request never answers", async () => {
-    const cancel = vi.fn().mockResolvedValue(true);
-    const pay = vi.fn(() => new Promise(() => {}));
-    const { el, c } = await waiting(pay, { cancelDemoReaderPayment: cancel });
-    expect(pay).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(100_000);
-    emit(c, "cancel-demo-reader");
-    await vi.advanceTimersByTimeAsync(0);
-    expect(cancel).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(299_999);
-    expect(privateState<string>(el, "operatorName")).toBe("Ana");
-    await vi.advanceTimersByTimeAsync(1);
-    expect(privateState<string>(el, "operatorName")).toBe("");
-  });
 
   it.each(["declined", "network_unavailable", "timeout"])(
     "restarts the full idle time after %s",
@@ -5852,21 +5837,6 @@ describe("own card payment and idle sign-out (A532)", () => {
     refuse({ code: "device.forbidden_action", status: 403 });
     await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(300_000);
-    expect(privateState<string>(el, "operatorName")).toBe("");
-  });
-
-  it("keeps reader protection when cancellation was refused", async () => {
-    const cancel = vi.fn().mockResolvedValue(false);
-    const { el, c } = await waiting(
-      vi.fn(() => new Promise(() => {})),
-      { cancelDemoReaderPayment: cancel },
-    );
-    await vi.advanceTimersByTimeAsync(100_000);
-    emit(c, "cancel-demo-reader");
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(300_000);
-    expect(privateState<string>(el, "operatorName")).toBe("Ana");
-    await vi.advanceTimersByTimeAsync(200_000);
     expect(privateState<string>(el, "operatorName")).toBe("");
   });
 

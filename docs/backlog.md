@@ -934,7 +934,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — Park · Pay and one payment window.** The [current plan](superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for its non-slip cuts (watcher, 10 November 01:26); build those in order. Practice Approve/Decline/No answer and manager-ended recovery are the first cut. Slip cuts wait for the owner's recovery decision; Demo-reader retirement, the shared window, final documents and runtime acceptance remain open.
+- **A739 — Park · Pay and one payment window.** The [current plan](superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for its non-slip cuts (watcher, 10 November 01:26); build those in order. Practice Approve/Decline/No answer and manager-ended recovery are delivered; the separate Demo reader is retired. Slip cuts wait for the owner's recovery decision; the shared window, final documents and runtime acceptance remain open.
   [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window)
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
@@ -1387,11 +1387,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   built.** Start by reading what the SumUp Solo actually does on a signature-required card,
   because if the reader owns the whole step there may be nothing for us to build.
   [Detail](backlog/payments.md#some-card-payments-ask-the-cardholder-to-sign-instead-of-enter-a-pin--open-question-nothing-built)
-
-- **If demos use multiple tills at once, add a till label to each pending amount so the manager can
-  choose the right one; the current page shows amounts alone.** Left open by A247 (a pretend
-  connected card reader in Demo mode, W38, #1172). A739 removes the pretend reader (owner,
-  2026-10-15); delete this entry when it lands.
 
 - **A793 — tips: who a tip belongs to, how it is shared out, and what payroll gets** — NOT
   APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a

@@ -226,26 +226,50 @@ describe("till-app: paying a table from a handheld", () => {
     expect(sent()[0]).toMatchObject({ kind: "contribution", amount: "70.00" });
   });
 
-  it("a practice venue's phone charges its demo reader, which the row shows fixed", async () => {
+  it("a practice phone pays through the instant simulator without seeded hardware", async () => {
     const { el } = await mountApp(
       onPhone(
-        { getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(null)) },
+        {
+          getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(null)),
+          previewBillPayment: vi
+            .fn()
+            .mockResolvedValue({ ...wholeCard, applied: "40.00", charged: "40.00" }),
+          takeBillPayment: vi
+            .fn()
+            .mockResolvedValue(
+              takenOf(
+                { method: "card", entry: "reader", applied: "40.00", tip: "0.00", change: null },
+                { received: "40.00", outstanding: "80.00" },
+              ),
+            ),
+        },
         {
           cardProvider: "simulator",
-          activeReaders: [{ id: "demo-1", name: "Demo card reader", provider: "simulator" }],
-          defaultReaderId: "demo-1",
+          activeReaders: [],
         },
       ),
     );
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
-    expect(dialog(el)!.fixedReader).toEqual({ id: "demo-1", name: "Demo card reader" });
+    expect(dialog(el)!.fixedReader).toEqual({ name: t("card.instant_simulator") });
+    await press(el, 'input[name="way"][value="contribution"]');
+    await type(el, "amount", "40");
     await press(el, 'input[name="method"][value="card"]');
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
 
     expect(sent()).toHaveLength(1);
-    expect(sent()[0]).toMatchObject({ method: "card", entry: "reader", readerId: "demo-1" });
+    expect(sent()[0]).toMatchObject({
+      method: "card",
+      entry: "reader",
+      simulationOutcome: "captured",
+    });
+    expect(sent()[0]).not.toHaveProperty("readerId");
+    expect(text(inDialog(el, "[data-pay-taken-reader]"))).toBe(
+      t("bill_pay.taken_on_reader")
+        .replace("{amount}", money("40.00"))
+        .replace("{reader}", t("card.instant_simulator")),
+    );
   });
 
   it("a partly paid bill keeps its amount lines and bill choices beside one Pay button", async () => {
@@ -403,6 +427,28 @@ describe("a presented bill on a handheld", () => {
       undefined,
       editOfBill,
     ]);
+  });
+
+  it("a practice phone pays a presented bill without seeded hardware", async () => {
+    const practice = onPhone(
+      { getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(null)) },
+      { cardProvider: "simulator", activeReaders: [] },
+    );
+    const { el } = await openPresented({
+      getTill: practice.getTill,
+      getDeviceEquipment: practice.getDeviceEquipment,
+    });
+    expect(inPresented(el, "[data-presented-pay-take]")).toHaveProperty("disabled", false);
+    await takeOnReader(el);
+    expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.pay).mock.calls[0]![0]).toEqual({
+      expectedEdit: editOfBill,
+      id: "wo-4",
+      lines: [],
+      guestCount: 4,
+    });
+    expect(presented(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-paid-view")).not.toBeNull();
   });
 
   it("a card is charged on the row's reader through the integrated payment, then the paid screen shows", async () => {
@@ -4979,15 +5025,14 @@ describe("till-app: a phone's first payment picks up the one free reader (defaul
     expect(setDeviceEquipment).toHaveBeenCalledOnce();
   });
 
-  it("a practice venue's phone, which charges its demo reader, picks up nothing", async () => {
+  it("a practice phone picks up no real reader", async () => {
     const setDeviceEquipment = vi.fn().mockResolvedValue(holding(SECOND_READER));
     api = stubApi(
       onPhone(
         { getDeviceEquipment: vi.fn().mockResolvedValue(firstUse()), setDeviceEquipment },
         {
           cardProvider: "simulator",
-          activeReaders: [{ id: "demo-1", name: "Demo card reader", provider: "simulator" }],
-          defaultReaderId: "demo-1",
+          activeReaders: [],
         },
       ),
     );
@@ -5313,11 +5358,10 @@ describe("till-app: why the sheet's reader has gone (default 19)", () => {
     expect(await reason(el)).toBeNull();
   });
 
-  it("a practice venue's phone, which charges its demo reader, gets no line", async () => {
+  it("a practice phone gets no missing-reader line", async () => {
     const { el } = await lostPhone(takenByMarc, {}, undefined, {
       cardProvider: "simulator",
-      activeReaders: [{ id: "demo-1", name: "Demo card reader", provider: "simulator" }],
-      defaultReaderId: "demo-1",
+      activeReaders: [],
     });
 
     expect(await reason(el)).toBeNull();

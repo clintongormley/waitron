@@ -610,8 +610,6 @@ export interface IntegratedPayRequest {
   allowOffline?: boolean;
   /** Test result selected by the practice UI. Only a server-mounted simulator may receive it. */
   simulationOutcome?: "captured" | "declined" | "attempting";
-  /** One pretend-reader attempt, shared with its cancellation request. */
-  demoAttemptId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
   /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
@@ -1424,7 +1422,6 @@ async function payIntegrated(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
       allowOffline: req.allowOffline,
       simulationOutcome: req.simulationOutcome,
-      demoAttemptId: req.demoAttemptId,
     });
   } catch (error) {
     await releasePaymentAttempt(deps, req.id, attemptAt);

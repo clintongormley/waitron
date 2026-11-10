@@ -28,14 +28,6 @@ import {
   recordVoid,
 } from "./store.js";
 
-export const DEMO_READER_REF = "waitron-demo-reader";
-export const DEMO_READER_ID = "00000000-0000-4000-8000-000000000247";
-
-export interface PendingDemoReaderPayment {
-  id: string;
-  amount: string;
-}
-
 /** A local, database-backed card simulator for Demo and Preparation installations. */
 export class SimulatorPaymentProvider implements PaymentProvider {
   readonly provider = "simulator";
@@ -44,21 +36,6 @@ export class SimulatorPaymentProvider implements PaymentProvider {
    * resend could not be matched to the first. */
   readonly refundResendWindowMs = null;
   private readonly refundsByKey = new Map<string, { ref: string; refundId: string }>();
-  private readonly pendingDemoReader = new Map<
-    string,
-    PendingDemoReaderPayment & {
-      workingOrderId: string;
-      deviceId: string;
-      attemptId?: string;
-      timer: ReturnType<typeof setTimeout>;
-      resolve: (outcome: "captured" | "declined") => void;
-    }
-  >();
-  private readonly cancelledDemoAttempts = new Map<
-    string,
-    { workingOrderId: string; deviceId: string }
-  >();
-
   constructor(private readonly db: Database) {}
 
   sendRefund(req: RefundSend): Promise<RefundAnswer> {
@@ -87,35 +64,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
   }
 
   async collect(params: CollectParams): Promise<PaymentResult> {
-    const cancelled =
-      params.demoAttemptId === undefined
-        ? undefined
-        : this.cancelledDemoAttempts.get(params.demoAttemptId);
-    if (params.demoAttemptId !== undefined) this.cancelledDemoAttempts.delete(params.demoAttemptId);
-    const cancelledHere =
-      cancelled?.workingOrderId === params.workingOrderId &&
-      cancelled.deviceId === params.origin.deviceId;
-    const simulationOutcome =
-      params.readerRef === DEMO_READER_REF && params.simulationOutcome === undefined
-        ? cancelledHere
-          ? "declined"
-          : await new Promise<"captured" | "declined">((resolve) => {
-              const id = randomUUID();
-              const timer = setTimeout(() => {
-                this.decideDemoReaderPayment(id, "declined");
-              }, 10 * 60_000);
-              timer.unref();
-              this.pendingDemoReader.set(id, {
-                id,
-                amount: params.amount,
-                workingOrderId: params.workingOrderId,
-                deviceId: params.origin.deviceId,
-                attemptId: params.demoAttemptId,
-                timer,
-                resolve,
-              });
-            })
-        : params.simulationOutcome;
+    const simulationOutcome = params.simulationOutcome;
     const paymentRef = `sim-${randomUUID()}`;
     const declined = simulationOutcome === "declined";
     const unanswered = simulationOutcome === "attempting";
@@ -141,44 +90,6 @@ export class SimulatorPaymentProvider implements PaymentProvider {
       amount: params.amount,
       settledAt,
     };
-  }
-
-  pendingDemoReaderPayments(): PendingDemoReaderPayment[] {
-    return [...this.pendingDemoReader.values()].map(({ id, amount }) => ({ id, amount }));
-  }
-
-  decideDemoReaderPayment(id: string, outcome: "captured" | "declined"): boolean {
-    const pending = this.pendingDemoReader.get(id);
-    if (pending === undefined) return false;
-    this.pendingDemoReader.delete(id);
-    clearTimeout(pending.timer);
-    pending.resolve(outcome);
-    return true;
-  }
-
-  cancelDemoReaderPayment(workingOrderId: string, deviceId: string, attemptId?: string): boolean {
-    const pending = [...this.pendingDemoReader.values()].find(
-      (entry) =>
-        entry.workingOrderId === workingOrderId &&
-        entry.deviceId === deviceId &&
-        (attemptId === undefined || entry.attemptId === attemptId),
-    );
-    if (pending !== undefined) return this.decideDemoReaderPayment(pending.id, "declined");
-    if (
-      [...this.pendingDemoReader.values()].some(
-        (entry) => entry.workingOrderId === workingOrderId && entry.deviceId === deviceId,
-      )
-    )
-      return false;
-    if (attemptId === undefined) return false;
-    const cancellation = { workingOrderId, deviceId };
-    this.cancelledDemoAttempts.set(attemptId, cancellation);
-    const timer = setTimeout(() => {
-      if (this.cancelledDemoAttempts.get(attemptId) === cancellation)
-        this.cancelledDemoAttempts.delete(attemptId);
-    }, 10 * 60_000);
-    timer.unref();
-    return true;
   }
 
   forward(now: Date): Promise<ForwardResult> {

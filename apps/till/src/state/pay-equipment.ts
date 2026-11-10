@@ -90,14 +90,13 @@ export function printerChoices(equipment: DeviceEquipment | null): EquipmentItem
   return roleOf(equipment, "receipt")?.choices ?? [];
 }
 
-/** A practice venue's demo reader: charged whatever the equipment says. */
+/** A fixed payment label; the instant simulator has no hardware id. */
 export interface FixedReader {
-  id: string;
+  id?: string;
   name: string;
 }
 
-/** The reader a card would be charged on now: the demo reader, else the equipment's ready one;
- * null before the equipment has been read. */
+/** A fixed payment option takes precedence over physical equipment. */
 export function readyPayReader(
   equipment: DeviceEquipment | null,
   fixedReader: FixedReader | null,
@@ -122,8 +121,7 @@ export function heldForEquipment(
   return card && readyPayReader(state.equipment, state.fixedReader) === null;
 }
 
-/** Whether the row opens by itself; an unread equipment does not open it, and the demo reader
- * counts as ready. */
+/** A fixed payment option needs only the printer warning to open the row. */
 export function payRowWantsOpen(
   equipment: DeviceEquipment | null,
   fixedReader: FixedReader | null,

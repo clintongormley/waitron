@@ -692,13 +692,6 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
       "Request proof: till-api.request-device.test.ts. A person changes only their own screen language; no selling action applies.",
     routes: ["PUT /api/session/locale"],
   },
-  {
-    proof: "matching request (tested)",
-    actions: [],
-    basis:
-      "Request proof: till-api.request-device.test.ts. Registered only for the simulator; cancellation requires payment.take permission and moves no real money.",
-    routes: ["POST /api/demo-reader/cancel"],
-  },
 ];
 
 function routeKey(method: string, path: string): string {

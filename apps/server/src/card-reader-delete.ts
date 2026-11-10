@@ -15,7 +15,6 @@ import {
   cardProviderById,
   cardReaderHolders,
   cardReaders,
-  DEMO_READER_ID,
   deviceCardReaders,
   deviceProfileCardReaders,
   IN_PROGRESS_PAYMENT_STATES,
@@ -72,7 +71,7 @@ async function cardReaderDeleteRules(
     })
     .from(cardReaders)
     .where(and(eq(cardReaders.id, id), isNull(cardReaders.deletedAt)));
-  if (reader === undefined || id === DEMO_READER_ID) throw new AppError("reader.not_found", { id });
+  if (reader === undefined) throw new AppError("reader.not_found", { id });
 
   const busy = await tx
     .select({ id: devices.id, name: devices.label })

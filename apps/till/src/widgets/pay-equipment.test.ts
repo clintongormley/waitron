@@ -172,13 +172,16 @@ describe("till-pay-equipment", () => {
     it("shows a practice venue's fixed reader", async () => {
       const el = await mount({
         equipment: equipment(undefined, {}),
-        fixedReader: { id: "demo", name: "Lector de prueba" },
+        fixedReader: { name: "Lector de prueba" },
       });
       expect(summary(el)).toBe("Lector de prueba · ticket en Barra");
       el.open = true;
       await el.updateComplete;
       const reader = box(el, "cardReaderId")!;
-      expect(reader.value).toBe("demo");
+      expect(reader.value).toBe("");
+      expect(reader.shadowRoot!.querySelector(".value")?.textContent?.trim()).toBe(
+        "Lector de prueba",
+      );
       expect(reader.disabled).toBe(true);
       expect(reader.options.map((each) => each.label)).toEqual(["Lector de prueba"]);
     });
@@ -186,7 +189,7 @@ describe("till-pay-equipment", () => {
     it("names a practice venue's fixed reader before the equipment has been read", async () => {
       const el = await mount({
         equipment: null,
-        fixedReader: { id: "demo", name: "Lector de prueba" },
+        fixedReader: { name: "Lector de prueba" },
       });
       expect(summary(el)).toBe("Lector de prueba · Leyendo…");
     });

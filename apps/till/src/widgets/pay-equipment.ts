@@ -248,8 +248,8 @@ export class TillPayEquipment extends LitElement {
   @property({ type: Boolean }) canScan = false;
   @property({ type: Boolean }) askNfc = false;
   @property({ type: Boolean }) disabled = false;
-  /** A practice venue's demo reader: shown, never chosen. */
-  @property({ attribute: false }) fixedReader: { id: string; name: string } | null = null;
+  /** A practice payment label: shown, never chosen. */
+  @property({ attribute: false }) fixedReader: { id?: string; name: string } | null = null;
   @state() private asking: { role: PayEquipmentRole; item: EquipmentItem } | null = null;
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -398,11 +398,12 @@ export class TillPayEquipment extends LitElement {
     if (fixed !== null)
       return html`<wt-combobox
         name="cardReaderId"
+        .showEmptyOption=${true}
         search="never"
         label=${t("equipment.card_terminal")}
         disabled
-        .options=${[{ value: fixed.id, label: fixed.name }]}
-        .value=${fixed.id}
+        .options=${[{ value: fixed.id ?? "", label: fixed.name }]}
+        .value=${fixed.id ?? ""}
       ></wt-combobox>`;
     const reader = payReaderOf(equipment);
     return this.#field(

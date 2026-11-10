@@ -68,12 +68,11 @@ export class TillReaderPicker extends LitElement {
 
   @property({ attribute: false }) readers: ReaderOption[] = [];
   @property() selectedReaderId?: string;
-  @property({ type: Boolean }) plainSimulator = false;
 
   /** Does not close itself: the host owns whether a pick also tears the dialog down. */
-  #choose(readerId: string | null): void {
+  #choose(readerId: string): void {
     this.dispatchEvent(
-      new CustomEvent<{ readerId: string | null }>("reader-chosen", {
+      new CustomEvent<{ readerId: string }>("reader-chosen", {
         detail: { readerId },
         bubbles: true,
         composed: true,
@@ -96,20 +95,6 @@ export class TillReaderPicker extends LitElement {
         this.readers.length === 0
           ? html`<p class="empty">${t("reader_picker.empty")}</p>`
           : html`<div class="list" role="menu">
-              ${
-                this.plainSimulator
-                  ? html`<button
-                      type="button"
-                      class="option"
-                      role="menuitemradio"
-                      aria-checked=${this.selectedReaderId === undefined}
-                      data-test="reader-instant"
-                      @click=${() => this.#choose(null)}
-                    >
-                      <span class="name">${t("card.instant_simulator")}</span>
-                    </button>`
-                  : nothing
-              }
               ${this.readers.map((reader) => this.#renderOption(reader))}
             </div>`
       }
@@ -132,9 +117,7 @@ export class TillReaderPicker extends LitElement {
         data-test="reader-${reader.id}"
         @click=${() => this.#choose(reader.id)}
       >
-        <span class="name"
-          >${reader.provider === "simulator" ? t("card.demo_reader") : reader.name}</span
-        >
+        <span class="name">${reader.name}</span>
         ${
           reader.online === false
             ? html`<span class="status" data-test="reader-${reader.id}-offline"

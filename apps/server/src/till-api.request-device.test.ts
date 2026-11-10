@@ -33,7 +33,6 @@ const CASES = [
   ["POST", "/api/schedule/swaps", 400, "management.request_invalid"],
   ["POST", `/api/schedule/swaps/${id}/accept`, 404, "swap.not_found"],
   ["PUT", "/api/session/locale", 400, "locale.unsupported"],
-  ["POST", "/api/demo-reader/cancel", 400, "shared.invalid_id"],
 ] as const;
 
 let venue: PartyVenue;

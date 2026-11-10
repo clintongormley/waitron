@@ -9,7 +9,6 @@ import { cardReaders } from "./schema/card-readers.js";
 import { deviceCardReaders } from "./schema/device-card-readers.js";
 import { deviceProfileCardReaders } from "./schema/device-profile-card-readers.js";
 import { payments } from "./schema/payments.js";
-import { DEMO_READER_ID } from "./simulator.js";
 
 /** A profile's readers in display order and its default, which is on that list or `null`. */
 export type ProfileReaderList = { readerIds: string[]; defaultReaderId: string | null };
@@ -168,7 +167,6 @@ export type ReaderInfo = {
   holderDeviceId: string | null;
 };
 
-/** A reader a profile lists, enabled or not; the demo reader included. */
 export type ListedReader = { profileId: string; id: string; isDefault: boolean };
 
 /** What {@link readReaderEquipment} reads; `listed`, empty without `lists`, is in list order. */
@@ -332,7 +330,6 @@ export async function selectDeviceReader(
           eq(cardReaders.id, selection.id),
           eq(cardReaders.active, true),
           isNull(cardReaders.unpairedAt),
-          ne(cardReaders.id, DEMO_READER_ID),
         ),
       );
     if (reader === undefined) return { ok: false, refusal: "not_permitted" };

@@ -28,7 +28,6 @@ import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-str
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import {
   SimulatorPaymentProvider,
-  DEMO_READER_ID,
   cardReaderHolders,
   cardReaders,
   deviceProfileCardReaders,
@@ -384,41 +383,6 @@ describe("providers list", () => {
 });
 
 describe("device and profile readers", () => {
-  it("keeps the demo reader out of ordinary reader management", async () => {
-    const venue = await seedVenueWithStaff();
-    const app = mountApp(venue);
-    const device = await seedDevice();
-    await suite.db.insert(cardReaders).values({
-      id: DEMO_READER_ID,
-      provider: "simulator",
-      providerRef: "waitron-demo-reader",
-      name: "Demo reader",
-    });
-
-    const listed = await send(app, "GET", "/management-api/payments/readers", {
-      cookie: venue.managerCookie,
-    });
-    expect(await listed.json()).toEqual([]);
-
-    const assigned = await send(app, "PUT", `/management-api/payments/devices/${device}/reader`, {
-      cookie: venue.managerCookie,
-      body: { readerId: DEMO_READER_ID },
-    });
-    expect((await assigned.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.not_found" },
-    });
-    const status = await send(
-      app,
-      "GET",
-      `/management-api/payments/readers/${DEMO_READER_ID}/status`,
-      {
-        cookie: venue.managerCookie,
-      },
-    );
-    expect((await status.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "reader.not_found" },
-    });
-  });
   it("sets, reads back and clears a device's chosen reader", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
@@ -2255,7 +2219,7 @@ describe("reader delete", () => {
     return paired;
   }
 
-  it("refuses a caller without hardware.manage, a malformed id, an unknown id and the demo reader, changing nothing", async () => {
+  it("refuses a caller without hardware.manage, a malformed id, an unknown id, changing nothing", async () => {
     const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
@@ -2287,7 +2251,7 @@ describe("reader delete", () => {
       });
       expect(malformed.status).toBe(400);
       expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-      for (const missing of [unknown, DEMO_READER_ID]) {
+      for (const missing of [unknown]) {
         const res = await send(app, method, `${base}/readers/${missing}${suffix}`, {
           cookie: venue.managerCookie,
         });
