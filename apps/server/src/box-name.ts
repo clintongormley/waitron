@@ -1,8 +1,6 @@
 /**
- * The venue's mDNS name. Only a box that sells, waits to sell, or is in setup mode while no other
- * box answers it answers this name; every box also answers its own `boxHostnameFor` name. The name
- * the responder answers for, discovery advertises and the leaf's SANs cover must agree, or the trust
- * flow hits a certificate-hostname mismatch.
+ * The venue's mDNS name. The name the responder answers for, discovery advertises and the leaf's
+ * SANs cover must agree, or the trust flow hits a certificate-hostname mismatch.
  *
  * Copies outside this process (the image's `WAITRON_MANAGEMENT_RP_ID` / `WAITRON_MANAGEMENT_ORIGIN`,
  * compose's defaults, `waitron.sh`'s QR URL) are pinned to this line, read as text, by

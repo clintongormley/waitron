@@ -4,7 +4,7 @@
 
 > **2026-11-10, A947 3b-2:** each box answers its own `box-<id>.waitron.local`; `waitron.local` only
 > from a full start that accepts sales (until it steps down), the waiting start, or a setup start
-> whose last ask heard no other box. The setup start asks the network every 30 s plus 0–10 s
+> whose last ask heard no other box. The setup start asks the network 30 s plus 0–10 s after each ask ends
 > (`watchVenueNameInSetup`, `mdns.ts`), a timer the rows below do not list.
 >
 > **2026-11-09, #2543:** the legacy relay tunnel is removed: `packages/tunnel`, `tunnel-http.ts` and the
