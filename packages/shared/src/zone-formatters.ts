@@ -2,6 +2,7 @@ const nameFormatters = new Map<string, Intl.DateTimeFormat>();
 const offsetFormatters = new Map<string, Intl.DateTimeFormat>();
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
+// A zone the runtime refuses throws before `set`, so it is never stored.
 function cached(
   formatters: Map<string, Intl.DateTimeFormat>,
   timeZone: string,
