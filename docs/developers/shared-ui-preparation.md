@@ -22,7 +22,7 @@ run; the next qualifying merge attempts a new numbered version. An older run can
 be refused if a higher package version has already been published. There is no
 scheduled publisher or catch-up process.
 
-After the first contract publication, record its version, source commit, integrity
+After a contract publication, record its version, source commit, integrity
 and private Cloud repository association. Cloud must install that exact version with
 its own workflow token; a refused install needs a package access grant for Cloud.
 A local tarball or a writer-token download does not establish that access.
@@ -34,6 +34,16 @@ and both licence files were checked against the registry metadata and source fil
 That run established upload to the existing Cloud-associated package. Cloud owns
 authenticated installation, dependency updates and portal/image
 qualification under its [approved release plan](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/plans/2026-11-06-simple-private-ui-release.md).
+
+The [first signing publication on 10 November 2026](https://github.com/clintongormley/waitron/actions/runs/42848197329)
+released private `@waitron-io/contract@0.2.9`, associated with `waitron-io/waitron-cloud`.
+Its downloaded tarball matches the registry’s SHA-512 integrity and records source commit
+`ae8d1bb9c948539a93e1bc0940db2a1a73054ffa` in its archived `package.json`. Both licences
+match that commit; the declaration entry exists and runtime/peer dependencies are absent.
+An independent driver-token install passed the existing three-format Node consumer.
+This does not establish Cloud’s own workflow-token access; that installation and adoption
+remain open. The registry metadata in this qualification omitted `waitronSource`, so read
+`waitronSource.commit` from the downloaded archive when checking the source.
 
 ## Inspect a package locally
 

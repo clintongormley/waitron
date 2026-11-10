@@ -112,8 +112,10 @@ the next qualifying merge attempts a new `0.2.<run number>` version.
 The publisher uses a fixed UI/contract matrix, with UI-only Chromium setup and independent
 failures (`fail-fast: false`). Each row runs the same source/preparation/installed-consumer
 checks; contract runs in Node with no peers. Both upload with restricted access.
-Actual private publication and Cloud’s own-token installation remain to be checked
-after the first contract release; local package checks do not establish registry access.
+The first private contract release, `0.2.9`, passed the real publication and independent
+download/driver-token consumer checks on 10 November 2026; the [receipt](shared-ui-preparation.md)
+records its source and integrity. Cloud’s own-token installation remains separate; local
+package checks do not establish registry access.
 
 The publisher uses its own concurrency group with `queue: max` and no cancellation
 of a running publication. This serializes uploads separately from `ci.yml`, whose
