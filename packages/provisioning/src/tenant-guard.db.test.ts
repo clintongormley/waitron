@@ -67,9 +67,9 @@ describe("readOperationalVenueIds", () => {
 
   it("reads every venue row, so a second venue is visible to the guard", async () => {
     await suite.db.execute(sql`
-      insert into locations (id, name, invoice_locales, operation_description) values
-        ('00000000-0000-4000-8000-00000000000a', 'Barra', '["es-ES"]', 'venta'),
-        ('00000000-0000-4000-8000-00000000000b', 'Terraza', '["es-ES"]', 'venta')`);
+      insert into locations (id, invoice_locales, operation_description) values
+        ('00000000-0000-4000-8000-00000000000a', '["es-ES"]', 'venta'),
+        ('00000000-0000-4000-8000-00000000000b', '["es-ES"]', 'venta')`);
 
     expect([...(await readOperationalVenueIds(suite.db))].sort()).toEqual([
       "00000000-0000-4000-8000-00000000000a",

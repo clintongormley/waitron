@@ -150,6 +150,7 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
+  await seedVenueSettings(suite.db, { name: "Earlier location" });
   await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });
   const scratch = await mkdtemp(join(tmpdir(), "preview-old-stream-"));
   try {

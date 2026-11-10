@@ -15,11 +15,11 @@ import { useVenueDb } from "./testing/venue-db.js";
 // sibling join-requests and dining-table suites use. The id is supplied here because `id` columns
 // take their default from a JavaScript call (`newId`, `./schema/columns.ts`) and raw SQL never
 // reaches it.
-async function insertLocation(tx: Transaction, name: string): Promise<string> {
+async function insertLocation(tx: Transaction): Promise<string> {
   const id = randomUUID();
   await tx.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${id}, ${name}, '["es"]', 'Hostelería')`);
+    insert into locations (id, invoice_locales, operation_description)
+    values (${id}, '["es"]', 'Hostelería')`);
   return id;
 }
 
@@ -48,7 +48,7 @@ describe("the change log", () => {
     const seen = collect();
     let id = "";
     await withTransaction(suite.db, async (tx) => {
-      id = await insertLocation(tx, "Committed venue");
+      id = await insertLocation(tx);
       // Still open: a listener that had already seen this would be reporting a change that the
       // rollback case below proves may never happen.
       expect(seen).toEqual([]);
@@ -60,7 +60,7 @@ describe("the change log", () => {
     const seen = collect();
     await expect(
       withTransaction(suite.db, async (tx) => {
-        await insertLocation(tx, "Rolled-back venue");
+        await insertLocation(tx);
         throw new Error("deliberate");
       }),
     ).rejects.toThrow("deliberate");
@@ -72,7 +72,7 @@ describe("the change log", () => {
     const seen = collect();
     let id = "";
     await withTransaction(suite.db, async (tx) => {
-      id = await insertLocation(tx, "App-role venue");
+      id = await insertLocation(tx);
     });
     expect(seen).toEqual([{ resources: [{ type: "locations", id }] }]);
   });
@@ -83,7 +83,7 @@ describe("the change log", () => {
     const unsubscribe = subscribeToChanges((change) => dropped.push(change));
     unsubscribe();
     await withTransaction(suite.db, async (tx) => {
-      await insertLocation(tx, "Unsubscribed venue");
+      await insertLocation(tx);
     });
     // `seen` is the control: the change WAS delivered, to the listener still registered.
     expect(seen).toHaveLength(1);

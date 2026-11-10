@@ -16,8 +16,11 @@ beforeEach(() => {
   for (const db of [before.db, after.db]) {
     db.run(sql`insert into tenants (id, country, tax_id, legal_name, created_at)
       values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`);
-    db.run(sql`insert into locations (id, name, invoice_locales, operation_description, time_zone)
-      values ('bbbbbbbb-0000-4000-8000-000000000001', 'Fixture venue', '["en"]', 'Restaurant', 'UTC')`);
+    db.run(sql`insert into locations (id, invoice_locales, operation_description, time_zone)
+      values ('bbbbbbbb-0000-4000-8000-000000000001', '["en"]', 'Restaurant', 'UTC')`);
+    db.run(
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
+    );
     db.run(sql`insert into nodes (id, location_id, name, created_at)
       values ('aaaaaaaa-0000-4000-8000-000000000001', 'bbbbbbbb-0000-4000-8000-000000000001', 'Source node', '2026-10-20T00:00:00Z'),
              ('aaaaaaaa-0000-4000-8000-000000000002', 'bbbbbbbb-0000-4000-8000-000000000001', 'Other node', '2026-10-20T00:00:00Z')`);

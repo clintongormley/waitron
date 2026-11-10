@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, expect, it, onTestFinished } from "vitest";
@@ -184,11 +185,9 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   const area = await announced((tx) => saveHolidayArea(tx, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
   expect(reaches(area, operations)).toEqual(["holiday_geographies"]);
-  const moved = await announced((tx) =>
-    tx.update(locations).set({ city: "Lleida" }).where(eq(locations.id, cfg.locationId)),
-  );
-  expect(both(moved)).toEqual([["locations"], ["locations"]]);
-  expect(reaches(moved, operations)).toEqual(["locations"]);
+  const moved = await announced((tx) => seedVenueSettings(tx, { city: "Lleida" }));
+  expect(both(moved)).toEqual([["settings.venue"], ["settings.venue"]]);
+  expect(reaches(moved, operations)).toEqual(["settings.venue"]);
   const country = await announced((tx) => tx.update(tenants).set({ country: "PT" }));
   expect(both(country)).toEqual([["tenants"], ["tenants"]]);
   expect(reaches(country, operations)).toEqual(["tenants"]);

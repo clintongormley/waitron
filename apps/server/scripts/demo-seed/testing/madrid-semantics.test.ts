@@ -189,3 +189,36 @@ it("verifies valid and wrong credentials before replacing salts, and retains pas
     }),
   ).rejects.toThrow("password verification mismatch");
 });
+it("keeps the location's semantic name after it moves into the venue document", async () => {
+  const result = await canonical({
+    tables: {
+      locations: table([{ id, time_zone: "Europe/Madrid" }]),
+      settings: table([{ module: "venue", doc: JSON.stringify({ name: "Deli" }) }]),
+    },
+  });
+  expect(result.tables.locations!.rows).toEqual({
+    '@locations:["Deli"]': { id: '@locations:["Deli"]', time_zone: "Europe/Madrid" },
+  });
+});
+it("maps only the generated activity id and retains the setup save facts", async () => {
+  const event = {
+    at: "2026-10-08T10:00:00.000Z",
+    kind: "settings.saved",
+    subject_kind: "settings",
+    subject_id: "venue",
+    person_id: null,
+    device_id: null,
+    data: '{"revision":1}',
+  };
+  const first = await canonical({ tables: { activity_log: table([{ id, ...event }]) } });
+  const second = await canonical({ tables: { activity_log: table([{ id: otherId, ...event }]) } });
+  expect(second).toEqual(first);
+  expect(Object.values(first.tables.activity_log!.rows)).toEqual([
+    { id: expect.stringContaining("@activity_log:"), ...event, data: { revision: 1 } },
+  ]);
+  expect(
+    await canonical({
+      tables: { activity_log: table([{ id, ...event, at: "2026-10-08T10:00:01.000Z" }]) },
+    }),
+  ).not.toEqual(first);
+});

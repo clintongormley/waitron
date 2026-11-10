@@ -927,7 +927,7 @@ describe("promoteMirrorToPrimary", () => {
     const { db, deps, nodeId } = await mirror();
     await holdChart(db, suite.node, nodeId, heldTermThreeDoc(nodeId, "old-primary"));
     await db.execute(
-      sql`insert into locations (id, name, invoice_locales, operation_description) values ('e0000000-0000-4000-8000-000000000099', 'Second venue', '["es-ES"]', 'Venta')`,
+      sql`insert into locations (id, invoice_locales, operation_description) values ('e0000000-0000-4000-8000-000000000099', '["es-ES"]', 'Venta')`,
     );
     const persist = vi.fn(async () => {});
     const activate = vi.fn(async () => {});

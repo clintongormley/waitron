@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type {
   HourPeriod,
   HoursSubject,
@@ -77,7 +78,9 @@ async function fixture(): Promise<Fixture> {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-    const [location] = await tx.insert(locations).values(venue("Venue")).returning();
+    const { name: venueName, ...columns } = venue("Venue");
+    const [location] = await tx.insert(locations).values(columns).returning();
+    await seedVenueSettings(tx, { name: venueName });
     const department = (location: string, name: string, isDefault = false) => ({
       locationId: location,
       name,

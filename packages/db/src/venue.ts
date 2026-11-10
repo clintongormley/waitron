@@ -38,7 +38,6 @@ export async function saveVenueFields(
   });
 }
 
-/** The venue's settings, as stored. */
 export interface Venue {
   name: string;
   invoiceLocales: string[];

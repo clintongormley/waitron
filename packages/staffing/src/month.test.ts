@@ -1,12 +1,7 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  kitchenStations,
-  locations,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, kitchenStations, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departments, specialDayDates, specialDays } from "@waitron/venue-service";
 import {
@@ -228,10 +223,7 @@ describe("readStaffingMonth", () => {
   it("reads each table once when a repeating special day follows a public holiday, places it by that holiday, and its live query names every one of them", async () => {
     const v = await painted();
     const semanaSanta = await inTx(async (tx) => {
-      await tx
-        .update(locations)
-        .set({ province: "Sevilla", city: "Sevilla" })
-        .where(eq(locations.id, v.cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const [row] = await tx
         .insert(specialDays)
         .values({ name: "Semana Santa", repeatsYearly: true })
@@ -256,7 +248,9 @@ describe("readStaffingMonth", () => {
     for (const holidayTable of ["tenants", "holiday_geographies"])
       expect(tables.filter((table) => table === holidayTable)).toHaveLength(1);
     const watched: readonly string[] = QUERY_DEPENDENCIES["staffing-month"];
-    expect(tables.filter((table) => !watched.includes(table))).toEqual([]);
+    expect(
+      tables.filter((table) => !watched.includes(table === "settings" ? "settings.venue" : table)),
+    ).toEqual([]);
     for (const unshown of ["floor_zones", "location_business_day_settings"])
       expect(tables).not.toContain(unshown);
   });
@@ -292,7 +286,10 @@ describe("rota counts in the staffing month", () => {
     expect(tables.filter((t, i) => tables.indexOf(t) !== i)).toEqual([]);
     expect(
       tables.filter(
-        (t) => !(QUERY_DEPENDENCIES["staffing-month"] as readonly string[]).includes(t),
+        (t) =>
+          !(QUERY_DEPENDENCIES["staffing-month"] as readonly string[]).includes(
+            t === "settings" ? "settings.venue" : t,
+          ),
       ),
     ).toEqual([]);
   });

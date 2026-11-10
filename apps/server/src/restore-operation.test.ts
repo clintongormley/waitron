@@ -1,3 +1,4 @@
+import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, invoiceSeries, locations, nodes, tenants } from "@waitron/db";
@@ -197,7 +198,7 @@ describe("authenticated opaque restore seat", () => {
 
   it("rolls back an earlier hook's writes when the later authority is wrong", async () => {
     const first = regime(async (tx) => {
-      await tx.update(locations).set({ name: "written-in-hook" });
+      await seedVenueSettings(tx, { name: "written-in-hook" });
       return { report: "first" };
     }, "other-regime");
     const second = regime(async () => ({ report: "unexpected" }));
@@ -219,8 +220,6 @@ describe("authenticated opaque restore seat", () => {
       "FF",
       "R",
     ]);
-    expect((await suite.db.select().from(locations)).map((row) => row.name)).toEqual([
-      "Restaurant",
-    ]);
+    expect([(await readVenue(suite.db)).name]).toEqual(["Restaurant"]);
   });
 });

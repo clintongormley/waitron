@@ -434,9 +434,9 @@ it("refuses a copy holding two venue rows before moving the database", async () 
     try {
       copy
         .prepare(
-          "insert into locations (id, name, operation_description, invoice_locales) values (?, ?, ?, ?)",
+          "insert into locations (id, operation_description, invoice_locales) values (?, ?, ?)",
         )
-        .run("10000000-0000-4000-8000-000000000099", "Second venue", "Sale", '["en"]');
+        .run("10000000-0000-4000-8000-000000000099", "Sale", '["en"]');
     } finally {
       copy.close();
     }

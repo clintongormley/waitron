@@ -1,3 +1,4 @@
+import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -151,7 +152,7 @@ beforeEach(async () => {
         expect(readOperationAuthority(operation!.authority, request.binding)).toEqual({
           operatorId: { kind: "recovery-key", nodeId: NODE, eventId: "restore-42" },
         });
-        await tx.update(locations).set({ name: "Restored with current evidence" });
+        await seedVenueSettings(tx, { name: "Restored with current evidence" });
         return { report: "restored" };
       },
     },
@@ -175,9 +176,7 @@ function target() {
 async function restored() {
   const opened = await openVenueDatabase(join(root, "venue"));
   try {
-    expect((await opened.venue.select().from(locations))[0]!.name).toBe(
-      "Restored with current evidence",
-    );
+    expect((await readVenue(opened.venue)).name).toBe("Restored with current evidence");
   } finally {
     await opened.close();
   }

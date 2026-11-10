@@ -264,8 +264,8 @@ function seed(connection) {
   const statements = [
     // Venue: one location with TWO invoice locales, so "exactly the venue locales" has a set to be
     // wrong about in both directions.
-    `insert into locations (id, name, invoice_locales, operation_description) ` +
-      `values ('loc', 'Venue', '["es","ca"]', 'Restaurante')`,
+    `insert into locations (id, invoice_locales, operation_description) ` +
+      `values ('loc', '["es","ca"]', 'Restaurante')`,
 
     // Working orders, one per case that changes an order's state.
     workingOrder("wo-open", "open"),
@@ -334,16 +334,16 @@ function seed(connection) {
 
     // An order at a venue invoicing in Spanish alone, opened on `dev-active`, whose own venue `loc`
     // invoices in two: the locale triggers must read the order's location, not its device's.
-    `insert into locations (id, name, invoice_locales, operation_description) ` +
-      `values ('loc-es-only', 'Venue 4', '["es"]', 'Restaurante')`,
+    `insert into locations (id, invoice_locales, operation_description) ` +
+      `values ('loc-es-only', '["es"]', 'Restaurante')`,
     workingOrder("wo-es-only", "open", { locationId: "loc-es-only" }),
 
     // Lines for the served exception, written while their orders are open; the orders leave open
     // below. `loc-relocale` is a venue of its own so its invoice locales can change without moving
     // what any other case reads; its orders are opened on a device of `loc`, so a trigger reading
     // the device's location instead of the order's would see the other venue's list.
-    `insert into locations (id, name, invoice_locales, operation_description) ` +
-      `values ('loc-relocale', 'Venue 2', '["es","ca"]', 'Restaurante')`,
+    `insert into locations (id, invoice_locales, operation_description) ` +
+      `values ('loc-relocale', '["es","ca"]', 'Restaurante')`,
     workingOrder("wo-served-placed", "open"),
     workingOrder("wo-served-settled", "open"),
     workingOrder("wo-served-orphan", "open"),
@@ -400,8 +400,8 @@ function seed(connection) {
     // A venue whose invoice locales change once every line below is written, as a receipt-language
     // change leaves them. Lines carrying a variant map reach both locale triggers; the `plain` ones
     // reach only the descriptions trigger, so its refusal is the one that comes back.
-    `insert into locations (id, name, invoice_locales, operation_description) ` +
-      `values ('loc-relocale-text', 'Venue 3', '["es","ca"]', 'Restaurante')`,
+    `insert into locations (id, invoice_locales, operation_description) ` +
+      `values ('loc-relocale-text', '["es","ca"]', 'Restaurante')`,
     workingOrder("wo-text-a", "open", { locationId: "loc-relocale-text" }),
     workingOrder("wo-text-b", "open", { locationId: "loc-relocale-text" }),
     workingOrder("wo-text-paid", "open", { locationId: "loc-relocale-text" }),

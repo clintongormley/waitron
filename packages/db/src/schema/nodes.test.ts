@@ -126,7 +126,7 @@ describe("nodes schema", () => {
     });
   });
 
-  it("locations carry fiscal_territory, an address, time_zone and day_cutover", async () => {
+  it("locations retain territory and clock columns; the venue document owns name and address", async () => {
     const cols = await db.execute<{ name: string; notnull: number }>(
       sql`select name, "notnull" from pragma_table_info('locations')`,
     );
@@ -134,8 +134,8 @@ describe("nodes schema", () => {
     expect(byName.get("fiscal_territory")).toBe(1);
     expect(byName.get("time_zone")).toBe(1);
     expect(byName.get("day_cutover")).toBe(1);
-    for (const a of ["address_line1", "address_line2", "postal_code", "city", "province"]) {
-      expect(byName.has(a)).toBe(true);
+    for (const a of ["name", "address_line1", "address_line2", "postal_code", "city", "province"]) {
+      expect(byName.has(a)).toBe(false);
     }
   });
 

@@ -368,7 +368,9 @@ describe("venue detail edits", () => {
     await suite.db.execute(
       sql`update settings set doc = json_set(doc, '$.name', '  Main room  ', '$.province', 'Madrid') where module = 'venue'`,
     );
-    await suite.db.execute(sql`update locations set time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`);
+    await suite.db.execute(
+      sql`update locations set time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
+    );
     const initial = await read();
     for (const changes of [{}, { name: "Main room", province: "28", dayCutover: "05:00:00" }]) {
       expect(
@@ -379,7 +381,12 @@ describe("venue detail edits", () => {
         ).changed,
       ).toBe(false);
     }
-    expect((await read()).details.name).toBe("  Main room  ");
+    expect(
+      suite.db.all(
+        sql`select json_extract(doc, '$.name') as name from settings where module = 'venue'`,
+      ),
+    ).toEqual([{ name: "  Main room  " }]);
+    expect((await read()).details.name).toBe("Main room");
   });
   it.each(["country", "legalName", "taxId", "fiscalTerritory"])(
     "refuses read-only %s even with a matching value",
@@ -679,8 +686,12 @@ describe("crafted detail bodies and legacy values", () => {
     expect(saved.model.details.province).toBe("Madrid");
   });
   it("keeps exact invalid legacy values as no-ops without normalizing other fields", async () => {
-    await suite.db.execute(sql`update locations set time_zone = 'legacy-invalid' where id = ${venue.cfg.locationId}`);
-    await suite.db.execute(sql`update settings set doc = json_set(doc, '$.province', 'Unknown legacy province') where module = 'venue'`);
+    await suite.db.execute(
+      sql`update locations set time_zone = 'legacy-invalid' where id = ${venue.cfg.locationId}`,
+    );
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.province', 'Unknown legacy province') where module = 'venue'`,
+    );
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
@@ -901,7 +912,7 @@ describe("venue details preserve committed history", () => {
       await suite.db.execute(sql`drop trigger detail_sale_rollback`);
     }
   });
-  it("notifies the old and new location resource and stays silent on equivalent and empty retries after sales", async () => {
+  it("notifies the venue document and activity resources and stays silent on equivalent and empty retries after sales", async () => {
     await (
       await prepareSale()
     )();
@@ -917,9 +928,13 @@ describe("venue details preserve committed history", () => {
         }),
       );
       expect(saved.changed).toBe(true);
+      const [activity] = suite.db.all<{ id: string }>(
+        sql`select id from activity_log where kind = 'settings.saved' and subject_id = 'venue' and json_extract(data, '$.revision') = 2`,
+      );
       expect(events).toEqual([
-        { resources: [{ type: "locations", id: venue.cfg.locationId }] },
-        { resources: [{ type: "locations", id: venue.cfg.locationId }] },
+        { resources: [{ type: "settings.venue" }] },
+        { resources: [{ type: "settings.venue" }] },
+        { resources: [{ type: "activity_log", id: activity!.id }] },
       ]);
       events.length = 0;
       for (const changes of [

@@ -1,3 +1,4 @@
+import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, expect, it } from "vitest";
 import {
@@ -72,7 +73,7 @@ it("collects for the real node key before opening the host transaction", async (
     expect(readOperationAuthority(operation.authority, operation.binding)).toEqual({
       operatorId: { kind: "recovery-key", nodeId: target.nodeId, eventId: binding.eventId },
     });
-    await withTransaction(suite.db, (tx) => tx.update(locations).set({ name: "outside-write" }));
+    await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { name: "outside-write" }));
     return run({ ...operation, input: "collected-current" });
   });
   let captured!: ModuleOperationInput;
@@ -82,13 +83,13 @@ it("collects for the real node key before opening the host transaction", async (
     async (tx, ready) => {
       captured = ready.get(binding.module)!;
       expect(captured.input).toBe("collected-current");
-      expect((await tx.select().from(locations))[0]?.name).toBe("outside-write");
-      await tx.update(locations).set({ name: "committed-recovery" });
+      expect((await readVenue(tx)).name).toBe("outside-write");
+      await seedVenueSettings(tx, { name: "committed-recovery" });
       return "restored";
     },
   );
   expect(result).toBe("restored");
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("committed-recovery");
+  expect((await readVenue(suite.db)).name).toBe("committed-recovery");
   expect(readOperationAuthority(captured.authority, binding)).toBeUndefined();
 });
 
@@ -123,19 +124,19 @@ it("refuses a key replaced while the outside source is being collected", async (
       { binding, input, secret },
       async (tx) => {
         entered = true;
-        await tx.update(locations).set({ name: "unexpected" });
+        await seedVenueSettings(tx, { name: "unexpected" });
       },
     ),
   ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   expect(entered).toBe(false);
   expect(replacement).not.toBe(secret);
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("Restaurant");
+  expect((await readVenue(suite.db)).name).toBe("Restaurant");
 });
 
 it("keeps outside work and rolls back a refused host write", async () => {
   const secret = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, target.nodeId);
   const owner = module(async (operation, run) => {
-    await withTransaction(suite.db, (tx) => tx.update(locations).set({ name: "outside-retained" }));
+    await withTransaction(suite.db, (tx) => seedVenueSettings(tx, { name: "outside-retained" }));
     return run(operation);
   });
   await expect(
@@ -143,12 +144,12 @@ it("keeps outside work and rolls back a refused host write", async () => {
       { db: suite.db, nodeDb: suite.node, node: target, modules: [owner] },
       { binding, input, secret },
       async (tx) => {
-        await tx.update(locations).set({ name: "rolled-back" });
+        await seedVenueSettings(tx, { name: "rolled-back" });
         throw new Error("later-write-refused");
       },
     ),
   ).rejects.toThrow("later-write-refused");
-  expect((await suite.db.select().from(locations))[0]?.name).toBe("outside-retained");
+  expect((await readVenue(suite.db)).name).toBe("outside-retained");
 });
 
 it("passes only the declared operation scope to an outside source", async () => {

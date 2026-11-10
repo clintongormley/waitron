@@ -1,4 +1,3 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import * as api from "./index.js";
@@ -60,7 +59,6 @@ describe("the venue document", () => {
       .insert(locations)
       .values({ invoiceLocales: ["es"], operationDescription: "Meals" })
       .returning({ id: locations.id });
-    await seedVenueSettings(suite.db, {});
     expect(await api.venueLocationId(suite.db)).toBe(row!.id);
   });
 
@@ -144,7 +142,7 @@ describe("the venue document", () => {
     await withTransaction(suite.db, (tx) => api.createVenueSettings(tx, doc, null));
     await suite.db.update(settings).set({ version: 2 }).where(eq(settings.module, "venue"));
     for (const read of [api.readVenueSettings, api.readVenueClockAndPlace])
-      await expect(withTransaction(suite.db, read)).rejects.toMatchObject({
+      await expect(withTransaction<unknown>(suite.db, read)).rejects.toMatchObject({
         code: "settings.invalid",
         params: { module: "venue", field: "version", version: 2 },
       });

@@ -1,10 +1,11 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { tenants } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { getCountryPack } from "@waitron/country-packs";
@@ -16,8 +17,6 @@ import {
   readVenueLocale,
   readVenueReceiptLanguageRules,
 } from "./venue-locale.js";
-
-let locationId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -34,20 +33,16 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Retail",
     });
-    locationId = await venueLocationId(db);
   },
 });
 
 /** Runs `act` with the one venue moved to Madrid, and back to Barcelona afterwards. */
 async function inMadrid(act: () => Promise<void>) {
-  await suite.db.update(locations).set({ province: "Madrid" }).where(eq(locations.id, locationId));
+  await seedVenueSettings(suite.db, { province: "Madrid" });
   try {
     await act();
   } finally {
-    await suite.db
-      .update(locations)
-      .set({ province: "Barcelona" })
-      .where(eq(locations.id, locationId));
+    await seedVenueSettings(suite.db, { province: "Barcelona" });
   }
 }
 

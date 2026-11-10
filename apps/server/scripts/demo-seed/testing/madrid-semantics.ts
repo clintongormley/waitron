@@ -136,6 +136,14 @@ export async function canonicalMadridSemantics(
     const parts = (...keys: string[]) => keys.map((key) => alias(row[key]!));
     let key: unknown[];
     switch (table) {
+      case "locations": {
+        const venue = snapshot.tables.settings?.rows.find((row) => row.module === "venue");
+        key = [row.name ?? JSON.parse(String(venue?.doc ?? "{}")).name];
+        break;
+      }
+      case "activity_log":
+        key = parts("kind", "subject_id", "at", "data");
+        break;
       case "catalogues":
       case "categories":
       case "departments":
@@ -143,7 +151,6 @@ export async function canonicalMadridSemantics(
       case "extra_lists":
       case "kitchen_courses":
       case "kitchen_stations":
-      case "locations":
       case "nodes":
       case "option_lists":
       case "printers":

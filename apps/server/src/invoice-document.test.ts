@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -535,10 +536,9 @@ describe("current department A4 document", () => {
           email: "dining@example.com",
         },
       });
-      await suite.db
-        .update(locations)
-        .set({ addressLine1: "Current street differs from filed domicile" })
-        .where(eq(locations.id, venue.cfg.locationId));
+      await seedVenueSettings(suite.db, {
+        addressLine1: "Current street differs from filed domicile",
+      });
       const session = (
         suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
       ).session;

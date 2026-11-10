@@ -1,3 +1,5 @@
+import { seedVenueSettings } from "./testing/seed.js";
+import type { VenueSettings } from "./venue-settings.js";
 import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
@@ -17,16 +19,32 @@ import {
 describe("the venue accessor", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
-  async function insertVenue(values: Partial<typeof locations.$inferInsert> = {}) {
+  async function insertVenue(values: Partial<typeof locations.$inferInsert & VenueSettings> = {}) {
+    const {
+      name = "Casa Pepe",
+      addressLine1 = null,
+      addressLine2 = null,
+      postalCode = null,
+      city = null,
+      province = null,
+      ...columns
+    } = values;
     const [row] = await suite.db
       .insert(locations)
       .values({
-        name: "Casa Pepe",
         invoiceLocales: ["es"],
         operationDescription: "Meals",
-        ...values,
+        ...columns,
       })
       .returning({ id: locations.id });
+    await seedVenueSettings(suite.db, {
+      name,
+      addressLine1,
+      addressLine2,
+      postalCode,
+      city,
+      province,
+    });
     return row!.id;
   }
 

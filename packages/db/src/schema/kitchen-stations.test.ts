@@ -30,11 +30,10 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     await suite.db.insert(locations).values([
       {
         id: LOCATION_A2,
-        name: "Loc A2",
         invoiceLocales: ["es"],
         operationDescription: "Hostelería",
       },
-      { id: LOCATION_B, name: "Loc B", invoiceLocales: ["es"], operationDescription: "Hostelería" },
+      { id: LOCATION_B, invoiceLocales: ["es"], operationDescription: "Hostelería" },
     ]);
   });
 

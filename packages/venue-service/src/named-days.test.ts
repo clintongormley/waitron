@@ -297,10 +297,7 @@ it("returns the country's area options and the chosen venue area without inventi
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "X0000000", legalName: "Invented SL" })
       .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-    await tx
-      .update(locations)
-      .set({ province: "Santa Cruz de Tenerife", city: "Santa Cruz" })
-      .where(eq(locations.id, f.cfg.locationId));
+    await seedVenueSettings(tx, { province: "Santa Cruz de Tenerife", city: "Santa Cruz" });
   });
   const before = await run((tx) => readSpecialDaysModel(tx, "2026-02-02", "2026-02-02", now));
   expect(before.area).toEqual({

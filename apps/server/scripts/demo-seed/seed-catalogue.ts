@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
-import { kitchenStations, type Transaction } from "@waitron/db";
+import { kitchenStations, readVenue, readTenant, type Transaction } from "@waitron/db";
 import { setRoutingCell, STARTER_OPEN_PERIOD_NAMES } from "@waitron/venue-service";
 import {
   addCatalogueToVenue,
@@ -100,13 +100,11 @@ export async function seedCatalogues(
 ): Promise<SeedCataloguesResult> {
   const plain = (text: DemoPlainText) => demoPlainText(text, dataSet, locale);
   const stationIds = await resolveStationIds(tx, locationId, dataSet, locale);
-  const { rows: geography } = await tx.execute<{ province: string | null; country: string }>(sql`
-    select l.province, t.country from locations l
-    cross join tenants t
-    where l.id = ${locationId}`);
+  const venue = await readVenue(tx);
+  const taxpayer = await readTenant(tx);
   const { defaultLanguage, languages, required } = demoLanguagesFor(dataSet, {
-    country: geography[0]?.country,
-    area: geography[0]?.province,
+    country: taxpayer?.country,
+    area: venue.province ?? undefined,
   });
   await writeContentLanguages(tx, { defaultLanguage, languages: [...languages] }, required);
   const translated = (text: Readonly<Record<string, string>>) => inLanguages(text, languages);

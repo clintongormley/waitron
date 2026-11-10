@@ -329,7 +329,7 @@ describe("applyVenue: the one taxpayer row", () => {
       sql`select taxpayer_domicile from tenants where id = 1`,
     );
     const location = await suite.db.execute<{ address_line1: string }>(
-      sql`select address_line1 from locations`,
+      sql`select json_extract(doc, '$.addressLine1') as address_line1 from settings where module = 'venue'`,
     );
     expect(tenant.rows).toEqual([{ taxpayer_domicile: "Calle Fiscal 8, 28013 Madrid" }]);
     expect(location.rows).toEqual([{ address_line1: "Calle Mayor 1" }]);
@@ -758,8 +758,8 @@ describe("applyVenue", () => {
         modules: ALL_MODULES,
       });
       await suite.db.execute(sql`
-        insert into locations (id, name, invoice_locales, operation_description)
-        values ('00000000-0000-4000-8000-0000000000ff', 'Terraza', '["es-ES"]', 'venta')`);
+        insert into locations (id, invoice_locales, operation_description)
+        values ('00000000-0000-4000-8000-0000000000ff', '["es-ES"]', 'venta')`);
 
       await expect(
         applyVenue(planVenue(request("B13131313"), ALL_MODULES), {

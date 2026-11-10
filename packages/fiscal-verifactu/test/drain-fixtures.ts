@@ -458,7 +458,7 @@ export async function seedSecondChain(
             })
             .returning({ id: locations.id })
         )[0]!;
-  await seedVenueSettings(db, { name: "Sala B" });
+  if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala B" });
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node B" })
@@ -513,6 +513,7 @@ export async function seedIndependentChain(
             })
             .returning({ id: locations.id })
         )[0]!;
+  if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala Z" });
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node Z" })
@@ -578,6 +579,8 @@ export async function seedPinnedChain(
             })
             .returning({ id: locations.id })
         )[0]!;
+  if (existing.length !== 1)
+    await seedVenueSettings(db, { name: `Sala ${params.sifId.slice(0, 4)}` });
   const [node] = await db
     .insert(nodes)
     .values({ locationId: location!.id, name: `Node ${params.sifId.slice(0, 4)}` })

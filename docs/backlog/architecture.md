@@ -1068,12 +1068,11 @@ product failures.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5b–5h of A1308's slice 5; the backup screen's folder wording goes with
+  slices. Still open: 5c–5h of A1308's slice 5; the backup screen's folder wording goes with
   the venue-id work.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
-  `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
-  `scripts/a1301-seed-codemod.mjs` rewrites the common shapes and reports the rest (F1, #2383).
+  `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings` and `seedWorkingOrder`.
   S18 is planned in six sub-slices
   ([S18 plan](../superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)). S18c (#2443),
   S18a (#2447), S18b (#2450), S18d (#2451, #2453) and S18f (#2467) have landed. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup
@@ -1110,9 +1109,7 @@ product failures.
     it alone rebuilds `locations` (S17, #2415; A773-2 PR D plan D113). S28 also deletes the tests
     that still set it, listed in D113 and in [kitchen.md](kitchen.md). One raw
     `insert into working_orders` statement (`working-order.test.ts`'s `seedForeignNodeOrder`): the
-    schema slice that drops `working_orders.location_id` changes it (F5, #2403). A bucket restore reads the venue from the downloaded copy before any
-    migration runs, so the slice that moves the venue's columns keeps that read working on an older
-    copy (S12; the plan's "Carried to the schema plan"). Server test helpers take the venue row's
+    schema slice that drops `working_orders.location_id` changes it (F5, #2403). Server test helpers take the venue row's
     id through the test type `WithVenueRowId` (`apps/server/src/testing/venue-row-id.ts`), which
     goes when no `location_id` column is left to fill (S18f). `verifyCoreBackupData`
     (`packages/db/src/backup-evidence.ts`) still reads `locations` and `nodes.location_id` (S18f).

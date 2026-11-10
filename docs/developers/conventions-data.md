@@ -6241,6 +6241,14 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ## A module's settings are one document in the shared settings table
 
+The venue's name and five address fields live in core's non-transferring `settings.venue`
+document. Read them through `readVenue`; write them through `createVenueSettings` at setup or
+`saveVenueFields` inside the caller's transaction. `readVenueClockAndPlace` joins the document
+into its clock query. The fields still travel in a configuration bundle's `venue` object.
+
+**2026-11-10, A1308 slice 5b:** configuration format 13 keeps those venue keys while refusing
+older exports after the core reset.
+
 Declare a document with `defineSettingsDocument`, read it with `readSettings`, and save it through
 `saveSettings`, the only writer (`packages/db/src/settings.ts`). The checker returns the normalised
 value that is stored. A save names the revision you read; map `settings.out_of_date` to HTTP 409.

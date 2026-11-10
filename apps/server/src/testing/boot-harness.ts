@@ -338,6 +338,7 @@ export async function seedTradingVenue(db: Database): Promise<void> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
+  await seedVenueSettings(db, { name: "Barra" });
   await db.insert(nodes).values({
     id: TILL_ENV.WAITRON_NODE_ID,
     locationId: TILL_LOCATION_ID,

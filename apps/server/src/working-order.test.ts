@@ -1,3 +1,4 @@
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
@@ -3804,6 +3805,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, { name: "Downstairs bar" });
@@ -3837,6 +3839,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, { name: "Downstairs bar" });
@@ -3862,6 +3865,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const downstairs = await createStation(tx, { name: "Downstairs bar" });
@@ -3901,6 +3905,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
@@ -3954,6 +3959,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
@@ -4035,6 +4041,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       await createStation(tx, { name: "Kitchen", isDefault: true });
       const upstairs = await createStation(tx, { name: "Upstairs bar" });
       const drinks = await createCategory(tx, { name: "Drinks" });
@@ -4171,6 +4178,7 @@ describe("opening hours", () => {
         .update(locations)
         .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
       await tx
         .update(kitchenStations)
@@ -4231,8 +4239,9 @@ describe("a sale on a Spanish public holiday", () => {
     const { upstairs, downstairs, product } = await withTransaction(db, async (tx) => {
       await tx
         .update(locations)
-        .set({ timeZone: "Europe/Madrid", province: "Sevilla", city: "Sevilla" })
+        .set({ timeZone: "Europe/Madrid" })
         .where(eq(locations.id, cfg.locationId));
+      await seedVenueSettings(tx, { province: "Sevilla", city: "Sevilla" });
       expect(await readHolidayFacts(tx, HOLIDAY, HOLIDAY)).toEqual([
         expect.objectContaining({ date: HOLIDAY, scope: "national" }),
       ]);

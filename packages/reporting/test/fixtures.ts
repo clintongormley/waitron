@@ -66,7 +66,14 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     await seedVenue(db, venue);
     locationId = await venueLocationId(db);
   } else {
-    const [location] = await db.insert(locations).values(venue).returning({ id: locations.id });
+    const [location] = await db
+      .insert(locations)
+      .values({
+        invoiceLocales: venue.invoiceLocales,
+        operationDescription: venue.operationDescription,
+        dayCutover: venue.dayCutover,
+      })
+      .returning({ id: locations.id });
     locationId = location!.id;
   }
   const { deviceId } = await seedDevice(db, { locationId });

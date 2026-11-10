@@ -25,7 +25,10 @@ const absent = useVenueDb({
 beforeEach(() => {
   for (const db of [original.db, restored.db]) {
     db.run(
-      sql`insert into locations (id,name,invoice_locales,operation_description) values ('venue','Venue','["en"]','Hospitality')`,
+      sql`insert into locations (id, invoice_locales, operation_description) values ('venue', '["en"]', 'Hospitality')`,
+    );
+    db.run(
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
     );
     db.run(
       sql`insert into nodes (id,location_id,name,created_at) values ('source','venue','Source','2026-10-20T08:00:00.000Z')`,

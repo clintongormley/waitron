@@ -250,6 +250,7 @@ it.each([
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
+    await seedVenueSettings(source.db, { name: "Counter", province: "London" });
     await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
     const server = await startServer({
       ...(await environment(true)),
@@ -294,6 +295,7 @@ it.each(["mirror", "primary"] as const)(
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
     });
+    await seedVenueSettings(source.db, { name: "Counter", province: "London" });
     await source.db.insert(nodes).values([
       { id: NODE, locationId: LOCATION, name: "Own box" },
       { id: originNode, locationId: LOCATION, name: "Origin box" },
