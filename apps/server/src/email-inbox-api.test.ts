@@ -10,6 +10,7 @@ import { hashPassword, hashPin, persons, startManagementSession } from "@waitron
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { MailpitClient } from "./mailpit-client.js";
 import { ALL_MODULES } from "./modules.js";
@@ -179,6 +180,34 @@ describe("mountEmailInboxApi", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id: "mail-1", subject: "Set up your account" });
     expect(mailpit.read).toHaveBeenCalledWith("mail-1");
+  });
+
+  it("answers 404 for a message no longer in the test inbox", async () => {
+    const venue = await setupVenue();
+    const mailpit = inbox();
+    vi.mocked(mailpit.read).mockRejectedValue(new AppError("email.message_not_found", {}));
+    const { app } = mount("local_capture", mailpit);
+
+    const response = await get(app, "/management-api/email/message/gone", venue.admin);
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "email.message_not_found" },
+    });
+  });
+
+  it("answers 500 when the test inbox cannot be reached", async () => {
+    const venue = await setupVenue();
+    const mailpit = inbox();
+    vi.mocked(mailpit.read).mockRejectedValue(new Error("connect ECONNREFUSED"));
+    const { app } = mount("local_capture", mailpit);
+
+    const response = await get(app, "/management-api/email/message/mail-1", venue.admin);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: { code: "server.internal" },
+    });
   });
 
   it("does not expose the test inbox when SMTP is active", async () => {

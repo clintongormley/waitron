@@ -402,6 +402,10 @@ Defect fixes first:
   unknown id (not established). Fixes: 500 → 404 for an unknown id, keeping
   `email.test_inbox_unavailable` for an outage. Clients: none. Tests: `email-inbox-api.test.ts`
   gains a case. Size S. Depends on: nothing.
+  **2026-11-10 (A394-6):** done — Mailpit v1.33.0 answers 404 for an unknown id (probed); the route
+  now answers that with `email.message_not_found` 404. Any other failed Mailpit read still answers
+  500 `server.internal`, not `email.test_inbox_unavailable` as the Fixes line says: that code stays
+  the 409 for a message asked for while email uses SMTP or is not set up.
 
 Status changes:
 
@@ -994,6 +998,9 @@ Body `ticketItemIds` that name nothing answer `management.request_invalid` 400
 | --- | --- | --- | --- | --- | --- | --- |
 | GET /management-api/email/message/:id | none — a plain `Error` | 500 `server.internal` (`error-boundary.ts:39-40`) | 404 | The path `:id` goes straight to Mailpit (`email-inbox-api.ts:52`); any non-OK answer becomes `throw new Error(...)` (`mailpit-client.ts:63`), so an unknown id cannot be told from Mailpit being down. What Mailpit answers for an unknown id: not established (nothing run). | none found by grep `email/message` and `email.test_inbox_unavailable` | `email-inbox-api.test.ts:167,178` read `mail-1`; a missing-id case not found |
 
+**2026-11-10:** an unknown id now answers 404 `email.message_not_found`; any other failed Mailpit
+read still answers 500 `server.internal` (A394-6).
+
 ### email-settings-api.ts — boundary `email-settings-api.ts:71-82`
 
 7 codes checked / 6 match / 0 rule mismatches; 2 out-of-rule (below).
@@ -1112,8 +1119,8 @@ path `:nodeId` (`membership-removal.ts:116`); the other refusals are clashes, 40
 
 - management-api's sign-in and account routes (`:724-978`, `:2276-2363`) were checked only at the
   STATUS map, not down each call chain: their codes are 401/429 auth answers.
-- Whether Mailpit answers 404 for an unknown message id; what an unknown `toPersonId` does in
-  `requestSwap`.
+- Whether Mailpit answers 404 for an unknown message id (2026-11-10, A394-6: v1.33.0 does, with
+  the body "404 page not found"); what an unknown `toPersonId` does in `requestSwap`.
 - Which case each proximity-matched test covers.
 
 ---

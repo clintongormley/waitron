@@ -1,3 +1,6 @@
+import { AppError } from "@waitron/shared";
+import "./errors.js";
+
 type Fetch = (input: string) => Promise<Response>;
 
 interface RawAddress {
@@ -58,8 +61,9 @@ const projectAddress = (address: RawAddress): TestEmailAddress => ({
   address: address.Address,
 });
 
-async function json<T>(fetchImpl: Fetch, url: string): Promise<T> {
+async function json<T>(fetchImpl: Fetch, url: string, notFound?: () => AppError): Promise<T> {
   const response = await fetchImpl(url);
+  if (response.status === 404 && notFound !== undefined) throw notFound();
   if (!response.ok) throw new Error(`Mailpit request failed with ${response.status}`);
   return (await response.json()) as T;
 }
@@ -90,6 +94,7 @@ export function createMailpitClient(baseUrl: string, fetchImpl: Fetch = fetch): 
       const message = await json<RawMessage>(
         fetchImpl,
         `${base}/api/v1/message/${encodeURIComponent(id)}`,
+        () => new AppError("email.message_not_found", {}),
       );
       return {
         id: message.ID,

@@ -576,6 +576,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The email inbox is unavailable because account email is not using local capture",
     es: "La bandeja de correo no está disponible porque el correo de cuentas no usa la captura local",
   },
+  "email.message_not_found": {
+    en: "That email is no longer in the test inbox",
+    es: "Ese correo ya no está en el buzón de prueba",
+  },
   "management.request_invalid": {
     en: "Check the form and try again",
     es: "Revisa el formulario e inténtalo de nuevo",

@@ -883,3 +883,12 @@ it("keeps the fault wording for a true restriction conflict", () => {
   expect(codeMessage("handover.restriction_conflict", "en")).toContain("fault in Waitron");
   expect(codeMessage("handover.restriction_conflict", "es")).toContain("fallo de Waitron");
 });
+
+it("words a test email no longer in the inbox in both languages", () => {
+  expect(codeMessage("email.message_not_found", "en")).toBe(
+    "That email is no longer in the test inbox",
+  );
+  expect(codeMessage("email.message_not_found", "es")).toBe(
+    "Ese correo ya no está en el buzón de prueba",
+  );
+});
