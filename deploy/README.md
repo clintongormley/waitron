@@ -43,9 +43,9 @@ A production setup offers Live and Join or recover. See the
 
 ## Development image rehearsal
 
-You can [build a development root and open setup in an emulator](../bench/box-installer/README.md).
-That rehearsal stops at Prepare’s administrator form; the USB installer and physical-box
-checks remain B3 work.
+You can [build a development image, install onto a virtual disk and open setup](../bench/box-installer/README.md).
+The installed-setup rehearsal boots that disk alone twice and stops at Prepare’s administrator form.
+It is unencrypted and emulator-only. Encryption, retained keys and physical-box checks remain B3 work.
 
 ## Setting up a box
 

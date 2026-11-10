@@ -18,6 +18,8 @@ size="$(blockdev --getsize64 "$target")"
 [ -z "$(ls -A "/sys/class/block/${target##*/}/holders")" ] || refuse holders
 [ "$(lsblk -nro SERIAL "$target")" = waitron-dev-target ] || refuse serial
 cmp -n "$size" "$target" /dev/zero >/dev/null 2>&1 || refuse occupied
+[ "$(blockdev --getsize64 "$target")" = "$size" ] || refuse size
+[ "$(lsblk -nro SERIAL "$target")" = waitron-dev-target ] || refuse serial
 sfdisk "$target" <<'LAYOUT'
 label: gpt
 size=512M, type=U
@@ -25,12 +27,11 @@ size=1G, type=L
  type=L
 LAYOUT
 udevadm settle
-[ "$(blockdev --getsize64 "$target")" = "$size" ] || refuse size
 mkfs.vfat "${target}1"
 mkfs.ext4 -q -F "${target}2"
 mkfs.btrfs -q -f "${target}3"
 work="$(mktemp -d /run/waitron-install.XXXXXX)"
-cleanup() { umount -R "$work/root" 2>/dev/null || true; umount "$work/top" "$work/payload" 2>/dev/null || true; rm -rf "$work"; }
+cleanup() { umount -R "$work/root" 2>/dev/null || true; umount "$work/top" "$work/payload" 2>/dev/null || true; rmdir "$work/root" "$work/top" "$work/payload" "$work" 2>/dev/null || true; }
 trap cleanup EXIT
 mkdir "$work/top" "$work/root" "$work/payload"
 mount "${target}3" "$work/top"
@@ -79,7 +80,7 @@ initrd /initrd.img-$kernel
 boot
 CONFIG
 mkdir -p "$root/boot/efi/EFI/BOOT"
-chroot "$root" grub-mkstandalone -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI 'boot/grub/grub.cfg=/tmp/waitron-grub.cfg'
+chroot "$root" grub-mkstandalone --modules="part_gpt ext2 search_fs_uuid" -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI 'boot/grub/grub.cfg=/tmp/waitron-grub.cfg'
 sync
 cleanup
 trap - EXIT

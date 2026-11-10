@@ -26,7 +26,7 @@ case "$name" in
  blockdev) echo 12884901888 ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
- docker) echo "docker $*" >> "$WRITES"; exit 43 ;;
+ docker) echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"; exit 43 ;;
  sfdisk) echo "$*" >> "$WRITES"; exit 42 ;;
  *) echo "unexpected $name $*" >&2; exit 99 ;;
 esac
@@ -99,7 +99,7 @@ describe("installed startup", () => {
   const bashEnv = join(scratch, "bash-env");
   writeFileSync(bashEnv, `cd() { builtin cd "$B3_TEST_CWD"; }\n`);
   it.each([
-    ["0", 43, "apparmor\ndocker compose up -d --pull never\n"],
+    ["0", 43, "apparmor\ndocker compose up -d --pull never profile=waitron-print-agent\n"],
     ["7", 7, "apparmor\n"],
   ])("loads AppArmor before Compose and stops on refusal (%s)", (apparmorExit, code, calls) => {
     const writes = join(scratch, "startup-calls");

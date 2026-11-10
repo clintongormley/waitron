@@ -23,7 +23,7 @@ linux /boot/vmlinuz-$kernel root=UUID=$installer_uuid rootfstype=ext4 rw console
 initrd /boot/initrd.img-$kernel
 boot
 CONFIG
-chroot "$installer" grub-mkstandalone -O x86_64-efi -o /boot/BOOTX64.EFI 'boot/grub/grub.cfg=/tmp/waitron-grub.cfg'
+chroot "$installer" grub-mkstandalone --modules="part_gpt ext2 search_fs_uuid" -O x86_64-efi -o /boot/BOOTX64.EFI 'boot/grub/grub.cfg=/tmp/waitron-grub.cfg'
 truncate -s 2G "$work/installer.img"
 mkfs.ext4 -q -F -U "$installer_uuid" -d "$installer" "$work/installer.img"
 payload_bytes="$(stat -c %s "$payload")"

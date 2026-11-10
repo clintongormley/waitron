@@ -7,8 +7,9 @@ Requires=docker.service
 Type=oneshot
 ExecStart=/usr/local/sbin/waitron-dev-start
 RemainAfterExit=yes
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console
 
 [Install]
 WantedBy=multi-user.target

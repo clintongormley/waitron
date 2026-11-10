@@ -47,3 +47,11 @@ export function installedFailures(expected, installedUuid, first, again) {
   if (!first.ca || first.ca !== again.ca) failures.push("ca");
   return [...new Set(failures)];
 }
+
+export function rigLine(serial, prefix) {
+  return serial
+    .split(/\r?\n/)
+    .slice(0, -1)
+    .find((line) => line.startsWith(prefix))
+    ?.slice(prefix.length);
+}

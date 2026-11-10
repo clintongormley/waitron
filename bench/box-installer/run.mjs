@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createConnection } from "node:net";
 import process from "node:process";
 import console from "node:console";
 import { Buffer } from "node:buffer";
@@ -10,7 +11,7 @@ import { mkdir, readFile, writeFile, copyFile, truncate, open } from "node:fs/pr
 import { dirname, join, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { parseRigArgs } from "../../scripts/box/rig-contract.mjs";
-import { recipeFailures, installedFailures } from "../../scripts/box/recipe-setup.mjs";
+import { recipeFailures, installedFailures, rigLine } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
 const started = Date.now();
@@ -242,7 +243,7 @@ async function installedRun() {
   await mkdir(runDir, { mode: 0o700 });
   const target = join(runDir, "target.img");
   await writeFile(target, "");
-  await truncate(target, 16 * 1024 ** 3);
+  await truncate(target, 12 * 1024 ** 3);
   const diskHash = async (path) => {
     const digest = createHash("sha256");
     for await (const bytes of createReadStream(path)) digest.update(bytes);
@@ -266,10 +267,14 @@ async function installedRun() {
     "type=1,product=Waitron-B3-dev",
   ];
   async function boot(name, source, marker, deadline) {
+    const phaseStarted = Date.now();
     const vars = join(runDir, `${name}-vars.fd`);
     await copyFile("/usr/share/OVMF/OVMF_VARS_4M.fd", vars);
+    const monitor = join(runDir, `${name}-monitor.sock`);
     const args = [
       ...common,
+      "-monitor",
+      `unix:${monitor},server=on,wait=off`,
       "-drive",
       "if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd",
       "-drive",
@@ -296,12 +301,38 @@ async function installedRun() {
     let serial = "";
     let failure;
     const stopped = new Promise((done) =>
-      child.once("exit", (code, signal) => done({ code, signal })),
+      child.once("exit", (code, signal) => {
+        console.error(name, "exit", { code, signal });
+        done({ code, signal });
+      }),
     );
     const stop = async () => {
-      child.kill("SIGTERM");
-      const force = setTimeout(() => child.kill("SIGKILL"), 3000);
+      await writeFile(
+        join(runDir, `${name}-timing.json`),
+        JSON.stringify({ started: phaseStarted, elapsedMs: Date.now() - phaseStarted }),
+      );
+      console.error(name, "stop", { code: child.exitCode, signal: child.signalCode });
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      await new Promise((done) => {
+        const socket = createConnection(monitor);
+        socket.resume();
+        socket.setTimeout(1000, () => socket.destroy());
+        socket.on("error", (error) => console.error(name, "monitor", error.code));
+        socket.on("connect", () => {
+          console.error(name, "powerdown");
+          socket.end("system_powerdown\n");
+        });
+        socket.on("close", () => {
+          console.error(name, "monitor closed");
+          done();
+        });
+      });
+      const polite = setTimeout(() => child.kill("SIGTERM"), 20000);
+      const force = setTimeout(() => child.kill("SIGKILL"), 23000);
+      console.error(name, "waiting for exit");
       await stopped;
+      console.error(name, "stopped");
+      clearTimeout(polite);
       clearTimeout(force);
     };
     const timer = setTimeout(() => {
@@ -314,7 +345,7 @@ async function installedRun() {
           stream.on("data", (bytes) => {
             serial += bytes.toString();
             appendFileSync(join(runDir, `${name}-serial.log`), bytes);
-            if (serial.split(/\r?\n/).some((line) => line.startsWith(marker))) done();
+            if (rigLine(serial, marker) !== undefined) done();
           });
         child.once("error", reject);
         child.once("exit", (code, signal) =>
@@ -342,21 +373,27 @@ async function installedRun() {
       await handle.close();
     }
     const before = await diskHash(target);
-    const guest = await boot("refused", true, "install.refused:occupied", 300000);
-    await guest.stop();
+    let failure;
+    try {
+      const guest = await boot("refused", true, "install.refused:occupied", 300000);
+      await guest.stop();
+    } catch (error) {
+      failure = error;
+    }
     const after = await diskHash(target);
     if (before !== after) throw new Error("refused target changed");
+    if (failure) throw failure;
     await writeFile(join(runDir, "refusal.json"), JSON.stringify({ before, after }));
   } else {
     const install = await boot("install", true, "B3_INSTALL_OK:", 900000);
-    const installedUuid = install.serial.match(/(?:^|\n)B3_INSTALL_OK:([^\r\n]+)/)[1].trim();
+    const installedUuid = rigLine(install.serial, "B3_INSTALL_OK:").trim();
     await install.stop();
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
     const { chromium } = require("playwright");
     async function inspect(name) {
       const guest = await boot(name, false, "B3_INSTALLED:", 300000);
       try {
-        const observed = JSON.parse(guest.serial.match(/(?:^|\n)B3_INSTALLED:([^\r\n]+)/)[1]);
+        const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
         const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
         try {
           const context = await browser.newContext({ ignoreHTTPSErrors: true });

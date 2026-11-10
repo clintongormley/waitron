@@ -3,6 +3,7 @@ set -euo pipefail
 [ "$(findmnt -nro UUID /)" = "$(cat /etc/waitron-dev-root)" ] || { echo start.refused:root-uuid >&2; exit 1; }
 cd /opt/waitron
 apparmor_parser -r /etc/apparmor.d/waitron-print-agent
+export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
 docker compose up -d --pull never
 for attempt in $(seq 1 90); do
   if curl -kfsS -o /run/waitron-status.json https://127.0.0.1/setup-api/status; then break; fi
