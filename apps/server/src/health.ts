@@ -4,6 +4,7 @@ import type { StreamView } from "@waitron/stream";
 import { DEFAULT_MAX_TICK_MS } from "./config.js";
 import { ALL_DUTIES, DRAIN_DUTY, RECONCILE_DUTY, type Duty, type PassReport } from "./pass.js";
 import type { Logger } from "./logger.js";
+import type { JobView, PublicJobView } from "./job-runner.js";
 import type { TradingAdmissionView } from "./trading-admission.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -44,6 +45,7 @@ export interface HealthState {
   /** Reported, never judged: `/health` failing on an external bucket would stall an install or an
    * update on someone else's outage (`deploy/waitron.sh` waits for a healthy container). */
   readStream: () => StreamView;
+  readJobs?: () => Readonly<Record<string, JobView>>;
   readTradingAdmission?: () => TradingAdmissionView;
   /** Set on a box started restricted after a handover: it runs no duty and takes no sales. */
   takesNoSales?: boolean;
@@ -169,8 +171,31 @@ export function healthSnapshot(
       startedAt: state.startedAt.toISOString(),
       lastPassAt: state.lastPassAt?.toISOString() ?? null,
       duties,
+      ...(state.readJobs === undefined
+        ? {}
+        : {
+            jobs: Object.fromEntries(
+              Object.entries(state.readJobs()).map(([name, view]) => [name, publicJob(view)]),
+            ),
+          }),
       stream: streamHealth(state.readStream()),
     },
+  };
+}
+
+function publicJob(view: JobView): PublicJobView {
+  return {
+    kind: view.kind,
+    state: view.state,
+    judged: view.judged,
+    lastTurnAt: view.lastTurnAt,
+    lastRunAt: view.lastRunAt,
+    lastOkAt: view.lastOkAt,
+    consecutiveFailures: view.consecutiveFailures,
+    failingSince: view.failingSince,
+    throwsSinceClean: view.throwsSinceClean,
+    throwingSince: view.throwingSince,
+    nextDueAt: view.nextDueAt,
   };
 }
 

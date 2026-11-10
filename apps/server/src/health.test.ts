@@ -648,3 +648,58 @@ describe("the bucket copy on /health", () => {
     expect(((await res.json()) as { ok: boolean }).ok).toBe(false);
   });
 });
+
+describe("runner jobs on health", () => {
+  const view = {
+    kind: "job" as const,
+    state: "waiting" as const,
+    judged: false,
+    lastTurnAt: "2026-07-25T08:00:00.000Z",
+    lastRunAt: "2026-07-25T08:00:00.000Z",
+    lastOkAt: null,
+    consecutiveFailures: 20,
+    failingSince: "2026-07-25T08:00:00.000Z",
+    throwsSinceClean: 20,
+    throwingSince: "2026-07-25T08:00:00.000Z",
+    lastErrorCode: "secret.failure",
+    nextDueAt: null,
+    ownFailureAlert: "private.alert",
+  };
+  it("reports every job field by field without private error or alert codes", async () => {
+    const state = createHealthState(BOOT);
+    state.readJobs = () => ({ "menu.activation": view });
+    recordPass(state, report(true), AT);
+    const response = await healthApp(state, () => AT).request("/health");
+    const body = await response.json();
+    expect(body.jobs).toEqual({
+      "menu.activation": {
+        kind: "job",
+        state: "waiting",
+        judged: false,
+        lastTurnAt: "2026-07-25T08:00:00.000Z",
+        lastRunAt: "2026-07-25T08:00:00.000Z",
+        lastOkAt: null,
+        consecutiveFailures: 20,
+        failingSince: "2026-07-25T08:00:00.000Z",
+        throwsSinceClean: 20,
+        throwingSince: "2026-07-25T08:00:00.000Z",
+        nextDueAt: null,
+      },
+    });
+    expect(response.status).toBe(200);
+  });
+  it("a failing job never changes status, even when judged", async () => {
+    const state = createHealthState(BOOT);
+    recordPass(state, report(true), AT);
+    state.readJobs = () => ({ "fiscal.drain": { ...view, judged: true } });
+    const response = await healthApp(state, () => AT).request("/health");
+    expect(response.status).toBe(200);
+    expect((await response.json()).jobs["fiscal.drain"].judged).toBe(true);
+  });
+  it("a restricted box reports no jobs", () => {
+    const state = createHealthState(BOOT);
+    state.takesNoSales = true;
+    state.readJobs = () => ({ "menu.activation": view });
+    expect(healthSnapshot(state, AT).body).toEqual({ ok: true, tradingAvailable: false });
+  });
+});
