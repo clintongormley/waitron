@@ -34,7 +34,14 @@ function automaticRangeFirstPort(): number {
   return first;
 }
 
+/**
+ * A draw under a stubbed pool id binds real ports in that id's slice, so the ids used here (11 to 16,
+ * and 37, which wraps to 12) must belong to no live worker: apps/server's `maxWorkers`
+ * is 4, and Vitest numbers workers from 1 to `maxWorkers`. The check below sees only this worker's
+ * own id.
+ */
 async function freshModule(poolId: string): Promise<typeof import("./free-ports.js")> {
+  expect(Number(process.env.VITEST_POOL_ID ?? 0)).toBeLessThan(11);
   vi.stubEnv("VITEST_POOL_ID", poolId);
   vi.resetModules();
   return import("./free-ports.js");
@@ -55,9 +62,9 @@ describe("freePorts", () => {
   });
 
   it.each([
-    ["1", 20500],
-    ["2", 21000],
-    ["27", 21000],
+    ["11", 25500],
+    ["12", 26000],
+    ["37", 26000],
   ])(
     "with VITEST_POOL_ID %s, draws only inside the slice starting at %i",
     async (poolId, start) => {
@@ -73,8 +80,8 @@ describe("freePorts", () => {
   );
 
   it("skips a port another listener already holds", async () => {
-    const { freePorts: draw } = await freshModule("3");
-    const start = 21500;
+    const { freePorts: draw } = await freshModule("13");
+    const start = 26500;
     const [p] = (await draw(1)) as [number];
     const next = (offset: number) => start + ((p - start + offset) % 500);
     const held = [await listenOn(next(1)), await listenOn(next(2))];
@@ -96,8 +103,14 @@ describe("freePorts", () => {
     for (const port of ports) await bindAndRelease(port);
   });
 
+  it("never returns one port twice in a call, refusing a call that asks for more than its slice holds", async () => {
+    const { freePorts: draw } = await freshModule("16");
+
+    await expect(draw(501)).rejects.toThrow(/28000.*28499/);
+  });
+
   it("a bind error other than the port being in use rejects the draw with that error", async () => {
-    const { freePorts: draw } = await freshModule("4");
+    const { freePorts: draw } = await freshModule("14");
     const bindError = Object.assign(new Error("bind refused"), { code: "EACCES" });
     vi.spyOn(Server.prototype, "listen").mockImplementation(function (this: Server) {
       process.nextTick(() => this.emit("error", bindError));
@@ -108,7 +121,7 @@ describe("freePorts", () => {
   });
 
   it("a slice with every port in use rejects with an error naming its bounds", async () => {
-    const { freePorts: draw } = await freshModule("5");
+    const { freePorts: draw } = await freshModule("15");
     vi.spyOn(Server.prototype, "listen").mockImplementation(function (this: Server) {
       process.nextTick(() =>
         this.emit("error", Object.assign(new Error("in use"), { code: "EADDRINUSE" })),
@@ -116,8 +129,24 @@ describe("freePorts", () => {
       return this;
     });
 
-    await expect(draw(1)).rejects.toThrow(/22500.*22999/);
+    await expect(draw(1)).rejects.toThrow(/27500.*27999/);
   });
+
+  it.each(["", "not-a-number"])(
+    "with VITEST_POOL_ID %j, draws from the slice the process id picks",
+    async (poolId) => {
+      const { freePorts: draw } = await freshModule(poolId);
+      const start = 20000 + (process.pid % 25) * 500;
+      vi.spyOn(Server.prototype, "listen").mockImplementation(function (this: Server) {
+        process.nextTick(() =>
+          this.emit("error", Object.assign(new Error("in use"), { code: "EADDRINUSE" })),
+        );
+        return this;
+      });
+
+      await expect(draw(1)).rejects.toThrow(`from ${start} to ${start + 499}`);
+    },
+  );
 
   it("a release that fails rejects the draw", async () => {
     const releaseError = new Error("release refused");
