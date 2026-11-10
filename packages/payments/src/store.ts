@@ -368,18 +368,26 @@ async function selectCapturedForWorkingOrder(
   tx: Transaction,
   key: { workingOrderId: string; provider?: string },
 ): Promise<CapturedPaymentForOrder | undefined> {
-  const [row] = await tx
-    .select(PAYMENT_WITH_KEY_COLUMNS)
-    .from(payments)
-    .where(
-      and(
-        key.provider === undefined ? undefined : eq(payments.provider, key.provider),
-        eq(payments.workingOrderId, key.workingOrderId),
-        inArray(payments.state, ["captured", "accepted_offline", "settled"]),
-      ),
-    )
-    .orderBy(sql`${payments.settledAt} desc nulls last`, sql`${payments}.rowid desc`)
-    .limit(1);
+  // Without statistics SQLite prefers `payments_reconcile_idx`, which matches every payment the
+  // provider has ever taken (A1469). Raw SQL because drizzle's `.from()` given the hinted table
+  // refuses the selected columns: "the table "payments" is not part of the query".
+  const columns = sql.join(
+    Object.entries(PAYMENT_WITH_KEY_COLUMNS).map(
+      ([name, column]) => sql`${column} as ${sql.identifier(name)}`,
+    ),
+    sql`, `,
+  );
+  const {
+    rows: [row],
+  } = await tx.execute<Omit<CapturedPaymentForOrder, "amount"> & { amount: number }>(sql`
+    select ${columns} from ${payments} indexed by payments_working_order_idx
+    where ${and(
+      key.provider === undefined ? undefined : eq(payments.provider, key.provider),
+      eq(payments.workingOrderId, key.workingOrderId),
+      inArray(payments.state, ["captured", "accepted_offline", "settled"]),
+    )}
+    order by ${payments.settledAt} desc nulls last, ${payments}.rowid desc
+    limit 1`);
   return row === undefined ? undefined : (withDecimalAmount(row) as CapturedPaymentForOrder);
 }
 

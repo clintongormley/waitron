@@ -2253,7 +2253,7 @@ _Formerly parts of B9 and Track C._ Open work:
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **Query plans and indexes, measured on a year of data** (bundle of 5, 4 important, size M, waits for another entry). [Detail](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
+- **Query plans and indexes, measured on a year of data** (bundle of 4, 3 important, size M, waits for another entry). [Detail](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
 
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
