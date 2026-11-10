@@ -83,7 +83,9 @@ function recordingHandles(
     sealedState: { settled: () => void calls.push("settled sealedState") },
     jobRunner: {
       signalStepdown: () => void calls.push("abort jobRunner"),
-      stopJobs: () => void calls.push("stop jobRunner"),
+      stopJobs: async () => {
+        calls.push("stop jobRunner");
+      },
     },
     appendOnlyWatch: stopper("appendOnlyWatch"),
     freeSpaceWatch: stopper("freeSpaceWatch"),
