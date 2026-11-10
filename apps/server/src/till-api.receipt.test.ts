@@ -2334,6 +2334,16 @@ describe("payment slip persisted capture facts", () => {
         expect(text).toContain(labels.paymentHeading);
         expect(text).toContain(labels.paymentEntry);
         expect(text).toContain(labels.paymentContactless);
+        expect(
+          text
+            .split("\n")
+            .some(
+              (line) =>
+                line.startsWith(labels.paymentRemaining) &&
+                line.slice(labels.paymentRemaining.length).trim() === "0,00 €",
+            ),
+        ).toBe(true);
+        expect(text).not.toContain(labels.duplicate);
         expect(text).toContain(saved === "ca-ES" ? "1.500,00 €" : "1500,00 €");
         expect(text).toContain("09:05");
         expect(text).not.toContain("Sep");

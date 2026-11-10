@@ -101,6 +101,7 @@ export const RECEIPT_LABEL_KEYS = [
   "paymentSwipe",
   "paymentAuthorization",
   "paymentAmount",
+  "paymentRemaining",
   "refundHeading",
   "refundNotice",
   "refundReference",

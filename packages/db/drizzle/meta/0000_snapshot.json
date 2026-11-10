@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "225c518c-7447-40fc-80fa-0f1763b735eb",
+  "id": "42dac559-a80a-4bcf-a35d-49fbe823a5f4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8085,6 +8085,13 @@
         },
         "tendered": {
           "name": "tendered",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "remaining_after": {
+          "name": "remaining_after",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

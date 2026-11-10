@@ -1382,6 +1382,23 @@ describe("till-bill-pay-dialog: the bill's payments", () => {
   const row = (el: TillBillPayDialog, id: string) =>
     root(el).querySelector<HTMLElement>(`[data-payment="${id}"]`)!;
 
+  it("offers a copy for an eligible reader capture while the bill still owes money", async () => {
+    const el = await mount({
+      canPrintReceipt: true,
+      balance: balanceOf({
+        payments: [paymentOf({ method: "card", entry: "reader", canCopySlip: true }), cardPaid],
+      }),
+    });
+    const copies = () => root(el).querySelectorAll<HTMLElement>("[data-payment-slip-copy]");
+    expect(copies()).toHaveLength(1);
+    const asked = capture<{ paymentId: string }>(el, "bill-slip-copy");
+    copies()[0]!.click();
+    expect(asked).toEqual([{ paymentId: "pay-1" }]);
+    el.canPrintReceipt = false;
+    await el.updateComplete;
+    expect(copies()).toHaveLength(0);
+  });
+
   it("lists each payment with how it was paid, what it paid off, its tip and its state", async () => {
     const el = await mount({
       balance: balanceOf({ payments: [cashPaid, cardPaid, cardAtReader, declined] }),

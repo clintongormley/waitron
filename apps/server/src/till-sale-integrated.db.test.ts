@@ -2122,6 +2122,11 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       balance: { received: "1.00", outstanding: "0.50" },
     });
 
+    expect(
+      suite.db.get(
+        sql`select remaining_after as remaining from bill_payments where working_order_id = ${id}`,
+      ),
+    ).toEqual({ remaining: 50 });
     expect(client.lastCreateIntent).toBeUndefined(); // never re-charged
     expect(await saleCount(id)).toBe(0);
     expect(await fiscalRecordCount(id)).toBe(0);

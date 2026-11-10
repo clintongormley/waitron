@@ -6457,6 +6457,8 @@ own row when the zone offers sending before payment.
 
 ### Shared bill payment window
 
+The Payments list offers Print a copy beside eligible received reader payments, including an unpaid bill, on devices that can print receipts.
+
 Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
 Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
 in one row at phone width, allowing their labels to wrap within equal columns. The amount choices

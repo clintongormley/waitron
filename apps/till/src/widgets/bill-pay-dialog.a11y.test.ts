@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -153,6 +153,47 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
 
   for (const locale of ["en", "es"]) {
     for (const width of [390, 1280]) {
+      it(`labels and keyboard-activates the card copy in ${locale} at ${width}px`, async () => {
+        setLocale(locale);
+        await page.viewport(width, 900);
+        try {
+          const { el, host } = await mount({
+            canPrintReceipt: true,
+            balance: {
+              ...balance,
+              total: "30.00",
+              received: "10.00",
+              outstanding: "20.00",
+              reserved: "0.00",
+              payments: [
+                {
+                  ...pendingCard,
+                  applied: "10.00",
+                  state: "received",
+                  receivedAt: pendingCard.createdAt,
+                  canCopySlip: true,
+                },
+              ],
+            },
+          });
+          const copy = el.shadowRoot!.querySelector<HTMLElement>("[data-payment-slip-copy]")!;
+          expect(copy.getAttribute("aria-label")).toBe(
+            t("bill_pay.slip_copy_label").replace("{n}", "1"),
+          );
+          const requested = vi.fn();
+          el.addEventListener("bill-slip-copy", requested);
+          copy.shadowRoot!.querySelector<HTMLButtonElement>("button")!.focus();
+          await userEvent.keyboard("{Enter}");
+          expect(requested).toHaveBeenCalledOnce();
+          await expectNoA11yViolations(host);
+          await page.screenshot({
+            path: `__screenshots__/a739-slip3-${locale}-${theme}-${width}.png`,
+          });
+        } finally {
+          setLocale("es-ES");
+        }
+      });
+
       it(`keeps Whole bill at the right of the shared choices in ${locale} at ${width}px`, async () => {
         setLocale(locale);
         await page.viewport(width, 900);

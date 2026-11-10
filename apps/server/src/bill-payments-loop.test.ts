@@ -289,6 +289,9 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(await settle()).toMatchObject({ received: 1 });
     expect(await settle()).toMatchObject({ received: 0 });
     expect(await stateOf(id)).toBe("received");
+    expect(
+      venue.db.get(sql`select remaining_after as remaining from bill_payments where id = ${id}`),
+    ).toEqual({ remaining: 500 });
     expect((await balance(billId)).json).toMatchObject({
       received: "30.00",
       tips: "0.00",

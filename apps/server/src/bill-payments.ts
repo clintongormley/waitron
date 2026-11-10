@@ -1,3 +1,4 @@
+import { readBillSlipPayments } from "./payment-slip-print.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -178,6 +179,7 @@ export interface BillRefundView {
 }
 
 export interface BillPaymentView {
+  canCopySlip?: true;
   id: string;
   submissionId: string;
   kind: "items" | "contribution" | "share";
@@ -645,6 +647,7 @@ export async function readBillBalance(
   const manualCards = await manualCardsOf(tx, rows);
   const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, total), held);
   const outstanding = subtractDecimal(subtractDecimal(funds.total, funds.received), funds.reserved);
+  const copyable = new Set((await readBillSlipPayments(tx, workingOrderId)).map((card) => card.id));
   const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
   return {
     ...(captureWarning === undefined ? {} : { captureWarning }),
@@ -657,7 +660,10 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map(({ row }) => toView(row, lines, refunds, lineNos, manualCards)),
+    payments: held.map(({ row }) => ({
+      ...toView(row, lines, refunds, lineNos, manualCards),
+      ...(copyable.has(row.id) ? { canCopySlip: true as const } : {}),
+    })),
     paidLines: [...paidQuantitiesOf(held, lines)]
       .flatMap(([lineId, quantity]) => {
         const lineNo = lineNos.get(lineId);
@@ -1415,7 +1421,11 @@ export async function completeBillPayment(
 ): Promise<{ payment: PaymentRow; invoice: TillSaleResult | null; total?: Decimal }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
   const [pending] = await tx
-    .select({ applied: billPayments.applied })
+    .select({
+      applied: billPayments.applied,
+      workingOrderId: billPayments.workingOrderId,
+      method: billPayments.method,
+    })
     .from(billPayments)
     .where(eq(billPayments.id, billPaymentId));
   const provided = await findPaymentByBillPayment(tx, billPaymentId);
@@ -1424,9 +1434,24 @@ export async function completeBillPayment(
       ? decimalToCents(decimal(provided.amount))
       : undefined;
   const applied = actual === undefined ? undefined : Math.min(pending!.applied, actual);
+  let remainingAfter: number | undefined;
+  if (pending!.method === "card") {
+    const funds = fundsOf(
+      pending!.workingOrderId,
+      await billPaymentTotal(tx, pending!.workingOrderId),
+      await readPaymentMoney(tx, [pending!.workingOrderId]),
+    );
+    remainingAfter = decimalToCents(
+      subtractDecimal(
+        subtractDecimal(funds.total, funds.received),
+        centsToDecimal(applied ?? pending!.applied),
+      ),
+    );
+  }
   const [payment] = await tx
     .update(billPayments)
     .set({
+      remainingAfter,
       applied,
       tip: actual === undefined ? undefined : actual - applied!,
       state: "received",

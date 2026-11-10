@@ -10,6 +10,8 @@
 
 **Build checkpoint, 10 November 19:22:** the watcher cleared growth to about 760 changed lines plus review fixes, with an outside review again before about 850. Its same note says implementation waits for #2736; reconciliation with the 18:44 release is pending in Lane F questions. Existing work stays local while that gate is settled.
 
+**Watcher correction, 10 November 19:26:** the 19:22 build hold above was a mistake. The 18:44 release stands: build and review cut 3 now; open no PR until #2736 is on main. The roughly 760-line forecast and roughly 850-line stop including review fixes remain.
+
 ## Cut 3: historical balances and a copy before full payment
 
 **Finish:** reopen **Pay → Payments → Print a copy** beside a received reader payment, including an unpaid bill. Reuse the existing sale-level slip action after settlement; change only its first-tender visibility to any eligible reader capture. Add no per-payment ticket controls or history navigation.
@@ -39,3 +41,5 @@ Both cuts update S/guide/{en,es}/{table-service,kitchen-service}.md, docs/develo
 | 4 | 235/25 | 260/20 | 0/0 | 0/0 | 15/5 | 560 / 840 |
 
 Each independently usable PR has three hours; report changed-test results and ask the watcher before 1.5× growth or a material deviation. The revised total is 1,005 lines, 90 fewer than the reviewed proposal. Exclude durable intent, boot recovery, new protocol/journal/deadline, native print controls, compatibility, fiscal calls and chooser/email work. Physical printer/reader qualification remains unverified; no product tests were run for this plan.
+
+**Publication update, 10 November 20:15:** watcher reports #2736 landed at `4189506dc2` and releases cut 3 for rebase and publication. The earlier publication dependency is met; cut 4 still follows cut 3.

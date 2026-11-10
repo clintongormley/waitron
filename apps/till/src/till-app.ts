@@ -10868,6 +10868,7 @@ export class TillApp extends LitElement {
     const pending = this.#unansweredPayments.get(open.billId);
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
+        .canPrintReceipt=${this.capabilities.includes("print-receipt")}
         .checkTimeOffered=${this.checkTimeOffered}
         .balance=${open.balance}
         .lines=${open.lines}
@@ -10915,6 +10916,7 @@ export class TillApp extends LitElement {
           this.#closeBillPaying();
           if (open !== null) this.#releaseFoundCounterBill(open);
         }}
+        @bill-slip-copy=${(event: CustomEvent<{ paymentId: string }>) => void this.#onBillSlipCopy(event.detail.paymentId)}
         @bill-refund=${(event: Event) => this.#onBillRefund(event)}
       ></till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
@@ -19962,6 +19964,25 @@ export class TillApp extends LitElement {
     this.billPaying = null;
     this.payEquipmentErrors = {};
     this.#closeBillRefunding();
+  }
+
+  async #onBillSlipCopy(paymentId: string): Promise<void> {
+    const open = this.billPaying;
+    if (open === null || open.busy) return;
+    this.billPaying = { ...open, busy: true, refusal: null };
+    try {
+      await this.api!.printBillPaymentSlip(open.billId, paymentId);
+    } catch {
+      const now = this.#billPayingNow(open.id);
+      if (now !== null)
+        this.billPaying = {
+          ...now,
+          refusal: { code: "payment_slip.error", text: t("payment_slip.error") },
+        };
+    } finally {
+      const now = this.#billPayingNow(open.id);
+      if (now !== null) this.billPaying = { ...now, busy: false };
+    }
   }
 
   /** Refund pressed on a payment the dialog lists: the refund dialog opens over it. */

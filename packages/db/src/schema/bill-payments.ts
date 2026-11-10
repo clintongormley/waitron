@@ -47,6 +47,7 @@ export const billPayments = table(
     applied: money("applied").notNull(),
     tip: money("tip").notNull().default(0),
     tendered: money("tendered"),
+    remainingAfter: money("remaining_after"),
     state: billPaymentState("state").notNull(),
     requestedBy: id("requested_by").notNull(),
     source: saleSourceColumn("source").notNull(),

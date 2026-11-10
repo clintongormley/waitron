@@ -87,6 +87,34 @@ import type {
 
 let api: TillApi;
 
+it.each([false, true])(
+  "a partial slip copy fails=%s without taking another payment",
+  async (fails) => {
+    const printBillPaymentSlip = fails
+      ? vi.fn().mockRejectedValue(new Error("Printer unavailable"))
+      : vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      printBillPaymentSlip,
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          payments: [paymentOf({ canCopySlip: true, method: "card", entry: "reader" })],
+        }),
+      ),
+    });
+    await openTable(el);
+    await openDialog(el, "rest");
+    emit(dialog(el)!, "bill-slip-copy", { paymentId: "pay-1" });
+    await vi.waitFor(() => expect(printBillPaymentSlip).toHaveBeenCalledWith("wo-4", "pay-1"));
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+    expect(dialog(el)).not.toBeNull();
+    await flush(el);
+    if (fails)
+      expect(
+        text(await formMessageOf(dialog(el)!.shadowRoot!.querySelector("wt-form-actions")!)),
+      ).toBe(t("payment_slip.error"));
+  },
+);
+
 const fullInvoicesOn = () => ({
   getTill: vi.fn().mockResolvedValue({ ...till, fullInvoices: true }),
 });

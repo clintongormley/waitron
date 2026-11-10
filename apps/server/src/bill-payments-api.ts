@@ -14,7 +14,8 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertTakesTender } from "./device-session.js";
+import { printBillPaymentSlip } from "./payment-slip-print.js";
+import { assertDeviceCapability, assertTakesTender } from "./device-session.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import type { Logger } from "./logger.js";
 import {
@@ -268,6 +269,23 @@ export function mountBillPaymentsApi(
           { personId, sessionId },
         ),
       );
+    }),
+  );
+
+  app.post("/api/working-orders/:id/payments/:paymentId/slip-copy", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(deps, c, "print-receipt", "slip-copy", session.device);
+      await assertRequestDevice(deps, c, session);
+      const id = requireBillParam(c.req.param("id"));
+      await gateZones(deps, session, [{ orderId: id }]);
+      await printBillPaymentSlip(
+        deps.db,
+        requestCfg(deps.cfg, session),
+        id,
+        c.req.param("paymentId"),
+      );
+      return c.body(null, 200);
     }),
   );
 

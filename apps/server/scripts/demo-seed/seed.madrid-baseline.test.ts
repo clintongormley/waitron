@@ -94,6 +94,7 @@ const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {
     ["created_at", "charge_kept", "preparation_started", "refund_handoff", "refund_value"],
   ],
   bookings: [["tab_id", "table_label"]],
+  bill_payments: [["state", "remaining_after"]],
   card_readers: [["created_at", "prints_own_slip_automatically"]],
   convenio_config: [
     [
@@ -487,6 +488,11 @@ for (const locale of ["en", "es"] as const) {
         pk: 0,
       });
       for (const [name, column, value] of [
+        [
+          "bill_payments",
+          { name: "remaining_after", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
         [
           "management_sessions",
           { name: "proved_at", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },

@@ -21,6 +21,23 @@ const input = {
   printer: { paperWidth: "80mm", resolution: "180dpi" } as const,
 };
 describe("payment slip (pure renderer, no database)", () => {
+  it("marks a copy and shows only a known historical remaining balance", () => {
+    const labels = receiptLabelsFor("en-GB");
+    for (const remaining of [null, "0.00", "20.00"]) {
+      const text = decodeTicket(
+        formatPaymentSlip({ ...input, invoiceLocale: "en-GB", remaining, copy: true }),
+      );
+      expect(text).toContain(labels.duplicate);
+      if (remaining === null) expect(text).not.toContain("Remaining");
+      else
+        expect(
+          text
+            .split("\n")
+            .some((line) => line.startsWith("Remaining") && line.endsWith(`€${remaining}`)),
+        ).toBe(true);
+    }
+  });
+
   it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "ca", "fr-FR"])(
     "A965 payment language uses %s resources for each card entry mode",
     (invoiceLocale) => {
