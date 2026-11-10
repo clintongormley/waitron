@@ -31,6 +31,7 @@ export const CAPABILITY_FLAGS = [
   "hand-over-orders",
   "run-the-pass",
   "clock-in",
+  "close-by-transfer",
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 
@@ -45,6 +46,7 @@ export const PROFILE_ACTIONS = [
   "print-receipt",
   "open-cash-drawer",
   "clock-in",
+  "close-by-transfer",
 ] as const satisfies readonly CapabilityFlag[];
 export type ProfileAction = (typeof PROFILE_ACTIONS)[number];
 
