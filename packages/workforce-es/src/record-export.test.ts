@@ -353,7 +353,7 @@ it("keeps recorded DST offsets and elapsed minutes after subtracting a break", a
     workedMinutes: 90,
   });
 });
-it("keeps the full frozen period and explicit null and populated summary values", async () => {
+it("keeps the full frozen period and empty and populated summary values", async () => {
   const { seedEmployment } = await import("../test/fixtures.js");
   await seedEmployment(suite.db, { personId: worker, contractedMinutesPerWeek: 1200 });
   const automaticId = await day(true);
@@ -536,6 +536,21 @@ it.each([
   const values = rows(exported).flatMap((r) => Object.values(r));
   for (const code of [true, false, null, "standard", "worker", "manager", "in", "out"])
     expect(values).not.toContain(code);
+});
+it.each([
+  { locale: "en", worker: "Worker", requested: "Requested" },
+  { locale: "es", worker: "Persona trabajadora", requested: "Solicitado" },
+] as const)("leaves code-shaped free text as written for $locale", async (words) => {
+  await suite.db.update(persons).set({ displayName: "worker" }).where(eq(persons.id, worker));
+  const change = await request(await day(), "approved");
+  const exported = await doc({ locale: words.locale });
+  expect(cells(exported, "history").find((r) => r.entryId === change)).toMatchObject({
+    reason: "approved",
+    personName: "worker",
+    authorName: "worker",
+    authorKind: words.worker,
+    correctionStatus: words.requested,
+  });
 });
 it("names the venue once and gives entries and closures no workplace column", async () => {
   await day();

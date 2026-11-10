@@ -94,7 +94,7 @@ const LABELS: Record<string, readonly [string, string]> = {
   confirmedByWorker: ["Acknowledged by worker", "Confirmado por la persona"],
   selfApproved: ["Self-approved", "Autoaprobado"],
   corrected: ["Corrected", "Corregido"],
-  disputed: ["Disputed", "Disputado"],
+  disputed: ["Disputed", "En desacuerdo"],
   authorKind: ["Author type", "Tipo de autor"],
   authorPersonId: ["Author reference", "Referencia del autor"],
   authorName: ["Author", "Autor"],
@@ -487,7 +487,7 @@ export function formatTimeRecordExport(
         "Desde está incluido; Antes de está excluido. Los nombres son los actuales.",
       ][language]!,
       [
-        "Automatic finishes count immediately. Worker acknowledgment is separate.",
+        "Automatic finishes count immediately. Worker acknowledgement is separate.",
         "Los fines automáticos cuentan de inmediato. La confirmación de la persona se muestra por separado.",
       ][language]!,
       ...(input.audience === "representatives"

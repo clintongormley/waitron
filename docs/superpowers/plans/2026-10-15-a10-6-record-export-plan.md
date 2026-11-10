@@ -1,5 +1,7 @@
 # A10-6 Working-Time Record Export Implementation Plan
 
+_2026-11-10, A1488: the export now writes coded values, yes/no values and empty values as words in the file's language (or an empty cell), so a real export's CSV cells no longer show coded values, `true`, `false` or `null`. A null summary value below now prints as an empty cell._
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use `superpowers:executing-plans` for native inline execution, task by task. Read `superpowers:test-driven-development` before writing implementation or tests. No implementer dispatch or per-task external review. The root driver reviews and publishes this documentation first, then owns execution and the authorised finish/land workflow. This invocation writes this plan only: no implementation, tests, commits or pushes.
 
 **Goal:** You can download your working-time record from dashboard My Schedule, or an authorised manager can download everyone's or one person's record for any range, as PDF or CSV, including a representatives' version.
