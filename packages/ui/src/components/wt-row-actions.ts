@@ -152,6 +152,13 @@ export class WtRowActions extends LitElement {
     if (popup?.matches(":popover-open")) popup.hidePopover();
   }
 
+  /** Places an open popup again against the trigger's current position, for a host that moves the
+   * trigger without changing the popup's size or the window's. Does nothing while it is closed or
+   * before the first render. */
+  reposition(): void {
+    if ((this.popup as HTMLElement | null) !== null) this.positionPopup();
+  }
+
   private readonly onWindowResize = (): void => this.positionPopup();
 
   private positionPopup(): void {
