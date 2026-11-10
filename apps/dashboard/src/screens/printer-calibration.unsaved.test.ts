@@ -211,6 +211,7 @@ it("calibration steps and test results alone are exempt", async () => {
   q(screen, "[data-test=calibration-back]")!.click();
   await screen.updateComplete;
   expect(field(screen, "printer-ruler-number").value).toBe("512");
+  change(screen, "printer-ruler-number", "360");
   q(screen, "[data-test=cancel-edit-printer]")!.click();
   await expect.poll(() => modal(screen)).toBeNull();
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);

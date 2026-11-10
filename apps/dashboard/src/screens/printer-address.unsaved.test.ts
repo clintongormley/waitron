@@ -107,7 +107,7 @@ async function choose(app: PrinterAddressLeaveApp, decision: "keep" | "discard")
   question.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
   await expect.poll(() => question.open).toBe(false);
 }
-for (const route of ["escape"] as const) {
+for (const route of ["close", "escape"] as const) {
   it(`manual printer address ${route} preserves values and focus until Discard`, async () => {
     const { app, screen } = await mount();
     change(screen, "host", "192.168.20.247");
@@ -116,7 +116,10 @@ for (const route of ["escape"] as const) {
     await field(screen, "host").updateComplete;
     const input = field(screen, "host").shadowRoot!.querySelector("input")!;
     input.focus();
-    const close = async () => userEvent.keyboard("{Escape}");
+    const close = async () => {
+      if (route === "close") q(screen, "[data-test=cancel-new-printer]")!.click();
+      else await userEvent.keyboard("{Escape}");
+    };
     await close();
     await choose(app, "keep");
     expect(modal(screen)!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
@@ -316,7 +319,7 @@ it("a later address edit remains dirty after the submitted registration succeeds
   change(screen, "host", " 192.168.20.247 ");
   expect(unload()).toBe(false);
 });
-for (const route of ["escape"] as const) {
+for (const route of ["close", "escape"] as const) {
   it(`submitted registration permits discovery ${route} and reloads without reopening it`, async () => {
     let finish!: (result: { id: string }) => void;
     let reads = 0;

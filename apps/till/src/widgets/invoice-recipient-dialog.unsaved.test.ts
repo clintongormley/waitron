@@ -359,7 +359,7 @@ it("a saved choice the field does not offer opens clean, and choosing it again a
   expect(unload()).toBe(false);
 });
 
-it("a saved A4 opened on the current printer instead counts as a change: Cancel asks first", async () => {
+it("a saved A4 opened on the current printer instead counts as a change: Escape asks first", async () => {
   const { app, form } = await mountDelivery({
     saved: { medium: "a4", pagePrinterId: "pp-retired" },
   });

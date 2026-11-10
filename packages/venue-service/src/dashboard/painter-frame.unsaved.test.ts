@@ -141,3 +141,14 @@ it("an unchanged draft closes without asking", async () => {
   expect(question().open).toBe(false);
   expect(frame.open).toBe(false);
 });
+
+it("the Cancel footer discards the painter instead of taking the close-cross path", async () => {
+  const { painter, frame } = await mount();
+  painter.edit("b");
+  await painter.updateComplete;
+  await frame.updateComplete;
+  button(frame, "cancel").click();
+  await expect.poll(() => frame.open).toBe(false);
+  expect(question().open).toBe(false);
+  expect(painter.draft).toBe("a");
+});

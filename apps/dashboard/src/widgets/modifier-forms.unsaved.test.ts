@@ -134,7 +134,7 @@ for (const kind of ["extras", "options"] as const) {
     await expect.poll(() => app.cancelled).toBe(1);
     expect((await question(app)).open).toBe(false);
   });
-  it(`${kind} refused write preserves normalized submitted values and asks on Cancel`, async () => {
+  it(`${kind} refused write preserves normalized submitted values and asks on Escape`, async () => {
     const { app, form } = await mount(kind);
     await edit(form, "name", " Saved list ");
     form.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
@@ -396,7 +396,7 @@ it("extras keep positional rows distinct after a move and restore them on Discar
   ).toEqual(["one", "two"]);
 });
 for (const kind of ["extras", "options"] as const) {
-  it(`${kind} put back after a detached update still asks before Cancel discards an edit`, async () => {
+  it(`${kind} put back after a detached update still asks before Escape discards an edit`, async () => {
     const { app, form } = await mount(kind);
     await reattachAfterDetachedUpdate(form);
     await edit(form, "name", "Draft list");

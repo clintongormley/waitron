@@ -3896,7 +3896,7 @@ export class PrintersScreen extends LitElement {
     }
     if (id === "name-printer-modal" || id === "new-printer-modal") {
       if (id === "new-printer-modal" ? this.#addressScope : this.#printerNameScope) {
-        await modal.requestClose("cancel");
+        await modal.requestClose(id === "new-printer-modal" ? "navigation" : "cancel");
         return;
       }
     }
@@ -3905,7 +3905,7 @@ export class PrintersScreen extends LitElement {
       return;
     }
     if (id === "edit-printer-modal" && this.#calibrationLeave) {
-      await modal.requestClose("navigation");
+      await modal.requestClose("cancel");
       return;
     }
     if (id === "new-printer-modal") this.#endScan();
