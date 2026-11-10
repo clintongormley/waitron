@@ -497,8 +497,6 @@ export const DEFAULT_MIGRATIONS_ROOT = fileURLToPath(new URL("drizzle", import.m
  */
 export const DEFAULT_STATE_ROOT = fileURLToPath(new URL("state", import.meta.url));
 
-export { BOX_HOSTNAME };
-
 /** The dNSName SANs on the box's self-signed leaf, whether minted or re-issued after a restore. */
 export const BOX_LEAF_HOSTNAMES = [BOX_HOSTNAME, "localhost"];
 

@@ -2,12 +2,8 @@ import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AppError } from "@waitron/shared";
-import {
-  BOX_HOSTNAME,
-  BOX_LEAF_HOSTNAMES,
-  startLandingListener,
-  type LandingListenerConfig,
-} from "./boot.js";
+import { BOX_LEAF_HOSTNAMES, startLandingListener, type LandingListenerConfig } from "./boot.js";
+import { BOX_HOSTNAME } from "./box-name.js";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { inspectBoxTls } from "./box-tls-repair.js";
