@@ -1,3 +1,4 @@
+import type { JobRunner } from "./job-runner.js";
 import { closeAll } from "./close-all.js";
 
 export interface BackgroundAbort {
@@ -49,7 +50,7 @@ export interface BackgroundDutyHandles {
   unsubscribeFromChanges: () => unknown;
   stopSealingNodeCommits: () => unknown;
   sealedState: { settled(): unknown };
-  menuActivation: Stopper;
+  jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs">;
   appendOnlyWatch: Stopper;
   freeSpaceWatch: Stopper;
   boxEmails: Stopper;
@@ -159,7 +160,12 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
             atStepdown: true as const,
           },
         ]),
-    { name: "menuActivation", close: () => h.menuActivation.stop(), atStepdown: true },
+    {
+      name: "jobRunner",
+      close: () => h.jobRunner.stopJobs(),
+      reason:
+        "stops every job on the runner together; each job's own stepdown mark is in job-catalogue.ts",
+    },
     {
       name: "appendOnlyWatch",
       close: () => h.appendOnlyWatch.stop(),
@@ -221,6 +227,7 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
         abort: () => h.certificateReminderController?.abort(),
       },
       { name: "tenderRefundController", abort: () => h.tenderRefundController.abort() },
+      { name: "jobRunner", abort: () => h.jobRunner.signalStepdown() },
     ],
     closers: closers.map((closer) => ({ ...closer, close: once(closer.close) })),
   };

@@ -55,6 +55,7 @@ const ABORTS = [
   "attendanceController",
   "certificateReminderController",
   "tenderRefundController",
+  "jobRunner",
 ] as const;
 const LOOPS = [
   "pendingCardLoop",
@@ -70,7 +71,6 @@ const LOOPS = [
 ] as const;
 const STOPPERS = [
   "certificateDiagnosis",
-  "menuActivation",
   "appendOnlyWatch",
   "freeSpaceWatch",
   "boxEmails",
@@ -83,7 +83,6 @@ const STOPPERS = [
 ] as const;
 const AT_STEPDOWN = [
   "certificateDiagnosis",
-  "menuActivation",
   "boxEmails",
   "demoPrinterLoop",
   "clockWatch",
@@ -104,6 +103,13 @@ function fakeDuties(overrides: Partial<Record<string, unknown>> = {}) {
       },
     };
   }
+  handles.jobRunner = {
+    signalStepdown: () => controllers.jobRunner!.abort(),
+    stopJobs: () => {
+      calls.push("jobRunner");
+      return Promise.resolve();
+    },
+  };
   for (const name of LOOPS) {
     Object.defineProperty(handles, name, {
       enumerable: true,
@@ -259,12 +265,11 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
   });
 
-  it("the five early stops' source text sets the stop flag before the first await", async () => {
+  it("the early stops' source text sets the stop flag before the first await", async () => {
     // Reads the source as text: calling a stop inside the request is safe only while its first
     // effect comes before its first await, so a reordering of any of these fails here.
     const files = [
       "fiscal-certificate-diagnosis-runner.ts",
-      "menu-activation.ts",
       "box-alert-email.ts",
       "demo-printer.ts",
       "clock-watch.ts",
@@ -382,11 +387,12 @@ describe("a stepdown", () => {
     expect(await readHandoverRestriction(suite.node, SOURCE)).not.toBeNull();
   });
 
-  it("an early stop that throws does not keep the others from being told", async () => {
+  it("a runner signal that throws does not keep the early stops from being told", async () => {
     await begin();
     const duties = fakeDuties({
-      menuActivation: {
-        stop: () => {
+      jobRunner: {
+        stopJobs: () => Promise.resolve(),
+        signalStepdown: () => {
           throw new Error("stop failed");
         },
       },

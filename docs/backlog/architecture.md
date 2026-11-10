@@ -1052,7 +1052,8 @@ product failures.
   [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
-  `recovery_packs`, in eight migration sets instead of sixteen. There is one job runner. 111 product
+  `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
+  menu activation and public `/health` reports; the other jobs and services still need moving onto it. 111 product
   environment variables become 51. There is one state-folder layout. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity

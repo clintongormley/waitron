@@ -14,6 +14,7 @@ const ABORTS = [
   "attendanceController",
   "certificateReminderController",
   "tenderRefundController",
+  "jobRunner",
 ];
 
 const CLOSERS = [
@@ -30,7 +31,7 @@ const CLOSERS = [
   "unsubscribeFromChanges",
   "stopSealingNodeCommits",
   "sealedState",
-  "menuActivation",
+  "jobRunner",
   "appendOnlyWatch",
   "freeSpaceWatch",
   "boxEmails",
@@ -80,7 +81,10 @@ function recordingHandles(
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
     stopSealingNodeCommits: () => void calls.push("call stopSealingNodeCommits"),
     sealedState: { settled: () => void calls.push("settled sealedState") },
-    menuActivation: stopper("menuActivation"),
+    jobRunner: {
+      signalStepdown: () => void calls.push("abort jobRunner"),
+      stopJobs: () => void calls.push("stop jobRunner"),
+    },
     appendOnlyWatch: stopper("appendOnlyWatch"),
     freeSpaceWatch: stopper("freeSpaceWatch"),
     boxEmails: stopper("boxEmails"),
@@ -121,7 +125,7 @@ describe("background duties", () => {
       "call unsubscribeFromChanges",
       "call stopSealingNodeCommits",
       "settled sealedState",
-      "stop menuActivation",
+      "stop jobRunner",
       "stop appendOnlyWatch",
       "stop freeSpaceWatch",
       "stop boxEmails",
@@ -157,8 +161,9 @@ describe("background duties", () => {
     const calls: string[] = [];
     const first = new Error("menu activation failed");
     const handles = recordingHandles(calls, {
-      menuActivation: {
-        stop: () => {
+      jobRunner: {
+        signalStepdown: () => {},
+        stopJobs: () => {
           throw first;
         },
       },

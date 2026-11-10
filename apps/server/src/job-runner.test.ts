@@ -93,6 +93,21 @@ describe("job runner", () => {
     expect(times).toEqual([0, 30_000, 31_000, 91_000]);
   });
 
+  it.each([false, true])("delays the first pass, wakeable=%s", async (wake) => {
+    runner.add(job({ firstPassAfterMs: 10_000 }));
+    await advance(2_000);
+    expect(times).toEqual([]);
+    if (wake) {
+      emit({ resources: [{ type: "schedule" }] });
+      await advance();
+    } else {
+      await advance(7_999);
+      expect(times).toEqual([]);
+      await advance(1);
+    }
+    expect(times).toEqual([wake ? 2_000 : 10_000]);
+  });
+
   it("a null due time sleeps the ceiling", async () => {
     runner.add(job());
     await advance(59_999);

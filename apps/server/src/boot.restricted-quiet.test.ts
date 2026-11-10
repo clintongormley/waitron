@@ -29,7 +29,18 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-const calls = vi.hoisted(() => ({ authority: 0, sweep: 0, spawn: 0, drain: 0 }));
+const calls = vi.hoisted(() => ({ authority: 0, sweep: 0, spawn: 0, drain: 0, runner: 0 }));
+
+vi.mock("./job-runner.js", async (original) => {
+  const actual = await original<typeof import("./job-runner.js")>();
+  return {
+    ...actual,
+    createJobRunner: (...args: Parameters<typeof actual.createJobRunner>) => {
+      calls.runner++;
+      return actual.createJobRunner(...args);
+    },
+  };
+});
 
 // Counts the fiscal drain's passes, each still running the real drain.
 vi.mock("@waitron/module", async (importOriginal) => {
@@ -111,6 +122,7 @@ interface Observed {
   sweep: number;
   spawn: number;
   drain: number;
+  runner: number;
   /** The status of a GET of `/` made during the quiet period. */
   pageStatus: number;
   mailStatus: string;
@@ -260,6 +272,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     calls.sweep = 0;
     calls.spawn = 0;
     calls.drain = 0;
+    calls.runner = 0;
     const hashBefore = await venueHash(suite);
     server = await startServer(env, env, {
       stream: { spawn, store: new SwitchableStore(() => new Date()) },
@@ -323,6 +336,10 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
     expect(observed().spawn).toBe(0);
   });
 
+  it("builds no job runner", () => {
+    expect(observed().runner).toBe(0);
+  });
+
   it("starts no fiscal pass", () => {
     expect(observed().drain).toBe(0);
   });
@@ -341,6 +358,10 @@ describe("control: the same folder without the restriction row", () => {
 
   it("expires a queued mail past its time", () => {
     expect(observed().mailStatus).toBe("expired");
+  });
+
+  it("builds one job runner", () => {
+    expect(observed().runner).toBe(1);
   });
 
   it("starts the fiscal drain", () => {

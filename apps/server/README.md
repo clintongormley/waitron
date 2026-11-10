@@ -627,6 +627,21 @@ otherwise:
       "stale": false
     }
   },
+  "jobs": {
+    "menu.activation": {
+      "kind": "job",
+      "state": "waiting",
+      "judged": false,
+      "lastTurnAt": "2026-07-26T09:14:02Z",
+      "lastRunAt": "2026-07-26T09:14:02Z",
+      "lastOkAt": "2026-07-26T09:14:02Z",
+      "consecutiveFailures": 0,
+      "failingSince": null,
+      "throwsSinceClean": 0,
+      "throwingSince": null,
+      "nextDueAt": null
+    }
+  },
   "venueHolder": {
     "kind": "server",
     "lockedAt": "2026-07-26T08:00:00Z",
@@ -647,6 +662,11 @@ otherwise:
 A box that takes no sales answers `200` with only `{ "ok": true, "tradingAvailable": false }`:
 trading is not admitted yet, the box has stepped down and started restricted
 (`src/restricted-start.ts`), or it is waiting for the other box (`src/waiting-start.ts`).
+
+Use `jobs` to see the runner's recurring work. Scheduled menu activation runs there,
+with retries after a failure starting at five seconds and doubling up to five minutes.
+Job state is reported without error codes or alert codes and never changes the health status;
+`duties` and `lastPassAt` still decide it.
 
 `venueHolder` is read from `venue.holder.json`, the file a monitored venue holder
 keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, its last heartbeat,

@@ -23,13 +23,13 @@ import { menusFixture, type MenusFixture } from "@waitron/catalogue/test/menus-f
 import { AppError } from "@waitron/shared";
 import { changeSubscriber, LiveEvents } from "./live-api.js";
 import type { Logger, LogLevel } from "./logger.js";
-import { startMenuActivation } from "./menu-activation.js";
+import { menuActivationJob } from "./menu-activation.js";
+import { createJobRunner } from "./job-runner.js";
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
 const MAX_WAIT_MS = 20 * 86_400_000;
-const LONGEST_TIMER_MS = 2_147_483_647;
 // Years after the real clock, so a read that takes the real clock never finds these editions due.
 const day = (date: number) => new Date(`2030-01-${String(date).padStart(2, "0")}T06:00:00.000Z`);
 const ANA = "manager-ana";
@@ -141,19 +141,39 @@ function startDuty(
   const log: Logger = (level, event, fields) => lines.push({ level, event, fields });
   const bus = new LiveEvents();
   const clock = { now: day(4) };
-  const duty = startMenuActivation({
-    db,
-    bus,
-    isPrimary: options.isPrimary ?? (() => true),
+  const runner = createJobRunner({
     now: () => clock.now,
     log,
-    maxWaitMs: options.maxWaitMs ?? MAX_WAIT_MS,
-    timer: (ms, fn) => {
-      const entry = { ms, fn, cancelled: false };
-      armed.push(entry);
-      return { cancel: () => (entry.cancelled = true) };
-    },
+    subscribe: (fn) =>
+      bus.subscribe((event) => {
+        if (event.kind === "change") fn(event.change);
+      }),
+    delay: (ms, signal) =>
+      new Promise<void>((resolve) => {
+        if (signal.aborted || ms === 0) return resolve();
+        const entry = { ms, fn: done, cancelled: false };
+        armed.push(entry);
+        signal.addEventListener("abort", cancel, { once: true });
+        function done() {
+          signal.removeEventListener("abort", cancel);
+          resolve();
+        }
+        function cancel() {
+          entry.cancelled = true;
+          done();
+        }
+      }),
   });
+  runner.add(
+    menuActivationJob({
+      db,
+      isPrimary: options.isPrimary ?? (() => true),
+      now: () => clock.now,
+      log,
+      maxWaitMs: options.maxWaitMs ?? MAX_WAIT_MS,
+    }),
+  );
+  const duty = { stop: () => runner.stopJobs() };
   /** Waits until the duty has armed its `count`-th timer. */
   const armedCount = (count: number) =>
     vi.waitFor(() => expect(armed).toHaveLength(count), { timeout: 5_000 });
@@ -165,7 +185,7 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 50));
 
 const SCHEDULE_CHANGE = { resources: [{ type: "menu_scheduled_publications" }] };
 
-describe("startMenuActivation", () => {
+describe("menuActivationJob", () => {
   it("on start, activates every overdue edition and arms the timer for the next one", async () => {
     const [v2, v3, v4] = await lunchWithQueue(2, 3, 6);
     const { duty, armed, armedCount, lines } = startDuty();
@@ -220,32 +240,6 @@ describe("startMenuActivation", () => {
     try {
       await armedCount(1);
       expect(armed[0]!.ms).toBe(MAX_WAIT_MS);
-    } finally {
-      await duty.stop();
-    }
-  });
-
-  it("never arms a timer longer than Node honours, whatever the longest wait", async () => {
-    f = await menusFixture(fx.db);
-    await publishNow(f.lunch);
-    const { duty, armed, armedCount } = startDuty({ maxWaitMs: LONGEST_TIMER_MS * 10 });
-    try {
-      await armedCount(1);
-      expect(armed[0]!.ms).toBe(LONGEST_TIMER_MS);
-    } finally {
-      await duty.stop();
-    }
-  });
-
-  it("never arms a timer longer than Node honours for an edition further off than that", async () => {
-    f = await menusFixture(fx.db);
-    await publishNow(f.lunch);
-    await setSoup("5.50");
-    await queue(f.lunch, new Date(day(4).getTime() + LONGEST_TIMER_MS + 86_400_000));
-    const { duty, armed, armedCount } = startDuty({ maxWaitMs: LONGEST_TIMER_MS * 10 });
-    try {
-      await armedCount(1);
-      expect(armed[0]!.ms).toBe(LONGEST_TIMER_MS);
     } finally {
       await duty.stop();
     }
@@ -310,7 +304,16 @@ describe("startMenuActivation", () => {
         event: "menu_publication.activation_failed",
         fields: { errorCode: "provisioning.database_in_use" },
       });
-      expect(armed[0]!.ms).toBe(MAX_WAIT_MS);
+      expect(armed[0]!.ms).toBe(5_000);
+      expect(lines).toContainEqual({
+        level: "error",
+        event: "job.failed",
+        fields: {
+          job: "menu.activation",
+          errorCode: "provisioning.database_in_use",
+          consecutiveFailures: 1,
+        },
+      });
       expect(await stateOf(v2!)).toBe("queued");
 
       armed[0]!.fn();
@@ -345,7 +348,7 @@ describe("startMenuActivation", () => {
     }
   });
 
-  it("stop() cancels the armed timer and stops listening", async () => {
+  it("stopJobs() cancels the armed timer and stops listening", async () => {
     await lunchWithQueue(9);
     const { duty, door, armed, armedCount, bus } = startDuty();
     await armedCount(1);
@@ -360,7 +363,7 @@ describe("startMenuActivation", () => {
     expect(door.begins).toBe(1);
   });
 
-  it("stop() waits for a run in flight, which then arms nothing", async () => {
+  it("stopJobs() waits for a run in flight, which then arms nothing", async () => {
     await lunchWithQueue(9);
     const { duty, door, armed, armedCount, bus } = startDuty();
     await armedCount(1);
@@ -386,14 +389,17 @@ describe("startMenuActivation", () => {
     await publishNow(f.lunch);
     await setSoup("5.50");
     const { versionId } = await queue(f.lunch, new Date(Date.now() + 1_000));
-    const duty = startMenuActivation({
-      db: fx.db,
-      bus: new LiveEvents(),
-      isPrimary: () => true,
-      now: () => new Date(),
-      log: () => {},
-      maxWaitMs: MAX_WAIT_MS,
-    });
+    const runner = createJobRunner({ now: () => new Date(), log: () => {} });
+    runner.add(
+      menuActivationJob({
+        db: fx.db,
+        isPrimary: () => true,
+        now: () => new Date(),
+        log: () => {},
+        maxWaitMs: MAX_WAIT_MS,
+      }),
+    );
+    const duty = { stop: () => runner.stopJobs() };
     try {
       expect(await stateOf(versionId)).toBe("queued");
       await vi.waitFor(async () => expect(await stateOf(versionId)).toBe("activated"), {
