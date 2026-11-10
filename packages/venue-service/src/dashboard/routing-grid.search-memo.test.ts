@@ -88,7 +88,7 @@ it("does not search again when an editor opens or a choice is waiting, and does 
 it("refreshes the shown search order on a live language change", async () => {
   const el = document.createElement("venue-routing-grid") as RoutingGrid;
   hosts.push(el);
-  const label = SUPPORTED_LOCALES[0].label;
+  const label = SUPPORTED_LOCALES.find(({ code }) => code === "es-ES")!.label;
   const plain = label.normalize("NFD").replace(/\p{M}/gu, "");
   el.model = {
     ...model,

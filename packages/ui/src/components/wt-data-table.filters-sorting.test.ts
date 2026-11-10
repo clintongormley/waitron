@@ -52,7 +52,7 @@ function rowKeys(el: WtDataTable<Row>): string[] {
 
 test("text rows re-sort when the page language changes", async () => {
   document.documentElement.lang = "en";
-  const label = SUPPORTED_LOCALES[0].label;
+  const label = SUPPORTED_LOCALES.find(({ code }) => code === "es-ES")!.label;
   const plain = label.normalize("NFD").replace(/\p{M}/gu, "");
   const el = await table({
     rows: [

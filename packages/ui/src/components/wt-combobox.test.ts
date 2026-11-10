@@ -49,9 +49,9 @@ async function mountCombobox(html = '<wt-combobox label="Dietary tags"></wt-comb
   return { el, trigger, popup };
 }
 
-test("orders copied options by visible labels within groups and fixed anchors", async () => {
+test("sorts labels within groups while keeping empty and fixed anchors", async () => {
   const options: ComboboxOption[] = [
-    { value: "", label: "Choose" },
+    { value: "", label: "Use default", group: "One" },
     { value: "z", label: "Zulu", group: "One" },
     { value: "a", label: "Alpha", group: "One", disabled: true },
     { value: "fixed", label: "Middle", group: "One", fixed: true },
@@ -64,7 +64,7 @@ test("orders copied options by visible labels within groups and fixed anchors", 
   const original = [...options];
   const el = await mountWith('<wt-combobox label="Choices"></wt-combobox>', options);
   expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual([
-    "Choose",
+    "Use default",
     "Alpha",
     "Zulu",
     "Middle",
