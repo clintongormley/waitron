@@ -49,7 +49,9 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Dishes", active: true, version: 1 },
   { id: "cat-b", name: "ES drinks", active: true, version: 1 },
 ];
-const categories: CategorySummary[] = [{ id: "c1", name: "Starters", parentId: null, color: null }];
+const categories: CategorySummary[] = [
+  { id: "c1", name: "Appetizers", parentId: null, color: null },
+];
 const units: Unit[] = [
   {
     staffName: "Staff unit",
@@ -2171,7 +2173,7 @@ describe("catalogue-screen", () => {
     const venueCourses: Course[] = [
       {
         id: "k1",
-        name: "Starters",
+        name: "Appetizers",
         displayOrder: 0,
         active: true,
         inUse: false,
@@ -2179,7 +2181,7 @@ describe("catalogue-screen", () => {
       },
       {
         id: "k2",
-        name: "Mains",
+        name: "Main dishes",
         displayOrder: 1,
         active: true,
         inUse: false,
@@ -2415,7 +2417,7 @@ describe("catalogue-screen", () => {
                 (resolve) =>
                   (answerRemoval = () =>
                     resolve({
-                      target: { id, name: "Mains" },
+                      target: { id, name: "Main dishes" },
                       refusals: [],
                       ends: [],
                       removes: [],
@@ -2492,7 +2494,7 @@ describe("catalogue-screen", () => {
         ),
       });
       const el = await openCourses(api, "k1");
-      await typeNewCourse(el, "Starters");
+      await typeNewCourse(el, "Appetizers");
       await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-test=courses-done]")!);
       const field = () =>
         inList(el, 'wt-input[name="course-name"]') as unknown as { error: string } | null;
@@ -2574,7 +2576,7 @@ describe("catalogue-screen", () => {
       const options = [...box.shadowRoot!.querySelectorAll("li[role=option]")].map((option) =>
         option.textContent!.trim(),
       );
-      expect(options).toContain("Mains");
+      expect(options).toContain("Main dishes");
       expect(options).not.toContain("Brunch");
     });
 
@@ -2597,7 +2599,7 @@ describe("catalogue-screen", () => {
       await done(el);
       expect(editor(el).currentValue.courseId).toBe("k2");
       expect(editor(el).courses.map(({ id }) => id)).toEqual(["k2"]);
-      expect(await shownCourse(el)).toBe("Mains");
+      expect(await shownCourse(el)).toBe("Main dishes");
       expect(editor(el).shadowRoot!.activeElement).toBe(courseBox(el));
     });
 
@@ -3684,7 +3686,7 @@ it("paints All products' square, an uncategorised product and a new product's in
   const loose: Product = {
     ...products[0]!,
     id: "p2",
-    name: "Water",
+    name: "Artesian water",
     categoryId: null,
     primaryCategoryId: null,
   };
