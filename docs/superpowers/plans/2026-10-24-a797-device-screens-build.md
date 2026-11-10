@@ -10560,7 +10560,9 @@ small item: one implementer task.
   `deliveryTableId` and `deliveryTableLabel` it already selects. It goes on `PassRow.order` and so
   on `PassCard.orders` (`placeCard` copies `row.order` less `openedAt`, `pass-card.ts:245-251`), and
   on the till's copy of the type (`apps/till/src/api/client.ts` `PassCard.orders`). `tableLabel`
-  stays as it is.
+  stays as it is. `readPassRows` also serves Fire's release (`readPassCardRows`,
+  `apps/server/src/pass-board.ts:94-113`, `pass-release.ts:111`), which names no table, so the
+  short-name read runs only when a board is built, not on that path (plan review, 2026-11-10).
 - **D2. The till names a bill's place by one rule:** its `tableShortNames` through `mergeLabel`
   (`@waitron/ui`), else its `tableLabel` — the kitchen card's rule (`cardPlaces`,
   `apps/till/src/state/kitchen-cards.ts:156-161`) with `tableLabel` where the kitchen has `label`,
@@ -10569,9 +10571,17 @@ small item: one implementer task.
   used by the card heading (`pass-board.ts:529`) and by the two refusal messages that name the card
   (`cardLabel`, `till-pass-screen.ts:62-66`, and the `party.out_of_date` message, `:447`), so a
   message names the card as its heading does.
-- **D3. Left as they are:** the heading's per-bill layout (number, then place, for each bill; the
+- **D3. A table named for today shows its saved short name on the pass, as everywhere tight**
+  (slice 1, D8, which settled design §9: "a tight place shows the saved short name for a table
+  renamed today, and its tables' short names joined for one of today's joins … whatever today's
+  names say"). Today the card shows today's name ("García birthday", A581 part 2, #1649;
+  `apps/server/src/today-names.test.ts:310-321` pins it on the read's `tableLabel`, which this slice
+  leaves alone); after it, the card reads "C3+C4", as the kitchen card has since slice 8b, while the
+  printed kitchen ticket keeps the full or today's name. **Owner FYI** in the PR.
+- **D4. Left as they are:** the heading's per-bill layout (number, then place, for each bill; the
   kitchen card's distinct-places list and "Counter #12" are the kitchen's, slice 8b D3/D4); the
-  printed kitchen ticket and every receipt (full names, design §3.7).
+  printed kitchen ticket and every receipt (full names, design §3.7); the bill's name on pass cards
+  (design §3.5, A803's dependency tail, not this slice).
 
 ### Changed test checks (expected; the implementer confirms each)
 
@@ -10585,11 +10595,15 @@ queue's controversial-change rule).
 
 1. A table with a short name: the card reads "T4", not "Terrace 4"; with none, its label.
 2. A party at two joined tables: "T4+T5" in number order.
-3. A counter order with no table: unchanged ("#12", or its label).
+3. A counter order with no table: unchanged ("#12", or its label). A party holding no table: its
+   bill's label. A party merged into another: the survivor's tables.
 4. A counter order delivered to a table, and one whose delivery table was let go: the table's short
    name, and the kept name.
 5. The pass monitor (kitchen display) and a till's Pass both carry it (one read).
-6. The two refusal messages name the card as its heading does.
+6. Both refusal messages (`cardLabel`, `till-pass-screen.ts:62-66`, and the `party.out_of_date`
+   message, `:447`) name the card as its heading does — one test each.
+7. A table renamed today and a group named today, in a fixture whose short name, saved label and
+   today's name are three different texts: the card shows the short name (D3).
 
 ### Task 1: The pass read and the pass card name tables by their short names
 
@@ -10599,8 +10613,10 @@ queue's controversial-change rule).
 the fixture calls), `apps/till/src/api/client.ts`, `apps/till/src/state/pass-view.ts` (+ its test),
 `apps/till/src/widgets/pass-board.ts` (+ `pass-board.test.ts`), `apps/till/src/screens/till-pass-screen.ts`;
 the guides `apps/server/src/guide/en/kitchen-service.md` and `es/` (`{#pass-screen}`: one sentence —
-a card names its table by its short name), `docs/backlog.md` and `docs/backlog/till.md` (A797 is
-finished: delete its entry and its index line).
+a card names its table by its short name) and `apps/server/src/guide/en/table-service.md` and `es/`
+(`{#short-names}`: add the pass to where short names show), `docs/backlog.md` and
+`docs/backlog/till.md` (A797, the A182 part 1 entry, is finished: delete it and its index line,
+after checking that A738 and A739, which it mentions, keep entries of their own).
 
 - [ ] Failing server tests through the pass board read (Review focus 1–5; one through the till's
   route or the device route on the wire), then D1.
