@@ -2313,11 +2313,12 @@ Slice 9 kept the shipped append-only table rather than
 
 ## The email about a clock set before 28 October 2024 rarely leaves the box.
 
-With a date that
-  early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`, slice 10 plan P8),
-  so the email waits until the clock is fixed, when there is nothing left to say. A plain relay or
-  the practice box's local capture does receive it. For the owner to know. Left open by A798-B
-  slice 10.
+With a date that early the box cannot check a mail server's certificate (`CERT_NOT_YET_VALID`,
+slice 10 plan P8). That failure comes before the email is handed over, so the queue retries it on
+the box alert waits for a day, by the box's own clock; once the clock is set right the email is past
+its day and is dropped unsent. The alert stays in the bell. A plain relay or the practice box's
+local capture does receive it. For the owner to know. Read, not run: no TLS relay with a
+future-dated certificate was used in 3b-ii.
 
 ## The Clock row says 'connect the box to the internet' where that may not help.
 

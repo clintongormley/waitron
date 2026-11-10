@@ -24,6 +24,8 @@ import { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   devices,
+  enqueueMail,
+  outgoingMail,
   drawerOpens,
   invoiceSeries,
   openVenueDatabase,
@@ -69,7 +71,12 @@ import { mountAlertsApi } from "./alerts-api.js";
 import { createAlertRegistry } from "./alerts.js";
 import { dumpFileName } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
-import { readBoxEmailContext } from "./box-alert-email.js";
+import {
+  boxEmailMessage,
+  readBoxEmailContext,
+  readOpenEmailedIncidents,
+  startBoxEmailDuty,
+} from "./box-alert-email.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { collectBoxHealth, type BoxHealth } from "./box-health.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -1010,6 +1017,106 @@ describe("a start on a real full disk", () => {
     } finally {
       small.unfill();
       await store.close();
+    }
+  });
+
+  it("the full-disk email goes out directly while the queue refuses its row; with room, the low-space email is queued", async (ctx) => {
+    const small = needDisk(ctx);
+    const dir = realpathSync(small.folder("email-queue"));
+    await applyMigrations(dir, migrationOptionsFor(manifestSets(), null));
+    const store = await openVenueDatabase(dir);
+    const db = store.venue;
+    const now = new Date("2026-11-10T00:00:00.000Z");
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    let full = true;
+    const send = vi.fn(async () => "sent" as const);
+    const armed: (() => void)[] = [];
+    let handle: ReturnType<typeof startBoxEmailDuty> | undefined;
+    try {
+      await seedVenue(db, {
+        name: "Corner Bistro",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Sale",
+      });
+      const [admin] = await db
+        .insert(persons)
+        .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
+        .returning();
+      await withTransaction(db, () => {});
+      expect(db.all(sql`select count(*) as n from change_log`)).toEqual([{ n: 0 }]);
+      db.all(sql`pragma wal_checkpoint(truncate)`);
+      handle = startBoxEmailDuty({
+        db,
+        now: () => now,
+        disk: { since: () => (full ? now : null) },
+        space: { current: () => ({ freeBytes: 1, readAt: now, lowSince: now }) },
+        moduleNotices: async () => ({ notices: [], unavailable: [] }),
+        emailedIncidents: () => readOpenEmailedIncidents(db),
+        backupStopped: () => undefined,
+        context: () => readBoxEmailContext(db, { ring, practiceMode: true, venueLanguage: "en" }),
+        send,
+        isPrimary: () => true,
+        intervalMs: 60000,
+        log: () => {},
+        timer: (_ms, fn) => {
+          armed.push(fn);
+          return { cancel: () => {} };
+        },
+      });
+      small.fill(0);
+      armed.at(-1)!();
+      await vi.waitFor(() => expect(armed).toHaveLength(2));
+      expect(send).toHaveBeenCalledExactlyOnceWith({
+        smtp: { url: "smtp://127.0.0.1:1025", from: "Waitron <no-reply@waitron.test>" },
+        recipient: "admin@example.test",
+        ...boxEmailMessage("storage.disk_full", "en", "Corner Bistro"),
+      });
+      await expect(
+        withTransaction(db, (tx) =>
+          enqueueMail(tx, {
+            kind: "box_alert",
+            dedupeKey: `alert:probe:${admin!.id}`,
+            personId: admin!.id,
+            params: { code: "storage.space_low", wording: null },
+            now,
+            notAfter: new Date(now.getTime() + 86400000),
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "storage.disk_full" });
+      expect(await db.select().from(outgoingMail)).toEqual([]);
+      small.unfill();
+      full = false;
+      // The full-disk email reached the administrator, so only the new manager needs this one.
+      const [added] = await withTransaction(db, (tx) =>
+        tx
+          .insert(persons)
+          .values({
+            displayName: "New manager",
+            role: "manager",
+            email: "new@example.test",
+          })
+          .returning(),
+      );
+      armed.at(-1)!();
+      await vi.waitFor(() => expect(armed).toHaveLength(3));
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(await db.select().from(outgoingMail)).toEqual([
+        expect.objectContaining({
+          kind: "box_alert",
+          status: "pending",
+          personId: added!.id,
+          params: { code: "storage.space_low", wording: "null" },
+        }),
+      ]);
+    } finally {
+      small.unfill();
+      await handle?.stop();
+      await store.close();
+      // Leave room on the shared small filesystem for the remaining cases.
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

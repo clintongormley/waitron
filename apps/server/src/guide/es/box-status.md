@@ -559,22 +559,29 @@ correo cuando:
 - borró copias de seguridad antiguas para hacer sitio;
 - no se hizo una copia de seguridad por falta de espacio.
 
-Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha elegido
-ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor de correo lo
-rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contraseña equivocada),
-el equipo lo vuelve a intentar cada minuto mientras dura el problema, hasta que el servidor de
-correo lo acepta. Así, el correo llega en cuanto se arregla la conexión o los ajustes. Si el
-problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de intentarlo y no
-envía nada. Si se confirmó la hora, si hay ventas con fecha incorrecta o si se borraron copias, el
-equipo lo sigue intentando mientras su aviso esté abierto en la campana. Un disco lleno al que solo
-se le libera parte del espacio sigue casi sin espacio, así que quien no recibió el correo de disco
-lleno recibe en su lugar el de poco espacio. Un reinicio mientras dura el problema puede enviar el
-mismo correo otra vez. Mientras no haya ningún servidor de correo configurado, no se envía nada.
+Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha
+elegido ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor de
+correo lo rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contraseña
+equivocada), el equipo lo vuelve a intentar al cabo de un minuto y después con esperas cada vez
+más largas, durante un día como mucho. Así, el correo llega en cuanto se arregla la conexión o
+los ajustes, si es dentro de ese día. Si la conexión se corta después de entregar el correo al
+servidor de correo, el equipo no puede saber si salió y no lo vuelve a enviar.
+Si el problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de
+intentarlo y no envía nada. Si se confirmó la hora, si hay ventas con fecha incorrecta o si se
+borraron copias, el equipo lo sigue intentando mientras su aviso esté abierto en la campana,
+durante un día como mucho. El correo de disco lleno no se puede guardar con el disco lleno, así
+que el equipo lo envía en el acto y lo vuelve a intentar cada minuto mientras el disco siga
+lleno; los demás correos esperan a que vuelva a haber espacio. Un disco lleno al que solo
+se le libera parte del espacio sigue casi sin espacio, así que quien no recibió el correo de
+disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras el disco, una copia o la
+hora siguen con problemas puede enviar el mismo correo otra vez. Mientras no haya ningún
+servidor de correo configurado, no se envía nada.
 
 Cada vez que el equipo pone su reloj en hora envía su propio correo, aunque lo vuelva a poner en
 hora antes de un minuto, lo que marca como resuelto el aviso del primer cambio. Cuando el aviso de
 un cambio está resuelto, el equipo deja de intentar enviar su correo a un encargado cuya dirección
-rechazó del todo el servidor de correo, y un reinicio antes de enviarlo lo pierde. El aviso en sí
+rechazó del todo después el servidor de correo, y un reinicio en el minuto antes de que el correo
+quede en cola lo pierde. El aviso en sí
 sigue en la página **Avisos**, en **Resueltos**.
 
 Un equipo cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar

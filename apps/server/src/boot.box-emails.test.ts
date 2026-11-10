@@ -3,12 +3,21 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { incidents, locations, stampDeployment, withTransaction } from "@waitron/db";
+import {
+  enqueueMail,
+  incidents,
+  locations,
+  outgoingMail,
+  stampDeployment,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import type { Transaction } from "@waitron/db";
 import type { EmailDelivery } from "./email-delivery.js";
 type AccountMode = (tx: Transaction) => Promise<EmailDelivery["mode"]>;
+import { runMailLoop, runMailPass } from "./mail-sender.js";
+import { AppError } from "@waitron/shared";
 import type { startMailSender } from "./mail-sender.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Alert } from "@waitron/module";
@@ -35,6 +44,7 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 
 const holder = vi.hoisted(() => ({
+  pauseMail: false,
   deps: undefined as Parameters<typeof startBoxEmailDuty>[0] | undefined,
   armed: [] as (() => void)[],
   sent: [] as Parameters<TextEmailSender>[0][],
@@ -71,7 +81,7 @@ vi.mock("./mail-sender.js", async (load) => {
     ...actual,
     startMailSender: (deps: Parameters<typeof actual.startMailSender>[0]) => {
       holder.mail = deps;
-      return actual.startMailSender(deps);
+      return holder.pauseMail ? Promise.resolve() : actual.startMailSender(deps);
     },
   };
 });
@@ -79,7 +89,16 @@ vi.mock("./smtp-send.js", async (load) => {
   const actual = await load<typeof import("./smtp-send.js")>();
   return {
     ...actual,
-    sendSmtpMessage: async (smtp: Parameters<typeof actual.sendSmtpMessage>[0]) => {
+    sendSmtpMessage: async (
+      smtp: Parameters<typeof actual.sendSmtpMessage>[0],
+      message: Parameters<typeof actual.sendSmtpMessage>[1],
+    ) => {
+      holder.sent.push({
+        smtp,
+        recipient: String(message.to),
+        subject: String(message.subject),
+        text: String(message.text),
+      });
       holder.smtp.push(smtp);
       return { status: "sent" as const };
     },
@@ -194,6 +213,7 @@ async function shutDown(booted: Booted): Promise<void> {
   holder.managementMode = undefined;
   holder.profileMode = undefined;
   holder.mail = undefined;
+  holder.pauseMail = false;
   holder.armed.length = 0;
   holder.sent.length = 0;
   holder.smtp.length = 0;
@@ -481,6 +501,124 @@ describe("the running server's managers' email check", () => {
     }
   });
 
+  it("cancels a prior process's notice before the first duty check", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    holder.pauseMail = true;
+    const [admin] = await suite.db
+      .select()
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    const queued = await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, {
+        kind: "box_alert",
+        dedupeKey: "old-low-space",
+        personId: admin!.id,
+        params: { code: "storage.space_low", wording: null },
+        notAfter: new Date(Date.now() + 86400000),
+      }),
+    );
+    try {
+      await bootServer(booted, venue);
+      const send = vi.fn(async () => ({ status: "sent" as const }));
+      await runMailPass({
+        ...holder.mail!,
+        send,
+        resolveDelivery: async () => ({
+          mode: "smtp",
+          smtp: { url: "smtp://127.0.0.1:1", from: "box@example.test" },
+        }),
+      });
+      expect(holder.armed).toHaveLength(1);
+      expect(
+        (
+          await holder.mail!.db.select().from(outgoingMail).where(eq(outgoingMail.id, queued.id))
+        )[0]!.status,
+      ).toBe("cancelled");
+      expect(send).not.toHaveBeenCalled();
+    } finally {
+      await shutDown(booted);
+    }
+  });
+
+  it("holds due mail without claim errors while the full-disk stop is noted, then sends it", async () => {
+    const venue = await setupVenue(suite.db);
+    const booted: Booted = {};
+    holder.pauseMail = true;
+    const [admin] = await suite.db
+      .select()
+      .from(persons)
+      .where(eq(persons.email, "owner@example.test"));
+    const [incident] = await suite.db
+      .insert(incidents)
+      .values({
+        source: "backup",
+        code: "backup.archives_deleted",
+        params: { count: 1, date: "2026-11-09", lastDate: "2026-11-09", severalDays: false },
+        severity: "warning",
+        detectedAt: new Date().toISOString(),
+      })
+      .returning();
+    const queued = await withTransaction(suite.db, (tx) =>
+      enqueueMail(tx, {
+        kind: "box_alert",
+        dedupeKey: "full-disk-pause",
+        personId: admin!.id,
+        subjectId: incident!.id,
+        params: { code: "backup.archives_deleted", wording: null },
+        notAfter: new Date(Date.now() + 86400000),
+      }),
+    );
+    try {
+      await bootServer(booted, venue);
+      const disk = holder.deps!.disk as DiskFullState;
+      disk.noteRefused();
+      const log = vi.fn();
+      const send = vi.fn(async () => ({ status: "sent" as const }));
+      const deps = {
+        ...holder.mail!,
+        log,
+        send,
+        resolveDelivery: async () => ({
+          mode: "smtp" as const,
+          smtp: { url: "smtp://127.0.0.1:1", from: "box@example.test" },
+        }),
+      };
+      const lock = vi
+        .spyOn(deps.db, "withWriteLock")
+        .mockRejectedValue(new AppError("storage.disk_full", {}));
+      const controller = new AbortController();
+      let sleeps = 0;
+      try {
+        await runMailLoop({
+          ...deps,
+          signal: controller.signal,
+          sleep: async () => {
+            if (++sleeps === 3) controller.abort();
+          },
+        });
+        expect(log.mock.calls.filter(([, event]) => event === "mail.pass.threw")).toEqual([]);
+        expect(lock).not.toHaveBeenCalled();
+        expect(send).not.toHaveBeenCalled();
+        expect(
+          (await deps.db.select().from(outgoingMail).where(eq(outgoingMail.id, queued.id)))[0]!
+            .status,
+        ).toBe("pending");
+      } finally {
+        lock.mockRestore();
+      }
+      expect(await disk.full()).toBe(false);
+      await runMailPass(deps);
+      expect(send).toHaveBeenCalledOnce();
+      expect(
+        (await deps.db.select().from(outgoingMail).where(eq(outgoingMail.id, queued.id)))[0]!
+          .status,
+      ).toBe("sent");
+    } finally {
+      await shutDown(booted);
+    }
+  });
+
   it("boot emails a backup refused for room and an open old-backups-deleted alert", async () => {
     const venue = await setupVenue(suite.db);
     const booted: Booted = {};
@@ -503,7 +641,21 @@ describe("the running server's managers' email check", () => {
         .from(incidents)
         .where(eq(incidents.code, "backup.archives_deleted"));
 
+      await withTransaction(suite.db, (tx) =>
+        putCredential(
+          tx,
+          loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          }),
+          {
+            purpose: "email.smtp",
+            value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
+          },
+        ),
+      );
       await bootServer(booted, venue);
+      expect(holder.mail!.owners.some((owner) => owner.kind === "box_alert")).toBe(true);
       const sizes = { neededBytes: 3 * 1024 ** 3, availableBytes: 1024 ** 3 };
       const stoppedAt = new Date().toISOString();
       holder.outcomes!.runStopped = {
@@ -516,8 +668,10 @@ describe("the running server's managers' email check", () => {
       const refusal = boxEmailMessage("backup.run_stopped", "es", name, sizes);
       const deletion = boxEmailMessage("backup.archives_deleted", "es", name, deleted!.params);
       await tick();
-      expect(holder.sent.map((message) => message.subject).sort()).toEqual(
-        [refusal.subject, deletion.subject].sort(),
+      await vi.waitFor(() =>
+        expect(holder.sent.map((message) => message.subject).sort()).toEqual(
+          [refusal.subject, deletion.subject].sort(),
+        ),
       );
       expect(holder.sent).toEqual(
         expect.arrayContaining([

@@ -519,20 +519,24 @@ The box emails everyone who can manage the system and has an email address when:
 - a backup was not made for lack of room.
 
 Each person gets one email per problem, in their own language, or the venue's if they have not
-chosen one. If it cannot be sent, because the box has no internet or the mail server refuses it (for
-example, because the mail server settings have a wrong password), the box tries again each minute
-while the problem lasts, until the mail server accepts it. So the email arrives once the connection
-or the settings are fixed. If the problem ends first, for example because the clock was set right,
-the box stops trying and sends nothing. For a confirmed clock, sales dated wrongly and deleted
-backups, the box keeps trying while their alert is open in the bell. A full disk that is only partly
-freed is still nearly out of space, so anyone the full-disk email did not reach is sent the
-nearly-out-of-space email instead. A restart while the problem lasts can send the same email again.
+chosen one. If it cannot be sent, because the box has no internet or the mail server refuses it
+(for example, because the mail server settings have a wrong password), the box tries again a
+minute later, then after longer and longer waits, for up to a day. So the email arrives once the
+connection or the settings are fixed, if that happens within the day. If the connection breaks
+after the mail server has been handed the email, the box cannot tell whether it went and does
+not send it again. If the problem ends first, for example because the clock was
+set right, the box stops trying and sends nothing. For a confirmed clock, sales dated wrongly and
+deleted backups, the box keeps trying while their alert is open in the bell, for up to a day. The
+full-disk email cannot be saved on a full disk, so the box sends it straight away and tries again
+each minute while the disk stays full; every other email waits until the disk has room again. A full disk that is only partly freed is still nearly out of space, so
+anyone the full-disk email did not reach is sent the nearly-out-of-space email instead. A
+restart while the disk, a backup or the clock stays in trouble can send the same email again.
 While no mail server is set up, nothing is sent.
 
 Each time the box sets its clock it sends its own email, even when it sets the clock again within a
 minute, which marks the first change's alert handled. Once a change's alert is handled, the box
-stops trying to send its email to a manager whose address the mail server refused outright, and a
-restart before the email is sent loses it. The alert itself stays on the **Alerts** page, under
+stops trying to send its email to a manager whose address the mail server refused outright after
+that, and a restart in the minute before the email is queued loses it. The alert itself stays on the **Alerts** page, under
 **Handled**.
 
 A box whose clock reads before 28 October 2024 usually cannot send its email: with a date that
