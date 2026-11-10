@@ -3417,7 +3417,7 @@ A1308 changes most of the tables, and a slice that changes a path staff wait on 
 not make that path slower. Slice 0 built a bench for that, beside the [protection list](#the-protection-list). It lives
 in `apps/server/scripts/bench/` and runs from `apps/server` as `pnpm bench <command>`. It does not
 run in CI: only its unit tests do, in `apps/server`'s suite. It refuses a relative path, and a
-`--venue` or `--out` inside the repository; a refused command exited 1. `bench compare`, which only
+`--venue` or `--out` inside the repository; a refused command exits 2. `bench compare`, which only
 reads its two files, takes any path.
 
 The bench builds a venue that trades through the real routes (`app.request`, with no network and a
@@ -3459,12 +3459,15 @@ every id written `:id`), its `count`, `totalMs`, `medianMs` and `p95Ms`, so a re
 with history shows by name across the days. `checkpointMs` is the time spent checkpointing the
 database and copying the venue to `last-day/`, measured apart because that copy grows with the
 database. `dayMs - checkpointMs - sum(totalMs)` is the time outside requests: the bench's own reads
-between them, the overnight filing, the attendance passes and the daily close. A resumed build adds to the file and keeps each day once.
+between them, the overnight filing, the attendance passes and the daily close. A resumed build adds
+to the file and keeps each day once.
 
 If a build stops, run the same command again. It throws away `venue/`, because a half-traded day
 cannot be removed from the append-only tables, and carries on from `last-day/`. Running it again with
-a larger `--days` extends a finished build. It refuses only a different `--seed`. Nothing checks that
-the code is the same, so never resume a folder with code that plans the days differently.
+a larger `--days` extends a finished build, and removes `volume.json` until the extension finishes. It
+refuses a different `--seed`, a different `--bills-per-day`, and a `--days` smaller than the days it
+has finished. Nothing checks that the code is the same, so never resume a folder with code that plans
+the days differently.
 
 Plan for a long run. On 9 November 2026 the full year took 8 h 28 min on an otherwise idle 32-core
 Linux server with Node 26.13.0, from 0.18 s a bill on day 1 to 0.49 s on day 360, and left 12.7
@@ -3517,11 +3520,13 @@ floor.read           5.67 ms to 7.44 ms      5.59 ms         same
 filing.pass          8.68 ms to 12.29 ms     10.45 ms        same
 ```
 
-3 samples are too few to trust a verdict: keep the default of 200.
+3 samples are too few to trust a verdict: keep the default of 200. A case only one result holds is
+named under the table, as `only in before: …` or `only in after: …`.
 
-`bench compare` exits 0 whenever it can read both files, because a slower case is for a person to judge. When the two results
-differ in seed, profile or machine it prints `not compared: …` instead of the table, and still exits
-0. So read what it prints, never its exit status:
+`bench compare` exits 0 whenever it can read both files, because a slower case is for a person to
+judge. When the two results differ in seed, profile or machine, or a case has no rounds or a round
+median that is not a number, it prints `not compared: …` instead of the table, and still exits 0. So
+read what it prints, never its exit status:
 
 ```text
 not compared: bench: the two results differ in seed: 1 against 2
