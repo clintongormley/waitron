@@ -762,8 +762,9 @@ test("clicking a block opens a wide editor: Staff role and How many on one row, 
     expect(cancel(el).variant).toBe("secondary");
     expect(remove.variant).toBe("danger");
     const group = cancel(el).parentElement!;
-    expect(group.slot).toBe("cancel");
-    expect([...group.children]).toEqual([cancel(el), remove]);
+    expect(cancel(el).slot).toBe("cancel");
+    expect(remove.slot).toBe("cancel");
+    expect([...group.querySelectorAll('[slot="cancel"]')]).toEqual([cancel(el), remove]);
     expect(save(el).slot).toBe("");
     expect(save(el).parentElement!.localName).toBe("wt-form-actions");
   } finally {

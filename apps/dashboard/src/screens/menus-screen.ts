@@ -3800,23 +3800,13 @@ export class MenusScreen extends LitElement {
               .categories=${this.categories}
               .inSection=${this.#pickerHeld}
               .onMenu=${target.menuId === this.menuId ? this.#onMenu : null}
+              .requestError=${this.addProductsError ?? ""}
               .busy=${this.busy}
               @wt-add-products=${(event: CustomEvent<{ productIds: string[] }>) => {
                 event.stopPropagation();
                 this.#addProducts(event.detail.productIds);
               }}
-              >${
-                this.addProductsError
-                  ? html`<p
-                      class="error"
-                      slot="message"
-                      role="alert"
-                      data-test="add-products-error"
-                    >
-                      ${this.addProductsError}
-                    </p>`
-                  : nothing
-              }<wt-button
+              ><wt-button
                 slot="cancel"
                 variant="secondary"
                 data-test="add-products-cancel"

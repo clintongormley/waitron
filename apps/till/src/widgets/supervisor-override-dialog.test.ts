@@ -24,6 +24,12 @@ async function mount(props: Partial<TillSupervisorOverrideDialog> = {}) {
 }
 
 const root = (el: TillSupervisorOverrideDialog) => el.shadowRoot!;
+async function shownError(el: TillSupervisorOverrideDialog) {
+  await root(el).querySelector("wt-form-actions")?.updateComplete;
+  const dialog = root(el).querySelector("wt-dialog")!;
+  await dialog.updateComplete;
+  return dialog.shadowRoot!.querySelector('[role="alert"]');
+}
 const pad = (el: TillSupervisorOverrideDialog) =>
   root(el).querySelector<HTMLElement & { value: string }>("till-numeric-pad");
 
@@ -133,7 +139,7 @@ describe("till-supervisor-override-dialog", () => {
     await pick(el, "sup-1");
     el.error = "pin.invalid";
     await el.updateComplete;
-    const alert = root(el).querySelector('[role="alert"]');
+    const alert = await shownError(el);
     expect(alert).not.toBeNull();
     expect(alert!.textContent).toContain(t("pin.invalid"));
   });
@@ -143,7 +149,7 @@ describe("till-supervisor-override-dialog", () => {
     await pick(el, "sup-1");
     el.error = "pin.throttled";
     await el.updateComplete;
-    const alert = root(el).querySelector('[role="alert"]');
+    const alert = await shownError(el);
     expect(alert!.textContent).toContain(t("pin.throttled"));
     expect(alert!.textContent).not.toContain(t("override.error"));
   });
@@ -156,10 +162,10 @@ describe("till-supervisor-override-dialog", () => {
     await el.updateComplete;
     el.error = "pin.invalid";
     await el.updateComplete;
-    expect(root(el).querySelector('[role="alert"]')).not.toBeNull();
+    expect(await shownError(el)).not.toBeNull();
 
     await typePin(el, "1");
-    expect(root(el).querySelector('[role="alert"]')).toBeNull();
+    expect(await shownError(el)).toBeNull();
   });
 
   it("maps any other code to the generic override.error copy, never the raw code", async () => {
@@ -167,7 +173,7 @@ describe("till-supervisor-override-dialog", () => {
     await pick(el, "sup-1");
     el.error = "server.internal";
     await el.updateComplete;
-    const alert = root(el).querySelector('[role="alert"]');
+    const alert = await shownError(el);
     expect(alert!.textContent).toContain(t("override.error"));
     expect(alert!.textContent).not.toContain("server.internal");
   });
@@ -177,7 +183,7 @@ describe("till-supervisor-override-dialog", () => {
     await pick(el, "sup-1");
     el.error = "authorization.not_permitted";
     await el.updateComplete;
-    const alert = root(el).querySelector('[role="alert"]');
+    const alert = await shownError(el);
     expect(alert!.textContent!.trim()).toBe(codeMessage("authorization.not_permitted"));
   });
 });
@@ -219,4 +225,22 @@ describe("till-supervisor-override-dialog: naming the role that must approve", (
       t("override.pick_supervisor"),
     );
   });
+});
+
+it("hands a refusal to the footer row while Authorize remains usable for retry", async () => {
+  const { el } = await mount();
+  await pick(el, "sup-1");
+  await typePin(el, "1234");
+  el.error = "pin.invalid";
+  await el.updateComplete;
+  const actions = root(el).querySelector<
+    HTMLElement & { error: string; updateComplete: Promise<unknown> }
+  >('wt-form-actions[slot="footer"]');
+  expect(actions).not.toBeNull();
+  await actions!.updateComplete;
+  expect(actions!.error).toBe(t("pin.invalid"));
+  expect(root(el).querySelector(".error")).toBeNull();
+  expect(root(el).querySelector<HTMLElement & { disabled: boolean }>(".authorize")!.disabled).toBe(
+    false,
+  );
 });

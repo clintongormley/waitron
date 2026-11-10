@@ -3881,13 +3881,15 @@ it("keeps the picker open and explains a refused product add", async () => {
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() =>
-    expect(text(inModal(el, "add-products", '[data-test="add-products-error"]'))).toBe(
-      codeMessage("menu_section.membership_invalid"),
-    ),
+    expect(
+      (picker.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+        .error,
+    ).toBe(codeMessage("menu_section.membership_invalid")),
   );
-  // It sits with the buttons, in the picker's bottom block.
-  expect(inModal(el, "add-products", '[data-test="add-products-error"]').assignedSlot?.name).toBe(
-    "message",
+  const actions = picker.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  expect(actions.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+    codeMessage("menu_section.membership_invalid"),
   );
   expect(modal(el, "add-products").open).toBe(true);
 });
@@ -3945,9 +3947,10 @@ it("keeps the product picker open while its add is out and its section leaves th
   );
   adding.reject({ code: "menu_section.membership_invalid" });
   await vi.waitFor(() =>
-    expect(text(inModal(el, "add-products", '[data-test="add-products-error"]'))).toBe(
-      codeMessage("menu_section.membership_invalid"),
-    ),
+    expect(
+      (picker.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+        .error,
+    ).toBe(codeMessage("menu_section.membership_invalid")),
   );
   expect(modal(el, "add-products").open).toBe(true);
   expect(q(el, '[data-test="member-error"]')).toBeNull();
@@ -4430,9 +4433,10 @@ it("keeps a picker whose add was refused open, and sends a second add, when the 
   await vi.waitFor(() => expect(q(el, '[data-test="structure-loading"]')).not.toBeNull());
   adding.reject({ code: "menu_section.membership_invalid" });
   await vi.waitFor(() =>
-    expect(text(inModal(el, "add-products", '[data-test="add-products-error"]'))).toBe(
-      codeMessage("menu_section.membership_invalid"),
-    ),
+    expect(
+      (picker.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string })
+        .error,
+    ).toBe(codeMessage("menu_section.membership_invalid")),
   );
 
   client.addSectionProducts.mockResolvedValue({ added: 1 });

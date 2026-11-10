@@ -97,11 +97,6 @@ export class PeriodDialog extends LitElement {
       [data-test="not-painted"] {
         color: var(--wt-color-warning);
       }
-      .cancel-group {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
       [data-test="menu-includes"] {
         margin: calc(-1 * var(--wt-space-3)) 0 0;
         color: var(--wt-color-text-muted);
@@ -566,30 +561,31 @@ export class PeriodDialog extends LitElement {
           slot="footer"
           .error=${[bottom, marked ? t("menu.fix_fields") : ""].filter(Boolean).join(" ")}
         >
-          <div slot="cancel" class="cancel-group">
-            <wt-button
-              variant="secondary"
-              ?disabled=${this.busy}
-              @click=${() => {
-                if (current())
-                  void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
-              }}
-              >${t("menu.cancel")}</wt-button
-            >
-            ${
-              this.period && this.deletable
-                ? html`<wt-button
-                    data-test="delete-period"
-                    variant="danger"
-                    ?disabled=${this.busy}
-                    @click=${() => {
-                      if (current()) void this.requestDelete(this.period!.id);
-                    }}
-                    >${t("period.delete_ellipsis")}</wt-button
-                  >`
-                : nothing
-            }
-          </div>
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            ?disabled=${this.busy}
+            @click=${() => {
+              if (current())
+                void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+            }}
+            >${t("menu.cancel")}</wt-button
+          >
+          ${
+            this.period && this.deletable
+              ? html`<wt-button
+                  slot="cancel"
+                  data-test="delete-period"
+                  variant="danger"
+                  ?disabled=${this.busy}
+                  @click=${() => {
+                    if (current()) void this.requestDelete(this.period!.id);
+                  }}
+                  >${t("period.delete_ellipsis")}</wt-button
+                >`
+              : nothing
+          }
+
           <wt-button
             data-test="save-period"
             variant=${s.variant}

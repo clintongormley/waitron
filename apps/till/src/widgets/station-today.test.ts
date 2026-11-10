@@ -1,3 +1,4 @@
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { page } from "vitest/browser";
@@ -203,9 +204,9 @@ it.each(["pin.invalid", "pin.throttled"])(
     await expect.poll(() => override.error).toBe(pinCode);
     expect(changed).toBe(0);
     await override.updateComplete;
-    expect(override.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
-      pinCode === "pin.invalid" ? "Wrong PIN" : "Too many",
-    );
+    expect(
+      (await formMessageOf(override.shadowRoot!.querySelector("wt-form-actions")!))!.textContent,
+    ).toContain(pinCode === "pin.invalid" ? "Wrong PIN" : "Too many");
     await enterPin("5678");
     await expect.poll(() => changed).toBe(1);
     expect(calls.filter((c) => c.method === "PUT").map((c) => c.body)).toEqual([

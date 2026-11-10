@@ -23,7 +23,7 @@ export interface AddableProduct {
  * Picks several products to add to one section. A product the section already holds is not
  * offered; one elsewhere on the menu around it is only marked, since a product may sit in several
  * sections. A host may put its own Cancel in the `cancel` slot, which lands beside the confirm
- * action, and a message of its own, such as a refused add, in the `message` slot above the count.
+ * action. A refused request is given through `requestError` to the bottom action row.
  */
 @customElement("dashboard-section-add-products")
 export class SectionAddProducts extends LitElement {
@@ -148,6 +148,7 @@ export class SectionAddProducts extends LitElement {
   /** Null outside a menu, where there is no menu to mark. */
   @property({ attribute: false }) onMenu: string[] | null = null;
   @property({ type: Boolean }) busy = false;
+  @property() requestError = "";
   @state() private categoryId = "";
   @state() private search = "";
   @state() private selected: ReadonlySet<string> = new Set();
@@ -397,7 +398,6 @@ export class SectionAddProducts extends LitElement {
         ${this.#list()}
       </fieldset>
       <div class="bottom">
-        <slot name="message"></slot>
         ${
           this.error
             ? html`<p class="error" id="add-products-error" data-test="error">
@@ -408,7 +408,7 @@ export class SectionAddProducts extends LitElement {
         <p class="count" data-test="count" role="status">
           ${t("add_products.selected").replace("{count}", String(count))}
         </p>
-        <wt-form-actions>
+        <wt-form-actions .error=${this.requestError}>
           <slot name="cancel" slot="cancel"></slot>
           <wt-button
             variant=${addAction.variant}

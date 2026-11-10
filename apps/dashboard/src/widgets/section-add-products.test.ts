@@ -526,3 +526,20 @@ it("clears the nothing-chosen explanation once the header checkbox chooses", asy
   await tickHeader(el);
   expect(el.shadowRoot!.querySelector('[data-test="error"]')).toBeNull();
 });
+
+it("keeps a request refusal above Add and permits retry with the same selection", async () => {
+  const el = await mount();
+  await tick(el, "p-ipa");
+  Object.assign(el, { requestError: "Some products could not be added. Try again." });
+  await el.updateComplete;
+  const actions = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "wt-form-actions");
+  await actions.updateComplete;
+  const message = actions.shadowRoot!.querySelector<HTMLElement>("[role=alert]");
+  expect(message?.textContent).toBe("Some products could not be added. Try again.");
+  expect(message!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    q(el, '[data-test="add"]').getBoundingClientRect().top,
+  );
+  const adds = capture(el);
+  q(el, '[data-test="add"]').click();
+  expect(adds).toEqual([{ productIds: ["p-ipa"] }]);
+});

@@ -10,7 +10,7 @@ afterEach(cleanup);
 describe.each(["light", "dark"] as const)("wt-form-actions a11y (%s theme)", (theme) => {
   test("cancel and primary actions", async () => {
     await mountThemed(
-      '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+      '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button slot="cancel" variant="danger">Delete</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>',
       theme,
     );
     await expectNoA11yViolations(host);

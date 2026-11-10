@@ -349,7 +349,7 @@ it("Cancel closes without a coordinator, and reopening clears earlier edits and 
   await change(el, "name", { value: "Dinner" });
   el.refusal = { code: "menu_period.name_taken" };
   await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!.click();
+  el.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!.click();
   await expect.poll(() => el.open).toBe(false);
   el.period = undefined;
   el.open = true;
@@ -614,7 +614,7 @@ it("departed controls cannot edit, submit or close a reopened period", async () 
   const oldMenu = field(el, "menuId");
   const oldStaffMenus = field(el, "staffMenuIds");
   const oldSave = save(el);
-  const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("[slot=cancel] wt-button")!;
+  const oldCancel = el.shadowRoot!.querySelector<HTMLElement>("wt-button[slot=cancel]")!;
   const oldModal = el.shadowRoot!.querySelector("wt-modal")!;
   el.open = false;
   await el.updateComplete;
@@ -812,9 +812,10 @@ it("Delete… shows only when deletable and editing", async () => {
   const footer = editing.shadowRoot!.querySelector("wt-modal > wt-form-actions[slot=footer]");
   expect(footer).not.toBeNull();
   expect(deleteButton(editing)!.closest("wt-form-actions")).toBe(footer);
-  const cancelGroup = footer!.querySelector(":scope > [slot=cancel]");
   expect(
-    [...cancelGroup!.querySelectorAll("wt-button")].map((button) => button.textContent!.trim()),
+    [...footer!.querySelectorAll(":scope > wt-button[slot=cancel]")].map((button) =>
+      button.textContent!.trim(),
+    ),
   ).toEqual(["Cancel", "Delete…"]);
   expect(
     [...footer!.querySelectorAll(":scope > wt-button:not([slot])")].map((button) =>
@@ -842,7 +843,7 @@ it.each([1280, 390])("Delete… sits left of Save, after Cancel, at %i px", asyn
       el.deletable = true;
     });
     const footer = el.shadowRoot!.querySelector("wt-form-actions")!;
-    const cancel = footer.querySelector<HTMLElement>("[slot=cancel] wt-button:not([data-test])")!;
+    const cancel = footer.querySelector<HTMLElement>("wt-button[slot=cancel]:not([data-test])")!;
     const remove = deleteButton(el)!;
     const submit = save(el);
     await Promise.all(

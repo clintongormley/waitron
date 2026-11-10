@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import type { PropertyValues } from "lit";
@@ -8,6 +8,7 @@ import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import type { PersonRole, StaffMember } from "../api/client.js";
 
 export interface OverrideConfirmDetail {
@@ -56,15 +57,6 @@ export class TillSupervisorOverrideDialog extends LitElement {
         margin-bottom: var(--wt-space-3);
         font-size: var(--wt-font-size-xl);
         letter-spacing: var(--wt-space-2);
-      }
-
-      .error {
-        margin: 0 0 var(--wt-space-3);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-danger);
-        color: var(--wt-color-on-danger);
-        font-weight: var(--wt-font-weight-bold);
       }
     `,
   ];
@@ -225,9 +217,11 @@ export class TillSupervisorOverrideDialog extends LitElement {
               </div>
             `
       }
-      <wt-button slot="footer" class="cancel" variant="secondary" @click=${() => this.#cancel()}>
-        ${t("action.cancel")}
-      </wt-button>
+      <wt-form-actions slot="footer"
+        ><wt-button slot="cancel" class="cancel" variant="secondary" @click=${() => this.#cancel()}>
+          ${t("action.cancel")}
+        </wt-button></wt-form-actions
+      >
     `;
   }
 
@@ -237,28 +231,24 @@ export class TillSupervisorOverrideDialog extends LitElement {
       <p class="operator">${person.displayName}</p>
       <p class="prompt">${this.#text("enter_pin")}</p>
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
-      ${
-        showError
-          ? html`<p class="error" role="alert">${overrideErrorText(this.error!)}</p>`
-          : nothing
-      }
       <till-numeric-pad
         mode="pin"
         .value=${this.pin}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
       ></till-numeric-pad>
-      <wt-button slot="footer" class="back" variant="secondary" @click=${() => this.#back()}>
-        ${t("action.back")}
-      </wt-button>
-      <wt-button
-        slot="footer"
-        class="authorize"
-        variant="primary"
-        ?disabled=${this.pin === ""}
-        @click=${() => this.#confirm()}
+      <wt-form-actions slot="footer" .error=${showError ? overrideErrorText(this.error!) : ""}>
+        <wt-button slot="cancel" class="back" variant="secondary" @click=${() => this.#back()}>
+          ${t("action.back")}
+        </wt-button>
+        <wt-button
+          class="authorize"
+          variant="primary"
+          ?disabled=${this.pin === ""}
+          @click=${() => this.#confirm()}
+        >
+          ${t("action.authorize")}
+        </wt-button></wt-form-actions
       >
-        ${t("action.authorize")}
-      </wt-button>
     `;
   }
 }
