@@ -5,6 +5,7 @@ import { buildYear } from "./build-year.js";
 import { compareTimings, formatComparison } from "./compare-timings.js";
 import { measureVenue, type MeasureResult } from "./measure.js";
 import { BENCH_PROFILE } from "./profile.js";
+import { describeRuntime } from "./runtime.js";
 
 const USAGE =
   "Usage: build --out <absolute dir> [--days 360] [--bills-per-day 250] [--seed 1]\n" +
@@ -92,6 +93,7 @@ async function measure(args: readonly string[], print: (text: string) => void) {
     samples: wholeNumber(found, "--samples", 200),
     rounds: wholeNumber(found, "--rounds", 3),
   });
+  print(describeRuntime(result));
   for (const entry of result.cases)
     print(
       `${entry.name}: ` +
@@ -112,7 +114,9 @@ function compare(args: readonly string[], print: (text: string) => void) {
   const before = read("--before");
   const after = read("--after");
   try {
-    print(formatComparison(compareTimings(before, after)));
+    const compared = compareTimings(before, after);
+    print(describeRuntime(before));
+    print(formatComparison(compared));
   } catch (error) {
     print(`not compared: ${error instanceof Error ? error.message : String(error)}`);
   }

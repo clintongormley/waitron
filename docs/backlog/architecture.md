@@ -1590,7 +1590,9 @@ statistics, 1.63 s with them, and 0.48 s with them plus three partial indexes; e
 waiting records still took 29 s each. Instead of statistics, a read that picks a worse index
 without them names its index with `indexed by`: the two reads of `payments` by working order
 (A1469), and the four filed-record reads of A1471 (#2711). Commands and result files: #2704 (with
-and without statistics) and the A1469 payments PR (the partial indexes).
+and without statistics) and the A1469 payments PR (the partial indexes). Those figures were taken on
+the bench server, whose Node and SQLite match the box image's (Node v26.13.0, SQLite 3.54.0, built
+without STAT4, so `ANALYZE` there gathers only `sqlite_stat1`); the decision stands as measured.
 
 - **Official holiday names and English display names (A971, owner 2026-10-23).** Keep the published official name as the annual-rule key; choose the display name by the screen language. The country calendar supplies English names for holidays and area choices. A stored name absent from the supplied English-name inventory stays as recorded. This changes no stored holiday rule or database schema.
 

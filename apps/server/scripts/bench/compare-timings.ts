@@ -4,6 +4,8 @@ import type { MeasureResult } from "./measure.js";
 /** How far after's median may move past before's spread of round medians and still be noise. */
 const MARGIN = 0.1;
 
+const RUNTIME_FIELDS = ["node", "sqlite", "sqliteStat4"] as const;
+
 export type Verdict = "slower" | "faster" | "same";
 
 export interface ComparisonRow {
@@ -23,7 +25,13 @@ export interface Comparison {
 }
 
 export function compareTimings(before: MeasureResult, after: MeasureResult): Comparison {
-  for (const field of ["seed", "profile", "machine"] as const)
+  for (const [side, result] of [
+    ["before", before],
+    ["after", after],
+  ] as const)
+    if (RUNTIME_FIELDS.some((field) => result[field] === undefined))
+      throw new Error(`bench: the ${side} result does not record which Node and SQLite made it`);
+  for (const field of [...RUNTIME_FIELDS, "seed", "profile", "machine"] as const)
     if (!isDeepStrictEqual(before[field], after[field]))
       throw new Error(
         `bench: the two results differ in ${field}: ${JSON.stringify(before[field])} against ` +

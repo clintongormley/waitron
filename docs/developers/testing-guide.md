@@ -3452,11 +3452,11 @@ built 2 days into /tmp/bench-new7-FKz5
 
 The folder holds `venue/`, the venue being traded, and `last-day/`, a copy taken after each finished
 day. `bench-session.json` records the last finished day, and `volume.json`, written only when the
-build finishes, holds the row count of every table, the size of `venue.db`, the seed, the commit and
-the profile.
+build finishes, holds the Node and SQLite versions, the row count of every table, the size of
+`venue.db`, the seed, the commit and the profile.
 
-`request-timings.jsonl` holds one line of JSON for each finished day: `day`, `date`, `bills`,
-`dayMs`, `checkpointMs` and `routes`. `routes` gives, for each kind of request (`METHOD /path` with
+`request-timings.jsonl` holds one line of JSON for each finished day: `day`, `node`, `sqlite`,
+`sqliteStat4`, `date`, `bills`, `dayMs`, `checkpointMs` and `routes`. `routes` gives, for each kind of request (`METHOD /path` with
 every id written `:id`), its `count`, `totalMs`, `medianMs` and `p95Ms`, so a request whose cost grows
 with history shows by name across the days. `checkpointMs` is the time spent checkpointing the
 database and copying the venue to `last-day/`, measured apart because that copy grows with the
@@ -3500,9 +3500,9 @@ the short run of requests a screen sends when it opens:
 
 Only the requests in that column are inside the timer. A case's set-up runs untimed, and the case
 stops the run if the answer does not show the set-up, for example if `kitchen.queue` sees fewer than
-its 30 open dishes. The command prints each case's median for each round and writes the whole result,
-with `load: "idle"`, the machine, the Node version, the commit, the seed, the profile and the row
-count.
+its 30 open dishes. The command prints the Node and SQLite it ran on, then each case's median for each
+round, and writes the whole result, with the Node and SQLite versions, `load: "idle"`, the machine,
+the commit, the seed, the profile and the row count.
 
 **Compare two results.**
 
@@ -3510,7 +3510,7 @@ count.
 pnpm bench compare --before <file> --after <file>
 ```
 
-For each case it takes the median of the after result's round medians. It prints `slower` if that is
+It prints the Node and SQLite both results were made by, then the table. For each case it takes the median of the after result's round medians. It prints `slower` if that is
 more than 10% above the before result's highest round median, `faster` if more than 10% below the
 lowest, and `same` otherwise. Two measurements of the same small build, 3 samples and 2 rounds each,
 printed in part:
@@ -3526,13 +3526,22 @@ filing.pass          8.68 ms to 12.29 ms     10.45 ms        same
 named under the table, as `only in before: …` or `only in after: …`.
 
 `bench compare` exits 0 whenever it can read both files, because a slower case is for a person to
-judge. When the two results differ in seed, profile or machine, or a case has no rounds or a round
-median that is not a number, it prints `not compared: …` instead of the table, and still exits 0. So
+judge. When the two results differ in Node, SQLite or STAT4, seed, profile or machine, when either
+does not record which Node and SQLite made it, or when a case has no rounds or a round median that is
+not a number, it prints `not compared: …` instead of the table, and still exits 0. So
 read what it prints, never its exit status:
 
 ```text
 not compared: bench: the two results differ in seed: 1 against 2
 ```
+
+**Which Node and SQLite made a result.** Every result the bench writes records Node's version
+(`node`), SQLite's version (`sqlite`) and whether SQLite was built with STAT4 (`sqliteStat4`), read
+from `node:sqlite` itself, and `bench compare` refuses two results that differ in any of them. The
+same Node version can carry a different SQLite. Measured on 10 November 2026: the bench server and
+the box image's base (`node:26-slim`) both ran Node v26.13.0 with SQLite 3.54.0, built without STAT4,
+while a Homebrew Node v26.13.0 on macOS ran SQLite 3.54.1 with STAT4. So bench figures are taken on
+the bench server.
 
 ### How a slice uses it
 

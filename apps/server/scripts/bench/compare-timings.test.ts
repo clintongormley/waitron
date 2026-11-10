@@ -4,9 +4,11 @@ import type { MeasureResult } from "./measure.js";
 
 function result(medians: Record<string, number[]>, seed = 1): MeasureResult {
   return {
+    node: "v26.13.0",
+    sqlite: "3.54.0",
+    sqliteStat4: false,
     load: "idle",
     machine: { hostname: "bench", cpu: "M-test", cores: 8, memoryBytes: 1, platform: "darwin" },
-    node: "v24.0.0",
     commit: "0".repeat(40),
     seed,
     profile: { days: 360 },
@@ -62,6 +64,30 @@ describe("compareTimings", () => {
       compareTimings(before, { ...other, machine: { ...other.machine, cpu: "other" } }),
     ).toThrow(/machine/);
   });
+
+  it.each([
+    ["node", { node: "v26.14.0" }, '"v26.13.0" against "v26.14.0"'],
+    ["sqlite", { sqlite: "3.54.1" }, '"3.54.0" against "3.54.1"'],
+    ["sqliteStat4", { sqliteStat4: true }, "false against true"],
+  ])("refuses two results made by a different %s", (field, change, values) => {
+    expect(() => compareTimings(before, { ...before, ...change })).toThrow(
+      `bench: the two results differ in ${field}: ${values}`,
+    );
+  });
+
+  it.each(["before", "after"] as const)(
+    "refuses the %s result when it does not record which Node and SQLite made it",
+    (side) => {
+      const unstamped: Partial<MeasureResult> = { ...before };
+      delete unstamped.sqlite;
+      delete unstamped.sqliteStat4;
+      const [first, second] = side === "before" ? [unstamped, before] : [before, unstamped];
+
+      expect(() => compareTimings(first as MeasureResult, second as MeasureResult)).toThrow(
+        `bench: the ${side} result does not record which Node and SQLite made it`,
+      );
+    },
+  );
 
   it("lists the cases only one result holds, under the table", () => {
     const compared = compareTimings(

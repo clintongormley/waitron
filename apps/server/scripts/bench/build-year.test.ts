@@ -11,6 +11,7 @@ import {
   VOLUME_FILE,
   WORKING_DIR,
 } from "./build-year.js";
+import { runtime } from "./runtime.js";
 import type { RouteTiming } from "./trading-day.js";
 
 // Each run migrates and seeds a venue (about 1.3 s locally) and trades a few bills a day.
@@ -232,6 +233,14 @@ describe("buildYear", () => {
     }, CASE_TIMEOUT_MS);
     afterAll(() => {
       if (out !== "") rmSync(out, { recursive: true, force: true });
+    });
+
+    it("says on each day's timing line and atop volume.json which Node and SQLite made them", () => {
+      const made = runtime();
+      for (const line of timingLines(out)) expect(line).toMatchObject(made);
+      const written = JSON.parse(readFileSync(join(out, VOLUME_FILE), "utf8")) as object;
+      expect(Object.keys(written).slice(0, 3)).toEqual(["node", "sqlite", "sqliteStat4"]);
+      expect(written).toMatchObject(made);
     });
 
     it("records the bills a day in the session", () => {
