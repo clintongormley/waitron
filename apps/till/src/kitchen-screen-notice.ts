@@ -51,6 +51,17 @@ export function lostSlotLine(slot: "station" | "zone", name: string): string {
   );
 }
 
+/** Where to fix a till's Station or Pass screen that a narrowing left with nothing to show. */
+export function emptiedScreenGuidance(screenGone: boolean) {
+  return html`<p class="choose-again" data-choose-again>
+    ${t(
+      screenGone
+        ? "kitchen_screen.offer_again_in_dashboard"
+        : "kitchen_screen.choose_again_in_dashboard",
+    )}
+  </p>`;
+}
+
 /** The look of a "no longer available" line. */
 export const unavailableStyles = css`
   .unavailable {

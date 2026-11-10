@@ -678,6 +678,10 @@ export const en = {
   "kitchen_screen.unavailable": "This screen is no longer available: {screen}",
   "kitchen_screen.switched": "Now showing: {screen}",
   "kitchen_screen.choose_again": "Ask a manager to choose its screens again in Devices.",
+  "kitchen_screen.choose_again_in_dashboard":
+    "Choose this device's screens again in the dashboard, under Devices.",
+  "kitchen_screen.offer_again_in_dashboard":
+    "This device's profile can offer it again in the dashboard, under Device profiles.",
   "station.open": "Kitchen",
   "station.title": "Kitchen",
   "station.back": "Back to counter",
@@ -2646,6 +2650,10 @@ export const es: Record<StringKey, string> = {
   "kitchen_screen.switched": "Ahora muestra: {screen}",
   "kitchen_screen.choose_again":
     "Pide a un responsable que vuelva a elegir sus pantallas en Dispositivos.",
+  "kitchen_screen.choose_again_in_dashboard":
+    "Vuelve a elegir las pantallas de este dispositivo en el panel, en Dispositivos.",
+  "kitchen_screen.offer_again_in_dashboard":
+    "El perfil de este dispositivo puede volver a ofrecerla en el panel, en Perfiles de dispositivo.",
   "station.open": "Cocina",
   "station.title": "Cocina",
   "station.back": "Volver al mostrador",

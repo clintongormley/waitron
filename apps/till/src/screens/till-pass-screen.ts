@@ -5,6 +5,7 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
+  emptiedScreenGuidance,
   kitchenScreenNoticeText,
   lostSlotLine,
   unavailableStyles,
@@ -136,6 +137,10 @@ export class TillPassScreen extends LitElement {
         background: var(--wt-color-warning);
         color: var(--wt-color-on-warning);
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .choose-again {
+        margin: 0;
       }
 
       .empty {
@@ -642,7 +647,7 @@ export class TillPassScreen extends LitElement {
     return html`<section class="screen" aria-label=${t("expo.title")}>
         ${
           boardId === null || !this.#shows()
-            ? html`${this.#lead()}${this.#unavailable()}`
+            ? html`${this.#lead()}${this.#unavailable()}${emptiedScreenGuidance(this.passGone)}`
             : this.#board(boardId)
         }
       </section>
