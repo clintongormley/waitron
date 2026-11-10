@@ -285,7 +285,9 @@ async function installedRun() {
         "-drive",
         `file=${stick},format=raw,if=none,id=stick,snapshot=on`,
         "-device",
-        "virtio-blk-pci,drive=stick,serial=waitron-dev-stick,bootindex=1",
+        "qemu-xhci,id=usb",
+        "-device",
+        "usb-storage,bus=usb.0,drive=stick,serial=waitron-dev-stick,bootindex=1",
       );
     args.push(
       "-drive",

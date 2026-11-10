@@ -16,10 +16,10 @@ case "$name" in
   */product_name) echo "\${DMI:-Waitron-B3-dev}" ;;
   */waitron-dev-root) echo installed-root ;;
   *) echo machine-a ;; esac ;;
- findmnt) if [[ "$*" == *UUID* ]]; then echo "\${ROOT_UUID:-wrong-root}"; else echo /dev/vda2; fi ;;
+ findmnt) if [[ "$*" == *UUID* ]]; then echo "\${ROOT_UUID:-wrong-root}"; else echo "\${SOURCE_ROOT:-/dev/vda2}"; fi ;;
  lsblk)
   if [[ "$*" == *MOUNTPOINTS* ]]; then echo "\${MOUNTED:-}"
-  elif [[ "$*" == *PKNAME* ]]; then echo vda
+  elif [[ "$*" == *PKNAME* ]]; then echo "\${SOURCE_PARENT:-vda}"
   elif [[ "$*" == *SERIAL* && "$*" != *json* ]]; then echo "\${SERIAL:-waitron-dev-target}"
   else printf '%s\n' "$DISKS"; fi ;;
  ls) echo "\${HOLDERS:-}" ;;
@@ -87,6 +87,17 @@ describe("development disk writer", () => {
     expect(result.stderr).toContain(`install.refused:${reason}`);
     expect(result.status).toBe(1);
     expect(result.writes).toBe("");
+  });
+  it("excludes the USB source while admitting the virtio target", () => {
+    const result = writer({
+      SOURCE_ROOT: "/dev/sda2",
+      SOURCE_PARENT: "sda",
+      DISKS: JSON.stringify({
+        blockdevices: [disk("/dev/sda", "waitron-dev-stick"), disk("/dev/vda")],
+      }),
+    });
+    expect(result.status).toBe(42);
+    expect(result.writes).toBe("/dev/vda\n");
   });
   it("admits only the blank named QEMU target to the first partition write", () => {
     const result = writer();
