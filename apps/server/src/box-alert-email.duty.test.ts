@@ -1,4 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { CORE_MIGRATIONS, incidents, outgoingMail, persons } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { boxAlertMail } from "./box-alert-mail.js";
+import { runMailPass } from "./mail-sender.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOX_EMAIL_CHECK_MS,
   boxEmailMessage,
@@ -27,7 +33,68 @@ function at(minute: number): Date {
   return new Date(Date.UTC(2026, 9, 23, 12, minute));
 }
 
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+beforeEach(async () => {
+  await seedVenue(suite.db, { name: VENUE });
+  for (const recipient of [ANA, BEN]) {
+    await suite.db.insert(persons).values({
+      id: recipient.personId,
+      displayName: recipient.personId,
+      role: "admin",
+      email: recipient.email,
+      locale: recipient.language === "es" ? "es-ES" : "en-GB",
+    });
+  }
+});
+
 function duty() {
+  let now = at(0);
+  const controller = new AbortController();
+  const owner = boxAlertMail({ venueLanguage: "en", log: (...args) => log(...args) });
+  const known = new Set<string>();
+  const sources = [
+    "dashboard",
+    "fiscal_filing",
+    "payment_check",
+    "kitchen_timer",
+    "demo_seed",
+    "readiness_test",
+    "operator_script",
+    "backup",
+  ] as const;
+  async function store(incident: EmailedIncident, handled: boolean) {
+    if (!known.has(incident.id)) {
+      await suite.db
+        .insert(incidents)
+        .values({
+          ...incident,
+          source: sources[known.size % sources.length]!,
+          severity: "warning",
+          detectedAt: now.toISOString(),
+          acknowledgedAt: handled ? now.toISOString() : null,
+        })
+        .onConflictDoUpdate({
+          target: incidents.id,
+          set: { acknowledgedAt: handled ? now.toISOString() : null },
+        });
+      known.add(incident.id);
+    } else {
+      await suite.db
+        .update(incidents)
+        .set({ acknowledgedAt: handled ? now.toISOString() : null })
+        .where(eq(incidents.id, incident.id));
+    }
+  }
+  async function syncIncidents() {
+    for (const id of known) {
+      if (!state.incidents.some((incident) => incident.id === id))
+        await suite.db
+          .update(incidents)
+          .set({ acknowledgedAt: now.toISOString() })
+          .where(eq(incidents.id, id));
+    }
+    for (const incident of state.incidents) await store(incident, false);
+  }
   const lines: Line[] = [];
   const log: Logger = (level, event, fields) => lines.push([level, event, fields]);
   const events = (event: string) => lines.filter((line) => line[1] === event);
@@ -49,8 +116,14 @@ function duty() {
   }));
   const moduleNotices = vi.fn(async (): Promise<StaffNoticesRead> => state.notices);
   const emailedIncidents = vi.fn(async (): Promise<readonly EmailedIncident[]> => state.incidents);
-  const send = vi.fn<TextEmailSender>(async () => "sent");
+  const send = vi.fn<
+    (
+      message: Parameters<TextEmailSender>[0],
+    ) => Promise<"sent" | "rejected" | "unknown" | "uncertain">
+  >(async () => "sent");
   const handle = startBoxEmailDuty({
+    db: suite.db,
+    now: () => now,
     disk: { since: () => state.diskSince },
     space: {
       current: (): FreeSpaceReading =>
@@ -62,7 +135,8 @@ function duty() {
     emailedIncidents,
     backupStopped: () => state.backupStopped,
     context,
-    send,
+    send: (message) =>
+      send(message).then((outcome) => (outcome === "uncertain" ? "unknown" : outcome)),
     isPrimary: () => state.primary,
     intervalMs: BOX_EMAIL_CHECK_MS,
     log,
@@ -72,16 +146,64 @@ function duty() {
       return { cancel: () => (entry.cancelled = true) };
     },
   });
-  const tick = async () => {
+  const drain = async () => {
+    await syncIncidents();
+    while (
+      (
+        await runMailPass({
+          db: suite.db,
+          owners: [owner],
+          now: () => now,
+          isPrimary: () => state.primary,
+          signal: controller.signal,
+          log,
+          resolveDelivery: async () => state.delivery,
+          send: async (smtp, message) => {
+            let outcome;
+            try {
+              outcome = await send({
+                smtp,
+                recipient: String(message.to),
+                subject: String(message.subject),
+                text: String(message.text),
+              });
+            } catch {
+              outcome = "unknown";
+            }
+            if (outcome === "sent") return { status: "sent" };
+            if (outcome === "uncertain") return { status: "unknown", reason: "email.test_timeout" };
+            return {
+              status: "rejected",
+              serverRefused: outcome === "rejected",
+              reason: "email.test_connection_refused",
+            };
+          },
+        })
+      ).processed
+    ) {
+      /* drain to idle */
+    }
+  };
+  const check = async ({ advanceMs = 60_000 } = {}) => {
+    now = new Date(now.getTime() + advanceMs);
+    await syncIncidents();
     const n = armed.length;
     armed.at(-1)!.fn();
     await vi.waitFor(() => expect(armed.length).toBe(n + 1));
   };
+  const tick = async (options?: { advanceMs?: number }) => {
+    await check(options);
+    if (state.diskSince === null) await drain();
+  };
+  const remember = async (incident: EmailedIncident) => {
+    await store(incident, true);
+    handle.remember(incident);
+  };
   const sent = () =>
     send.mock.calls.map(([message]) => ({
       recipient: message.recipient,
-      subject: message.subject,
-      text: message.text,
+      subject: String(message.subject),
+      text: String(message.text),
     }));
   return {
     handle,
@@ -93,6 +215,14 @@ function duty() {
     send,
     sent,
     tick,
+    check,
+    drain,
+    remember,
+    controller,
+    advance: (ms: number) => {
+      now = new Date(now.getTime() + ms);
+    },
+    rows: () => suite.db.select().from(outgoingMail),
     lines,
     events,
   };
@@ -202,9 +332,9 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
 
   it("emails both of two steps inside one check interval, each once, though the first is handled", async () => {
     const d = duty();
-    d.handle.remember(FIRST_STEP);
+    await d.remember(FIRST_STEP);
     // The second step marks the first handled, so the read answers only the second.
-    d.handle.remember(SECOND_STEP);
+    await d.remember(SECOND_STEP);
     d.state.incidents = [SECOND_STEP];
     await d.tick();
     await d.tick();
@@ -220,7 +350,7 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     const d = duty();
     d.state.recipients = [BEN];
     d.send.mockImplementationOnce(async () => "rejected");
-    d.handle.remember(FIRST_STEP);
+    await d.remember(FIRST_STEP);
     d.state.incidents = [FIRST_STEP];
     await d.tick();
     d.state.incidents = [];
@@ -228,14 +358,14 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     await d.tick();
     await d.tick();
     expect(d.sent()).toEqual([clockEmail(FIRST_STEP, BEN), clockEmail(FIRST_STEP, BEN)]);
-    expect(d.context).toHaveBeenCalledTimes(2);
+    expect(d.context).toHaveBeenCalledTimes(1);
   });
 
   it("tries a handled step's failed send again on the next check", async () => {
     const d = duty();
     d.state.recipients = [BEN];
     d.send.mockImplementationOnce(async () => "unknown");
-    d.handle.remember(FIRST_STEP);
+    await d.remember(FIRST_STEP);
     await d.tick();
     await d.tick();
     await d.tick();
@@ -248,8 +378,8 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     d.send.mockImplementation(async ({ recipient }) =>
       recipient === BEN.email ? "rejected" : "sent",
     );
-    d.handle.remember(FIRST_STEP);
-    d.handle.remember(SECOND_STEP);
+    await d.remember(FIRST_STEP);
+    await d.remember(SECOND_STEP);
     for (let i = 0; i < 4; i++) await d.tick();
     expect(d.sent()).toEqual([
       clockEmail(FIRST_STEP, ANA),
@@ -277,13 +407,13 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
     d.state.incidents = [];
     for (let i = 0; i < 3; i++) await d.tick();
     expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANA), clockEmail(FIRST_STEP, BEN)]);
-    expect(d.context).toHaveBeenCalledTimes(2);
+    expect(d.context).toHaveBeenCalledTimes(1);
   });
 
   it("drops a remembered step after its no-recipients line when there is no one to email", async () => {
     const d = duty();
     d.state.recipients = [];
-    d.handle.remember(FIRST_STEP);
+    await d.remember(FIRST_STEP);
     await d.tick();
     d.state.recipients = [BEN];
     await d.tick();
@@ -298,7 +428,7 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
   it("drops a remembered step after its not-configured line when email is not set up", async () => {
     const d = duty();
     d.state.delivery = { mode: "unconfigured" } as EmailDelivery;
-    d.handle.remember(FIRST_STEP);
+    await d.remember(FIRST_STEP);
     await d.tick();
     d.state.delivery = { mode: "smtp", smtp: SMTP } as EmailDelivery;
     await d.tick();
@@ -324,7 +454,7 @@ describe("startBoxEmailDuty for the box setting its clock", () => {
 
   it("still sends nothing for a remembered wrongly dated alert handled before it was sent", async () => {
     const d = duty();
-    d.handle.remember(MISDATED);
+    await d.remember(MISDATED);
     await d.tick();
     await d.tick();
     expect(d.send).not.toHaveBeenCalled();
@@ -461,7 +591,9 @@ describe("startBoxEmailDuty", () => {
 
   it("a send that could not be made is tried the next minute; one already accepted is not", async () => {
     const d = duty();
-    d.send.mockImplementationOnce(async () => "unknown");
+    d.send.mockImplementation(async ({ recipient }) =>
+      recipient === ANA.email && d.send.mock.calls.length === 1 ? "unknown" : "sent",
+    );
     d.state.lowSince = at(1);
     await d.tick();
     expect(d.sent().map((m) => m.recipient)).toEqual([ANA.email, BEN.email]);
@@ -762,6 +894,8 @@ describe("startBoxEmailDuty", () => {
     await stopping;
     await turn();
     expect(d.context).not.toHaveBeenCalled();
+    expect(await d.rows()).toEqual([]);
+    await d.drain();
     expect(d.send).not.toHaveBeenCalled();
   });
 
@@ -795,16 +929,33 @@ describe("startBoxEmailDuty", () => {
     await stopping;
     await turn();
     await turn();
+    expect(await d.rows()).toEqual([]);
+    await d.drain();
     expect(d.send).not.toHaveBeenCalled();
     expect(d.armed[0]!.cancelled).toBe(true);
     expect(d.armed).toHaveLength(1);
   });
 
-  it("stop during a send sends to no one after it", async () => {
+  it("stopping the sender during a queued send sends to no one after it", async () => {
     const d = duty();
     const first = held<"sent">();
     d.send.mockImplementationOnce(() => first.promise);
     d.state.lowSince = at(1);
+    await d.check();
+    const draining = d.drain();
+    await vi.waitFor(() => expect(d.send).toHaveBeenCalled());
+    d.controller.abort();
+    first.release("sent");
+    await draining;
+    expect(d.send).toHaveBeenCalledTimes(1);
+    expect((await d.rows()).map((row) => row.status)).toEqual(["sent", "pending"]);
+  });
+
+  it("stop during a full-disk send sends to no one after it", async () => {
+    const d = duty();
+    const first = held<"sent">();
+    d.send.mockImplementationOnce(() => first.promise);
+    d.state.diskSince = at(1);
     d.armed[0]!.fn();
     await vi.waitFor(() => expect(d.send).toHaveBeenCalled());
     await d.handle.stop();
@@ -831,14 +982,14 @@ describe("startBoxEmailDuty", () => {
       recipient === ANA.email ? (anaOutcomes[anaCalls++] ?? "sent") : "sent",
     );
     d.state.lowSince = at(1);
-    for (let i = 0; i < anaOutcomes.length; i++) await d.tick();
+    for (let i = 0; i < anaOutcomes.length; i++) await d.tick({ advanceMs: 3_600_000 });
     const failure = (outcome: string) => [
       "warn",
       "box_email.send_failed",
       { code: "storage.space_low", outcome },
     ];
     expect(d.events("box_email.send_failed")).toEqual([failure("rejected"), failure("unknown")]);
-    await d.tick();
+    await d.tick({ advanceMs: 3_600_000 });
     expect(d.sent().filter((m) => m.recipient === ANA.email)).toHaveLength(8);
     expect(d.events("box_email.sent")).toHaveLength(2);
     expect(d.events("box_email.send_failed")).toHaveLength(2);
@@ -942,7 +1093,7 @@ describe("startBoxEmailDuty for backups", () => {
     await d.tick();
     d.state.backupStopped = undefined;
     await d.tick();
-    d.state.backupStopped = REFUSED;
+    d.state.backupStopped = { ...REFUSED, since: "2026-10-28T04:00:00.000Z" };
     await d.tick();
     expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN)]);
   });
@@ -979,6 +1130,22 @@ describe("startBoxEmailDuty for backups", () => {
     expect(d.sent()).toEqual([refusedEmail(BEN)]);
   });
 
+  it("retries queuing a new backup episode after its write is refused", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    d.state.backupStopped = { ...REFUSED, since: "2026-10-28T05:00:00.000Z" };
+    const lock = vi
+      .spyOn(suite.db, "withWriteLock")
+      .mockRejectedValueOnce(new Error("write refused"));
+    await d.check();
+    lock.mockRestore();
+    expect(d.events("box_email.check_failed")).toHaveLength(1);
+    await d.tick();
+    expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN)]);
+  });
+
   it("does not email a backup run that stopped on anything else", async () => {
     const d = duty();
     d.state.backupStopped = {
@@ -990,5 +1157,125 @@ describe("startBoxEmailDuty for backups", () => {
     await d.tick();
     expect(d.send).not.toHaveBeenCalled();
     expect(d.context).not.toHaveBeenCalled();
+  });
+});
+
+describe("box email queue episodes", () => {
+  it("queues one row per manager per episode, kept a day, and none again at the next check", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    await d.check();
+    const rows = await d.rows();
+    expect(
+      rows.map((row) => [
+        row.personId,
+        row.params.code,
+        Date.parse(row.notAfter) - Date.parse(row.queuedAt),
+      ]),
+    ).toEqual([
+      [ANA.personId, "storage.space_low", 86400000],
+      [BEN.personId, "storage.space_low", 86400000],
+    ]);
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+    await d.check();
+    expect(lock).not.toHaveBeenCalled();
+    lock.mockRestore();
+    expect(await d.rows()).toEqual(rows);
+  });
+  it("cancels an ended episode's unsent rows", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    d.send.mockResolvedValue("rejected");
+    await d.tick();
+    d.state.lowSince = null;
+    await d.tick();
+    expect((await d.rows()).map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
+    expect(d.send).toHaveBeenCalledTimes(2);
+  });
+  it("an alert's email queued before a restart is sent after it, once", async () => {
+    const a = duty();
+    a.state.incidents = [RESTART];
+    await a.check();
+    await a.handle.stop();
+    const before = await a.rows();
+    const b = duty();
+    b.state.incidents = [RESTART];
+    await b.tick();
+    await b.tick();
+    expect((await b.rows()).map((row) => row.id)).toEqual(before.map((row) => row.id));
+    expect(b.sent()).toEqual([clockEmail(RESTART, ANA), clockEmail(RESTART, BEN)]);
+  });
+  it("a restart cancels a disk episode's leftover unsent rows and queues them again", async () => {
+    const a = duty();
+    a.state.lowSince = at(1);
+    await a.check();
+    await a.handle.stop();
+    const b = duty();
+    b.state.lowSince = at(1);
+    await b.tick();
+    expect((await b.rows()).map((row) => row.status)).toEqual([
+      "cancelled",
+      "cancelled",
+      "sent",
+      "sent",
+    ]);
+    expect(b.sent()).toEqual([
+      expected("storage.space_low", ANA),
+      expected("storage.space_low", BEN),
+    ]);
+  });
+  it("queues nothing while the disk is full and writes nothing", async () => {
+    const d = duty();
+    d.state.diskSince = at(1);
+    d.state.incidents = [RESTART];
+    // Store the alert before observing the duty's write turns.
+    await suite.db.insert(incidents).values({
+      ...RESTART,
+      source: "dashboard",
+      severity: "warning",
+      detectedAt: at(0).toISOString(),
+    });
+    const lock = vi.spyOn(suite.db, "withWriteLock");
+    d.armed[0]!.fn();
+    await vi.waitFor(() => expect(d.armed).toHaveLength(2));
+    expect(lock).not.toHaveBeenCalled();
+    lock.mockRestore();
+    expect(await d.rows()).toEqual([]);
+    expect(d.sent()).toEqual([
+      expected("storage.disk_full", ANA),
+      expected("storage.disk_full", BEN),
+    ]);
+    expect(d.moduleNotices).not.toHaveBeenCalled();
+    expect(d.emailedIncidents).not.toHaveBeenCalled();
+  });
+  it("does not send a box email again that may have been delivered", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    d.state.recipients = [ANA];
+    d.send.mockResolvedValue("uncertain");
+    await d.tick();
+    await d.tick();
+    expect((await d.rows())[0]!.status).toBe("unknown");
+    expect(d.send).toHaveBeenCalledTimes(1);
+  });
+  it("retries an email that never reached the mail server on the waits 1, 1, 5 and 15 minutes", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    d.state.recipients = [ANA];
+    d.send.mockResolvedValue("unknown");
+    await d.tick();
+    for (let minute = 1; minute <= 22; minute++) {
+      await d.tick();
+      expect(d.send).toHaveBeenCalledTimes(minute < 2 ? 2 : minute < 7 ? 3 : minute < 22 ? 4 : 5);
+    }
+  });
+  it("keeps a queued email from being sent after its day", async () => {
+    const d = duty();
+    d.state.lowSince = at(1);
+    await d.check();
+    d.advance(86400001);
+    await d.drain();
+    expect((await d.rows()).map((row) => row.status)).toEqual(["expired", "expired"]);
+    expect(d.send).not.toHaveBeenCalled();
   });
 });

@@ -265,6 +265,7 @@ import { beginAttendanceDiscovery } from "./attendance-discovery.js";
 import { runAttendanceLoop } from "./attendance-loop.js";
 import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
+import { boxAlertMail } from "./box-alert-mail.js";
 import { attendanceReminderMail } from "./attendance-email.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
@@ -2514,6 +2515,7 @@ async function bootServer(
     });
     if (isSingletonPrimary) {
       const owners = [
+        boxAlertMail({ venueLanguage: venueLocale === "es-ES" ? "es" : "en", log }),
         ...(workforceEnabled
           ? [
               attendanceReminderMail({
@@ -3019,6 +3021,8 @@ async function bootServer(
   const emailNoticeLog = createStaffNoticeLog(log);
   const emailNoticeSources = enabledStaffNoticeSources(setsToMigrate);
   const boxEmails = startBoxEmailDuty({
+    db,
+    now,
     disk: diskFull,
     space: freeSpace,
     moduleNotices: async () => {

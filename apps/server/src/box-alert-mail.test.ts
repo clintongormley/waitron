@@ -33,14 +33,12 @@ beforeEach(async () => {
     })
     .returning();
   personId = person!.id;
-  await suite.db
-    .insert(persons)
-    .values({
-      displayName: "Other manager",
-      role: "admin",
-      email: "other@example.test",
-      locale: "en-GB",
-    });
+  await suite.db.insert(persons).values({
+    displayName: "Other manager",
+    role: "admin",
+    email: "other@example.test",
+    locale: "en-GB",
+  });
   deps = {
     db: suite.db,
     owners: [boxAlertMail({ venueLanguage: "en", log })],

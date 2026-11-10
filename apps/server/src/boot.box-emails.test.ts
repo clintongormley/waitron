@@ -79,7 +79,16 @@ vi.mock("./smtp-send.js", async (load) => {
   const actual = await load<typeof import("./smtp-send.js")>();
   return {
     ...actual,
-    sendSmtpMessage: async (smtp: Parameters<typeof actual.sendSmtpMessage>[0]) => {
+    sendSmtpMessage: async (
+      smtp: Parameters<typeof actual.sendSmtpMessage>[0],
+      message: Parameters<typeof actual.sendSmtpMessage>[1],
+    ) => {
+      holder.sent.push({
+        smtp,
+        recipient: String(message.to),
+        subject: String(message.subject),
+        text: String(message.text),
+      });
       holder.smtp.push(smtp);
       return { status: "sent" as const };
     },
@@ -503,7 +512,21 @@ describe("the running server's managers' email check", () => {
         .from(incidents)
         .where(eq(incidents.code, "backup.archives_deleted"));
 
+      await withTransaction(suite.db, (tx) =>
+        putCredential(
+          tx,
+          loadKeyRing({
+            WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+            WAITRON_CREDENTIALS_KEY_VERSION: "1",
+          }),
+          {
+            purpose: "email.smtp",
+            value: { url: "smtp://smtp.example.test:2525", from: "venue@example.test" },
+          },
+        ),
+      );
       await bootServer(booted, venue);
+      expect(holder.mail!.owners.some((owner) => owner.kind === "box_alert")).toBe(true);
       const sizes = { neededBytes: 3 * 1024 ** 3, availableBytes: 1024 ** 3 };
       const stoppedAt = new Date().toISOString();
       holder.outcomes!.runStopped = {
@@ -516,8 +539,10 @@ describe("the running server's managers' email check", () => {
       const refusal = boxEmailMessage("backup.run_stopped", "es", name, sizes);
       const deletion = boxEmailMessage("backup.archives_deleted", "es", name, deleted!.params);
       await tick();
-      expect(holder.sent.map((message) => message.subject).sort()).toEqual(
-        [refusal.subject, deletion.subject].sort(),
+      await vi.waitFor(() =>
+        expect(holder.sent.map((message) => message.subject).sort()).toEqual(
+          [refusal.subject, deletion.subject].sort(),
+        ),
       );
       expect(holder.sent).toEqual(
         expect.arrayContaining([

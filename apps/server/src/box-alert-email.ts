@@ -1,6 +1,16 @@
-import { and, asc, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
-import { incidents, readVenue, type Database } from "@waitron/db";
+import {
+  cancelMail,
+  enqueueMail,
+  incidents,
+  MAIL_LIFETIME_MS,
+  newId,
+  outgoingMail,
+  readVenue,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { formatBytes, formatDuration } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
@@ -233,13 +243,14 @@ export async function readBoxEmailContext(
 }
 
 interface Episode {
+  readonly id: string;
+  readonly incidentId?: string;
+  readonly queuedFor: Set<string>;
   readonly code: EmailCode;
   /** The module that gave the notice; absent for the disk's episodes and the alerts'. */
   readonly owner?: string;
   /** Set for an open alert's episode, which lasts while the alert stays open. */
   readonly incident?: true;
-  /** Set for a `clock.corrected` alert's episode, which also lasts once the alert is handled, until
-   * `deliver` finds nothing left worth trying. */
   readonly untilSent?: true;
   /** The params of the notice that began the episode, kept for its whole length. */
   readonly params?: Readonly<Record<string, unknown>>;
@@ -254,11 +265,12 @@ function recipientKey(recipient: ManagerEmailRecipient): string {
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
  * last finished. `stop` resolves once a database read in flight has finished; nothing is read or
- * sent after it. `remember` begins an alert's episode with no read, for an alert that may be
+ * queued after it. `remember` begins an alert's episode with no read, for an alert that may be
  * handled before the next check reads it: the box's own clock step, whose next step marks it
- * handled. A restart loses the email of an alert already handled and not yet sent; the alert stays
- * in the bell. */
+ * handled. A restart before the next check queues it loses its email; the alert stays in the bell. */
 export function startBoxEmailDuty(deps: {
+  db: Database;
+  now: () => Date;
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
   /** The enabled modules' notices, read in turns. */
@@ -274,7 +286,8 @@ export function startBoxEmailDuty(deps: {
   timer?: (ms: number, fn: () => void) => Timer;
 }): { stop: () => Promise<void>; remember: (incident: EmailedIncident) => void } {
   const timer = deps.timer ?? unrefTimer;
-  const episodes = new Map<string, Episode>();
+  let episodes = new Map<string, Episode>();
+  let cleanedUp = false;
   /** The refusal episode's `runStopped.since`; a different one is a new refusal. */
   let refusedSince: string | undefined;
   let stopped = false;
@@ -301,6 +314,13 @@ export function startBoxEmailDuty(deps: {
     let episode = episodes.get(key);
     if (episode === undefined) {
       episode = {
+        id: incident
+          ? key
+          : code === BACKUP_REFUSED_EMAIL_CODE
+            ? `${code}:${deps.backupStopped()!.since}`
+            : newId(),
+        ...(incident ? { incidentId: key.slice("incident:".length) } : {}),
+        queuedFor: new Set(),
         code,
         ...(owner === undefined ? {} : { owner }),
         ...(incident === undefined ? {} : { incident }),
@@ -321,8 +341,6 @@ export function startBoxEmailDuty(deps: {
     deps.log("warn", event, { code: episode.code });
   }
 
-  /** True once nothing is left worth trying for a handled alert: every manager has it or had their
-   * address refused outright, there is none, or email is not set up. */
   async function deliver(
     episode: Episode,
     ctx: BoxEmailContext,
@@ -371,18 +389,25 @@ export function startBoxEmailDuty(deps: {
   }
 
   async function check(): Promise<void> {
+    const beforeCheck = episodes;
+    const beforeRefusal = refusedSince;
     try {
       if (stopped || !deps.isPrimary()) return;
-      const due: { episode: Episode; key?: string; toldAlready?: ReadonlySet<string> }[] = [];
       const full = deps.disk.since() !== null;
       const low = deps.space.current().lowSince !== null;
-      if (!full && !low) {
+      if (full) {
+        const episode = begin("storage.disk_full", "storage.disk_full");
+        const ctx = await read(deps.context);
+        if (!stopped) await deliver(episode, ctx);
+        return;
+      }
+      const previous = episodes;
+      episodes = new Map(episodes);
+      const due: { episode: Episode; key?: string; toldAlready?: ReadonlySet<string> }[] = [];
+      if (!low) {
         episodes.delete("storage.disk_full");
         episodes.delete("storage.space_low");
-      } else if (full) {
-        due.push({ episode: begin("storage.disk_full", "storage.disk_full") });
       } else {
-        // One disk episode: a manager the full-disk email reached is not sent the low-space one.
         due.push({
           episode: begin("storage.space_low", "storage.space_low"),
           toldAlready: episodes.get("storage.disk_full")?.sentTo,
@@ -421,7 +446,7 @@ export function startBoxEmailDuty(deps: {
         if (episode.incident) {
           // A handled alert is never open again, so its episode ends for good.
           if (incidentSeen.has(key)) due.push({ episode });
-          else if (episode.untilSent) due.push({ episode, key });
+          else if (episode.untilSent && episode.queuedFor.size === 0) due.push({ episode, key });
           else episodes.delete(key);
           continue;
         }
@@ -433,16 +458,96 @@ export function startBoxEmailDuty(deps: {
           episodes.delete(key);
         }
       }
-      if (due.length === 0) return;
-      // Read at every check while an episode lasts, so a manager added during it is found.
-      const ctx = await read(deps.context);
-      if (stopped) return;
+      const ended = [...previous]
+        .filter(
+          ([key, episode]) =>
+            episode.incidentId === undefined &&
+            key !== "storage.disk_full" &&
+            episodes.get(key) !== episode,
+        )
+        .map(([, episode]) => episode);
+      const ctx = due.length === 0 ? undefined : await read(deps.context);
+      if (stopped) {
+        episodes = previous;
+        return;
+      }
+      const queued: { episode: Episode; personId: string }[] = [];
+      const additions: { episode: Episode; personId: string }[] = [];
+      const dropped: string[] = [];
       for (const { episode, key, toldAlready } of due) {
-        if (stopped) return;
-        const done = await deliver(episode, ctx, toldAlready);
-        if (done && key !== undefined) episodes.delete(key);
+        if (ctx!.recipients.length === 0) sayOnce(episode, "box_email.no_recipients");
+        else if (ctx!.delivery.mode === "unconfigured")
+          sayOnce(episode, "box_email.not_configured");
+        else
+          for (const recipient of ctx!.recipients) {
+            if (
+              !episode.queuedFor.has(recipient.personId) &&
+              !toldAlready?.has(recipientKey(recipient))
+            )
+              additions.push({ episode, personId: recipient.personId });
+          }
+        if (key !== undefined) dropped.push(key);
+      }
+      try {
+        if (
+          !cleanedUp ||
+          ended.some((episode) => episode.queuedFor.size !== 0) ||
+          additions.length !== 0
+        ) {
+          await read(() =>
+            withTransaction(deps.db, async (tx) => {
+              if (stopped || !deps.isPrimary()) return;
+              const now = deps.now();
+              if (!cleanedUp) {
+                const leftovers = await tx
+                  .select({ key: outgoingMail.dedupeKey })
+                  .from(outgoingMail)
+                  .where(
+                    and(
+                      eq(outgoingMail.kind, "box_alert"),
+                      isNull(outgoingMail.subjectId),
+                      inArray(outgoingMail.status, ["pending", "rejected"]),
+                      isNull(outgoingMail.finishedAt),
+                    ),
+                  );
+                for (const row of leftovers) await cancelMail(tx, row.key, now);
+              }
+              for (const episode of ended)
+                for (const personId of episode.queuedFor)
+                  await cancelMail(tx, boxAlertMailKey(episode.id, personId), now);
+              for (const pair of additions) {
+                const { episode, personId } = pair;
+                await enqueueMail(tx, {
+                  kind: "box_alert",
+                  dedupeKey: boxAlertMailKey(episode.id, personId),
+                  subjectId: episode.incidentId ?? null,
+                  personId,
+                  params: {
+                    code: episode.code,
+                    wording: episode.incidentId ? null : JSON.stringify(episode.params ?? null),
+                  },
+                  now,
+                  notAfter: new Date(now.getTime() + MAIL_LIFETIME_MS.box_alert),
+                });
+                queued.push(pair);
+              }
+            }),
+          );
+          if (stopped || !deps.isPrimary()) {
+            episodes = previous;
+            return;
+          }
+          cleanedUp = true;
+        }
+        for (const { episode, personId } of queued) episode.queuedFor.add(personId);
+        for (const key of dropped) episodes.delete(key);
+      } catch (error) {
+        episodes = previous;
+        throw error;
       }
     } catch (error) {
+      episodes = beforeCheck;
+      refusedSince = beforeRefusal;
       deps.log("warn", "box_email.check_failed", { errorCode: codeOf(error) });
     } finally {
       if (!stopped) armed = timer(deps.intervalMs, () => void check());
@@ -458,6 +563,7 @@ export function startBoxEmailDuty(deps: {
       await reading?.catch(() => undefined);
     },
     remember: (incident) => {
+      if (incident.code !== "clock.corrected") return;
       begin(`incident:${incident.id}`, incident.code, undefined, incident.params, true);
     },
   };
