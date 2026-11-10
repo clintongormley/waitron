@@ -45,7 +45,7 @@ import {
   rowsOf,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
-import { send as rawPaymentSend } from "./testing/bill-venue.js";
+import { fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
 import { createZone } from "./testing/service-zone.js";
 import {
   watchDerivationsAndLock,
@@ -1009,13 +1009,9 @@ describe("the public cancellation read and command", () => {
       ]);
       expect(after.bills.find((b) => b.id === p.billId)?.status).toBe("settled");
       expect(after.payments).toEqual(before.payments);
-      const records = await venue.db.execute(
-        sql`select count(*) as count from registros_facturacion`,
-      );
+      const records = fiscalRecordCount(venue);
       expect((await post(p, body)).json).toEqual(answer.json);
-      expect(
-        await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
-      ).toEqual(records);
+      expect(fiscalRecordCount(venue)).toEqual(records);
       expect(await frozen()).toEqual(after);
     },
   );

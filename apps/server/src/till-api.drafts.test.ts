@@ -31,6 +31,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { createTable } from "./testing/live-table.js";
 import {
+  fiscalRecordCount,
   inTx,
   provisionBillVenue,
   send as rawGroupSend,
@@ -1418,13 +1419,9 @@ describe("source-backed draft HTTP boundary", () => {
       expect(answer.json).toMatchObject({ invoice: { total: "3.00", invoiceType: "F2" } });
       if (operation === "submit") {
         const before = await snapshot();
-        const records = await venue.db.execute(
-          sql`select count(*) as count from registros_facturacion`,
-        );
+        const records = fiscalRecordCount(venue);
         expect(await ana(method, path, body)).toEqual(answer);
-        expect(
-          await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
-        ).toEqual(records);
+        expect(fiscalRecordCount(venue)).toEqual(records);
         expect(await snapshot()).toEqual(before);
       }
     },

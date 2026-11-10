@@ -433,13 +433,19 @@ export async function statusOf(venue: BillVenue, billId: string): Promise<string
   return row!.status;
 }
 
-export function fiscalRecordCount(venue: BillVenue, billId: string): number {
-  const [row] = venue.db.all<{ count: string }>(sql`
+export function fiscalRecordCount(venue: Pick<BillVenue, "db">, billId?: string): number {
+  const records = sql`
     select cast(count(*) as text) as count
     from registros_facturacion r
+  `;
+  const [row] = venue.db.all<{ count: string }>(
+    billId === undefined
+      ? records
+      : sql`${records}
     join sales s on s.id = r.sale_id
     where s.working_order_id = ${billId}
-  `);
+  `,
+  );
   return Number(row!.count);
 }
 

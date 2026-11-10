@@ -47,7 +47,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 afterEach(async () => {
   await watchedOrder();
 });
-import { send as rawPaymentSend } from "./testing/bill-venue.js";
+import { fiscalRecordCount, send as rawPaymentSend } from "./testing/bill-venue.js";
 import {
   billWith,
   inTx,
@@ -558,9 +558,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       const p = await setup(false, true, false, "hold", "grouped");
       const body = await request(p);
       const before = await frozen();
-      const records = await venue.db.execute(
-        sql`select count(*) as count from registros_facturacion`,
-      );
+      const records = fiscalRecordCount(venue);
       const recordSale = venue.backend.recordSale.bind(venue.backend);
       let attempted = false;
       const probe = vi.spyOn(venue.backend, "recordSale").mockImplementation(async (tx, sale) => {
@@ -576,9 +574,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
         expect(answer.json).toMatchObject({ code: "clock.unusable" });
         expect(attempted).toBe(true);
         expect(await frozen()).toEqual(before);
-        expect(
-          await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
-        ).toEqual(records);
+        expect(fiscalRecordCount(venue)).toEqual(records);
       } finally {
         probe.mockRestore();
       }
@@ -589,9 +585,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const p = await setup(false, true, false, "hold", "grouped");
     const body = await request(p);
     const before = await frozen();
-    const records = await venue.db.execute(
-      sql`select count(*) as count from registros_facturacion`,
-    );
+    const records = fiscalRecordCount(venue);
     expect(p.billId).toMatch(/^[a-f0-9-]{36}$/);
     await venue.db
       .execute(sql`create trigger refuse_completed_discard before insert on service_commands
@@ -601,9 +595,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
       const answer = await discard(p, body);
       expect(answer.json).toMatchObject({ code: "server.internal" });
       expect(await frozen()).toEqual(before);
-      expect(
-        await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
-      ).toEqual(records);
+      expect(fiscalRecordCount(venue)).toEqual(records);
     } finally {
       await venue.db.execute(sql`drop trigger refuse_completed_discard`);
     }
@@ -614,6 +606,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
     const p = await setup(false, true, false, "hold", "grouped");
     const body = await request(p);
     const before = await frozen();
+    const recordsBefore = fiscalRecordCount(venue);
     const answer = await discard(p, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     const after = await frozen();
@@ -629,13 +622,10 @@ describe("Discard resolves the whole owned draft atomically", () => {
     ]);
     expect(after.bills.find((b) => b.id === p.billId)).toMatchObject({ status: "settled" });
     expect(after.payments).toEqual(before.payments);
-    const records = await venue.db.execute(
-      sql`select count(*) as count from registros_facturacion`,
-    );
+    const records = fiscalRecordCount(venue);
+    expect(records).toBe(recordsBefore + 1);
     expect((await discard(p, body)).json).toEqual(answer.json);
-    expect(
-      await venue.db.execute(sql`select count(*) as count from registros_facturacion`),
-    ).toEqual(records);
+    expect(fiscalRecordCount(venue)).toEqual(records);
     expect(await frozen()).toEqual(after);
   });
 
