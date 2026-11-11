@@ -16,6 +16,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
+import { IssuanceRefusedError } from "@waitron/fiscal";
 import { businessDayAt, saleId as brandSaleId } from "@waitron/shared";
 import { acceptInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
@@ -58,6 +59,17 @@ useVenueDb({
         });
         ids.set(name, product.id);
       }
+      const soup = await createProduct(tx, {
+        catalogueId: catalogue!.id,
+        categoryId: category!.id,
+        name: "Cold soup",
+        customerName: { [venue.cfg.locale]: "House Cold soup" },
+        kitchenName: "COLD SOUP",
+        pricingUnit: "each",
+        unitPrice: "5.50",
+        vatClass: "reduced",
+      });
+      ids.set("Cold soup", soup.id);
       const offers = await offerProducts(tx, venue.cfg, { zone: { zoneId: venue.zoneId } });
       offerOf = (name) => offers.offerFor(ids.get(name)!);
       const [manager] = await tx
@@ -75,7 +87,10 @@ useVenueDb({
 
 /** A counter order of `dish`, paid through the till in `parts` (cash, or a hand-keyed card); its
  * invoice, issued unpaid when `parts` is empty. */
-async function soldForCash(dish: string, parts: readonly (string | { card: string })[]) {
+async function soldForCash(
+  dish: string | readonly string[],
+  parts: readonly (string | { card: string })[],
+) {
   const id = randomUUID();
   const deps = {
     db: venue.db,
@@ -85,7 +100,10 @@ async function soldForCash(dish: string, parts: readonly (string | { card: strin
   };
   await parkOrder(deps, venue.cfg, {
     id,
-    lines: [{ menuItemId: offerOf(dish), quantity: "1" }],
+    lines: (typeof dish === "string" ? [dish] : dish).map((name) => ({
+      menuItemId: offerOf(name),
+      quantity: "1",
+    })),
     zoneId: venue.zoneId,
     operatorId: venue.operatorId,
   });
@@ -130,12 +148,14 @@ async function correct(
     submissionId: string;
     gross: string;
     note?: string;
+    lineIds?: string[];
     split?: { rate: string; base: string; tax: string }[];
     backend?: typeof venue.backend;
   },
 ) {
+  const scope = ask.lineIds === undefined ? {} : { lineIds: ask.lineIds };
   const preview = await inTx(venue, (tx) =>
-    previewInvoiceCorrection(tx, venue.backend, venue.cfg, saleId, { gross: ask.gross }),
+    previewInvoiceCorrection(tx, venue.backend, venue.cfg, saleId, { gross: ask.gross, ...scope }),
   );
   return inTx(venue, (tx) =>
     acceptInvoiceCorrection(
@@ -146,6 +166,7 @@ async function correct(
       {
         submissionId: ask.submissionId,
         gross: ask.gross,
+        ...scope,
         reasonId,
         note: ask.note ?? "Overcooked",
         expectedSplit:
@@ -154,6 +175,14 @@ async function correct(
       actor(),
     ),
   );
+}
+
+async function lineIdsOfSale(saleId: string) {
+  const rows = await venue.db
+    .select({ id: saleLines.id })
+    .from(saleLines)
+    .where(eq(saleLines.saleId, saleId));
+  return rows.map((row) => row.id);
 }
 
 async function original(saleId: string) {
@@ -260,6 +289,48 @@ describe("acceptInvoiceCorrection", () => {
     await expect(
       correct(saleId, { submissionId, gross: "6.05", note: "Too salty" }),
     ).rejects.toMatchObject({ code: "submission.id_reused" });
+  });
+
+  it("accepts the split the till showed in any rate order", async () => {
+    const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"]);
+    const lineIds = (await lineIdsOfSale(saleId)).sort();
+    const preview = await inTx(venue, (tx) =>
+      previewInvoiceCorrection(tx, venue.backend, venue.cfg, saleId, { gross: "17.60", lineIds }),
+    );
+    expect(preview.vatBreakdown).toEqual([
+      { rate: "10.00", base: "5.00", tax: "0.50" },
+      { rate: "21.00", base: "10.00", tax: "2.10" },
+    ]);
+
+    const result = await correct(saleId, {
+      submissionId: randomUUID(),
+      gross: "17.60",
+      lineIds,
+      split: [...preview.vatBreakdown].reverse(),
+    });
+
+    expect(result.refunds).toMatchObject([{ appliedAmount: "17.60" }]);
+  });
+
+  it("answers a repeat whose line ids and split come in another order with the first answer", async () => {
+    const saleId = await soldForCash(["Rib steak", "Cold soup"], ["17.60"]);
+    const lineIds = (await lineIdsOfSale(saleId)).sort();
+    const submissionId = randomUUID();
+    const first = await correct(saleId, { submissionId, gross: "8.80", lineIds });
+    const split = await inTx(venue, (tx) =>
+      previewInvoiceCorrection(tx, venue.backend, venue.cfg, saleId, { gross: "8.80", lineIds }),
+    );
+    const after = counts();
+
+    const again = await correct(saleId, {
+      submissionId,
+      gross: "8.80",
+      lineIds: [...lineIds].reverse(),
+      split: [...split.vatBreakdown].reverse(),
+    });
+
+    expect(again).toEqual({ ...first, replayed: true });
+    expect(counts()).toEqual(after);
   });
 
   it("gives €25 back over two €20 cash payments, oldest first, as €20 and €5 with one drawer job", async () => {
@@ -462,6 +533,35 @@ describe("acceptInvoiceCorrection refuses", () => {
     await expect(
       correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
     ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it("a refund refused after the corrective is filed, undoing the corrective, the refund, the drawer job and the correction row", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const filed = () =>
+      venue.db.all<{ n: number }>(sql`select count(*) as n from registros_facturacion`)[0]!.n;
+    const filedBefore = filed();
+    let filedWhenRefused: number | undefined;
+    const refusing = Object.create(venue.backend, {
+      refuseNewRefund: {
+        value: async (tx: Parameters<typeof venue.backend.refuseNewRefund>[0]) => {
+          filedWhenRefused = tx.all<{ n: number }>(
+            sql`select count(*) as n from registros_facturacion`,
+          )[0]!.n;
+          throw new IssuanceRefusedError("sif.allocation_invalid", {
+            reason: "conflict_requires_administrator",
+            recoveryUrl: "/manage/recovery/fiscal-conflict",
+          });
+        },
+      },
+    }) as typeof venue.backend;
+
+    await refusedWithNothingWritten(
+      () => correct(saleId, { submissionId: randomUUID(), gross: "6.05", backend: refusing }),
+      { code: "sif.allocation_invalid" },
+    );
+
+    expect(filedWhenRefused).toBe(filedBefore + 1);
+    expect(filed()).toBe(filedBefore);
   });
 
   it("while a refund on the invoice is pending, and corrects once it completes", async () => {

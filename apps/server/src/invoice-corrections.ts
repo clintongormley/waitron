@@ -112,7 +112,7 @@ export async function acceptInvoiceCorrection(
     lineIds: ask.lineIds === undefined ? null : [...ask.lineIds].sort(),
     reasonId: ask.reasonId,
     note: ask.note,
-    expectedSplit: ask.expectedSplit,
+    expectedSplit: [...ask.expectedSplit].sort((a, b) => compareDecimal(a.rate, b.rate)),
   });
   const earlier = await tx
     .select({
