@@ -1,7 +1,7 @@
 # A1002 access roles and job roles — implementation plan
 
-**Status: DRAFT, under review** (fresh-context plan-against-design read, then a Fable second
-read). Build nothing until the owner approves it and it is queued to a lane.
+**Status: APPROVED by the owner, 2026-11-11**, after the fresh-context plan-against-design read
+and the Fable second read. Queued to lane K.
 **Revision 3, 2026-11-11 evening:** the fresh-context read's findings, the Fable read
 (`~/waitron-campaign-m/reports/ra.md`) and the owner's answers to its proposals (recorded in the
 design by `e69416d2cd`) are applied: eighteen pull requests, re-sized from source on `c00b1a6f39`.
