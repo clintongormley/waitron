@@ -566,7 +566,7 @@ export async function translationCloudFixture(options: { cloudBeforeVersion2?: b
     },
   ): Promise<{ status: number; json: unknown }> {
     const saved = JSON.parse(
-      await readFile(join(base.stateDir, "cloud-connection.json"), "utf8"),
+      await readFile(join(base.stateDir, "cloud/connection.json"), "utf8"),
     ) as SavedCloudState;
     const lease =
       input.lease ?? (saved.lifecycle?.lease ? JSON.stringify(saved.lifecycle.lease) : "");

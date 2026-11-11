@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { connect, createServer as createNetServer } from "node:net";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -422,8 +423,10 @@ describe("a start that fails after the venue folder is opened gives the folder b
         ipAddresses: [],
       });
       const install = async () => {
-        await writeFile(join(state, "cloud-staff.key"), material.serverKeyPem, { mode: 0o600 });
-        await writeFile(join(state, "cloud-staff.crt"), material.serverCertPem);
+        await mkdir(join(state, "cloud"), { recursive: true });
+        await writeFile(join(state, "cloud/staff.key"), material.serverKeyPem, { mode: 0o600 });
+        await mkdir(join(state, "cloud"), { recursive: true });
+        await writeFile(join(state, "cloud/staff.crt"), material.serverCertPem);
       };
       let workerOptions: Parameters<typeof runCloudWorker>[0] | undefined;
       vi.mocked(runCloudWorker).mockImplementationOnce(async (options) => {
@@ -522,8 +525,10 @@ describe("a start that fails after the venue folder is opened gives the folder b
       hostnames: ["staff.example.test"],
       ipAddresses: [],
     });
-    await writeFile(join(state, "cloud-staff.key"), certificate.serverKeyPem);
-    await writeFile(join(state, "cloud-staff.crt"), certificate.serverCertPem);
+    await mkdir(join(state, "cloud"), { recursive: true });
+    await writeFile(join(state, "cloud/staff.key"), certificate.serverKeyPem);
+    await mkdir(join(state, "cloud"), { recursive: true });
+    await writeFile(join(state, "cloud/staff.crt"), certificate.serverCertPem);
     const failure = new Error("interfaces unreadable");
     failLandingAfterMdns(failure);
     try {

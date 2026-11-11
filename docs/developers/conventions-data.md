@@ -5453,8 +5453,8 @@ entries and handover manifest items keep their own literals because they describ
 format, not the box's current paths. A name assembled from pieces, an array or object entry, a
 join from a differently named root, or a shell path escapes this guard. The scanner can mistake
 comment-like text in a regular expression or template for a comment and hide a later definition. The fl1 review compared it with TypeScript’s parser over 2,661 files
-and found no hidden definition on candidate `bf13077098`. Cloud files remain with their owners
-until fl4; legacy setup names remain with the code that reads or refuses them until their slices.
+and found no hidden definition on candidate `bf13077098`. Cloud connection, recovery, replacement and staff files live under `cloud/`, with snapshot state
+in `cloud/snapshots/`; legacy setup names remain with the code that reads or refuses them until their slices.
 The separate reset case compares the shell command's retained names with the layout's kept entries.
 
 ## Start again's records and the set-aside folder

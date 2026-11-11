@@ -1,11 +1,12 @@
+import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
+import { CLOUD_DIR, CLOUD_REPLACEMENT_FILE } from "@waitron/store";
 import {
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
-  randomUUID,
   sign,
 } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
@@ -66,7 +67,7 @@ function unavailable(): never {
 }
 
 export function createCloudReplacement(options: ReplacementOptions) {
-  const path = join(resolve(options.stateDir), "cloud-replacement.json");
+  const path = join(resolve(options.stateDir), CLOUD_REPLACEMENT_FILE);
   const recovery = createCloudRecoveryClient({
     stateDir: options.stateDir,
     origin: options.origin,
@@ -140,26 +141,8 @@ export function createCloudReplacement(options: ReplacementOptions) {
     }
   }
   async function save(value: SavedReplacement) {
-    await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    try {
-      const file = await open(temporary, "wx", 0o600);
-      try {
-        await file.writeFile(JSON.stringify(value));
-        await file.sync();
-      } finally {
-        await file.close();
-      }
-      await rename(temporary, path);
-      const dir = await open(options.stateDir, "r");
-      try {
-        await dir.sync();
-      } finally {
-        await dir.close();
-      }
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
+    await writeFileDurable(path, JSON.stringify(value), 0o600);
   }
   async function identity() {
     let value: Awaited<ReturnType<typeof recovery.replacementIdentity>>;
@@ -384,7 +367,7 @@ export function createCloudReplacement(options: ReplacementOptions) {
         await importInto(saved, saved.view);
       });
     },
-    /** `cloud-connection.json` alone cannot keep the stop if it is deleted. */
+    /** `cloud/connection.json` alone cannot keep the stop if it is deleted. */
     async recordStop(): Promise<void> {
       await locked(async () => {
         let saved: SavedReplacement | undefined;
@@ -393,7 +376,7 @@ export function createCloudReplacement(options: ReplacementOptions) {
         } catch {
           // Resume and check refuse the file while it stays unreadable; a repaired file comes back
           // without the stop (`docs/backlog/replication-cloud.md`, "A stop made while
-          // `cloud-replacement.json` is unreadable is not recorded in it").
+          // `cloud/replacement.json` is unreadable is not recorded in it").
           return;
         }
         if (!saved || (await options.connection.status()).requestId !== saved.requestId) return;

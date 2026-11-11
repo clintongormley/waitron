@@ -406,7 +406,7 @@ it("the version-2 configuration reply carries the service's state", () =>
 /** Signs a `configuration` request with the box's pending operation ID, which the base fake requires. */
 async function postConfiguration(f: TranslationCloud, body: string) {
   const saved = JSON.parse(
-    await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"),
+    await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
   ) as SavedCloudState & { lifecycle: { pending: { operationId: string } } };
   const bytes = machinePayload(saved, {
     action: "configuration",

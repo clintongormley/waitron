@@ -192,8 +192,8 @@ if (request.command === "capture") {
         networkDenied,
         integrityOk: true,
         hooks,
-        cloudCredentialPresent: await exists("cloud-connection.json", stateDir),
-        staffKeyPresent: await exists("cloud-staff.key", stateDir),
+        cloudCredentialPresent: await exists("cloud/connection.json", stateDir),
+        staffKeyPresent: await exists("cloud/staff.key", stateDir),
       }),
     );
   } finally {

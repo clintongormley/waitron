@@ -1339,10 +1339,13 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
     "restore-request.json",
     "reset-request.json",
     "modules.json",
-    "cloud-replacement.json",
+    "cloud/replacement.json",
   ].map((name): [string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>] => [
     `state/${name}`,
-    (f) => writeFile(join(f.stateDir, name), "X=1\n"),
+    async (f) => {
+      await mkdir(join(f.stateDir, "cloud"), { recursive: true });
+      await writeFile(join(f.stateDir, name), "X=1\n");
+    },
   ]),
   ["venue/.venue.db-litestream/", (f) => mkdir(join(f.venueDir, ".venue.db-litestream"))],
 ])(

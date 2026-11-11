@@ -61,7 +61,7 @@ async function fixture(artifact: Uint8Array = Buffer.from("archive")) {
   roots.push(root);
   const stateDir = join(root, "state");
   const venueDir = join(root, "venue");
-  await mkdir(stateDir);
+  await mkdir(join(stateDir, "cloud"), { recursive: true });
   await mkdir(venueDir);
   await writeFile(join(stateDir, "trading.env"), "old identity");
   await writeFile(join(stateDir, "secrets.env"), "old secrets");
@@ -94,7 +94,7 @@ async function fixture(artifact: Uint8Array = Buffer.from("archive")) {
     snapshotVerification: verification,
   };
   const save = () =>
-    writeFile(join(stateDir, "cloud-recovery.json"), JSON.stringify(saved), { mode: 0o600 });
+    writeFile(join(stateDir, "cloud/recovery.json"), JSON.stringify(saved), { mode: 0o600 });
   await save();
   const request: ArchiveRestoreRequest & { snapshotVerification: SnapshotRecoveryVerification } = {
     artifact,
@@ -185,7 +185,7 @@ it.each(["loose-permissions", "damaged-identity"])(
     delete legacy.target;
     delete legacy.snapshotVerification;
     if (fault === "damaged-identity") legacy.privateKey = "damaged-cache-key";
-    const cache = join(f.stateDir, "cloud-recovery.json");
+    const cache = join(f.stateDir, "cloud/recovery.json");
     await writeFile(cache, JSON.stringify(legacy));
     if (fault === "loose-permissions") await chmod(cache, 0o644);
     const before = await f.evidence();
@@ -211,7 +211,7 @@ it.each([
   "{broken",
 ])("ordinary archives refuse ambiguous or downgraded Cloud state %s", async (raw) => {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "cloud-recovery.json"), raw);
+  await writeFile(join(f.stateDir, "cloud/recovery.json"), raw);
   await expect(
     stageRestoreRequest(f.stateDir, {
       artifact: f.request.artifact,
@@ -285,10 +285,10 @@ it.each([
       .toString("base64url");
     await f.save();
   }
-  if (fault === "saved") await rm(join(f.stateDir, "cloud-recovery.json"));
+  if (fault === "saved") await rm(join(f.stateDir, "cloud/recovery.json"));
   if (fault === "saved-verification") {
     await writeFile(
-      join(f.stateDir, "cloud-recovery.json"),
+      join(f.stateDir, "cloud/recovery.json"),
       JSON.stringify({ ...f.saved, snapshotVerification: undefined }),
     );
   }
@@ -503,10 +503,10 @@ describe("comparison immediately before real archive placement", () => {
   it("a local archive with an unusable v1 cache reaches the unchanged fiscal authority gate", async () => {
     const f = await realFixture();
     await writeFile(
-      join(f.stateDir, "cloud-recovery.json"),
+      join(f.stateDir, "cloud/recovery.json"),
       '{"version":1,"privateKey":"damaged-cache"}',
     );
-    await chmod(join(f.stateDir, "cloud-recovery.json"), 0o644);
+    await chmod(join(f.stateDir, "cloud/recovery.json"), 0o644);
     const before = await f.evidence();
     const operation = createRecoveryRestoreRunner(
       ALL_MODULES,

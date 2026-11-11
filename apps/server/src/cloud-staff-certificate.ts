@@ -1,3 +1,4 @@
+import { CLOUD_STAFF_KEY_FILE, CLOUD_STAFF_CERT_FILE } from "@waitron/store";
 import { createHash, createPrivateKey, randomUUID, X509Certificate } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -28,8 +29,8 @@ function fresh(chain: string | Buffer, key: string | Buffer, hostname: string): 
 }
 async function installedFresh(stateDir: string, hostname: string): Promise<boolean> {
   try {
-    const key = join(stateDir, "cloud-staff.key"),
-      chain = join(stateDir, "cloud-staff.crt");
+    const key = join(stateDir, CLOUD_STAFF_KEY_FILE),
+      chain = join(stateDir, CLOUD_STAFF_CERT_FILE);
     const info = await lstat(key),
       certInfo = await lstat(chain);
     if (
@@ -120,7 +121,7 @@ export async function refreshStaffCertificate(
       if (reply.state !== "ready") return false;
       if (typeof reply.certificate !== "string" || Buffer.byteLength(reply.certificate) > 16384)
         throw new Error();
-      if (!fresh(reply.certificate, await readFile(join(stateDir, "cloud-staff.key")), hostname))
+      if (!fresh(reply.certificate, await readFile(join(stateDir, CLOUD_STAFF_KEY_FILE)), hostname))
         return false;
       deadline.throwIfAborted();
       if (isCurrent && !(await isCurrent())) throw new AppError("cloud.not_configured", {});

@@ -414,7 +414,7 @@ describe("what the deletion must never delete", () => {
       "modules.json",
       join("stream", "litestream.yml"),
       join("tls", "ca.crt"),
-      join("cloud-snapshots", "staging", "venue.db"),
+      join("cloud/snapshots", "staging", "venue.db"),
       join("scratch/restore", DUMP),
       DUMP,
     ].map((name) => join(stateDir, name));

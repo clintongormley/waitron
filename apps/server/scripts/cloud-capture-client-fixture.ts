@@ -30,7 +30,7 @@ const request = JSON.parse(input) as {
 };
 assert(request.stateSubdir === undefined || request.stateSubdir === "state");
 const stateDir = request.stateSubdir === "state" ? join(root, "state") : root;
-const saved = JSON.parse(await readFile(join(stateDir, "cloud-connection.json"), "utf8"));
+const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
 const client = createCloudConnection({
   stateDir,
   origin: saved.origin,

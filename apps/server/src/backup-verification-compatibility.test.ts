@@ -521,7 +521,7 @@ describe("strict backup compatibility", () => {
     async (mode) => {
       const names: Record<string, string> = {
         unknown: "secrets/unknown",
-        cloud: "secrets/cloud-connection.json",
+        cloud: "secrets/cloud/connection.json",
         absolute: "/secrets/trading.env",
         backslash: "secrets\\trading.env",
         traversal: "secrets/../secrets/trading.env",

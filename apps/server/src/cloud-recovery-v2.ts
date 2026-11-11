@@ -1,3 +1,4 @@
+import { CLOUD_RECOVERY_FILE } from "@waitron/store";
 import { createPrivateKey, createPublicKey } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -136,7 +137,7 @@ export async function readSnapshotRecoveryBinding(
 ): Promise<{ verification: SnapshotRecoveryVerification; publicKey: string } | undefined> {
   if (input.snapshotVerification === undefined) {
     try {
-      const path = join(stateDir, "cloud-recovery.json");
+      const path = join(stateDir, CLOUD_RECOVERY_FILE);
       const info = await lstat(path);
       if (!info.isFile() || info.size > 65536) cloudRecoveryUnavailable();
       const raw = await readFile(path, "utf8");
@@ -183,7 +184,7 @@ export async function readCloudRecoveryState(
   stateDir: string,
 ): Promise<SavedCloudRecoveryState | undefined> {
   try {
-    const path = join(stateDir, "cloud-recovery.json");
+    const path = join(stateDir, CLOUD_RECOVERY_FILE);
     const info = await lstat(path);
     if (!info.isFile() || info.size > 65536 || info.mode & 0o077) cloudRecoveryUnavailable();
     const raw = await readFile(path, "utf8");

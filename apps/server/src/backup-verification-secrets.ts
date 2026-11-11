@@ -66,8 +66,7 @@ export async function verifyBackupStateSecrets(
   for (const entry of entries) {
     const name = posix.normalize(entry.name);
     if (byName.has(name)) return INVALID;
-    if (name === "secrets/cloud-connection.json" || name.startsWith("secrets/cloud-staff."))
-      return UNSUPPORTED;
+    if (name.startsWith("secrets/cloud/")) return UNSUPPORTED;
     byName.set(name, entry);
   }
   for (const name of RECOVERY_FILES) {

@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -121,8 +122,10 @@ async function withServer(
         hostnames: [new URL(env.WAITRON_STAFF_ORIGIN).hostname],
         ipAddresses: [],
       });
-      await writeFile(join(scratch, "cloud-staff.key"), material.serverKeyPem);
-      await writeFile(join(scratch, "cloud-staff.crt"), material.serverCertPem);
+      await mkdir(join(scratch, "cloud"), { recursive: true });
+      await writeFile(join(scratch, "cloud/staff.key"), material.serverKeyPem);
+      await mkdir(join(scratch, "cloud"), { recursive: true });
+      await writeFile(join(scratch, "cloud/staff.crt"), material.serverCertPem);
     }
     server = await startServer(full, full, seams);
     await vi.waitFor(async () => {

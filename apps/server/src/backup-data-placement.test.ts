@@ -317,8 +317,8 @@ it.each([
   ["secrets/tls/../trading.env", "restore.unsafe_entry_path"],
   ["unexpected", "restore.unexpected_entry"],
   ["secrets/unclaimed.json", "restore.unexpected_entry"],
-  ["secrets/cloud-connection.json", "restore.unexpected_entry"],
-  ["secrets/cloud-staff.key", "restore.unexpected_entry"],
+  ["secrets/cloud/connection.json", "restore.unexpected_entry"],
+  ["secrets/cloud/staff.key", "restore.unexpected_entry"],
   ["secrets/first-setup-claim.json", "restore.unexpected_entry"],
   ["secrets/records/choices/1-earlier.json", "restore.unexpected_entry"],
 ])("refuses %s before placement", async (name, code) => {

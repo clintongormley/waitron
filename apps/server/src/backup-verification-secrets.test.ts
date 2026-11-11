@@ -91,6 +91,15 @@ async function seal(input: ArchiveEntry[]) {
 }
 
 describe("private host recovery material", () => {
+  it("refuses an entry under secrets/cloud/", async () => {
+    expect(
+      await verifyBackupStateSecrets(
+        set(entries(), "cloud/connection.json", "private-cloud-sentinel"),
+        source,
+        now,
+      ),
+    ).toEqual(unsupported);
+  });
   it("accepts complete matching state with no selected-node sealed row", async () => {
     expect(await verifyBackupStateSecrets(entries(), source, now)).toEqual(pass);
   });
@@ -240,7 +249,7 @@ describe("private host recovery material", () => {
       await verifyBackupStateSecrets(set(entries(), "modules.json", raw), source, now),
     ).toEqual(unsupported);
   });
-  it.each(["cloud-connection.json", "cloud-staff.key", "cloud-staff.json", "cloud-staff.session"])(
+  it.each(["cloud/connection.json", "cloud/staff.key", "cloud/staff.json", "cloud/staff.session"])(
     "refuses archived Cloud authority %s",
     async (name) => {
       expect(

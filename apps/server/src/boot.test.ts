@@ -568,7 +568,8 @@ describe("startServer, against a migrated venue directory", () => {
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { "fiscal-none": false } }),
     );
-    await writeFile(join(stateDir, "cloud-replacement.json"), "corrupt", { mode: 0o600 });
+    await mkdir(join(stateDir, "cloud"), { recursive: true });
+    await writeFile(join(stateDir, "cloud/replacement.json"), "corrupt", { mode: 0o600 });
     let server: StartedServer | undefined;
     try {
       server = await startServer({

@@ -127,9 +127,9 @@ else if (request.command === "stage") {
     request.expectedSourceNodeId,
   );
   assert.equal(await exists(join(stateDir, "backup.env")), false);
-  assert.equal(await exists(join(stateDir, "cloud-connection.json")), false);
-  assert.equal(await exists(join(stateDir, "cloud-staff.key")), false);
-  assert.equal(await exists(join(stateDir, "cloud-staff.crt")), false);
+  assert.equal(await exists(join(stateDir, "cloud/connection.json")), false);
+  assert.equal(await exists(join(stateDir, "cloud/staff.key")), false);
+  assert.equal(await exists(join(stateDir, "cloud/staff.crt")), false);
   result = {
     restored: true,
     venue: request.expectedVenue,

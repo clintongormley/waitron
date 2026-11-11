@@ -51,7 +51,7 @@ it("uses current installation proof and renews the same capture without saving u
     const retried = await restarted.reserveCapture(id);
     expect(retried.id).toBe(id);
     expect(retried.recoveryKey).toBe(first.recoveryKey);
-    const saved = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
+    const saved = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
     for (const secret of [first.recoveryKey, '"secretAccessKey"', '"sessionToken"'])
       expect(saved).not.toContain(secret);
   } finally {
@@ -166,7 +166,7 @@ it("refuses malformed response bodies, redirects, invalid inputs and missing loc
   try {
     await f.client.refresh();
     const state = JSON.parse(
-      await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"),
+      await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
     ) as SavedCloudState;
     for (const bad of [
       { ...state, view: undefined },

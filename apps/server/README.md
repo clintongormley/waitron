@@ -306,7 +306,7 @@ Set `WAITRON_STAFF_HOST` to the tunnel address and `WAITRON_STAFF_PORT` to the r
 they default to loopback and 8443. With `WAITRON_CLOUD_ORIGIN` set and your test installation
 connected, the Cloud worker requests and renews the staff certificate with a key kept under
 `WAITRON_STATE_DIR`. The staff listener opens after first issuance. You can also install a
-matching `cloud-staff.key` and `cloud-staff.crt` before startup. An unset or empty staff origin
+matching `cloud/staff.key` and `cloud/staff.crt` before startup. An unset or empty staff origin
 opens no staff listener. For the current container, put these values in its `trading.env`;
 Compose does not forward host `WAITRON_STAFF_*` variables. This does not configure a tunnel or connect the box to Cloud.
 

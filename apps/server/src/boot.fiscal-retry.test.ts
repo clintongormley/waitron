@@ -51,7 +51,7 @@ it("hands the configured tunnel folder to the real Cloud worker and publishes it
   const f = await installationFixture();
   const publicKey = randomBytes(32).toString("base64"),
     gatewayPublicKey = randomBytes(32).toString("base64");
-  const source = join(f.stateDir, "cloud-connection.json");
+  const source = join(f.stateDir, "cloud/connection.json");
   const saved = JSON.parse(await readFile(source, "utf8"));
   f.patch({
     services: ["continuous_backup", "remote_access", "retained_snapshots"].map((service) => ({
@@ -81,7 +81,8 @@ it("hands the configured tunnel folder to the real Cloud worker and publishes it
       beforeStart: async (venue, directory, env) => {
         saved.localVenueId = venue.cfg.locationId;
         saved.view.localVenueId = venue.cfg.locationId;
-        const destination = join(directory, "cloud-connection.json");
+        await mkdir(join(directory, "cloud"), { recursive: true });
+        const destination = join(directory, "cloud/connection.json");
         await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
         await rm(source);
         await symlink(destination, source);
@@ -210,7 +211,7 @@ it("submits the container's public key through boot's real Cloud worker", async 
     },
   });
   const publicKey = randomBytes(32).toString("base64");
-  const source = join(f.stateDir, "cloud-connection.json");
+  const source = join(f.stateDir, "cloud/connection.json");
   const saved = JSON.parse(await readFile(source, "utf8"));
   try {
     await boot({
@@ -219,7 +220,8 @@ it("submits the container's public key through boot's real Cloud worker", async 
       beforeStart: async (venue, directory, env) => {
         saved.localVenueId = venue.cfg.locationId;
         saved.view.localVenueId = venue.cfg.locationId;
-        const destination = join(directory, "cloud-connection.json");
+        await mkdir(join(directory, "cloud"), { recursive: true });
+        const destination = join(directory, "cloud/connection.json");
         await writeFile(destination, JSON.stringify(saved), { mode: 0o600 });
         await rm(source);
         await symlink(destination, source);

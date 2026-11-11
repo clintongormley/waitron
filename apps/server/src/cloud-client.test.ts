@@ -1,9 +1,39 @@
+import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { chmod, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import * as fs from "node:fs/promises";
+import { syncsAndRenames, writtenDurably } from "./testing/durable-writes.js";
 import { expect, it, vi } from "vitest";
 import { cloudFixture as fixture } from "../test/cloud-fixture.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
+vi.mock("node:fs/promises", { spy: true });
+
+it("saves the connection under cloud with private permissions and both flushes", async () => {
+  const f = await fixture();
+  try {
+    f.reject();
+    const events = await syncsAndRenames(
+      { mkdir: vi.mocked(fs.mkdir), open: vi.mocked(fs.open), rename: vi.mocked(fs.rename) },
+      () =>
+        createCloudConnection(f.options)
+          .start()
+          .catch(() => undefined),
+    );
+    const folder = join(f.stateDir, "cloud");
+    const path = join(folder, "connection.json");
+    expect(JSON.parse(await readFile(path, "utf8")).localVenueId).toBe(f.options.localVenueId);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect((await stat(folder)).mode & 0o777).toBe(0o700);
+    expect(writtenDurably(events, path, folder)).toBe(true);
+    const created = events.indexOf(`mkdir ${folder}`);
+    expect(created).not.toBe(-1);
+    expect(events.indexOf(`sync ${f.stateDir}`, created)).toBeGreaterThan(created);
+  } finally {
+    await f.close();
+  }
+});
+
 it("requires a pinned secure Cloud origin except explicit loopback development", () => {
   expect(loadCloudOrigin({})).toBeUndefined();
   expect(loadCloudOrigin({ WAITRON_CLOUD_ORIGIN: "" })).toBeUndefined();
@@ -32,8 +62,8 @@ it("persists before sending, resumes a failed start after restart and never expo
     expect((await client.status()).state).toBe("not_connected");
     f.reject();
     await expect(client.start()).rejects.toMatchObject({ code: "cloud.unavailable" });
-    const before = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
-    expect((await stat(join(f.stateDir, "cloud-connection.json"))).mode & 0o777).toBe(0o600);
+    const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
+    expect((await stat(join(f.stateDir, "cloud/connection.json"))).mode & 0o777).toBe(0o600);
     f.accept();
     const resumed = createCloudConnection(f.options);
     const status = await resumed.start();
@@ -56,7 +86,7 @@ it("requires explicit bound local confirmation and checks authority again after 
     f.approve();
     const approved = await client.check();
     expect(approved.state).toBe("awaiting_local");
-    const approvedPath = join(f.stateDir, "cloud-connection.json");
+    const approvedPath = join(f.stateDir, "cloud/connection.json");
     const approvedFile = await readFile(approvedPath, "utf8");
     for (const patch of [{ organisationId: randomUUID() }, { legalBusinessId: randomUUID() }]) {
       f.patchReply(patch);
@@ -86,7 +116,7 @@ it("requires explicit bound local confirmation and checks authority again after 
     const restarted = createCloudConnection(f.options);
     expect((await restarted.check()).registration).toEqual(complete.registration);
     expect((await restarted.status()).code).toBe("");
-    const path = join(f.stateDir, "cloud-connection.json");
+    const path = join(f.stateDir, "cloud/connection.json");
     const before = await readFile(path, "utf8");
     for (const patch of [
       { registration: { ...complete.registration, installationId: randomUUID() } },
@@ -107,14 +137,15 @@ it("rejects changed binding, malformed state, and mismatched replies without ove
   try {
     const client = createCloudConnection(f.options);
     await client.start();
-    const before = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
+    const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
     await expect(
       createCloudConnection({ ...f.options, localVenueId: randomUUID() }).status(),
     ).rejects.toMatchObject({ code: "cloud.state_invalid" });
     f.bad();
     await expect(client.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
-    expect(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")).toBe(before);
-    await writeFile(join(f.stateDir, "cloud-connection.json"), "broken");
+    expect(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")).toBe(before);
+    await mkdir(join(f.stateDir, "cloud"), { recursive: true });
+    await writeFile(join(f.stateDir, "cloud/connection.json"), "broken");
     await expect(client.start()).rejects.toMatchObject({ code: "cloud.state_invalid" });
   } finally {
     await f.close();
@@ -196,8 +227,9 @@ it("emits the fixed version-one wire vector shared with Cloud", async () => {
     await readFile(new URL("../test/cloud-pairing-vector.json", import.meta.url), "utf8"),
   );
   const options = { ...f.options, origin: v.claims.origin, localVenueId: v.claims.localVenueId };
+  await mkdir(join(f.stateDir, "cloud"), { recursive: true });
   await writeFile(
-    join(f.stateDir, "cloud-connection.json"),
+    join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
       version: 1,
       origin: v.claims.origin,

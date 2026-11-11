@@ -24,7 +24,8 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
     await mkdir(dirname(join(root, path)), { recursive: true });
     await writeFile(join(root, path), path + " contents");
   }
-  await writeFile(join(root, "cloud-connection.json"), "private installation key");
+  await mkdir(join(root, "cloud"), { recursive: true });
+  await writeFile(join(root, "cloud/connection.json"), "private installation key");
   await mkdir(join(root, "cloud-tls"));
   await writeFile(join(root, "cloud-tls/staff.key"), "private staff key");
   const at = new Date("2026-09-24T12:00:00Z");
@@ -57,7 +58,7 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   expect(
     [...entries.keys()].some((k) => k.includes("cloud-connection") || k.includes("cloud-tls")),
   ).toBe(false);
-  expect(await readdir(join(root, "cloud-snapshots"))).toEqual([]);
+  expect(await readdir(join(root, "cloud/snapshots"))).toEqual([]);
   const c = new AbortController();
   c.abort();
   await expect(
@@ -107,7 +108,7 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: "cloud.unavailable" });
-    expect(await readdir(join(root, "cloud-snapshots"))).toEqual([]);
+    expect(await readdir(join(root, "cloud/snapshots"))).toEqual([]);
   } finally {
     archive.mockRestore();
   }
@@ -148,7 +149,7 @@ it("lets a node copy still writing into staging finish before it clears staging 
       ),
     ).rejects.toMatchObject({ code: "EISDIR" });
     expect(copyFinished).toBe(true);
-    expect(await readdir(join(root, "cloud-snapshots"))).toEqual([]);
+    expect(await readdir(join(root, "cloud/snapshots"))).toEqual([]);
   } finally {
     copy.mockRestore();
   }

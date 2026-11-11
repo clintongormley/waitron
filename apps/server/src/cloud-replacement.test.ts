@@ -1,3 +1,4 @@
+import { mkdir } from "node:fs/promises";
 import { createPublicKey, generateKeyPairSync, randomUUID, verify } from "node:crypto";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -36,8 +37,9 @@ async function fixture(
   const publicKey = key.publicKey.export({ format: "der", type: "spki" }).toString("base64url");
   const requestId = randomUUID();
   const oldInstallationId = randomUUID();
+  await mkdir(join(stateDir, "cloud"), { recursive: true });
   await writeFile(
-    join(stateDir, "cloud-recovery.json"),
+    join(stateDir, "cloud/recovery.json"),
     JSON.stringify({
       version: 1,
       origin: cloudOrigin,
@@ -129,8 +131,8 @@ it("persists new keys before sending dual signatures and reuses them after a los
   await expect(
     createCloudReplacement({ ...f.options, connection: f.connection }).prepare(),
   ).rejects.toMatchObject({ code: "cloud.unavailable" });
-  const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-replacement.json"), "utf8"));
-  expect((await stat(join(f.stateDir, "cloud-replacement.json"))).mode & 0o777).toBe(0o600);
+  const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/replacement.json"), "utf8"));
+  expect((await stat(join(f.stateDir, "cloud/replacement.json"))).mode & 0o777).toBe(0o600);
   expect(saved.privateKey).toBeTruthy();
   expect(saved.peerPrivateKey).toBeTruthy();
   expect(saved.publicKey).not.toBe(f.publicKey);
@@ -171,7 +173,7 @@ it("refuses a saved replacement file made group-readable after creation", async 
   const f = await fixture();
   const client = createCloudReplacement({ ...f.options, connection: f.connection });
   await client.prepare();
-  const path = join(f.stateDir, "cloud-replacement.json");
+  const path = join(f.stateDir, "cloud/replacement.json");
   await chmod(path, 0o640);
   expect((await stat(path)).mode & 0o777).toBe(0o640);
   await expect(client.status()).rejects.toMatchObject({
@@ -192,7 +194,7 @@ it("reports a completed local restore to Cloud before replacement prepare", asyn
   const view = await createCloudReplacement({ ...f.options, connection: f.connection }).prepare();
   expect(view.state).toBe("awaiting_owner");
   expect(f.requests.map((request) => request.action)).toEqual(["info", "restored", "prepare"]);
-  const state = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+  const state = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
   expect(state.phase).toBe("reported");
 });
 
@@ -201,9 +203,10 @@ it("refuses an unrestored recovery and imports an exact completion idempotently"
   const client = createCloudReplacement({ ...f.options, connection: f.connection });
   await expect(client.prepare()).rejects.toMatchObject({ code: "cloud.replacement_not_restored" });
   expect(f.requests).toHaveLength(0);
-  const recovery = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+  const recovery = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
   recovery.phase = "reported";
-  await writeFile(join(f.stateDir, "cloud-recovery.json"), JSON.stringify(recovery), {
+  await mkdir(join(f.stateDir, "cloud"), { recursive: true });
+  await writeFile(join(f.stateDir, "cloud/recovery.json"), JSON.stringify(recovery), {
     mode: 0o600,
   });
   await client.prepare();
@@ -221,8 +224,9 @@ it("refuses an unrestored recovery and imports an exact completion idempotently"
 it("does not propose replacement over an unrelated saved Cloud connection", async () => {
   const f = await fixture();
   const key = generateKeyPairSync("ed25519");
+  await mkdir(join(f.stateDir, "cloud"), { recursive: true });
   await writeFile(
-    join(f.stateDir, "cloud-connection.json"),
+    join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
       version: 1,
       origin,
@@ -246,7 +250,7 @@ it("restarts an interrupted registration import without changing the proposed ke
   const f = await fixture();
   const client = createCloudReplacement({ ...f.options, connection: f.connection });
   await client.prepare();
-  const before = await readFile(join(f.stateDir, "cloud-replacement.json"), "utf8");
+  const before = await readFile(join(f.stateDir, "cloud/replacement.json"), "utf8");
   f.setMode("complete");
   const originalImport = f.connection.importReplacement.bind(f.connection);
   f.connection.importReplacement = vi.fn(async () => {
@@ -254,7 +258,7 @@ it("restarts an interrupted registration import without changing the proposed ke
   });
   await expect(client.check()).rejects.toThrow("disk write interrupted");
   expect((await f.connection.status()).state).toBe("not_connected");
-  const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-replacement.json"), "utf8"));
+  const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/replacement.json"), "utf8"));
   expect(saved.privateKey).toBe(JSON.parse(before).privateKey);
   expect(saved.view.registration).toEqual(registration);
   f.connection.importReplacement = originalImport;
@@ -281,14 +285,14 @@ it("retrieves owner confirmation after a lost status reply with the saved propos
   const f = await fixture();
   const client = createCloudReplacement({ ...f.options, connection: f.connection });
   await client.prepare();
-  const before = JSON.parse(await readFile(join(f.stateDir, "cloud-replacement.json"), "utf8"));
+  const before = JSON.parse(await readFile(join(f.stateDir, "cloud/replacement.json"), "utf8"));
   f.setMode("lost");
   await expect(client.check()).rejects.toMatchObject({ code: "cloud.unavailable" });
   f.setMode("complete");
   expect(
     (await createCloudReplacement({ ...f.options, connection: f.connection }).check()).registration,
   ).toEqual(registration);
-  const after = JSON.parse(await readFile(join(f.stateDir, "cloud-replacement.json"), "utf8"));
+  const after = JSON.parse(await readFile(join(f.stateDir, "cloud/replacement.json"), "utf8"));
   expect(after.privateKey).toBe(before.privateKey);
   expect(after.peerPrivateKey).toBe(before.peerPrivateKey);
 });
@@ -319,7 +323,7 @@ it("imports a durable completion on boot after the recovery request file is remo
     throw Error("disk write interrupted");
   });
   await expect(client.check()).rejects.toThrow("disk write interrupted");
-  await rm(join(f.stateDir, "cloud-recovery.json"));
+  await rm(join(f.stateDir, "cloud/recovery.json"));
   f.connection.importReplacement = originalImport;
   await createCloudReplacement({ ...f.options, connection: f.connection }).resume();
   expect((await f.connection.status()).registration).toEqual(registration);
@@ -328,7 +332,7 @@ it("imports a durable completion on boot after the recovery request file is remo
 async function connectedReplacement() {
   const cloud = await installationFixture();
   clouds.push(cloud);
-  await rm(join(cloud.stateDir, "cloud-connection.json"));
+  await rm(join(cloud.stateDir, "cloud/connection.json"));
   const f = await fixture("reported", { stateDir: cloud.stateDir, origin: cloud.options.origin });
   const client = createCloudReplacement({ ...f.options, connection: f.connection });
   await client.prepare();
@@ -344,7 +348,7 @@ async function connectedReplacement() {
     });
     return { connection, replacement: createCloudReplacement({ ...f.options, connection }) };
   };
-  const saved = async (name: "cloud-connection.json" | "cloud-replacement.json") =>
+  const saved = async (name: "cloud/connection.json" | "cloud/replacement.json") =>
     JSON.parse(await readFile(join(f.stateDir, name), "utf8"));
   return { f, cloud, client, restart, saved, sent: () => cloud.requests.map((v) => v[2]) };
 }
@@ -356,7 +360,7 @@ for (const heard of [false, true])
     const stopping = f.connection.revoke(() => client.recordStop());
     if (heard) await stopping;
     else await expect(stopping).rejects.toMatchObject({ code: "cloud.unavailable" });
-    await rm(join(f.stateDir, "cloud-connection.json"));
+    await rm(join(f.stateDir, "cloud/connection.json"));
     const { connection, replacement } = restart();
     await replacement.resume();
     cloud.online();
@@ -381,8 +385,8 @@ for (const waiting of [undefined, "renew"] as const)
         throw Error("process died");
       }),
     ).rejects.toThrow("process died");
-    expect((await saved("cloud-replacement.json")).stopped).toBe(true);
-    expect((await saved("cloud-connection.json")).lifecycle?.pending?.action).toBe(waiting);
+    expect((await saved("cloud/replacement.json")).stopped).toBe(true);
+    expect((await saved("cloud/connection.json")).lifecycle?.pending?.action).toBe(waiting);
     const { connection, replacement } = restart();
     await replacement.resume();
     cloud.requests.length = 0;
@@ -397,12 +401,12 @@ it("keeps a stop request already waiting, with its operation id, when the replac
   await expect(f.connection.revoke(() => client.recordStop())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
-  expect((await saved("cloud-replacement.json")).stopped).toBe(true);
-  const waiting = (await saved("cloud-connection.json")).lifecycle.pending;
+  expect((await saved("cloud/replacement.json")).stopped).toBe(true);
+  const waiting = (await saved("cloud/connection.json")).lifecycle.pending;
   expect(waiting.action).toBe("revoke");
   const { connection, replacement } = restart();
   await replacement.resume();
-  expect((await saved("cloud-connection.json")).lifecycle.pending).toEqual(waiting);
+  expect((await saved("cloud/connection.json")).lifecycle.pending).toEqual(waiting);
   cloud.online();
   cloud.requests.length = 0;
   await connection.refresh();
@@ -413,8 +417,8 @@ it("keeps a stop request already waiting, with its operation id, when the replac
 it("leaves a connection Cloud has already revoked unchanged when the replacement is re-imported", async () => {
   const { f, cloud, client, restart, saved } = await connectedReplacement();
   await f.connection.revoke(() => client.recordStop());
-  expect((await saved("cloud-replacement.json")).stopped).toBe(true);
-  const path = join(f.stateDir, "cloud-connection.json");
+  expect((await saved("cloud/replacement.json")).stopped).toBe(true);
+  const path = join(f.stateDir, "cloud/connection.json");
   const before = await readFile(path, "utf8");
   const { connection, replacement } = restart();
   await replacement.resume();
@@ -431,7 +435,7 @@ it("carries the stop when Check reconnection re-imports after the connection fil
   await expect(f.connection.revoke(() => client.recordStop())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
-  await rm(join(f.stateDir, "cloud-connection.json"));
+  await rm(join(f.stateDir, "cloud/connection.json"));
   const { connection, replacement } = restart();
   expect((await replacement.check()).registration).toEqual(registration);
   cloud.online();
@@ -443,7 +447,7 @@ it("carries the stop when Check reconnection re-imports after the connection fil
 
 it("resumes a replacement that was never stopped after the connection file is deleted", async () => {
   const { f, restart, sent } = await connectedReplacement();
-  await rm(join(f.stateDir, "cloud-connection.json"));
+  await rm(join(f.stateDir, "cloud/connection.json"));
   const { connection, replacement } = restart();
   await replacement.resume();
   expect((await connection.status()).registration).toEqual(registration);
@@ -470,8 +474,8 @@ it("refuses Stop access with cloud.busy while a Check reconnection is in flight,
     await expect(f.connection.revoke(() => client.recordStop())).rejects.toMatchObject({
       code: "cloud.busy",
     });
-    expect((await saved("cloud-connection.json")).lifecycle?.pending).toBeUndefined();
-    expect((await saved("cloud-replacement.json")).stopped).toBeUndefined();
+    expect((await saved("cloud/connection.json")).lifecycle?.pending).toBeUndefined();
+    expect((await saved("cloud/replacement.json")).stopped).toBeUndefined();
     expect(sent()).toEqual([]);
   } finally {
     release();
@@ -480,14 +484,14 @@ it("refuses Stop access with cloud.busy while a Check reconnection is in flight,
   expect((await checking).state).toBe("complete");
   await f.connection.revoke(() => client.recordStop());
   expect(sent()).toEqual(["revoke"]);
-  expect((await saved("cloud-replacement.json")).stopped).toBe(true);
+  expect((await saved("cloud/replacement.json")).stopped).toBe(true);
   expect((await f.connection.status()).installation?.state).toBe("revoked");
 });
 
 it("records a stop only for the Cloud connection this replacement imported", async () => {
   const f = await fixture();
   const client = createCloudReplacement({ ...f.options, connection: f.connection });
-  const path = join(f.stateDir, "cloud-replacement.json");
+  const path = join(f.stateDir, "cloud/replacement.json");
   await client.recordStop();
   await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
   await client.prepare();
@@ -496,8 +500,9 @@ it("records a stop only for the Cloud connection this replacement imported", asy
   f.setMode("complete");
   await client.check();
   const key = generateKeyPairSync("ed25519");
+  await mkdir(join(f.stateDir, "cloud"), { recursive: true });
   await writeFile(
-    join(f.stateDir, "cloud-connection.json"),
+    join(f.stateDir, "cloud/connection.json"),
     JSON.stringify({
       version: 1,
       origin,
@@ -516,7 +521,7 @@ it("records a stop only for the Cloud connection this replacement imported", asy
 
 it("saves a recorded stop and refuses a saved stop that is not true", async () => {
   const { f, client } = await connectedReplacement();
-  const path = join(f.stateDir, "cloud-replacement.json");
+  const path = join(f.stateDir, "cloud/replacement.json");
   await client.recordStop();
   const saved = JSON.parse(await readFile(path, "utf8"));
   expect(saved.stopped).toBe(true);
@@ -528,7 +533,7 @@ it("saves a recorded stop and refuses a saved stop that is not true", async () =
 
 it("does not let a corrupt replacement file block Stop access, while start-up and Check reconnection refuse the unreadable file too", async () => {
   const { f, client, sent } = await connectedReplacement();
-  const path = join(f.stateDir, "cloud-replacement.json");
+  const path = join(f.stateDir, "cloud/replacement.json");
   await chmod(path, 0o640);
   await f.connection.revoke(() => client.recordStop());
   expect(sent()).toEqual(["revoke"]);
