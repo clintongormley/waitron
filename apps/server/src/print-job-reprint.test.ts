@@ -63,7 +63,7 @@ useVenueDb({
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true));
       const { id } = await createPrinter(tx, {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "network_tcp",
         host: "kitchen.test",
       });

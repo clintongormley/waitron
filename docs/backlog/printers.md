@@ -336,7 +336,7 @@ checked on the box).
 
 ## Deleting an A4 printer
 
-- **Deleting an A4 printer (left open by A405 point 6, #2678).** `page_printers` has no deletion
+- **Deleting an A4 printer (left open by A405 point 6, #2661).** `page_printers` has no deletion
   column and is referenced with `restrict` by `invoice_deliveries`, `devices` and
   `device_profile_printers`, so a delete must be a soft delete, which needs a column. Until then A4
   details have no Delete.

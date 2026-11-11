@@ -4294,15 +4294,18 @@ beside its value, the label muted and the value in normal weight, and stacks the
 
 Printer details open in a modal over the tab they were opened from (A405). Each fact is one row,
 in groups under Status, Connection, Paper and drawer, and Used by (`settingsRows`); Used by shows
-only outside Edit. The Active switch sits
-once, under Status, and acts at once. The view footer reads Close and Delete at the start,
+only outside Edit. The view footer reads Close and Delete at the start,
 Calibrate printer and Edit at the end. Edit turns the modal into one form of the name and, for a
 network receipt printer, its host and port; that form has no Close button, its footer reads Cancel and Save
 with the one bottom message, Cancel returns to the details, and Escape closes the window. The
 list's Edit opens the details in edit mode with the name focused. Cancel discards edits without
 asking. Escape and leaving the page ask before discarding an edited form. An A4 printer opens the same modal with a Paper group and no
 Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
-is set. Its Active switch only switches off, and its Edit form holds the name alone.
+is set. Its Active switch, under Status, only switches off, and its Edit form holds the name alone.
+A disabled Bluetooth printer that no agent reports paired offers Pair again in its row's actions
+and under Connection in its details; it opens a compact window that looks for the printer, then
+the Pair dialog. The Print Queue's Reprint opens `apps/dashboard/src/widgets/print-job-reprint-dialog.ts`,
+which holds a choice, not staged input, so it takes no draft scope and has no `*.unsaved.test.ts`.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the

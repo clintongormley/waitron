@@ -35,6 +35,13 @@ bell and in their emails (`backup.archives_deleted` and the `spaceLow` variant o
 and `BACKUP_REFUSED_EMAIL_WORDS` in `apps/server/src/i18n/box-emails.ts`). The owner's reason: “the
 more you say, the less people will read”, so no tips and no rule explanations in the alerts.
 
+A fourth exception, the owner's of 2026-11-10 (A405 PR 4, #2678): when a print-queue Reprint has
+nowhere to go because its printer is disabled, the dialog says only that
+(`printers.reprint_original_off` and `printers.reprint_none` in
+`apps/dashboard/src/i18n/strings.ts`). The owner's words: “i don't think we need to tell them how
+to reenable an inactive printer. presumably it has been disabled for a reason. just say the
+printer is disabled”.
+
 The dashboard's full-disk bar follows the rule: to a person who cannot open Box status it offers
 **Sign in as a manager** in place, saying that this signs them out (`#diskStopBar` in
 `apps/dashboard/src/dashboard-app.ts`).

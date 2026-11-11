@@ -778,7 +778,7 @@ export const en = {
   "printers.connected_through": "Connected through",
   "printers.details_paper": "Paper and drawer",
   "printers.details_help":
-    "Active switches the printer on or off at once. Edit changes its name and, for a network printer, its address.",
+    "Edit changes its name and, for a network printer, its address.",
   "printers.connection_network": "Any venue agent",
   "printers.connection_direct": "Direct (no agent)",
   "printers.jobs_limit":
@@ -4648,7 +4648,7 @@ export const es: Record<StringKey, string> = {
   "printers.connected_through": "Conectada a través de",
   "printers.details_paper": "Papel y cajón",
   "printers.details_help":
-    "Activa enciende o apaga la impresora al momento. Editar cambia su nombre y, si es de red, su dirección.",
+    "Editar cambia su nombre y, si es de red, su dirección.",
   "printers.connection_network": "Cualquier agente del local",
   "printers.connection_direct": "Directa (sin agente)",
   "printers.jobs_limit":

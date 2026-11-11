@@ -2271,7 +2271,7 @@ bytes: the invoice data is the same, while the trim, logo and address are today'
 are in the sale's receipt language. It keeps its own marking: an original that failed still comes
 out as an original, and a copy carries the duplicate marking (`reprintJobOn`,
 `apps/server/src/print-job-reprint.ts`). An original still
-waiting on a disabled printer, or on one no agent sees, can be moved the same way; it is ended on
+waiting on a disabled printer, or on a USB or Bluetooth printer no print agent sees, can be moved the same way; it is ended on
 its own printer when it is moved.
 
 > **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios

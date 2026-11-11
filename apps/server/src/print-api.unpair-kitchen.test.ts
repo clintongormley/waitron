@@ -44,7 +44,7 @@ useVenueDb({
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true));
       const { id: printerId } = await createPrinter(tx, {
-        name: "Cocina",
+        name: "Kitchen",
         transport: "bluetooth",
         localKey: MAC,
       });
@@ -169,7 +169,7 @@ describe("a kitchen ticket reprinted on another printer", () => {
 
     const moved = await inTx(venue, async (tx) => {
       const { id: printerId } = await createPrinter(tx, {
-        name: "Barra",
+        name: "Bar",
         transport: "network_tcp",
         host: "bar.test",
       });

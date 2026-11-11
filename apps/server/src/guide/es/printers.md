@@ -60,7 +60,7 @@ la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
 **Reimprimir** vuelve a enviar una impresión, a su impresora o a otra: un ticket o una factura, a
-cualquier impresora de tickets; una comanda de cocina o un ticket de devolución, a una al menos
+cualquier impresora de tickets; una comanda de cocina o un justificante de devolución, a una al menos
 igual de ancha. Una impresión que espera en una impresora deshabilitada, o en una impresora USB o Bluetooth que
 ningún agente ve, se puede mover igual, y allí se cancela. Las demás impresiones solo se reimprimen en su propia impresora.
 

@@ -977,7 +977,7 @@ export class PrintersScreen extends LitElement {
       proceed() {},
     })) === "proceeded";
   @state() private commands: Record<string, TrackedCommand> = {};
-  /** Command key to answerBy for each pairing that succeeded while Add a printer is open. */
+  /** Command key to answerBy for each pairing that succeeded while Add a printer or Pair again is open. */
   @state() private pairedDevices: Record<string, number> = {};
   @state() private forgetting = false;
   #commandTimer?: ReturnType<typeof setInterval>;
@@ -1824,8 +1824,8 @@ export class PrintersScreen extends LitElement {
 
   /** Carries a successful pairing straight on into the form to add the device, unless another dialog
    * is in the way (its row then offers Add) or the device can no longer be added — which includes a
-   * pair-only device (`#canPairOnly`), so its pairing never opens the form. Returns whether the form
-   * opened. */
+   * pair-only device (`#canPairOnly`), so its pairing never opens the form. Returns whether the
+   * pairing was taken: the form opened, or Pair again brought its printer back. */
   #addPaired(key: string, tracked: TrackedCommand): boolean {
     const device = this.#listedDevice(key) ?? tracked.device!;
     if (this.pairAgain !== null && device.printerId === this.pairAgain.printer.id) {
