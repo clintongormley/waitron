@@ -1,3 +1,6 @@
+import { createFreshSignInGate } from "../api/fresh-sign-in.js";
+import { FreshSignInDialog } from "../widgets/fresh-sign-in-dialog.js";
+import type { LitElement } from "lit";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -130,13 +133,16 @@ it("a passkey-only account cannot start the handover", async () => {
   const { el, start } = await mount({ password: false });
   q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
   await vi.waitFor(() =>
-    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
-      t("servers.handover_password"),
-    ),
+    expect(
+      (q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error,
+    ).toContain("This account has no password"),
   );
   expect(
     (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
   ).toBe(true);
+  expect(
+    (q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error,
+  ).toContain(t("profile.password_recovery"));
   expect(start).not.toHaveBeenCalled();
 });
 
@@ -284,4 +290,82 @@ it("keeps Hand over quiet after a failed passive profile read and retries it", a
     ).toBe(false),
   );
   expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe("");
+});
+
+it("the handover prompt refuses recovery codes before sending and continues with a current code", async () => {
+  const own = await (await mount()).el.api.getProfile();
+  cleanupWidgets();
+  const confirmations: unknown[] = [];
+  const starts: unknown[] = [];
+  const dialog = new FreshSignInDialog();
+  const gate = createFreshSignInGate({
+    sessionGeneration: () => 0,
+    prompt: (signal, context) => dialog.show(signal, context),
+  });
+  const api = new DashboardApi(
+    "",
+    async (path, init) => {
+      if (String(path).endsWith("/servers")) return new Response(JSON.stringify(listing));
+      if (String(path).endsWith("/profile")) return new Response(JSON.stringify(own));
+      if (String(path).endsWith("/fresh-sign-in")) {
+        confirmations.push(JSON.parse(String(init.body)));
+        return new Response(JSON.stringify({}));
+      }
+      starts.push(JSON.parse(String(init.body)));
+      return confirmations.length
+        ? new Response(JSON.stringify({ handoverPage: "https://new.example/handover/move" }))
+        : new Response(
+            JSON.stringify({ error: { code: "management_session.proof_required", params: {} } }),
+            { status: 400 },
+          );
+    },
+    undefined,
+    undefined,
+    false,
+    { sessionGeneration: () => 0, freshSignIn: gate },
+  );
+  dialog.api = api.background;
+  const { el, host } = await mountWidget<ServersScreen>("dashboard-servers-screen", {
+    api,
+    canPromote: true,
+  });
+  host.appendChild(dialog);
+  const navigate = vi.fn();
+  host.addEventListener("handover-open", navigate);
+  await vi.waitFor(() =>
+    expect(q(q(el, "wt-data-table"), '[data-test="handover-new"]')).not.toBeNull(),
+  );
+  await open(el);
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() =>
+    expect(
+      q(dialog, "dashboard-fresh-sign-in")?.shadowRoot?.querySelector("wt-input[name=totp]"),
+    ).toBeTruthy(),
+  );
+  const signIn = q(dialog, "dashboard-fresh-sign-in");
+  const fill = async (name: string, value: string) => {
+    const field = q(signIn, `[name="${name}"]`) as LitElement;
+    await field.updateComplete;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  };
+  await fill("current-password", "secret");
+  await fill("totp", "recovery-code");
+  q(dialog, "[data-test=confirm-proof]").click();
+  await vi.waitFor(() => {
+    expect(confirmations).toEqual([]);
+    expect((q(signIn, '[name="totp"]') as HTMLElement & { error: string }).error).not.toBe("");
+  });
+  expect(starts).toHaveLength(1);
+  await fill("totp", "123456");
+  await vi.waitFor(() =>
+    expect(
+      (q(dialog, "[data-test=confirm-proof]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false),
+  );
+  q(dialog, "[data-test=confirm-proof]").click();
+  await vi.waitFor(() => expect(navigate).toHaveBeenCalledOnce());
+  expect(confirmations).toEqual([{ method: "password", password: "secret", totp: "123456" }]);
+  expect(starts).toEqual([starts[0], starts[0]]);
 });

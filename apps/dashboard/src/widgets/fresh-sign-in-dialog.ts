@@ -37,6 +37,7 @@ export class FreshSignInDialog extends LitElement {
     "getProfile" | "freshSignInPasskeyOptions" | "confirmFreshSignIn"
   >;
   @state() private opened = false;
+  @state() private allowRecoveryCode = true;
   @state() private busy = false;
   @state() private ways: SignInWays | null = null;
   @state() private refusal = "";
@@ -49,10 +50,11 @@ export class FreshSignInDialog extends LitElement {
     new LocaleChangeController(this);
   }
 
-  show(signal: AbortSignal): Promise<boolean> {
+  show(signal: AbortSignal, context: { allowRecoveryCode?: boolean } = {}): Promise<boolean> {
     if (signal.aborted) return Promise.resolve(false);
     this.#close(false);
     this.opened = true;
+    this.allowRecoveryCode = context.allowRecoveryCode !== false;
     this.ways = null;
     const { coordinator, scope } = draftScopeFor(this, {
       id: {},
@@ -148,6 +150,7 @@ export class FreshSignInDialog extends LitElement {
           ? html`<p>${t("fresh_sign_in.explanation")}</p>
               <dashboard-fresh-sign-in
                 .api=${this.api}
+                .allowRecoveryCode=${this.allowRecoveryCode}
                 ?disabled=${this.busy}
                 @sign-in-ways=${(event: CustomEvent<SignInWays>) => {
                   this.ways = event.detail;

@@ -36,6 +36,7 @@ it("shares one prompt and retries each original request once with its original b
   void a.catch(() => {});
   void b.catch(() => {});
   await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
+  expect(prompt).toHaveBeenCalledWith(expect.any(AbortSignal), { allowRecoveryCode: true });
   body.selection.push(2);
   answer.resolve(true);
   expect(await Promise.all([a, b])).toEqual(["/a", "/b"]);

@@ -32,6 +32,7 @@ function profile(overrides: Partial<OwnProfile>): OwnProfile {
 const STATES: Record<string, { own: Partial<OwnProfile> | "failed"; refusal?: string }> = {
   password: { own: {} },
   "password and code": { own: { hasTotp: true, passkeys: [PASSKEY] } },
+  "authenticator only": { own: { hasTotp: true, passkeys: [PASSKEY] } },
   "passkey only": { own: { hasPassword: false, passkeys: [PASSKEY] } },
   "passkey and code": { own: { hasPassword: false, hasTotp: true, passkeys: [PASSKEY] } },
   "no way in": { own: { hasPassword: false, passkeys: [] } },

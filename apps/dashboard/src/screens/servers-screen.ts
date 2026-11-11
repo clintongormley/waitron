@@ -176,7 +176,8 @@ export class ServersScreen extends LitElement {
       const profile = await this.api.background.getProfile();
       if (this.handoverTarget !== target) return;
       this.handoverHasPassword = profile.hasPassword;
-      if (!profile.hasPassword) this.handoverError = t("servers.handover_password");
+      if (!profile.hasPassword)
+        this.handoverError = `${t("servers.handover_no_password")} ${t("profile.password_recovery")}`;
     } catch (error) {
       if (this.handoverTarget !== target) return;
       this.handoverProfileFailed = true;
@@ -202,7 +203,7 @@ export class ServersScreen extends LitElement {
     if (!target || this.handoverBusy || !this.canPromote) return;
     this.handoverError = "";
     if (!this.handoverHasPassword) {
-      this.handoverError = t("servers.handover_password");
+      this.handoverError = `${t("servers.handover_no_password")} ${t("profile.password_recovery")}`;
       return;
     }
     const operationId = this.#operationId;

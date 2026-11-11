@@ -246,7 +246,7 @@ describe.each(["light", "dark"] as const)("servers-screen a11y (%s theme)", (the
 });
 
 describe.each(["light", "dark"] as const)("controlled handover form (%s)", (theme) => {
-  it("shows the handover confirmation without accessibility violations", async () => {
+  it.each([true, false])("accessible handover, password=%s", async (hasPassword) => {
     const api = stubApi({
       getProfile: vi.fn().mockResolvedValue({
         displayName: "Owner",
@@ -256,7 +256,7 @@ describe.each(["light", "dark"] as const)("controlled handover form (%s)", (them
         email: "owner@example.com",
         pendingEmail: null,
         locale: "en",
-        hasPassword: true,
+        hasPassword,
         hasTotp: true,
         hasGoogle: false,
         passkeys: [],
@@ -278,7 +278,7 @@ describe.each(["light", "dark"] as const)("controlled handover form (%s)", (them
             disabled: boolean;
           }
         ).disabled,
-      ).toBe(false),
+      ).toBe(!hasPassword),
     );
     await expectNoA11yViolations(host);
   });

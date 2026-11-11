@@ -2,7 +2,7 @@ import type { DashboardRequest } from "@waitron/dashboard-kit";
 
 export function createFreshSignInGate(options: {
   sessionGeneration: () => number;
-  prompt: (signal: AbortSignal) => Promise<boolean>;
+  prompt: (signal: AbortSignal, context: { allowRecoveryCode: boolean }) => Promise<boolean>;
 }) {
   let proofVersion = 0;
   let pending: { generation: number; stop: AbortController; answer: Promise<boolean> } | undefined;
@@ -10,14 +10,14 @@ export function createFreshSignInGate(options: {
     pending?.stop.abort();
     pending = undefined;
   };
-  const ask = (generation: number): Promise<boolean> => {
+  const ask = (generation: number, allowRecoveryCode: boolean): Promise<boolean> => {
     if (pending?.generation === generation) return pending.answer;
     cancel();
     const stop = new AbortController();
     const cancelled = new Promise<boolean>((resolve) =>
       stop.signal.addEventListener("abort", () => resolve(false), { once: true }),
     );
-    const answer = Promise.race([options.prompt(stop.signal), cancelled])
+    const answer = Promise.race([options.prompt(stop.signal, { allowRecoveryCode }), cancelled])
       .then((confirmed) => {
         if (confirmed) proofVersion++;
         return confirmed;
@@ -56,7 +56,8 @@ export function createFreshSignInGate(options: {
           init?.signal?.addEventListener("abort", cancel, { once: true });
           try {
             if (
-              (proofAtStart === proofVersion && !(await ask(generation))) ||
+              (proofAtStart === proofVersion &&
+                !(await ask(generation, path !== "/management-api/handover"))) ||
               init?.signal?.aborted ||
               generation !== options.sessionGeneration()
             )
