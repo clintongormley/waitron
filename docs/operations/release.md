@@ -82,7 +82,8 @@ pnpm release prepare 1.0.0 --place "<town>"
 It stops at the first thing that is wrong, and changes nothing until you sign. In order, it:
 
 1. checks that the version looks like `1.2.3`, that you are on `release/1.0.0` with nothing
-   uncommitted (untracked files count), and that the branch is `origin/main`'s latest commit;
+   uncommitted in files git tracks (untracked files are ignored), and that the branch is
+   `origin/main`'s latest commit;
 2. refuses a version that is already released, or that is not above the highest released one;
 3. prints the whole declaration with your three settings filled in and today's date in Madrid;
 4. asks you to type `yes`. Typing it is the producer signing; anything else stops with nothing
@@ -108,10 +109,10 @@ pnpm install
 pnpm release tag 1.0.0
 ```
 
-It refuses unless you are on `main` with nothing uncommitted (untracked files count here too), at
-`origin/main`'s latest commit; unless `main` holds `declarations/v1.0.0.md`; unless that file
-still carries no blocker line and its name, system code, version and yes/no answers still match
-the code; unless the version is still unreleased and above the highest released one; and unless
+It refuses unless you are on `main` with no uncommitted change to a file git tracks (untracked
+files are ignored here too), at `origin/main`'s latest commit; unless `main` holds
+`declarations/v1.0.0.md`; unless that file still carries no blocker line and its name, system
+code, version and yes/no answers still match the code; unless the version is still unreleased and above the highest released one; and unless
 `main`'s CI run for that commit has finished green. Other pull requests can land between `prepare`
 and `tag`, which is why it checks the declaration again. Then it makes the annotated tag
 `v1.0.0` ("Waitron 1.0.0") and pushes it.

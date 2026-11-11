@@ -33,7 +33,7 @@ const ON_MAIN = { "git rev-parse --abbrev-ref HEAD": "main\n" };
 
 const tagPath = (version = "1.0.0") => [
   ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-  ["git", "status", "--porcelain"],
+  ["git", "status", "--porcelain", "--untracked-files=no"],
   ["git", "fetch", "origin", "main"],
   ["git", "rev-parse", "HEAD"],
   ["git", "rev-parse", "origin/main"],
@@ -63,7 +63,7 @@ const tagPath = (version = "1.0.0") => [
 
 const happyPath = (version = "1.0.0", place = "Elche", date = "2026-11-11") => [
   ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-  ["git", "status", "--porcelain"],
+  ["git", "status", "--porcelain", "--untracked-files=no"],
   ["git", "fetch", "origin", "main"],
   ["git", "rev-parse", "HEAD"],
   ["git", "rev-parse", "origin/main"],
@@ -243,7 +243,7 @@ describe("prepareRelease", () => {
     ],
     [
       "uncommitted changes",
-      { answers: { "git status --porcelain": " M package.json\n" } },
+      { answers: { "git status --porcelain --untracked-files=no": " M package.json\n" } },
       /uncommitted/,
       2,
     ],

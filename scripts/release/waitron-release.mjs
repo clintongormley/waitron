@@ -61,7 +61,8 @@ function onCleanBranchAtOriginMain(run, branch) {
   if (git("rev-parse", "--abbrev-ref", "HEAD") !== branch) {
     throw new Error(`run this on the branch ${branch}`);
   }
-  if (git("status", "--porcelain") !== "") throw new Error("the worktree has uncommitted changes");
+  if (git("status", "--porcelain", "--untracked-files=no") !== "")
+    throw new Error("the worktree has uncommitted changes");
   git("fetch", "origin", "main");
   const head = git("rev-parse", "HEAD");
   if (head !== git("rev-parse", "origin/main")) {
