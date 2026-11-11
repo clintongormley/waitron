@@ -217,6 +217,7 @@ export function sealedStateJob(
     ownFailureAlert: "backup.sealed_state_failed",
     onStop: async () => {
       unsubscribe();
+      await refresher.refresh();
       await refresher.settled();
     },
   };

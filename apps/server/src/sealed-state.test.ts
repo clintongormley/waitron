@@ -606,13 +606,16 @@ describe("sealed state on the runner", () => {
     );
   });
 
-  it("unhooks commits before waiting for an external refresh at close", async () => {
+  it("unhooks commits, seals once more, then waits for an external refresh at close", async () => {
     const order: string[] = [];
     let release!: () => void;
     runner.add(
       sealedStateJob(
         {
-          refresh: async () => "sealed",
+          refresh: async () => {
+            order.push("final refresh");
+            return "sealed";
+          },
           settled: async () => {
             order.push("settling");
             await new Promise<void>((resolve) => {
@@ -627,9 +630,12 @@ describe("sealed state on the runner", () => {
       ),
     );
     const closing = runner.stopJobs();
-    await vi.waitFor(() => expect(order).toEqual(["unsubscribed", "settling"]));
-    release();
-    await closing;
-    expect(order).toEqual(["unsubscribed", "settling", "settled"]);
+    try {
+      await vi.waitFor(() => expect(order).toEqual(["unsubscribed", "final refresh", "settling"]));
+    } finally {
+      release?.();
+      await closing;
+    }
+    expect(order).toEqual(["unsubscribed", "final refresh", "settling", "settled"]);
   });
 });

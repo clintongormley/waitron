@@ -29,11 +29,16 @@ const seen = vi.hoisted(() => ({
   refresherDeps: [] as unknown[],
   refreshes: [] as Promise<unknown>[],
   logs: [] as unknown[][],
+  holdQueuedJob: false,
 }));
 vi.mock("./sealed-state.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./sealed-state.js")>();
   return {
     ...actual,
+    sealedStateJob: (...args: Parameters<typeof actual.sealedStateJob>) => ({
+      ...actual.sealedStateJob(...args),
+      ...(seen.holdQueuedJob ? { minSleepMs: 60_000 } : {}),
+    }),
     createSealedStateRefresher: (deps: Parameters<typeof actual.createSealedStateRefresher>[0]) => {
       seen.refresherDeps.push(deps);
       const refresher = actual.createSealedStateRefresher({
@@ -159,6 +164,7 @@ it("a recovery key replaced after the last refresh is in the next sealed row", a
 
 it("a node change committed just before close is sealed before the database closes", async () => {
   seen.refresherDeps.length = 0;
+  seen.holdQueuedJob = true;
   beforeServerStarts();
   const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-node-commit-"));
   let server: StartedServer | undefined;
@@ -170,14 +176,16 @@ it("a node change committed just before close is sealed before the database clos
     seen.logs.length = 0;
 
     await putVerifier(node, started.nodeId, "verifier-before-close");
-    expect(seen.refreshes).toHaveLength(1);
+    expect(seen.refreshes).toHaveLength(0);
     await server.close();
     server = undefined;
     await Promise.all(seen.refreshes);
+    expect(await verifierInSealedRow(started.nodeId, scratch)).toBe("verifier-before-close");
 
     expect(seen.logs).toEqual([["info", "backup.sealed_state_refreshed", expect.anything()]]);
   } finally {
     await server?.close();
+    seen.holdQueuedJob = false;
     await rm(scratch, { recursive: true, force: true });
   }
 }, 60_000);
