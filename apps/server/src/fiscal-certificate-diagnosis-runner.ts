@@ -123,7 +123,12 @@ export function createCertificateDiagnosisRunner(options: {
           fail();
           return;
         }
-        schedule(Math.min(now() + cleanupMs, attemptEnd), fail);
+        const giveUp = () => {
+          if (settled) return;
+          if (!childExited) schedule(now() + cleanupMs / 8, giveUp);
+          else fail();
+        };
+        schedule(Math.min(now() + cleanupMs, attemptEnd), giveUp);
       }
       function cancelled() {
         interrupt("cancelled");
@@ -192,16 +197,22 @@ export function createCertificateDiagnosisRunner(options: {
           )!;
           if (notify && !channel.destroyed && channel.writable) channel.write(frame, () => {});
           const reserve = Math.max(0, Math.min(at + cleanupMs, attemptEnd) - at);
+          // The forced stop and the give-up wait a fixed eighth of the cleanup allowance after the step
+          // before them, not a share of the reserve, so a stopped child's exit can still be reported in
+          // between when a held event loop used the reserve up.
+          const step = cleanupMs / 8;
           schedule(at + reserve * 0.75, () => {
-            if (!childExited) child.kill("SIGTERM");
-          });
-          schedule(at + reserve * 0.875, () => {
-            if (!childExited) child.kill("SIGKILL");
-          });
-          schedule(at + reserve, () => {
             if (childExited) return;
-            fail();
-            endSupervision();
+            child.kill("SIGTERM");
+            schedule(now() + step, () => {
+              if (childExited) return;
+              child.kill("SIGKILL");
+              schedule(now() + step, () => {
+                if (childExited) return;
+                fail();
+                endSupervision();
+              });
+            });
           });
         };
         cleanChild = cleanup;
