@@ -580,6 +580,12 @@ update resealing and real stick/box/Android checks remain release gates. B3 rema
 complete. A1187 part 3 and A950 cuts 4+ can reassess their startup dependency once this cut lands;
 other prerequisites still apply. [Startup plan](../superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
 
+The [11 November firmware measurement](../superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026)
+observed one guest-requested restart into an exact target EFI entry, with the USB attached and
+first, BootNext consumed, BootOrder unchanged and both read-only disk hashes unchanged.
+The installed automatic-return adapter, encrypted-root transition and physical-box checks remain
+unbuilt or unqualified; this measurement changes no installer behavior.
+
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”
 [Design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md),

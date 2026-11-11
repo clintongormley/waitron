@@ -1723,6 +1723,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   retains its recovery key and seals to a virtual TPM. Its first disk boot requests a restart with Docker stopped;
   two subsequent chip-unlocked boots must remove the empty password and reach setup. The rig independently
   tests the retained key. Setup offers Prepare/Live/existing and refuses Demo.
+  The [firmware measurement](superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026) reached the selected target after a guest reboot with the USB still first and attached; product automatic return remains unbuilt.
   The installed name-tag writer must arrive with its reader/screen. The [header measurements](superpowers/plans/2026-11-11-b3-16-name-tag-duty.md#measured-on-11-november-2026) answer PR 4’s disposable-disk questions; installed-image qualification remains open.
   Signed boot/Secure Boot, other-stick and missing-container checks, failure/recovery screens, key sheets,
   update resealing and physical-device qualification remain release gates. This development cut claims no theft protection.
