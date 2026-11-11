@@ -717,7 +717,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
                 email: {
                   server: "127.0.0.1",
                   port: 1025,
-                  encryption: "none",
+                  encryption: "starttls",
                   from: "venue@example.test",
                 },
               },
