@@ -2067,7 +2067,8 @@ describe("updateHeldOrder", () => {
               },
             ];
       await expect(updateProducts(cfg, id, { lines: changed })).rejects.toMatchObject({
-        code: "ticket.already_fired",
+        code: "ticket.already_sent",
+        params: { workingOrderId: id, lineId: before[0]!.id },
       });
       expect(await readOrder(id)).toEqual(sent);
     },
@@ -2234,7 +2235,7 @@ describe("updateHeldOrder", () => {
           },
         ],
       }),
-    ).rejects.toMatchObject({ code: "ticket.already_fired" });
+    ).rejects.toMatchObject({ code: "ticket.already_sent" });
     expect(await readLines(id)).toEqual(stored);
   });
 
@@ -2256,7 +2257,7 @@ describe("updateHeldOrder", () => {
           },
         ],
       }),
-    ).rejects.toMatchObject({ code: "ticket.already_fired" });
+    ).rejects.toMatchObject({ code: "ticket.already_sent" });
     expect(await readLines(id)).toEqual(before);
   });
 

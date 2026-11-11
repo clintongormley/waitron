@@ -6019,6 +6019,38 @@ async function applyLineEdits(
     if (change) refuseChangesAfterSending(orderId, records, stationChanges);
     return records.some((record) => record.firedAt !== null);
   };
+  if (plan.refuseSentDrop) {
+    for (const parent of order.parents) {
+      const sent = [parent, ...parent.children].some(
+        (part) => part.sentAt !== null || part.ticket?.firedAt != null,
+      );
+      if (!sent) continue;
+      const edit = plan.edits.find((edit) => edit.parent.id === parent.id);
+      const picks = namedPicks(edit?.intent.extras?.set);
+      const drops =
+        edit === undefined ||
+        compareDecimal(decimal(edit.intent.quantity), parent.quantity) < 0 ||
+        parent.children.some((child) => {
+          const pick = picks.find(
+            (pick) => pick.listId === child.extraListId && pick.productId === child.productId,
+          );
+          return (
+            compareDecimal(
+              extraQuantityFor(
+                pick?.quantity ?? 0,
+                decimal(edit.intent.quantity),
+                child.priceQuantity,
+              ),
+              child.quantity,
+            ) < 0
+          );
+        });
+      if (!drops) continue;
+      refuseServed(parent);
+      refuseSent(parent, kitchenHas(parent, false));
+      throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    }
+  }
   const menuItemOf = (line: EditableParent): string => {
     if (line.menuItemId === undefined) {
       throw new AppError("order.service_context_missing", { workingOrderId: orderId });
@@ -7062,32 +7094,6 @@ export async function updateHeldOrder(
           makeAt: line.makeAt,
         },
       });
-    }
-    for (const parent of order.parents) {
-      const sent = [parent, ...parent.children].some(
-        (part) => part.sentAt !== null || part.ticket !== null,
-      );
-      if (!sent) continue;
-      const edit = edits.find((edit) => edit.parent.id === parent.id);
-      if (edit === undefined || compareDecimal(decimal(edit.intent.quantity), parent.quantity) < 0)
-        throw new AppError("ticket.already_fired", { workingOrderId: id });
-      const picks = namedPicks(edit.intent.extras?.set);
-      for (const child of parent.children) {
-        const pick = picks.find(
-          (pick) => pick.listId === child.extraListId && pick.productId === child.productId,
-        );
-        if (
-          compareDecimal(
-            extraQuantityFor(
-              pick?.quantity ?? 0,
-              decimal(edit.intent.quantity),
-              child.priceQuantity,
-            ),
-            child.quantity,
-          ) < 0
-        )
-          throw new AppError("ticket.already_fired", { workingOrderId: id });
-      }
     }
     const { changed, at } = await applyLineEdits(
       tx,
