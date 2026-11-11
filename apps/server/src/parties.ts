@@ -177,7 +177,7 @@ export function notAbandonedInFamily(family: string[]) {
   return and(inArray(workingOrders.partyId, family), ne(workingOrders.status, "abandoned"));
 }
 
-/** The caller moves the party's revision once for its whole command. */
+/** Makes a bill only for an open party without one; returns whether it did. The caller owns the revision. */
 export async function ensureFamilyBill(
   tx: Transaction,
   cfg: OriginConfig,

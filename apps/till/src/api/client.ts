@@ -4862,6 +4862,7 @@ export class TillApi {
     return this.#request(`/api/bills/${billId}/name`, "PUT", { name, ...revisions });
   }
 
+  /** The source has no payments; payments on the receiving open bill stay with it. */
   async mergeBills(
     intoBillId: string,
     fromBillId: string,
