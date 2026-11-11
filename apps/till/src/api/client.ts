@@ -1021,12 +1021,14 @@ export interface ReceiptAdjustment {
 
 /**
  * How a filed sale was paid, read back from the committed rows: `unpaid` is an invoice issued before
- * collection, `cash` carries the change, and `card` the whole charge (`charged` = total + tip), the
- * `tip` ("0.00" when none) and the operator `reference` (null for an integrated capture). Card-present
- * identity belongs only to the separate payment slip.
+ * collection, `transfer` a bill closed to be paid by transfer later, `cash` carries the change, and
+ * `card` the whole charge (`charged` = total + tip), the `tip` ("0.00" when none) and the operator
+ * `reference` (null for an integrated capture). Card-present identity belongs only to the separate
+ * payment slip.
  */
 export type TenderBlock =
   | { method: "unpaid" }
+  | { method: "transfer" }
   | { method: "cash"; change: string }
   | {
       method: "card";

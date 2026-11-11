@@ -303,6 +303,7 @@ export interface ReceiptAdjustment {
 /** Persisted tender amounts and optional manual terminal reference. Card identity belongs on the slip. */
 export type TenderBlock =
   | { method: "unpaid" }
+  | { method: "transfer" }
   | { method: "cash"; change: string }
   | {
       method: "card";
@@ -406,6 +407,7 @@ export async function readTenderBlock(
     .limit(1);
   // Invoice-first issuance legitimately precedes the tender.
   if (row === undefined) return { method: "unpaid" };
+  if (row.method === "transfer") return { method: "transfer" };
   const tender = {
     ...row,
     amount: centsToDecimal(row.amount),

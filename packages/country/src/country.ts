@@ -69,6 +69,7 @@ export const RECEIPT_LABEL_KEYS = [
   "cash",
   "change",
   "card",
+  "toBePaidByTransfer",
   "tip",
   "charged",
   "refund",
