@@ -2392,10 +2392,13 @@ export class TillApp extends LitElement {
   }
 
   #currentTransferTabId(): string | undefined {
-    if (this.#tableCatalogueActive()) return this.activeTabId;
+    if (this.#tableCatalogueActive()) return undefined;
     const tab = this.#activeTab();
     const counterVisible = this.drill === undefined && tab === "counter";
-    return counterVisible && this.stage === "order" && this.#store.persisted
+    return counterVisible &&
+      this.stage === "order" &&
+      this.#store.persisted &&
+      !this.#store.kitchenNoteScopeKey.startsWith("party:")
       ? this.#store.id
       : undefined;
   }
@@ -21821,7 +21824,7 @@ export class TillApp extends LitElement {
                               ? nothing
                               : html`<till-department-transfers
                                   .currentTabId=${this.#currentTransferTabId()}
-                                  .currentTabLabel=${this.#tableCatalogueActive() ? (this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId)?.label ?? this.orderParty?.displayName ?? "") : (this.#store.label ?? "")}
+                                  .currentTabLabel=${this.#store.label ?? ""}
                                   .serviceZones=${this.profileServiceZones}
                                   @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                                   .api=${this.api}
