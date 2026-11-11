@@ -1,4 +1,5 @@
 import "./widgets/fresh-sign-in-dialog.js";
+import "./widgets/about-dialog.js";
 import { LeaveController, navigationGuardFor, type LeaveReason } from "@waitron/ui";
 import { dashboardPath, leftToBrowser } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -75,7 +76,6 @@ import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
 import "@waitron/ui/src/components/wt-demo-bar.js";
 import "./screens/login-screen.js";
-import "./screens/about-dialog.js";
 import "./screens/venue-zone-repair.js";
 import "./screens/profile-screen.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";

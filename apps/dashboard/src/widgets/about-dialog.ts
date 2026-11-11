@@ -51,6 +51,35 @@ export class AboutDialog extends LitElement {
 
   @query("wt-modal") private modal!: WtModal;
 
+  #pageListeners?: AbortController;
+
+  override disconnectedCallback(): void {
+    this.#unlistenPage();
+    super.disconnectedCallback();
+  }
+
+  #unlistenPage(): void {
+    this.#pageListeners?.abort();
+    this.#pageListeners = undefined;
+  }
+
+  /** A key pressed inside the framed page never reaches the modal, so Escape is caught in each
+   * page the frame loads. */
+  #onFrameLoad(frame: HTMLIFrameElement): void {
+    this.#unlistenPage();
+    // Null for a page from another origin, which the window cannot reach into.
+    const page = frame.contentDocument;
+    if (page === null) return;
+    this.#pageListeners = new AbortController();
+    page.addEventListener(
+      "keydown",
+      (event) => {
+        if (event.key === "Escape") void this.modal.requestClose("escape");
+      },
+      { signal: this.#pageListeners.signal },
+    );
+  }
+
   #releaseLine() {
     if (this.about === null) return nothing;
     const { release, build } = this.about;
@@ -72,6 +101,7 @@ export class AboutDialog extends LitElement {
       .open=${this.open}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
+        this.#unlistenPage();
         this.dispatchEvent(new CustomEvent("about-close", { bubbles: true, composed: true }));
       }}
     >
@@ -80,7 +110,15 @@ export class AboutDialog extends LitElement {
         ${this.#releaseLine()}
         <p>${t("about.licence")}</p>
         ${spanish ? nothing : html`<p>${t("about.declaration_note")}</p>`}
-        ${this.open ? html`<iframe src="/legal/declaration" title=${title}></iframe>` : nothing}
+        ${
+          this.open
+            ? html`<iframe
+                src="/legal/declaration"
+                title=${title}
+                @load=${(event: Event) => this.#onFrameLoad(event.target as HTMLIFrameElement)}
+              ></iframe>`
+            : nothing
+        }
       </div>
       <wt-button slot="footer" @click=${() => void this.modal.requestClose("cancel")}
         >${t("about.close")}</wt-button

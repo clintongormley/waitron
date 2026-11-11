@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import type { WtModal } from "@waitron/ui";
 import type { LegalAbout } from "@waitron/shared";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./about-dialog.js";
 import type { AboutDialog } from "./about-dialog.js";

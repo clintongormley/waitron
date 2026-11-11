@@ -1,7 +1,8 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import type { WtButton, WtModal } from "@waitron/ui";
 import type { LegalAbout } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import "./about-dialog.js";
 import type { AboutDialog } from "./about-dialog.js";
@@ -77,4 +78,55 @@ it("close dispatches about-close", async () => {
   const event = await closed;
   expect(event.bubbles).toBe(true);
   expect(event.composed).toBe(true);
+});
+
+let pagesShown = 0;
+
+/** Puts a same-origin page in the frame and waits until it has loaded. */
+async function showPage(frame: HTMLIFrameElement): Promise<Document> {
+  const page = `page-${++pagesShown}`;
+  frame.srcdoc = `<body tabindex="0" data-page="${page}"><p>Declaration</p></body>`;
+  await vi.waitFor(() => {
+    expect(frame.contentDocument?.body?.dataset.page).toBe(page);
+    expect(frame.contentDocument!.readyState).toBe("complete");
+  });
+  return frame.contentDocument!;
+}
+
+it.each([1, 2])(
+  "Escape pressed inside the framed declaration closes the window (page %i of the frame)",
+  async (pages) => {
+    const el = await mount(released);
+    const frame = frames(el)[0]!;
+    let page = await showPage(frame);
+    if (pages === 2) page = await showPage(frame);
+    const closes: Event[] = [];
+    el.addEventListener("about-close", (event) => closes.push(event));
+    page.body.focus();
+    expect(el.shadowRoot!.activeElement).toBe(frame);
+    expect(page.activeElement).toBe(page.body);
+
+    await userEvent.keyboard("{Escape}");
+
+    await vi.waitFor(() => expect(closes).toHaveLength(1));
+  },
+);
+
+it("frames a page from another origin, which it cannot reach into, without an error", async () => {
+  const errors: unknown[] = [];
+  const onError = (event: ErrorEvent) => errors.push(event.error);
+  window.addEventListener("error", onError);
+  try {
+    const el = await mount(released);
+    const frame = frames(el)[0]!;
+    const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+    frame.src = "data:text/html,<p>Elsewhere</p>";
+    await loaded;
+    expect(frame.contentDocument).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(errors).toEqual([]);
+    expect(el.shadowRoot!.querySelector<WtModal>("wt-modal")!.open).toBe(true);
+  } finally {
+    window.removeEventListener("error", onError);
+  }
 });

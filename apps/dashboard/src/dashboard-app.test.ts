@@ -25,7 +25,7 @@ import {
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
-import type { AboutDialog } from "./screens/about-dialog.js";
+import type { AboutDialog } from "./widgets/about-dialog.js";
 import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
