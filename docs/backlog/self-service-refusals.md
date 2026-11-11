@@ -511,7 +511,7 @@ State: Reset was requested. The warning explicitly covers the case where the sup
 
 Route: Existing: reload after restart. Missing if the half-join remains: an authenticated retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
 
-_2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree. A1089 B3 (dropped, 2026-11-11): a probe on main 3c064196a1 ran the real join through `/setup-api/adopt`, stopped it at each of its writes, then ran the staged reset; the reset was dropped only when stopped after the trading settings file, and that box starts as the mirror, not in setup mode (`apps/server/src/boot.ts:1345`), so a dropped reset that brings the person back to the setup page needs damaged files._
+_2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
 
 ### `aeat_certificate.refused.check_failed`
 
@@ -744,6 +744,8 @@ still block Start again on this path.
 **An incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
 
 _2026-11-11, A1089 slice 1: the resetting message now names pressing Reset this server again instead of support; a reset that never takes effect is still open._
+
+_2026-11-11, A1089 B3 dropped: a probe on main 3c064196a1 stopped the real join (`/setup-api/adopt`) at each of its five writes, then ran the staged reset. The reset was dropped only when stopped just after `trading.env` was written; that file sets `WAITRON_NODE_ID` (`apps/server/src/trading-config.ts:34`), and setup mode needs it unset (`apps/server/src/node-config.ts:36`, `apps/server/src/boot.ts:1345`). The probe did not try damaged files. Its steps are in the A1494 pull request._
 
 ### setup-readiness
 
