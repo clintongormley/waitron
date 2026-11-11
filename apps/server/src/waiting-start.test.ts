@@ -27,6 +27,7 @@ import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { corsForVenue } from "./cors.js";
 import { createHealthState } from "./health.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
@@ -126,6 +127,14 @@ describe("the waiting start", () => {
     const asked = recheck.mock.calls.length;
     await new Promise((done) => setTimeout(done, 50));
     expect(recheck).toHaveBeenCalledTimes(asked);
+  });
+
+  it("serves the declaration while it waits", async () => {
+    const h = harness(() => Promise.resolve(WAIT));
+    const page = await h.app().request("/legal/declaration");
+    expect(page.status).toBe(404);
+    expect(await page.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
+    await h.waiting.server.close();
   });
 
   it("answers a till on another of the venue's origins, and no stranger", async () => {

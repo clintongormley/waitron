@@ -16,6 +16,7 @@ export default defineConfig({
     proxy: {
       "/api": devServerProxy(),
       "/help": devServerProxy(),
+      "/legal": devServerProxy(),
       "/management-api": devServerProxy(),
       "/media": devServerProxy(),
     },

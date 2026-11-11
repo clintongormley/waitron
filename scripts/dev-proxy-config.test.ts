@@ -19,9 +19,9 @@ const originalStateDir = process.env.WAITRON_STATE_DIR;
 const stateDir = mkdtempSync(join(import.meta.dirname, "dev-proxy-state-"));
 
 const EXPECTED_ROUTES: Record<string, string[]> = {
-  dashboard: ["/api", "/help", "/management-api", "/media"],
-  setup: ["/api/node/handover", "/setup-api"],
-  till: ["/api", "/help", "/media"],
+  dashboard: ["/api", "/help", "/legal", "/management-api", "/media"],
+  setup: ["/api/node/handover", "/legal", "/setup-api"],
+  till: ["/api", "/help", "/legal", "/media"],
 };
 
 function staticConfig(config: UserConfigExport): UserConfig {

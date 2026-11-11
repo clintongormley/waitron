@@ -36,6 +36,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { beginHandover } from "./handover-store.js";
 import { awaitListening, httpsVia } from "./testing/boot-harness.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
@@ -227,6 +228,13 @@ describe("a box holding a handover restriction starts restricted", () => {
       term: 0,
       acceptingSales: false,
     });
+  }, 60_000);
+
+  it("serves the declaration's none page", async () => {
+    const { port } = start();
+    const response = await fetch(`http://127.0.0.1:${port}/legal/declaration`);
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
   }, 60_000);
 
   it("answers /health healthy, saying it takes no sales", async () => {

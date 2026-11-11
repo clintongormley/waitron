@@ -140,7 +140,8 @@ export function createStaffApp(app: Hono, origin: string): Hono {
           path === "/api/theme" ||
           path === "/api/content-languages" ||
           path.startsWith("/media/") ||
-          path.startsWith("/help/")));
+          path.startsWith("/help/") ||
+          path.startsWith("/legal/")));
     if (!allowed) return c.notFound();
     if (path === "/management-api/passkey/auth/options" && c.req.method === "POST") {
       const now = Date.now();

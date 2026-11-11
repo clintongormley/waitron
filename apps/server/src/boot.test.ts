@@ -1,4 +1,5 @@
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { locations } from "@waitron/db";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
@@ -1490,6 +1491,13 @@ describe("startServer, against a migrated venue directory", () => {
       const noGuide = await fetch(`https://127.0.0.1:${httpPort()}/help/en`, via);
       expect(noGuide.status).toBe(404);
       expect(await noGuide.text()).toContain("Page not found");
+
+      const declaration = await fetch(`https://127.0.0.1:${httpPort()}/legal/declaration`, via);
+      expect(declaration.status).toBe(404);
+      expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
+      const about = await fetch(`https://127.0.0.1:${httpPort()}/legal/about`, via);
+      expect(about.status).toBe(200);
+      expect(await about.json()).toMatchObject({ release: null });
     } finally {
       await server.close();
       await close();
@@ -2280,6 +2288,10 @@ describe("startServer, against a migrated venue directory", () => {
       });
       expect(noGuide.status).toBe(404);
       expect(await noGuide.text()).toContain("Page not found");
+      const declaration = await fetch(`http://127.0.0.1:${httpPort()}/legal/declaration`, {
+        headers: { Accept: "text/html" },
+      });
+      expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
 
       const asset = await fetch(`http://127.0.0.1:${httpPort()}/manage/assets/d-1.js`);
       expect(asset.status).toBe(200);
