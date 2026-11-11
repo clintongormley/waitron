@@ -5,7 +5,9 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
+  addDecimal,
   AppError,
+  decimal,
   nodeId as brandNodeId,
   type BusinessDayClock,
   type NodeId,
@@ -24,6 +26,7 @@ import {
 import {
   CATEGORY_REPORT_MODES,
   computeCategorySales,
+  computeClosedBills,
   computeDailyClose,
   computeOverdueOrders,
   computeTopSellers,
@@ -37,6 +40,7 @@ import {
   type CashUp,
   type CategoryReport,
   type CategoryReportMode,
+  type DailyCloseInput,
   type LiquidationPeriod,
 } from "@waitron/reporting";
 import { currentClassifications } from "@waitron/catalogue";
@@ -283,6 +287,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           limit: 5,
         });
         const openTables = await countOpenTables(tx);
+        const closureSummary = await summariseClosures(tx, input, close.cash);
         return {
           businessDay,
           takings: {
@@ -290,6 +295,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
             tipTotal: close.cash.tipTotal,
             grossTotal: close.vat.grossTotal,
           },
+          closureSummary,
           counts: close.counts,
           openTables,
           topSellers,
@@ -325,7 +331,15 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           limit: 10,
         });
         const cash = await namedCashUp(tx, close.cash);
-        return { businessDay, vat: close.vat, cash, counts: close.counts, topSellers };
+        const closureSummary = await summariseClosures(tx, input, close.cash);
+        return {
+          businessDay,
+          vat: close.vat,
+          cash,
+          closureSummary,
+          counts: close.counts,
+          topSellers,
+        };
       });
       return c.json(result);
     }),
@@ -460,6 +474,22 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       return c.json({ orders });
     }),
   );
+}
+
+/**
+ * The bills closed in the day, and the cash-up split into what a transfer is still to pay and the
+ * money received. A transfer line is a promise, so it is never money received.
+ */
+async function summariseClosures(tx: Transaction, input: DailyCloseInput, cash: CashUp) {
+  const billsClosed = await computeClosedBills(tx, input);
+  let toBePaidByTransfer = decimal("0.00");
+  let received = decimal("0.00");
+  for (const line of cash.byOrigin.flatMap((row) => row.byMethod)) {
+    if (line.method === "transfer")
+      toBePaidByTransfer = addDecimal(toBePaidByTransfer, line.amount);
+    else received = addDecimal(received, line.amount);
+  }
+  return { billsClosed, toBePaidByTransfer, received };
 }
 
 /**
