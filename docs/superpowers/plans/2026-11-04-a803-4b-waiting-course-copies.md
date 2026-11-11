@@ -1,5 +1,8 @@
 # A803 slice 4b: waiting dishes leave with their own copy of the course — task plan
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 > **2026-11-06, A1378:** MOVED now follows the station's combined/separate choice. Identical
 > whole portions combine within their group; measured and printed-as-sold items stay separate.
 > References below to A1192 being open describe the earlier implementation.

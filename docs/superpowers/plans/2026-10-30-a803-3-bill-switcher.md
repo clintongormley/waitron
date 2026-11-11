@@ -1,5 +1,8 @@
 # A803 slice 3: one bill switcher, one ⋮ menu, no main bill — task plan
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 **Goal.** At a table, the waiter always sees which bill is on screen and can change it from one
 drop-down, "Bill 1 · €38.50 ▾" with one bill and "Bill 2 of 3 · Clint · €54.00 ▾" with several (Owner 2026-10-31 (Q1): the several-bills label is 'Bill 4 · 2 bills' / «Cuenta 4 · 2 cuentas».), which
 also holds **+ New bill**. Everything that acts on that bill or on the whole table sits in one ⋮

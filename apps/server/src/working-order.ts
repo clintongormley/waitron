@@ -7247,10 +7247,8 @@ export async function abandonHeldOrder(
         status: workingOrders.status,
         revision: workingOrders.revision,
         partyId: workingOrders.partyId,
-        partyState: parties.state,
       })
       .from(workingOrders)
-      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
       throw new AppError("working_order.not_open", { workingOrderId: id });
@@ -7261,8 +7259,7 @@ export async function abandonHeldOrder(
     await refuseBillHoldingMoney(tx, [id]);
     await assertBillHasNoUnsent(tx, id);
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
-    if (locked.partyId !== null && locked.partyState === "open") {
-      await ensureFamilyBill(tx, cfg, locked.partyId);
+    if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
       await bumpPartyRevision(tx, locked.partyId);
     }
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
@@ -7511,10 +7508,8 @@ async function cancelPlaced(
       .select({
         status: workingOrders.status,
         partyId: workingOrders.partyId,
-        partyState: parties.state,
       })
       .from(workingOrders)
-      .leftJoin(parties, eq(parties.id, workingOrders.partyId))
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "placed") {
       throw new AppError("working_order.not_placed", { workingOrderId: id });
@@ -7563,8 +7558,7 @@ async function cancelPlaced(
     );
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
-    if (locked.partyId !== null && locked.partyState === "open") {
-      await ensureFamilyBill(tx, cfg, locked.partyId);
+    if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
       await bumpPartyRevision(tx, locked.partyId);
     }
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);

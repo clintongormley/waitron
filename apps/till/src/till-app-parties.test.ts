@@ -1113,6 +1113,30 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(banner(el)!.textContent).not.toContain(t("table.reread_failed"));
   });
 
+  it.each(["en", "es"] as const)(
+    "a refused merge names the picked bill that received a payment (%s)",
+    async (locale) => {
+      setLocale(locale);
+      try {
+        const { el } = await mountApp({
+          mergeBills: vi
+            .fn()
+            .mockRejectedValue({ code: "bill.payments_received", workingOrderId: "wo-check" }),
+        });
+        const order = await openPartyTable(el);
+
+        emit(order, "merge-bills", { fromBillId: "wo-check" });
+        await flush(el);
+
+        expect(tableOrder(el)!.orderId).toBe("wo-4");
+        expect(banner(el)!.textContent).toContain(t("floor.unsent_bill").replace("{n}", "2"));
+        expect(banner(el)!.textContent).toContain(codeMessage("bill.payments_received"));
+      } finally {
+        setLocale("en");
+      }
+    },
+  );
+
   it("an order with no party gets no still to pay when the floor cannot be read after a cancel", async () => {
     // The till opens a table by its party's bills, so an order has no party only once the party
     // has left the table while its order is still on screen.

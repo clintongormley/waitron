@@ -1,5 +1,8 @@
 # Extras made at their own station, and tickets that name each other (slice 3c-2) Implementation Plan
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 > **2026-10-19, A773-1:** the approved
 > [Recall design](../specs/2026-10-16-a773-courses-and-groups-design.md#310-recall) replaces this
 > plan's table Recall-to-held behavior with Recall into that bill's New order. The

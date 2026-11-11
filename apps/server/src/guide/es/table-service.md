@@ -339,6 +339,8 @@ arriba en la pantalla de la mesa, indica qué cuenta está en pantalla, como **C
 cuenta, así que una segunda cuenta está siempre a un toque.
 
 En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta de una mesa.
+Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. Para liberar la mesa,
+usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar o **Pagada ✓**, y una línea como **Ana tiene un

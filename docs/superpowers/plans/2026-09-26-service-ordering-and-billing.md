@@ -1,5 +1,8 @@
 # Service, ordering and billing — Implementation Plan
 
+2026-11-11: [R4](2026-11-11-r4-bill-rules.md) supersedes the merge, held-dish movement and
+replacement-bill rules where this historical plan describes the earlier behavior.
+
 > **2026-10-19, A773-1:** use the later
 > [table-panel plan](2026-10-16-a773-1-unsent-list.md) and
 > [per-bill ownership contract](../specs/2026-10-17-a773-one-editor-design.md)

@@ -14,7 +14,7 @@ import {
   type BillEditState,
 } from "./order-drafts.js";
 import { recallToDraft } from "./draft-recall.js";
-import { partyRevisionOfOrder } from "./parties.js";
+import { createPartyBill, partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound, abandonHeldOrder, parkOrder } from "./working-order.js";
 import { fireAll } from "./testing/serve-line.js";
@@ -122,6 +122,28 @@ it("discarding the last bill leaves its seated party one fresh empty bill", asyn
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, bills[0]!.id)),
   ).toEqual([]);
+});
+
+it("discarding a different bill keeps the remaining bill's party revision current", async () => {
+  const p = await fixture();
+  const party = await inTx(venue, (tx) => partyRevisionOfOrder(tx, p.id));
+  const second = await inTx(venue, (tx) =>
+    createPartyBill(tx, venue.cfg, p.partyId!, { expectedPartyRevision: party!.revision }),
+  );
+
+  const answer = await send(
+    venue.app,
+    venue.cookie,
+    "DELETE",
+    `/api/working-orders/${second.billId}`,
+    {
+      expectedEdit: await edit(second.billId),
+    },
+  );
+
+  expect(answer.status).toBe(200);
+  const current = await inTx(venue, (tx) => partyRevisionOfOrder(tx, p.id));
+  expect(current!.revision).toBe(second.revision);
 });
 
 for (const op of operations)

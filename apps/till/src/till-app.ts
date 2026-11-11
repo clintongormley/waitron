@@ -17333,7 +17333,11 @@ export class TillApp extends LitElement {
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
       if (isPaymentsReceived(error)) {
-        this.errorKey = { code: "bill.payments_received" };
+        const bill = this.partyBills.find((row) => row.workingOrderId === fromBillId);
+        this.errorKey = {
+          code: "bill.payments_received",
+          ...(bill === undefined ? {} : { bill: billLabel(bill) }),
+        };
         await this.#loadPartyBills();
       } else await this.#onBillPairRefusal(error);
       if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();

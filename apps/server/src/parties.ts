@@ -182,13 +182,15 @@ export async function ensureFamilyBill(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
-): Promise<void> {
+): Promise<boolean> {
   const [any] = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
     .where(notAbandonedInFamily(await partyFamily(tx, partyId)))
     .limit(1);
-  if (any === undefined) await insertPartyBill(tx, cfg, partyId);
+  if (any !== undefined || (await readParty(tx, partyId))?.state !== "open") return false;
+  await insertPartyBill(tx, cfg, partyId);
+  return true;
 }
 
 /** A new empty bill at an open party, asked for by staff; a party command guarded by its revision. */

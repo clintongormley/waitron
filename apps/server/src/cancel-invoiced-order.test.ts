@@ -836,6 +836,22 @@ describe("cancelling a placed order whose invoice was issued", () => {
     },
   );
 
+  it("cancelling a different bill keeps the remaining bill's party revision current", async () => {
+    const party = await seatedWith(venue);
+    const presented = await placedCounterBillMovedTo(venue, ticketThenPayZone, party);
+    const [before] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+
+    const answer = await cancel(presented);
+
+    expect(answer.status).toBe(200);
+    const [after] = venue.db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${party.partyId}`,
+    );
+    expect(after!.revision).toBe(before!.revision);
+  });
+
   it("cancelling the last presented bill leaves its seated party a fresh empty bill", async () => {
     const party = await seatedWith(venue);
     const presented = await placedCounterBillMovedTo(venue, ticketThenPayZone, party);

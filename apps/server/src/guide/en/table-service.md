@@ -319,7 +319,8 @@ screen, says which bill is on screen, such as **Bill 1 · €38.50**, or **Bill 
 · €54.00** when the table has three. It is there even when the table has one bill, so a second bill is
 always one tap away.
 
-At the counter, use **Parked orders** to retrieve or discard a table's bill.
+At the counter, use **Parked orders** to retrieve or discard a table's bill. Discarding its last
+bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. Each row shows the bill's number and
 name, what it still owes or **Paid ✓**, and a line such as **Ana has an unsent order: 3 items** for
