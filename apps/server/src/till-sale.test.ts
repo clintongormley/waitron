@@ -1191,7 +1191,7 @@ describe("ordering extras and options — parent + child lines", () => {
         {
           // Six DIFFERENT strings across the list's and the labels' three names, so a surface that
           // prints or files the wrong one of them cannot match (CLAUDE.md §3).
-          name: "Tamaño staff",
+          name: "Size staff",
           customerName: { [defaultLanguage]: "Tamaño customer" },
           kitchenName: "Tamaño kitchen",
           defaultLabelId: null,
@@ -1199,7 +1199,7 @@ describe("ordering extras and options — parent + child lines", () => {
           labels: [
             { name: "Pequeño", customerName: null, kitchenName: null, available: true },
             {
-              name: "Grande staff",
+              name: "Large staff",
               customerName: { [defaultLanguage]: "Grande customer" },
               kitchenName: "Grande kitchen",
               available: true,
@@ -1244,7 +1244,7 @@ describe("ordering extras and options — parent + child lines", () => {
         extrasListId: extrasList.id,
         sideDishListId: sideDishList.id,
         sizeListId: sizeList.id,
-        largeSizeLabelId: sizeList.labels.find((label) => label.name === "Grande staff")!.id,
+        largeSizeLabelId: sizeList.labels.find((label) => label.name === "Large staff")!.id,
         defaultLanguage,
         sauceListId: sauceList.id,
         sauceLabelId: sauceList.labels.find((label) => label.name === "Alioli")!.id,
@@ -1493,13 +1493,13 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(child.quantity).toBe(6000);
   });
 
-  /** The six frozen strings one answer to "Tamaño" carries, under the venue's default content
+  /** The six frozen strings one answer to the size option carries, under the venue's default content
    *  language. Every name differs, so an assertion cannot pass while the wrong one was copied. */
   const largeSnapshot = (defaultLanguage: string) => ({
-    listName: { [defaultLanguage]: "Tamaño staff" },
+    listName: { [defaultLanguage]: "Size staff" },
     listCustomerName: { [defaultLanguage]: "Tamaño customer" },
     listKitchenName: "Tamaño kitchen",
-    labelName: { [defaultLanguage]: "Grande staff" },
+    labelName: { [defaultLanguage]: "Large staff" },
     labelCustomerName: { [defaultLanguage]: "Grande customer" },
     labelKitchenName: "Grande kitchen",
   });
