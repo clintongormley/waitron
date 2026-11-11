@@ -4,6 +4,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DailyCloseDto, DashboardApi, SalesOverview, SalesPeriodDto } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";
 import { SalesScreen } from "./dashboard-sales-screen.js";
@@ -369,7 +370,7 @@ describe("dashboard-sales-screen", () => {
       spanish.el
         .shadowRoot!.querySelector(`[data-test=${test}]`)!
         .parentElement!.querySelector(".label")!.textContent;
-    expect(label("transfer-total")).toBe("A pagar por transferencia");
+    expect(label("transfer-total")).toBe(es["sales.to_be_paid_by_transfer"]);
     expect(label("bills-closed")).toBe("Cuentas cerradas");
   });
 

@@ -98,7 +98,7 @@ describe("dashboard-overview-screen", () => {
     expect(cells("seller-row-0-variant-1")).toEqual(["8", "€14.00"]);
   });
 
-  it("shows bills closed and the amount to be paid by transfer apart from the money received", async () => {
+  it("shows bills closed and the deferred-payment amount apart from the money received", async () => {
     setLocale("en-GB");
     const api = stubApi({
       getSalesOverview: vi.fn().mockResolvedValue({
@@ -117,6 +117,10 @@ describe("dashboard-overview-screen", () => {
     expect(root.querySelector("[data-test=bills-closed]")!.textContent).toBe("2 · €320.00");
     expect(root.querySelector("[data-test=transfer-total]")!.textContent).toBe("€220.00");
     expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("€110.00");
+    expect(
+      root.querySelector("[data-test=transfer-total]")!.parentElement!.querySelector(".label")!
+        .textContent,
+    ).toBe("Deferred payment");
   });
 
   it("renders the record counts", async () => {

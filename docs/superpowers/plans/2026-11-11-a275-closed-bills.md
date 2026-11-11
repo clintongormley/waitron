@@ -4,6 +4,10 @@
 with the five defaults; the one-total-per-day departure from design §4 is for the owner at
 landing.** Every `file:line` below was read at `69a65a106a`.
 
+_2026-11-11 (owner, 13:49): the words people see are now "Deferred payment" / «Pago aplazado», not "To be paid by transfer". Code names keep `transfer` until a follow-up rename._
+
+_2026-11-11 (owner, 14:01): the report shows one total for the venue, with no per-till list; the departure from design §4 named above is settled._
+
 **When this lands, a manager can:** open the dashboard's overview (today) or its Sales report for
 any one business day and see a bill closed "to be paid by transfer" exactly once: on its own **To be
 paid by transfer / A pagar por transferencia** line, and in a new **Bills closed / Cuentas
