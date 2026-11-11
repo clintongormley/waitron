@@ -731,6 +731,7 @@ describe("a fix never changes the invoice's amounts", () => {
 
   it.each([
     { BaseRectificada: "999.00", CuotaRectificada: "20.00" },
+    { BaseRectificada: "200.00", CuotaRectificada: "21.00" },
     { BaseRectificada: "200.00", CuotaRectificada: "20.00", CuotaRecargoRectificado: "1.00" },
     null,
   ])(
@@ -763,6 +764,33 @@ describe("a fix never changes the invoice's amounts", () => {
       }),
     );
     expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
+    expect(row?.importeRectificacion).toEqual({
+      BaseRectificada: "200.00",
+      CuotaRectificada: "20.00",
+      CuotaRecargoRectificado: "0.00",
+    });
+  });
+
+  it("refuses a correction-amount change after a saved decision, without a write", async () => {
+    await targetRefusedCorrective();
+    const facts = {
+      correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+      description: "Corrected restaurant service",
+    };
+    expect((await send(facts)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send({
+      ...facts,
+      correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.01" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "fiscal.remedy_amount_changed",
+        params: { registroId: body.registroId, field: "correctionAmounts" },
+      },
+    });
+    expect(await snapshot()).toEqual(before);
   });
 
   it("accepts a fix of the same invoice that changes only its description", async () => {

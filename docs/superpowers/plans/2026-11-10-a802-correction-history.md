@@ -5,6 +5,7 @@ _2026-11-11: slices 4–5 re-planned after the owner's option A (a fix never cha
 **Status: R1–R5 cleared by the watcher 2026-11-10 16:23 with four changes, and the owner's three
 questions answered 16:26–16:28; both are written into the
 [revision](#clearance-and-answers-2026-11-10-1623-1628). Slice 3b is cleared to build after this slice.**
+_2026-11-11: slice 3b will not be built: #2775 was closed under the owner's option A (a fix never changes an invoice's amounts, A1481 in `docs/backlog/fiscal.md`), so the moved-invoice paths and slice 3b's steps below describe a fix the remedy route now refuses (`fiscal.remedy_amount_changed`)._
 Parts B and C were built before the runner read the owner's instruction: the watcher wrote its note
 at 15:43; the runner, in a firing that started at 15:00, did not read it until 15:48; Part B
 (15:15), Part C (15:22) and the review-fix round (15:47) were committed in that window. The
@@ -502,7 +503,7 @@ corrective at the new one. Not A802's to fix (a wrong VAT return could cost a fi
 queued it at 16:26 as its own item, A1481, in lane L after slice 3b, its backlog entry to come with
 its first pull request; `docs/backlog.md` does not name it yet. The derived path's weakness joins
 the A802 bundle in `docs/backlog/fiscal.md` ("Nothing in the product can issue a corrective
-invoice…") when slice 3b lands.
+invoice…") when slice 3b lands. _2026-11-11: slice 3b will not land, so it joined that bundle now. Under option A a fix never moves an invoice's amounts, so this VAT-return item is not needed; A1481 now names that decision (its entry under Decisions in `docs/backlog/fiscal.md`)._
 
 **The tests.**
 

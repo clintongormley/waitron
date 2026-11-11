@@ -960,6 +960,9 @@ asesor Q31 (2026-09-30), not decided.
     −€5.50, base −€5.00, VAT −€0.50.
   - Later fit: the bills-and-tables brainstorm (2026-10-17/18) moves order lines to one portion per
     line; a correction then picks portions the same way staff pick dishes to move.
+  - The derived correction path, which works out VAT by rounding, checks almost nothing against the
+    invoice: a −12.00 corrective whose lines came to −12.10 was accepted (from `e56323007c`, #982;
+    the runs in the [A802 slice 3 plan](../superpowers/plans/2026-11-10-a802-correction-history.md)).
 
 ## Correct VAT without returning money
 
