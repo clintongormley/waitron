@@ -1237,8 +1237,9 @@ _2026-11-10 (A802 slice 3b):_ once the regime accepted a fix of the invoice's VA
 credit files that accepted split negated, read from the invoice's filed records rather than
 `sales.vat_breakdown`. A `partialVatBreakdown` is checked against the accepted figures of the
 invoice and its earlier corrections (the stored ones where none is accepted), and once those differ
-from the stored ones it is not checked against its lines rate by rate. Both are refused while the
-newest filed fix still waits for the regime's answer.
+from the stored ones it is not checked against its lines rate by rate. Both are refused while a
+fix still waiting for the regime's answer carries figures other than those they are measured
+against; a waiting fix that kept them is allowed.
 
 **A guard got quietly weaker and had to be shored up.** With `quantity` and `rate` converted, the
 vocabulary stopped importing `numeric` at all — and `scripts/column-vocabulary.test.ts` DERIVES its

@@ -955,7 +955,8 @@ asesor Q31 (2026-09-30), not decided.
   at 10% of an invoice stored at 21% were filed. Slice 3b left this path unchanged.
 - **A refused cancellation of a fixed invoice has no way out on the till.** Since slice 3b,
   cancelling an issued order is refused while a VAT fix of its invoice waits for AEAT's answer
-  (`sale.correction_not_admitted`, `filed_figures_unanswered`), and when a fix changed its total or
+  with figures other than the ones measured (`sale.correction_not_admitted`,
+  `filed_figures_unanswered`), and when a fix changed its total or
   its filed figures cannot be read (`sale.correction_history_unusable`); the till API answers 409.
   The till explains each; the second has no way to cancel until slice 5's till screen or the
   filing-case remedy screens give one.

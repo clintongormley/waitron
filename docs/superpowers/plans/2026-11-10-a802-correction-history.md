@@ -1139,8 +1139,9 @@ Size after these: about 175 production and 320 test lines.
   falling back to the stored figures.
 - A cancellation of a fixed invoice whose total changed, or whose figures cannot be read, is
   refused: its lines reverse the stored total.
-- A cancellation is refused while a fix waits for its answer, the same rule as the preview and the
-  exact-split path.
+- A cancellation is refused while a fix waiting for its answer carries figures other than the
+  measured ones, the same rule as the preview and the exact-split path; a waiting fix that kept
+  them is allowed.
 
 **Size** (`git diff --numstat 0b7f37048f`, TypeScript only): production 533 lines added and 170
 removed; tests, test fixtures and the fake backend 1,122 added and 49 removed. The plan review
