@@ -1,12 +1,23 @@
-import { LitElement, type TemplateResult, css, html } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  draftScopeFor,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope } from "@waitron/ui";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  codeOf,
+  type CardProviderPanel,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import { StripePaymentsClient, type StripeConnectPayload } from "./client.js";
 
@@ -33,6 +44,10 @@ export class StripeConnectForm extends LitElement {
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) onConnected: () => void = () => {};
 
+  @property({ attribute: false }) actions?: Parameters<
+    CardProviderPanel["renderConnectForm"]
+  >[0]["actions"];
+
   @state() private secretKey = "";
   @state() private webhookSecret = "";
   @state() private successUrl = "";
@@ -58,7 +73,7 @@ export class StripeConnectForm extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#opening = {};
-    this.#scope = leaveCoordinatorFor(this)?.register<StripeConnectPayload>({
+    this.#scope = draftScopeFor(this, {
       id: this,
       parent: (this.getRootNode() as ShadowRoot).host,
       current: () => this.#value(),
@@ -75,7 +90,7 @@ export class StripeConnectForm extends LitElement {
         this.successUrl = value.successUrl;
         this.cancelUrl = value.cancelUrl;
       },
-    });
+    }).scope;
     this.requestUpdate();
   }
 
@@ -114,7 +129,13 @@ export class StripeConnectForm extends LitElement {
 
   async #connect(event: Event, opening: object): Promise<void> {
     event.stopPropagation();
-    if (this.busy || !this.isConnected || opening !== this.#opening) return;
+    if (
+      this.busy ||
+      !this.isConnected ||
+      opening !== this.#opening ||
+      (this.actions && !this.#scope?.isDirty())
+    )
+      return;
     const scope = this.#scope;
     const submitted = this.#value();
     this.attempted = true;
@@ -124,6 +145,7 @@ export class StripeConnectForm extends LitElement {
       return;
     }
     this.busy = true;
+    this.actions?.onBusy(true);
     scope?.changed();
     try {
       const result = await new StripePaymentsClient(this.request).connect({
@@ -134,6 +156,7 @@ export class StripeConnectForm extends LitElement {
       });
       if (!this.isConnected || opening !== this.#opening) return;
       this.busy = false;
+      this.actions?.onBusy(false);
       scope?.commit(submitted);
       if (scope?.isDirty()) return;
       scope?.dispose();
@@ -153,6 +176,7 @@ export class StripeConnectForm extends LitElement {
     } finally {
       if (opening === this.#opening) {
         this.busy = false;
+        this.actions?.onBusy(false);
         scope?.changed();
       }
     }
@@ -164,6 +188,7 @@ export class StripeConnectForm extends LitElement {
 
   #renderForm(): TemplateResult {
     const opening = this.#opening;
+    const save = saveActionState(this.#scope);
     if (this.connectedName !== null) {
       return html`<p class="confirm" data-test="connected">
         ${t("payments.stripe.connected_as").replace("{name}", this.connectedName)}
@@ -181,6 +206,7 @@ export class StripeConnectForm extends LitElement {
         required
         error=${secretKeyError}
         .value=${this.secretKey}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "secretKey", opening)}
       ></wt-input>
       <wt-input
@@ -190,6 +216,7 @@ export class StripeConnectForm extends LitElement {
         data-test="webhook-secret"
         label=${t("payments.stripe.webhook_secret")}
         .value=${this.webhookSecret}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "webhookSecret", opening)}
       ></wt-input>
       <wt-input
@@ -198,6 +225,7 @@ export class StripeConnectForm extends LitElement {
         data-test="success-url"
         label=${t("payments.stripe.success_url")}
         .value=${this.successUrl}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "successUrl", opening)}
       ></wt-input>
       <wt-input
@@ -206,6 +234,7 @@ export class StripeConnectForm extends LitElement {
         data-test="cancel-url"
         label=${t("payments.stripe.cancel_url")}
         .value=${this.cancelUrl}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "cancelUrl", opening)}
       ></wt-input>
       <wt-form-actions
@@ -213,13 +242,14 @@ export class StripeConnectForm extends LitElement {
           .filter(Boolean)
           .join(" ")}
       >
+        ${this.actions ? html`<wt-button slot="cancel" variant="secondary" ?disabled=${this.busy} @click=${() => this.actions?.onCancel()}>${this.actions.cancelLabel}</wt-button>` : nothing}
         <wt-button
-          variant="primary"
+          variant=${this.actions && !this.busy ? save.variant : "primary"}
           data-test="connect"
           ?loading=${this.busy}
-          ?disabled=${blocked}
+          ?disabled=${blocked || (!!this.actions && save.unchanged)}
           @click=${(e: Event) => void this.#connect(e, opening)}
-          >${t("payments.stripe.connect")}</wt-button
+          >${this.actions?.saveLabel ?? t("payments.stripe.connect")}</wt-button
         >
       </wt-form-actions>
     `;

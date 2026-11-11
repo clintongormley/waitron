@@ -13,6 +13,7 @@ export const STRIPE_PANEL: CardProviderPanel = {
     return html`<stripe-connect-form
       .request=${ctx.request}
       .onConnected=${ctx.onConnected}
+      .actions=${ctx.actions}
     ></stripe-connect-form>`;
   },
   renderAddReader(ctx) {

@@ -261,26 +261,12 @@ describe("payments-screen", () => {
     expect(getComputedStyle(name).fontWeight).toBe("800");
   });
 
-  it("shows a not-connected provider's connect form from the registry, matched by providerId", async () => {
+  it("links configuration to the complete provider catalogue rather than embedding connect forms", async () => {
     const { el } = await mount();
-
     expect(q(el, "[data-test=fake-connect-zeta]")).toBeNull();
-    q(el, "[data-test=connect-zeta]")!.click();
-    await flush(el);
-
-    expect(q(el, "[data-test=fake-connect-zeta]")).not.toBeNull();
-  });
-
-  it("reloads the provider list when a connect form reports success", async () => {
-    const { el, api } = await mount();
-    (api.listPaymentProviders as ReturnType<typeof vi.fn>).mockClear();
-
-    q(el, "[data-test=connect-zeta]")!.click();
-    await flush(el);
-    q(el, "[data-test=fake-connect-zeta]")!.click();
-    await flush(el);
-
-    expect(api.listPaymentProviders).toHaveBeenCalled();
+    expect(q(el, "a[data-test=configure-providers]")?.getAttribute("href")).toBe(
+      "/manage/modules/view/card-providers/state/all",
+    );
   });
 
   it("disconnects a connected provider behind a two-tap confirm", async () => {
@@ -560,26 +546,21 @@ describe("payments-screen", () => {
     expect(disconnectNotice(el)?.textContent).not.toContain("payment.provider_in_use");
   });
 
-  it("keeps a failed disconnect when a provider connect already in flight completes after it", async () => {
-    const api = stubApi({
+  it("keeps a failed disconnect when the provider list refreshes", async () => {
+    const api = liveApi({
       listReaders: vi.fn().mockResolvedValue([]),
       disconnectPaymentProvider: vi.fn().mockRejectedValue({ code: "payment.provider_in_use" }),
     });
     const { el } = await mount(api);
-    q(el, "[data-test=connect-zeta]")!.click();
-    await flush(el);
-
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
     q(el, "[data-test=disconnect-acme]")!.click();
     await vi.waitFor(() =>
       expect(disconnectNotice(el)?.textContent).toBe(codeMessage("payment.provider_in_use")),
     );
-
     const reads = vi.mocked(api.listPaymentProviders).mock.calls.length;
-    q(el, "[data-test=fake-connect-zeta]")!.click();
+    api.liveData.refresh();
     await vi.waitFor(() => expect(api.listPaymentProviders).toHaveBeenCalledTimes(reads + 1));
-    await flush(el);
     expect(disconnectNotice(el)?.textContent).toBe(codeMessage("payment.provider_in_use"));
   });
 });
@@ -1109,18 +1090,6 @@ describe("payments-screen remaining edges", () => {
 
     expect(el.shadowRoot!.textContent).toContain("No payment providers are available.");
     expect(q(el, ".providers")).toBeNull();
-  });
-
-  it("closes the connect form when Connect is pressed a second time", async () => {
-    const { el } = await mount();
-    q(el, "[data-test=connect-zeta]")!.click();
-    await el.updateComplete;
-    expect(q(el, "[data-test=connect-form-zeta]")).not.toBeNull();
-
-    q(el, "[data-test=connect-zeta]")!.click();
-    await el.updateComplete;
-
-    expect(q(el, "[data-test=connect-form-zeta]")).toBeNull();
   });
 
   it("shows a reader that is still pairing as Pairing", async () => {
@@ -1835,7 +1804,7 @@ describe("the providers and readers once the server answers again", () => {
     const { el } = await mount(api);
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
 
-    expect(q(el, "section[slot=readers] wt-data-table")).toBeNull();
+    expect(q(el, "[data-test=readers-section] wt-data-table")).toBeNull();
     api.liveData.refresh();
     await vi.waitFor(() =>
       expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toBe("Online"),
@@ -1937,7 +1906,9 @@ describe("the providers and readers once the server answers again", () => {
     await flush(el);
 
     api.liveData.refresh();
-    await vi.waitFor(() => expect(q(el, "[data-test=connect-acme]")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=provider-state-acme]")?.textContent).toContain("Not connected"),
+    );
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[data-test=disconnect-acme]")).not.toBeNull());
     expect(q(el, "[data-test=disconnect-acme]")!.textContent).toBe(t("payments.disconnect"));
@@ -1962,7 +1933,7 @@ describe("the providers and readers once the server answers again", () => {
     api.liveData.refresh();
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(2));
     await flush(el);
-    expect(q(el, "section[slot=readers] wt-data-table")).not.toBeNull();
+    expect(q(el, "[data-test=readers-section] wt-data-table")).not.toBeNull();
     expect(qCell(el, "[data-test=reader-status-r-1]")).not.toBeNull();
     api.liveData.refresh();
     await vi.waitFor(() => expect(api.listReaders).toHaveBeenCalledTimes(3));
@@ -2422,10 +2393,10 @@ it("keeps readers unknown while pending, then shows a successful empty list", as
     api,
     panels: PANELS,
   });
-  expect(q(el, "section[slot=readers] wt-data-table")).toBeNull();
+  expect(q(el, "[data-test=readers-section] wt-data-table")).toBeNull();
   answer([]);
-  await vi.waitFor(() => expect(q(el, "section[slot=readers] wt-data-table")).not.toBeNull());
-  expect(q(el, "section[slot=readers] wt-data-table")!.shadowRoot!.textContent).toContain(
+  await vi.waitFor(() => expect(q(el, "[data-test=readers-section] wt-data-table")).not.toBeNull());
+  expect(q(el, "[data-test=readers-section] wt-data-table")!.shadowRoot!.textContent).toContain(
     t("payments.readers_empty"),
   );
 });

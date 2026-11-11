@@ -1,13 +1,24 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  draftScopeFor,
+  saveActionState,
+  submitOnEnter,
+} from "@waitron/ui";
 import type { DraftScope } from "@waitron/ui";
 import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  codeOf,
+  type CardProviderPanel,
+  type DashboardRequest,
+} from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import {
   SumUpPaymentsClient,
@@ -52,6 +63,10 @@ export class SumUpConnectForm extends LitElement {
   /** Called after a successful connect (the screen refreshes its provider list). */
   @property({ attribute: false }) onConnected: () => void = () => {};
 
+  @property({ attribute: false }) actions?: Parameters<
+    CardProviderPanel["renderConnectForm"]
+  >[0]["actions"];
+
   @state() private apiKey = "";
   @state() private merchants: AmbiguousMerchant[] | null = null;
   @state() private merchantCode = "";
@@ -78,7 +93,7 @@ export class SumUpConnectForm extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#opening = {};
-    this.#scope = leaveCoordinatorFor(this)?.register<Required<SumUpConnectPayload>>({
+    this.#scope = draftScopeFor(this, {
       id: this,
       parent: (this.getRootNode() as ShadowRoot).host,
       current: () => this.#value(),
@@ -88,7 +103,7 @@ export class SumUpConnectForm extends LitElement {
         this.apiKey = value.apiKey;
         this.merchantCode = value.merchantCode;
       },
-    });
+    }).scope;
     this.requestUpdate();
   }
 
@@ -141,7 +156,13 @@ export class SumUpConnectForm extends LitElement {
 
   async #connect(event: Event, opening: object): Promise<void> {
     event.stopPropagation();
-    if (this.busy || !this.isConnected || opening !== this.#opening) return;
+    if (
+      this.busy ||
+      !this.isConnected ||
+      opening !== this.#opening ||
+      (this.actions && !this.#scope?.isDirty())
+    )
+      return;
     const scope = this.#scope;
     const submitted = this.#value();
     this.attempted = true;
@@ -151,6 +172,7 @@ export class SumUpConnectForm extends LitElement {
       return;
     }
     this.busy = true;
+    this.actions?.onBusy(true);
     scope?.changed();
     try {
       const result = await this.#client().connect({
@@ -159,6 +181,7 @@ export class SumUpConnectForm extends LitElement {
       });
       if (!this.isConnected || opening !== this.#opening) return;
       this.busy = false;
+      this.actions?.onBusy(false);
       scope?.commit(submitted);
       if (scope?.isDirty()) return;
       scope?.dispose();
@@ -181,6 +204,7 @@ export class SumUpConnectForm extends LitElement {
     } finally {
       if (opening === this.#opening) {
         this.busy = false;
+        this.actions?.onBusy(false);
         scope?.changed();
       }
     }
@@ -192,6 +216,7 @@ export class SumUpConnectForm extends LitElement {
 
   #renderForm(): TemplateResult {
     const opening = this.#opening;
+    const save = saveActionState(this.#scope);
     if (this.connectedName !== null) {
       return html`<p class="confirm" data-test="connected">
         ${t("payments.sumup.connected_as").replace("{name}", this.connectedName)}
@@ -209,6 +234,7 @@ export class SumUpConnectForm extends LitElement {
         required
         error=${errors.apiKey}
         .value=${this.apiKey}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "apiKey", opening)}
       ></wt-input>
 
@@ -229,6 +255,7 @@ export class SumUpConnectForm extends LitElement {
                 noResultsLabel=${t("payments.sumup.combobox_no_results")}
                 .options=${this.merchants.map((m) => ({ value: m.code, label: m.name }))}
                 error=${errors.merchant}
+                @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=connect]"))}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onMerchant(e, opening)}
               ></wt-combobox>
             </div>`
@@ -240,13 +267,14 @@ export class SumUpConnectForm extends LitElement {
           .filter(Boolean)
           .join(" ")}
       >
+        ${this.actions ? html`<wt-button slot="cancel" variant="secondary" ?disabled=${this.busy} @click=${() => this.actions?.onCancel()}>${this.actions.cancelLabel}</wt-button>` : nothing}
         <wt-button
-          variant="primary"
+          variant=${this.actions && !this.busy ? save.variant : "primary"}
           data-test="connect"
           ?loading=${this.busy}
-          ?disabled=${blocked}
+          ?disabled=${blocked || (!!this.actions && save.unchanged)}
           @click=${(e: Event) => void this.#connect(e, opening)}
-          >${t("payments.sumup.connect")}</wt-button
+          >${this.actions?.saveLabel ?? t("payments.sumup.connect")}</wt-button
         >
       </wt-form-actions>
     `;

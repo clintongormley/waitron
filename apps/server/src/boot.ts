@@ -271,6 +271,7 @@ import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { recoverAutomaticCardPayments, runPendingCardLoop } from "./pending-card-recovery.js";
 import { boxAlertMail } from "./box-alert-mail.js";
 import { attendanceReminderMail } from "./attendance-email.js";
+import { mountModulesApi } from "./modules-api.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { createCardProviderPool } from "./card-provider-pool.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
@@ -2757,6 +2758,16 @@ async function bootServer(
       log,
     );
   }
+  mountModulesApi(
+    app,
+    {
+      db,
+      modules: availableModules,
+      enabled: setsToMigrate.map((module) => module.name),
+      providers: CARD_PROVIDERS,
+    },
+    log,
+  );
   const backupDeadlines: { archive: string | null; cloud: string | null } = {
     archive: null,
     cloud: null,

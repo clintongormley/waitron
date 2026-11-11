@@ -2321,7 +2321,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 27, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
-- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
+- **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; provider switches and A483 remain).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-07-a646-modules-page.md).
   Remaining build in lane D: the Modules list and card-provider controls. Other optional modules
   will be listed but cannot be switched. Exports with optional modules off load with those modules on and empty.

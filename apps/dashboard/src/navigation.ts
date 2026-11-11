@@ -30,6 +30,7 @@ export const dashboardPath: UrlPathConfig = {
       table: "table",
       q: "q",
     },
+    modules: { view: "view", state: "state" },
     printers: { view: "view", printer: "printer" },
     "device-profiles": { profile: "profile" },
     "floor-plan": { set: "set", zone: "zone" },
