@@ -22,6 +22,9 @@ Cites read against `main` at `e0da0ad18a` (4 November 2026). Every claim about c
 that was run. Everything is read, not run, unless a sentence names a test. "Pass" means one run of a job; "wake" means cutting a job's sleep short because something
 already knows there is work.
 
+**2026-11-11:** jr2 moves the bucket copy onto the runner and rechecks it on role changes.
+Descriptions below of the bucket copy checking its role only on start record the earlier implementation.
+
 ## 1. The target picture
 
 **Today** the server runs about twenty background duties, built at least four different ways:

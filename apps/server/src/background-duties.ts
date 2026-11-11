@@ -48,9 +48,7 @@ export interface BackgroundDutyHandles {
   cloudSnapshots: unknown;
   suggestionLoop: unknown;
   unsubscribeFromChanges: () => unknown;
-  stopSealingNodeCommits: () => unknown;
-  sealedState: { settled(): unknown };
-  jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs">;
+  jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
   appendOnlyWatch: Stopper;
   freeSpaceWatch: Stopper;
   boxEmails: Stopper;
@@ -61,7 +59,6 @@ export interface BackgroundDutyHandles {
   clockWatch: Stopper;
   handoverDestinationDuty: Stopper | undefined;
   chartPost: Stopper;
-  streamHost: Stopper;
 }
 
 /** The first call's result, or its synchronous failure, is what every later call gets. */
@@ -87,6 +84,13 @@ const SIGNALLED_LOOP_WAIT =
 
 export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
   const closers: BackgroundCloser[] = [
+    {
+      name: "jobRunner",
+      close: () => h.jobRunner.stopJobs(),
+      reason:
+        "stops every job on the runner together; each job's own stepdown mark is in job-catalogue.ts",
+    },
+
     {
       name: "pendingCardLoop",
       close: () => h.pendingCardLoop,
@@ -138,19 +142,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       close: h.unsubscribeFromChanges,
       reason: "only stops hearing local changes",
     },
-    {
-      name: "stopSealingNodeCommits",
-      close: h.stopSealingNodeCommits,
-      reason:
-        "removes the hook that refreshes the sealed-state row in venue.db after a node.db commit; local, sends nothing outside the box",
-    },
-    // A refresh still running would otherwise run against the closed store and log a failure.
-    {
-      name: "sealedState",
-      close: () => h.sealedState.settled(),
-      // Called early, its result would be kept and a later refresh never awaited.
-      reason: "waits for a local refresh, which must be awaited at close, not before",
-    },
     ...(h.fiscalReconciliation === undefined
       ? []
       : [
@@ -160,12 +151,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
             atStepdown: true as const,
           },
         ]),
-    {
-      name: "jobRunner",
-      close: () => h.jobRunner.stopJobs(),
-      reason:
-        "stops every job on the runner together; each job's own stepdown mark is in job-catalogue.ts",
-    },
     {
       name: "appendOnlyWatch",
       close: () => h.appendOnlyWatch.stop(),
@@ -207,10 +192,9 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       reason:
         "hands the old box a chart it may keep, once, within its own limit; it reaches no box but that one and writes nothing here",
     },
-    // Litestream writes venue.db, so its stop is awaited before the store closes.
     {
-      name: "streamHost",
-      close: () => h.streamHost.stop(),
+      name: "jobRunnerServices",
+      close: () => h.jobRunner.stopServices(),
       reason: "stops last, after anything that may still write venue.db",
     },
   ];

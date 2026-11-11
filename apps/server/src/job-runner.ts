@@ -124,7 +124,7 @@ export function createJobRunner(deps: {
   let servicesStopping: Promise<void> | undefined;
   let serviceLoop: Promise<void> | undefined;
 
-  function checkService(service: Service): Promise<void> {
+  function checkService(service: Service, retry = false): Promise<void> {
     service.pending = service.pending.then(async () => {
       if (servicesStopping) return;
       const { definition: def, view } = service;
@@ -132,7 +132,7 @@ export function createJobRunner(deps: {
       view.lastTurnAt = at;
       try {
         if (def.applies()) {
-          if (!service.active && !steppedDown) {
+          if ((!service.active || (retry && !def.describe().running)) && !steppedDown) {
             await def.start();
             service.active = true;
           }
@@ -143,6 +143,8 @@ export function createJobRunner(deps: {
         view.consecutiveFailures = 0;
         view.failingSince = null;
         view.lastErrorCode = null;
+        view.throwsSinceClean = 0;
+        view.throwingSince = null;
         view.lastOkAt = at;
       } catch (error) {
         view.consecutiveFailures++;
@@ -159,7 +161,7 @@ export function createJobRunner(deps: {
     while (!serviceController.signal.aborted) {
       await delay(deps.serviceCheckMs ?? 60_000, serviceController.signal);
       if (!serviceController.signal.aborted)
-        await Promise.all([...services.values()].map(checkService));
+        await Promise.all([...services.values()].map((service) => checkService(service)));
     }
   }
   let stopping: Promise<void> | undefined;
@@ -322,6 +324,8 @@ export function createJobRunner(deps: {
     },
     wake(name) {
       jobs.get(name)?.waker.wake();
+      const service = services.get(name);
+      if (service) void checkService(service, true);
     },
     roleChanged() {
       for (const job of jobs.values()) job.role.abort();

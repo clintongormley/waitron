@@ -186,6 +186,7 @@ export function healthSnapshot(
 function publicJob(view: JobView): PublicJobView {
   return {
     kind: view.kind,
+    detail: view.detail,
     state: view.state,
     judged: view.judged,
     lastTurnAt: view.lastTurnAt,

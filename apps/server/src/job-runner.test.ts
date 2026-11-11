@@ -8,18 +8,7 @@ import {
 } from "./job-runner.js";
 import * as wakers from "./loop-wake.js";
 
-function fakeDelay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) return resolve();
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done, { once: true });
-    function done() {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    }
-  });
-}
+import { fakeTimerDelay as fakeDelay } from "./testing/fake-timer-delay.js";
 
 let runner: JobRunner;
 let emit: (change: ResourceChange) => void;
@@ -593,7 +582,32 @@ describe("runner services", () => {
     });
     await advance(60_000);
     expect(host.start).toHaveBeenCalledTimes(2);
-    expect(runner.views().stream).toMatchObject({ state: "running", consecutiveFailures: 0 });
+    expect(runner.views().stream).toMatchObject({
+      state: "running",
+      consecutiveFailures: 0,
+      throwsSinceClean: 0,
+      throwingSince: null,
+    });
+  });
+
+  it("retries an off active service on wake, but never after stepdown", async () => {
+    let running = false;
+    const host = service({
+      describe: () => ({ running, reason: running ? null : "reseal_required" }),
+    });
+    await runner.addService(host);
+    runner.wake("stream");
+    await advance();
+    expect(host.start).toHaveBeenCalledTimes(2);
+    running = true;
+    runner.wake("stream");
+    await advance();
+    expect(host.start).toHaveBeenCalledTimes(2);
+    running = false;
+    runner.signalStepdown();
+    runner.wake("stream");
+    await advance(60_000);
+    expect(host.start).toHaveBeenCalledTimes(2);
   });
 
   it("refuses a service missing from the declared stop order", async () => {
