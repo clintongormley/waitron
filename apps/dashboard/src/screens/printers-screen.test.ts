@@ -11256,6 +11256,38 @@ describe("office printers in discovery", () => {
     );
   });
 
+  it("reports the saved name when Add restores an A4 printer", async () => {
+    const listPagePrinters = vi.fn().mockResolvedValue([]);
+    const registerPagePrinter = vi.fn(async () => {
+      listPagePrinters.mockResolvedValue([added]);
+      return { id: added.id, outcome: "enabled" as const };
+    });
+    const { el, api } = await mountWith([office()], { listPagePrinters, registerPagePrinter });
+    q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+    await flush(el);
+    const field = q(
+      el,
+      "[data-test=page-printer-add-modal] wt-input[name=name]",
+    ) as HTMLElementTagNameMap["wt-input"];
+    typeField(el, "[data-test=page-printer-add-modal] wt-input[name=name]", "New label");
+    await flush(el);
+    q(el, "[data-test=confirm-add-page-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=page-printer-add-modal]")).toBeNull());
+    expect(api.registerPagePrinter).toHaveBeenCalledWith({
+      agentId: "a1",
+      host: "10.0.0.56",
+      port: 631,
+      path: "/ipp/print",
+      name: "New label",
+    });
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=printer-added]")).toBe(
+        t("printers.added").replace("{name}", "Back office"),
+      ),
+    );
+    expect(field.label).toBe(t("printers.page_printer_new_name"));
+  });
+
   it("names a new A4 printer in a dialog whose Add is ready with the discovered name, then adds it from the row's discovery entry", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
     const { el, api } = await mountWith([office()], { listPagePrinters });

@@ -479,7 +479,10 @@ describe("deleting a page printer", () => {
     );
     const before = new Map((await deliveryRows()).map((row) => [row.id, row]));
 
-    await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id, new Date(NOW)));
+    const impact = await withTransaction(suite.db, (tx) =>
+      deletePagePrinter(tx, office.id, new Date(NOW)),
+    );
+    expect(impact.ends).toEqual([{ key: "invoice_a4", count: 2, targets: [] }]);
 
     expect((await printerRows()).find((row) => row.id === office.id)).toMatchObject({
       active: false,

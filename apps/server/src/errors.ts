@@ -45,7 +45,6 @@ declare module "@waitron/shared" {
     "page_printer.not_found": Record<string, never>;
     /** The discovery entry carries no office report, or one whose printer cannot print an A4 invoice. */
     "page_printer.not_printable": Record<string, never>;
-    /** A disabled page printer is enabled by adding it again from a fresh discovery entry, never by an edit. */
     /** The page printer has no print agent to send it a test page; adding it again re-points it. */
     "page_printer.no_agent": Record<string, never>;
     "venue.business_day_invalid": {

@@ -20,6 +20,8 @@ usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se r
 nombre y calibración, así que no necesitas repetirlos. Vuelve a asignar sus dispositivos y
 puestos de cocina.
 
+Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.
+
 ## Calibrar una impresora de recibos {#calibrate}
 
 La calibración tiene tres pasos. Se abre al añadir una impresora de recibos nueva, y **Calibrar

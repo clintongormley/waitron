@@ -42,11 +42,6 @@ export async function listPagePrinters(tx: Transaction): Promise<PagePrinterRow[
   return rows.map((row) => ({ ...row.printer, agentName: row.agentName }));
 }
 
-/**
- * Adds the printer a current discovery entry reports, or brings back the row already at that IPP
- * queue under its id: a disabled one is enabled, and an active one is re-pointed to the reporting
- * agent. Either way its capabilities are refreshed from the report; `name` is used only for a new row.
- */
 export async function registerPagePrinter(
   tx: Transaction,
   input: { name: string; entry: PagePrinterDiscovery | undefined },

@@ -23,7 +23,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 
 /**
  * Names an office printer found by discovery and adds it. Open while `entry` is set. Sends
- * `page-printer-added` (`detail: { name }`) once the server has added it, and
+ * `page-printer-added` (`detail: { id, outcome, name }`) once the server has added it, and
  * `page-printer-add-closed` when the dialog has closed, either way.
  */
 @customElement("dashboard-page-printer-add")
@@ -145,8 +145,9 @@ export class PagePrinterAdd extends LitElement {
       return;
     }
     this.sending = true;
+    let result: Awaited<ReturnType<DashboardApi["registerPagePrinter"]>>;
     try {
-      await this.api!.registerPagePrinter({ ...entry, name });
+      result = await this.api!.registerPagePrinter({ ...entry, name });
     } catch (error) {
       this.refusedCode = codeOf(error);
       return;
@@ -155,7 +156,7 @@ export class PagePrinterAdd extends LitElement {
     }
     this.#baseline = this.name;
     this.#scope?.commit(this.name);
-    this.dispatchEvent(new CustomEvent("page-printer-added", { detail: { name } }));
+    this.dispatchEvent(new CustomEvent("page-printer-added", { detail: { ...result, name } }));
     this.shadowRoot!.querySelector<WtModal>("wt-modal")!.closeAfter("saved");
   }
 
@@ -184,7 +185,7 @@ export class PagePrinterAdd extends LitElement {
           required
           name="name"
           autocomplete="off"
-          label=${t("printers.name")}
+          label=${t("printers.page_printer_new_name")}
           .value=${this.name}
           .invalid=${nameError !== ""}
           .error=${nameError}

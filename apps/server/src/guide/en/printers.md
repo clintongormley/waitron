@@ -18,6 +18,8 @@ confirmation lists the assignments removed and work ended. To use it again, choo
 printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
 do not need to name or calibrate it again. Assign its devices and kitchen stations again.
 
+After importing a configuration, find its A4 printers with **Add a printer** and add them again.
+
 ## Calibrate a receipt printer {#calibrate}
 
 Calibration has three steps. It opens after you add a new receipt printer, and **Calibrate printer**

@@ -1790,6 +1790,7 @@ export const en = {
   "printers.no_discovered":
     "No printers found. Check that the printer is on and connected, then scan again.",
   "printers.discovered_seen_on": "Seen on {agent}",
+  "printers.page_printer_new_name": "Name for a new printer",
   "printers.page_printer_add": "Add as A4 printer",
   "printers.page_printer_added": "Added as A4 printer",
   "printers.page_printer_use_agent": "Use this agent",
@@ -5660,6 +5661,7 @@ export const es: Record<StringKey, string> = {
   "printers.no_discovered":
     "No se ha encontrado ninguna impresora. Comprueba que esté encendida y conectada, y vuelve a buscar.",
   "printers.discovered_seen_on": "Detectada en {agent}",
+  "printers.page_printer_new_name": "Nombre para una impresora nueva",
   "printers.page_printer_add": "Añadir como impresora A4",
   "printers.page_printer_added": "Añadida como impresora A4",
   "printers.page_printer_use_agent": "Usar este agente",

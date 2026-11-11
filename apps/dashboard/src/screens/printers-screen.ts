@@ -1531,7 +1531,6 @@ export class PrintersScreen extends LitElement {
     };
   }
 
-  /** Enable and Use this agent: the server takes the queue's current report from the agent named. */
   async #registerPagePrinter(key: string, entry: PagePrinterEntry): Promise<void> {
     if (this.pagePrinterSending.has(key)) return;
     this.pagePrinterSending = new Set([...this.pagePrinterSending, key]);
@@ -4276,9 +4275,13 @@ export class PrintersScreen extends LitElement {
       .draftParent=${this.#addressScope?.id}
       description=${adding.description}
       .suggestedName=${adding.suggestedName}
-      @page-printer-added=${(event: CustomEvent<{ name: string }>) => {
-        this.addedPrinterName = event.detail.name;
-        void this.#refreshPagePrinters();
+      @page-printer-added=${async (
+        event: CustomEvent<{ id: string; name: string; outcome: string }>,
+      ) => {
+        await this.#refreshPagePrinters();
+        this.addedPrinterName =
+          this.pagePrinters.find((row) => row.id === event.detail.id)?.name ??
+          (event.detail.outcome === "created" ? event.detail.name : null);
       }}
       @page-printer-add-closed=${() => {
         this.addingPagePrinter = null;
