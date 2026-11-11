@@ -56,9 +56,9 @@ case "$name" in
  reboot) echo reboot >> "$WRITES" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
  node)
-  if [ "$1" = /opt/waitron-host/box/installer-name-notice.mjs ]; then
-   [ "\${NOTICE:-}" != "" ] || exit 1
-   printf '%s\n' "$NOTICE"; exit 0
+  if [ "$1" = /opt/waitron-host/box/installer-return.mjs ]; then
+   [ "\${NOTICE:-}" != "" ] || { echo install.refused:occupied >&2; exit 1; }
+   printf '%s\n' "$NOTICE"; exit "\${RETURN_EXIT:-0}"
   fi
   [ "$1" = /opt/waitron-host/box/disk-start.mjs ] || exit 99
   [ "\${DISK_CHECK_EXIT:-0}" = 0 ] || exit 1
@@ -180,14 +180,23 @@ describe("development disk writer", () => {
     expect(result.status).toBe(1);
     expect(result.writes).toBe("");
   });
-  it("shows the stored venue notice for an occupied Waitron target without writing it", () => {
+  it("returns to an occupied Waitron target without falling through to the disk writer", () => {
     const result = writer({
       OCCUPIED: "1",
       NOTICE: "This box already has Waitron (Harbour Restaurant Ltd).",
     });
-    expect(result.status).toBe(1);
+    expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe("This box already has Waitron (Harbour Restaurant Ltd).");
     expect(result.stderr).toBe("");
+    expect(result.writes).toBe("");
+  });
+  it("ends unsuccessfully without writing when firmware return fails", () => {
+    const result = writer({
+      OCCUPIED: "1",
+      NOTICE: "Cannot start the installed box.",
+      RETURN_EXIT: "19",
+    });
+    expect(result.status).toBe(19);
     expect(result.writes).toBe("");
   });
   it("excludes the USB source while admitting the virtio target", () => {

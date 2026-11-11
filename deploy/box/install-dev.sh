@@ -17,8 +17,8 @@ size="$(blockdev --getsize64 "$target")"
 [ -z "$(lsblk -nro MOUNTPOINTS "$target")" ] || refuse mounted
 [ -z "$(ls -A "/sys/class/block/${target##*/}/holders")" ] || refuse holders
 if ! cmp -n "$size" "$target" /dev/zero >/dev/null 2>&1; then
-  if node /opt/waitron-host/box/installer-name-notice.mjs "$target"; then exit 1; fi
-  refuse occupied
+  node /opt/waitron-host/box/installer-return.mjs "$target"
+  exit 0
 fi
 [ "$(blockdev --getsize64 "$target")" = "$size" ] || refuse size
 [ "$(lsblk -nro SERIAL "$target")" = waitron-dev-target ] || refuse serial
@@ -103,3 +103,4 @@ sync
 cleanup
 trap - EXIT
 printf 'B3_INSTALL_OK:%s\n' "$uuid"
+systemctl poweroff --no-block

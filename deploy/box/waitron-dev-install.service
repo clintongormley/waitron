@@ -2,12 +2,14 @@
 Description=Install the emulator-only Waitron development disk
 After=local-fs.target
 Requires=local-fs.target
-SuccessAction=poweroff
+SuccessAction=none
 FailureAction=poweroff
 
 [Service]
 Type=oneshot
+SuccessExitStatus=SIGTERM
 ExecStart=/usr/local/sbin/waitron-dev-install
 StandardOutput=tty
 StandardError=tty
-TTYPath=/dev/console
+StandardInput=tty-force
+TTYPath=/dev/ttyS0
