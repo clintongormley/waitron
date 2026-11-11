@@ -30,12 +30,8 @@ import { deletePrinter } from "./printer-delete.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
-import {
-  enqueueSaleReceipt,
-  layOutSaleReceipt,
-  readOriginalReceiptPrint,
-} from "./receipt-print.js";
-import { readSettledTicket } from "./till-sale.js";
+import { layOutSaleReceipt, readOriginalReceiptPrint } from "./receipt-print.js";
+import { printSaleReceipt } from "./till-sale.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { inTx, send as rawGroupSend } from "./testing/bill-venue.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -149,15 +145,8 @@ async function paidSale(setting: EscSetting) {
     const [sale] = await inTx(venue, (tx) =>
       tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
     );
-    // As a bill paid after its invoice is issued prints its original (bill-payments.ts).
-    await inTx(venue, async (tx) =>
-      enqueueSaleReceipt(
-        tx,
-        venue.cfg,
-        await readSettledTicket(venue.backend, tx, venue.cfg, billId),
-        sale!.id,
-      ),
-    );
+    // Paper is printed only when chosen (A739 cut 7b, #2791): choose it, as the till does.
+    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
     const [original] = await inTx(venue, (tx) =>
       tx
         .select()
