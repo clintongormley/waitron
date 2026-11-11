@@ -461,6 +461,7 @@ it("a refused public adoption retains its independently signed reservation witho
         now: () => new Date(),
         stateDir: adoptionDir,
         persistTrading: async () => {},
+        persistBackupSettings: async () => {},
         persistModuleConfig: async () => {},
         persistCredentialsRing: async () => {},
         fetchBundle: async (_url, _credential, standby) => {

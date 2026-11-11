@@ -1618,6 +1618,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       moduleOverrides: {},
       primaryPublicKey: "fixture-primary-key",
       credentialsRing: { key: Buffer.alloc(32, 8).toString("base64"), version: 1 },
+      backupSettings: null,
       boxCaKeyPem: "fixture-ca-key",
     };
     const primary = createHttpServer((_req, res) => {

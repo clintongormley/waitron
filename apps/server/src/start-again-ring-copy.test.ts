@@ -69,6 +69,7 @@ const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,
   credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
+  backupSettings: null,
   boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
 };
 
@@ -125,6 +126,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
           persistTrading: async (cfg) => {
             await writeTradingEnv(stateDir, cfg);
           },
+          persistBackupSettings: async () => {},
           persistModuleConfig: async (config) => {
             await writeModuleConfig(stateDir, config);
           },

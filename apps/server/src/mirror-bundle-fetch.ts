@@ -8,6 +8,7 @@ import { isIP } from "node:net";
 import { dirname } from "node:path";
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
+import { checkBackupSettings } from "./backup-env-writer.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
@@ -53,6 +54,7 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
     !isRecord(value.store) ||
     !hasStrings(value.store, ["accessKeyId", "secretAccessKey", "venueId"]) ||
     !isEncodedKeyRing(value.credentialsRing) ||
+    (value.backupSettings !== null && !checkBackupSettings(value.backupSettings).ok) ||
     (value.environment !== "production" && value.environment !== "preproduction") ||
     (wireguardPublicKey !== undefined && typeof wireguardPublicKey !== "string") ||
     !isRecord(designated) ||

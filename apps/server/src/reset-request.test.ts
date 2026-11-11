@@ -1,3 +1,4 @@
+import { replaceBackupSettings } from "./backup-env-writer.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -111,6 +112,7 @@ const BUNDLE: MirrorBundle = {
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,
   credentialsRing: { key: Buffer.alloc(32, 6).toString("base64"), version: 1 },
+  backupSettings: null,
   boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
 };
 
@@ -312,7 +314,7 @@ describe("runStagedReset", () => {
       expect(existsSync(join(stateDir, "flows/tls-repair"))).toBe(false);
       expect(await readdir(tls)).toEqual([]);
       expect(existsSync(join(stateDir, "secrets.env"))).toBe(false);
-      expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe("B=1\n");
+      expect(existsSync(join(stateDir, "backup.env"))).toBe(false);
       // A setup start can mint a fresh set: nothing of the old one is left to refuse it.
       await ensureBoxSecrets({
         stateDir,
@@ -322,6 +324,21 @@ describe("runStagedReset", () => {
       });
       expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.pem"]);
       expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
+    },
+  );
+
+  it.each([
+    [true, false],
+    [false, true],
+  ])(
+    "a staged reset of a box that joined removes the other venue's backup settings (joined: %s, kept: %s)",
+    async (joined, kept) => {
+      const { stateDir, venueDir, operationId } = await halfAdoptedBox(joined);
+      await stageResetRequest(stateDir, operationId);
+
+      expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
+
+      expect(existsSync(join(stateDir, "backup.env"))).toBe(kept);
     },
   );
 
@@ -411,6 +428,7 @@ describe("runStagedReset", () => {
               await writeModuleConfig(stateDir, config);
             },
             persistCredentialsRing: (ring) => writeCredentialsRing(stateDir, ring),
+            persistBackupSettings: (settings) => replaceBackupSettings(stateDir, settings),
             stateDir,
             database: venueDir,
             listIpv4: () => [],

@@ -75,6 +75,7 @@ function bundle(): MirrorBundle {
     moduleOverrides: {},
     primaryPublicKey: PRIMARY_KEYS.publicKey,
     credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+    backupSettings: null,
     boxCaKeyPem: MAIN_AUTHORITY.caKeyPem,
   };
 }
@@ -107,6 +108,7 @@ function deps(value = bundle()) {
       },
     }),
     persistTrading: async () => {},
+    persistBackupSettings: async () => {},
     persistModuleConfig: async () => {},
     persistCredentialsRing: (ring: MirrorBundle["credentialsRing"]) =>
       writeCredentialsRing(stateDir, ring),

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
 import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisioning";
 import {
+  BACKUP_ENV_FILE,
   SECRETS_ENV_FILE,
   TLS_DIR,
   TLS_REPAIR_FLOW_DIR,
@@ -137,11 +138,12 @@ export async function runStagedReset(
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
     // The other venue's authority and key ring may be here, so the box's own go with them and the
-    // next setup start mints a fresh set. Before the operation record, whose removal makes a re-run
+    // next setup start mints a fresh set; `backup.env` may hold the other venue's recovery key. Before the operation record, whose removal makes a re-run
     // discard; the joined record goes last of them, so a re-run still finds this box joined.
     if (await joinedAnotherBox(deps.stateDir)) {
       await rm(join(deps.stateDir, TLS_REPAIR_FLOW_DIR), { recursive: true, force: true });
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
+      await rm(join(deps.stateDir, BACKUP_ENV_FILE), { force: true });
       const tlsDir = join(deps.stateDir, TLS_DIR);
       for (const name of await readdir(tlsDir)) {
         if (join(TLS_DIR, name) !== TLS_JOINED_FILE) {

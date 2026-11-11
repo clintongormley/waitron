@@ -270,6 +270,22 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect(bundle.moduleOverrides).toEqual({});
   });
 
+  it("the bundle carries the main box's backup settings, and null when it has none", async () => {
+    const standby = () => ({ nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB });
+    expect((await allocatedBundle(standby())).bundle.backupSettings).toBeNull();
+    await writeFile(
+      join(stateDir, "backup.env"),
+      "WAITRON_BACKUP_RECOVERY_KEY=recovery-0123456789abcdef\nWAITRON_BACKUP_DIR=\n",
+    );
+    try {
+      expect((await allocatedBundle(standby())).bundle.backupSettings).toEqual({
+        WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef",
+      });
+    } finally {
+      await rm(join(stateDir, "backup.env"), { force: true });
+    }
+  });
+
   it("carries the main box's own address and the pair's key, and a relay only when one is given", async () => {
     const { bundle } = await allocatedBundle(
       { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },

@@ -45,6 +45,8 @@ import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { tlsSetMatches } from "./testing/box-tls.js";
 import { runStagedReset, stageResetRequest } from "./reset-request.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
+import { readBackupSettings, readOfferSettings } from "./handover-manifest.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
@@ -117,6 +119,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     moduleOverrides: {},
     primaryPublicKey: PRIMARY_KEYS.publicKey,
     credentialsRing: BUNDLE_RING,
+    backupSettings: null,
     boxCaKeyPem: CA_KEY_PEM,
     ...over,
   };
@@ -177,6 +180,8 @@ function deps(
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
     persistModuleConfig: extra.persistModuleConfig ?? (async () => {}),
+    persistBackupSettings: (settings: Record<string, string> | null) =>
+      replaceBackupSettings(stateDir, settings),
     persistCredentialsRing:
       extra.persistCredentialsRing ?? ((ring) => writeCredentialsRing(stateDir, ring)),
     stateDir,
@@ -484,6 +489,59 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         table,
       ).toEqual([{ node_id: STANDBY.nodeId }]);
     }
+  });
+
+  it("the spare holds the main box's backup settings once it has joined", async () => {
+    const mainState = await mkdtemp(join(tmpdir(), "waitron-adopt-main-"));
+    try {
+      await writeFile(
+        join(mainState, "backup.env"),
+        "WAITRON_BACKUP_RECOVERY_KEY=recovery-0123456789abcdef\nWAITRON_BACKUP_KEY_ROTATED_AT=2026-11-01T00:00:00.000Z\n",
+      );
+      const backupSettings = await readBackupSettings(mainState);
+      await adoptFromPrimary(
+        deps({ fetchBundle: async () => makeBundle({ backupSettings }) }),
+        REQ,
+        NO_HOOKS,
+      );
+      const digest = async (dir: string) =>
+        (await readOfferSettings(dir, RING, "handover.settings_unreadable")).backupSettings;
+      expect(await digest(mainState)).not.toBeNull();
+      expect(await digest(stateDir)).toBe(await digest(mainState));
+    } finally {
+      await rm(mainState, { recursive: true, force: true });
+    }
+  });
+
+  it("a second join under a main box with no settings leaves none", async () => {
+    const first: StandbyIdentity = {
+      nodeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      ...generateNodeKeyPair(),
+    };
+    standbyIdentity = first;
+    await adoptFromPrimary(
+      deps({
+        fetchBundle: async () =>
+          makeBundle({
+            backupSettings: { WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef" },
+            reservedIdentity: {
+              ...RESERVED,
+              endorsement: endorseKey(
+                first.nodeId,
+                first.publicKey,
+                DESIGNATED.nodeId,
+                PRIMARY_KEYS.privateKey,
+              ),
+            },
+          }),
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    expect(await readBackupSettings(stateDir)).not.toBeNull();
+    standbyIdentity = STANDBY;
+    await adoptFromPrimary(deps(), REQ, NO_HOOKS);
+    expect(existsSync(join(stateDir, "backup.env"))).toBe(false);
   });
 
   it("every node.db table is either swept by adopt or named as kept", () => {

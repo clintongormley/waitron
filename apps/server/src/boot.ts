@@ -449,7 +449,7 @@ import {
 } from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { replaceBackupSettings, writeRecoveryKey } from "./backup-env-writer.js";
 import {
   createS3ObjectStore,
   parseRecoveryKit,
@@ -1642,6 +1642,7 @@ async function bootServer(
               ownerNode: store.node,
               ring,
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
+              persistBackupSettings: (s) => replaceBackupSettings(config.stateDir, s),
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
               spareStorePort: config.spareStorePort,

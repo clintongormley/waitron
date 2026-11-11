@@ -188,6 +188,7 @@ async function joined() {
       persistTrading: async (args) => {
         spareId = args.nodeId;
       },
+      persistBackupSettings: async () => {},
       persistModuleConfig: async (config) => {
         await writeModuleConfig(spareState, config);
       },

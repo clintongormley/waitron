@@ -29,6 +29,7 @@ import {
   type ModuleOperations,
 } from "@waitron/module";
 import { caCertPath, caKeyPath, type EncodedKeyRing } from "./box-secrets.js";
+import { readBackupSettings } from "./handover-manifest.js";
 import { readModuleConfig } from "./module-config.js";
 import { ALL_MODULES } from "./modules.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -53,10 +54,10 @@ export interface PairStoreKey {
 }
 
 /**
- * Four secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
+ * Five secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
  * `credentialsRing` (the key ring every sealed row on the main box opens with), `boxCaKeyPem`
- * (the private key of the main box's certificate authority) and `store.secretAccessKey` (the pair's
- * key to the spare's store).
+ * (the private key of the main box's certificate authority), `store.secretAccessKey` (the pair's
+ * key to the spare's store) and the backup recovery key in `backupSettings`.
  */
 export interface MirrorBundle {
   designated: AdoptResult;
@@ -82,6 +83,8 @@ export interface MirrorBundle {
   /** The designated node's identity public key, which signed `reservedIdentity.endorsement`. */
   primaryPublicKey: string;
   credentialsRing: EncodedKeyRing;
+  /** The main box's `backup.env`, its values only; `null` when it holds none. */
+  backupSettings: Record<string, string> | null;
   boxCaKeyPem: string;
 }
 
@@ -173,6 +176,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
   // must fail before collecting or writing any reservation.
   const moduleConfig = await readModuleConfig(deps.stateDir);
   const modules = enabledModules(ALL_MODULES, moduleConfig);
+  const backupSettings = await readBackupSettings(deps.stateDir);
 
   for (const name of operations.keys()) {
     if (
@@ -241,6 +245,7 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     wireguardPublicKey: deps.wireguardPublicKey,
     primaryPublicKey: nodeSigningPublicKey(primaryPrivateKey),
     credentialsRing: encodeKeyRing(deps.ring),
+    backupSettings,
     boxCaKeyPem,
   };
 }

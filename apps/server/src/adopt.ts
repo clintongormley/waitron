@@ -132,6 +132,8 @@ export interface AdoptDeps {
   persistTrading: (args: PersistTradingArgs) => Promise<void>;
   /** So the mirror's next boot sees the primary's enabled module set. */
   persistModuleConfig: (config: ModuleConfig) => Promise<void>;
+  /** Replaces `backup.env` with the main box's settings, or removes it for `null`. */
+  persistBackupSettings: (settings: Record<string, string> | null) => Promise<void>;
   /** Where the finish-adoption latch is written. `PendingAdoption` in `finish-adoption.ts` says why
    * that step cannot complete today. */
   stateDir: string;
@@ -271,8 +273,9 @@ export async function adoptFromPrimary(
     });
     return name;
   });
-  // Unconditional, even `{}`, so a re-adopt overwrites.
+  // Unconditional, even `{}` or `null`, so a re-adopt overwrites.
   await deps.persistModuleConfig(moduleConfig);
+  await deps.persistBackupSettings(bundle.backupSettings);
   await writePendingAdoption(deps.stateDir, {
     standby: { nodeId: standby.nodeId, publicKey: standby.publicKey },
     nodeName: `${bundle.primaryNode.name} (standby)`,

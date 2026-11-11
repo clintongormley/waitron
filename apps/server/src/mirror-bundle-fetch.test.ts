@@ -77,6 +77,7 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   moduleOverrides: {},
   primaryPublicKey: "PRIMARY_PUB",
   credentialsRing: { key: Buffer.alloc(32, 5).toString("base64"), version: 1 },
+  backupSettings: null,
   boxCaKeyPem: "-----BEGIN PRIVATE KEY-----\nFAKE\n-----END PRIVATE KEY-----\n",
 };
 
@@ -174,6 +175,32 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     const base = await startServer(app);
 
     expect(await fetchMirrorBundle(base, CREDENTIAL, STANDBY)).toEqual(noRelay);
+  });
+
+  it("accepts a bundle carrying the main box's backup settings", async () => {
+    const withSettings: MirrorBundle = {
+      ...SAMPLE_BUNDLE,
+      backupSettings: { WAITRON_BACKUP_RECOVERY_KEY: "recovery-0123456789abcdef" },
+    };
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.json(withSettings));
+    const base = await startServer(app);
+
+    expect(await fetchMirrorBundle(base, CREDENTIAL, STANDBY)).toEqual(withSettings);
+  });
+
+  it.each([
+    ["name anything but a WAITRON_BACKUP_ setting", { WAITRON_CREDENTIALS_KEY: "x" }],
+    ["hold a tab", { WAITRON_BACKUP_RECOVERY_KEY: "recovery\t0123456789" }],
+  ])("refuses a bundle whose backup settings %s", async (_shape, backupSettings) => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.json({ ...SAMPLE_BUNDLE, backupSettings }),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
   it("tolerates a primaryUrl with a trailing slash (no double-slash path)", async () => {

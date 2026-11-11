@@ -142,6 +142,7 @@ beforeAll(async () => {
       persistTrading: async (args) => {
         bId = args.nodeId;
       },
+      persistBackupSettings: async () => {},
       persistModuleConfig: async () => {},
       persistCredentialsRing: async (ring) => {
         persisted = ring;
