@@ -49,7 +49,7 @@ async function storedRows(partyId: string) {
 describe("A803 create bill:", () => {
   it("makes an empty open bill on the party numbered next after its highest number, in the party's zone, and moves the revision by one", async () => {
     const { partyId, tabId } = await seat(v, await v.table("C1"));
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const second = await split(v, partyId, tabId, [1]);
     const revision = await revisionOf(v, partyId);
 
@@ -79,7 +79,7 @@ describe("A803 create bill:", () => {
 
   it("after Bill 2 was merged away the new bill is Bill 3", async () => {
     const { partyId, tabId } = await seat(v, await v.table("C2"));
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const second = await split(v, partyId, tabId, [1]);
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, tabId, second, command));

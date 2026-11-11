@@ -123,7 +123,7 @@ describe("kitchen notes when bills and parties move", () => {
 
   it("keeps one shared note through same-party split, transfer and merge", async () => {
     const source = await seat(v, await freshTable("Shared note"));
-    await order(v, source.tabId, "Burger", "Flan", "Vino");
+    await order(v, source.tabId, "Burger", "Flan", "Red wine bottle");
     await save({ partyId: source.partyId }, "One shared heading");
     const other = await split(v, source.partyId, source.tabId, [2]);
     expect(await effective(other)).toMatchObject({
@@ -142,7 +142,7 @@ describe("kitchen notes when bills and parties move", () => {
     expect((await linesOf(v, source.tabId)).map((line) => line.name).sort()).toEqual([
       "Burger",
       "Flan",
-      "Vino",
+      "Red wine bottle",
     ]);
   });
 
@@ -239,7 +239,7 @@ describe("kitchen notes when bills and parties move", () => {
     const fromTable = await freshTable("Combined source");
     const source = await seat(v, fromTable);
     const target = await seat(v, await freshTable("Combined target"));
-    await order(v, source.tabId, "Burger", "Flan", "Vino");
+    await order(v, source.tabId, "Burger", "Flan", "Red wine bottle");
     const second = await split(v, source.partyId, source.tabId, [2]);
     const retained = await split(v, source.partyId, source.tabId, [3]);
     await pay(v, retained, "30.00");

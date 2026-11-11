@@ -398,7 +398,7 @@ describe("A803 move dishes: the moves that succeed", () => {
   });
 
   it("A803 move dishes: onto Bill 2 holding a €5 contribution, the Caña moves, Bill 2 owes more and its payment is unchanged", async () => {
-    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino")]);
+    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Red wine bottle")]);
     const paymentId = await cashContribution(v, p.bill2, "5.00");
     const before = await total(p.bill2);
     const [beerLine] = await dishIds(p.bill1, "Caña");
@@ -412,8 +412,11 @@ describe("A803 move dishes: the moves that succeed", () => {
     expect(payments.map((payment) => payment.id)).toEqual([paymentId]);
   });
 
-  it("A803 move dishes: onto Bill 2 whose Vino is paid by item, the Caña moves and the Vino stays paid", async () => {
-    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino"), dish("Agua")]);
+  it("A803 move dishes: onto Bill 2 whose Red wine bottle is paid by item, the Caña moves and the Red wine bottle stays paid", async () => {
+    const p = await party([dish("Caña"), dish("Burger")], "fire", [
+      dish("Red wine bottle"),
+      dish("Agua"),
+    ]);
     const [wineLine] = await rowsOf(p.bill2);
     await payItems(p.bill2, [wineLine!.lineNo], "30.00");
     const payments = await paymentsOf(v, p.bill2);
@@ -428,7 +431,7 @@ describe("A803 move dishes: the moves that succeed", () => {
   });
 
   it("A803 move dishes: onto Bill 2 holding a received €20 card payment, the Caña moves and the payment is unchanged", async () => {
-    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Vino")]);
+    const p = await party([dish("Caña"), dish("Burger")], "fire", [dish("Red wine bottle")]);
     await inTx(v, (tx) =>
       tx.insert(billPayments).values({
         workingOrderId: p.bill2,
@@ -456,7 +459,13 @@ describe("A803 move dishes: the moves that succeed", () => {
   });
 
   it("A803 move dishes: Bill 1 totals €52.00 with €40.00 received; moving €12.00 leaves €40.00, which is allowed", async () => {
-    const p = await party([dish("Vino"), dish("Burger"), dish("Agua"), dish("Flan"), dish("Caña")]);
+    const p = await party([
+      dish("Red wine bottle"),
+      dish("Burger"),
+      dish("Agua"),
+      dish("Flan"),
+      dish("Caña"),
+    ]);
     expect(await total(p.bill1)).toBe(5200);
     await cashContribution(v, p.bill1, "40.00");
     const [burger] = await dishIds(p.bill1, "Burger");
@@ -907,7 +916,13 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   });
 
   it("A803 move dishes refuses: €52.00 with €40.01 received; moving €12.00 is bill.received_exceeds_total by 0.01", async () => {
-    const p = await party([dish("Vino"), dish("Burger"), dish("Agua"), dish("Flan"), dish("Caña")]);
+    const p = await party([
+      dish("Red wine bottle"),
+      dish("Burger"),
+      dish("Agua"),
+      dish("Flan"),
+      dish("Caña"),
+    ]);
     await cashContribution(v, p.bill1, "40.01");
     const [burger] = await dishIds(p.bill1, "Burger");
     await refused(
@@ -940,7 +955,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   });
 
   it("A803 move dishes refuses: a card contribution still at the reader on the source is order.payment_in_flight", async () => {
-    const p = await party([dish("Caña", "2"), dish("Vino")]);
+    const p = await party([dish("Caña", "2"), dish("Red wine bottle")]);
     const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
       tx.insert(billPayments).values({
@@ -962,7 +977,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   });
 
   it("A803 move dishes refuses: a card contribution still at the reader on the destination is order.payment_in_flight naming it", async () => {
-    const p = await party([dish("Caña", "2"), dish("Vino")], "fire", [dish("Agua")]);
+    const p = await party([dish("Caña", "2"), dish("Red wine bottle")], "fire", [dish("Agua")]);
     const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
       tx.insert(billPayments).values({
@@ -984,7 +999,10 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   });
 
   it("A803 move dishes refuses: a card refund in progress on the destination is bill.refund_in_progress naming it", async () => {
-    const p = await party([dish("Caña", "2"), dish("Vino")], "fire", [dish("Agua"), dish("Vino")]);
+    const p = await party([dish("Caña", "2"), dish("Red wine bottle")], "fire", [
+      dish("Agua"),
+      dish("Red wine bottle"),
+    ]);
     const paymentId = await cashContribution(v, p.bill2, "1.00");
     const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
@@ -1007,7 +1025,7 @@ describe("A803 move dishes refuses, and changes nothing", () => {
   });
 
   it("A803 move dishes refuses: a card refund in progress on the source is bill.refund_in_progress", async () => {
-    const p = await party([dish("Caña", "2"), dish("Vino")]);
+    const p = await party([dish("Caña", "2"), dish("Red wine bottle")]);
     const paymentId = await cashContribution(v, p.bill1, "5.00");
     const [beerLine] = await dishIds(p.bill1);
     await inTx(v, (tx) =>
@@ -1240,8 +1258,8 @@ describe("A803 move dishes race: the second of two writes is refused, changing n
   });
 
   it("A803 move dishes race: a €40 contribution commits first; the move that would now break the floor is bill.received_exceeds_total", async () => {
-    const p = await party([dish("Vino"), dish("Burger"), dish("Agua")]);
-    const [wineLine] = await dishIds(p.bill1, "Vino");
+    const p = await party([dish("Red wine bottle"), dish("Burger"), dish("Agua")]);
+    const [wineLine] = await dishIds(p.bill1, "Red wine bottle");
     const ask = await readMove(p.partyId, p.bill1, p.bill2);
     await cashContribution(v, p.bill1, "40.00");
     await refused(

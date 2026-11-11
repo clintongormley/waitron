@@ -423,7 +423,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const table5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, table4);
     await orderForParty(v, partyId, ["Burger"], tabId);
-    await orderForParty(v, partyId, ["Vino"], tabId);
+    await orderForParty(v, partyId, ["Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     await holdOne(v, tabId, "Agua");
     const before = await noticesOf([tabId, checkId]);
@@ -440,7 +440,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const table5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, table4);
     await join(v, partyId, table5);
-    await orderForParty(v, partyId, ["Burger", "Vino", "Flan"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle", "Flan"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     const newTabId = await split(v, partyId, tabId, [1]);
     const command = await commandFor(v, partyId);
@@ -480,7 +480,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const table9 = await v.table("Mesa 9");
     const { partyId, tabId } = await seat(v, table4);
     await join(v, partyId, table5);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
     const before = await noticesOf([tabId, checkId]);
@@ -501,7 +501,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const table4 = await v.table("Mesa 4");
     const table7 = await v.table("Mesa 7");
     const ana = await seat(v, table4);
-    await orderForParty(v, ana.partyId, ["Burger", "Vino"], ana.tabId);
+    await orderForParty(v, ana.partyId, ["Burger", "Red wine bottle"], ana.tabId);
     const checkId = await split(v, ana.partyId, ana.tabId, [2]);
     await nextMillisecond();
     const other = await seat(v, table7);
@@ -1064,7 +1064,7 @@ async function burgerAndHeldPaella(v: PartyVenue, partyId: string, billId: strin
 }
 
 describe("A803 split: what the kitchen is told", () => {
-  const dishes = ["Burger", "Flan", "Paella", "Vino"];
+  const dishes = ["Burger", "Flan", "Paella", "Red wine bottle"];
   const loose = (billId: string, ...lineIds: string[]) => ({ billId, lineIds });
 
   /** Ana at Mesa `first` and Mesa `second`, a printing station for every dish. */

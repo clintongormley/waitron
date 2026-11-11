@@ -233,7 +233,7 @@ describe("an order sent to a named bill", () => {
   it("lands on another open bill of the party, and the table still opens on Bill 1", async () => {
     const table9 = await v.table("Table 9");
     const { partyId, tabId } = await seat(v, table9);
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const checkId = await split(v, partyId, tabId, [2]);
     const revisionBefore = await revisionOf(v, partyId);
 
@@ -242,7 +242,10 @@ describe("an order sent to a named bill", () => {
     expect(landed).toBe(checkId);
     expect(revision).toBe(revisionBefore);
     expect(await revisionOf(v, partyId)).toBe(revisionBefore);
-    expect((await linesOf(v, checkId)).map((line) => line.name)).toEqual(["Vino", "Agua"]);
+    expect((await linesOf(v, checkId)).map((line) => line.name)).toEqual([
+      "Red wine bottle",
+      "Agua",
+    ]);
     expect((await floorRow(v, table9)).party!.openingBillId).toBe(tabId);
   });
 
@@ -287,7 +290,7 @@ describe("a split bill is a bill like any other", () => {
   it("can have a line voided", async () => {
     const table10 = await v.table("Table 10");
     const { partyId, tabId } = await seat(v, table10);
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const checkId = await split(v, partyId, tabId, [2]);
 
     await inTx(v, (tx) => cancelLine(tx, v.cfg, checkId, 1));
@@ -341,7 +344,7 @@ describe("pay, then order dessert", () => {
   it("a round naming no bill lands on the next bill the test helper makes, on the same party, and leaves the earlier sale untouched", async () => {
     const table20 = await v.table("Table 20");
     const { partyId, tabId } = await seat(v, table20, 2);
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const checkId = await split(v, partyId, tabId, [2]);
     await pay(v, tabId, "12.00");
     await pay(v, checkId, "30.00");
@@ -408,7 +411,7 @@ describe("pay, then order dessert", () => {
   it("refuses a round sent to a settled tab the party has already moved on from, or to a settled check", async () => {
     const table22 = await v.table("Table 22");
     const { partyId, tabId } = await seat(v, table22);
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const checkId = await split(v, partyId, tabId, [2]);
     await pay(v, tabId, "12.00");
     await pay(v, checkId, "30.00");
@@ -515,7 +518,7 @@ describe("A803 no main bill:", () => {
     const table = await v.table("Table seated 3");
     const freeTable = await v.table("Table seated 3b");
     const { partyId, tabId } = await seat(v, table);
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const second = await split(v, partyId, tabId, [2]);
     const expectedPartyRevision = await revisionOf(v, partyId);
     const moved = await inTx(v, (tx) =>
@@ -543,19 +546,22 @@ describe("A803 no main bill:", () => {
 
     expect(error).toMatchObject({ code: "bill.other_party", params: { workingOrderId: second } });
     expect(await rows()).toEqual(before);
-    expect(before.lines.map((line) => line.name)).toEqual(["Vino"]);
+    expect(before.lines.map((line) => line.name)).toEqual(["Red wine bottle"]);
   });
 
   it("a send naming a bill of this party that is not the lowest-numbered lands on exactly that bill", async () => {
     const table = await v.table("Table seated 4");
     const { partyId, tabId } = await seat(v, table);
-    await order(v, tabId, "Burger", "Vino");
+    await order(v, tabId, "Burger", "Red wine bottle");
     const second = await split(v, partyId, tabId, [2]);
 
     const { tabId: landed } = await orderForParty(v, partyId, ["Agua"], second);
 
     expect(landed).toBe(second);
-    expect((await linesOf(v, second)).map((line) => line.name)).toEqual(["Vino", "Agua"]);
+    expect((await linesOf(v, second)).map((line) => line.name)).toEqual([
+      "Red wine bottle",
+      "Agua",
+    ]);
     expect((await linesOf(v, tabId)).map((line) => line.name)).toEqual(["Burger"]);
     expect(await numbersOf(v, partyId)).toEqual([
       [tabId, 1, null],

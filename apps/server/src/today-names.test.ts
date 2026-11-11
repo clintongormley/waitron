@@ -408,7 +408,7 @@ describe("a group renamed for today, in the copies bills store", () => {
     const { zoneId, table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     await rename(table.c3!, name);
-    await order(v, guests.tabId, "Burger", "Vino");
+    await order(v, guests.tabId, "Burger", "Red wine bottle");
     const second = await split(v, guests.partyId, guests.tabId, [2]);
     const expectedPartyRevision = await revisionOf(v, guests.partyId);
     await inTx(v, (tx) =>
@@ -434,7 +434,7 @@ describe("a group renamed for today, in the copies bills store", () => {
     const { table, guests } = await seatedGroup();
     const name = suffixed("García birthday");
     await rename(table.c4!, name);
-    await order(v, guests.tabId, "Burger", "Vino");
+    await order(v, guests.tabId, "Burger", "Red wine bottle");
 
     const second = await split(v, guests.partyId, guests.tabId, [2]);
 

@@ -2488,7 +2488,7 @@ describe("the table a slip names (spec decision 9)", () => {
     const table4 = await v.table("Table 4");
     const table5 = await v.table("Table 5");
     const { partyId, tabId } = await seat(v, table4);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     await join(v, partyId, table5);
 
@@ -2503,7 +2503,7 @@ describe("the table a slip names (spec decision 9)", () => {
     const { partyId, tabId } = await seat(v, table4);
     await join(v, partyId, table5);
     await nameParty(v, partyId, "Ana");
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
 
     const checkId = await split(v, partyId, tabId, [2]);
 
@@ -2514,7 +2514,7 @@ describe("the table a slip names (spec decision 9)", () => {
     const v = await setupPartyVenue(db);
     const table4 = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     await inTx(v, async (tx) => {
       await tx

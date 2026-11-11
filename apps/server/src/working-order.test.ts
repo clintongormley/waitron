@@ -6338,7 +6338,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
     const table4Id = await v.table("Table 4");
     const table5Id = await v.table("Table 5");
     const { partyId, tabId } = await seat(v, table4Id);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     await join(v, partyId, table5Id);
 
