@@ -6213,7 +6213,9 @@ it("publishes a scanned Bluetooth device becoming paired, but not its pairing re
 });
 
 describe("held print pulls", () => {
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   async function rig() {
     const bus = new LiveEvents();
     const gate = createHandoverGate();
