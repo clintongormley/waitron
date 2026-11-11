@@ -46,7 +46,7 @@ useVenueDb({
   },
 });
 
-/** A seated table with one fired group of Pulpo, its kitchen ticket just queued. */
+/** A seated table with one fired group of Octopus, its kitchen ticket just queued. */
 async function tableWithTicket() {
   const { id: tableId } = await inTx(venue, (tx) =>
     createTable(tx, venue.cfg, { label: `P-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
@@ -61,7 +61,9 @@ async function tableWithTicket() {
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
     allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-    groups: [{ lines: [{ menuItemId: venue.offerFor("Pulpo"), quantity: "1" }], release: "fire" }],
+    groups: [
+      { lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }], release: "fire" },
+    ],
   });
   expect(submitted.status).toBe(200);
   const [link] = await inTx(venue, (tx) =>
@@ -73,7 +75,7 @@ async function tableWithTicket() {
   return { partyId, tabId, jobId: link!.jobId };
 }
 
-/** A seated table with one fired group of Pulpo, whose kitchen ticket failed every attempt. */
+/** A seated table with one fired group of Octopus, whose kitchen ticket failed every attempt. */
 async function tableWithFailedTicket() {
   const { partyId, tabId, jobId } = await tableWithTicket();
   const [job] = await inTx(venue, (tx) =>

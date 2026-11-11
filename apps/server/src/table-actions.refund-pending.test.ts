@@ -162,7 +162,7 @@ function expectPendingFigures(read: Awaited<ReturnType<typeof charges>>) {
 
 /** A party at one table with the €40.00 bill, its card payment and its pending refund. */
 async function refundParty() {
-  const party = await seatedWith(venue, "Pulpo", "Croquetas", "Croquetas");
+  const party = await seatedWith(venue, "Octopus", "Croquettes", "Croquettes");
   const refund = await pendingRefundOn(party.tabId);
   return { ...party, refund };
 }
@@ -246,7 +246,7 @@ describe("a pending card refund and the table actions", () => {
   );
 
   it("has its table joined while another bill holds the refund: every bill stays its own, the refund's bill does not change", async () => {
-    const ana = await seatedWith(venue, "Caña", "Pulpo", "Croquetas", "Croquetas");
+    const ana = await seatedWith(venue, "Caña", "Octopus", "Croquettes", "Croquettes");
     const splitBill = await post(`/api/bills/${ana.tabId}/split`, {
       transfers: [{ lineNo: 2 }, { lineNo: 3 }, { lineNo: 4 }],
       expectedPartyRevision: revisionOf(ana.partyId),
@@ -284,7 +284,7 @@ describe("a pending card refund and the table actions", () => {
   });
 
   it("unjoins a table taking no bill: the bill charges the same and stays locked", async () => {
-    const ana = await seatedWith(venue, "Pulpo", "Croquetas", "Croquetas");
+    const ana = await seatedWith(venue, "Octopus", "Croquettes", "Croquettes");
     const second = await freeTable();
     const joined = await post(`/api/parties/${ana.partyId}/join`, {
       tableId: second,
@@ -309,7 +309,7 @@ describe("a pending card refund and the table actions", () => {
   });
 
   it("unjoins a table taking the bill: it moves to the new party whole and stays locked", async () => {
-    const ana = await seatedWith(venue, "Caña", "Pulpo", "Croquetas", "Croquetas");
+    const ana = await seatedWith(venue, "Caña", "Octopus", "Croquettes", "Croquettes");
     const second = await freeTable();
     const joined = await post(`/api/parties/${ana.partyId}/join`, {
       tableId: second,

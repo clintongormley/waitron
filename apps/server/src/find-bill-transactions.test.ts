@@ -143,10 +143,10 @@ describe("Find Transactions SQL paging", () => {
       },
       false,
     );
-    const unfiled = await parked(venue, "Pulpo");
+    const unfiled = await parked(venue, "Octopus");
     await attempt(unfiled, null, "9999", { state: "attempting" });
     await attempt(unfiled, null, "9998", { state: "failed" });
-    const voidedOrder = await placedIssuedBill(venue, "Croquetas");
+    const voidedOrder = await placedIssuedBill(venue, "Croquettes");
     await voidInvoice(venue, voidedOrder);
     const unsettledF2 = await invoice({}, false);
     const rows = (await list()).rows;

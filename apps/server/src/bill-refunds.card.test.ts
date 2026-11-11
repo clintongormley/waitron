@@ -232,11 +232,11 @@ const runLoop = (clock: TrustedClock = systemClock()) =>
 const LOST: RefundAnswer = { kind: "uncertain", reason: "timeout" };
 
 /**
- * A €40.00 bill (Pulpo €20.00, Croquetas €10.00, Croquetas €10.00) with a €20.00 card payment, and
+ * A €40.00 bill (Octopus €20.00, Croquettes €10.00, Croquettes €10.00) with a €20.00 card payment, and
  * a €5.00 refund of it whose send reached nobody and was answered by a timeout: pending, sent once.
  */
 async function pendingRefund(first: RefundScript = { made: false, answer: LOST }) {
-  const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+  const billId = await bill("Octopus", "Croquettes", "Croquettes");
   const card = await pay(billId, "card", "20.00");
   venue.card.scriptNextRefund(first);
   const asked = await refund(billId, card.id, { applied: "5.00" });
@@ -421,7 +421,7 @@ describe("the evidence table (design §6b)", () => {
 
 describe("a card refund, sent once (design §6b R1–R3)", () => {
   it("records a refund the provider completed, with its reference, on both records", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
 
     const { answer } = await refund(billId, card.id, { applied: "5.00" });
@@ -453,7 +453,7 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
   });
 
   it("asks for the payment's whole remainder, its tip included, when the payer wants it all back", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const answer = await send(
       venue.app,
       venue.cookie,
@@ -483,7 +483,7 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
   });
 
   it("refuses a card taken on a terminal Waitron does not drive, writing nothing", async () => {
-    const billId = await bill("Pulpo");
+    const billId = await bill("Octopus");
     const answer = await send(
       venue.app,
       venue.cookie,
@@ -511,7 +511,7 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
   });
 
   it("refuses a refund the provider's own record no longer allows, before asking it", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     venue.db.run(sql`update payments set state = 'voided' where bill_payment_id = ${card.id}`);
     const calls = venue.card.refundCalls.length;
@@ -576,7 +576,7 @@ describe("design §8 test 18: a new id while a refund is pending", () => {
   });
 
   it("refuses a refund of another payment of the same bill too", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const cash = await pay(billId, "cash", "5.00");
     const card = await pay(billId, "card", "20.00");
     venue.card.scriptNextRefund({ made: false, answer: LOST });
@@ -593,7 +593,7 @@ describe("design §8 test 18: a new id while a refund is pending", () => {
   });
 
   it("leaves another bill of the same party alone", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas", "Caña");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes", "Caña");
     const split = await send(
       venue.app,
       venue.cookie,
@@ -720,7 +720,7 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
   ] as const)(
     "temporary balance explanation: %s, documented %s",
     async (entry, documented, notice) => {
-      const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+      const billId = await bill("Octopus", "Croquettes", "Croquettes");
       const card = await pay(billId, "card", "20.00");
       const submissionId = randomUUID();
       if (entry === "never sent")
@@ -871,7 +871,7 @@ describe("design §8 test 20: the call's own answer, and which answers settle wh
 
 describe("the provider refunds another refund of the payment already accounts for", () => {
   it("keeps a failed refund's provider reference, so the payment's next refund is not settled by that failure", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     // SumUp's own lookup over a transaction whose one refund event is the first refund's failure,
     // stamped when first read, so after that refund's send.
@@ -937,7 +937,7 @@ describe("the provider refunds another refund of the payment already accounts fo
   });
 
   it("excludes the references of the payment's completed and failed refunds, not its own or another payment's", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const other = await pay(billId, "card", "10.00");
     venue.card.scriptNextRefund({ made: "completed", answer: "made" });
@@ -1021,7 +1021,7 @@ describe("the provider's refunds read before the first send", () => {
   });
 
   it("keeps the reading, and settles a later lookup by it: an earlier refund is never this one, a skewed stamp still is", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const events = [refunded("made-a-minute-before", 60_000)];
     const sumup = sumupOver(events);
@@ -1088,7 +1088,7 @@ describe("the provider's refunds read before the first send", () => {
   });
 
   it("sends with no reading when the provider cannot say which refunds exist, and leaves an earlier-stamped one unsettled", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const sumup = sumupOver([refunded("made-a-minute-before", 60_000)]);
     sumup.reads.mockRejectedValueOnce(new Error("sumup unreachable"));
@@ -1111,7 +1111,7 @@ describe("the provider's refunds read before the first send", () => {
 
 describe("design §8 test 21: never sent, sent but not found, and the key window", () => {
   it("fails a refund a crash left with no sent_at, asking the provider nothing", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
@@ -1146,7 +1146,7 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
   });
 
   it("fails a refund that never left without asking for its provider", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
@@ -1226,7 +1226,7 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
 
   /** {@link pendingRefund}, its first send made on a clock `aheadMs` ahead, as before a backward step. */
   async function refundSentAhead(aheadMs: number) {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     const asked = await refund(billId, card.id, {
@@ -1289,7 +1289,7 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
   );
 
   it("sends a refund a crash left unsent when its own request is retried", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const submissionId = randomUUID();
     const [stranded] = await inTx(venue, (tx) =>
@@ -1321,7 +1321,7 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
 
 describe("one resolver at a time", () => {
   it("answers a retry, the manager and the loop 'in progress' while the send is still running", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const release = venue.card.holdNextRefund();
     const submissionId = randomUUID();
@@ -1367,7 +1367,7 @@ describe("one resolver at a time", () => {
   });
 
   it("records nothing, and raises an alert, when a refund made at the provider finds its row already failed", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const release = venue.card.holdNextRefund();
     const asked = refund(billId, card.id, { applied: "5.00" });
@@ -1567,7 +1567,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
   });
 
   it("refuses to record completed for a refund that never left Waitron, and records its failure", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
@@ -1613,7 +1613,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
   });
 
   it("raises the alert for a refund pending over an hour, and not for one under it", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00", venue.cookie2);
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     await refund(billId, card.id, { applied: "5.00", cookie: venue.cookie2 });
@@ -1734,7 +1734,7 @@ describe("how often the loop looks a pending refund up", () => {
 
 describe("the single-payment routes on a bill whose only card payment was refunded in full (design §7)", () => {
   it("refuses a cash sale of the whole bill, and the bill's own invoice links the refunded card", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const back = await refund(billId, card.id, { applied: "20.00" });
     expect(back.answer.json).toMatchObject({ refund: { state: "completed" } });
@@ -1763,7 +1763,7 @@ describe("the single-payment routes on a bill whose only card payment was refund
   });
 
   it("refuses placing the bill, which would leave it for a collect that is refused too", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     await refund(billId, card.id, { applied: "20.00" });
 
@@ -1843,7 +1843,7 @@ describe("a refund the provider here cannot answer for", () => {
   });
 
   it("does nothing to a cash refund, which has no provider to ask", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const { id: paymentId } = await pay(billId, "cash", "20.00");
     expect((await refund(billId, paymentId, { applied: "5.00" })).answer.status).toBe(200);
     const { id: refundId } = await onlyRefundOf(paymentId);
@@ -1903,7 +1903,7 @@ describe("a refund the provider here cannot answer for", () => {
   });
 
   it("leaves a refund that never left pending when a retry finds no way to send it", async () => {
-    const billId = await bill("Pulpo", "Croquetas", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const [stranded] = await inTx(venue, (tx) =>
       tx
@@ -1949,7 +1949,7 @@ describe("a refund the provider here cannot answer for", () => {
 
 describe("a paid bill", () => {
   it("refuses a new refund of its card payment (working_order.not_open), writing no refund row", async () => {
-    const billId = await bill("Pulpo");
+    const billId = await bill("Octopus");
     const card = await pay(billId, "card", "20.00");
     expect(card.answer.status).toBe(200);
 
@@ -1966,7 +1966,7 @@ describe("a paid bill", () => {
 
 describe("design §8 test 23: the invoice waits for the refund", () => {
   it("refuses the reduction that would issue it while the refund is pending, then issues one invoice once it completes", async () => {
-    const billId = await bill("Red wine bottle", "Pulpo", "Croquetas");
+    const billId = await bill("Red wine bottle", "Octopus", "Croquettes");
     const card = await pay(billId, "card", "30.00");
     await pay(billId, "cash", "20.00");
     venue.card.scriptNextRefund({ made: "completed", answer: LOST });
@@ -2029,7 +2029,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
   });
 
   it("does not issue the invoice of a bill a pending refund would leave short, whoever asks", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     await refund(billId, card.id, { applied: "10.00" });
@@ -2063,7 +2063,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
 
 describe("manual confirmation on a connected card", () => {
   it("still asks the connected reader's provider when manual confirmation is supplied", async () => {
-    const billId = await bill("Pulpo", "Croquetas");
+    const billId = await bill("Octopus", "Croquettes");
     const card = await pay(billId, "card", "20.00");
     const submissionId = randomUUID();
 

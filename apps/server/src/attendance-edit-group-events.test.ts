@@ -153,7 +153,7 @@ async function command(
       menuItemId: v.offerFor(row.lineNo === 1 ? "House salad" : "Tarta"),
       quantity: "1",
     }));
-  if (action === "add-group") lines.push({ menuItemId: v.offerFor("Pulpo"), quantity: "1" });
+  if (action === "add-group") lines.push({ menuItemId: v.offerFor("Octopus"), quantity: "1" });
   return updateHeldOrder(
     { admission: testTradingAdmission(), db: suite.db },
     v.cfg,

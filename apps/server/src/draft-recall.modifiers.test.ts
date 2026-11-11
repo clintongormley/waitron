@@ -317,7 +317,7 @@ describe("recalled modifier edits", () => {
                 },
               ],
             })),
-            ...(fresh ? [{ menuItemId: venue.offerFor("Croquetas"), quantity: "1" }] : []),
+            ...(fresh ? [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }] : []),
           ],
         });
         expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -763,7 +763,7 @@ describe("mixed New order persistence through authenticated requests", () => {
         lines: [
           { menuItemId: venue.offerFor("Caña"), quantity: "2", ...places[0] },
           {
-            menuItemId: venue.offerFor("Pulpo"),
+            menuItemId: venue.offerFor("Octopus"),
             quantity: "0.375",
             note: "Fresh measured dish",
             ...places[1],

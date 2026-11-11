@@ -1744,7 +1744,7 @@ describe("A773 requested lifecycle", () => {
 describe("a merged party", () => {
   it("invoices and records an owing bill brought by each party, and frees every table", async () => {
     const ana = await seatedWith(venue, "Red wine bottle");
-    const luis = await seatedWith(venue, "Pulpo");
+    const luis = await seatedWith(venue, "Octopus");
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
       expectedEdits: await inTx(venue, (tx) =>
@@ -1772,7 +1772,7 @@ describe("a merged party", () => {
 
   it("A803 departure order: invoices the bill opened first first, when its bill number is the higher one", async () => {
     const ana = await seatedWith(venue, "Red wine bottle");
-    const luis = await seatedWith(venue, "Pulpo");
+    const luis = await seatedWith(venue, "Octopus");
     const joined = await send(
       venue.app,
       venue.cookie,

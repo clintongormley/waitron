@@ -135,7 +135,7 @@ const edits = {
   "basket omission": (p: Fixture) =>
     call("PUT", `/api/working-orders/${p.tabId}`, {
       revision: p.revision,
-      lines: [{ menuItemId: venue.offerFor("Croquetas"), quantity: "1" }],
+      lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }],
     }),
   "course edit": (p: Fixture) =>
     call("PATCH", `/api/working-orders/${p.tabId}/lines/${p.line.lineNo}/course`, {
@@ -288,7 +288,7 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
           groups: [
             {
               release: "hold",
-              lines: [{ menuItemId: venue.offerFor("Croquetas"), quantity: "1" }],
+              lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1" }],
             },
           ],
         })

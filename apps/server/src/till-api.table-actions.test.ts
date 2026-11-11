@@ -83,9 +83,9 @@ async function floorGuests(tableId: string): Promise<number | null> {
   return tables.find((t) => t.id === tableId)!.party!.guestCount;
 }
 
-/** Ana at two tables, the bill made at her seating (Tarta) and a split bill (Pulpo). */
+/** Ana at two tables, the bill made at her seating (Tarta) and a split bill (Octopus). */
 async function anaAtTwo() {
-  const ana = await seatedWith(venue, "Tarta", "Pulpo");
+  const ana = await seatedWith(venue, "Tarta", "Octopus");
   const second = await freeTable();
   const joined = await post(`/api/parties/${ana.partyId}/join`, {
     tableId: second,
@@ -121,7 +121,7 @@ describe("the table action routes", () => {
   it("move guests to another party's table keeps every bill, for each of two moves sending the same request", async () => {
     const ana = await seatedWith(venue, "Tarta");
     const luis = await seatedWith(venue, "Caña");
-    const bea = await seatedWith(venue, "Pulpo");
+    const bea = await seatedWith(venue, "Octopus");
     const cris = await seatedWith(venue, "Caña");
 
     const merged = await post(`/api/parties/${ana.partyId}/move`, {
@@ -834,7 +834,7 @@ describe("A803 action results:", () => {
   it("no answer carries mainBillId", async () => {
     const { ana, second, billId } = await anaAtTwo();
     const luis = await seatedWith(venue, "Caña");
-    const bea = await seatedWith(venue, "Pulpo");
+    const bea = await seatedWith(venue, "Octopus");
 
     const answers = [
       await post(`/api/parties/${ana.partyId}/split-table`, {
@@ -1050,9 +1050,9 @@ describe("Join tables' guest counts", () => {
 });
 
 describe("A803 split: the route", () => {
-  /** Ana at two tables: her first bill holds the dishes named, and a second bill holds a Pulpo. */
+  /** Ana at two tables: her first bill holds the dishes named, and a second bill holds a Octopus. */
   async function anaWith(...names: string[]) {
-    const ana = await seatedWith(venue, ...names, "Pulpo");
+    const ana = await seatedWith(venue, ...names, "Octopus");
     const second = await freeTable();
     const joined = await post(`/api/parties/${ana.partyId}/join`, {
       tableId: second,
@@ -1665,10 +1665,10 @@ describe("A803 split: the panel's read", () => {
     const { familyParty, luis } = await luisWithAnaFamilyBill(
       "Tarta",
       "Caña",
-      "Pulpo",
+      "Octopus",
       "Caña",
       "Caña",
-      "Pulpo",
+      "Octopus",
       "Caña",
     );
     const partPaid = luis.tabId;
@@ -1765,7 +1765,7 @@ describe("A803 split: the panel's read", () => {
 
   it("lists a bill moved onto the table by its number, below a bill opened after it", async () => {
     const ana = await seatedWith(venue, "Caña");
-    const luis = await seatedWith(venue, "Pulpo");
+    const luis = await seatedWith(venue, "Octopus");
     const moved = await post(`/api/bills/${ana.tabId}/move`, {
       partyId: ana.partyId,
       expectedPartyRevision: revisionOf(ana.partyId),
@@ -1878,7 +1878,7 @@ describe("A803 split: the panel's read", () => {
 
   describe("the revision it answers with its rows", () => {
     async function twoBillsOnTwoTables() {
-      const ana = await seatedWith(venue, "Tarta", "Pulpo");
+      const ana = await seatedWith(venue, "Tarta", "Octopus");
       const second = await freeTable();
       const joined = await post(`/api/parties/${ana.partyId}/join`, {
         tableId: second,

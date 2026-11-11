@@ -71,8 +71,8 @@ const MENU: { name: string; customer: string; kitchen: string; price: string }[]
   { name: "House salad", customer: "Ensalada de la casa", kitchen: "ENSAL", price: "12.00" },
   { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
   { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
-  { name: "Croquetas", customer: "Croquetas de jamón", kitchen: "CROQ", price: "10.00" },
-  { name: "Pulpo", customer: "Pulpo a la gallega", kitchen: "PULPO", price: "20.00" },
+  { name: "Croquettes", customer: "Croquetas de jamón", kitchen: "CROQ", price: "10.00" },
+  { name: "Octopus", customer: "Pulpo a la gallega", kitchen: "PULPO", price: "20.00" },
 ];
 
 export interface BillVenue {

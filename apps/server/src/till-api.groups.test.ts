@@ -131,13 +131,13 @@ interface SubmitAnswer {
   groups: { id: string; state: string; lineIds: string[] }[];
 }
 
-/** A seated party holding a fired Caña group and held Tarta and Croquetas groups, in that order. */
+/** A seated party holding a fired Caña group and held Tarta and Croquettes groups, in that order. */
 async function withGroups() {
   const party = await seated();
   const submitted = await submit(party.partyId, [
     { lines: [dish("Caña")], release: "fire" },
     { lines: [dish("Tarta")], release: "hold" },
-    { lines: [dish("Croquetas")], release: "hold" },
+    { lines: [dish("Croquettes")], release: "hold" },
   ]);
   expect(submitted.status).toBe(200);
   const [fired, cake, croquettes] = (submitted.json as unknown as SubmitAnswer).groups;
@@ -207,7 +207,7 @@ describe("POST /api/parties/:id/groups", () => {
       operatorId: venue.adminId,
       groups: [
         { lines: [dish("Caña", "2")], release: "fire" },
-        { lines: [dish("Tarta"), dish("Croquetas")], release: "hold" },
+        { lines: [dish("Tarta"), dish("Croquettes")], release: "hold" },
       ],
     });
 
@@ -240,7 +240,7 @@ describe("POST /api/parties/:id/groups", () => {
           remindAt: null,
           lineIds: [lines[2]!.id, lines[3]!.id],
           courseIds: [],
-          summary: "1 × Tarta, 1 × Croquetas",
+          summary: "1 × Tarta, 1 × Croquettes",
         },
       ],
     });
@@ -257,7 +257,7 @@ describe("POST /api/parties/:id/groups", () => {
     const body = {
       submissionId: randomUUID(),
       expectedPartyRevision: party.revision,
-      groups: [{ lines: [dish("Pulpo")], release: "hold" }],
+      groups: [{ lines: [dish("Octopus")], release: "hold" }],
     };
     const first = await call("POST", `/api/parties/${party.partyId}/groups`, body);
     const before = await snapshot(party);
@@ -276,14 +276,14 @@ describe("POST /api/parties/:id/groups", () => {
     await call("POST", `/api/parties/${party.partyId}/groups`, {
       submissionId,
       expectedPartyRevision: party.revision,
-      groups: [{ lines: [dish("Pulpo")], release: "hold" }],
+      groups: [{ lines: [dish("Octopus")], release: "hold" }],
     });
     const before = await snapshot(party);
 
     const reused = await call("POST", `/api/parties/${party.partyId}/groups`, {
       submissionId,
       expectedPartyRevision: party.revision + 1,
-      groups: [{ lines: [dish("Pulpo", "2")], release: "hold" }],
+      groups: [{ lines: [dish("Octopus", "2")], release: "hold" }],
     });
 
     expect(reused.status).toBe(409);
@@ -293,7 +293,7 @@ describe("POST /api/parties/:id/groups", () => {
 
   it("puts the lines on the bill of the party billId names, and refuses the same id naming another bill 409 submission.id_reused", async () => {
     const party = await seated();
-    await submit(party.partyId, [{ lines: [dish("Caña"), dish("Pulpo")], release: "fire" }]);
+    await submit(party.partyId, [{ lines: [dish("Caña"), dish("Octopus")], release: "fire" }]);
     const command = {
       expectedPartyRevision: await revisionOf(party.partyId),
       operatorId: venue.operatorId,
@@ -312,7 +312,7 @@ describe("POST /api/parties/:id/groups", () => {
     const named = await call("POST", `/api/parties/${party.partyId}/groups`, body);
     expect(named.status).toBe(200);
     expect((named.json as unknown as SubmitAnswer).tabId).toBe(checkId);
-    expect((await dishLines(checkId)).map((line) => line.name)).toEqual(["Pulpo", "Tarta"]);
+    expect((await dishLines(checkId)).map((line) => line.name)).toEqual(["Octopus", "Tarta"]);
     const before = await snapshot(party);
 
     const reused = await call("POST", `/api/parties/${party.partyId}/groups`, {
@@ -323,7 +323,7 @@ describe("POST /api/parties/:id/groups", () => {
     expect(reused.status).toBe(409);
     expect(reused.json).toEqual(refusal("submission.id_reused", { submissionId }));
     expect(await snapshot(party)).toEqual(before);
-    expect((await dishLines(checkId)).map((line) => line.name)).toEqual(["Pulpo", "Tarta"]);
+    expect((await dishLines(checkId)).map((line) => line.name)).toEqual(["Octopus", "Tarta"]);
   });
 
   it.each([null, "bill-1", 7])(
@@ -344,7 +344,7 @@ describe("POST /api/parties/:id/groups", () => {
 
   it("refuses 409 party.out_of_date for a revision another command has moved past, writing nothing", async () => {
     const party = await seated();
-    await submit(party.partyId, [{ lines: [dish("Pulpo")], release: "hold" }]);
+    await submit(party.partyId, [{ lines: [dish("Octopus")], release: "hold" }]);
     const before = await snapshot(party);
 
     const stale = await call("POST", `/api/parties/${party.partyId}/groups`, {
@@ -363,15 +363,15 @@ describe("POST /api/parties/:id/groups", () => {
   it("joins a held group named by joinGroupId, and refuses a fired one 409 group.not_held and an unknown one 404 group.not_found", async () => {
     const party = await withGroups();
 
-    const joined = await submit(party.partyId, [{ lines: [dish("Pulpo")], release: "hold" }], {
+    const joined = await submit(party.partyId, [{ lines: [dish("Octopus")], release: "hold" }], {
       joinGroupId: party.cake.id,
     });
     const before = await snapshot(party);
-    const toFired = await submit(party.partyId, [{ lines: [dish("Pulpo")], release: "hold" }], {
+    const toFired = await submit(party.partyId, [{ lines: [dish("Octopus")], release: "hold" }], {
       joinGroupId: party.fired.id,
     });
     const missing = randomUUID();
-    const toMissing = await submit(party.partyId, [{ lines: [dish("Pulpo")], release: "hold" }], {
+    const toMissing = await submit(party.partyId, [{ lines: [dish("Octopus")], release: "hold" }], {
       joinGroupId: missing,
     });
 
@@ -391,7 +391,7 @@ describe("POST /api/parties/:id/groups", () => {
       const refused = await call("POST", `/api/parties/${partyId}/groups`, {
         submissionId: randomUUID(),
         expectedPartyRevision: 0,
-        groups: [{ lines: [dish("Pulpo")], release: "hold" }],
+        groups: [{ lines: [dish("Octopus")], release: "hold" }],
       });
 
       expect(refused.status).toBe(409);
@@ -863,7 +863,7 @@ describe("GET /api/parties/:id/groups", () => {
           remindAt: null,
           lineIds: [lines[2]!.id],
           courseIds: [],
-          summary: "1 × Croquetas",
+          summary: "1 × Croquettes",
         },
       ],
       printProblems: [],
@@ -1075,7 +1075,7 @@ describe("the line-editing routes act as the session's operator", () => {
     }));
 
     const saved = await call("PUT", `/api/working-orders/${party.tabId}`, {
-      lines: [...kept, dish("Pulpo")],
+      lines: [...kept, dish("Octopus")],
       revision: tab.revision,
       operatorId: venue.adminId,
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
@@ -1083,7 +1083,7 @@ describe("the line-editing routes act as the session's operator", () => {
 
     expect(saved.status).toBe(200);
     expect((await dishLines(party.tabId)).at(-1)).toMatchObject({
-      name: "Pulpo",
+      name: "Octopus",
       creditedTo: venue.operatorId,
     });
   });
@@ -1312,7 +1312,7 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
   it("refuses 409 group.line_held for a held line outside any group that needs no kitchen", async () => {
     const party = await seated();
     const [octopusProduct] = await inTx(venue, (tx) =>
-      tx.select({ id: products.id }).from(products).where(eq(products.name, "Pulpo")),
+      tx.select({ id: products.id }).from(products).where(eq(products.name, "Octopus")),
     );
     const octopusRoutingCell = {
       row: { kind: "product" as const, productId: octopusProduct!.id },
@@ -1321,7 +1321,7 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
     await inTx(venue, (tx) => setRoutingCell(tx, octopusRoutingCell, { kind: "no_preparation" }));
     try {
       await inTx(venue, (tx) =>
-        addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Pulpo"), hold: true }]),
+        addTabRound(tx, venue.cfg, party.tabId, [{ ...dish("Octopus"), hold: true }]),
       );
     } finally {
       await inTx(venue, (tx) => clearRoutingCell(tx, octopusRoutingCell));
@@ -1472,7 +1472,7 @@ describe("the group routes without a session", () => {
       await send(venue.app, "", "GET", base),
       await send(venue.app, "", "POST", base, {
         ...body,
-        groups: [{ lines: [dish("Pulpo")], release: "hold" }],
+        groups: [{ lines: [dish("Octopus")], release: "hold" }],
       }),
       await send(venue.app, "", "POST", `${base}/${party.cake.id}/fire`, body),
       await send(venue.app, "", "PUT", `${base}/order`, {
@@ -2410,7 +2410,7 @@ describe("per-group HTTP destinations direct", () => {
       expectedPartyRevision: party.revision,
       groups: [
         { release: "hold", lines: [dish("Tarta")] },
-        { release: "hold", lines: [dish("Croquetas")] },
+        { release: "hold", lines: [dish("Croquettes")] },
       ],
     });
     expect(initial.status).toBe(200);
@@ -2423,8 +2423,8 @@ describe("per-group HTTP destinations direct", () => {
 
     const groups = [
       { release: "fire", lines: [dish("Caña")] },
-      { release: "hold", joinGroupId: first.toUpperCase(), lines: [dish("Pulpo")] },
-      { release: "hold", joinGroupId: second, lines: [dish("Croquetas")] },
+      { release: "hold", joinGroupId: first.toUpperCase(), lines: [dish("Octopus")] },
+      { release: "hold", joinGroupId: second, lines: [dish("Croquettes")] },
       { release: "hold", afterGroupId: first.toUpperCase(), lines: [dish("Tarta")] },
     ];
     const body = {

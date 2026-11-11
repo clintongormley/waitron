@@ -120,7 +120,7 @@ async function agentUnpairingTheKitchenPrinter(): Promise<{ token: string; comma
   return { token, commandId: command.id };
 }
 
-/** A seated table with one fired group of Pulpo, whose kitchen ticket waits for the printer. */
+/** A seated table with one fired group of Octopus, whose kitchen ticket waits for the printer. */
 async function tableWithWaitingTicket() {
   const { id: tableId } = await inTx(venue, (tx) =>
     createTable(tx, venue.cfg, { label: `P-${randomUUID().slice(0, 8)}`, zoneId: venue.zoneId }),
@@ -135,7 +135,9 @@ async function tableWithWaitingTicket() {
     allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
-    groups: [{ lines: [{ menuItemId: venue.offerFor("Pulpo"), quantity: "1" }], release: "fire" }],
+    groups: [
+      { lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }], release: "fire" },
+    ],
   });
   expect(submitted.status).toBe(200);
   const [link] = await inTx(venue, (tx) =>

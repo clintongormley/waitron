@@ -786,14 +786,14 @@ describe("A803 race replay: Split a table against another command, from one read
 
   for (const order of orders) {
     it(`A803 race replay: two splits of one party from one read: one commits, the other is refused, and one new party exists (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Tarta", "Caña", "Pulpo");
+      const ana = await seatedWith(venue, "Tarta", "Caña", "Octopus");
       const tables = {
         left: await joinFree(ana.partyId),
         right: await joinFree(ana.partyId),
       };
       const dishes = {
         left: lineNamed(ana.tabId, "Caña").id,
-        right: lineNamed(ana.tabId, "Pulpo").id,
+        right: lineNamed(ana.tabId, "Octopus").id,
       };
       const commands = {
         left: await splitOf(ana.partyId, tables.left, {
@@ -814,10 +814,10 @@ describe("A803 race replay: Split a table against another command, from one read
       expect(holderOf(tables[order[0]])).toBe(won.partyId);
       expect(holderOf(tables[order[1]])).toBe(ana.partyId);
       expect(namesOn(ana.tabId)).toEqual(
-        order[0] === "left" ? ["Tarta", "Pulpo"] : ["Tarta", "Caña"],
+        order[0] === "left" ? ["Tarta", "Octopus"] : ["Tarta", "Caña"],
       );
       expect(billsOf(won.partyId).flatMap(namesOn)).toEqual([
-        order[0] === "left" ? "Caña" : "Pulpo",
+        order[0] === "left" ? "Caña" : "Octopus",
       ]);
     });
   }
@@ -897,7 +897,7 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "takeOver"],
   ] as const) {
     it(`A803 race replay: a take-over and a split of that bill: one commits and no dish is lost (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Pulpo");
+      const ana = await seatedWith(venue, "Octopus");
       const table = await joinFree(ana.partyId);
       const saved = await inTx(venue, async (tx) =>
         saveDraft(tx, venue.cfg, ana.partyId, venue.adminId, {
@@ -934,7 +934,7 @@ describe("A803 race replay: Split a table against another command, from one read
         .from(orderDraftLines)
         .where(eq(orderDraftLines.draftId, draftId));
       expect(draftLines).toHaveLength(1);
-      expect(namesOn(ana.tabId)).toEqual(["Pulpo"]);
+      expect(namesOn(ana.tabId)).toEqual(["Octopus"]);
       const after = await inTx(venue, (tx) => readBillEditState(tx, ana.tabId));
       expect(after.draftId).toBe(draftId);
       if (order[0] === "takeOver") {
@@ -998,7 +998,7 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "fire"],
   ] as const) {
     it(`A803 race replay: a split and Fire of a held group holding a loose pick: each table ends right (${order[0]} asked first)`, async () => {
-      const ana = await seatedWith(venue, "Pulpo");
+      const ana = await seatedWith(venue, "Octopus");
       const table = await joinFree(ana.partyId);
       await inTx(venue, (tx) =>
         submitGroups(tx, venue.cfg, ana.partyId, {

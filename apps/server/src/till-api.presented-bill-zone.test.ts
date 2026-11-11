@@ -249,8 +249,8 @@ describe("a presented bill moving with its party", () => {
   });
 
   it("files the same lines, total and VAT after the move as an unmoved presented bill", async () => {
-    const { ana, presented } = await presentedSplit("Tarta", "Pulpo");
-    const control = await presentedSplit("Tarta", "Pulpo");
+    const { ana, presented } = await presentedSplit("Tarta", "Octopus");
+    const control = await presentedSplit("Tarta", "Octopus");
     const priced = () =>
       inTx(venue, async (tx) =>
         issuancePass(tx, presented, await priceStoredOrderForIssuance(tx, presented)),
