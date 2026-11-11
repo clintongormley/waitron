@@ -682,7 +682,7 @@ export function seedDeviceProfiles(db: Database | Transaction, values: DevicePro
 profile through `seedDeviceProfiles`. `packages/db/src/testing/` is under coverage and mutation,
 so the helper has its own test.
 
-- [ ] **Step 1–4:** one and many rows, full rows returned, default staff, role round-trip.
+- [x] **Step 1–4:** one and many rows, full rows returned, default staff, role round-trip.
   **Step 5: Commit.**
 
 ### Task 5.2–5.4: People codemod (three tasks)
