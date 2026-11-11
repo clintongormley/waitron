@@ -5636,6 +5636,8 @@ interface EditableLine {
     /** Thousandths. */
     firedQuantity: number;
   } | null;
+  /** Thousandths. */
+  servedQuantity: number;
 }
 
 /** A stored dish line, its extras children and the offer it was sold through. */
@@ -5846,6 +5848,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
       madeHere: ticketItems.madeHere,
       sentOrderNumber: ticketItems.sentOrderNumber,
       firedQuantity,
+      servedQuantity: workingOrderLines.servedQuantity,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
@@ -5888,6 +5891,7 @@ async function readEditableOrder(tx: Transaction, orderId: string): Promise<Edit
             sentOrderNumber: row.sentOrderNumber,
             firedQuantity: row.firedQuantity,
           },
+    servedQuantity: row.servedQuantity,
   }));
   const menuItemByLine = new Map(
     (await VENUE_SERVICE.listLineContexts(tx, orderId)).map((line) => [
@@ -5956,12 +5960,17 @@ async function assertProductsSellable(
  *   removal ({@link planHeldCorrections}).
  * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
- *   a new line; a drop voids the difference, with a notice and slip. Removing it voids it the same
- *   way.
- * - A started line's quantity rise is taken as a not-started one's is; its change, drop or removal
- *   is refused `ticket.already_started`. Then a changed or raised line whose records' stations do
- *   not allow changes after sending is refused `ticket.already_fired`. A removal or a drop is a
- *   void, which the stations' choice does not gate.
+ *   a new line; a drop voids the difference, with a notice and slip, the served quantity clamped to
+ *   what is left.
+ * - A change of a line some of which is served is refused `ticket.already_served`. A started line's
+ *   quantity rise is taken as a not-started one's is; its change or drop is refused
+ *   `ticket.already_started`. Then a changed or raised line whose records' stations do not allow
+ *   changes after sending is refused `ticket.already_fired`; a drop is a void, which the stations'
+ *   choice does not gate.
+ * - Whatever the stations allow, a removal is refused `ticket.already_served` where any of the line
+ *   is served, `ticket.already_started` where it is started, `ticket.already_fired` where the
+ *   kitchen holds fired work, and `ticket.already_sent` where it was sent and holds no kitchen
+ *   record at all. With `refuseSentDrop`, a drop is refused the same way.
  *
  * New lines are numbered after the order's highest line number, and reach the kitchen as
  * {@link EditableOrder.newWork} says: where work was sent, as a round's line would, a course the
@@ -5986,6 +5995,8 @@ async function applyLineEdits(
     edits: { parent: EditableParent; intent: LineIntent }[];
     removed: EditableParent[];
     fresh: RequestedLine[];
+    /** Refuse a lower count where a removal would be refused, rather than take it. */
+    refuseSentDrop?: true;
   },
   operatorId: string | undefined,
   attendance?: OrderAttendance,
@@ -5998,6 +6009,20 @@ async function applyLineEdits(
     tx,
     order.lines.flatMap((line) => (line.ticket === null ? [] : [line.ticket.stationId])),
   );
+  const refuseServed = (line: EditableParent): void => {
+    const served = [line, ...line.children].find((part) => part.servedQuantity > 0);
+    if (served !== undefined) {
+      throw new AppError("ticket.already_served", { workingOrderId: orderId, lineId: served.id });
+    }
+  };
+  const refuseSent = (line: EditableParent, fired: boolean): void => {
+    if (fired) throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+    const parts = [line, ...line.children];
+    const sent = parts.find((part) => part.sentAt !== null);
+    if (sent !== undefined && parts.every((part) => part.ticket === null)) {
+      throw new AppError("ticket.already_sent", { workingOrderId: orderId, lineId: sent.id });
+    }
+  };
   /**
    * Refuses what the kitchen state forbids, the stations' choice only for a change; answers
    * whether the kitchen holds fired work. A bare raise leaves the started work alone, so it is not
@@ -6174,7 +6199,10 @@ async function applyLineEdits(
     if (!changed && rise === 0) continue;
     // Changed in place or replaced, a paid line would no longer be what was paid for.
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
+    const refusedDrop = rise < 0 && plan.refuseSentDrop === true;
+    if (changed || refusedDrop) refuseServed(parent);
     const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
+    if (refusedDrop) refuseSent(parent, fired);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
     const addedApart = action === "free" && rise > 0 && parent.adjusted;
@@ -6284,17 +6312,9 @@ async function applyLineEdits(
   }
 
   await refusePaidLines(tx, orderId, plan.removed.flatMap(paidLineParts), paid);
-  const voided: CorrectionItem[] = [];
   for (const parent of plan.removed) {
-    kitchenHas(parent, false);
-    for (const part of [parent, ...parent.children])
-      if (part.ticket !== null && part.ticket.firedAt !== null)
-        voided.push({
-          workingOrderLineId: part.id,
-          stationId: part.ticket.stationId,
-          quantity: part.ticket.firedQuantity,
-          wasStarted: false,
-        });
+    refuseServed(parent);
+    refuseSent(parent, kitchenHas(parent, false));
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.
@@ -6402,7 +6422,6 @@ async function applyLineEdits(
     cfg,
     orderId,
     [
-      ...voided,
       ...removedExtras,
       ...dropped.flatMap(({ parent, kept, removed }) => [
         ...(parent.ticket?.firedAt == null ? [] : [correctionFor(parent, removed)]),
@@ -6986,9 +7005,10 @@ export async function setWorkingOrderLabel(
  * Save an edited copy of an OPEN order, from any node of the venue, by the rules
  * {@link applyLineEdits} states. A line of the basket naming a stored line by id, through the same
  * offer and variant, edits it; a line naming a different offer or variant replaces it with a new
- * item priced now; a line naming none is new; a stored line the basket leaves out is removed. An
- * absent label clears it: the whole request is the new state. A save given `issue` may issue the
- * bill's invoice, so it must name who saves.
+ * item priced now; a line naming none is new; a stored line the basket leaves out is removed. A
+ * dish that is served, started or fired, or was sent with no kitchen record, is refused rather than
+ * replaced, left out or lowered. An absent label clears it: the whole request is the new state. A
+ * save given `issue` may issue the bill's invoice, so it must name who saves.
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps & { admission: TradingAdmission },
@@ -7068,7 +7088,12 @@ export async function updateHeldOrder(
       cfg,
       id,
       order,
-      { edits, removed: order.parents.filter((parent) => !claimed.has(parent.id)), fresh },
+      {
+        edits,
+        removed: order.parents.filter((parent) => !claimed.has(parent.id)),
+        fresh,
+        refuseSentDrop: true,
+      },
       req.operatorId,
       attendance,
       req.lateSend,

@@ -147,7 +147,12 @@ it("tells staff a card payment is running on the order, and that a dish has sold
 });
 
 it("localises the refusals of changing a sent line in both languages", () => {
-  for (const code of ["ticket.already_started", "ticket.already_fired"]) {
+  for (const code of [
+    "ticket.already_started",
+    "ticket.already_fired",
+    "ticket.already_served",
+    "ticket.already_sent",
+  ]) {
     const generic = codeMessage("some.unmapped_code", "en");
     expect(codeMessage(code, "en")).not.toBe(generic);
     expect(codeMessage(code, "es")).not.toBe(codeMessage("some.unmapped_code", "es"));
@@ -155,6 +160,12 @@ it("localises the refusals of changing a sent line in both languages", () => {
   }
   expect(codeMessage("ticket.already_started", "en")).toBe(
     "The kitchen has already started this item, so it can no longer be changed. You can cancel it",
+  );
+  expect(codeMessage("ticket.already_sent", "en")).toBe(
+    "This item has already been sent and cannot be changed. You can cancel it",
+  );
+  expect(codeMessage("ticket.already_sent", "es")).toBe(
+    "Este plato ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
   );
 });
 

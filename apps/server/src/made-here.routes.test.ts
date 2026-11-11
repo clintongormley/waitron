@@ -7,7 +7,7 @@ import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
@@ -1600,7 +1600,8 @@ describe("made-here route wiring", () => {
         submissionId: randomUUID(),
         expectedPartyRevision: party.revision,
         groups: [
-          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "fire" },
+          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }], release: "fire" },
+          { lines: [{ menuItemId: venue.offerFor("Paella"), quantity: "1" }], release: "hold" },
         ],
       },
     );
@@ -1608,10 +1609,10 @@ describe("made-here route wiring", () => {
     const payment = {
       submissionId: randomUUID(),
       kind: "contribution",
-      amount: "3.00",
+      amount: "6.00",
       method: "cash",
-      tendered: "3.00",
-      applied: "3.00",
+      tendered: "6.00",
+      applied: "6.00",
       tip: "0.00",
     };
     expect(
@@ -1631,6 +1632,15 @@ describe("made-here route wiring", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, party.tabId)),
     );
+    // The whole-order save refuses to leave out the fired Caña, so it keeps it.
+    const [fired] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(eq(workingOrderLines.workingOrderId, party.tabId), eq(workingOrderLines.lineNo, 1)),
+        ),
+    );
 
     const edited = await send(
       venue.app,
@@ -1638,7 +1648,10 @@ describe("made-here route wiring", () => {
       "PUT",
       `/api/working-orders/${party.tabId}`,
       {
-        lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }],
+        lines: [
+          { workingOrderLineId: fired!.id, menuItemId: venue.offerFor("Caña"), quantity: "1" },
+          { menuItemId: venue.offerFor("Caña"), quantity: "1" },
+        ],
         revision: order!.revision,
       },
     );

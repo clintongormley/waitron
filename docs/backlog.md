@@ -863,10 +863,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   slice 3's LOOK fix review 3; predates it, `c8487cba5`).** Clear both when the question changes.
   [Detail](backlog/till.md#a1269-a-dead-end-question-that-replaces-another-keeps-the-first-ones-picks)
 
-- **A1416. A started dish whose option was renamed blocks every save of its order until it is
-  cancelled (left open by A1382).** Run on main; not small, since it needs a decision on what a
+- **A1416. A started or served dish whose option was renamed blocks every save of its order until
+  it is cancelled (left open by A1382).** Run on main for a started dish, and in R3-fixes for a
+  served one; not small, since it needs a decision on what a
   started dish's saved answer means.
-  [Detail](backlog/till.md#a1416-a-started-dish-whose-option-was-renamed-blocks-every-save-of-its-order-until-it-is-cancelled)
+  [Detail](backlog/till.md#a1416-a-started-or-served-dish-whose-option-was-renamed-blocks-every-save-of-its-order-until-it-is-cancelled)
 
 - **A1417. After a lost counter Send reply, a basket changed since cannot be sent and the till says
   only try again (left open by A1382).** A sentence failed review because not every change can be

@@ -123,9 +123,9 @@ async function issued(id: string) {
     await markOrderPlaced(tx, venue.clock, venue.cfg, id, venue.operatorId);
   });
 }
-async function received(id: string, amount: number) {
+async function received(id: string, amount: number, fire = true) {
   await withTransaction(venue.db, async (tx) => {
-    await fireAll(tx, venue.cfg, id);
+    if (fire) await fireAll(tx, venue.cfg, id);
     await tx.insert(billPayments).values({
       workingOrderId: id,
       submissionId: randomUUID(),
@@ -453,7 +453,13 @@ it.each(["save", "line", "split", "adjustment", "auto-issue", "departure", "cred
       id = party.tabId;
       partyId = party.partyId;
     } else if (operation === "credit") await issued(id);
-    else await received(id, operation === "auto-issue" || operation === "line" ? 2420 : 1210);
+    // The save lowers the count, which the whole-order save refuses for a dish the kitchen has.
+    else
+      await received(
+        id,
+        operation === "auto-issue" || operation === "line" ? 2420 : 1210,
+        operation !== "save",
+      );
     const actor = await operator();
     const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
     const authority = { admission: ready, operatorId: venue.adminId, expectedEdit: null };

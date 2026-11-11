@@ -1204,6 +1204,8 @@ export const en = {
     "{dish} is already being made and can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_fired_void":
     "{dish} has already gone to the kitchen and can no longer be changed. Use Void… to take it off the bill.",
+  "table.change_dish_served_void":
+    "{dish} has already been served and can no longer be changed. Use Void… to take it off the bill.",
   "table.recall_line": "Recall",
   "table.recall_n": "Recall {n}",
   "table.void_line": "Void…",
@@ -1548,6 +1550,14 @@ export const en = {
     "The order could not be read again. Park it, then retrieve it, to check it.",
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
+  "held.sent_dish_served":
+    "A dish on this order has already been served and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+  "held.sent_dish_started":
+    "The kitchen has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+  "held.sent_dish_fired":
+    "A dish on this order has already gone to the kitchen and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+  "held.sent_dish_sent":
+    "A dish on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
   "station.no_default_named":
     "No prep station can make {dishes}. Fix this in the dashboard, on the Prep stations page.",
   "place.error": "Could not send the order, try again",
@@ -3147,6 +3157,8 @@ export const es: Record<StringKey, string> = {
     "{dish} ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_fired_void":
     "{dish} ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+  "table.change_dish_served_void":
+    "{dish} ya se ha servido y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.recall_line": "Retirar",
   "table.recall_n": "Retirar {n}",
   "table.void_line": "Cancelar…",
@@ -3487,6 +3499,14 @@ export const es: Record<StringKey, string> = {
     "No se pudo volver a leer el pedido. Apárcalo y recupéralo para comprobarlo.",
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
+  "held.sent_dish_served":
+    "Un plato de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+  "held.sent_dish_started":
+    "La cocina ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+  "held.sent_dish_fired":
+    "Un plato de este pedido ya ha ido a cocina y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+  "held.sent_dish_sent":
+    "Un plato de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
   "station.no_default_named":
     "Ninguna estación de preparación puede preparar {dishes}. Corrígelo en el panel, en la página Estaciones de preparación.",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",

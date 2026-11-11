@@ -527,23 +527,57 @@ describe("editing split-off extras", () => {
     });
   });
 
-  it("voids a removed sent water's chips only at Fryer", async () => {
+  it("refuses to leave a sent water's fired chips out of the whole-order save, printing nothing", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, (tx) =>
       addTabRound(tx, venue.cfg, id, [line(venue, "water", "1", 2), line(venue, "water")]),
     );
-    const before = await withTransaction(
-      db,
-      async (tx) => (await slips(tx, venue.printers.fryer)).length,
-    );
-    await removeFirst(venue);
+    const before = await withTransaction(db, async (tx) => ({
+      state: await state(tx, id),
+      fryer: await slips(tx, venue.printers.fryer),
+      grill: await slips(tx, venue.printers.grill),
+    }));
+    await expect(removeFirst(venue)).rejects.toMatchObject({
+      code: "ticket.already_fired",
+      params: { workingOrderId: id },
+    });
     await withTransaction(db, async (tx) => {
-      expect((await state(tx, id)).items).toEqual([]);
-      const after = await slips(tx, venue.printers.fryer);
-      expect(after).toHaveLength(before + 1);
-      expect(after.at(-1)).toContain("VOID");
-      expect(await slips(tx, venue.printers.grill)).toEqual([]);
+      expect(await state(tx, id)).toEqual(before.state);
+      expect(await slips(tx, venue.printers.fryer)).toEqual(before.fryer);
+      expect(await slips(tx, venue.printers.grill)).toEqual(before.grill);
+    });
+  });
+
+  it("voids a sent water's fired chips at Fryer when the whole-order save takes them off", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const id = venue.party.tabId;
+    const before = await withTransaction(db, async (tx) => {
+      await addTabRound(tx, venue.cfg, id, [line(venue, "water", "1", 1)]);
+      return {
+        state: await state(tx, id),
+        fryer: await slips(tx, venue.printers.fryer),
+        revision: await revision(tx, id),
+      };
+    });
+    const water = before.state.lines.find((row) => row.parentLineId === null)!;
+    const chips = before.state.lines.find((row) => row.parentLineId !== null)!;
+    expect(before.state.items).toEqual([
+      expect.objectContaining({ lineId: chips.id, stationId: venue.stations.fryer }),
+    ]);
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, id, {
+      revision: before.revision,
+      operatorId: OPERATOR,
+      lines: [{ ...line(venue, "water"), workingOrderLineId: water.id }],
+    });
+
+    await withTransaction(db, async (tx) => {
+      expect(await state(tx, id)).toEqual({ lines: [water], items: [] });
+      const printed = (await slips(tx, venue.printers.fryer)).slice(before.fryer.length);
+      expect(printed).toHaveLength(1);
+      expect(printed[0]).toContain("*** VOID ***");
+      expect(printed[0]).toContain("1 x CHIPS");
     });
   });
 

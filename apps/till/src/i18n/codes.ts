@@ -619,6 +619,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This item has already gone to the kitchen and cannot be changed. You can cancel it",
     es: "Este plato ya ha ido a cocina y no se puede cambiar. Puedes cancelarlo",
   },
+  "ticket.already_served": {
+    en: "This item has already been served and cannot be changed. You can cancel it",
+    es: "Este plato ya se ha servido y no se puede cambiar. Puedes cancelarlo",
+  },
+  "ticket.already_sent": {
+    en: "This item has already been sent and cannot be changed. You can cancel it",
+    es: "Este plato ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
+  },
   "tab.serve_quantity_invalid": {
     en: "That quantity cannot be marked on this line. Check how many are left to serve, or how many were served",
     es: "No se puede marcar esa cantidad en esta línea. Comprueba cuántos quedan por servir o cuántos se han servido",

@@ -2158,21 +2158,21 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     ]);
   });
 
-  it("removing a sent, not-started line from the whole-order save voids it with a notice", async () => {
+  it("leaving a sent, not-started line out of the whole-order save is refused, voiding nothing", async () => {
     const { cfg, tabId, ticket, waterOffer } = await tabWithFiredCoffee();
+    const before = await linesOf(tabId);
 
-    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
-      operatorId: OPERATOR,
-      revision: await revisionOf(tabId),
-      lines: [{ menuItemId: waterOffer, quantity: "1" }],
-    });
+    await expect(
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+        operatorId: OPERATOR,
+        revision: await revisionOf(tabId),
+        lines: [{ menuItemId: waterOffer, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
 
-    expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([2]);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
-    ]);
-    // The tab has work sent, so the new line goes to the kitchen as a round's would.
-    expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
   it("raising a started line through the whole-order save leaves it preparing and sends the extra one and the new dish", async () => {
@@ -2363,7 +2363,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     }
   });
 
-  it("at a Not allowed station the whole-order save still removes a held dish and a waiting dish, with the waiting one's VOID notice", async () => {
+  it("at a Not allowed station the whole-order save still removes a held dish, and refuses to leave out a waiting one", async () => {
     const { cfg, tableId, coffeeOffer, waterOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -2375,17 +2375,34 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const waiting = await ticketOfLine(tabId, 1);
     const held = await ticketOfLine(tabId, 2);
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
+    const before = await linesOf(tabId);
 
+    await expect(
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+        operatorId: OPERATOR,
+        revision: await revisionOf(tabId),
+        lines: [{ menuItemId: waterOffer, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await noticesAt(cfg, waiting.stationId)).toEqual([]);
+
+    const [coffee] = await db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 1)));
     await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
       operatorId: OPERATOR,
       revision: await revisionOf(tabId),
-      lines: [{ menuItemId: waterOffer, quantity: "1" }],
+      lines: [
+        { workingOrderLineId: coffee!.id, menuItemId: coffeeOffer, quantity: "1" },
+        { menuItemId: waterOffer, quantity: "1" },
+      ],
     });
 
-    expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([3]);
-    expect(await noticesAt(cfg, waiting.stationId)).toEqual([
-      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
-    ]);
+    expect((await linesOf(tabId)).map((line) => line.lineNo)).toEqual([1, 3]);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: waiting.id });
+    expect(await noticesAt(cfg, waiting.stationId)).toEqual([]);
     if (held.stationId !== waiting.stationId)
       expect(await noticesAt(cfg, held.stationId)).toEqual([]);
   });
@@ -2581,20 +2598,21 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect((await ticketRow(tabId, 4))!.firedAt).not.toBeNull();
   });
 
-  it("changing a sent line's dish voids it with a notice and sends the new dish", async () => {
+  it("changing a sent line's dish through the whole-order save is refused, voiding nothing", async () => {
     const { cfg, tabId, ticket, lineId, waterOffer } = await tabWithFiredCoffee();
+    const before = await linesOf(tabId);
 
-    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
-      operatorId: OPERATOR,
-      revision: await revisionOf(tabId),
-      lines: [{ workingOrderLineId: lineId, menuItemId: waterOffer, quantity: "1" }],
-    });
+    await expect(
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+        operatorId: OPERATOR,
+        revision: await revisionOf(tabId),
+        lines: [{ workingOrderLineId: lineId, menuItemId: waterOffer, quantity: "1" }],
+      }),
+    ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
 
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
-    ]);
-    expect(await linesOf(tabId)).toEqual([expect.objectContaining({ lineNo: 2, lineTotal: 200 })]);
-    expect((await ticketRow(tabId, 2))!.firedAt).not.toBeNull();
+    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
+    expect(await linesOf(tabId)).toEqual(before);
+    expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id });
   });
 
   it("a change with a rise to a sent line recalls it, sends it again at its own quantity, and adds the difference", async () => {

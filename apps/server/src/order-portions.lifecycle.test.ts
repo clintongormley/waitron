@@ -113,7 +113,7 @@ const burgersWithCheese = (quantity: string): TabRoundLine[] =>
 
 /** A seated party whose first bill holds two sent burgers with cheese as portions, and an empty
  * second bill. */
-async function fixture() {
+async function fixture(fire = true) {
   return inTx(venue, async (tx) => {
     const table = await createTable(tx, venue.cfg, {
       label: `Life-${randomUUID().slice(0, 8)}`,
@@ -137,7 +137,7 @@ async function fixture() {
       venue.operatorId,
     );
     const portions = await addPortionRound(tx, venue.cfg, seated.tabId, burgersWithCheese("2"), {
-      fire: true,
+      fire,
     });
     return { partyId: seated.partyId, billId: seated.tabId, otherId: other!.id, portions };
   });
@@ -380,8 +380,9 @@ describe("A803 portion lifecycle: cancellations", () => {
     expect(eventsOf(p.portions)).toEqual([]);
   });
 
-  it("a saved edit that leaves a portion out records a cancelled event and drops its binding", async () => {
-    const p = await fixture();
+  it("a saved edit that leaves an unsent portion out records a cancelled event and drops its binding", async () => {
+    // The whole-order save refuses to leave out a portion the kitchen has.
+    const p = await fixture(false);
     const [first, second] = p.portions;
     const [order] = await venue.db
       .select({ revision: workingOrders.revision })

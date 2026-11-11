@@ -1917,9 +1917,10 @@ read "Uns…" and "Sin …" (A797 slice 3's LOOK, 2026-10-26, `l-floor-360-*.png
   unless the owner says otherwise.
   [Detail](till.md#a841-slice-11-waitrons-own-headings-are-one-step-lighter-2026-10-27)
 
-## A1416. A started dish whose option was renamed blocks every save of its order until it is cancelled
+## A1416. A started or served dish whose option was renamed blocks every save of its order until it is cancelled
 
-Left open by A1382. The order holds a dish the kitchen has started, and that dish's options list or
+Left open by A1382. The order holds a dish the kitchen has started, or one any of which has been
+served (refused `ticket.already_served`), and that dish's options list or
 option is renamed and the menu published. Every change to the order is then refused, including a new
 dish, a change to another dish and the order's label, and nothing on screen says the rename is why.
 The run reached this on a table's bill moved to the counter and on the same bill saved whole while
@@ -1929,11 +1930,11 @@ both saved. A counter order sent with Send did not reach it: once placed, a save
 
 **What the person sees.**
 
-- A customer or kitchen name changed: "Could not park the order, try again", and "Could not send
-  the order, try again" or "Could not complete the sale, try again" from Send or Pay. The basket
-  keeps its unsaved changes, the added dish among them, and hides Cancel. Each later save gets the
-  same answer. The owner chose (2026-11-07) to replace this path with a separate action for changing
-  a sent dish (A1426); A1426 built it, but the whole-order save is unchanged, so this stays open.
+- A customer or kitchen name changed: the save from Park, Send or Pay is refused and the till
+  reloads the order, dropping its unsaved changes, the added dish among them, and says the dish can
+  no longer be changed and to use Cancel on it. Each later save is refused the same way. The owner
+  chose (2026-11-07) to replace this path with a separate action for changing a sent dish (A1426);
+  A1426 built it, but the whole-order save still refuses, so this stays open.
 - A staff name changed: "An item's choices have changed — open the line and choose again". The
   basket's line window is read-only on a dish already sent (run on a started dish), and Change dish
   refuses a started dish, so nobody can; whether Change dish clears a dish not yet started was not
@@ -1948,8 +1949,11 @@ run src/working-order.test.ts -t "A1382 probe" --coverage.enabled=false`: seven 
 kitchen-name rename, adding a dish or changing only the other dish or the label, all printed `refused
 ticket.already_started`, the last with the dish `ready`, and the save after cancelling it printed
 `saved`. Controls printed `saved`: no rename, renamed but not
-published, and renamed with nothing started. The till's half ran as a focused test with the refusal
-stubbed, on main and on #2542, before its rebase; no real till ran this case.
+published, and renamed with nothing started. The served case ran as a throwaway server test in
+R3-fixes (2026-11-11): after a serve and a published kitchen-name rename, basket saves were refused
+`ticket.already_served`; served with no rename, and renamed but only fired, saved. The till's reload
+and sentence run in `apps/till/src/till-app-counter-adjustments.test.ts` with the refusal stubbed; no
+real till ran this case.
 
 **State of the fix.** None built, and it is not small: it needs a decision on what a started dish's
 saved answer means. A save sends every line's answers again and the box compares them by value with
