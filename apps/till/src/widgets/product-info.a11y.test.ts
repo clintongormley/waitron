@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { TillProduct } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from "./test-helpers.js";
 import { TillProductInfo } from "./product-info.js";
@@ -100,21 +101,13 @@ it.each([
     "product.not_found",
     "This dish or size is no longer offered here. Close this window and choose another dish or size.",
   ],
-  [
-    "dark",
-    "product.not_found",
-    "Este plato o tamaño ya no se ofrece aquí. Cierra esta ventana y elige otro plato o tamaño.",
-  ],
+  ["dark", "product.not_found", codeMessage("product.not_found", "es-ES")],
   [
     "light",
     "product.archived",
     "This dish or size has been archived. Close this window and choose another dish or size.",
   ],
-  [
-    "dark",
-    "product.archived",
-    "Este plato o tamaño se ha archivado. Cierra esta ventana y elige otro plato o tamaño.",
-  ],
+  ["dark", "product.archived", codeMessage("product.archived", "es-ES")],
 ] as const)(
   "availability controls, sending and refusal are accessible in %s for %s",
   async (theme, code, expected) => {
