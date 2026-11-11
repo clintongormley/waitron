@@ -177,7 +177,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         country: "ES",
         taxId: nextNif(),
         legalName: "Deli Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
@@ -191,7 +191,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -207,8 +207,8 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
   const catalogue = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const food = await createCategory(tx, { name: "Comida" });
-    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const food = await createCategory(tx, { name: "Food" });
+    const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: food.id,
@@ -595,7 +595,7 @@ describe("recordTillSale", () => {
       zone_id: zoneId,
       menu_item_id: waterOfferId,
       menu_name: "Delicatessen",
-      department_name: "Sala principal",
+      department_name: "Main room",
     };
     expect(snapshots.rows).toEqual([attribution, attribution]);
     expect(await expectOneTicketItemPerDish()).toBe(2);
@@ -793,7 +793,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
           country: "ES",
           taxId: nextNif(),
           legalName: "Deli Bare SL",
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales,
           operationDescription: "Venta en establecimiento",
@@ -807,7 +807,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
-            displayName: "Administradora",
+            displayName: "Administrator",
             pinHash: hashPin("1234"),
             passwordHash: hashPassword("dashPass123"),
             email: "owner@example.test",
@@ -822,7 +822,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
     const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, venueId));
     const productId = await withTransaction(suite.db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const drinks = await createCategory(tx, { name: "Bebidas" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
       const product = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: drinks.id,
@@ -1049,7 +1049,7 @@ describe("ordering extras and options — parent + child lines", () => {
           country: "ES",
           taxId: nextNif(),
           legalName: "Deli Mods SL",
-          name: "Sala principal",
+          name: "Main room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Venta en establecimiento",
@@ -1063,7 +1063,7 @@ describe("ordering extras and options — parent + child lines", () => {
           seriesCode: "A",
           rectificativeSeriesCode: "R",
           admin: {
-            displayName: "Administradora",
+            displayName: "Administrator",
             pinHash: hashPin("1234"),
             passwordHash: hashPassword("dashPass123"),
             email: "owner@example.test",
@@ -1079,7 +1079,7 @@ describe("ordering extras and options — parent + child lines", () => {
     const seeded = await withTransaction(suite.db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const food = await createCategory(tx, { name: "Comida" });
+      const food = await createCategory(tx, { name: "Food" });
       const dish = (
         name: string,
         unitPrice: string,
