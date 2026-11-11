@@ -1338,7 +1338,8 @@ changed tax number fails the publish unless the repository variable
 the job builds with `load: true`, checks the three values inside the image and runs the server's
 own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
 plan's 8g Step 5) is still to do.
-Then slices 1b to 6. Still needed from outside: the asesor's answer to Q53. The
+Slice 2, part 1 landed: the text and its renderer; next, the PDF and the package command (2a), then the release commands (2b); slices 1b and 3 to 6 follow.
+Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
 ## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.

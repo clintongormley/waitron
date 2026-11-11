@@ -102,7 +102,12 @@ export function renderDeclaration(
         .join("\n"),
     )
     .join("\n\n");
-  const title = escapeHtml(plain(blocks[0]?.lines[0] ?? []));
+  const title = escapeHtml(
+    blocks
+      .filter((block) => block.kind === "title")
+      .map((block) => plain(block.lines[0]!))
+      .join(""),
+  );
   const body = blocks.map((block) => {
     if (block.kind === "title") return `<h1>${title}</h1>`;
     if (block.kind === "list") {
