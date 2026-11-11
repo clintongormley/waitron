@@ -560,8 +560,6 @@ const inBarGroup = () => {
   ];
 };
 
-/** Counter 5 split off and free, with Terrace 9 standing where Long table was saved. */
-
 describe("till-floor-screen: Reset table's refusals name the tables", () => {
   it.each([
     [
@@ -695,22 +693,26 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
   it("a named refusal shows at the window's foot, and moves to the floor when the window closes", async () => {
     const api = stubApi();
     api.resetTableToday.mockRejectedValueOnce({
-      code: "table.needs_moving",
+      code: "joined_table.tables_in_group",
       status: 409,
-      tableId: "c3",
+      tableId: "long",
+      partIds: ["c3"],
     });
-    const el = await mount([...counter3Busy(), table("t9", "Terrace 9", 10)], api);
+    const tables = counter3Busy().map((each) =>
+      each.id === "c3" ? { ...each, today: { ...each.today!, joinId: "g" } } : each,
+    );
+    const el = await mount([...tables, table("bar", "Bar", 80, { joinId: "g" }, held)], api);
     const opened = (await pressResetTable(el, "c4"))!;
     send(opened, "reset-table-confirm", { seats: 6 });
     await settle(el);
     await opened.updateComplete;
 
-    const words = "Table Counter 3 needs moving. Mark it moved first.";
+    const words = "Counter 3 is in Bar+Counter 3. Split it off first, then Reset table.";
     expect(windowOf(el)).toBe(opened);
     expect(footError(el)).toBe(words);
     expect(floorRefusal(el)).toBeNull();
 
-    el.tables = [...allFree(), table("t9", "Terrace 9", 10)];
+    el.tables = allFree();
     await settle(el);
     expect(windowOf(el)).toBeNull();
     expect(floorRefusal(el)).toBe(words);

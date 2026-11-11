@@ -665,6 +665,17 @@ describe("Reset table accepts occupied places", () => {
     const after = await everything();
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);
+    const returned = new Set([table.c5!]);
+    expect(after.split).toEqual(
+      before.split.filter(
+        (row) => row.joinedTableId !== table.long || !returned.has(row.partTableId),
+      ),
+    );
+    expect(after.clearing).toEqual(
+      before.clearing.map((row) => (returned.has(row.id) ? { ...row, since: null } : row)),
+    );
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
     const changed = new Set([table.long!, table.c5!]);
     expect(after.today.filter((row) => !changed.has(row.tableId))).toEqual(
       before.today.filter((row) => !changed.has(row.tableId)),
@@ -687,6 +698,17 @@ describe("Reset table accepts occupied places", () => {
     const after = await everything();
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);
+    const returned = new Set([table.c3!, table.c4!]);
+    expect(after.split).toEqual(
+      before.split.filter(
+        (row) => row.joinedTableId !== table.long || !returned.has(row.partTableId),
+      ),
+    );
+    expect(after.clearing).toEqual(
+      before.clearing.map((row) => (returned.has(row.id) ? { ...row, since: null } : row)),
+    );
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
     const changed = new Set([table.long!, table.c3!, table.c4!]);
     expect(after.today.filter((row) => !changed.has(row.tableId))).toEqual(
       before.today.filter((row) => !changed.has(row.tableId)),
@@ -715,6 +737,18 @@ describe("Reset table accepts occupied places", () => {
     const after = await everything();
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);
+    const returned = new Set([table.c3!, table.c4!, table.c5!]);
+    expect(after.split).toEqual(
+      before.split.filter(
+        (row) => row.joinedTableId !== table.long || !returned.has(row.partTableId),
+      ),
+    );
+    expect(after.clearing).toEqual(
+      before.clearing.map((row) => (returned.has(row.id) ? { ...row, since: null } : row)),
+    );
+    const ended = before.joinTables.find((row) => row.tableId === table.bar)!.joinId;
+    expect(after.joins).toEqual(before.joins.filter((row) => row.id !== ended));
+    expect(after.joinTables).toEqual(before.joinTables.filter((row) => row.joinId !== ended));
     const changed = new Set([table.long!, table.bar!, table.c3!, table.c4!, table.c5!]);
     expect(after.today.filter((row) => !changed.has(row.tableId))).toEqual(
       before.today.filter((row) => !changed.has(row.tableId)),
@@ -737,6 +771,17 @@ describe("Reset table accepts occupied places", () => {
     const after = await everything();
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);
+    const returned = new Set([table.c3!, table.c5!]);
+    expect(after.split).toEqual(
+      before.split.filter(
+        (row) => row.joinedTableId !== table.long || !returned.has(row.partTableId),
+      ),
+    );
+    expect(after.clearing).toEqual(
+      before.clearing.map((row) => (returned.has(row.id) ? { ...row, since: null } : row)),
+    );
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
     const changed = new Set([table.long!, table.c3!, table.c5!]);
     expect(after.today.filter((row) => !changed.has(row.tableId))).toEqual(
       before.today.filter((row) => !changed.has(row.tableId)),
@@ -940,6 +985,17 @@ describe("Reset table on a joined table saved with no place", () => {
     const after = await everything();
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);
+    const returned = new Set([table.c5!]);
+    expect(after.split).toEqual(
+      before.split.filter(
+        (row) => row.joinedTableId !== table.long || !returned.has(row.partTableId),
+      ),
+    );
+    expect(after.clearing).toEqual(
+      before.clearing.map((row) => (returned.has(row.id) ? { ...row, since: null } : row)),
+    );
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
     const changed = new Set([table.long!, table.c5!]);
     expect(after.today.filter((row) => !changed.has(row.tableId))).toEqual(
       before.today.filter((row) => !changed.has(row.tableId)),
@@ -1281,6 +1337,17 @@ describe("Reset table on a joined table still standing", () => {
     const after = await everything();
     expect(after.parties).toEqual(before.parties);
     expect(after.partyTables).toEqual(before.partyTables);
+    const returned = new Set([table.c6!]);
+    expect(after.split).toEqual(
+      before.split.filter(
+        (row) => row.joinedTableId !== table.long || !returned.has(row.partTableId),
+      ),
+    );
+    expect(after.clearing).toEqual(
+      before.clearing.map((row) => (returned.has(row.id) ? { ...row, since: null } : row)),
+    );
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables);
     const changed = new Set([table.long!, table.c6!]);
     expect(after.today.filter((row) => !changed.has(row.tableId))).toEqual(
       before.today.filter((row) => !changed.has(row.tableId)),
