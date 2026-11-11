@@ -105,7 +105,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
-**4. Released by the hold, once A760 lands.** Build order: A739 paying, the pay window, A446 pre-bill,
+**4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
 A555, close the day, then A947 and its handover bundles, including the spare's backup settings, which
 A947 3b's plan still owes. A1150 (allergens from the live product) is needed before go-live and has
 no design yet.
@@ -929,7 +929,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-  [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window)
 
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
   the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** It first sends the merge or

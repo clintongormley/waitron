@@ -1,64 +1,66 @@
-# Counter payment cleanup and clear refusals (A840/A842/A848)
+# Till payment cleanup and clear refusals (A840/A842/A848)
 
-Written by Codex. Request: the three entries in `docs/backlog.md`, with detail in
-`docs/backlog/till.md` and `docs/backlog/payments.md`. The owner required one change
-after A739 (9 November 20:34); watcher 11 November 17:20 closed A739's software
-item and released this work. Claude reviews this plan; watcher clearance is still pending.
+Written by Codex for the three entries in `docs/backlog.md`, with their till/payment
+detail. The owner required one change after A739 (9 November 20:34); watcher
+11 November 17:20 closed A739 software and released it. Claude's initial plan read
+(482 seconds) identified the table surface and cut duplicate tests. Watcher
+clearance of this revised plan is pending; no owner design approval is claimed.
 
-**Finish line:** Counter shows only cancellation actions reachable through today's
-software, the payment action keeps its colour and spinner during sending, and an
-empty-order refusal explains what staff should do in English and Spanish.
+**Finish line:** remove the obsolete counter cancellation entry, keep the pressed
+payment action coloured and spinning during sending, and explain an empty-order
+refusal in EN/ES. Reuse the existing widgets, refusal mappers, code table and test
+fixtures. No table, migration, fiscal writer, payment protocol or hardware gate.
 
-**Reuse:** existing `till-counter-waiting`, shared cancellation dialog, `tender-pay`,
-bill/payment sheets, `wt-button.loading`, `codeMessage`, refusal mappers and test
-fixtures. Keep the current payment window and all table cancellation behaviour.
-No table, migration, fiscal writer, payment protocol or hardware qualification.
+1. **A840: prove the closed-party boundary, then delete the counter entry.**
+   Production sale writers settle in the same transaction (`till-sale.ts:1064`,
+   `bill-payments.ts:806`, `transfer-close.ts:181`); unpaid departure instead
+   invoices table bills and closes their party (`unpaid-departure.ts:152,206`).
+   Moving an unpaid bill first requires that party open (`bill-actions.ts:136`
+   to `parties.ts:401`). Add one real-route case in `till-api.move-bill.test.ts`:
+   depart unpaid, try moving that bill to Counter, assert `party.not_open` and
+   no invoiced waiting row. The falsifier is an accepted move or that waiting row.
+   Existing counter `issued` fixtures use `testing/issue-order.ts`, not a staff
+   issuance journey. Remove the waiting button/event, app handler and counter
+   success/refusal branches, `fromCounter`, counter network/refresh wording and
+   their obsolete tests. Keep the shared table dialog, server cancel route and
+   `CounterWaitingOrder.invoiceNumber`: old issued bench orders remain payable.
+   Put one absence assertion in an existing waiting-widget case, not a new suite.
+2. **A842: fix the live table Cash/Card controls first.** The table still uses
+   `tender-pay` without a payment window (`till-table-order-screen.ts:5134`).
+   Remember the pressed action inside that widget; while busy it is primary with
+   `loading`, the alternative is secondary and unavailable. Cover Counter Pay
+   while saving its order, plus the zero-total Counter Cash/Card fallback.
+   Widget cases own those loading/variant transitions and reset after the answer;
+   one table-app case holds the payment answer and verifies the sending action.
+   Preserve confirmation/retry locks. Do not duplicate existing bill-payment or
+   presented-payment loading tests, or test the shared button's paint again.
+3. **A848: test the ordinary empty cases and word the reachable refusal.**
+   Pay/Send on an already empty order stay unavailable. An empty whole bill can
+   be refused if another device empties it after this screen's read: reproduce
+   that Pay answer, then add `sale.empty_basket` to the existing code table and
+   whole-payment mapper. Text: “This order has no items. Add an item before
+   continuing.” / “Este pedido no tiene artículos. Añade uno antes de continuar.”
+   Check Send's existing disabled state and distinguish Move this bill (empty
+   bills may move) from Move dishes (an empty selection sends nothing).
+   Exercise a server empty refusal through an applicable send/move mapper only
+   if that real flow exposes one. Do not enable controls or add server checks
+   just to manufacture a refusal; report any unworded ordinary flow to the watcher.
 
-1. **A840: check the path before removing it.** Follow production issuance,
-   unpaid departure, transfer closure and bill-to-counter movement into
-   `listCounterWaiting`. The existing `issued` counter fixtures explicitly seed
-   an unpaid invoice through `testing/issue-order.ts`; they are not proof of a
-   current staff journey. Run focused real-route cases for placement, departure
-   and movement. If no production journey reaches the action, remove its button,
-   app listener/handler and counter-only dialog wording; retain shared table
-   cancellation and server cancellation. Replace only tests of the retired
-   counter entry with a failing browser check that it is absent, preserving
-   table/payment/refusal assertions where their behaviour still applies. If a
-   real journey reaches it, report that evidence to the watcher before choosing
-   a different build; do not remove a usable action or touch protected writers.
-2. **A842: test the live sending action.** In the actual counter/payment journey,
-   hold the payment answer and assert the sending action has `loading`, its
-   normal fill and a spinner; any alternative Cash/Card action is quiet and
-   unavailable. Preserve retry/confirmation locks. Use the existing sheet's
-   loading action where A739 already meets the requirement; change only a
-   remaining failing surface, including the counter's Pay preparation if needed.
-3. **A848: reproduce each refusal, then fix its wording.** Exercise Pay, Send and
-   Move with an empty order through the app. Retain controls that already prevent
-   an empty action and test their existing empty-state explanation. Where the
-   server answers `sale.empty_basket`, show “This order has no items. Add an item
-   before continuing.” / “Este pedido no tiene artículos. Añade uno antes de
-   continuar.” through the existing code table and the relevant refusal mapper.
-   Do not enable actions solely to produce an error or add new server checks.
+**Files/tests:** `apps/till/src/till-app.ts`, `i18n/{codes,strings}.ts`,
+`widgets/{counter-waiting,tender-pay,cancel-credit-dialog}.ts` and their sibling
+tests; `till-app-counter-cancel-credit.test.ts` retires; `till-app-parties.test.ts`
+owns the table journey, `till-app-move-dishes.test.ts` the empty move observation.
+Include `counter-waiting.a11y.test.ts`, `cancel-credit-dialog.test.ts`,
+`test-durations.json` and the one server route test. No server production changes.
 
-**Files:** `apps/till/src/till-app.ts`, `i18n/{codes,strings}.ts`,
-`widgets/{counter-waiting,tender-pay,cancel-credit-dialog}.ts`, and focused sibling
-tests: `till-app-counter-cancel-credit`, `till-app-counter-payment-window`,
-`till-app-boot-and-counter`, `till-app-parties`, `till-app-move-dishes`,
-`widgets/{counter-waiting,tender-pay,bill-pay-dialog,presented-pay-dialog}`, and
-`i18n/codes`. Change only files a reproduced case needs. Existing server route
-tests provide reachability evidence; no planned server production change.
+**Verification/documentation:** failing behavioural test before each fix; run every
+changed test file and the one route case. Inspect changed surfaces in EN/ES,
+light/dark and phone/desktop, using existing accessibility helpers. Delete the
+completed backlog entries; add a dated retirement pointer to C126's historical
+counter notes. Update staff guides only where staff instructions change. A739's
+physical checks stay in the existing real-box session. Normal hook, required
+Claude run-it review(s), one fix-read, current-head CI, then authorised landing.
 
-**Checks and order:** observed failing browser test before each implementation;
-run every changed test file, plus focused server reachability cases. Widget tests
-own loading/paint, app cases own forwarding and displayed refusals, code-table
-cases own EN/ES wording. Inspect changed surfaces in EN/ES, light/dark, phone and
-desktop; use existing accessibility helpers. Update both table-service guides
-only for staff instructions affected. Remove completed backlog entries; A739's
-physical printer/reader/inbox checks join the existing real-box session. Keep its
-dated decision history. Then normal hook, required Claude run-it review(s), one
-fix-read where needed, current-head CI and authorised landing.
-
-**Expected size:** production about +45/-100; tests about +140/-750 if the obsolete
-counter suite retires; support +0. Documentation about +35/-25. Report additions
-and removals separately. Stop for watcher review at 1.5 times the forecast or a
-new behaviour beyond these three asks. No owner design approval is claimed.
+**Forecast:** production +65/-150; tests +140/-850; support +0/-1 (duration entry);
+documentation about +40/-30. Count additions/removals separately; watcher review
+before growth past 1.5 times this forecast or a new behaviour beyond these asks.
