@@ -2281,8 +2281,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Tighten the checks the A974 review probed** (bundle of 4, size S). [Detail](backlog/architecture.md#bundle-tighten-the-checks-the-a974-review-probed)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Remaining local venue seeds, including email and sale suites, and the boot helper's raw
-  location names should use `Main room`, as `setupVenue` does. Current-order, order-group,
+  Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
+  location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
+  Administrator, Food and Drinks for its local staff samples; its product and fiscal text remain. Current-order, order-group,
   order-draft, served, certificate, backup-settings and backup-room fixture names use it. The shared
   `setupVenue` uses Administrator, Drinks, Coffee and Water. BillVenue uses Steak,
   Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
