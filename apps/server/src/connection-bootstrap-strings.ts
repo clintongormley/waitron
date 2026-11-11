@@ -18,7 +18,7 @@ export const CONNECTION_TEXT = {
     operator:
       "This server uses a separately installed certificate. Check the HTTPS address below. If it shows a certificate warning, stop; this page cannot replace that certificate.",
     serverOnly:
-      "On a standby server, the secure connection can be set up only on the server itself.",
+      "This page cannot repair a standby server’s secure connection. Switch the standby server off and on: as it starts, it renews a certificate that no longer matches its name or address.",
     javascript: "Enable JavaScript in your browser, then reload this page to use these choices.",
     check: "Check again",
     stop: "Stop",
@@ -58,7 +58,7 @@ export const CONNECTION_TEXT = {
     operator:
       "Este servidor usa un certificado instalado por separado. Comprueba la dirección HTTPS de abajo. Si muestra un aviso del certificado, detente: esta página no puede sustituirlo.",
     serverOnly:
-      "En un servidor en espera, la conexión segura solo se puede configurar en el propio servidor.",
+      "Esta página no puede reparar la conexión segura de un servidor en espera. Apaga y enciende el servidor en espera: al arrancar, renueva el certificado si ya no coincide con su nombre o su dirección.",
     javascript: "Activa JavaScript en tu navegador y recarga esta página para usar estas opciones.",
     check: "Comprobar de nuevo",
     stop: "Detener",

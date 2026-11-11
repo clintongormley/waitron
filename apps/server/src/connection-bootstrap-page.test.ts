@@ -406,7 +406,7 @@ it.each([
   ["es", "repair-required", false],
   ["en", "healthy", true],
 ] as const)(
-  "a repair offered only on the server itself is explained, not offered (%s, %s)",
+  "a standby server's repair is explained as a restart, not offered (%s, %s)",
   async (locale, state, continuationRequired) => {
     const page = await browser!.newPage();
     try {
@@ -423,8 +423,8 @@ it.each([
       );
       expect(await page.locator("#connection-status").textContent()).toBe(
         locale === "en"
-          ? "On a standby server, the secure connection can be set up only on the server itself."
-          : CONNECTION_TEXT.es.serverOnly,
+          ? "This page cannot repair a standby server’s secure connection. Switch the standby server off and on: as it starts, it renews a certificate that no longer matches its name or address."
+          : "Esta página no puede reparar la conexión segura de un servidor en espera. Apaga y enciende el servidor en espera: al arrancar, renueva el certificado si ya no coincide con su nombre o su dirección.",
       );
       expect(await page.locator("#connection-repair, #connection-reconnect").count()).toBe(0);
       expect(await page.locator("#connection-certificate").isVisible()).toBe(true);

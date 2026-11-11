@@ -25,8 +25,10 @@ import type { StartedServer, StartServerSeams } from "./boot.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { writeTlsSet } from "./testing/box-tls.js";
-import { writePendingAdoption } from "./finish-adoption.js";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { writePendingAdoption, type PendingAdoption } from "./finish-adoption.js";
+import { mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
+import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
+import { leafHostnamesFor } from "./box-name.js";
 import { resetObserver } from "./testing/connection-reset.js";
 import { beginHandover } from "./handover-store.js";
 
@@ -90,6 +92,15 @@ afterAll(async () => {
 
 type Start = "mirror" | "mirror-zone-repair" | "latch" | "primary" | "primary-zone-repair";
 
+const LATCH: PendingAdoption = {
+  originNodeId: ORIGIN,
+  standby: { nodeId: NODE, publicKey: "synthetic-public" },
+  nodeName: "Spare",
+  filingModule: "none",
+  taxModule: "vat",
+  reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
+};
+
 async function seedVenue(): Promise<void> {
   await suite.db
     .insert(tenants)
@@ -133,14 +144,7 @@ async function boot(
       join(stateDir, "modules.json"),
       JSON.stringify({ modules: { "fiscal-verifactu": false } }),
     );
-    await writePendingAdoption(stateDir, {
-      originNodeId: ORIGIN,
-      standby: { nodeId: NODE, publicKey: "synthetic-public" },
-      nodeName: "Spare",
-      filingModule: "none",
-      taxModule: "vat",
-      reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
-    });
+    await writePendingAdoption(stateDir, LATCH);
   } else {
     await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Node" });
     await suite.db.insert(invoiceSeries).values({ id: SERIES, nodeId: NODE, code: "A" });
@@ -163,6 +167,15 @@ async function boot(
         sql`update locations set time_zone = 'Invalid/Zone' where id = ${LOCATION}`,
       );
   }
+  return { ...(await startOn(stateDir, options)), stateDir };
+}
+
+/** Starts the server on the venue already seeded and on `stateDir`, as a restart of the box does. */
+async function startOn(
+  stateDir: string,
+  options: { landing?: boolean; fromBox?: { current: boolean } },
+): Promise<{ server: StartedServer; app: Hono }> {
+  const setupApp = join(stateDir, "setup");
   const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   let app: Hono | undefined;
   const mdns = fakeMdnsSocket();
@@ -194,7 +207,7 @@ async function boot(
     {},
     seams,
   );
-  return { server, app: app!, stateDir };
+  return { server, app: app! };
 }
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -480,6 +493,51 @@ describe("a spare's network surface", () => {
         expect(await repairOverLoopback(port)).toBe(200);
       } finally {
         await server.close();
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    },
+    60_000,
+  );
+
+  it.each<Start>(["mirror", "latch"])(
+    "a restart repairs the connection of a spare whose certificate lacks its address: the %s start",
+    async (start) => {
+      const fromBox = { current: false };
+      const first = await boot(start, { fromBox });
+      const { stateDir } = first;
+      let running: StartedServer | undefined = first.server;
+      const page = async (app: Hono) => {
+        const html = await (await app.request("/setup/connection")).text();
+        return {
+          state: /data-connection-state="([^"]+)"/.exec(html)?.[1],
+          status: /<p id="connection-status"[^>]*>([^<]*)<\/p>/.exec(html)?.[1],
+        };
+      };
+      try {
+        expect((await page(first.app)).state).toBe("healthy");
+        const tls = join(stateDir, "tls");
+        const leaf = reissueServerLeaf({
+          caCertPem: await readFile(join(tls, "ca.crt"), "utf8"),
+          caKeyPem: await readFile(join(tls, "ca.key"), "utf8"),
+          hostnames: leafHostnamesFor(NODE),
+          ipAddresses: [],
+          now: new Date(),
+        });
+        await writeFile(join(tls, "server.crt"), leaf.serverCertPem);
+        await writeFile(join(tls, "server.key"), leaf.serverKeyPem);
+        expect(await page(first.app)).toEqual({
+          state: "repair-required",
+          status: CONNECTION_TEXT.en.serverOnly,
+        });
+        await running.close();
+        running = undefined;
+        // In this fixture the joining start's latch is finished, as a real spare's never is yet.
+        if (start === "latch") await writePendingAdoption(stateDir, LATCH);
+        const again = await startOn(stateDir, { fromBox });
+        running = again.server;
+        expect(await page(again.app)).toEqual({ state: "healthy", status: "Certificate ready." });
+      } finally {
+        await running?.close();
         await rm(stateDir, { recursive: true, force: true });
       }
     },
