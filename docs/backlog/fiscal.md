@@ -1340,7 +1340,7 @@ changed tax number fails the publish unless the repository variable
 the job builds with `load: true`, checks the three values inside the image and runs the server's
 own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
 plan's 8g Step 5) is still to do.
-Slice 2, parts 1 and 2a landed: the text, its renderer, the A4 PDF's renderer (no command writes a PDF yet) and the package's `declaration` command (`show`, `write`, `check`); next, the release commands (2b) ([plan](../superpowers/plans/2026-11-11-a940-2-release-declaration.md)); slices 3 to 6 follow, and 1b (A993) waits until a producer change is scheduled.
+Slice 2 landed (#2820, #2827 and #2836; [plan](../superpowers/plans/2026-11-11-a940-2-release-declaration.md)): the text, its renderer, the A4 PDF's renderer (no command writes a PDF yet), the package's `declaration` command (`show`, `write`, `check`), and `pnpm release prepare` and `pnpm release tag` with their [runbook](../operations/release.md). Both release commands refuse until the two release-blocker lines in `packages/fiscal-verifactu/declarations/template.md` are deleted: the Q53 one by whoever records the asesor's answer, the slice-4 one by slice 4. Slices 3 to 6 remain; slice 4 also makes CI on a `v*` tag refuse a version whose declaration is missing or carries a blocker, because a tag pushed by hand skips both commands. 1b (A993) waits until a producer change is scheduled.
 Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 

@@ -72,6 +72,17 @@ missing or carries a blocker (departure 3).
 - Pull request 2b creates `scripts/release/waitron-release.mjs` and its test, and
   `docs/operations/release.md`. It modifies the root `package.json` (`"release"`) and the two backlog
   files.
+  As built (2026-11-11): it calls the package's `declaration` script through `pnpm --filter
+  @waitron/fiscal-verifactu declaration …`, not `exec tsx`; `prepareRelease` also takes `print`;
+  `nodeRun`, `nodeAsk` and `declarationArgs` are exported for their tests; a failed command's error
+  drops its cause, so a declaration command's output, which can hold the producer's settings, never
+  reaches an error message; the clean check ignores untracked files (`--untracked-files=no`); `tag`
+  reads no producer setting; a refused tag push deletes the local tag; `git push` and `gh pr create`
+  print straight to the terminal. It also modifies `docs/operations/operator-procedures.md` and
+  `planning-procedure-audit.md`. The script prints pnpm's banner line and the declaration whole, in
+  Spanish with the producer's values filled in; its own messages are English and hold no producer
+  value, and the output of `git push`, `gh pr create` and the pre-push hook passes through as those
+  tools print it.
 
 **The tests that matter.** Headings (Task 2), agree (Task 3), the slot refusals (Tasks 1–2), the
 blocker refusal in the package command (Task 5), and the root script's refusals before anything is
