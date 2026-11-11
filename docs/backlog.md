@@ -2287,7 +2287,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `setupVenue` uses Administrator, Drinks, Coffee and Water.
   Local published-menu, menu-patch, current-order, integrated-sale, delivery, pay-and-dispatch
   and stuck-payment fixtures use Administrator, Main room and Drinks where present.
-  Other person, category, option, device, printer and product samples in those files remain.
+  Other display samples in those files remain.
   BillVenue uses Steak,
   Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
   and kitchen names stay. PartyVenue uses Red wine bottle and Water as staff keys,

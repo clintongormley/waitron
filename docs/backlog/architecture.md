@@ -843,7 +843,7 @@ product failures.
   The local published-menu, menu-patch, current-order, integrated-sale, delivery,
   pay-and-dispatch and stuck-payment fixtures use Administrator; their location and category
   samples use Main room and Drinks where present.
-  Other person, category, option, device, printer and product samples in those files remain.
+  Other display samples in those files remain.
   The shared `setupVenue` uses Administrator,
   Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
   and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,
