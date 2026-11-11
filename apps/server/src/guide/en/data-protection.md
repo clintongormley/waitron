@@ -487,17 +487,16 @@ Each loss below says what it exposes and what to do in Waitron. Then answer the 
 
 **A stolen till device.** A till's browser keeps a few things on the device itself: an identifier
 for the last person who signed in on it, the list of dishes to make now with any notes typed on
-them, and unfinished refunds with the reason typed for each. Disabling or deleting the device clears
+them, and unfinished refunds with the reason typed for each. Deleting the device clears
 nothing on it. The till app deletes a person's unfinished refunds when that person signs out or the
 till locks itself, but keeps the other two. Refunds left when the till was closed, reloaded or
-refused by the box, as it is once disabled, stay on the device. Act in this order. On **Devices**,
-choose **Disable** in the device's row at once: it ends every staff sign-in on the device and stops
-it connecting. Next, note its **Last seen**, and find who used it from the copies of each person's
-data. Then choose **Delete**, which stops the device ever proving who it is again, and which Waitron
-refuses while a payment is in progress on it. Until you delete it, a disabled device can ask to come
-back and appear under **Devices asking to join**. Never choose **Enable** for a device you lost.
+refused by the box, as it is once deleted, stay on the device. Note its **Last seen** on
+**Devices**, then choose **Delete** in its row: it ends every staff sign-in on the device and stops
+it connecting. Waitron refuses Delete while a payment is in progress on it. Find who used it from
+the copies of each person's data. A deleted device can still ask to come back and appear under
+**Devices asking to join**. Never add a device you lost back to the venue.
 
-**A stolen phone or laptop used for the dashboard.** Disabling a device ends only its till
+**A stolen phone or laptop used for the dashboard.** Deleting a device ends only its till
 sign-ins; a dashboard sign-in belongs to the person. So an admin opens **Users** and chooses
 **Reset login** for that person. It signs them out everywhere, deletes their PIN, password,
 passkeys, two-factor settings, recovery codes and Google link, and sends them a new invitation if

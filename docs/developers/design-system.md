@@ -3042,7 +3042,7 @@ and the staffing grid's block editor in the A761 entry):
   bill has unsent dishes"), `widgets/tender-pay.test.ts` ("A803 table pay"),
   `till-app-bill-payments.test.ts` ("A803 quiet Pay …") and
   `screens/till-table-order-screen.bill-controls.a11y.test.ts` ("A803 quiet Pay", both themes).
-  A649 brought Add a device's Pair (Enable for a returning device) in the waiting-devices table
+  A649 brought Add a device's Pair (Add for a returning device) in the waiting-devices table
   under it (owner, 2026-10-14): it is drawn `secondary` while the screen holds no pairing hold.
   A689 brought the translations dialog's Translate all under it: it is drawn `secondary` while the
   latest suggestion read does not say the service is on, or while a run is being sent or
@@ -5583,7 +5583,7 @@ removing a product from a menu removes that offer.
 ### Switching off versus deleting
 
 Something switched off but kept — an options or extras list, a user, a printer, a print
-agent, a device or a card reader — is switched off with **Disable** (options and extras lists
+agent or a card reader — is switched off with **Disable** (options and extras lists
 are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** permanently removes a record from current use, and **Remove** for taking a row out of a list or a link off a record,
@@ -5592,7 +5592,7 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
 screen uses: **Activo** or **Deshabilitado** for a usuario,
-lector, agente or dispositivo; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+lector or agente; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
@@ -5601,7 +5601,7 @@ Status filter. The shared dialog reads the current impact before enabling Delete
 clears product defaults, deletes the service steps that start from it (a step left first that
 started after the step before then starts When seated), and retains any row needed by recorded work. A station refuses deletion
 while it is the default, an explicit effective KDS screen binding names it, or unfinished food
-remains. An off device still binds; an Every-stations scope alone does not. Once deletion is
+remains. A hidden inactive device does not bind; an Every-stations scope alone does not. Once deletion is
 allowed, the dialog lists the settings and unsent choices that will be removed. Deleted rows
 never return to these lists or become selectable again. Recorded names stay with historical
 work, and adding the same name creates a different id. Station Default, Closed today/destination
@@ -5628,10 +5628,12 @@ a matching retained registration with those settings; cleared assignments and en
 return. A recognised printer skips naming and calibration. System-switched-off printers stay
 listed with an Add-again hint. A4 printers retain their on/off controls until their A1484 slice.
 
-A device offers both too. **Disable** switches it off and keeps its id; its browser can knock again
-and come back as the same device. **Delete** is permanent: it signs the device out, ends what it
-holds, removes its settings, and keeps the row only as history. A deleted device's browser comes
-back only as a new device. A disabled row's menu offers Delete alone.
+A device offers **Delete** and **Add**, with no Status column or filter. Delete ends sign-ins,
+releases held equipment and ends its request to come back, while retaining its identity, proof,
+profile and local settings. Its existing browser can ask to join under that identity, then a manager
+accepts it through **Add a device**. A retired profile needs a replacement. Ended sign-ins stay ended;
+free portable equipment may be taken again from its saved choices. A browser without the retained
+proof joins as a new device.
 
 A card reader offers both. **Disable** switches the reader off and keeps its id, and Enable brings
 it back unless it was also unpaired. **Delete** is permanent, and is refused while a payment is in progress on the reader. A
@@ -6791,7 +6793,8 @@ refused. It becomes dangerous only when ready, or while its own write is pending
 After deletion, the target disappears from current choices and its open editors close. A stale id
 cannot open or save its configuration. Internal receipt printing keeps the deleted department's
 recorded receipt settings and media; image usage names that department without linking to its editor.
-Closed today and opening hours keep their own actions. Hardware keeps Disable and Enable.
+Closed today and opening hours keep their own actions. Card readers and print agents keep
+Disable and Enable until their hardware Delete/Add slices land.
 
 Individual tables follow the floor plan editor's contract: Delete, after a confirmation, has Undo
 until Save. Saving a layout preserves today's deferred removal rules. See the

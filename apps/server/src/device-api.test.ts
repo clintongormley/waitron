@@ -1037,7 +1037,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(await fromHandheld.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
-  it("enrol → authenticated station read → bump own item → foreign 403 → revoke stops the cookie", async () => {
+  it("enrol → authenticated station read → bump own item → foreign 403 → Delete stops the cookie", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
 
@@ -1099,10 +1099,10 @@ describe("Device API — the device-guarded routes", () => {
       error: { code: "device.forbidden_station", params: { stationId: cold.id } },
     });
 
-    const revoke = await send(app, "POST", `/management-api/devices/${deviceId}/revoke`, {
+    const revoke = await send(app, "DELETE", `/management-api/devices/${deviceId}`, {
       cookie: venue.managerCookie,
     });
-    expect(revoke.status).toBe(204);
+    expect(revoke.status).toBe(200);
 
     const afterRevoke = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
     expect(afterRevoke.status).toBe(401);
@@ -1787,7 +1787,7 @@ describe("Device management routes (hardware.manage)", () => {
 
     for (const res of [
       await send(app, "GET", "/management-api/devices", {}),
-      await send(app, "POST", `/management-api/devices/${DUMMY}/revoke`, {}),
+      await send(app, "DELETE", `/management-api/devices/${DUMMY}`, {}),
     ]) {
       expect(res.status).toBe(401);
       expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -1805,7 +1805,7 @@ describe("Device management routes (hardware.manage)", () => {
       await send(app, "GET", "/management-api/devices", { cookie: venue.staffCookie }),
     );
     await expect403(
-      await send(app, "POST", `/management-api/devices/${DUMMY}/revoke`, {
+      await send(app, "DELETE", `/management-api/devices/${DUMMY}`, {
         cookie: venue.staffCookie,
       }),
     );
@@ -1909,15 +1909,15 @@ describe("Device management routes (hardware.manage)", () => {
     }
   });
 
-  it("GET /management-api/devices says whether each device's profile was retired", async () => {
+  it("GET /management-api/devices hides deleted devices even when their profile is retired", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const kept = await enrolTill(app, venue, "Live till");
     const gone = await enrolTill(app, venue, "Retired till");
-    const revoke = await send(app, "POST", `/management-api/devices/${gone.deviceId}/revoke`, {
+    const revoke = await send(app, "DELETE", `/management-api/devices/${gone.deviceId}`, {
       cookie: venue.managerCookie,
     });
-    expect(revoke.status).toBe(204);
+    expect(revoke.status).toBe(200);
     // Only a disabled device holds the profile, so deleting it retires the row.
     await withTransaction(suite.db, (tx) =>
       deleteDeviceProfile(tx, {
@@ -1929,14 +1929,14 @@ describe("Device management routes (hardware.manage)", () => {
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { id: string; profileRetired: unknown }[];
     expect(rows.find((r) => r.id === kept.deviceId)?.profileRetired).toBe(false);
-    expect(rows.find((r) => r.id === gone.deviceId)?.profileRetired).toBe(true);
+    expect(rows.find((r) => r.id === gone.deviceId)).toBeUndefined();
   });
 
-  it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
+  it("Delete of an unknown / malformed device id → 404 device.not_found", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const unknown = randomUUID();
-    const res = await send(app, "POST", `/management-api/devices/${unknown}/revoke`, {
+    const res = await send(app, "DELETE", `/management-api/devices/${unknown}`, {
       cookie: venue.managerCookie,
     });
     expect(res.status).toBe(404);
@@ -1944,7 +1944,7 @@ describe("Device management routes (hardware.manage)", () => {
       (await res.json()) as { error: { code: string; params: { deviceId: string } } },
     ).toMatchObject({ error: { code: "device.not_found", params: { deviceId: unknown } } });
 
-    const malformed = await send(app, "POST", "/management-api/devices/not-a-uuid/revoke", {
+    const malformed = await send(app, "DELETE", "/management-api/devices/not-a-uuid", {
       cookie: venue.managerCookie,
     });
     expect(malformed.status).toBe(404);
@@ -3858,7 +3858,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     expect(body).not.toHaveProperty("deviceProfiles");
   });
 
-  it("lists only ACTIVE devices — a revoked device is omitted", async () => {
+  it("lists only ACTIVE devices — a deleted device is omitted", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountDevApp(venue.cfg, true);
     // Enrol through a non-dev mount: a devMode knock auto-accepts as a till.
@@ -3867,11 +3867,11 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId, "Pass screen");
     expect(
       (
-        await send(app, "POST", `/management-api/devices/${doomed.deviceId}/revoke`, {
+        await send(app, "DELETE", `/management-api/devices/${doomed.deviceId}`, {
           cookie: venue.managerCookie,
         })
       ).status,
-    ).toBe(204);
+    ).toBe(200);
 
     const body = (await (await send(app, "GET", "/api/dev/devices")).json()) as {
       devices: { id: string }[];
@@ -4790,11 +4790,11 @@ it.each([false, true])(
         .where(eq(devices.id, device.deviceId));
       expect(
         (
-          await send(app, "POST", `/management-api/devices/${device.deviceId}/revoke`, {
+          await send(app, "DELETE", `/management-api/devices/${device.deviceId}`, {
             cookie: venue.managerCookie,
           })
         ).status,
-      ).toBe(204);
+      ).toBe(200);
     }
     const profiles = new Hono();
     mountManagementApi(
@@ -4829,7 +4829,7 @@ it.each([false, true])(
     else expect(first).toBeUndefined();
     await suite.db
       .update(devices)
-      .set({ deviceProfileId: secondProfileId })
+      .set({ active: true, deviceProfileId: secondProfileId })
       .where(eq(devices.id, device.deviceId));
     expect(
       await withTransaction(suite.db, (tx) =>

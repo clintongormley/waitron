@@ -190,7 +190,13 @@ async function replaceProfileKitchenScreens(
   const onProfile = await tx
     .select({ id: devices.id, label: devices.label })
     .from(devices)
-    .where(and(eq(devices.deviceProfileId, profileId), isNull(devices.deletedAt)))
+    .where(
+      and(
+        eq(devices.deviceProfileId, profileId),
+        eq(devices.active, true),
+        isNull(devices.deletedAt),
+      ),
+    )
     .orderBy(asc(devices.label), asc(devices.id));
   const before =
     onProfile.length === 0

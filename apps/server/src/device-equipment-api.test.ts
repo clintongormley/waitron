@@ -718,21 +718,14 @@ describe("what a device may newly choose", () => {
     return { res, afterManagement, after: await aState() };
   }
 
-  describe.each([
-    ["Delete", "DELETE", ""],
-    ["Disable", "POST", "/revoke"],
-  ] as const)("a %s committed after the session check", (_name, method, suffix) => {
+  describe("Delete committed after the session check", () => {
     it.each([
       ["receipt", () => pp],
       ["card_terminal", () => r3],
     ] as const)("refuses a %s choice and writes nothing for the device", async (role, item) => {
+      const before = await aState();
       const { res, afterManagement, after } = await racedChoice(role, item(), async () => {
-        const res = await send(
-          deviceApp,
-          managerCookie,
-          method,
-          `/management-api/devices/${a}${suffix}`,
-        );
+        const res = await send(deviceApp, managerCookie, "DELETE", `/management-api/devices/${a}`);
         expect(res.status, JSON.stringify(res.json)).toBeLessThan(300);
       });
 
@@ -745,7 +738,7 @@ describe("what a device may newly choose", () => {
         printerHolds: [],
         readerHolds: [],
       });
-      if (method === "DELETE") expect(after.readerChoice).toEqual([]);
+      expect(after.readerChoice).toEqual(before.readerChoice);
     });
   });
 
@@ -784,7 +777,7 @@ describe("what a device may newly choose", () => {
     ["receipt", () => pp],
     ["card_terminal", () => r3],
   ] as const)(
-    "refuses a %s choice when a Disable and then an Enable both land after the session check",
+    "refuses a %s choice when a Delete and then an Add both land after the session check",
     async (role, item) => {
       // Join-api beside device-api on one pairing window, as boot wires them, so Pair can enable A.
       const pairingMode = createPairingMode();
@@ -807,7 +800,7 @@ describe("what a device may newly choose", () => {
         role,
         item(),
         async () => {
-          const off = await send(app, managerCookie, "POST", `/management-api/devices/${a}/revoke`);
+          const off = await send(app, managerCookie, "DELETE", `/management-api/devices/${a}`);
           expect(off.status, JSON.stringify(off.json)).toBeLessThan(300);
           const knock = await send(app, venue.cookie, "POST", "/api/device/join", {
             name: "Barra",

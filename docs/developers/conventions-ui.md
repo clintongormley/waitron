@@ -533,9 +533,9 @@ was (W100).
   till; a till whose profile lacks it opens none, and so does a kitchen display, whatever its
   stored list names.
 - **The Open drawer button** (`POST /api/drawer/open`, `apps/server/src/till-api.ts`) needs a
-  signed-in session, and a session always belongs to a device. Disabling a device ends its
+  signed-in session, and a session always belongs to a device. Deleting a device ends its
   sessions, so they answer `session.required`; a session left open on a device turned off outside
-  the Disable route answers `device.unauthorized` (`requireSession`,
+  Delete answers `device.unauthorized` (`requireSession`,
   `apps/server/src/till-session.ts`). A profile without
   `open-cash-drawer` is refused `device.forbidden_action` (`assertDeviceCapability`,
   `apps/server/src/device-session.ts`); the operator always needs
@@ -1038,33 +1038,32 @@ agent; it restores neither assignments nor ended deliveries. Guards: `apps/serve
 (assignments/history/restoration), `page-printers-api.test.ts` (routes), and dashboard
 `printers-screen.test.ts` (Delete/Add and confirmation).
 
-Card readers and devices retain their Disable/Enable behavior until their own A1484 slices land.
+Card readers retain their Disable/Enable behavior until their own A1484 slice lands.
 
 A deleted card reader is offered as a new registration: when discovery finds it again it is offered as available, and
 adding it creates a new reader beside the deleted row, which its payments still point at. Guard: "is offered by discovery as
 new" in `apps/server/src/payments-api.test.ts`.
 
-Devices follow the same rule, though nothing discovers them. A disabled device's browser keeps its
-`waitron_device` cookie, and a knock whose cookie token verifies against a disabled row
-(`provenDisabledDevice`, `apps/server/src/join-requests.ts`) takes that device's id: the pending list
-marks it `returning`, with the row's name, profile and binding, and whether that profile was
-retired (`profileRetired`, which the waiting list's hint reads and which starts Enable's Profile
-empty), and accepting it enables the same
-row. If that profile was retired since (deleted while only disabled devices held it), accepting with
-it is refused `device_profile.not_found` and the request stays, so Enable needs another profile.
-Outside dev mode it still needs an open Add a device dialog and the number check; in dev mode
-(`config.devMode`) the knock skips both and the device is enabled at once, under the venue's
-default till profile and the name the browser sent rather than its own (`apps/server/src/device-api.ts`).
-The knock gives the disabled
-row the new request's token, so the old cookie stops working and the same browser can knock as
-itself again after a deny or a lapse. Disabling ends every shift session open on the device in the
-same transaction. The till's sign-in checks the PIN before the transaction that opens the session,
+Devices offer Delete and Add, with no Disable/Enable action or Status filter. Delete hides the
+inactive registration and keeps its proof, profile and local choices. It ends sign-ins, releases
+held equipment and ends a pending return request; a payment in progress refuses it. The existing
+browser's proven `waitron_device` cookie lets it ask to return under the same id. A manager accepts
+it through Add a device; a retired profile needs a replacement. A return request replaces the stored
+proof, and old sign-ins stay ended. A browser without that proof joins as a new device.
+
+Guards: `apps/server/src/device-delete.db.test.ts` (retained settings, ended work, refusals and
+rollback), `device-delete.history.test.ts` (history), `device-api.delete.test.ts` (list and routes),
+`join-e2e.test.ts` (proof and manager acceptance), `packages/venue-service/src/station-delete-settings.test.ts`
+(hidden displays do not block station deletion), and `apps/dashboard/src/screens/devices-screen.test.ts`
+(Delete/Add controls and copy).
+
+The till's sign-in checks the PIN before the transaction that opens the session,
 so inside that transaction it checks the device again: still active, and still holding the token
 hash the cookie was verified against, or it is refused `device.unauthorized` and no session opens
-(`assertDeviceStillProven`, `apps/server/src/device-session.ts`). A Disable, or a Disable and then
-an Enable, landing while the PIN is checked therefore leaves no session open
-(`apps/server/src/join-e2e.test.ts`, "a sign-in that Disable overtook is refused, and opens no
-session" and "a sign-in that Disable and then Enable both overtook is refused, and opens no
+(`assertDeviceStillProven`, `apps/server/src/device-session.ts`). A Delete, or a Delete and then
+an Add, landing while the PIN is checked therefore leaves no session open
+(`apps/server/src/join-e2e.test.ts`, "a sign-in that Delete overtook is refused, and opens no
+session" and "a sign-in that Delete and then Add both overtook is refused, and opens no
 session"). The same check hands back the device as it stands at that moment, and the sign-in
 refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile is now a kitchen
 screen's (`refuseKitchenSignIn`, `apps/server/src/till-api.ts`), so a move onto a kitchen-screen
@@ -1078,9 +1077,8 @@ The counter sale, `/api/pay`, collecting a placed order and a bill refund use th
 first in their initial write transaction. Once a reader payment has begun, its outcome is recorded
 without another till sign-in check; the management recovery path can file a captured payment after
 the original till is switched off. Cases: `apps/server/src/till-money.write-session.test.ts` and
-`apps/server/src/payments-api.stuck.test.ts`. Enabling
-still ends any session open on the device, a second line for a device turned off outside the
-Disable route. A
+`apps/server/src/payments-api.stuck.test.ts`. Adding it again
+still ends any session open on the device, a second line for a device turned off outside Delete. A
 knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,
 so the browser keeps the one it has. Cancel and the number check name the ask by its `createdAt` as
 well as its id, and a replacing knock always gets a later `createdAt`, so a dialog still showing the
@@ -1089,17 +1087,11 @@ replaced ask can neither discard, refuse nor claim the new one; it is answered
 `device.pairing_hold_lapsed` first, a refusal that names no ask. One case is not covered: if a knock's response is lost after
 the server committed it, the browser still holds the old token, which no longer matches, and its
 next knock joins as a new device. The cost is a new device row; the old one stays disabled.
-Guards: the "a disabled device comes back as the same device" cases in
+Guards: the "a deleted device comes back as the same device" cases in
 `apps/server/src/join-e2e.test.ts`, "a dialog still showing the ask a second knock replaced" in the
 same file, and "a returning disabled device" in
 `apps/server/src/join-requests.test.ts`. Built in W105b.
 
-A deleted device is different: its knock is not matched, because `provenDisabledDevice` reads only
-rows with no `deleted_at`, so its browser arrives as a new device under a new id. Delete
-(`deleteDevice`, `apps/server/src/device-delete.ts`) signs the device out, ends its hold on printers
-and card readers and its request to come back, removes its settings and clears its token and
-printer choices; the row stays only so its history still names it. Guard: "a deleted device's
-browser comes back as a new device" in `apps/server/src/join-e2e.test.ts`. Built in A435 step 4.
 
 ## Native centring starts inside the configured paper width
 

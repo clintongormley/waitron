@@ -75,7 +75,13 @@ async function settings(tx: Transaction, id: string) {
     .select({ id: devices.id, name: devices.label })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(and(isNull(devices.deletedAt), eq(deviceProfiles.formFactor, "kds")));
+    .where(
+      and(
+        eq(devices.active, true),
+        isNull(devices.deletedAt),
+        eq(deviceProfiles.formFactor, "kds"),
+      ),
+    );
   const bound: DeleteTarget[] = [];
   const resolved = await readDevicesKitchenScreens(
     tx,

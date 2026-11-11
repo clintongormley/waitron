@@ -549,7 +549,7 @@ export async function acceptDeviceJoinRequest(
       { active: true, tokenHash: row.tokenHash },
     );
     await writeKitchenScreens();
-    // The Disable route ends them itself; this catches a device turned off outside it.
+    // A device switched off outside Delete may still have open sessions.
     await endDeviceSessions(tx, row.id);
     return { deviceId: row.id, name: input.label, formFactor };
   }

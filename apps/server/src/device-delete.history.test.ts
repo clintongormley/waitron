@@ -135,7 +135,7 @@ async function seedDeleted() {
       detectedAt: SOLD_AT,
     }),
   );
-  await inTx((tx) => deleteDevice(tx, venue.cfg, barTill, NOW));
+  await inTx((tx) => deleteDevice(tx, venue.cfg, barTill));
   return { venue, profileId: profile!.id, barTill };
 }
 

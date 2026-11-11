@@ -121,29 +121,12 @@ function withEndedSessions(snap: Snapshot, deviceId: string, open: Set<unknown>)
   };
 }
 
-/**
- * What deleting `deviceId` must leave, written from the spec rather than from the writer: its row
- * kept, switched off, marked deleted, its token and printer choices cleared; its sign-ins ended;
- * its holds, request, settings and kitchen screens gone. Every other row is as it was.
- */
-function afterDelete(before: Snapshot, deviceId: string, now: Date): Snapshot {
+function afterDelete(before: Snapshot, deviceId: string): Snapshot {
   const notMine = (rows: Rows) => rows.filter((row) => row.device_id !== deviceId);
   return {
     ...before,
     devices: byJson(
-      before.devices!.map((row) =>
-        row.id === deviceId
-          ? {
-              ...row,
-              active: 0,
-              deleted_at: now.toISOString(),
-              token_hash: "",
-              receipt_printer_id: null,
-              payment_slip_printer_id: null,
-              cash_drawer_printer_id: null,
-            }
-          : row,
-      ),
+      before.devices!.map((row) => (row.id === deviceId ? { ...row, active: 0 } : row)),
     ),
     sessions: byJson(
       before.sessions!.map((row) =>
@@ -152,13 +135,6 @@ function afterDelete(before: Snapshot, deviceId: string, now: Date): Snapshot {
     ),
     printer_holders: notMine(before.printer_holders!),
     card_reader_holders: notMine(before.card_reader_holders!),
-    device_made_here_stations: notMine(before.device_made_here_stations!),
-    device_approved_profiles: notMine(before.device_approved_profiles!),
-    device_card_readers: notMine(before.device_card_readers!),
-    device_kitchen_screens: notMine(before.device_kitchen_screens!),
-    device_kitchen_screen_stations: notMine(before.device_kitchen_screen_stations!),
-    device_kitchen_screen_zones: notMine(before.device_kitchen_screen_zones!),
-    device_kitchen_screen_removals: notMine(before.device_kitchen_screen_removals!),
     join_requests: before.join_requests!.filter((row) => row.id !== deviceId),
   };
 }
@@ -464,27 +440,7 @@ function expectedImpact(s: Seeded): DeleteImpact {
       { key: "held_readers", count: 1, targets: [{ id: s.readerR, name: "Reader R" }] },
       { key: "join_request", count: 1, targets: [] },
     ],
-    removes: [
-      {
-        key: "printer_choices",
-        count: 2,
-        targets: [
-          { id: s.counterP, name: "Counter P" },
-          { id: s.handheldP, name: "Handheld P" },
-        ],
-      },
-      {
-        key: "made_here_stations",
-        count: 2,
-        targets: [
-          { id: s.bar, name: "Bar" },
-          { id: s.grill, name: "Grill" },
-        ],
-      },
-      { key: "approved_profiles", count: 1, targets: [{ id: s.waiters, name: "Waiters" }] },
-      { key: "card_reader", count: 1, targets: [{ id: s.readerR, name: "Reader R" }] },
-      { key: "kitchen_screens", count: 1, targets: [] },
-    ],
+    removes: [],
   };
 }
 
@@ -498,7 +454,7 @@ async function codeOf(run: () => Promise<unknown>): Promise<unknown> {
 }
 
 describe("the device delete impact", () => {
-  it("names every sign-in, held printer and reader, request and setting the delete touches, and writes nothing", async () => {
+  it("names only the sign-ins, held equipment and returning request Delete ends, and writes nothing", async () => {
     const s = await seed();
     const before = await snapshot();
     const impact = await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
@@ -541,7 +497,7 @@ describe("the device delete impact", () => {
       ]);
 
       const before = await snapshot();
-      const error = await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW)));
+      const error = await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill)));
       expect(error).toMatchObject({ code: "device.payment_in_progress" });
       expect(await snapshot()).toEqual(before);
     },
@@ -584,24 +540,26 @@ describe("the device delete impact", () => {
 
   it("answers device.not_found for an unknown device and a deleted one", async () => {
     const s = await seed();
-    await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+    await suite.db
+      .update(devices)
+      .set({ active: false, deletedAt: NOW.toISOString() })
+      .where(eq(devices.id, s.barTill));
     const before = await snapshot();
     for (const id of [s.barTill, randomUUID()]) {
       expect(await codeOf(() => inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, id)))).toMatchObject(
         { code: "device.not_found" },
       );
-      expect(await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, id, NOW)))).toMatchObject({
+      expect(await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, id)))).toMatchObject({
         code: "device.not_found",
       });
     }
     expect(await snapshot()).toEqual(before);
   });
 
-  it("answers an empty impact for a disabled device with nothing left on it, and deletes it", async () => {
+  it("answers an empty impact for a device with no sign-ins, holds or request, and deletes it", async () => {
     const s = await seed();
     const spare = (await enrolDeviceForTest(suite.db, s.cfg, { name: "Spare", profileId: s.tills }))
       .deviceId;
-    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, spare));
     const empty: DeleteImpact = {
       target: { id: spare, name: "Spare" },
       refusals: [],
@@ -610,11 +568,11 @@ describe("the device delete impact", () => {
     };
     expect(await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, spare))).toEqual(empty);
     const before = await snapshot();
-    expect(await inTx((tx) => deleteDevice(tx, s.cfg, spare, NOW))).toEqual(empty);
-    expect(await snapshot()).toEqual(afterDelete(before, spare, NOW));
+    expect(await inTx((tx) => deleteDevice(tx, s.cfg, spare))).toEqual(empty);
+    expect(await snapshot()).toEqual(afterDelete(before, spare));
   });
 
-  it("deletes: ends sign-ins, holds and the request, removes every setting, clears the token and printer choices, keeps the row and every history row", async () => {
+  it("deletes: ends sign-ins, holds and the request, retaining proof, all settings and every history row", async () => {
     const s = await seed();
     const before = await snapshot();
     const history = [
@@ -633,12 +591,12 @@ describe("the device delete impact", () => {
     expect(before.device_kitchen_screens!.some((row) => row.device_id === s.barTill)).toBe(true);
     expect(before.join_requests!.some((row) => row.id === s.barTill)).toBe(true);
 
-    const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+    const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
 
     expect(impact).toEqual(expectedImpact(s));
     const after = await snapshot();
     expect(withEndedSessions(after, s.barTill, openSessionIds(before, s.barTill))).toEqual(
-      afterDelete(before, s.barTill, NOW),
+      afterDelete(before, s.barTill),
     );
     for (const table of history) {
       expect(before[table], table).toBeDefined();
@@ -648,7 +606,7 @@ describe("the device delete impact", () => {
 
   it("lets a new device take the deleted device's name at the same location", async () => {
     const s = await seed();
-    await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+    await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
     const again = await enrolDeviceForTest(suite.db, s.cfg, {
       name: "Bar till",
       profileId: s.tills,
@@ -665,7 +623,7 @@ describe("the device delete impact", () => {
     );
   });
 
-  it("recomputes inside the delete: a sign-in or setting added after the read is ended or removed too", async () => {
+  it("recomputes inside Delete: ends a later sign-in and keeps a later setting", async () => {
     const s = await seed();
     await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill));
     await signIn(s.barTill);
@@ -674,25 +632,17 @@ describe("the device delete impact", () => {
       .values({ deviceId: s.barTill, stationId: s.fryer });
     const before = await snapshot();
 
-    const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+    const impact = await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
 
     expect(impact.ends.find((item) => item.key === "sessions")).toEqual({
       key: "sessions",
       count: 2,
       targets: [],
     });
-    expect(impact.removes.find((item) => item.key === "made_here_stations")).toEqual({
-      key: "made_here_stations",
-      count: 3,
-      targets: [
-        { id: s.bar, name: "Bar" },
-        { id: s.fryer, name: "Fryer" },
-        { id: s.grill, name: "Grill" },
-      ],
-    });
+    expect(impact.removes).toEqual([]);
     expect(
       withEndedSessions(await snapshot(), s.barTill, openSessionIds(before, s.barTill)),
-    ).toEqual(afterDelete(before, s.barTill, NOW));
+    ).toEqual(afterDelete(before, s.barTill));
   });
 
   it("a payment started after the read refuses the delete, and nothing is written", async () => {
@@ -700,16 +650,16 @@ describe("the device delete impact", () => {
     expect((await inTx((tx) => readDeviceDeleteImpact(tx, s.cfg, s.barTill))).refusals).toEqual([]);
     await cardPayment(await openOrder(s.venue), s.barTill, "attempting");
     const before = await snapshot();
-    expect(await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW)))).toMatchObject(
-      { code: "device.payment_in_progress" },
-    );
+    expect(await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill)))).toMatchObject({
+      code: "device.payment_in_progress",
+    });
     expect(await snapshot()).toEqual(before);
   });
 
   it("leaves the control device, its sign-in, its hold and its settings exactly as they were", async () => {
     const s = await seed();
     const before = await snapshot();
-    await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+    await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
     const after = await snapshot();
     const passRows = (snap: Snapshot, table: string, column = "device_id") =>
       snap[table]!.filter((row) => row[column] === s.pass);
@@ -742,11 +692,11 @@ describe("the device delete impact", () => {
     try {
       const before = await snapshot();
       await suite.db.execute(
-        sql.raw(`create trigger test_refuse before update of deleted_at on devices
+        sql.raw(`create trigger test_refuse before update of active on devices
           begin select raise(abort, 'test_delete_failure'); end`),
       );
       try {
-        const error = await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW)));
+        const error = await codeOf(() => inTx((tx) => deleteDevice(tx, s.cfg, s.barTill)));
         expect(String(error)).toMatch(/test_delete_failure/);
         expect(await snapshot()).toEqual(before);
         expect(heard).toEqual([]);
@@ -755,7 +705,7 @@ describe("the device delete impact", () => {
       }
 
       // Control: the same subscription hears the delete once the trigger is gone.
-      await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill, NOW));
+      await inTx((tx) => deleteDevice(tx, s.cfg, s.barTill));
       expect(heard).toContainEqual(expect.objectContaining({ type: "devices", id: s.barTill }));
     } finally {
       unsubscribe();
@@ -765,7 +715,7 @@ describe("the device delete impact", () => {
   });
 });
 
-it("device deletion reports and removes all saved profile zone selections, retaining other devices", async () => {
+it("device deletion keeps all saved profile zone selections, retaining other devices", async () => {
   const venue = await setupVenue(suite.db);
   const firstProfile = await profile("First");
   const secondProfile = await profile("Second");
@@ -796,10 +746,9 @@ it("device deletion reports and removes all saved profile zone selections, retai
   await save(two);
   await suite.db.update(devices).set({ deviceProfileId: secondProfile }).where(eq(devices.id, one));
   await save(one);
-  await suite.db.update(devices).set({ active: false }).where(eq(devices.id, one));
   expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(2);
   const impact = await inTx((tx) => readDeviceDeleteImpact(tx, venue.cfg, one));
-  expect(impact.removes).toContainEqual({ key: "zone_selections", count: 2, targets: [] });
+  expect(impact.removes).toEqual([]);
   const before = await snapshot();
   await expect(
     inTx(async (tx) => {
@@ -809,6 +758,6 @@ it("device deletion reports and removes all saved profile zone selections, retai
   ).rejects.toThrow("rollback device deletion");
   expect(await snapshot()).toEqual(before);
   await inTx((tx) => deleteDevice(tx, venue.cfg, one));
-  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(0);
+  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(2);
   expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, two))).toBe(1);
 });

@@ -106,7 +106,7 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
         eq(deviceProfilePrinters.isDefault, true),
       ),
     )
-    .where(isNull(devices.deletedAt));
+    .where(and(eq(devices.active, true), isNull(devices.deletedAt)));
   const equipment = await readPrinterEquipment(
     tx,
     candidates.map((device) => device.id),

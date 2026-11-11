@@ -58,7 +58,7 @@ export async function openTillSession(
 /**
  * The cookie of `personId`'s shift session on a device at the venue that has since been
  * revoked: the request every till route refuses `device.unauthorized`. Revoked out of band, because
- * the Disable route ends the device's sessions.
+ * Delete ends the device's sessions.
  */
 export async function revokedDeviceSessionCookie(
   db: Database,

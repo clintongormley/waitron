@@ -53,7 +53,6 @@ import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
 import type { TradingContext } from "./trading-context.js";
 import { offerOnProfile } from "./testing/enrol.js";
-import { deleteDevice } from "./device-delete.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 
 const stationScreen = (stationId: string): DeviceKitchenScreen => ({
@@ -1411,18 +1410,17 @@ describe("a returning disabled device", () => {
     expect(await proven(`${made.joinId}.${made.token}`)).toBeNull();
   });
 
-  /** A till enrolled and then deleted through `deleteDevice`, with a REAL hash of its token written
-   * back onto the row. The delete itself blanks the hash, which refuses every proof on its own; the
-   * write puts the conditions on `deleted_at` alone between a deleted row and a match. */
   async function deletedWithRealHash(venue: { cfg: TradingContext }, profileId: string) {
     const made = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });
       return made;
     });
-    await withTransaction(suite.db, (tx) => deleteDevice(tx, venue.cfg, made.joinId));
     const tokenHash = hashDeviceToken(made.token);
-    await suite.db.update(devices).set({ tokenHash }).where(eq(devices.id, made.joinId));
+    await suite.db
+      .update(devices)
+      .set({ active: false, deletedAt: new Date().toISOString(), tokenHash })
+      .where(eq(devices.id, made.joinId));
     return { deviceId: made.joinId, tokenHash };
   }
 

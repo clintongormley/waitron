@@ -426,7 +426,7 @@ describe("a claim whose hold lapsed is forgotten only once its request's deletio
   });
 });
 
-describe("a disabled device comes back as the same device", () => {
+describe("a deleted device comes back as the same device", () => {
   async function knockWith(app: Hono, name: string, cookie?: string): Promise<Response> {
     return send(app, "POST", "/api/device/join", {
       body: { name },
@@ -476,10 +476,10 @@ describe("a disabled device comes back as the same device", () => {
   }
 
   async function disable(app: Hono, venue: Venue, deviceId: string): Promise<void> {
-    const res = await send(app, "POST", `/management-api/devices/${deviceId}/revoke`, {
+    const res = await send(app, "DELETE", `/management-api/devices/${deviceId}`, {
       cookie: venue.managerCookie,
     });
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(200);
   }
 
   async function deviceRow(id: string) {
@@ -735,7 +735,7 @@ describe("a disabled device comes back as the same device", () => {
     expect((await errorOf(after)).code).toBe("session.required");
   });
 
-  it("Disable ends every shift session open on the device at once, and no other device's", async () => {
+  it("Delete ends every shift session open on the device at once, and no other device's", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
     const profileId = await seedProfile("till");
@@ -792,7 +792,7 @@ describe("a disabled device comes back as the same device", () => {
     expect((await errorOf(afterEnable)).code).toBe("session.required");
   });
 
-  it("a sign-in that Disable overtook is refused, and opens no session", async () => {
+  it("a sign-in that Delete overtook is refused, and opens no session", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountWithSignIn(venue);
     const profileId = await seedProfile("till");
@@ -814,7 +814,7 @@ describe("a disabled device comes back as the same device", () => {
     expect(await openSessionsOn(deviceId)).toBe(0);
   });
 
-  it("a sign-in that Disable and then Enable both overtook is refused, and opens no session", async () => {
+  it("a sign-in that Delete and then Add both overtook is refused, and opens no session", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountWithSignIn(venue);
     const profileId = await seedProfile("till");
@@ -1022,7 +1022,7 @@ describe("a disabled device comes back as the same device", () => {
     ]);
   });
 
-  it("a deleted device's browser comes back as a new device whose sign-in works, and the old cookie stays refused", async () => {
+  it("a deleted device returns with the same identity and a new proof, while the old cookie stays refused", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountWithSignIn(venue);
     const profileId = await seedProfile("till");
@@ -1039,9 +1039,9 @@ describe("a disabled device comes back as the same device", () => {
     expect(deleted.status).toBe(200);
 
     const back = await joined(await knockWith(app, "Bar till", oldJar));
-    expect(back.joinId).not.toBe(deviceId);
+    expect(back.joinId).toBe(deviceId);
     expect(await listJoinRequests(app, venue)).toMatchObject([
-      { id: back.joinId, returning: null },
+      { id: back.joinId, returning: expect.objectContaining({ name: "Bar till" }) },
     ]);
     const accepted = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
     expect(accepted.status).toBe(200);
@@ -1052,14 +1052,11 @@ describe("a disabled device comes back as the same device", () => {
     const signedIn = await signIn(app, back.jar, person!.id);
     expect(signedIn.status).toBe(200);
     expect(await openSessionsOn(back.joinId)).toBe(1);
-    expect(await openSessionsOn(deviceId)).toBe(0);
-    expect(await deviceCount()).toBe(2);
+    expect(await deviceCount()).toBe(1);
     const row = await deviceRow(deviceId);
-    expect({ active: row.active, tokenHash: row.tokenHash }).toEqual({
-      active: false,
-      tokenHash: "",
-    });
-    expect(row.deletedAt).not.toBeNull();
+    expect(row.active).toBe(true);
+    expect(row.tokenHash).not.toBe("");
+    expect(row.deletedAt).toBeNull();
   });
 
   it("a cookie naming a disabled device with the wrong token joins as a new device", async () => {

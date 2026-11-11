@@ -1421,7 +1421,7 @@ describe("a profile save narrowing its devices", () => {
     return { venue, line, all };
   }
 
-  it("takes a station off each device on the profile, switched off or not, and no other", async () => {
+  it("narrows active devices on the profile, retaining hidden devices and other profiles", async () => {
     const { venue, line, all } = await narrowing();
     const old = await seedDevice(venue.kds, "Old line");
     await choose(old, venue.kds, [station([venue.pastry, venue.cold])]);
@@ -1436,7 +1436,6 @@ describe("a profile save narrowing its devices", () => {
     ).resolves.toEqual([
       lost(all, "All", { stations: [named(venue.pastry, "Pastry")] }),
       lost(line, "Line", { stations: [named(venue.pastry, "Pastry")] }),
-      lost(old, "Old line", { stations: [named(venue.pastry, "Pastry")] }),
     ]);
     await expect(shown(line)).resolves.toEqual([
       {
@@ -1470,9 +1469,9 @@ describe("a profile save narrowing its devices", () => {
     ]);
     expect((await shown(old))[0]!.stations).toEqual([
       slot(venue.cold, "Cold"),
-      slot(venue.pastry, "Pastry", false),
+      slot(venue.pastry, "Pastry"),
     ]);
-    for (const device of [line, all, old]) {
+    for (const device of [line, all]) {
       expect(
         (await removalsOf(device)).map(({ screen, stationId, zoneId }) => ({
           screen,
@@ -1481,6 +1480,7 @@ describe("a profile save narrowing its devices", () => {
         })),
       ).toEqual([{ screen: "station", stationId: venue.pastry, zoneId: null }]);
     }
+    expect(await removalsOf(old)).toEqual([]);
     expect(await removalsOf(elsewhere)).toEqual([]);
     expect((await shown(elsewhere))[0]!.stations).toEqual([slot(venue.pastry, "Pastry")]);
   });
@@ -1499,8 +1499,6 @@ describe("a profile save narrowing its devices", () => {
     }
   });
 
-  /** Marks the device deleted and removes its kitchen screens: what `deleteDevice` (in
-   *  apps/server, out of this package's reach) leaves in these tables. */
   async function deleted(deviceId: string) {
     await db
       .update(devices)
@@ -1509,14 +1507,15 @@ describe("a profile save narrowing its devices", () => {
     await scoped((tx) => removeDeviceKitchenScreens(tx, deviceId));
   }
 
-  it("narrows a switched-off device on the profile and reports nothing for a deleted one", async () => {
+  it("keeps a hidden device and reports nothing for a deleted one", async () => {
     const { venue, line, all } = await narrowing();
     await db.update(devices).set({ active: false }).where(eq(devices.id, line));
     await deleted(all);
 
     await expect(
       set(venue.kds, { station: { stationIds: [venue.grill, venue.cold], zoneIds: null } }),
-    ).resolves.toEqual([lost(line, "Line", { stations: [named(venue.pastry, "Pastry")] })]);
+    ).resolves.toEqual([]);
+    expect(await removalsOf(line)).toEqual([]);
     expect(await removalsOf(all)).toEqual([]);
   });
 

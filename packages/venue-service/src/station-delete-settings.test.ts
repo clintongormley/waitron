@@ -241,7 +241,7 @@ it("clears owned daily dates and incoming destinations without reopening their o
   });
 });
 
-it("ignores deleted KDS rows while an off retained display still binds the station", async () => {
+it("a deleted kitchen display does not block deleting a station", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "Every");
@@ -260,13 +260,11 @@ it("ignores deleted KDS rows while an off retained display still binds the stati
       .update(devices)
       .set({ deletedAt: at.toISOString(), tokenHash: "" })
       .where(eq(devices.id, deleted));
-    expect((await module.readStationDeleteSettings(tx, f.gone)).boundScreens).toEqual([
-      { id: off, name: "Off display" },
-    ]);
+    expect((await module.readStationDeleteSettings(tx, f.gone)).boundScreens).toEqual([]);
   });
 });
 
-it("finds explicitly bound KDS choices including switched-off devices and deduplicates affected settings owners", async () => {
+it("finds active bound KDS choices and deduplicates affected settings owners", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
     const bounded = await profile(tx, "Bound");
@@ -310,7 +308,6 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
     expect(impact.boundScreens).toEqual([
       { id: explicit, name: "Á explicit" },
       { id: boundEvery, name: "B bound" },
-      { id: off, name: "Off" },
     ]);
     expect(impact.removes).toEqual([
       {
@@ -585,7 +582,6 @@ it.each(["pass", "pass_monitor"] as const)(
       expect((await module.readStationDeleteSettings(tx, f.gone)).boundScreens).toEqual([
         { id: explicit, name: "A explicit" },
         { id: boundEvery, name: "B bound" },
-        { id: off, name: "Off" },
       ]);
     });
   },

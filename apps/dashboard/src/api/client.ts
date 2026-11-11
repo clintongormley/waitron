@@ -3857,10 +3857,6 @@ export class DashboardApi {
     return this.#request(`/management-api/devices/${id}`, "DELETE");
   }
 
-  revokeDevice(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
-  }
-
   /** Everything about a device but its card reader, which `setDeviceReader` saves. */
   updateDevice(
     id: string,

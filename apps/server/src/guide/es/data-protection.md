@@ -531,19 +531,17 @@ Cada pérdida siguiente dice qué expone y qué hacer en Waitron. Después respo
 **Un dispositivo de caja robado.** El navegador de una caja guarda algunas cosas en el propio
 dispositivo: un identificador de la última persona que inició sesión en él, la lista de platos que
 hay que preparar ahora con las notas escritas en ellos, y las devoluciones sin terminar con el
-motivo escrito en cada una. Deshabilitar o eliminar el dispositivo no borra nada en él. La
+motivo escrito en cada una. Eliminar el dispositivo no borra nada en él. La
 aplicación de caja borra las devoluciones sin terminar de una persona cuando esa persona cierra la
 sesión o la caja se bloquea sola, pero conserva las otras dos. Las que quedaron cuando la caja se
-cerró, se recargó o el equipo la rechazó, como ocurre al deshabilitarla, siguen en el dispositivo.
-Actúa en este orden. En **Dispositivos**, elige enseguida **Deshabilitar** en la fila del
-dispositivo: cierra todas las sesiones del personal en el dispositivo y le impide conectarse.
-Después, anota su **Visto por última vez**, y averigua quién lo usó con las copias de los datos de
-cada persona. Luego elige **Eliminar**, que impide que el dispositivo vuelva a demostrar quién es, y
-que Waitron rechaza mientras haya un pago en curso en él. Hasta que lo eliminas, un dispositivo
-deshabilitado puede pedir volver y aparecer en **Dispositivos que solicitan el alta**. Nunca elijas
-**Habilitar** para un dispositivo que perdiste.
+cerró, se recargó o el equipo la rechazó, como ocurre al eliminarla, siguen en el dispositivo.
+Anota su **Visto por última vez** en **Dispositivos** y después elige **Eliminar** en su fila:
+cierra todas las sesiones del personal en el dispositivo y le impide conectarse. Waitron rechaza
+Eliminar mientras haya un pago en curso en él. Averigua quién lo usó con las copias de los datos de
+cada persona. Un dispositivo eliminado puede pedir volver y aparecer en **Dispositivos que
+solicitan el alta**. Nunca vuelvas a añadir al local un dispositivo que perdiste.
 
-**Un móvil o un portátil robado que se usaba para el panel.** Deshabilitar un dispositivo solo
+**Un móvil o un portátil robado que se usaba para el panel.** Eliminar un dispositivo solo
 cierra sus sesiones de caja; una sesión del panel pertenece a la persona. Por eso un administrador
 abre **Usuarios** y elige **Restablecer acceso** para esa persona. Cierra todas sus sesiones,
 borra su PIN, su contraseña, sus llaves de acceso, su verificación en dos pasos, sus códigos de

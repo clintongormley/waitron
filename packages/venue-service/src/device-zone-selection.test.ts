@@ -357,7 +357,7 @@ describe("device zone selection", () => {
     await expect(read(f)).rejects.toMatchObject({ code: "device.not_found" });
   });
 
-  it("retains disabled device preferences and removes every saved profile for only the named device", async () => {
+  it("refuses hidden devices while retaining their saved preferences", async () => {
     const f = await fixture();
     await save(f, [f.terrace], f.terrace);
     await run(async (tx) => {
@@ -368,6 +368,8 @@ describe("device zone selection", () => {
       });
       await tx.update(devices).set({ active: false }).where(eq(devices.id, f.deviceId));
     });
+    await expect(read(f)).rejects.toMatchObject({ code: "device.not_found" });
+    await run((tx) => tx.update(devices).set({ active: true }).where(eq(devices.id, f.deviceId)));
     expect(await read(f)).toMatchObject({ selectedZoneIds: [f.terrace] });
     await run((tx) => VENUE_SERVICE.removeDeviceZoneSelections(tx, f.deviceId));
     expect(await run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, f.deviceId))).toBe(0);

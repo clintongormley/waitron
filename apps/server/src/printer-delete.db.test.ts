@@ -577,7 +577,7 @@ describe("the printer delete impact", () => {
     }
   });
 
-  it("names a disabled device inheriting the printer as its profile's default, and not a deleted one", async () => {
+  it("omits hidden devices inheriting the printer as their profile default", async () => {
     const v = await seedVenueWithPrinters();
     const [series] = await suite.db.select().from(invoiceSeries);
     const tillCfg: TradingContext = {
@@ -604,15 +604,15 @@ describe("the printer delete impact", () => {
     };
     const gone = await deliDevice("Deli till");
     const spare = await deliDevice("Deli spare");
-    await withTransaction(suite.db, (tx) => deleteDevice(tx, tillCfg, gone, NOW));
+    await suite.db.update(devices).set({ active: true }).where(eq(devices.id, gone));
+    await withTransaction(suite.db, (tx) => deleteDevice(tx, tillCfg, gone));
 
     const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.Z));
 
-    expect(impact.removes.find((item) => item.key === "device_receipt_default")).toEqual({
-      key: "device_receipt_default",
-      count: 1,
-      targets: [{ id: spare, name: "Deli spare" }],
-    });
+    expect(impact.removes.find((item) => item.key === "device_receipt_default")).toBeUndefined();
+    expect((await suite.db.select().from(devices).where(eq(devices.id, spare)))[0]!.active).toBe(
+      false,
+    );
     const goneRow = async () =>
       (await suite.db.execute(sql`select * from devices where id = ${gone}`)).rows;
     const kept = await goneRow();

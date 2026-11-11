@@ -223,7 +223,7 @@ async function requireKnownDevice(tx: Transaction, deviceId: string): Promise<vo
   const [device] = await tx
     .select({ id: devices.id })
     .from(devices)
-    .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
+    .where(and(eq(devices.id, deviceId), eq(devices.active, true), isNull(devices.deletedAt)));
   if (device === undefined) throw new AppError("device.not_found", { deviceId });
 }
 

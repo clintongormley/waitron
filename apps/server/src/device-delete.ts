@@ -9,11 +9,7 @@ import {
 import {
   billPaymentRefunds,
   billPayments,
-  deviceApprovedProfiles,
-  deviceMadeHereStations,
-  deviceProfiles,
   devices,
-  kitchenStations,
   printerHolders,
   printers,
   workingOrders,
@@ -24,13 +20,11 @@ import {
   IN_PROGRESS_PAYMENT_STATES,
   cardReaderHolders,
   cardReaders,
-  deviceCardReaders,
   payments,
 } from "@waitron/payments";
 import { named } from "./delete-impact.js";
 import { releaseDevice } from "./device-equipment.js";
 import { endReturningRequest, hasReturningRequest } from "./join-requests.js";
-import { VENUE_SERVICE } from "./modules.js";
 import type { TradingContext } from "./trading-context.js";
 
 const orderName = (row: {
@@ -44,7 +38,6 @@ const orderName = (row: {
 
 const counted = (key: string, count: number): DeleteImpactItem => ({ key, count, targets: [] });
 
-/** The impact read and the delete both call this, so the delete acts on exactly what it reports. */
 async function deviceDeleteRules(
   tx: Transaction,
   cfg: TradingContext,
@@ -54,9 +47,6 @@ async function deviceDeleteRules(
     .select({
       id: devices.id,
       name: devices.label,
-      receiptPrinterId: devices.receiptPrinterId,
-      paymentSlipPrinterId: devices.paymentSlipPrinterId,
-      cashDrawerPrinterId: devices.cashDrawerPrinterId,
     })
     .from(devices)
     .where(and(eq(devices.id, id), isNull(devices.deletedAt)));
@@ -104,49 +94,11 @@ async function deviceDeleteRules(
     .where(eq(cardReaderHolders.deviceId, id));
   const returning = await hasReturningRequest(tx, cfg, id);
 
-  const choiceIds = [
-    device.receiptPrinterId,
-    device.paymentSlipPrinterId,
-    device.cashDrawerPrinterId,
-  ].filter((printerId): printerId is string => printerId !== null);
-  const chosenPrinters =
-    choiceIds.length === 0
-      ? []
-      : await tx
-          .select({ id: printers.id, name: printers.name })
-          .from(printers)
-          .where(inArray(printers.id, choiceIds));
-  const madeHere = await tx
-    .select({ id: kitchenStations.id, name: kitchenStations.name })
-    .from(deviceMadeHereStations)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, deviceMadeHereStations.stationId))
-    .where(eq(deviceMadeHereStations.deviceId, id));
-  const approved = await tx
-    .select({ id: deviceProfiles.id, name: deviceProfiles.name })
-    .from(deviceApprovedProfiles)
-    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceApprovedProfiles.deviceProfileId))
-    .where(eq(deviceApprovedProfiles.deviceId, id));
-  const chosenReader = await tx
-    .select({ id: cardReaders.id, name: cardReaders.name })
-    .from(deviceCardReaders)
-    .innerJoin(cardReaders, eq(cardReaders.id, deviceCardReaders.readerId))
-    .where(eq(deviceCardReaders.deviceId, id));
-  const kitchenScreens = await VENUE_SERVICE.countDeviceKitchenScreens(tx, id);
-  const zoneSelections = await VENUE_SERVICE.countDeviceZoneSelections(tx, id);
-
   const ends: DeleteImpactItem[] = [
     counted("sessions", openSessions.length),
     named("held_printers", heldPrinters),
     named("held_readers", heldReaders),
     counted("join_request", returning ? 1 : 0),
-  ];
-  const removes: DeleteImpactItem[] = [
-    named("printer_choices", chosenPrinters),
-    named("made_here_stations", madeHere),
-    named("approved_profiles", approved),
-    named("card_reader", chosenReader),
-    counted("kitchen_screens", kitchenScreens),
-    counted("zone_selections", zoneSelections),
   ];
   return {
     target: { id: device.id, name: device.name },
@@ -155,12 +107,10 @@ async function deviceDeleteRules(
         ? []
         : [{ code: "device.payment_in_progress", params: {}, targets: unfinished.targets }],
     ends: ends.filter((item) => item.count > 0),
-    removes: removes.filter((item) => item.count > 0),
+    removes: [],
   };
 }
 
-/** What deleting the device would refuse, end and remove now; `device.not_found` once it is
- * deleted. */
 export async function readDeviceDeleteImpact(
   tx: Transaction,
   cfg: TradingContext,
@@ -183,38 +133,14 @@ export async function disableDevice(tx: Transaction, id: string): Promise<void> 
   await releaseDevice(tx, id);
 }
 
-/**
- * Recomputes the impact on the caller's transaction and, unless a payment is in progress on the
- * device, acts on it: ends its sign-ins, holds and request to come back, removes its settings and
- * kitchen screens, and keeps the row, switched off, marked deleted, its token and printer choices
- * cleared.
- */
 export async function deleteDevice(
   tx: Transaction,
   cfg: TradingContext,
   id: string,
-  now = new Date(),
 ): Promise<DeleteImpact> {
   const impact = await deviceDeleteRules(tx, cfg, id);
   if (impact.refusals.length > 0) throw new AppError("device.payment_in_progress", {});
-  await endDeviceSessions(tx, id);
-  await releaseDevice(tx, id);
+  await disableDevice(tx, id);
   await endReturningRequest(tx, cfg, id);
-  await tx.delete(deviceMadeHereStations).where(eq(deviceMadeHereStations.deviceId, id));
-  await tx.delete(deviceApprovedProfiles).where(eq(deviceApprovedProfiles.deviceId, id));
-  await tx.delete(deviceCardReaders).where(eq(deviceCardReaders.deviceId, id));
-  await VENUE_SERVICE.removeDeviceKitchenScreens(tx, id);
-  await VENUE_SERVICE.removeDeviceZoneSelections(tx, id);
-  await tx
-    .update(devices)
-    .set({
-      active: false,
-      deletedAt: now.toISOString(),
-      tokenHash: "",
-      receiptPrinterId: null,
-      paymentSlipPrinterId: null,
-      cashDrawerPrinterId: null,
-    })
-    .where(and(eq(devices.id, id), isNull(devices.deletedAt)));
   return impact;
 }

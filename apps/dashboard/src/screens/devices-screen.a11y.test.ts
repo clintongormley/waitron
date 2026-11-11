@@ -244,7 +244,6 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     acceptDeviceJoinRequest: vi
       .fn()
       .mockResolvedValue({ deviceId: "d9", name: "Pass display", formFactor: "kds" }),
-    revokeDevice: vi.fn().mockResolvedValue(undefined),
     updateDevice: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue([
       {
@@ -1040,7 +1039,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       target: named,
       refusals: [],
       ends: [{ key: "sessions", count: 2, targets: [] }],
-      removes: [{ key: "printer_choices", count: 1, targets: [{ id: "p1", name: "Back bar" }] }],
+      removes: [],
     };
     const refused: DeleteImpact = {
       ...ready,
