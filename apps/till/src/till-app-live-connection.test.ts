@@ -315,3 +315,27 @@ it("a change during a focus-started draft read queues a fresh read while connect
   await flush(el);
   expect(api.listDrafts).toHaveBeenCalledTimes(before + 2);
 });
+
+it.each(["focus", "visibilitychange"])(
+  "%s refreshes bills after a hidden live change",
+  async (event) => {
+    const stream = liveReadFixture();
+    const { el } = await mountApp({ readLiveEvents: stream.read });
+    await openTable(el);
+    stream.event("ready");
+    await flush(el);
+    const bills = api.getPartyBills!.mock.calls.length;
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    try {
+      stream.event("change", '[{"type":"working_orders"}]');
+      await flush(el);
+      expect(api.getPartyBills).toHaveBeenCalledTimes(bills);
+      hidden.mockReturnValue(false);
+      (event === "focus" ? window : document).dispatchEvent(new Event(event));
+      await flush(el);
+      expect(api.getPartyBills).toHaveBeenCalledTimes(bills + 1);
+    } finally {
+      hidden.mockRestore();
+    }
+  },
+);

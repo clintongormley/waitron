@@ -2501,11 +2501,13 @@ export class TillApp extends LitElement {
 
   readonly #onDraftFocus = (): void => {
     void this.#refreshBillDraft();
+    void this.#rereadBillsOnTimer();
     void this.#refreshTableAllergy();
   };
 
   readonly #onVisibility = (): void => {
     void this.#refreshBillDraft();
+    void this.#rereadBillsOnTimer();
     this.sessionActivity.reacquire();
     this.#syncEquipmentNfc();
   };
