@@ -20,6 +20,7 @@ import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { nodeSigningPublicKey } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverOperation, readOpenHandoverOperation } from "@waitron/node-db";
+import { AppError } from "@waitron/shared";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
@@ -50,6 +51,7 @@ const dirs = () => ({
 const fixture = placedSpareFixture({ mainBox, spareBefore, dirs });
 const external = {
   fault: "ECONNREFUSED",
+  thrown: undefined as Error | undefined,
   restriction: undefined as
     undefined | { kind: "superseded"; successorNodeId: string; operationId: string | null },
   calls: 0,
@@ -72,6 +74,7 @@ beforeEach(async () => {
   spareBefore.node.run(sql`vacuum into ${join(dirs().spareVenue, "node.db")}`);
   placed = await openVenueDatabase(dirs().spareVenue);
   external.fault = "ECONNREFUSED";
+  external.thrown = undefined;
   external.restriction = undefined;
   external.calls = 0;
 });
@@ -99,6 +102,7 @@ function service(origin = "https://spare.example") {
       passwordThrottle: createPasswordThrottle(),
       fetch: async (_url, init) => {
         external.calls += 1;
+        if (external.thrown !== undefined) throw external.thrown;
         if (external.restriction === undefined)
           throw Object.assign(new Error("synthetic transport fault"), { code: external.fault });
         const query = JSON.parse(init!.body as string) as { body: { nonce: string } };
@@ -241,6 +245,13 @@ it("a failed declaration record rolls back the controlled replacement", async ()
 it("refuses an uncertain transport failure rather than declaring the source stopped", async () => {
   external.fault = "CERT_HAS_EXPIRED";
   expect((await service().post()).body.error?.code).toBe("handover.source_not_established");
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it("refuses declaration when the old main box's name finds no box on the network", async () => {
+  external.thrown = new AppError("mirror.peer_unresolved", {});
+  expect((await service().post()).body.error?.code).toBe("handover.source_not_established");
+  expect(external.calls).toBe(1);
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
 });
 
