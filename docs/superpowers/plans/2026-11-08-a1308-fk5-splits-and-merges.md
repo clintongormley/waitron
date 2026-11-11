@@ -8,7 +8,7 @@ A saved joined table starts service as its real tables in an ordinary named grou
 
 **Recommend two sequential PRs within fk5:** ordinary groups plus R1's stale-split fix before fk4; merge-storage fold/rename after fk4. This avoids a temporary joined-runtime port. Needs: fk0–fk3, 5e and landed fk4-hands; then watcher agreement to this order and the bookings adaptation below. fk4 stays blocked until then. Do not combine these into one three-hour PR or add queue items.
 
-fk4-hands #2873, head `b0ea8578c59854bce93381b4a82b77c7bca21a97`, is reviewed/complete, CI queued per handoff; do not duplicate it. Combining parties' names/bill requests belongs to `table-actions.ts`'s owner or fk6. Exclude booking automation, R1's other findings/duplication projects, and all fiscal changes.
+[fk4-hands](2026-11-11-a1308-fk4-hands.md) (#2873) owns the manual place-check change; do not duplicate it. Combining parties' names/bill requests belongs to `table-actions.ts`'s owner or fk6. Exclude booking automation, R1's other findings/duplication projects, and all fiscal changes.
 
 ## First PR: ordinary groups and stale splits
 
