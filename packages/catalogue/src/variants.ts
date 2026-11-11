@@ -64,7 +64,7 @@ function validatePrice(price: string | null, field: string): Decimal | null {
   return toScale(decimal(price), 2);
 }
 
-function validateFlag(value: boolean, field: string): void {
+function validateFlag(value: unknown, field: string): void {
   if (typeof value !== "boolean") throw new AppError("product.variant_invalid", { field });
 }
 

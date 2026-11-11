@@ -495,12 +495,12 @@ its colour as a stripe along its left edge, `--wt-space-1` wide, with a one-pixe
 line on the tile's side of the stripe (W92a, A292). Both are inset shadows, which take no layout
 width, so the labels stay centred; a shadow's offset is physical, so the stripe would stay on the
 left in a right-to-left language, and the till has none (`catalogues`,
-`apps/till/src/i18n/strings.ts`). The button stays disabled, so a tap adds nothing. The "tile
+`apps/till/src/i18n/strings.ts`). The button opens information by tap or Enter; Add stays disabled while the dish cannot be sold. The "tile
 colours" cases in `apps/till/src/widgets/menu-browser.test.ts` work out each label's contrast as it
 is seen, the button's opacity included, and hold it at 4.5:1 or more in both themes; they also pin
 the fill, the stripe's colour and width, that each sold-out tile's name and label block are centred
 within 1px of its button's centre, that in the dark theme the fill is no lighter than the page, the
-disabled button and the language of "Sold out". One case mounts a sold-out tile in each of the 24
+sold-out state and the language of "Sold out". One case mounts a sold-out tile in each of the 24
 `CATEGORY_PALETTE` colours in both themes and requires each stripe to reach 3:1 against the tile's
 fill or, where it does not, the line beside it to reach 3:1 against both the fill and the stripe.
 Measured in Chromium on 2026-10-06, the stripe alone falls short for 19 colours in the light theme
@@ -896,8 +896,8 @@ refuse an archived product too. Translation fixes, the main reporting category a
 remain allowed.
 **Available / Unavailable** is "sold out for now": a save sends `available` only when the editor's
 Available switch changed. Omission preserves an existing row; a new row defaults to available. This
-also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans,
-and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
+also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans.
+Unavailable products remain visible in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`applyLiveFields` in `packages/catalogue/src/menu-document.ts` marks it on each
 served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses
 what it marks) —

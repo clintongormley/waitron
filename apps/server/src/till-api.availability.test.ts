@@ -19,7 +19,7 @@ const path = () => `/api/service-zones/${v.counter.zoneId}/products/${productId}
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
   productId = v.productId("Burger");
-  await withTransaction(suite.db, async (tx) => {
+  const token = await withTransaction(suite.db, async (tx) => {
     const variants = await setProductVariants(
       tx,
       productId,
@@ -46,8 +46,9 @@ beforeEach(async () => {
       personId: staff!.id,
       pin: "5555",
     });
-    cookie = await sessionCookieForTest(tx, session.token);
+    return session.token;
   });
+  cookie = await sessionCookieForTest(suite.db, token);
   app = new Hono();
   mountTillApi(
     app,
@@ -57,7 +58,8 @@ beforeEach(async () => {
       clock: v.clock,
       cfg: v.cfg,
       venueLocale: "es-ES",
-      trading: testTradingAdmission(),
+      secureCookies: false,
+      admission: testTradingAdmission(),
     },
     () => {},
   );

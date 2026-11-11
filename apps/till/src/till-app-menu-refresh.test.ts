@@ -1,7 +1,7 @@
 import { idleLiveReadFor } from "./widgets/test-helpers.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
   floorPartyBills,
@@ -2710,4 +2710,52 @@ it("changes availability from Counter information then refreshes immediately", a
   expect(setAvailability).toHaveBeenCalledExactlyOnceWith("zone-counter", "Burger", false);
   expect(tile(el, "Burger").hasAttribute("data-sold-out")).toBe(true);
   expect(browser.shadowRoot!.querySelector("till-product-info")).toBeNull();
+});
+
+it("offers table-zone availability controls only on an ordering device", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  onTestFinished(() => page.viewport(width, height));
+  await page.viewport(390, 844);
+  const setAvailability = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountApp(
+    tableStubs(DINING, {
+      setAvailability,
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-orders"] }),
+    }),
+  );
+  await toTable(el);
+  await userEvent.click(
+    tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-view=menu]")!,
+  );
+  await flush(el);
+  const browser = tableScreen(el).shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+  const tile = [...browser.shadowRoot!.querySelectorAll<HTMLElement>('[data-kind="product"]')].find(
+    (t) => t.textContent!.includes("Lemonade"),
+  )!;
+  tile.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+  );
+  await browser.updateComplete;
+  const info = browser.shadowRoot!.querySelector("till-product-info")!;
+  await info.updateComplete;
+  await userEvent.click(
+    info.shadowRoot!.querySelector<HTMLElement>('[data-availability="Lemonade"]')!,
+  );
+  await flush(el);
+  expect(setAvailability).toHaveBeenCalledExactlyOnceWith("zone-dining", "Lemonade", false);
+});
+it("hides availability actions without take-orders", async () => {
+  const { el } = await mountApp();
+  await toCounter(el);
+  const browser = grid(el).querySelector("till-menu-browser")!;
+  tile(el, "Burger").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+  );
+  await browser.updateComplete;
+  const info = browser.shadowRoot!.querySelector("till-product-info")!;
+  await info.updateComplete;
+  expect(info.shadowRoot!.querySelector("[data-availability]")).toBeNull();
 });
