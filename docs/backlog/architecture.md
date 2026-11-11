@@ -838,7 +838,8 @@ product failures.
   helper's raw `Barra` location seeds remain. The shared `setupVenue` uses Administrator,
   Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
   and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,
-  Caña, Paella and its other labels remain.
+  Caña, Paella and its other labels remain. PartyVenue uses Red wine bottle as its wine
+  staff key, retaining customer Rioja crianza, kitchen TINTO and the independent recorded Vino.
   Local party-suite table, party,
   course and printer samples use English. Shared dish samples remain in their helpers and
   consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,

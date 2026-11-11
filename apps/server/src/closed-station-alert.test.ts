@@ -21,7 +21,7 @@ it("records one release alert with staff names in line order until the open aler
   );
   const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
-  await orderForParty(venue, partyId, ["Burger", "Vino", "Burger"], tabId);
+  await orderForParty(venue, partyId, ["Burger", "Red wine bottle", "Burger"], tabId);
   const lines = await inTx(venue, (tx) =>
     tx
       .select({ id: workingOrderLines.id })
@@ -57,7 +57,7 @@ it("records one release alert with staff names in line order until the open aler
     acknowledgedAt: null,
     params: {
       station: "Upstairs bar",
-      dishes: "Burger, Vino",
+      dishes: "Burger, Red wine bottle",
       workingOrderId: tabId,
       orderNumber: order!.number,
       orderLabel: order!.label,
@@ -89,7 +89,10 @@ it("records one release alert with staff names in line order until the open aler
   expect(alerts).toHaveLength(2);
   expect(alerts.filter((alert) => alert.acknowledgedAt === null)).toEqual([
     expect.objectContaining({
-      params: expect.objectContaining({ station: "Upstairs bar, Fryer", dishes: "Burger, Vino" }),
+      params: expect.objectContaining({
+        station: "Upstairs bar, Fryer",
+        dishes: "Burger, Red wine bottle",
+      }),
     }),
   ]);
 });
@@ -183,7 +186,7 @@ it("raises both alerts from one call, each naming only its own stations and dish
   const fryer = await inTx(venue, (tx) => createStation(tx, { name: "Fryer" }));
   const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
   const { partyId, tabId } = await seat(venue, tableId);
-  await orderForParty(venue, partyId, ["Burger", "Vino", "Paella"], tabId);
+  await orderForParty(venue, partyId, ["Burger", "Red wine bottle", "Paella"], tabId);
   const lines = await inTx(venue, (tx) =>
     tx
       .select({ id: workingOrderLines.id })
@@ -217,7 +220,7 @@ it("raises both alerts from one call, each naming only its own stations and dish
   expect(Object.fromEntries(alerts.map((alert) => [alert.code, alert.params]))).toEqual({
     "route.released_at_closed_station": {
       station: "Upstairs bar",
-      dishes: "Vino",
+      dishes: "Red wine bottle",
       workingOrderId: tabId,
       orderNumber: order!.number,
       orderLabel: order!.label,

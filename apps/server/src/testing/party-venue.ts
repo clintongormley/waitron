@@ -60,7 +60,7 @@ export const OPERATOR = "cccccccc-0000-4000-8000-000000000001";
 // Each product's staff, customer-facing and kitchen names differ (docs/developers/products.md).
 const MENU: { name: string; customer: string; kitchen: string; price: string }[] = [
   { name: "Burger", customer: "Hamburguesa de la casa", kitchen: "BURG", price: "12.00" },
-  { name: "Vino", customer: "Rioja crianza", kitchen: "TINTO", price: "30.00" },
+  { name: "Red wine bottle", customer: "Rioja crianza", kitchen: "TINTO", price: "30.00" },
   { name: "Agua", customer: "Agua mineral", kitchen: "AGUA", price: "2.00" },
   { name: "Flan", customer: "Flan de huevo", kitchen: "FLAN", price: "5.00" },
   { name: "Paella", customer: "Paella valenciana", kitchen: "PAELLA", price: "20.00" },

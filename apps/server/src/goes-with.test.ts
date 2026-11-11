@@ -77,7 +77,6 @@ interface Kitchen {
   tabId: string;
 }
 
-/** Tarta at Grill and Vino at Bar, both Desserts, Caña at Bar with no course; each station prints. */
 async function kitchen(grillWaits: boolean): Promise<Kitchen> {
   const v = await setupPartyVenue(db);
   const stations = await inTx(v, async (tx) => {
@@ -85,10 +84,10 @@ async function kitchen(grillWaits: boolean): Promise<Kitchen> {
     const { id: bar } = await createStation(tx, { name: "Bar" });
     const desserts = await createCourse(tx, { name: "Desserts", displayOrder: 3 });
     await routeProductTo(tx, v.productId("Tarta"), grill);
-    await routeProductTo(tx, v.productId("Vino"), bar);
+    await routeProductTo(tx, v.productId("Red wine bottle"), bar);
     await routeProductTo(tx, v.productId("Caña"), bar);
     await setProductCourse(tx, v.productId("Tarta"), desserts.id);
-    await setProductCourse(tx, v.productId("Vino"), desserts.id);
+    await setProductCourse(tx, v.productId("Red wine bottle"), desserts.id);
     const printer = async (name: string, stationId: string) => {
       const { id } = await createPrinter(tx, {
         name,
@@ -288,7 +287,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 
   it("A773 fire paper: the bar's ticket names the station whose dish the pass holds", async () => {
     const k = await kitchen(true);
-    const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+    const [desserts] = await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
     await fire(k, desserts!);
 
     const bar = await papers(k, k.barPrinter);
@@ -312,7 +311,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 
   it("A773 fire paper: two bills of one group", async () => {
     const k = await kitchen(true);
-    const [desserts] = await place(k, [{ names: ["Vino", "Tarta"], release: "hold" }]);
+    const [desserts] = await place(k, [{ names: ["Red wine bottle", "Tarta"], release: "hold" }]);
     const [tarta] = await inTx(k.v, (tx) =>
       tx
         .select({ lineNo: workingOrderLines.lineNo })
@@ -336,7 +335,9 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
   it("A773 fire paper: the bar's ticket names a fired and a still-held station", async () => {
     const k = await kitchen(true);
     await withPastry(k);
-    const [desserts] = await place(k, [{ names: ["Vino", "Tarta", "Flan"], release: "hold" }]);
+    const [desserts] = await place(k, [
+      { names: ["Red wine bottle", "Tarta", "Flan"], release: "hold" },
+    ]);
     const [flan] = await inTx(k.v, (tx) =>
       tx
         .select({ lineNo: workingOrderLines.lineNo })
@@ -362,7 +363,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 
   it("A773 fire paper: a reprint after the pass's dish is served has no cue", async () => {
     const k = await kitchen(true);
-    const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+    const [desserts] = await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
     await fire(k, desserts!);
     await releaseAtPass(k, desserts!);
 
@@ -400,7 +401,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
   describe("A773 fire paper: no cue without dishes held for the pass", () => {
     it("A773 fire paper: no cue when nobody waits for the pass", async () => {
       const k = await kitchen(false);
-      const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+      const [desserts] = await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
       await fire(k, desserts!);
       const both = [...(await papers(k, k.barPrinter)), ...(await papers(k, k.grillPrinter))];
       expect(both).toHaveLength(2);
@@ -409,7 +410,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 
     it("A773 fire paper: no cue when a held dish on another bill sits at a station that does not wait", async () => {
       const k = await kitchen(false);
-      const [desserts] = await place(k, [{ names: ["Vino", "Tarta"], release: "hold" }]);
+      const [desserts] = await place(k, [{ names: ["Red wine bottle", "Tarta"], release: "hold" }]);
       const [tarta] = await inTx(k.v, (tx) =>
         tx
           .select({ lineNo: workingOrderLines.lineNo })
@@ -436,7 +437,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 
     it("A773 fire paper: no cue for an anomalous held made-here record", async () => {
       const k = await kitchen(true);
-      const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+      const [desserts] = await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
       await inTx(k.v, async (tx) => {
         const [vino] = await tx
           .select({ id: workingOrderLines.id })
@@ -444,7 +445,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
           .where(
             and(
               eq(workingOrderLines.workingOrderId, k.tabId),
-              eq(workingOrderLines.productId, k.v.productId("Vino")),
+              eq(workingOrderLines.productId, k.v.productId("Red wine bottle")),
             ),
           );
         await tx
@@ -461,7 +462,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
 
     it("A773 fire paper: no cue on a group with nothing at a station that waits", async () => {
       const k = await kitchen(true);
-      const [drinks] = await place(k, [{ names: ["Vino", "Caña"], release: "hold" }]);
+      const [drinks] = await place(k, [{ names: ["Red wine bottle", "Caña"], release: "hold" }]);
       await fire(k, drinks!);
       const bar = await papers(k, k.barPrinter);
       expect(bar).toHaveLength(1);
@@ -471,7 +472,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     it("A773 fire paper: no cue on the bar's advance HOLD ticket", async () => {
       const k = await kitchen(true);
       await inTx(k.v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [k.bar]));
-      await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+      await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
       const hold = await papers(k, k.barPrinter);
       expect(hold).toHaveLength(1);
       expect(hold[0]![0]).toBe(`*** ${words.hold} ***`);
@@ -484,7 +485,7 @@ describe("A773 fire paper: the cue on the station card", () => {
   it("A773 fire paper: a station's queue names the stations holding its group's dishes for the pass", async () => {
     const k = await kitchen(true);
     const [desserts, drinks] = await place(k, [
-      { names: ["Tarta", "Vino"], release: "hold" },
+      { names: ["Tarta", "Red wine bottle"], release: "hold" },
       { names: ["Caña"], release: "hold" },
     ]);
     await fire(k, desserts!);
@@ -504,7 +505,9 @@ describe("A773 fire paper: the cue on the station card", () => {
   it("A773 fire paper: a station's queue names two stations", async () => {
     const k = await kitchen(true);
     await withPastry(k);
-    const [desserts] = await place(k, [{ names: ["Tarta", "Vino", "Flan"], release: "hold" }]);
+    const [desserts] = await place(k, [
+      { names: ["Tarta", "Red wine bottle", "Flan"], release: "hold" },
+    ]);
     await fire(k, desserts!);
     expect((await queueGroups(k, k.bar)).get(desserts!)).toMatchObject({
       goesWith: ["Grill", "Pastry"],
@@ -513,7 +516,7 @@ describe("A773 fire paper: the cue on the station card", () => {
 
   it("A773 fire paper: the pass board's groups carry no cue key", async () => {
     const k = await kitchen(true);
-    const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+    const [desserts] = await place(k, [{ names: ["Tarta", "Red wine bottle"], release: "hold" }]);
     await fire(k, desserts!);
     const by = await passDevice(k);
     const board = await withTransaction(db, async (tx) => {
@@ -537,7 +540,9 @@ describe("A773 fire paper: the station names in the cue", () => {
       .filter((name) => name === "asador" || name === "Pastry");
     expect(listed).toEqual(["asador", "Pastry"]);
 
-    const [desserts] = await place(k, [{ names: ["Tarta", "Vino", "Flan"], release: "hold" }]);
+    const [desserts] = await place(k, [
+      { names: ["Tarta", "Red wine bottle", "Flan"], release: "hold" },
+    ]);
     await fire(k, desserts!);
 
     expect(await inTx(k.v, (tx) => passStationsByGroup(tx, [desserts!]))).toEqual(
@@ -555,7 +560,9 @@ describe("A773 fire paper: the station names in the cue", () => {
   it("A773 fire paper: two stations sharing a name are named once, on paper and on the card", async () => {
     const k = await kitchen(true);
     const pastry = await withPastry(k);
-    const [desserts] = await place(k, [{ names: ["Tarta", "Vino", "Flan"], release: "hold" }]);
+    const [desserts] = await place(k, [
+      { names: ["Tarta", "Red wine bottle", "Flan"], release: "hold" },
+    ]);
     await fire(k, desserts!);
     await releaseAtPass(k, desserts!);
     await inTx(k.v, async (tx) => {

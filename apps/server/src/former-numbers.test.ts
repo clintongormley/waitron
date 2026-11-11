@@ -39,7 +39,6 @@ import {
 import "./errors.js";
 
 let v: PartyVenue;
-/** Burger is cooked at the Plancha, Paella at the Arroces; the Vino is poured at the Barra. */
 const stations = { plancha: "", arroces: "", barra: "" };
 useVenueDb({
   resetPerTest: false,
@@ -51,7 +50,7 @@ useVenueDb({
       for (const [key, name, dish] of [
         ["plancha", "Plancha", "Burger"],
         ["arroces", "Arroces", "Paella"],
-        ["barra", "Barra", "Vino"],
+        ["barra", "Barra", "Red wine bottle"],
       ] as const) {
         const { id } = await createStation(tx, { name });
         stations[key] = id;
@@ -66,7 +65,6 @@ useVenueDb({
   },
 });
 
-/** Sends the dishes to `billId` as one fired group, from a device that makes the Vino on the spot. */
 async function send(partyId: string, billId: string, ...names: string[]) {
   await inTx(v, (tx) =>
     placeGroups(tx, { ...v.cfg, sendingDeviceId: v.cfg.origin.deviceId }, partyId, {
@@ -258,7 +256,7 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     const { partyId, bills } = await party("Mesa 96", 2);
     const [b27, b28] = bills as [string, string];
     await send(partyId, b27, "Paella");
-    await send(partyId, b28, "Vino");
+    await send(partyId, b28, "Red wine bottle");
 
     await merge(partyId, b27, b28);
 

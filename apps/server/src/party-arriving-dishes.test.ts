@@ -213,7 +213,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [table4, table7] = [await v.table("Table 4"), await v.table("Table 7")];
     const originalParty = await seat(v, table4);
     const receivingParty = await seat(v, table7);
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     await orderForParty(v, receivingParty.partyId, ["Agua"]);
     const groupsBefore = await groupsOf(receivingParty.partyId);
@@ -245,7 +245,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [table4, table7] = [await v.table("Time 4"), await v.table("Time 7")];
     const originalParty = await seat(v, table4);
     const receivingParty = await seat(v, table7);
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     await orderForParty(v, originalParty.partyId, ["Paella"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2, 3]);
     const [wineLine, riceLine] = await lineRows(b2);
@@ -326,7 +326,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [table4, table7] = [await v.table("Pass 4"), await v.table("Pass 7")];
     const originalParty = await seat(v, table4);
     const receivingParty = await seat(v, table7);
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
 
     await move(b2, { tableId: table7 });
@@ -603,7 +603,10 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await parkOrder(deps, v.cfg, {
       id,
       zoneId: ticketThenPayZone,
-      lines: ["Burger", "Vino"].map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
+      lines: ["Burger", "Red wine bottle"].map((name) => ({
+        menuItemId: v.item(name),
+        quantity: "1",
+      })),
       operatorId: OPERATOR,
     });
     await placeOrder({ ...deps, admission: testTradingAdmission() }, v.cfg, id, OPERATOR);
@@ -635,7 +638,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   it("names whoever fired a dish's group in the party it left, not the mover, when its bill moves to a free table", async () => {
     const originalParty = await seat(v, await v.table("Free 3"));
     const freeTable = await v.table("Free 4");
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     const [wineLine] = await lineRows(b2);
     await inTx(v, (tx) =>
@@ -652,7 +655,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   it("names the kitchen display that fired a dish's group in the party it left, not the mover, when its bill moves", async () => {
     const originalParty = await seat(v, await v.table("Free 5"));
     const freeTable = await v.table("Free 6");
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     const [wineLine] = await lineRows(b2);
     const display = await seedSessionDevice(v.db);
@@ -687,7 +690,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await nextMillisecond();
     const joining = { ...(await commandFor(v, originalParty.partyId)) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     const [wineLine] = await lineRows(b2);
     const display = await seedSessionDevice(v.db);
@@ -718,7 +721,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await nextMillisecond();
     const joining = { ...(await commandFor(v, originalParty.partyId)) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino", "Flan"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle", "Flan"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2, 3]);
 
     const splitting = { ...(await commandFor(v, originalParty.partyId)), operatorId: MOVER };
@@ -737,7 +740,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const targetTable = await v.table("Merge 1");
     const receivingParty = await seat(v, targetTable);
     await orderForParty(v, receivingParty.partyId, ["Burger"]);
-    await order(v, receivingParty.tabId, "Vino");
+    await order(v, receivingParty.tabId, "Red wine bottle");
     const [burger, wineLine] = await lineRows(receivingParty.tabId);
     const [own] = await groupsOf(receivingParty.partyId);
     expect([burger!.groupId, wineLine!.groupId]).toEqual([own!.id, null]);
@@ -753,7 +756,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     ]);
     expect((await lineRows(receivingParty.tabId)).map((l) => [l.name, l.groupId])).toEqual([
       ["Burger", own!.id],
-      ["Vino", null],
+      ["Red wine bottle", null],
     ]);
     expect((await lineRows(counter)).map((l) => [l.name, l.groupId])).toEqual([
       ["Tarta", groups[1]!.id],
@@ -840,7 +843,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("makes no group, records nothing and leaves the revision for a bill whose every dish already has one", async () => {
     const originalParty = await seat(v, await v.table("Nothing 1"));
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const groupsBefore = await groupsOf(originalParty.partyId);
     const linesBefore = await lineRows(originalParty.tabId);
     const revision = await revisionOf(v, originalParty.partyId);
@@ -1061,7 +1064,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     await nextMillisecond();
     const joining = { ...(await commandFor(v, originalParty.partyId)) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     await inTx(v, (tx) =>
       addTabRound(tx, v.cfg, b2, [
@@ -1184,7 +1187,7 @@ describe("A773 requested lifecycle: arrival", () => {
     await nextMillisecond();
     const joining = await commandFor(v, originalParty.partyId);
     await inTx(v, (tx) => joinTables(tx, v.cfg, originalParty.partyId, table5, joining));
-    await orderForParty(v, originalParty.partyId, ["Burger", "Vino"]);
+    await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
     await everyStationWaiting(async () => {
       await inTx(v, (tx) =>

@@ -329,13 +329,13 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       await inTx(v, (tx) =>
         setRoutingCell(
           tx,
-          { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
+          { row: { kind: "product", productId: v.productId("Red wine bottle") }, zoneId: null },
           { kind: "no_preparation" },
         ),
       );
-      const a = await seatWith([{ names: ["Vino"], release: "hold" }]);
-      const wine = await lineOf(a.billId, "Vino");
-      expect(await markOf(a.partyId, a.billId, "Vino")).toEqual({
+      const a = await seatWith([{ names: ["Red wine bottle"], release: "hold" }]);
+      const wine = await lineOf(a.billId, "Red wine bottle");
+      expect(await markOf(a.partyId, a.billId, "Red wine bottle")).toEqual({
         waits: true,
         firedAt: null,
         course: "Desserts",
@@ -347,7 +347,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
       await fire(a.partyId, wine.groupId!);
 
       expect(await billRevision(a.billId)).toBeGreaterThan(revision);
-      expect(await markOf(a.partyId, a.billId, "Vino")).toEqual({
+      expect(await markOf(a.partyId, a.billId, "Red wine bottle")).toEqual({
         waits: false,
         firedAt: null,
         course: "Desserts",

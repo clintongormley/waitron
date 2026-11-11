@@ -254,7 +254,7 @@ it("splitting one of two recalled dishes keeps both source assignments and their
 
 it("whole dish ticks survive a same-party bill split, transfer and merge", async () => {
   const a = await party();
-  await order(v, a.tabId, "Burger", "Flan", "Vino");
+  await order(v, a.tabId, "Burger", "Flan", "Red wine bottle");
   const state = await save(a.partyId, "Red coat");
   const first = await dish(a.tabId, "Burger"),
     second = await dish(a.tabId, "Flan");

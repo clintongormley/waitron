@@ -39,7 +39,7 @@ async function fixture() {
     const grill = (await createStation(tx, { name: "Grill" })).id;
     const bar = (await createStation(tx, { name: "Bar" })).id;
     await routeProductTo(tx, v.productId("Burger"), grill);
-    await routeProductTo(tx, v.productId("Vino"), bar);
+    await routeProductTo(tx, v.productId("Red wine bottle"), bar);
     const [policy] = await tx
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
@@ -125,7 +125,10 @@ async function threeOrders(f: Fixture) {
       groups: [
         {
           lines: [
-            { menuItemId: f.terraceWine.offers.offerFor(f.v.productId("Vino")), quantity: "1" },
+            {
+              menuItemId: f.terraceWine.offers.offerFor(f.v.productId("Red wine bottle")),
+              quantity: "1",
+            },
           ],
           release: "fire",
         },

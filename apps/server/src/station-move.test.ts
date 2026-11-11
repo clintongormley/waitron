@@ -484,7 +484,10 @@ describe("release", () => {
       await setStationToday(tx, bar, null, at);
       await setStationToday(tx, grill, null, at);
       await setStationPrinting(tx, { printHeldWork: true });
-      return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
+      return routeProduct(tx, venue.productId("Red wine bottle"), {
+        kind: "station",
+        stationId: grill,
+      });
     });
     const tableId = await venue.table(`F-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -507,7 +510,7 @@ describe("release", () => {
             release: "hold",
             lines: [
               { menuItemId: venue.item("Burger"), quantity: "1" },
-              { menuItemId: venue.item("Vino"), quantity: "1" },
+              { menuItemId: venue.item("Red wine bottle"), quantity: "1" },
             ],
           },
         ],
@@ -800,9 +803,9 @@ describe("release", () => {
   );
 
   it("keeps held work at an open station after the rules change", async () => {
-    const group = await heldDish("Vino");
+    const group = await heldDish("Red wine bottle");
     const cell = await inTx(venue, (tx) =>
-      routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill }),
+      routeProduct(tx, venue.productId("Red wine bottle"), { kind: "station", stationId: grill }),
     );
     try {
       await fireHeldBurger(group);
@@ -816,11 +819,13 @@ describe("release", () => {
   });
 
   it("leaves held work at a closed station when the rules now say no preparation", async () => {
-    const group = await heldDish("Vino");
+    const group = await heldDish("Red wine bottle");
     const at = new Date("2026-10-02T18:45:00.000Z");
     await handleOpenReleaseAlerts(at);
     const cell = await inTx(venue, async (tx) => {
-      const id = await routeProduct(tx, venue.productId("Vino"), { kind: "no_preparation" });
+      const id = await routeProduct(tx, venue.productId("Red wine bottle"), {
+        kind: "no_preparation",
+      });
       await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
       await tx
         .update(kitchenStations)
@@ -843,7 +848,7 @@ describe("release", () => {
       expect(alerts.filter((alert) => alert.params.workingOrderId === group.tabId)).toEqual([
         expect.objectContaining({
           acknowledgedAt: null,
-          params: expect.objectContaining({ station: "Bar", dishes: "Vino" }),
+          params: expect.objectContaining({ station: "Bar", dishes: "Red wine bottle" }),
         }),
       ]);
     } finally {
@@ -914,7 +919,7 @@ describe("release", () => {
       });
       await tx.insert(deviceMadeHereStations).values({ deviceId: tillId, stationId: bar });
       await setStationToday(tx, grill, null, new Date("2026-10-02T18:45:00.000Z"));
-      const cell = await routeProduct(tx, venue.productId("Vino"), {
+      const cell = await routeProduct(tx, venue.productId("Red wine bottle"), {
         kind: "station",
         stationId: grill,
       });
@@ -952,7 +957,7 @@ describe("release", () => {
             release: "hold",
             lines: [
               { menuItemId: venue.item("Caña"), quantity: "1" },
-              { menuItemId: venue.item("Vino"), quantity: "1" },
+              { menuItemId: venue.item("Red wine bottle"), quantity: "1" },
             ],
           },
         ],
@@ -1514,7 +1519,10 @@ describe("moveDishesToStation", () => {
     });
     const cell = await inTx(venue, async (tx) => {
       await setStationToday(tx, grill, null, new Date());
-      return routeProduct(tx, venue.productId("Vino"), { kind: "station", stationId: grill });
+      return routeProduct(tx, venue.productId("Red wine bottle"), {
+        kind: "station",
+        stationId: grill,
+      });
     });
     const tableId = await venue.table(`R-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
@@ -1537,7 +1545,7 @@ describe("moveDishesToStation", () => {
             release: "hold",
             lines: [
               { menuItemId: venue.item("Burger"), quantity: "1" },
-              { menuItemId: venue.item("Vino"), quantity: "1" },
+              { menuItemId: venue.item("Red wine bottle"), quantity: "1" },
             ],
           },
         ],
@@ -3021,7 +3029,7 @@ describe("moveDishesToStation", () => {
   it("prints one destination ticket per old station in a two-dish move", async () => {
     const fryer = await inTx(venue, async (tx) => {
       const station = await createStation(tx, { name: `Fryer ${randomUUID()}` });
-      await routeProductTo(tx, venue.productId("Vino"), station.id);
+      await routeProductTo(tx, venue.productId("Red wine bottle"), station.id);
       const printer = await createPrinter(tx, {
         name: "Fryer printer",
         transport: "cloud_poll",
@@ -3035,7 +3043,7 @@ describe("moveDishesToStation", () => {
     });
     const tableId = await venue.table(`T-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
-    await orderForParty(venue, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(venue, partyId, ["Burger", "Red wine bottle"], tabId);
     const items = await inTx(venue, (tx) =>
       tx
         .select({ lineId: ticketItems.workingOrderLineId, stationId: ticketItems.stationId })

@@ -2313,7 +2313,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
     const table4Id = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4Id);
     await nameParty(v, partyId, "Ana");
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     await inTx(v, (tx) =>
       tx.update(partyTables).set({ leftAt: nowIso() }).where(eq(partyTables.partyId, partyId)),

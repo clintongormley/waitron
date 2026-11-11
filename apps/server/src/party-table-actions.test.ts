@@ -682,7 +682,7 @@ describe("the floor reads the bills of the party holding the table", () => {
   it("counts a presented bill's dishes still to serve, but not toward the open bill, its lines or its total", async () => {
     const [m4] = await tables("Floor presented", 4);
     const ana = await seat(v, m4);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const presented = await splitOff(ana.partyId, ana.tabId, [2]);
     await placeByHand(v, presented);
     expect((await billRow(v, presented)).status).toBe("placed");
@@ -710,7 +710,7 @@ describe("the floor reads the bills of the party holding the table", () => {
     const [m4, m5] = await tables("Floor sum", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const second = await splitOff(ana.partyId, ana.tabId, [2]);
     expect((await billRow(v, second)).status).toBe("open");
 
@@ -788,7 +788,7 @@ describe("a paid bill stays on its original party", () => {
     const [m4, m7] = await tables("Paid", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const second = await splitOff(ana.partyId, ana.tabId, [2]);
     await pay(v, ana.tabId, "12.00");
     const before = noticesOn([ana.tabId, second]);
@@ -912,7 +912,7 @@ describe("A803 a paid bill kept on a party combined away is one of the table's b
     const [m4, m5] = await tables("Family merged", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     const merging = await cmd(ana.partyId);
     await act((tx) => mergeBills(tx, v.cfg, b2, ana.tabId, merging));
@@ -1328,7 +1328,7 @@ describe("split a table", () => {
     const [m4, m5] = await tables(prefix, 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     return { ana, m4, m5, b2 };
   }
@@ -1376,7 +1376,9 @@ describe("split a table", () => {
     const [m4, m5] = await tables("Presented", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await sendGroups(ana.partyId, [{ names: ["Burger", "Vino", "Flan"], release: "fire" }]);
+    await sendGroups(ana.partyId, [
+      { names: ["Burger", "Red wine bottle", "Flan"], release: "fire" },
+    ]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2, 3]);
     await placeByHand(v, b2);
     const lines = await lineRows(b2);
@@ -1419,7 +1421,7 @@ describe("split a table", () => {
     const [m4, m5] = await tables("Sent", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await sendGroups(ana.partyId, [{ names: ["Burger", "Vino"], release: "fire" }]);
+    await sendGroups(ana.partyId, [{ names: ["Burger", "Red wine bottle"], release: "fire" }]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     const lines = await lineRows(b2);
     const tickets = await ticketsOf(b2);
@@ -1946,7 +1948,7 @@ describe("A803 no main bill (join)", () => {
     const [m4, m7] = await tables("A803 Move", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const second = await splitOff(ana.partyId, ana.tabId, [2]);
     await order(v, luis.tabId, "Agua");
     await cashContribution(v, second, "5.00");
@@ -1972,7 +1974,7 @@ describe("A803 no main bill (join)", () => {
     }
     expect(await lineRows(luis.tabId)).toEqual(receivingBefore);
     expect((await linesOf(v, ana.tabId)).map((l) => l.name)).toEqual(["Burger"]);
-    expect((await linesOf(v, second)).map((l) => l.name)).toEqual(["Vino"]);
+    expect((await linesOf(v, second)).map((l) => l.name)).toEqual(["Red wine bottle"]);
     expect(await numbersOf(v, luis.partyId)).toEqual([
       [luis.tabId, 1, null],
       [ana.tabId, 2, null],
@@ -2027,7 +2029,7 @@ describe("A803 split", () => {
     const [m4, m5] = await tables(prefix, 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino", "Flan");
+    await order(v, ana.tabId, "Burger", "Red wine bottle", "Flan");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
     return { ana, m4, m5, b1: ana.tabId, b2, b3 };
@@ -2269,7 +2271,7 @@ describe("A803 split", () => {
       ana.partyId,
       [
         { names: ["Burger"], release: "fire" },
-        { names: ["Vino"], release: "fire" },
+        { names: ["Red wine bottle"], release: "fire" },
         { names: ["Flan"], release: "fire" },
       ],
       ana.tabId,
@@ -2307,7 +2309,7 @@ describe("A803 split", () => {
     const [m4, m5] = await tables("A803 No group", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino", "Agua");
+    await order(v, ana.tabId, "Burger", "Red wine bottle", "Agua");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
     const { id: courseId } = await act((tx) =>
@@ -2431,7 +2433,7 @@ describe("A803 split", () => {
     const [m4, m5] = await tables("A803 Part", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino", "Agua", "Flan");
+    await order(v, ana.tabId, "Burger", "Red wine bottle", "Agua", "Flan");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2, 3]);
     const b3 = await splitOff(ana.partyId, ana.tabId, [4]);
     await takeBillPayment(
@@ -2534,7 +2536,6 @@ describe("A803 split", () => {
         })),
       ),
     );
-    /** A party on three tables pushed together, 14 seats typed: Bills 1 (Burger), 2 (Vino), 3 (Flan). */
     async function joinedParty(twin: string) {
       const [a, b, c] = [table[`a${twin}`]!, table[`b${twin}`]!, table[`c${twin}`]!];
       for (const movingId of [b, c]) {
@@ -2543,7 +2544,7 @@ describe("A803 split", () => {
         );
       }
       const ana = await seat(v, a);
-      await order(v, ana.tabId, "Burger", "Vino", "Flan");
+      await order(v, ana.tabId, "Burger", "Red wine bottle", "Flan");
       const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
       const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
       return { ana, a, b, c, b2, b3 };
@@ -2653,7 +2654,7 @@ describe("A803 split", () => {
     const [m4, m5] = await tables("A803 Before", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
-    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, ana.tabId, "Burger", "Red wine bottle");
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
     await act((tx) =>
       addTabRound(tx, v.cfg, b2, [{ menuItemId: v.item("Flan"), quantity: "1", hold: true }]),
@@ -2861,15 +2862,15 @@ describe("A803 split", () => {
       const newBill = result.billIds[0]!;
       expect(result.looseSourceIds).toEqual([b2, b3]);
       expect(await namesOn(newBill)).toEqual(["Agua", "Caña"]);
-      expect(await namesOn(b2)).toEqual(["Vino"]);
+      expect(await namesOn(b2)).toEqual(["Red wine bottle"]);
       expect(await namesOn(b3)).toEqual(["Flan"]);
       expect(await shownBills(result.partyId)).toEqual([{ id: newBill, status: "open" }]);
       expect(await numbersOf(v, result.partyId)).toEqual([[newBill, 1, null]]);
     });
 
     it("a loose pick burns no number at the staying table", async () => {
-      const { ana, m5, b1 } = await tableFor("A803 No room", "Burger", "Vino");
-      const wine = await lineOn(b1, "Vino");
+      const { ana, m5, b1 } = await tableFor("A803 No room", "Burger", "Red wine bottle");
+      const wine = await lineOn(b1, "Red wine bottle");
 
       await splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b1, wine.id)] });
 
@@ -2950,7 +2951,7 @@ describe("A803 split", () => {
       it("a loose pick leaving €40.00 of €52.00 with €40.00 received goes", async () => {
         const { ana, m5, b1 } = await tableFor(
           "A803 Exact",
-          "Vino",
+          "Red wine bottle",
           "Burger",
           "Agua",
           "Flan",
@@ -3172,7 +3173,7 @@ describe("A803 split", () => {
       it("loose, it refuses bill.presented", async () => {
         const { ana, m5, b2 } = await threeBills("A803 Bill loose");
         await placeByHand(v, b2);
-        const wine = await lineOn(b2, "Vino");
+        const wine = await lineOn(b2, "Red wine bottle");
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(ana.partyId, m5, { wholeBillIds: [], loose: [loose(b2, wine.id)] }),
@@ -3305,7 +3306,7 @@ describe("A803 split", () => {
     describe("a selection it cannot read", () => {
       it("a bill both whole and loose", async () => {
         const { ana, m5, b2 } = await threeBills("A803 Both");
-        const wine = await lineOn(b2, "Vino");
+        const wine = await lineOn(b2, "Red wine bottle");
 
         const error = await refusedWithNoRowChanged(() =>
           splitSelected(ana.partyId, m5, { wholeBillIds: [b2], loose: [loose(b2, wine.id)] }),
@@ -3367,7 +3368,7 @@ describe("A803 split", () => {
 
       it("a line of another bill is tab.line_not_found, and no line of the named bill with that number moves", async () => {
         const { ana, m5, b1, b2 } = await threeBills("A803 Other bill");
-        const wine = await lineOn(b2, "Vino");
+        const wine = await lineOn(b2, "Red wine bottle");
         expect((await lineRows(b1)).map((line) => line.lineNo)).toContain(wine.lineNo);
 
         const error = await refusedWithNoRowChanged(() =>

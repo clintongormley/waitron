@@ -33,7 +33,6 @@ let v: PartyVenue;
 let cheese: { listId: string; productId: string };
 /** The tables zone's offers, made again once the Caña offers a Cheese extra. */
 let offers: ZoneOffers;
-/** The venue's device makes the Vino and the Cheese on the spot when it sends them with this configuration. */
 let madeHereCfg: PartyVenue["cfg"];
 useVenueDb({
   resetPerTest: false,
@@ -66,7 +65,7 @@ useVenueDb({
       const { id: barStation } = await createStation(tx, { name: "Barra" });
       await setRoutingCell(
         tx,
-        { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
+        { row: { kind: "product", productId: v.productId("Red wine bottle") }, zoneId: null },
         { kind: "station", stationId: barStation },
       );
       await setMadeHereStations(tx, v.cfg.origin.deviceId, [barStation, cheeseStation]);
@@ -371,28 +370,35 @@ describe("the order number a moved dish was sent under", () => {
     const { partyId, bills } = await party("Mesa sent 10", 2);
     const [b27, b28] = bills as [string, string];
     await send(partyId, b28, [{ name: "Burger" }], "fire");
-    await send(partyId, b28, [{ name: "Vino" }], "fire", madeHereCfg);
+    await send(partyId, b28, [{ name: "Red wine bottle" }], "fire", madeHereCfg);
     const n28 = await numberOf(b28);
-    expect(madeHereOf(b28, "Vino")).toEqual([true]);
+    expect(madeHereOf(b28, "Red wine bottle")).toEqual([true]);
 
     await merge(partyId, b27, b28);
 
     expect(kitchenItems(b27)).toEqual([
       { name: "Burger", quantity: 1000, sent: n28 },
-      { name: "Vino", quantity: 1000, sent: null },
+      { name: "Red wine bottle", quantity: 1000, sent: null },
     ]);
   });
 
   it("is not recorded on the part of a made-here line transferred", async () => {
     const { partyId, bills } = await party("Mesa sent 11", 2);
     const [b27, b28] = bills as [string, string];
-    await send(partyId, b28, [{ name: "Vino", quantity: "2" }], "fire", madeHereCfg, "grouped");
+    await send(
+      partyId,
+      b28,
+      [{ name: "Red wine bottle", quantity: "2" }],
+      "fire",
+      madeHereCfg,
+      "grouped",
+    );
 
-    await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Vino"), quantity: "1" }]);
+    await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Red wine bottle"), quantity: "1" }]);
 
-    expect(madeHereOf(b27, "Vino")).toEqual([true]);
-    expect(kitchenItems(b27)).toEqual([{ name: "Vino", quantity: 1000, sent: null }]);
-    expect(kitchenItems(b28)).toEqual([{ name: "Vino", quantity: 1000, sent: null }]);
+    expect(madeHereOf(b27, "Red wine bottle")).toEqual([true]);
+    expect(kitchenItems(b27)).toEqual([{ name: "Red wine bottle", quantity: 1000, sent: null }]);
+    expect(kitchenItems(b28)).toEqual([{ name: "Red wine bottle", quantity: 1000, sent: null }]);
   });
 
   it("is recorded as the counter order's number when a sent counter order moved to a table is merged into its bill", async () => {

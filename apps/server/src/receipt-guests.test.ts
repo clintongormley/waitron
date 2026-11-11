@@ -124,7 +124,7 @@ describe("the default guests (readReceiptGuests)", () => {
 
   it("prints nothing on either bill of a party that split a dish onto a second bill", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Guests 4"), 4);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const second = await split(v, partyId, tabId, [2]);
 
     expect(await guestsOnPaying(second, "30.00")).toBeUndefined();
@@ -133,7 +133,7 @@ describe("the default guests (readReceiptGuests)", () => {
 
   it("prints the count again once the split bill is merged back", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Guests 5"), 4);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, tabId, second, command));
@@ -211,7 +211,7 @@ describe("the default guests (readReceiptGuests)", () => {
     const table5 = await v.table("Guests 10 5");
     const { partyId, tabId } = await seat(v, table4, 4);
     await join(v, partyId, table5);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
     await inTx(v, (tx) =>
@@ -227,7 +227,7 @@ describe("the default guests (readReceiptGuests)", () => {
 
   it("prints nothing while an emptied split bill stays open", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Guests 11"), 4);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const [moved] = await linesOf(v, second);
     const command = await commandFor(v, partyId);
@@ -414,7 +414,7 @@ describe("the guests row written beside a recorded sale", () => {
 
   it("writes no line by default for a party that split a dish onto a second bill", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Row 4"), 4);
-    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    await orderForParty(v, partyId, ["Burger", "Red wine bottle"], tabId);
     const second = await split(v, partyId, tabId, [2]);
     const saleId = await saleWithNoRow(second, { name: "Vino", price: "30.00", vatRate: "21.00" });
     await inTx(v, (tx) => recordReceiptGuests(tx, simplifiedSale(saleId, second), undefined));
