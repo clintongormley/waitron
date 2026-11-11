@@ -28,3 +28,7 @@
 - **O1:** Inline the existing committed-binding validation into `hour-recovery-state.ts`, preserving its refusal checks, because the ask explicitly deletes `restore-committed.ts` while this other caller remains.
 - **O4:** The request-layer test includes interruption after setup-operation removal but before the final record replacement; retry must pass admission and complete from the retained source.
 - **O5:** Before each attempt, under the existing venue hold, remove only `RESTORE_STAGING_DIR` before validation recreates it; a retry test seeds an earlier attempt’s decrypt scratch and checks it is gone while `flows/restore` attachments remain. Boot's `emptyScratch` runs too late for repeatedly failing pre-boot restores.
+
+**Changed test checks (watcher, 2026-11-11 21:40, Lane H questions.md):** Keep the synthetic host-claims-committed case and counter-preservation assertion; after removing the host resume pre-check, expect the existing fiscal hook wrapper (`restore.hook_failed`, module `fiscal-verifactu`, code `sif.allocation_invalid`).
+
+**Prose corrections (watcher, 2026-11-11 21:46, Lane H questions.md):** Update `paper-custodian.md`, `conventions-data.md` and the root caller sentence; retain the old recovery heading anchor and supersede historical A1415 wording with a dated note. Q2 and discard wording remain held.

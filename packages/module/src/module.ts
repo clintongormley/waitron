@@ -1417,12 +1417,6 @@ export interface ModuleBackupContribution {
   readonly verification?: BackupVerificationContribution;
   readonly nonDbState?: readonly NonDbSource[];
   readonly restore?: RestoreHook;
-  /** A resume must already have committed locally. Preparation still supplies current authority. */
-  readonly assertRestoreCommitted?: (
-    tx: Transaction,
-    node: import("./provisioning.js").ProvisionedNode,
-    binding: import("./operation-authority.js").OperationBinding,
-  ) => Promise<void>;
   /** Validate and return public recovery material; no private signing key or claim authority. */
   readonly recoveryPack?: (
     tx: Transaction,

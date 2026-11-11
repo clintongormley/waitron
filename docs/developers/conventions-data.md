@@ -5044,6 +5044,12 @@ control still sends before the wait. Run them with
 
 ## The box's BOOT path and the bucket rebuild carry an ahead-of-image check; no other migrating path does, and `waitron.sh install <ref>` is a one-way door
 
+**2026-11-11 (A1308-fl5b):** staged restores now retry from their retained source and remove
+unfinished database files before each marked retry. Neither restore path reads the destination
+for committed replay or calls `assertNotAhead`. Boot and bucket preparation retain their checks.
+The A1415 note immediately below describes the superseded implementation; follow
+[interrupted staged restores](emergency-recovery.md#resume-an-interrupted-staged-restore).
+
 **2026-11-08 (A1415):** a started staged restore with saved recovery selection also calls
 `assertNotAhead` in `restore-request.ts` before migrating and reading destination recovery state.
 The existing resumed-placement check in `restore.ts` remains. The caller inventory below records
@@ -5057,9 +5063,7 @@ this error. `waitron.sh`'s advice on that failure depends on the box: on one tha
 production, it names `waitron.sh --reset install [ref]`, which wipes the database as
 `waitron.sh reset` does and installs again in one run, the clean way back to a working box; on a
 production box the script refuses to suggest that (a reset there would destroy the fiscal chain) and
-says to install the version that wrote the database instead (#314). It has three callers (`grep -rn assertNotAhead` before
-believing otherwise): boot, in `apps/server/src/node-entry.ts`, a resumed restore, in
-`apps/server/src/restore.ts`, and the bucket rebuild's
+says to install the version that wrote the database instead (#314). Its production callers are boot, in `apps/server/src/node-entry.ts`, and the bucket rebuild's
 preparation, `prepareStreamRestore` in `apps/server/src/restore-stream.ts`, which checks the
 downloaded copy before anything is placed (2026-09-25, slice 2 Task 9b). Boot's call runs after
 `runStagedRestore` — the restore that replaces the venue files — and `runStagedReset`, which removes

@@ -646,12 +646,14 @@ command against it treat that entrypoint differently:
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that
   fails after its fiscal step has committed keeps the restored database and the box's old secrets,
-  with no `trading.env`; a restore staged with a node recovery key for the next start is finished
-  by that start. One that fails in between (while migrating the restored database, or in a module's
+  with no `trading.env`. One that fails in between (while migrating the restored database, or in a module's
   restore step) keeps the restored database, with the box's old identity set aside as
   `trading.env.replaced`. Running the same command again once the cause is gone (for a failed
-  migration, a version of Waitron that fixes it) starts the restore over. One staged for the next
-  start that failed in between is started over by that start. Outside "as they were": a restore that is killed; a folder made to hold a
+  migration, a version of Waitron that fixes it) starts the restore over. A saved staged request always runs from its source again
+  at the next start. Once it is marked `placing`, that start deletes the unfinished database
+  files and restores the old identity copy before retrying. Any failure, including Cloud's
+  completion step, keeps the request and prevents the server from starting. Completion removes
+  the request last, leaving only the separate first-start checks. Outside "as they were": a restore that is killed; a folder made to hold a
   secret (such as `tls/`) on a box that had none; the backup room note, deleted before anything
   changes and written again by the next backup; Litestream's `.venue.db-litestream/` folder beside
   the old database, which is not put back if the move fails after removing it; a move that could

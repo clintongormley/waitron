@@ -149,52 +149,32 @@ An existing `.txt.next` file refuses another publication rather than being overw
 it after an interrupted writer, just as you retain the JSON journal's helper files.
 
 
-## Resume an interrupted staged restore
+<a id="resume-an-interrupted-staged-restore"></a>
 
-A stopped restore may already have activated its allocation. Replacing its placed database with
-the old backup again would erase the local result needed to recognise that activation. The staged
-archive and prepared-stream paths flush the `placing` phase to `flows/restore/record.json` and sync its folder before
-placement. A stream also flushes its retained source.
-A stream uses a separate placement copy, so leave room for that additional database file.
+## Restart an interrupted staged restore
 
-On restart, leave the staged request and its key in place. The selected source's exact bytes and
-the staged node key still authenticate the attempt. For a request
-carrying its recovery selection, the host checks the destination before choosing what to do:
+Leave the request and its keys in `flows/restore/` and restart the box. Every attempt runs the
+restore from its saved source again. It checks the selected source and node key on each attempt;
+the saved request supplies no authority by itself. A stream keeps its source and places a separate
+copy, so leave room for that additional database file.
 
-- If activation committed for this event, it uses the placed database. The module checks the event,
-  node and source; replay then checks the allocation, approval, active SIF and complete series.
-- If the module reports no activation for this event, it places the authenticated source again,
-  retaining the same event and series name. A missing destination, or one without the selected
-  node, also takes this path. An existing destination is checked against the image and migrated
-  before its current-schema recovery state is read.
-- An unreadable, corrupt or uncertain destination refuses recovery and retains staging. A newer
-  image's database is refused before migration. Keep the incident evidence. If the file is corrupt,
-  preparing a fresh event also refuses: stop the box and move the bad `venue.db` aside, keeping it
-  as evidence, before restarting with the same staged request. For a readable but invalid
-  destination, you can prepare a new event against current outside history and submit a fresh request.
+Before moving the databases, the restore saves `phase: "placing"` after setting the box's previous
+identity aside. A restart with that mark removes the unfinished database files and restores
+`trading.env.replaced` before trying again. This also discards a database put back during an earlier
+failed move. A corrupt partial database does not need to be opened to retry the restore.
 
-A stage marker alone grants no activation authority. Requests without saved recovery selection
-keep their existing committed-replay path. A deliberate fresh request can restore the old backup
-again, but it does not free the interrupted event's spent name. Never delete the old incident to
-reuse that name.
+A failure keeps the request and attachments for the next start. This includes failure to record
+completion with Cloud: the box cannot start serving until that step succeeds. Completion first
+removes the setup operation, then replaces the request with a `first-start` record and removes its
+private attachments. First start finishes the separate recovery checks and removes the old
+identity copy; it does not repeat the restore.
 
-On the first attempt, an error before the restore hooks' transaction body returns normally puts
-the original request back. If that write fails or the process stops first, the next start checks the saved activation
-state as above. Errors after the body returns keep the started request and its owner-only key,
-including a failed trading-settings write or outside-result publication after activation commits.
-A refusal while resuming keeps them for another checked attempt. A completed restore removes its request and attachments, retaining a `first-start` record in
-`flows/restore/`. The first start ends that flow and removes `trading.env.replaced`.
-A venue lock refusal before placement leaves a fresh request.
+These rules apply to a saved staged request. A direct command-line restore still runs when you
+invoke the command. Its within-attempt file rollback is unchanged.
 
-**2026-11-08 (A1415):** the restart-versus-replay decision above supersedes the earlier requirement
-to prepare a new event after every uncommitted interruption. The process-kill tests below do not
-establish power-loss durability during database placement; that remains in the
+The process-kill cases in `src/restore-emergency-crash.e2e.test.ts` compare a restarted restore with
+its completed database result, retaining the saved name, backup counters, earlier records, chain
+head, filing queue and node key. They cover interruption after the fiscal write, identity
+publication and setup-operation removal. They establish process-interruption behavior, not
+power-loss durability during placement; that remains in the
 [B2 restore carry-forwards](../backlog/box.md#backup--restore--carry-forwards-b2).
-
-Qualification on 2026-10-14: `pnpm --filter @waitron/server exec vitest run
-src/restore-emergency-crash.e2e.test.ts` kills owned child processes after staging, after outside
-consumption, before the transaction commits, after activation but before trading-settings
-publication, and after restore before the first sale. Archive and prepared-stream cases check
-burned names, exact committed replay and retained earlier invoice records. The sale following a
-committed retry uses the new series at number 1 without resolving a network client. These are
-local process-interruption checks, not a power-loss or physical-printer measurement.

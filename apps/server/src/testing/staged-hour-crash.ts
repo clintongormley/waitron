@@ -21,6 +21,8 @@ import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-prepar
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import {
+  cadenas,
+  envios,
   fiscalAllocations,
   registroSif,
   registrosFacturacion,
@@ -36,6 +38,7 @@ import { previewRecoveryArchive } from "../recovery-backup-preview.js";
 import { recoveryStreamSourceId } from "../recovery-source.js";
 import { createSelectedRecoveryPreparation } from "../recovery-preparation.js";
 import { runStagedRestore, stageRestoreRequest } from "../restore-request.js";
+import { nodeRecoveryKey } from "@waitron/node-db";
 import { nodeDumpEntry } from "./node-copy.js";
 import {
   createFakeTimersHourClock,
@@ -263,6 +266,9 @@ export async function stagedHourCrash(
       const copy = await openVenueDatabase(roots.venueDir);
       try {
         return {
+          chainHeads: await copy.venue.select().from(cadenas),
+          submissions: await copy.venue.select().from(envios),
+          nodeKeys: await copy.node.select().from(nodeRecoveryKey),
           allocations: await copy.venue.select().from(fiscalAllocations),
           registrations: await copy.venue.select().from(registroSif),
           series: await copy.venue.select().from(invoiceSeries),

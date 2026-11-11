@@ -20,7 +20,6 @@ import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { activatePreparedModuleAllocation } from "./allocation-preparation.js";
 import { fiscalAllocations } from "./schema/allocations.js";
 import { registroSif } from "./schema/sif.js";
-import { assertFiscalRestoreCommitted } from "./restore-committed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const node = { nodeId: TENANT_A.nodeId };
@@ -336,7 +335,6 @@ it("replays the exact committed restore without another hour or counter change",
     monotonicNow: () => 0,
   });
   await withOperationAuthority(binding, operator, async (authority) => {
-    await withTransaction(suite.db, (tx) => assertFiscalRestoreCommitted(tx, node, binding));
     await expect(restore(restarted, { binding, authority, input })).resolves.toHaveProperty(
       "report",
     );

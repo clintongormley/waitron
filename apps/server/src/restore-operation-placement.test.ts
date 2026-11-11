@@ -1,7 +1,7 @@
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -128,76 +128,6 @@ function regime(hook: NonNullable<WaitronModule["backup"]>["restore"]): WaitronM
     backup: { restore: hook },
   };
 }
-
-it.each(["missing", "directory"] as const)(
-  "refuses a %s resumed database before opening it for admission",
-  async (kind) => {
-    const f = await fixture(regime(async () => ({ report: "unexpected" })));
-    const path = join(f.deps.venueDir, "venue.db");
-    await mkdir(f.deps.venueDir, { recursive: true });
-    if (kind === "directory") await mkdir(path);
-    let admitted = false;
-    const runner = f.deps.withModuleOperations!;
-    runner.checkBeforePlacement = async ({ db }) => {
-      admitted = true;
-      await db.select().from(nodes);
-    };
-    const priorIdentity = "existing target identity";
-    await writeFile(join(f.deps.stateDir, "trading.env"), priorIdentity);
-    const source = await readFile(f.validated.databasePath);
-    await expect(
-      writeValidated(f.validated, { ...f.deps, resumeOperation: binding }),
-    ).rejects.toMatchObject({ code: "module.operation_invalid" });
-    expect(admitted).toBe(false);
-    expect(await readFile(f.validated.databasePath)).toEqual(source);
-    expect(await readFile(join(f.deps.stateDir, "trading.env"), "utf8")).toBe(priorIdentity);
-    if (kind === "missing") await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" });
-  },
-);
-
-it("admits an existing resumed database and preserves its rows instead of replacing it", async () => {
-  let checked = false;
-  const module = regime(async () => ({ report: "restored" }));
-  const f = await fixture({
-    ...module,
-    backup: {
-      ...module.backup!,
-      assertRestoreCommitted: async () => {
-        checked = true;
-      },
-    },
-  });
-  await mkdir(f.deps.venueDir);
-  await copyFile(f.validated.databasePath, join(f.deps.venueDir, "venue.db"));
-  await writeFile(join(f.deps.venueDir, "node.db"), f.validated.nodeDump);
-  const placed = await openVenueDatabase(f.deps.venueDir);
-  try {
-    await seedVenueSettings(placed.venue, { name: "Already placed" });
-    await placed.venue.update(invoiceSeries).set({ nextNumber: 777 });
-  } finally {
-    await placed.close();
-  }
-  let admitted = false;
-  const runner = f.deps.withModuleOperations!;
-  runner.checkBeforePlacement = async ({ db }) => {
-    admitted = true;
-    expect((await readVenue(db)).name).toBe("Already placed");
-  };
-  await expect(
-    writeValidated(f.validated, { ...f.deps, resumeOperation: binding }),
-  ).resolves.toBeUndefined();
-  expect(admitted).toBe(true);
-  expect(checked).toBe(true);
-  const resumed = await openVenueDatabase(f.deps.venueDir);
-  try {
-    expect((await readVenue(resumed.venue)).name).toBe("Already placed");
-    expect((await resumed.venue.select().from(invoiceSeries)).map((row) => row.nextNumber)).toEqual(
-      [777, 777, 777],
-    );
-  } finally {
-    await resumed.close();
-  }
-});
 
 it("authenticates against the placed database and keeps the scoped authority alive through its hook", async () => {
   let held: ModuleOperationInput | undefined;

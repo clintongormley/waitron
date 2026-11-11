@@ -1,18 +1,12 @@
 import { SCRATCH_DIR, RESTORE_FLOW_DIR, SETUP_OPERATION_FILE } from "@waitron/store";
 import {
   assertNoStartAgainDeletion,
-  assertNotAhead,
   assertVenueFirstSetupAllowed,
   inspectFirstSetupMarker,
 } from "@waitron/provisioning";
-import { nodes, openVenueDatabase } from "@waitron/db";
-import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
-import { orderedMigrationSets, type OperationBinding, type ProvisionedNode } from "@waitron/module";
-import { eq } from "drizzle-orm";
 import {
   chmod,
   copyFile,
-  lstat,
   mkdir,
   mkdtemp,
   open,
@@ -21,9 +15,17 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
-import { VENUE_FILE } from "@waitron/store";
+import {
+  VENUE_FILE,
+  NODE_FILE,
+  SIDE_FILE_SUFFIXES,
+  TRADING_ENV_FILE,
+  TRADING_ENV_REPLACED_SUFFIX,
+} from "@waitron/store";
+import { litestreamMetaDir } from "@waitron/stream/litestream.js";
+import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { join } from "node:path";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
@@ -32,7 +34,7 @@ import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import {
   lockRestoreTarget,
-  readArtifactNode,
+  INCOMING_SUFFIX,
   restoreFromArtifactFile,
   validateArtifactFile,
   validateDatabaseEntries,
@@ -56,7 +58,6 @@ import {
   assertSnapshotRecoveryTarget,
   cloudRecoveryUnavailable,
   readSnapshotRecoveryBinding,
-  SnapshotPlacementRefused,
   type SnapshotRecoveryVerification,
 } from "./cloud-recovery-v2.js";
 import {
@@ -81,7 +82,6 @@ import { readRestoreFlowPhase } from "@waitron/provisioning";
 import {
   attachmentPath,
   dropAttachments,
-  endRestoreFlow,
   publishRestoreFlow,
   readRestoreFlow,
   updateRestoreFlow,
@@ -401,7 +401,6 @@ export async function runStagedRestore(
         candidate.snapshotRequestKey !== snapshot.publicKey ||
         (candidate.nodeRecoveryKey !== undefined &&
           (candidate.nodeRecoveryKey !== true || candidate.recoveryOperation === undefined)) ||
-        (phase === "placing" && candidate.nodeRecoveryKey !== true) ||
         Object.keys(candidate).some((key) => !allowed.includes(key))
       )
         cloudRecoveryUnavailable();
@@ -429,43 +428,6 @@ export async function runStagedRestore(
   }
 }
 
-async function restartUncommittedPlacement(
-  deps: StagedRestoreDeps,
-  node: ProvisionedNode,
-  binding: OperationBinding,
-): Promise<boolean> {
-  const refuse = (): never => {
-    throw new AppError("module.operation_invalid", { module: binding.module });
-  };
-  const reader = ALL_MODULES.find((module) => module.name === binding.module)?.operations
-    ?.readRecoveryState;
-  if (reader === undefined) return refuse();
-  try {
-    if (!(await lstat(join(deps.venueDir, VENUE_FILE))).isFile()) return refuse();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
-    throw error;
-  }
-  const destination = await openVenueDatabase(deps.venueDir);
-  try {
-    const sets = orderedMigrationSets(ALL_MODULES);
-    await assertNotAhead(destination, sets, deps.migrationsRoot);
-    await applyMigrations(deps.venueDir, migrationOptionsFor(sets, deps.migrationsRoot));
-    const [known] = await destination.venue
-      .select({ id: nodes.id })
-      .from(nodes)
-      .where(eq(nodes.id, node.nodeId))
-      .limit(1);
-    if (known === undefined) return true;
-    const state = await reader(destination.venue, node, binding);
-    if (state.priorActivation === "none") return true;
-    if (state.priorActivation === "committed") return false;
-    return refuse();
-  } finally {
-    await destination.close();
-  }
-}
-
 async function runHeld(
   deps: StagedRestoreDeps,
   flow: RestoreFlowRecord,
@@ -478,216 +440,177 @@ async function runHeld(
     await updateRestoreFlow(deps.stateDir, next);
     record = next;
   };
-  let managedCloud: { requestId: string; pointId: string } | undefined;
-  let resuming = false;
-  let restartPlacement = false;
-  let markedStarted = false;
-  let placed = false;
-  let uncommitted = false;
-  try {
-    const marker = (flow.request ?? {}) as {
-      version?: unknown;
-      environment?: unknown;
-      kind?: unknown;
-      managedCloud?: unknown;
-      recoveryOperation?: unknown;
-      nodeRecoveryKey?: unknown;
-      recoveryContext?: unknown;
-    };
-    if (
-      (marker.version !== 1 && !(marker.version === 2 && snapshot)) ||
-      (flow.phase === "placing" && marker.nodeRecoveryKey !== true) ||
-      (marker.nodeRecoveryKey !== undefined &&
-        (marker.nodeRecoveryKey !== true || marker.recoveryOperation === undefined)) ||
-      (marker.environment !== "production" && marker.environment !== "preproduction") ||
-      (marker.kind !== undefined && marker.kind !== "stream") ||
-      (marker.kind === "stream" && marker.managedCloud !== undefined) ||
-      (marker.managedCloud !== undefined &&
-        (marker.environment !== "preproduction" ||
-          typeof marker.managedCloud !== "object" ||
-          marker.managedCloud === null ||
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-            String((marker.managedCloud as { requestId?: unknown }).requestId),
-          ) ||
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-            String((marker.managedCloud as { pointId?: unknown }).pointId),
-          )))
-    ) {
-      throw new Error("invalid staged restore request");
+  await rm(join(deps.stateDir, RESTORE_STAGING_DIR), { recursive: true, force: true });
+  if (flow.phase === "placing") {
+    await deleteBackupRoomNote(deps.stateDir);
+    for (const name of [VENUE_FILE, NODE_FILE]) {
+      const target = join(deps.venueDir, name);
+      for (const suffix of ["", ...SIDE_FILE_SUFFIXES, INCOMING_SUFFIX])
+        await rm(`${target}${suffix}`, { force: true });
     }
-    resuming = flow.phase === "placing";
-    const environment: DeploymentEnvironment = marker.environment;
-    const operation =
-      marker.recoveryOperation === undefined
-        ? isUnset(deps.recoveryOperationPath)
-          ? undefined
-          : await readRecoveryOperationFile(deps.recoveryOperationPath)
-        : parseRecoveryOperationInput(marker.recoveryOperation);
-    if (operation === null) throw new Error("invalid staged restore request");
-    const context = recoveryContext(marker.recoveryContext);
-    if (context !== undefined && (operation === undefined || marker.nodeRecoveryKey !== true))
-      invalidRecoveryContext();
-    if (marker.nodeRecoveryKey === true && operation !== undefined) {
-      assertSource(
-        operation,
-        marker.kind === "stream"
-          ? await recoveryStreamSourceId(
-              attachmentPath(deps.stateDir, STREAM_DB),
-              unpackArchive(await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES))),
-            )
-          : await recoveryArchiveFileSourceId(attachmentPath(deps.stateDir, ARTIFACT)),
-      );
-    }
-    // The file bridges the restart; the selected database and current outside source still
-    // authenticate each attempt. A marker cannot substitute an environment key for a lost file.
-    const secret =
-      marker.nodeRecoveryKey === true
-        ? await readStagedNodeKey(deps.stateDir)
-        : deps.recoverySecret;
-    let withModuleOperations =
-      operation === undefined
-        ? deps.withModuleOperations
-        : createRecoveryRestoreRunner(ALL_MODULES, operation, secret);
-    if (context !== undefined && operation !== undefined) {
-      const validation = {
-        ...deps,
-        environment,
-        modules: ALL_MODULES,
-        stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
-      };
-      const copy =
-        marker.kind === "stream"
-          ? await (async () => {
-              const parent = join(deps.stateDir, SCRATCH_DIR);
-              await mkdir(parent, { recursive: true, mode: 0o700 });
-              const directory = await mkdtemp(join(parent, RESTORE_ENTRY_PREFIX));
-              const discard = () => rm(directory, { recursive: true, force: true });
-              try {
-                const databasePath = join(directory, VENUE_FILE);
-                await copyFile(attachmentPath(deps.stateDir, STREAM_DB), databasePath);
-                const validated = await validateDatabaseEntries(
-                  unpackArchive(await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES))),
-                  databasePath,
-                  validation,
-                );
-                await writeStagedNodeCopy(databasePath, validated.nodeDump);
-                return { ...validated, discard };
-              } catch (error) {
-                await discard();
-                throw error;
-              }
-            })()
-          : await validateArtifactFile({
-              ...validation,
-              artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
-              recoveryKey: await readFile(attachmentPath(deps.stateDir, KEY), "utf8"),
-            });
-      try {
-        withModuleOperations = await createRecoveryEntryRunner({
-          ...validation,
-          copy,
-          operation,
-          secret,
-          context,
-        });
-        if (resuming)
-          restartPlacement = await restartUncommittedPlacement(
-            deps,
-            await readArtifactNode(copy),
-            operation.binding,
-          );
-      } finally {
-        await copy.discard();
-      }
-    }
-    const common = {
-      venueDir: deps.venueDir,
-      stateDir: deps.stateDir,
-      stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
-      migrationsRoot: deps.migrationsRoot,
-      modules: ALL_MODULES,
-      environment,
-      log: deps.log,
-      ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
-      ...(resuming && !restartPlacement && operation !== undefined
-        ? { resumeOperation: operation.binding }
-        : {}),
-      recordFirstStart: (source: "archive" | "stream") =>
-        saveRecord({ ...record, firstStart: { source } }),
-      clearFirstStart: () => saveRecord({ ...record, firstStart: undefined }),
-      onDatabasePlaced: () => {
-        placed = true;
-      },
-      onFailedBeforeHooksCommit: () => {
-        uncommitted = true;
-      },
-    };
-    let run: () => Promise<void>;
-    if (marker.kind === "stream") {
-      const packed = await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES));
-      let databasePath = attachmentPath(deps.stateDir, STREAM_DB);
-      if (marker.nodeRecoveryKey === true && (!resuming || restartPlacement)) {
-        databasePath = attachmentPath(deps.stateDir, STREAM_PLACEMENT);
-        await copyFile(attachmentPath(deps.stateDir, STREAM_DB), databasePath);
-        await chmod(databasePath, 0o600);
-      }
-      run = () =>
-        restoreStream({
-          ...common,
-          databasePath,
-          entries: unpackArchive(packed),
-        });
-    } else {
-      const recoveryKey = await readFile(attachmentPath(deps.stateDir, KEY), "utf8");
-      run = () =>
-        restore({
-          ...common,
-          artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
-          recoveryKey,
-          ...(marker.managedCloud
-            ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
-            : {}),
-          ...(snapshot === undefined
-            ? {}
-            : {
-                snapshotVerification: snapshot.verification,
-                snapshotRequestKey: snapshot.publicKey,
-              }),
-        });
-    }
-    managedCloud = marker.managedCloud as typeof managedCloud;
-    if (marker.nodeRecoveryKey === true && !resuming) {
-      if (marker.kind === "stream") await flushPath(attachmentPath(deps.stateDir, STREAM_DB));
-      await saveRecord({ ...record, phase: "placing" });
-      markedStarted = true;
-    }
-    await run();
-  } catch (error) {
-    if (markedStarted && (!placed || uncommitted)) {
-      // Nothing a module step committed is in the venue folder, so the next start places the
-      // archive afresh, as running the restore command again does. Any later failure can follow a
-      // committed activation, which only a checked replay finds.
-      await saveRecord(flow);
-    } else if (
-      !resuming &&
-      !markedStarted &&
-      !(snapshot && error instanceof SnapshotPlacementRefused) &&
-      !(isAppError(error) && error.code === "provisioning.database_in_use")
-    ) {
-      await endRestoreFlow(deps.stateDir);
-      await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
-      await syncFolderHolding(join(deps.stateDir, SETUP_OPERATION));
-    }
-    throw error;
-  }
-  if (managedCloud) {
+    await rm(litestreamMetaDir(join(deps.venueDir, VENUE_FILE)), { recursive: true, force: true });
+    const identity = join(deps.stateDir, TRADING_ENV_FILE);
     try {
-      await deps.onManagedCloudRestored?.(managedCloud);
-    } catch {
-      // A started keyed request can check its committed activation before retrying notification.
-      if (markedStarted || resuming) return true;
+      await rename(`${identity}${TRADING_ENV_REPLACED_SUFFIX}`, identity);
+      await syncFolderHolding(identity);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
+  const marker = (flow.request ?? {}) as {
+    version?: unknown;
+    environment?: unknown;
+    kind?: unknown;
+    managedCloud?: unknown;
+    recoveryOperation?: unknown;
+    nodeRecoveryKey?: unknown;
+    recoveryContext?: unknown;
+  };
+  if (
+    (marker.version !== 1 && !(marker.version === 2 && snapshot)) ||
+    (marker.nodeRecoveryKey !== undefined &&
+      (marker.nodeRecoveryKey !== true || marker.recoveryOperation === undefined)) ||
+    (marker.environment !== "production" && marker.environment !== "preproduction") ||
+    (marker.kind !== undefined && marker.kind !== "stream") ||
+    (marker.kind === "stream" && marker.managedCloud !== undefined) ||
+    (marker.managedCloud !== undefined &&
+      (marker.environment !== "preproduction" ||
+        typeof marker.managedCloud !== "object" ||
+        marker.managedCloud === null ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          String((marker.managedCloud as { requestId?: unknown }).requestId),
+        ) ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+          String((marker.managedCloud as { pointId?: unknown }).pointId),
+        )))
+  ) {
+    throw new Error("invalid staged restore request");
+  }
+  const environment: DeploymentEnvironment = marker.environment;
+  const operation =
+    marker.recoveryOperation === undefined
+      ? isUnset(deps.recoveryOperationPath)
+        ? undefined
+        : await readRecoveryOperationFile(deps.recoveryOperationPath)
+      : parseRecoveryOperationInput(marker.recoveryOperation);
+  if (operation === null) throw new Error("invalid staged restore request");
+  const context = recoveryContext(marker.recoveryContext);
+  if (context !== undefined && (operation === undefined || marker.nodeRecoveryKey !== true))
+    invalidRecoveryContext();
+  if (marker.nodeRecoveryKey === true && operation !== undefined) {
+    assertSource(
+      operation,
+      marker.kind === "stream"
+        ? await recoveryStreamSourceId(
+            attachmentPath(deps.stateDir, STREAM_DB),
+            unpackArchive(await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES))),
+          )
+        : await recoveryArchiveFileSourceId(attachmentPath(deps.stateDir, ARTIFACT)),
+    );
+  }
+  // The file bridges the restart; the selected database and current outside source still
+  // authenticate each attempt. A marker cannot substitute an environment key for a lost file.
+  const secret =
+    marker.nodeRecoveryKey === true ? await readStagedNodeKey(deps.stateDir) : deps.recoverySecret;
+  let withModuleOperations =
+    operation === undefined
+      ? deps.withModuleOperations
+      : createRecoveryRestoreRunner(ALL_MODULES, operation, secret);
+  if (context !== undefined && operation !== undefined) {
+    const validation = {
+      ...deps,
+      environment,
+      modules: ALL_MODULES,
+      stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
+    };
+    const copy =
+      marker.kind === "stream"
+        ? await (async () => {
+            const parent = join(deps.stateDir, SCRATCH_DIR);
+            await mkdir(parent, { recursive: true, mode: 0o700 });
+            const directory = await mkdtemp(join(parent, RESTORE_ENTRY_PREFIX));
+            const discard = () => rm(directory, { recursive: true, force: true });
+            try {
+              const databasePath = join(directory, VENUE_FILE);
+              await copyFile(attachmentPath(deps.stateDir, STREAM_DB), databasePath);
+              const validated = await validateDatabaseEntries(
+                unpackArchive(await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES))),
+                databasePath,
+                validation,
+              );
+              await writeStagedNodeCopy(databasePath, validated.nodeDump);
+              return { ...validated, discard };
+            } catch (error) {
+              await discard();
+              throw error;
+            }
+          })()
+        : await validateArtifactFile({
+            ...validation,
+            artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
+            recoveryKey: await readFile(attachmentPath(deps.stateDir, KEY), "utf8"),
+          });
+    try {
+      withModuleOperations = await createRecoveryEntryRunner({
+        ...validation,
+        copy,
+        operation,
+        secret,
+        context,
+      });
+    } finally {
+      await copy.discard();
+    }
+  }
+  const common = {
+    venueDir: deps.venueDir,
+    stateDir: deps.stateDir,
+    stagingDir: join(deps.stateDir, RESTORE_STAGING_DIR),
+    migrationsRoot: deps.migrationsRoot,
+    modules: ALL_MODULES,
+    environment,
+    log: deps.log,
+    ...(withModuleOperations === undefined ? {} : { withModuleOperations }),
+    recordFirstStart: (source: "archive" | "stream") =>
+      saveRecord({ ...record, firstStart: { source } }),
+    clearFirstStart: () => saveRecord({ ...record, firstStart: undefined }),
+    beforeDatabaseMove: () => saveRecord({ ...record, phase: "placing" }),
+  };
+  let run: () => Promise<void>;
+  if (marker.kind === "stream") {
+    const packed = await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES));
+    const databasePath = attachmentPath(deps.stateDir, STREAM_PLACEMENT);
+    await copyFile(attachmentPath(deps.stateDir, STREAM_DB), databasePath);
+    await chmod(databasePath, 0o600);
+    run = () =>
+      restoreStream({
+        ...common,
+        databasePath,
+        entries: unpackArchive(packed),
+      });
+  } else {
+    const recoveryKey = await readFile(attachmentPath(deps.stateDir, KEY), "utf8");
+    run = () =>
+      restore({
+        ...common,
+        artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
+        recoveryKey,
+        ...(marker.managedCloud
+          ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
+          : {}),
+        ...(snapshot === undefined
+          ? {}
+          : {
+              snapshotVerification: snapshot.verification,
+              snapshotRequestKey: snapshot.publicKey,
+            }),
+      });
+  }
+  const managedCloud = marker.managedCloud as { requestId: string; pointId: string } | undefined;
+  await run();
+  if (managedCloud) await deps.onManagedCloudRestored?.(managedCloud);
+  await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
+  await syncFolderHolding(join(deps.stateDir, SETUP_OPERATION));
   await saveRecord({
     version: 1,
     phase: "first-start",
@@ -696,7 +619,5 @@ async function runHeld(
     },
   });
   await dropAttachments(deps.stateDir);
-  await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
-  await syncFolderHolding(join(deps.stateDir, SETUP_OPERATION));
   return true;
 }

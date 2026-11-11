@@ -4,7 +4,6 @@ import { AppError } from "@waitron/shared";
 import { readHourHistory } from "./hour-history-reader.js";
 import { liveSeriesBases } from "./reserved-series.js";
 import { readModuleAllocationSeries } from "./allocation-operation.js";
-import { assertFiscalRestoreCommitted } from "./restore-committed.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
 import { createHash } from "node:crypto";
@@ -68,8 +67,20 @@ export const readHourRecoveryState: NonNullable<
         row.reference === `fiscal_allocations/${binding.eventId}`,
     );
     if (committed) {
-      if (binding.action === "restore") await assertFiscalRestoreCommitted(tx, node, binding);
-      else {
+      if (binding.action === "restore") {
+        const [prior] = await tx
+          .select()
+          .from(fiscalAllocations)
+          .where(eq(fiscalAllocations.eventKey, binding.eventId));
+        if (
+          prior === undefined ||
+          prior.nodeId !== node.nodeId ||
+          prior.approval.sourceId !== binding.sourceId
+        )
+          throw new AppError("sif.allocation_invalid", {
+            reason: "prior_activation_requires_replay",
+          });
+      } else {
         const [prior] = await tx
           .select()
           .from(fiscalAllocations)

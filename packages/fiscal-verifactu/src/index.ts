@@ -15,7 +15,6 @@ export { FISCAL_RECOVERY_PACK } from "./recovery-pack.js";
 export { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 export { readCloudAllocationReceipt, verifyCloudAllocationEvidence } from "./cloud-evidence.js";
 export type { CloudAllocationReceipt, ReceiptTrust } from "./cloud-evidence.js";
-export { assertFiscalRestoreCommitted } from "./restore-committed.js";
 export { FISCAL_SLOT } from "./slot.js";
 export { FISCAL_ROUTES } from "./routes.js";
 export { FISCAL_PERMISSIONS } from "./permissions.js";

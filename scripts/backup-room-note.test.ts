@@ -26,6 +26,7 @@ const REPLACES: readonly string[] = [
   "apps/server/src/db-wipe.ts",
   "apps/server/src/handover-place-copy.ts",
   "apps/server/src/restore.ts",
+  "apps/server/src/restore-request.ts",
   "packages/provisioning/src/environment-recovery-move.ts",
   "packages/provisioning/src/first-setup-start-again-deletion.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
@@ -49,8 +50,6 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/reset-request.ts":
     "checks venue.db exists; removes its own marker and state files",
   "apps/server/src/restore-flow.ts": "removes only restore attachments under flows/restore",
-  "apps/server/src/restore-request.ts":
-    "removes and renames its own request files in the state folder",
   "apps/server/src/restore-stream.ts": "restores into a scratch folder it removes",
   "apps/server/src/start-backup-room-record.ts":
     "names venue.db in prose; unlinks only the start's deletion record",
@@ -157,5 +156,19 @@ describe("the backup room note guard (weaker than its name: reads text)", () => 
           `apps/server/src/${name}.ts: names venue.db beside a removal or copy, on neither list`,
       ),
     );
+  });
+
+  it("requires the staged retry to delete the note before replacing its database", () => {
+    const files = tree();
+    const path = "apps/server/src/restore-request.ts";
+    expect(
+      problems(
+        files.map((file) =>
+          file.path === path
+            ? { ...file, text: file.text.replaceAll("deleteBackupRoomNote(", "x(") }
+            : file,
+        ),
+      ),
+    ).toEqual([`${path}: replaces venue.db, never deletes the note`]);
   });
 });

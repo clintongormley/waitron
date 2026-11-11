@@ -33,12 +33,9 @@ import { writeStreamRestore } from "./restore-stream.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { Hono } from "hono";
 import { mountSetup } from "./setup-api.js";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { encodeRecoveryKit } from "@waitron/stream";
-import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
@@ -79,7 +76,7 @@ describe("selected-hour admission before archive placement", () => {
     },
   );
 
-  it("clears an unstored-credential request after its injected admission refuses", async () => {
+  it("retains an unstored-credential request after its injected admission refuses", async () => {
     const f = await archiveHost();
     await stageRestoreRequest(f.roots.stateDir, {
       artifact: f.restore.artifact,
@@ -90,14 +87,12 @@ describe("selected-hour admission before archive placement", () => {
     await expect(
       runStagedRestore({ ...f.restore, withModuleOperations: wrong.runner(f.outcome.input) }),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-    await expect(
-      readFile(join(f.roots.stateDir, "flows/restore/record.json")),
-    ).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await expect(readFile(join(f.roots.stateDir, "flows/restore/key"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(
+      JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+    ).toHaveProperty("request");
+    expect(await readFile(join(f.roots.stateDir, "flows/restore/key"), "utf8")).toBe(
+      "archive password",
+    );
   });
 
   it("checks fresh isolation before replacing the destination or its identity", async () => {
@@ -244,7 +239,6 @@ describe("selected-hour admission before archive placement", () => {
         modules: ALL_MODULES,
         log: () => {},
         withModuleOperations: reconstructed.runner(f.outcome.input, { refresh: true }),
-        resumeOperation: f.options.binding,
       });
       expect(external.internet).not.toHaveBeenCalled();
       expect(await restored.venue.select().from(invoiceSeries)).toEqual(rows);
@@ -472,106 +466,6 @@ describe("selected-hour admission before archive placement", () => {
         ).toEqual([]);
       }
     },
-  );
-
-  it.each(["archive", "stream"] as const)(
-    "replays staged %s recovery after process death following committed placement",
-    async (kind) => {
-      const f = await archiveHost(kind);
-      const credentials = {
-        environment: "preproduction" as const,
-        recoveryOperation: { binding: f.options.binding, input: f.outcome.input },
-        nodeRecoverySecret: key.secret,
-        recoveryContext: {
-          selectedSourceId: f.options.selected.sourceId,
-          oldBoxGone: true,
-          soleRecovery: true,
-        },
-      };
-      await stageRestoreRequest(
-        f.roots.stateDir,
-        kind === "archive"
-          ? { ...credentials, artifact: f.restore.artifact, recoveryKey: "archive password" }
-          : { ...credentials, kind: "stream", databasePath: f.database, entries: f.entries },
-      );
-      const internetModule = `export async function authenticatedHourHead() { throw new Error("this test makes no network request"); }
-      export async function observeInternetHourClock() {
-        return { source: "internet", result: "usable", instantMs: Date.now(), uncertaintyMs: 0,
-          wallStartedMs: Date.now(), wallFinishedMs: Date.now(),
-          monotonicStartedMs: performance.now(), monotonicFinishedMs: performance.now() };
-      }`;
-      // Holds the child for over a second of real time, once, between its clock reading and the
-      // re-check, so a child whose wall and elapsed-time clocks disagree is refused on every run.
-      const releaseModule = `let held = false; export function readHourRelease() { if (!held) { held = true; const end = process.hrtime.bigint() + 1_100_000_000n; while (process.hrtime.bigint() < end); } return { instantMs: Date.parse("2026-10-15T00:00:00Z") }; }`;
-      const source = `
-        import { registerHooks } from "node:module";
-        const realDate = Date;
-        globalThis.Date = class extends realDate {
-          constructor(...args) { super(...(args.length ? args : ["2026-10-16T12:42:01Z"])); }
-          static now() { return realDate.parse("2026-10-16T12:42:01Z"); }
-        };
-        Object.defineProperty(performance, "now", { value: () => 0 });
-        registerHooks({ resolve(specifier, context, next) {
-          if (specifier.endsWith("/hour-clock-internet.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(internetModule)}`)} };
-          if (specifier.endsWith("/hour-release.js")) return { shortCircuit: true, url: ${JSON.stringify(`data:text/javascript,${encodeURIComponent(releaseModule)}`)} };
-          return next(specifier, context);
-        }});
-        const { runStagedRestore } = await import(${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)});
-        const { restoreFromArtifactFile } = await import(${JSON.stringify(new URL("./restore.ts", import.meta.url).href)});
-        const { writeStreamRestore } = await import(${JSON.stringify(new URL("./restore-stream.ts", import.meta.url).href)});
-        await runStagedRestore({ ...JSON.parse(process.argv[1]), log() {} },
-          async (args) => { await restoreFromArtifactFile(args); process.kill(process.pid, "SIGKILL"); },
-          async (args) => { await writeStreamRestore(args); process.kill(process.pid, "SIGKILL"); });
-      `;
-      await expectChildKilled(
-        promisify(execFile)(
-          process.execPath,
-          [
-            "--import",
-            import.meta.resolve("tsx"),
-            "--input-type=module",
-            "-e",
-            source,
-            JSON.stringify({ ...f.roots, migrationsRoot: null }),
-          ],
-          { timeout: 45_000 },
-        ),
-        { signal: "SIGKILL" },
-      );
-      expect(
-        JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
-      ).toMatchObject({ phase: "placing" });
-      const restored = await openVenueDatabase(f.roots.venueDir);
-      let rows;
-      let allocations;
-      try {
-        expect(
-          (await restored.venue.select().from(invoiceSeries))
-            .filter((row) => row.retiredAt === null)
-            .map((row) => row.code),
-        ).toEqual(["A-0CNQT", "FF-0CNQT", "R-0CNQT"]);
-        await restored.venue.update(invoiceSeries).set({ nextNumber: 917 });
-        rows = await restored.venue.select().from(invoiceSeries);
-        allocations = await restored.venue.select().from(fiscalAllocations);
-      } finally {
-        await restored.close();
-      }
-      const journal = await readModulePreparationHistory(f.roots, binding.module);
-      vi.setSystemTime(new Date("2026-10-17T14:40:00Z"));
-      external.internet.mockClear();
-      expect(await runStagedRestore(f.restore)).toBe(true);
-      expect(external.internet).not.toHaveBeenCalled();
-      const replayed = await openVenueDatabase(f.roots.venueDir);
-      try {
-        expect(await replayed.venue.select().from(invoiceSeries)).toEqual(rows);
-        expect(await replayed.venue.select().from(fiscalAllocations)).toEqual(allocations);
-      } finally {
-        await replayed.close();
-      }
-      expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
-      expect(await runStagedRestore(f.restore)).toBe(false);
-    },
-    120_000,
   );
 
   it("interactive preparation keeps browser comparisons across freshly validated private copies and stages the selected hour", async () => {

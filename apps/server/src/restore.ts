@@ -3,7 +3,6 @@ import { TRADING_ENV_FILE } from "@waitron/store";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { isDeepStrictEqual } from "node:util";
 import {
   access,
   chmod,
@@ -50,11 +49,10 @@ import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
   modulesWithSets,
   orderedMigrationSets,
-  type OperationBinding,
   type ProvisionedNode,
   type WaitronModule,
 } from "@waitron/module";
-import { assertNotAhead, quoteIdent } from "@waitron/provisioning";
+import { quoteIdent } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -136,14 +134,7 @@ export interface RestoreDeps extends ValidationDeps {
    * its secrets; not run with `skipSecrets`. Refusing stops the restore. */
   readonly checkSourceLive?: (validated: ValidatedArtifact) => Promise<void>;
   readonly withModuleOperations?: RestoreOperationRunner;
-  readonly resumeOperation?: OperationBinding;
-  /** Called once the archive's database is in the venue folder, or at once when resuming: until
-   * then no module step has run on it, so a failure leaves nothing a retry must check. */
-  readonly onDatabasePlaced?: () => void;
-  /** Called when a failure after placement comes before the restore hooks' transaction body has
-   * returned, so before that transaction could commit (`packages/store/src/write-queue.ts` commits
-   * only once the body resolves): the placed database holds nothing a module step committed. */
-  readonly onFailedBeforeHooksCommit?: () => void;
+  readonly beforeDatabaseMove?: () => Promise<void>;
   readonly log: Logger;
 }
 
@@ -156,8 +147,7 @@ export interface RestoreHookResult {
 }
 
 // Authentication is reconstructed by the trusted host, never deserialised from a backup or marker.
-// A runner calls `run` once, as the body of the venue transaction it saves, and saves nothing to
-// venue.db before `run` returns: `onFailedBeforeHooksCommit` relies on it.
+// A runner calls `run` once, as the body of the venue transaction it saves.
 export interface RestoreOperationRunner {
   (
     context: {
@@ -405,48 +395,33 @@ async function validateEntryMetadata(
 /**
  * The secrets are staged before anything is replaced, so a full disk met during staging leaves the
  * box as it was. Placing the database is the point of no return for the box's files: after it a
- * failure keeps the placed database with the box's identity set aside. The hooks' commit is what a
- * staged restore resumes from.
+ * failure keeps the placed database with the box's identity set aside.
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
   // Before the identity is set aside, so a refusal here leaves it where it was.
   await deleteBackupRoomNote(deps.stateDir);
-  if (deps.resumeOperation !== undefined) {
-    const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
-    try {
-      await assertNotAhead(
-        { venue: existing.db, node: existing.node },
-        orderedMigrationSets(deps.modules),
-        deps.migrationsRoot,
-      );
-    } finally {
-      await existing.close();
-    }
-  }
   let staged: StagedSecrets | undefined;
   if (!deps.skipSecrets)
     staged = await stageSecrets({ entries: validated.secretEntries, stateDir: deps.stateDir, log });
-  if (deps.resumeOperation === undefined) {
-    let identityMoved = false;
-    try {
-      if (!deps.skipSecrets) identityMoved = await setAsideExistingIdentity(deps.stateDir, log);
-      await restoreDatabase({
-        databasePath: validated.databasePath,
-        // One source per restore: a restore that keeps the box's identity keeps its node.db too.
-        ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
-        venueDir: deps.venueDir,
-        stateDir: deps.stateDir,
-        log,
-      });
-    } catch (error) {
-      await staged?.discard();
-      if (identityMoved) await putIdentityBack(deps.stateDir, log);
-      throw error;
-    }
+  let identityMoved = false;
+  try {
+    if (!deps.skipSecrets) identityMoved = await setAsideExistingIdentity(deps.stateDir, log);
+    await deps.beforeDatabaseMove?.();
+    await restoreDatabase({
+      databasePath: validated.databasePath,
+      // One source per restore: a restore that keeps the box's identity keeps its node.db too.
+      ...(deps.skipSecrets ? {} : { nodeDump: validated.nodeDump }),
+      venueDir: deps.venueDir,
+      stateDir: deps.stateDir,
+      log,
+    });
+  } catch (error) {
+    await staged?.discard();
+    if (identityMoved) await putIdentityBack(deps.stateDir, log);
+    throw error;
   }
-  deps.onDatabasePlaced?.();
-  let hooksReturned = false;
+
   try {
     // The gate admits an OLDER schema; a hook written against today's must not run against
     // yesterday's. Every module, as setup mode migrates — the CLI has no enabled-set config.
@@ -471,16 +446,11 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
         node,
         log,
         withModuleOperations: deps.withModuleOperations,
-        resumeOperation: deps.resumeOperation,
-        onBodyReturned: () => {
-          hooksReturned = true;
-        },
       });
     } finally {
       await opened.close();
     }
   } catch (error) {
-    if (!hooksReturned) deps.onFailedBeforeHooksCommit?.();
     await staged?.discard();
     throw error;
   }
@@ -503,27 +473,20 @@ export async function writeValidated(
   let admitted = validated;
   try {
     await assertVenueFirstSetupAllowed(deps.venueDir);
-    if (
-      deps.resumeOperation !== undefined &&
-      (deps.skipSecrets ||
-        !lstatSync(join(deps.venueDir, VENUE_FILE), { throwIfNoEntry: false })?.isFile())
-    )
-      throw new AppError("module.operation_invalid", { module: deps.resumeOperation.module });
     const check = deps.withModuleOperations?.checkBeforePlacement;
     if (!deps.skipSecrets && check !== undefined) {
       let directory = deps.venueDir;
-      if (deps.resumeOperation === undefined) {
-        admissionDirectory = await mkdtemp(join(deps.stagingDir, RESTORE_ADMISSION_PREFIX));
-        directory = admissionDirectory;
-        admitted = {
-          ...validated,
-          databasePath: await copyStagedCopy(validated, directory),
-        };
-        await (deps.migrate ?? applyMigrations)(
-          directory,
-          migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
-        );
-      }
+      admissionDirectory = await mkdtemp(join(deps.stagingDir, RESTORE_ADMISSION_PREFIX));
+      directory = admissionDirectory;
+      admitted = {
+        ...validated,
+        databasePath: await copyStagedCopy(validated, directory),
+      };
+      await (deps.migrate ?? applyMigrations)(
+        directory,
+        migrationOptionsFor(orderedMigrationSets(deps.modules), deps.migrationsRoot),
+      );
+
       const opened = await (deps.openDb ?? openVenue)(directory);
       try {
         await check({
@@ -1004,9 +967,6 @@ export async function runRestoreHooks(args: {
   log: Logger;
   moduleOperations?: ModuleOperations;
   withModuleOperations?: RestoreOperationRunner;
-  resumeOperation?: OperationBinding;
-  /** Called as the transaction body's last step, before its commit is issued. */
-  onBodyReturned?: () => void;
 }): Promise<{ seriesId: string; reports: readonly string[] }> {
   const { node } = args;
   const suppliedOperations = snapshotModuleOperations(args.moduleOperations);
@@ -1021,18 +981,6 @@ export async function runRestoreHooks(args: {
       throw new AppError("restore.identity_unknown", {
         nodeId: node.nodeId,
       });
-    }
-    if (args.resumeOperation !== undefined) {
-      const binding = args.resumeOperation;
-      const owner = args.modules.find((module) => module.name === binding.module);
-      const operation = moduleOperationFor(operations, binding.module, node.nodeId, "restore");
-      if (
-        operation === undefined ||
-        !isDeepStrictEqual(operation.binding, binding) ||
-        owner?.backup?.assertRestoreCommitted === undefined
-      )
-        throw new AppError("module.operation_invalid", { module: binding.module });
-      await owner.backup.assertRestoreCommitted(tx, node, binding);
     }
     const reports: string[] = [];
     let replacement:
@@ -1082,7 +1030,6 @@ export async function runRestoreHooks(args: {
         }
       }
     }
-    args.onBodyReturned?.();
     return { seriesId, reports };
   };
   return args.withModuleOperations === undefined

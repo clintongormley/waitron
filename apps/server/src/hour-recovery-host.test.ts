@@ -167,7 +167,6 @@ it("replays the exact restore after reading the now-committed database history",
     modules: f.configured,
     log: () => {},
     withModuleOperations: runner,
-    resumeOperation: binding,
   });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
@@ -309,11 +308,10 @@ it("requires a real committed result when the host reports that replay is possib
       modules: f.configured,
       log: () => {},
       withModuleOperations: f.service.runner(selected.input),
-      resumeOperation: binding,
     }),
   ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "prior_activation_requires_replay" },
+    code: "restore.hook_failed",
+    params: { module: "fiscal-verifactu", code: "sif.allocation_invalid" },
   });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
 });
@@ -481,7 +479,6 @@ it("finishes an already committed restore after restart without selecting or com
     modules: next.configured,
     log: () => {},
     withModuleOperations: next.service.runner(selected.input),
-    resumeOperation: binding,
   });
   expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);
@@ -711,7 +708,6 @@ describe("module-owned recovery facts from the actual database", () => {
       modules: next.service.modules,
       log: () => {},
       withModuleOperations: next.service.runner(selected.input),
-      resumeOperation: binding,
     });
     expect(await suite.db.select().from(invoiceSeries)).toEqual(before);
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(2);

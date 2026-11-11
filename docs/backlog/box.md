@@ -1739,13 +1739,11 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   full disk), or `restore failed: restore.hook_failed (module …)` for a hook; a server started now
   comes up in setup mode, and once the cause is gone the same command finishes the restore (pinned in
   `apps/server/src/hour-recovery-placement-1.test.ts`). A restore staged for the box's next start
-  puts its original request back when the failure came before the restore hooks' transaction body
-  returned. Since A1415, a request carrying its recovery selection also checks saved activation
-  when it finds "placement started": no activation restarts authenticated placement with the same
-  event and series name; a committed activation uses checked replay. A missing destination or one
-  without the selected node also restarts placement; an unreadable or uncertain destination keeps
-  staging and refuses (`runHeld`, `apps/server/src/restore-request.ts`; archive and bucket cases in
-  `apps/server/src/restore-emergency-crash.e2e.test.ts`). Physical power-loss durability remains in
+  now starts from its retained source on every attempt (owner, 2026-11-11, A1308-fl5b), replacing
+  A1415's saved-activation decision. Once marked `placing`, retry removes the unfinished
+  databases first; a corrupt partial copy does not require a manual move. Every failure keeps
+  the request and stops the server, including Cloud completion. Completion removes the request
+  last and keeps the independent first-start obligation. Physical power-loss durability remains in
   the [B2 carry-forwards](#backup--restore--carry-forwards-b2).
 
 - **A managed Cloud restore keeps both sealed bucket records (owner answer 2026-10-13, A538-4).**

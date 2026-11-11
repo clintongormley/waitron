@@ -36,8 +36,6 @@ import {
   createInteractiveRecoveryPreparation,
 } from "./recovery-preparation.js";
 import { buildManifest } from "./backup-manifest.js";
-import { unpackArchive } from "./backup-archive.js";
-import { decryptArtifact } from "./artifact-cipher.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { runRestore } from "./restore-command.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
@@ -173,43 +171,6 @@ describe("selected-hour admission before archive placement", () => {
     } finally {
       await placed.close();
     }
-  });
-
-  it("finishes a placed archive after service reconstruction without new clocks or another identity", async () => {
-    const f = await archiveHost();
-    await restoreFromArtifact({
-      ...f.restore,
-      modules: f.service.modules,
-      withModuleOperations: f.service.runner(f.outcome.input),
-    });
-    const placed = await openVenueDatabase(f.roots.venueDir);
-    let before: (typeof invoiceSeries.$inferSelect)[];
-    try {
-      await placed.venue
-        .update(invoiceSeries)
-        .set({ nextNumber: 124 })
-        .where(eq(invoiceSeries.code, "A-0CNQT"));
-      before = await placed.venue.select().from(invoiceSeries);
-    } finally {
-      await placed.close();
-    }
-    const next = createSelectedRecoveryPreparation(f.options);
-    external.internet.mockClear();
-    await restoreFromArtifact({
-      ...f.restore,
-      modules: next.modules,
-      withModuleOperations: next.runner(f.outcome.input),
-      resumeOperation: f.options.binding,
-    });
-    const result = await openVenueDatabase(f.roots.venueDir);
-    try {
-      expect(await result.venue.select().from(invoiceSeries)).toEqual(before);
-      expect(await result.venue.select().from(fiscalAllocations)).toHaveLength(2);
-    } finally {
-      await result.close();
-    }
-    expect(external.internet).not.toHaveBeenCalled();
-    expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
   });
 
   it.each(["archive", "file", "stream", "managed"] as const)(
@@ -450,45 +411,6 @@ describe("selected-hour admission before archive placement", () => {
       } finally {
         await placed.close();
       }
-      const committed = await openVenueDatabase(f.roots.venueDir);
-      let afterIssuance: Awaited<ReturnType<typeof snapshot>>;
-      let afterSeries: (typeof invoiceSeries.$inferSelect)[];
-      try {
-        afterIssuance = await snapshot(committed.venue);
-        afterSeries = await committed.venue.select().from(invoiceSeries);
-      } finally {
-        await committed.close();
-      }
-      const next = createSelectedRecoveryPreparation(f.options);
-      vi.setSystemTime(new Date("2026-10-17T13:10:00Z"));
-      external.internet.mockClear();
-      const replay = {
-        ...f.restore,
-        modules: next.modules,
-        withModuleOperations: next.runner(f.outcome.input),
-        resumeOperation: f.options.binding,
-      };
-      if (source === "stream") {
-        await writeFile(
-          f.database,
-          unpackArchive(decryptArtifact(f.restore.artifact, "archive password")).find(
-            (entry) => entry.name === "db.dump",
-          )!.bytes,
-        );
-        await writeStreamRestore({ ...replay, databasePath: f.database, entries: f.entries });
-      } else {
-        await restoreFromArtifact(replay);
-      }
-      const reopened = await openVenueDatabase(f.roots.venueDir);
-      try {
-        expect(await snapshot(reopened.venue)).toEqual(afterIssuance);
-        expect(await reopened.venue.select().from(invoiceSeries)).toEqual(afterSeries);
-        expect(await reopened.venue.select().from(fiscalAllocations)).toHaveLength(2);
-      } finally {
-        await reopened.close();
-      }
-      expect(external.internet).not.toHaveBeenCalled();
-      expect(await readModulePreparationHistory(f.roots, binding.module)).toHaveLength(2);
     },
   );
 
@@ -825,20 +747,20 @@ describe("selected-hour admission before archive placement", () => {
   });
 
   it.each(["before", "after"] as const)(
-    "retries managed completion lost %s local acknowledgement without restoring again",
+    "retries the whole managed restore after completion is lost %s local acknowledgement",
     async (when) => {
       const f = await archiveHost();
       const managed = await managedHttp(f);
       agreeInternet();
-      expect(
-        await runStagedRestore({
+      await expect(
+        runStagedRestore({
           ...f.restore,
           onManagedCloudRestored: async (binding) => {
             if (when === "after") await managed.client().markRestored(binding);
             throw new Error("lost local acknowledgement");
           },
         }),
-      ).toBe(true);
+      ).rejects.toThrow("lost local acknowledgement");
       expect(
         JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
       ).toHaveProperty("request");
@@ -856,9 +778,20 @@ describe("selected-hour admission before archive placement", () => {
       let rows;
       let allocations;
       try {
-        await placed.venue.update(invoiceSeries).set({ nextNumber: 917 });
-        rows = await placed.venue.select().from(invoiceSeries);
-        allocations = await placed.venue.select().from(fiscalAllocations);
+        await placed.venue
+          .update(invoiceSeries)
+          .set({ nextNumber: 917 })
+          .where(eq(invoiceSeries.code, "A-0CNQT"));
+        rows = (await placed.venue.select().from(invoiceSeries)).map(
+          ({ code, nextNumber, retiredAt }) => ({
+            code,
+            nextNumber: retiredAt === null ? 1 : nextNumber,
+            retired: retiredAt !== null,
+          }),
+        );
+        allocations = (await placed.venue.select().from(fiscalAllocations)).map(
+          ({ eventKey, installationIdentity }) => ({ eventKey, installationIdentity }),
+        );
       } finally {
         await placed.close();
       }
@@ -891,12 +824,24 @@ describe("selected-hour admission before archive placement", () => {
       expect(await managed.client().replacementIdentity()).toMatchObject({ phase: "reported" });
       const replay = await openVenueDatabase(f.roots.venueDir);
       try {
-        expect(await replay.venue.select().from(invoiceSeries)).toEqual(rows);
-        expect(await replay.venue.select().from(fiscalAllocations)).toEqual(allocations);
+        expect(
+          (await replay.venue.select().from(invoiceSeries)).map(
+            ({ code, nextNumber, retiredAt }) => ({
+              code,
+              nextNumber,
+              retired: retiredAt !== null,
+            }),
+          ),
+        ).toEqual(rows);
+        expect(
+          (await replay.venue.select().from(fiscalAllocations)).map(
+            ({ eventKey, installationIdentity }) => ({ eventKey, installationIdentity }),
+          ),
+        ).toEqual(allocations);
       } finally {
         await replay.close();
       }
-      expect(external.internet).not.toHaveBeenCalled();
+      expect(external.internet).toHaveBeenCalled();
     },
   );
 

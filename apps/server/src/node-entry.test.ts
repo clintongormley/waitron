@@ -161,6 +161,18 @@ describe("runEntry", () => {
       await rm(stateDir, { recursive: true, force: true });
     }
   });
+  it("keeps the server stopped when the staged restore fails", async () => {
+    const failure = new Error("restore bookkeeping failed");
+    const d = deps({
+      runStagedRestore: async () => {
+        throw failure;
+      },
+    });
+    await expect(runEntry(d)).rejects.toBe(failure);
+    expect(d.startServer).not.toHaveBeenCalled();
+    expect(d.loadBoxEnv).not.toHaveBeenCalled();
+  });
+
   it("refuses ANY argument before it reads or writes the counter or opens the venue folder", async () => {
     const reportFailure = vi.fn();
     const d = deps({

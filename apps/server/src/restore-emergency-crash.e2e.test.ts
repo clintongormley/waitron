@@ -1,21 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
-import nativeFs from "node:fs/promises";
-import { readFileSync } from "node:fs";
 import { emptyScratch } from "./scratch.js";
 import { firstStartPending } from "./restore-flow.js";
 import { syncBuiltinESMExports } from "node:module";
-import { cp, mkdir, readFile, readdir, rename, symlink, writeFile } from "node:fs/promises";
+import { cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { eq, sql } from "drizzle-orm";
-import {
-  openVenueDatabase,
-  readStandardSeriesId,
-  sales,
-  nodes,
-  locations,
-  withTransaction,
-} from "@waitron/db";
+import { openVenueDatabase, readStandardSeriesId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
@@ -25,19 +15,10 @@ import {
 } from "@waitron/fiscal-verifactu";
 import { recordSale } from "@waitron/core";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { orderedMigrationSets, type WaitronModule } from "@waitron/module";
-import { fakeSetlessModule } from "@waitron/module/src/testing/fake-module.js";
-import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
-import { applyMigrations, migrationOptionsFor } from "@waitron/migrations";
+import { orderedMigrationSets } from "@waitron/module";
+import { seriesId as brandSeriesId } from "@waitron/shared";
+import { migrationOptionsFor } from "@waitron/migrations";
 import { ALL_MODULES } from "./modules.js";
-import {
-  restoreFromArtifactFile,
-  runRestoreHooks,
-  type PlacementDeps,
-  type RestoreOperationRunner,
-} from "./restore.js";
-import { runStagedRestore } from "./restore-request.js";
-import { writeStreamRestore } from "./restore-stream.js";
 import { stagedHourCrash } from "./testing/staged-hour-crash.js";
 
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
@@ -69,362 +50,103 @@ afterEach(async () => {
   await fixture?.cleanup();
   fixture = undefined;
 });
-async function markPlaced(stateDir: string) {
-  const path = join(stateDir, "flows/restore/record.json");
-  const marker = JSON.parse(await readFile(path, "utf8"));
-  await writeFile(path, JSON.stringify({ ...marker, phase: "placing" }));
-  return path;
+function resultFacts(rows: Awaited<ReturnType<Awaited<ReturnType<typeof stage>>["snapshot"]>>) {
+  const sif = (id: string) => rows.registrations.find((row) => row.id === id)!.numeroInstalacion;
+  const series = (id: string) => rows.series.find((row) => row.id === id)!.code;
+  return {
+    ...rows,
+    chainHeads: rows.chainHeads.map((row) => ({ ...row, actualizadoEn: null })),
+    registrations: rows.registrations.map((row) => ({
+      ...row,
+      id: sif(row.id),
+      registradoEn: null,
+      revocadoEn: row.revocadoEn !== null,
+    })),
+    series: rows.series.map((row) => ({
+      ...row,
+      id: series(row.id),
+      retiredAt: row.retiredAt !== null,
+    })),
+    allocations: rows.allocations.map((row) => ({
+      ...row,
+      activatedAt: null,
+      sifId: sif(row.sifId),
+      result: {
+        ...row.result,
+        sifId: sif(row.result.sifId),
+        series: row.result.series.map((row) => ({ ...row, id: series(row.id) })),
+      },
+    })),
+  };
 }
-
-it("refuses a resumed database from a newer image before migration or hour admission", async () => {
-  const f = await stage("archive");
-  await f.seedDestination();
-  const target = await openVenueDatabase(f.venueDir);
-  try {
-    await target.venue.run(
-      sql`insert into __drizzle_migrations_db (hash, created_at) values (${"f".repeat(64)}, 99999999999999)`,
-    );
-  } finally {
-    await target.close();
-  }
-  const markerPath = await markPlaced(f.stateDir);
-  const journal = f.journal();
-  await expect(f.run()).rejects.toMatchObject({ code: "provisioning.database_ahead" });
-  expect(f.journal()).toBe(journal);
-  expect(JSON.parse(await readFile(markerPath, "utf8")).phase).toBe("placing");
-});
-
-it("restarts a marked restore without a placed database after authenticating its selected source", async () => {
-  const f = await stage("archive");
-  await markPlaced(f.stateDir);
-  const journal = f.journal();
-  await expect(f.run()).resolves.toBe(true);
-  await expectFinishedRetry(f, journal);
-});
 
 it.each([
-  ["archive", "settings"],
-  ["stream", "settings"],
-  ["archive", "credentials"],
-  ["stream", "credentials"],
+  ["archive", "before-publication", true],
+  ["stream", "after-publication", false],
+  ["archive", "before-completion", false],
 ] as const)(
-  "keeps the committed %s activation when the %s write throws before completion",
-  async (kind, fault) => {
+  "an interrupted %s restore at %s starts over and reaches the uninterrupted result",
+  async (kind, phase, corrupt) => {
     const f = await stage(kind);
-    const failure = Object.assign(new Error("injected post-commit write failure"), { code: "EIO" });
-    const target = join(f.stateDir, fault === "settings" ? "trading.env" : "credentials.key");
-    const originalRename = nativeFs.rename;
-    vi.spyOn(nativeFs, "rename").mockImplementation(async (...args) => {
-      if (String(args[0]) === `${target}.incoming` && String(args[1]) === target) throw failure;
-      return originalRename(...args);
-    });
-    syncBuiltinESMExports();
-    await expect(f.run()).rejects.toBe(failure);
-    vi.restoreAllMocks();
-    syncBuiltinESMExports();
-    const committed = await f.snapshot();
-    expect(committed.allocations).toHaveLength(2);
-    expect(committed.records).toEqual(f.originalRecords);
-    expect(
-      JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")),
-    ).toHaveProperty("request");
-    expect(
-      JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")),
-    ).toHaveProperty("phase", "placing");
-    expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-    await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await f.advanceCounters();
-    const advanced = await f.snapshot();
-    await expect(f.run()).resolves.toBe(true);
-    expect(await f.snapshot()).toEqual(advanced);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
-    await expect(readFile(join(f.stateDir, "flows/restore/node-key"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    expect(await f.run()).toBe(false);
-  },
-);
-
-/** Every call of `nativeFs[method]` that `matches` picks throws `failure` until the mocks are
- * restored. */
-function failEvery(
-  method: "copyFile" | "rename" | "open",
-  matches: (...args: string[]) => boolean,
-  failure: Error,
-) {
-  const original = nativeFs[method] as (...args: unknown[]) => Promise<unknown>;
-  vi.spyOn(nativeFs, method).mockImplementation((async (...args: unknown[]) => {
-    if (matches(...args.map(String))) throw failure;
-    return original(...args);
-  }) as never);
-  syncBuiltinESMExports();
-}
-
-const enospc = () =>
-  Object.assign(new Error("injected full disk before placement"), { code: "ENOSPC" });
-
-const beforePlacement = {
-  "the first-start marker cannot be written": (f: Awaited<ReturnType<typeof stage>>) =>
-    failEvery(
-      "rename",
-      (from, to) =>
-        to === join(f.stateDir, "flows/restore/record.json") &&
-        JSON.parse(readFileSync(from, "utf8")).firstStart !== undefined,
-      enospc(),
-    ),
-  "the copy for the admission check cannot be written": () =>
-    failEvery("copyFile", (_from, to) => to.includes("restore-admission-"), enospc()),
-};
-
-it.each(
-  (["archive", "stream"] as const).flatMap((kind) =>
-    Object.keys(beforePlacement).map(
-      (name) => [kind, name as keyof typeof beforePlacement] as const,
-    ),
-  ),
-)(
-  "a started %s request whose restore stops before placement because %s gets its marker back and the next start finishes it",
-  async (kind, name) => {
-    const inject = beforePlacement[name];
-    const f = await stage(kind);
-    const markerPath = join(f.stateDir, "flows/restore/record.json");
-    const before = await readFile(markerPath, "utf8");
-    inject(f);
-    await expect(f.run()).rejects.toMatchObject({ code: "ENOSPC" });
-    vi.restoreAllMocks();
-    syncBuiltinESMExports();
-    expect(await readFile(markerPath, "utf8")).toBe(before);
-    expect(await readdir(f.venueDir)).not.toContain("venue.db");
-    await expect(f.run()).resolves.toBe(true);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
-  },
-);
-
-it("a started request whose database move leaves the old one set aside gets its marker back and the next start finishes it", async () => {
-  const f = await stage("archive");
-  await f.seedDestination();
-  const markerPath = join(f.stateDir, "flows/restore/record.json");
-  const before = await readFile(markerPath, "utf8");
-  const venueFile = join(f.venueDir, "venue.db");
-  failEvery(
-    "rename",
-    (_from, to) => to === venueFile,
-    Object.assign(new Error("injected placement failure"), { code: "EIO" }),
-  );
-  await expect(f.run()).rejects.toMatchObject({
-    code: "restore.placement_failed",
-    params: { kept: "set_aside" },
-  });
-  vi.restoreAllMocks();
-  syncBuiltinESMExports();
-  expect(await readFile(markerPath, "utf8")).toBe(before);
-  await expect(f.run()).resolves.toBe(true);
-  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
-  expect((await f.snapshot()).allocations).toHaveLength(2);
-});
-
-// The identity's way back failing does not keep "placement started": nothing a module step commits
-// has run, so the next start places the archive afresh, and the old identity stays set aside.
-it("a started request whose old identity cannot be put back after a placement failure gets its marker back", async () => {
-  const f = await stage("archive");
-  await f.seedDestination();
-  const previousIdentity = `WAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n# old box\n`;
-  await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
-  const markerPath = join(f.stateDir, "flows/restore/record.json");
-  const before = await readFile(markerPath, "utf8");
-  const venueFile = join(f.venueDir, "venue.db");
-  const replaced = join(f.stateDir, "trading.env.replaced");
-  failEvery(
-    "rename",
-    (from, to) => (from === `${venueFile}.incoming` && to === venueFile) || from === replaced,
-    Object.assign(new Error("injected placement failure"), { code: "EIO" }),
-  );
-  await expect(f.run()).rejects.toMatchObject({
-    code: "restore.placement_failed",
-    params: { kept: "previous" },
-  });
-  vi.restoreAllMocks();
-  syncBuiltinESMExports();
-  await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
-  expect(await readFile(markerPath, "utf8")).toBe(before);
-  await expect(f.run()).resolves.toBe(true);
-  expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).not.toBe(previousIdentity);
-  expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
-});
-
-const throwingHook: WaitronModule = {
-  ...fakeSetlessModule("synthetic-failing-restore", "core"),
-  backup: {
-    restore: async () => {
-      throw new AppError("module.operation_invalid", { module: "synthetic-failing-restore" });
-    },
-  },
-} as WaitronModule;
-
-const afterPlacement = {
-  "its migration fails": {
-    inject: (f: Awaited<ReturnType<typeof stage>>): Partial<PlacementDeps> => ({
-      migrate: async (directory, options) => {
-        if (directory === f.venueDir)
-          throw new AppError("migrations.apply_failed", { set: "__drizzle_migrations_db" });
-        return applyMigrations(directory, options);
-      },
-    }),
-    code: "migrations.apply_failed",
-    fiscalHookRan: false,
-  },
-  // Last, so the fiscal hook has run in the same transaction before this one throws.
-  "a module's restore hook throws": {
-    inject: (): Partial<PlacementDeps> => ({ modules: [...ALL_MODULES, throwingHook] }),
-    code: "restore.hook_failed",
-    fiscalHookRan: true,
-  },
-};
-
-it.each(
-  (["archive", "stream"] as const).flatMap((kind) =>
-    Object.keys(afterPlacement).map((name) => [kind, name as keyof typeof afterPlacement] as const),
-  ),
-)(
-  "a started %s request whose restore stops after placement because %s gets its marker back and the next start finishes it",
-  async (kind, name) => {
-    const f = await stage(kind);
+    const previousIdentity = `# the original box\nWAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n`;
+    await writeFile(join(f.stateDir, "trading.env"), previousIdentity);
     await f.seedDestination();
-    const previousIdentity = `WAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n# old box\n`;
-    await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
-    const markerPath = join(f.stateDir, "flows/restore/record.json");
-    const before = await readFile(markerPath, "utf8");
-    const fault = afterPlacement[name];
-    const injected = fault.inject(f);
-    const journal = f.journal();
-    const hooksDone: unknown[] = [];
-    await expect(
-      runStagedRestore(
-        {
-          ...f.restore,
-          log: (_level, event, fields) => {
-            if (event === "restore.hook.done") hooksDone.push(fields?.module);
+    await writeFile(join(f.stateDir, "setup-operation.json"), "pending operation");
+    if (kind === "archive") {
+      const old = await openVenueDatabase(f.venueDir);
+      try {
+        const backend = new VerifactuBackend({
+          db: old.venue,
+          deploymentEnvironment: "preproduction",
+          clock: {
+            ...steadyClock,
+            now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-16T12:39:00Z") }),
           },
-        },
-        (deps) => restoreFromArtifactFile({ ...deps, ...injected }),
-        (args) => writeStreamRestore({ ...args, ...injected }),
-      ),
-    ).rejects.toMatchObject({ code: fault.code });
-    expect(hooksDone.includes("fiscal-verifactu")).toBe(fault.fiscalHookRan);
-    expect(await readFile(markerPath, "utf8")).toBe(before);
-    expect(f.journal()).toBe(journal);
-    const placed = await f.snapshot();
-    expect(placed.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
-    await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    const replaced = join(f.stateDir, "trading.env.replaced");
-    expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
-    await expect(f.run()).resolves.toBe(true);
-    const restored = await f.snapshot();
-    expect(restored.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW", "0CNQR"]);
-    expect(restored.records).toEqual(f.originalRecords);
-    expect(restored.registrations).toHaveLength(2);
-    const selected: { code: string }[] =
-      JSON.parse(before).request.recoveryOperation.input.allocation.series;
+          resolveClient: async () => {
+            throw new Error("this restore has no network");
+          },
+        });
+        const seriesId = await readStandardSeriesId(old.venue, f.node.nodeId);
+        await withTransaction(old.venue, (tx) =>
+          recordSale(
+            tx,
+            backend,
+            saleInput({ nodeId: f.node.nodeId, seriesId: brandSeriesId(seriesId) }),
+          ),
+        );
+        expect(await old.venue.select().from(registrosFacturacion)).toHaveLength(2);
+      } finally {
+        await old.close();
+      }
+    }
+    await killRestore(f, phase);
+    const committed = await f.snapshot();
+    if (phase === "before-completion")
+      await expect(readFile(join(f.stateDir, "setup-operation.json"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    expect(committed.records).toEqual(f.originalRecords);
+    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
+      "0CNNW",
+      "0CNQR",
+    ]);
     expect(
-      restored.series
+      committed.series
         .filter((row) => row.retiredAt === null)
-        .map((row) => row.code)
-        .sort(),
-    ).toEqual(selected.map((row) => row.code).sort());
-    const identity = await readFile(join(f.stateDir, "trading.env"), "utf8");
-    expect(identity).toContain(f.node.nodeId);
-    expect(identity).not.toBe(previousIdentity);
-    expect(await readFile(replaced, "utf8")).toBe(previousIdentity);
-    expect(await f.run()).toBe(false);
-  },
-);
-
-it.each(["archive", "stream"] as const)(
-  "a started %s request that fails after its restore hooks committed keeps placement started, and the next start finishes it by a checked replay",
-  async (kind) => {
-    const f = await stage(kind);
-    await f.seedDestination();
-    const failure = new Error("injected failure closing the committed database");
-    const openDb: PlacementDeps["openDb"] = async (directory) => {
-      const store = await openVenueDatabase(directory);
-      return {
-        db: store.venue,
-        node: store.node,
-        close: async () => {
-          await store.close();
-          if (directory === f.venueDir) throw failure;
-        },
-      };
-    };
-    await expect(
-      runStagedRestore(
-        { ...f.restore },
-        (deps) => restoreFromArtifactFile({ ...deps, openDb }),
-        (args) => writeStreamRestore({ ...args, openDb }),
-      ),
-    ).rejects.toBe(failure);
-    expect(
-      JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")),
-    ).toHaveProperty("phase", "placing");
-    const committed = await f.snapshot();
-    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
-      "0CNNW",
-      "0CNQR",
+        .map((row) => [row.code, row.nextNumber]),
+    ).toEqual([
+      ["A-0CNQR", 1],
+      ["FF-0CNQR", 1],
+      ["R-0CNQR", 1],
     ]);
+    const journal = f.journal();
+    if (corrupt) await writeFile(join(f.venueDir, "venue.db"), "corrupt partial database");
+    else await f.advanceCounters();
     await expect(f.run()).resolves.toBe(true);
-    expect(await f.snapshot()).toEqual(committed);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
-  },
-);
-
-it.each(["archive", "stream"] as const)(
-  "a started %s request whose restore runner fails after its save went through keeps placement started, and the next start finishes it by a checked replay",
-  async (kind) => {
-    const f = await stage(kind);
-    await f.seedDestination();
-    const failure = new Error("injected failure after the runner's save");
-    const failAfter = (runner: RestoreOperationRunner | undefined): RestoreOperationRunner => {
-      const wrapped: RestoreOperationRunner = async (context, run) => {
-        await runner!(context, run);
-        throw failure;
-      };
-      if (runner?.checkBeforePlacement !== undefined)
-        wrapped.checkBeforePlacement = runner.checkBeforePlacement;
-      return wrapped;
-    };
-    await expect(
-      runStagedRestore(
-        { ...f.restore },
-        (deps) =>
-          restoreFromArtifactFile({
-            ...deps,
-            withModuleOperations: failAfter(deps.withModuleOperations),
-          }),
-        (args) =>
-          writeStreamRestore({
-            ...args,
-            withModuleOperations: failAfter(args.withModuleOperations),
-          }),
-      ),
-    ).rejects.toBe(failure);
-    expect(
-      JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")),
-    ).toHaveProperty("phase", "placing");
-    const committed = await f.snapshot();
-    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
-      "0CNNW",
-      "0CNQR",
-    ]);
-    await expect(f.run()).resolves.toBe(true);
-    expect(await f.snapshot()).toEqual(committed);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
+    expect(resultFacts(await f.snapshot())).toEqual(resultFacts(committed));
+    expect(f.journal()).toBe(journal);
+    expect(await readFile(join(f.stateDir, "trading.env.replaced"), "utf8")).toBe(previousIdentity);
+    await expectFinishedRetry(f, journal);
   },
 );
 
@@ -451,360 +173,6 @@ async function expectFinishedRetry(f: Awaited<ReturnType<typeof stage>>, journal
   await expect(f.run()).resolves.toBe(false);
   expect(await f.snapshot()).toEqual(active);
 }
-
-it.each(["archive", "stream"] as const)(
-  "restarts a marked %s placement when its authenticated destination has no committed activation",
-  async (kind) => {
-    const f = await stage(kind);
-    await cp(f.databasePath, join(f.venueDir, "venue.db"));
-    await suite.node.archiveTo(join(f.venueDir, "node.db"));
-    await markPlaced(f.stateDir);
-    const original = await f.snapshot();
-    expect(original.allocations.map((row) => row.installationIdentity)).toEqual(["0CNNW"]);
-    const journal = f.journal();
-    await expect(f.run()).resolves.toBe(true);
-    await expectFinishedRetry(f, journal);
-    expect((await f.snapshot()).allocations.slice(0, 1)).toEqual(original.allocations);
-  },
-);
-
-it("migrates a behind-schema destination before deciding whether placement can restart", async () => {
-  const f = await stage("archive");
-  const destination = await openVenueDatabase(f.venueDir);
-  await destination.close();
-  await markPlaced(f.stateDir);
-  const journal = f.journal();
-  await expect(f.run()).resolves.toBe(true);
-  await expectFinishedRetry(f, journal);
-});
-
-it("restarts over a destination that contains only another node", async () => {
-  const f = await stage("archive");
-  await applyMigrations(f.venueDir, migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null));
-  const destination = await openVenueDatabase(f.venueDir);
-  try {
-    const other = (await suite.db.select().from(nodes)).find((row) => row.id !== f.node.nodeId)!;
-    await destination.venue.insert(locations).values(await suite.db.select().from(locations));
-    await destination.venue.insert(nodes).values(other);
-  } finally {
-    await destination.close();
-  }
-  await markPlaced(f.stateDir);
-  const journal = f.journal();
-  await expect(f.run()).resolves.toBe(true);
-  await expectFinishedRetry(f, journal);
-});
-
-it("keeps a started stream request when its fresh placement copy cannot be written", async () => {
-  const f = await stage("stream");
-  await f.seedDestination();
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = await readFile(markerPath, "utf8");
-  const source = await readFile(join(f.stateDir, "flows/restore/venue.db"));
-  failEvery(
-    "copyFile",
-    (_from, to) => to === join(f.stateDir, "flows/restore/placement.db"),
-    enospc(),
-  );
-  await expect(f.run()).rejects.toMatchObject({ code: "ENOSPC" });
-  vi.restoreAllMocks();
-  syncBuiltinESMExports();
-  expect(await readFile(markerPath, "utf8")).toBe(marker);
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-  expect(await readFile(join(f.stateDir, "flows/restore/venue.db"))).toEqual(source);
-  const journal = f.journal();
-  await expect(f.run()).resolves.toBe(true);
-  await expectFinishedRetry(f, journal);
-});
-
-it("keeps a request when the original marker cannot be restored after an uncommitted failure", async () => {
-  const f = await stage("archive");
-  let writes = 0;
-  const markerPath = join(f.stateDir, "flows/restore/record.json");
-  const rename = nativeFs.rename;
-  vi.spyOn(nativeFs, "rename").mockImplementation(async (...args) => {
-    if (String(args[1]) === markerPath && ++writes === 2) throw enospc();
-    return rename(...args);
-  });
-  syncBuiltinESMExports();
-  const failure = enospc();
-  const restore = async () => {
-    throw failure;
-  };
-  await expect(runStagedRestore(f.restore, restore)).rejects.toMatchObject({ code: "ENOSPC" });
-  expect(writes).toBe(2);
-  vi.restoreAllMocks();
-  syncBuiltinESMExports();
-  expect(JSON.parse(await readFile(markerPath, "utf8")).phase).toBe("placing");
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-  const journal = f.journal();
-  await expect(f.run()).resolves.toBe(true);
-  await expectFinishedRetry(f, journal);
-});
-
-it("retains a started request when the destination path is not a regular file", async () => {
-  const f = await stage("archive");
-  await mkdir(join(f.venueDir, "venue.db"));
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = await readFile(markerPath, "utf8");
-  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
-  expect(await readFile(markerPath, "utf8")).toBe(marker);
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-});
-
-it("refuses a destination link before opening or migrating its target", async () => {
-  const f = await stage("archive");
-  const target = join(f.root, "linked.db");
-  const original = Buffer.alloc(0);
-  await writeFile(target, original);
-  await symlink(target, join(f.venueDir, "venue.db"));
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = await readFile(markerPath, "utf8");
-  const journal = f.journal();
-  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
-  expect((await readFile(target)).byteLength).toBe(original.byteLength);
-  expect(await readFile(markerPath, "utf8")).toBe(marker);
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-  expect(f.journal()).toBe(journal);
-});
-
-it("keeps a corrupt destination as evidence and retries the same request after it is moved aside", async () => {
-  const f = await stage("archive");
-  const file = join(f.venueDir, "venue.db");
-  const corrupt = Buffer.from("not a SQLite database");
-  await writeFile(file, corrupt);
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = await readFile(markerPath, "utf8");
-  const journal = f.journal();
-  await expect(f.run()).rejects.toMatchObject({ code: "ERR_SQLITE_ERROR", errcode: 26 });
-  await expect(f.nextEvent()).rejects.toMatchObject({ code: "module.operation_invalid" });
-  expect(await readFile(markerPath, "utf8")).toBe(marker);
-  expect(await readFile(file)).toEqual(corrupt);
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-  const kept = join(f.venueDir, "venue.db.unreadable");
-  await rename(file, kept);
-  await expect(f.run()).resolves.toBe(true);
-  expect(await readFile(kept)).toEqual(corrupt);
-  await expectFinishedRetry(f, journal);
-});
-
-it("refuses a changed target node before reading destination recovery state", async () => {
-  const f = await stage("archive");
-  await f.seedDestination();
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = JSON.parse(await readFile(markerPath, "utf8"));
-  marker.request.recoveryOperation.binding.targetNodeId = "00000000-0000-4000-8000-000000000001";
-  const altered = JSON.stringify(marker);
-  await writeFile(markerPath, altered);
-  const original = await f.snapshot();
-  const journal = f.journal();
-  await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
-  expect(await readFile(markerPath, "utf8")).toBe(altered);
-  expect(await f.snapshot()).toEqual(original);
-  expect(f.journal()).toBe(journal);
-});
-
-it("refuses a destination with the selected node but invalid recovery facts", async () => {
-  const f = await stage("archive");
-  await applyMigrations(f.venueDir, migrationOptionsFor(orderedMigrationSets(ALL_MODULES), null));
-  const destination = await openVenueDatabase(f.venueDir);
-  try {
-    await destination.venue.insert(locations).values(await suite.db.select().from(locations));
-    await destination.venue
-      .insert(nodes)
-      .values((await suite.db.select().from(nodes)).find((row) => row.id === f.node.nodeId)!);
-  } finally {
-    await destination.close();
-  }
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = await readFile(markerPath, "utf8");
-  const original = await f.snapshot();
-  await expect(f.run()).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "event_mismatch" },
-  });
-  expect(await readFile(markerPath, "utf8")).toBe(marker);
-  expect(await f.snapshot()).toEqual(original);
-});
-
-it("refuses and retains staging without a module recovery-state reader", async () => {
-  const f = await stage("archive");
-  await f.seedDestination();
-  const markerPath = await markPlaced(f.stateDir);
-  const marker = await readFile(markerPath, "utf8");
-  const original = await f.snapshot();
-  const operations = ALL_MODULES.find((module) => module.name === f.binding.module)!.operations!;
-  const reader = operations.readRecoveryState!;
-  delete operations.readRecoveryState;
-  try {
-    await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
-  } finally {
-    operations.readRecoveryState = reader;
-  }
-  expect(await readFile(markerPath, "utf8")).toBe(marker);
-  expect(await f.snapshot()).toEqual(original);
-  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-});
-
-it.each(["unknown", "throw"] as const)(
-  "refuses and retains staging when activation state is %s",
-  async (state) => {
-    const f = await stage("archive");
-    await f.seedDestination();
-    const markerPath = await markPlaced(f.stateDir);
-    const marker = await readFile(markerPath, "utf8");
-    const original = await f.snapshot();
-    const operations = ALL_MODULES.find((module) => module.name === f.binding.module)!.operations!;
-    const read = vi.spyOn(operations, "readRecoveryState");
-    if (state === "throw")
-      read.mockRejectedValueOnce(
-        new AppError("module.operation_invalid", { module: f.binding.module }),
-      );
-    else read.mockResolvedValueOnce({ priorActivation: "unknown" } as never);
-    await expect(f.run()).rejects.toMatchObject({ code: "module.operation_invalid" });
-    expect(await readFile(markerPath, "utf8")).toBe(marker);
-    expect(await f.snapshot()).toEqual(original);
-    expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.key.secret);
-  },
-);
-
-it.each(["archive", "stream"] as const)(
-  "keeps the committed %s activation after a process is killed before publishing trading settings",
-  async (kind) => {
-    const f = await stage(kind);
-    const previousIdentity = `# existing physical box\nWAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_ENV=preproduction\n`;
-    await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
-    await f.seedDestination();
-    const output = await killRestore(f, "before-publication");
-    expect(output).not.toContain(f.key.secret);
-    expect(output).not.toContain(f.encryptionKey);
-    await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    const markerPath = join(f.stateDir, "flows/restore/record.json");
-    const marker = JSON.parse(await readFile(markerPath, "utf8"));
-    const committed = await f.snapshot();
-    expect(committed.allocations).toHaveLength(2);
-    expect(committed.allocations.map((row) => row.installationIdentity)).toEqual([
-      "0CNNW",
-      "0CNQR",
-    ]);
-    const copy = await openVenueDatabase(f.venueDir);
-    try {
-      await runRestoreHooks({
-        db: copy.venue,
-        nodeDb: copy.node,
-        node: f.node,
-        modules: ALL_MODULES,
-        log: () => {},
-        withModuleOperations: f.service.runner(marker.request.recoveryOperation.input, {
-          refresh: true,
-        }),
-        resumeOperation: f.binding,
-      });
-      expect(await copy.venue.select().from(fiscalAllocations)).toEqual(committed.allocations);
-    } finally {
-      await copy.close();
-    }
-    const expectRetained = async () => {
-      expect(await f.snapshot()).toEqual(committed);
-      expect(JSON.parse(await readFile(markerPath, "utf8")).phase).toBe("placing");
-      await expect(readFile(join(f.stateDir, "trading.env"))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-    };
-    const journal = f.journal();
-    await writeFile(f.journalPath, JSON.stringify({ version: 1, revisions: [] }));
-    await expect(f.run()).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "reservation_missing" },
-    });
-    await expectRetained();
-    await writeFile(f.journalPath, journal);
-    await writeFile(join(f.stateDir, "flows/restore/node-key"), "wrong-node-key");
-    await expect(f.run()).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-    await expectRetained();
-    await writeFile(join(f.stateDir, "flows/restore/node-key"), f.key.secret);
-    const originalMarker = await readFile(markerPath, "utf8");
-    await writeFile(
-      markerPath,
-      JSON.stringify({
-        ...marker,
-        request: {
-          ...marker.request,
-          recoveryOperation: {
-            ...marker.request.recoveryOperation,
-            binding: { ...marker.request.recoveryOperation.binding, sourceId: "different-copy" },
-          },
-        },
-      }),
-    );
-    await expect(f.run()).rejects.toMatchObject({
-      code: "server.config_invalid",
-      params: { reason: "source_mismatch" },
-    });
-    await expectRetained();
-    await writeFile(markerPath, originalMarker);
-    await f.advanceCounters();
-    const advanced = await f.snapshot();
-    await expect(f.run()).resolves.toBe(true);
-    expect(await f.snapshot()).toEqual(advanced);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).not.toContain(
-      ["WAITRON", "LOCATION", "ID"].join("_") + "=",
-    );
-    expect(await readFile(join(f.stateDir, "trading.env.replaced"), "utf8")).toBe(previousIdentity);
-    expect(await f.run()).toBe(false);
-    const selling = await openVenueDatabase(f.venueDir);
-    let networkCalls = 0;
-    try {
-      expect(
-        await selling.venue
-          .select({ locationId: nodes.locationId })
-          .from(nodes)
-          .where(eq(nodes.id, f.node.nodeId)),
-      ).toEqual([{ locationId: f.node.locationId }]);
-      const backend = new VerifactuBackend({
-        db: selling.venue,
-        deploymentEnvironment: "preproduction",
-        clock: steadyClock,
-        resolveClient: async () => {
-          networkCalls++;
-          throw new Error("recovery test has no network");
-        },
-      });
-      const seriesId = await readStandardSeriesId(selling.venue, f.node.nodeId);
-      const result = await withTransaction(selling.venue, (tx) =>
-        recordSale(
-          tx,
-          backend,
-          saleInput({ nodeId: f.node.nodeId, seriesId: brandSeriesId(seriesId) }),
-        ),
-      );
-      const [sale] = await selling.venue.select().from(sales).where(eq(sales.id, result.saleId));
-      expect(sale?.invoiceNumber).toBe(917);
-      const rows = await selling.venue.select().from(registrosFacturacion);
-      expect(rows).toHaveLength(2);
-      expect(rows.filter((row) => row.saleId !== result.saleId)).toEqual(f.originalRecords);
-      const allocation = (await selling.venue.select().from(fiscalAllocations)).find(
-        (row) => row.eventKey === f.binding.eventId,
-      )!;
-      const issued = rows.find((row) => row.saleId === result.saleId);
-      expect(issued).toMatchObject({
-        saleId: result.saleId,
-        sifId: allocation.sifId,
-        primerRegistro: true,
-        secuencia: 2,
-      });
-      expect(issued!.numSerieFactura).toBe(
-        `${allocation.allocation.series.find((series) => series.purpose === "standard")!.code}/917`,
-      );
-      expect(networkCalls).toBe(0);
-    } finally {
-      await selling.close();
-    }
-  },
-);
 
 async function killRestore(f: Awaited<ReturnType<typeof stage>>, phase: string) {
   const migrationsRoot = join(f.root, "migrations");
@@ -854,8 +222,10 @@ const wait = async () => { console.log("RECOVERY_CRASH_GATE"); await new Promise
 if (phase === "staged" || phase === "hour-selected") await wait();
 const original = nativeFs.rename;
 nativeFs.rename = async (from, to) => {
+  if (phase === "before-completion" && String(to) === join(stateDir, "flows/restore/record.json") && JSON.parse(await nativeFs.readFile(from, "utf8")).phase === "first-start") await wait();
   if (phase === "before-publication" && String(to) === join(stateDir, "trading.env")) await wait();
   const result = await original(from, to);
+  if (phase === "after-publication" && String(to) === join(stateDir, "trading.env")) await wait();
   if (phase === "staging-artifact" && String(to).includes("/scratch/restore-flow-") && String(to).endsWith("/artifact")) await wait();
   if (phase === "after-publish" && String(to) === join(stateDir, "flows/restore")) await wait();
   if (phase === "after-end" && String(from) === join(stateDir, "flows/restore")) await wait();
