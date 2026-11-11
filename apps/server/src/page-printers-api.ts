@@ -151,6 +151,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
       await gated(sessionId, async (tx) => {
+        // Keep a pending test page's outcome readable after its printer is deleted.
         const [printer] = await tx
           .select({ id: pagePrinters.id })
           .from(pagePrinters)
