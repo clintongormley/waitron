@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { FreshSignIn } from "./fresh-sign-in.js";
 import "./fresh-sign-in.js";
@@ -29,10 +29,23 @@ function profile(overrides: Partial<OwnProfile>): OwnProfile {
   };
 }
 
-const STATES: Record<string, { own: Partial<OwnProfile> | "failed"; refusal?: string }> = {
+const STATES: Record<
+  string,
+  {
+    own: Partial<OwnProfile> | "failed";
+    refusal?: string;
+    allowRecoveryCode?: boolean;
+    invalidCode?: string;
+  }
+> = {
   password: { own: {} },
   "password and code": { own: { hasTotp: true, passkeys: [PASSKEY] } },
-  "authenticator only": { own: { hasTotp: true, passkeys: [PASSKEY] } },
+  "authenticator only": { own: { hasTotp: true, passkeys: [PASSKEY] }, allowRecoveryCode: false },
+  "refused recovery code": {
+    own: { hasTotp: true, passkeys: [PASSKEY] },
+    allowRecoveryCode: false,
+    invalidCode: "recovery-code",
+  },
   "passkey only": { own: { hasPassword: false, passkeys: [PASSKEY] } },
   "passkey and code": { own: { hasPassword: false, hasTotp: true, passkeys: [PASSKEY] } },
   "no way in": { own: { hasPassword: false, passkeys: [] } },
@@ -50,7 +63,7 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
     ]),
   )("draws $state in $locale", async ({ state, locale }) => {
     setLocale(locale);
-    const { own, refusal } = STATES[state]!;
+    const { own, refusal, allowRecoveryCode = true, invalidCode } = STATES[state]!;
     const api = {
       getProfile:
         own === "failed"
@@ -58,7 +71,11 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
           : vi.fn().mockResolvedValue(profile(own)),
       freshSignInPasskeyOptions: vi.fn(),
     } as unknown as DashboardApi;
-    const { el, host } = await mountWidget<FreshSignIn>("dashboard-fresh-sign-in", { api }, theme);
+    const { el, host } = await mountWidget<FreshSignIn>(
+      "dashboard-fresh-sign-in",
+      { api, allowRecoveryCode },
+      theme,
+    );
     const root = el.shadowRoot!;
     await expect
       .poll(() =>
@@ -67,6 +84,21 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
         ),
       )
       .toBeTruthy();
+    if (!allowRecoveryCode)
+      expect(root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="totp"]')!.label).toBe(
+        t("fresh_sign_in.authenticator_code"),
+      );
+    if (invalidCode !== undefined) {
+      root
+        .querySelector('wt-input[name="current-password"]')!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "secret" } }));
+      const field = root.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="totp"]')!;
+      field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: invalidCode } }));
+      expect(await el.signIn("password")).toBeNull();
+      expect(field.label).toBe(t("fresh_sign_in.authenticator_code"));
+      await el.updateComplete;
+      expect(field.error).toBe(t("fresh_sign_in.authenticator_required"));
+    }
     if (refusal !== undefined) el.refuse({ code: refusal, status: 401 });
     if (state === "code no longer needed") await expect.poll(() => el.notice).toBeTruthy();
     await el.updateComplete;
