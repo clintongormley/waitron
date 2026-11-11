@@ -25,7 +25,6 @@ import {
   type EscSetting,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
-import { setZoneSalePolicyOverride } from "@waitron/venue-service";
 import { deletePrinter } from "./printer-delete.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
@@ -54,9 +53,6 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
-    await inTx(venue, (tx) =>
-      setZoneSalePolicyOverride(tx, venue.counterZone, "receiptPrintMode", "auto"),
-    );
     kitchenPrinterId = await inTx(venue, async (tx) => {
       const [station] = await tx
         .select({ id: kitchenStations.id })
