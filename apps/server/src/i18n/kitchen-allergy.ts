@@ -8,6 +8,8 @@ export const KITCHEN_ALLERGY_WORDS = {
     clash: "!! CONTAINS {allergens} — SENT ANYWAY",
     changed: "ALLERGY CHANGED",
     removed: "ALLERGY REMOVED",
+    contains: "Contains: {allergens}",
+    extraContains: "{extra} - contains {allergens}",
   },
   es: {
     guideTitle: "Servicio de cocina",
@@ -16,8 +18,20 @@ export const KITCHEN_ALLERGY_WORDS = {
     clash: "!! CONTIENE {allergens} — ENVIADO IGUALMENTE",
     changed: "ALERGIA CAMBIADA",
     removed: "ALERGIA ELIMINADA",
+    contains: "Contiene: {allergens}",
+    extraContains: "{extra} - contiene {allergens}",
   },
 } as const;
+
+export function extraWithAllergens(
+  extra: string,
+  labels: readonly string[],
+  language: "en" | "es",
+): string {
+  return KITCHEN_ALLERGY_WORDS[language].extraContains
+    .replace("{extra}", () => extra)
+    .replace("{allergens}", () => labels.join(", "));
+}
 
 export const ALLERGEN_NAMES: Record<AllergenCode, { en: string; es: string }> = {
   gluten: { en: "Cereals containing gluten", es: "Cereales con gluten" },

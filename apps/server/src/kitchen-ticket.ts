@@ -33,6 +33,8 @@ export interface KitchenTicketItem {
   /** The free-text kitchen note, printed as an indented `* <note>` sub-line beneath the dish. */
   note?: string;
   modifiers?: string[];
+  /** The dish's own declared allergens, already worded; printed after the note. */
+  contains?: string[];
   /** Already-worded links to lines at other stations, printed after modifiers and before the note. */
   crossRefs?: string[];
   /** The permanent number on the group's original ticket. */
@@ -107,6 +109,7 @@ function entryKey(item: KitchenTicketItem): string {
     item.goesWith ?? [],
     item.modifiers ?? [],
     item.crossRefs ?? [],
+    item.contains ?? [],
     item.afterPeriod ?? null,
     item.allergy == null
       ? null
@@ -262,6 +265,10 @@ function emitItem(
     // A note of nothing but control bytes sanitises to "" and is skipped.
     const note = sanitizeNote(item.note);
     if (note !== "") text(`  * ${note}`, 4);
+  }
+  if (item.contains !== undefined && item.contains.length > 0) {
+    const [before] = KITCHEN_ALLERGY_WORDS[ticketLanguage(locale)].contains.split("{allergens}");
+    text(`  ${before}${item.contains.join(", ")}`, prepareText(`  ${before}`).length);
   }
   emitAllergy(b, item.allergy, columns, locale);
 }

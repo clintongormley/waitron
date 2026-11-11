@@ -11,6 +11,7 @@ import {
 import {
   ALLERGEN_NAMES,
   ALLERGEN_KIND_NAMES,
+  extraWithAllergens,
   KITCHEN_ALLERGY_WORDS,
 } from "./i18n/kitchen-allergy.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
@@ -279,5 +280,100 @@ describe("A669 paper grouping", () => {
     ];
     expect(arrangeTicketItems(portions, "combined")).toEqual(portions);
     expect(arrangeTicketItems(portions, "separate")).toEqual(portions);
+  });
+});
+
+describe("A1517-3 a dish's own allergens on paper", () => {
+  const layout = layouts[0]!;
+  const dish = {
+    qty: 1,
+    name: "Burger",
+    modifiers: ["Extra sauce"],
+    note: "No onion",
+    contains: ["Milk", "Nuts (Walnuts)"],
+  };
+  const lines = (items: object[], locale = "en-GB", paper = layout) =>
+    printedLines(
+      formatKitchenTicket(
+        { ...header, scope: "station", locale, items: items as (typeof item)[] },
+        paper,
+        TEST_TIME_ZONE,
+      ),
+    );
+
+  it("prints Contains after the note and before the guest block, in English and Spanish", () => {
+    for (const [locale, line] of [
+      ["en-GB", "  Contains: Milk, Nuts (Walnuts)"],
+      ["es-ES", "  Contiene: Milk, Nuts (Walnuts)"],
+    ] as const) {
+      const printed = lines(
+        [
+          { ...dish, allergy },
+          { qty: 1, name: "Plain dish" },
+        ],
+        locale,
+        layouts[2]!,
+      );
+      const at = printed.indexOf(line);
+      expect(at).toBeGreaterThan(printed.findIndex((l) => l.includes("No onion")));
+      expect(at).toBeLessThan(printed.findIndex((l) => l.includes("Window guest")));
+      expect(printed.filter((l) => /Cont(ains|iene):/.test(l))).toEqual([line]);
+    }
+  });
+
+  it("wraps a long list with its continuation under the first allergen name", () => {
+    const contains = [
+      "Cereals containing gluten (Wheat, Rye)",
+      "Milk",
+      "Nuts (Walnuts, Almonds)",
+      "Sulphur dioxide and sulphites",
+    ];
+    const printed = lines([{ qty: 1, name: "Burger", contains }]);
+    const first = printed.findIndex((l) => l.startsWith("  Contains: "));
+    const block = [printed[first]!];
+    for (const line of printed.slice(first + 1)) {
+      if (!line.startsWith(" ".repeat(12))) break;
+      block.push(line);
+    }
+    expect(block.length).toBeGreaterThan(1);
+    for (const line of block.slice(1)) expect(line).toMatch(/^ {12}\S/);
+    expect(block.every((l) => l.length <= columnsFor(layout.paperWidth))).toBe(true);
+    expect(words(block)).toBe(`Contains: ${contains.join(", ")}`);
+  });
+
+  it("guard (passes before A1517-3): no contains, or an empty one, prints no line", () => {
+    for (const contains of [undefined, []]) {
+      const printed = lines([{ qty: 1, name: "Burger", contains }]);
+      expect(printed.some((l) => /Contains/.test(l))).toBe(false);
+    }
+  });
+
+  it("guard (passes before A1517-3): a declaration without a guest block raises no allergy heading", () => {
+    const text = words(lines([dish]));
+    expect(text).not.toContain("ALLERGY");
+  });
+
+  it("does not merge entries that differ only in their declaration", () => {
+    expect(arrangeTicketItems([dish, { ...dish, contains: ["Milk"] }], "combined")).toHaveLength(2);
+    expect(arrangeTicketItems([dish, { ...dish, contains: undefined }], "combined")).toHaveLength(
+      2,
+    );
+  });
+
+  it("guard (passes before A1517-3): identical declarations still merge", () => {
+    expect(
+      arrangeTicketItems([dish, { ...dish, contains: [...dish.contains] }], "combined"),
+    ).toEqual([{ ...dish, qty: "2.000" }]);
+  });
+
+  it("words an extra's own allergens in English and Spanish", () => {
+    expect(extraWithAllergens("White sauce", ["Milk", "Eggs"], "en")).toBe(
+      "White sauce - contains Milk, Eggs",
+    );
+    expect(extraWithAllergens("Salsa blanca", ["Leche"], "es")).toBe(
+      "Salsa blanca - contiene Leche",
+    );
+    expect(KITCHEN_ALLERGY_WORDS.en.contains).toBe("Contains: {allergens}");
+    expect(KITCHEN_ALLERGY_WORDS.es.contains).toBe("Contiene: {allergens}");
   });
 });
