@@ -43,10 +43,14 @@ export interface RestoreRecoveryDeps {
 export async function renderRestoreDiscard(
   deps: RestoreRecoveryDeps,
   view: AdministratorView,
+  log?: Logger,
 ): Promise<string> {
   const text = RESTORE_DISCARD_TEXT[view.locale];
   if (view.stopped) return `<p>${escapeHtml(text.stopped)}</p>`;
-  if (view.message?.kind !== "moved" && (await restoreAdminVerifiers(deps.roots.stateDir)) === null)
+  if (
+    view.message?.kind !== "moved" &&
+    (await restoreAdminVerifiers(deps.roots.stateDir, log)) === null
+  )
     return "";
   const phase = await readRestoreFlowPhase(deps.roots.stateDir);
   return renderEnvironmentSection({
@@ -141,7 +145,7 @@ export function mountRestoreDiscard(
       choose: async (authorize) => {
         const hold = await lockVenueDatabase(deps.roots.venueDir);
         try {
-          const hashes = await restoreAdminVerifiers(deps.roots.stateDir);
+          const hashes = await restoreAdminVerifiers(deps.roots.stateDir, log);
           if (hashes === null) throw new AppError("setup.not_ready", {});
           await authorize(hashes);
           await discard(deps);

@@ -1,3 +1,5 @@
+import type { Logger } from "./logger.js";
+import { errnoOf } from "./errno.js";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import { randomUUID } from "node:crypto";
@@ -106,7 +108,10 @@ export async function firstStartPending(
   return { source: source === "archive" || source === "stream" ? source : "unknown" };
 }
 
-export async function restoreAdminVerifiers(stateDir: string): Promise<readonly string[] | null> {
+export async function restoreAdminVerifiers(
+  stateDir: string,
+  log?: Logger,
+): Promise<readonly string[] | null> {
   try {
     const hashes: unknown = JSON.parse(
       await readFile(attachmentPath(stateDir, "admin-verifiers"), "utf8"),
@@ -118,7 +123,15 @@ export async function restoreAdminVerifiers(stateDir: string): Promise<readonly 
     )
       return null;
     return hashes as string[];
-  } catch {
+  } catch (error) {
+    const errno = errnoOf(error);
+    if (!(error instanceof SyntaxError) && !["ENOENT", "ENOTDIR", "EISDIR"].includes(errno ?? "")) {
+      try {
+        log?.("warn", "recovery.restore_auth_unreadable", { errno: errno ?? null });
+      } catch {
+        /* Recovery remains visible when its logger fails. */
+      }
+    }
     return null;
   }
 }

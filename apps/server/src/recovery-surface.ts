@@ -327,7 +327,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   };
   const drawRestore = async (view: EnvironmentView) => {
     const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
-    const section = await renderRestoreDiscard(deps.restore!, view);
+    const section = await renderRestoreDiscard(deps.restore!, view, deps.log);
     if (section === "")
       return (deps.environment === undefined ? startAgainPage : drawEnvironment)(view);
     return renderPage(

@@ -1,3 +1,5 @@
+import nativeFs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -31,6 +33,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
+  syncBuiltinESMExports();
   await rm(stateDir, { recursive: true, force: true });
 });
 
@@ -206,4 +209,19 @@ it("flushes a prior discard-authority deletion again after its first folder flus
   fail = false;
   await flow.disarmRestoreDiscard(stateDir);
   expect(attempts).toBe(2);
+});
+
+it("logs an unexpected authentication read failure while withholding discard authority", async () => {
+  const failure = Object.assign(new Error("authentication read failed"), { code: "EIO" });
+  vi.spyOn(nativeFs, "readFile").mockRejectedValueOnce(failure);
+  syncBuiltinESMExports();
+  const lines: unknown[] = [];
+  expect(
+    await flow.restoreAdminVerifiers(stateDir, (level, event, fields) => {
+      lines.push({ level, event, fields });
+    }),
+  ).toBeNull();
+  expect(lines).toEqual([
+    { level: "warn", event: "recovery.restore_auth_unreadable", fields: { errno: "EIO" } },
+  ]);
 });

@@ -418,7 +418,7 @@ function sourceLiveRefusal(err: AppError, subject: string): string | null {
 function sharedRefusal(err: unknown): string {
   if (!(err instanceof AppError)) return "restore failed";
   if (err.code === "restore.request_waiting")
-    return "restore failed: restore.request_waiting — a restore saved from the setup page is still waiting and this command changed nothing; start the server and use Retry a normal boot on the recovery page to retry it, or choose Throw this restore away there over HTTPS with an administrator password from the selected backup, then run this command again";
+    return "restore failed: restore.request_waiting — a restore saved from the setup page is still waiting and this command changed nothing; start the server to run that restore. If it cannot finish, use Retry a normal boot or choose Throw this restore away on the HTTPS recovery page, using an administrator password from the selected backup; after discarding it, run this command again";
   if (err.code === "promotion.break_glass_invalid")
     return "restore failed: promotion.break_glass_invalid — use the selected backup's node recovery key";
   if (err.code === "provisioning.database_in_use") {
