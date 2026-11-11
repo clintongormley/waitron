@@ -230,11 +230,10 @@ it("A576 creates enables and repoints only the selected queue", async () => {
   });
 });
 
-/** One agent, one fresh printable office entry at `host`, registered as "Oficina". */
 async function onePrinter(app: Hono, host = "10.61.0.1") {
   const agent = await joinAgent(app, "Office agent");
   await scan(app, agent.token, [officeEntry(host)]);
-  const { id } = await registered(app, target(agent.agentId, host, { name: "Oficina" }));
+  const { id } = await registered(app, target(agent.agentId, host, { name: "Office" }));
   return { ...agent, id, host };
 }
 
@@ -259,7 +258,7 @@ describe("page-printer management routes", () => {
         error: { code: "authorization.not_permitted" },
       });
     }
-    expect(await stored(id)).toMatchObject({ name: "Oficina" });
+    expect(await stored(id)).toMatchObject({ name: "Office" });
 
     for (const route of routes) {
       const served = await send(app, route.method, route.path, {
@@ -279,7 +278,7 @@ describe("page-printer management routes", () => {
     const res = await register(
       app,
       target(agent.agentId, "10.61.1.1", {
-        name: "  Oficina  ",
+        name: "  Office  ",
         documentFormat: "image/urf",
         supportedFormats: ["image/urf"],
         media: "na_letter_8.5x11in",
@@ -291,7 +290,7 @@ describe("page-printer management routes", () => {
     const { id, outcome } = (await res.json()) as { id: string; outcome: string };
     expect(outcome).toBe("created");
     expect(await stored(id)).toMatchObject({
-      name: "Oficina",
+      name: "Office",
       host: "10.61.1.1",
       port: 631,
       resourcePath: "/ipp/print",
@@ -456,7 +455,7 @@ describe("page-printer management routes", () => {
       .insert(pagePrinters)
       .values({
         locationId: cfg.locationId,
-        name: "Sin agente",
+        name: "Unassigned printer",
         host: "10.61.7.2",
         port: 631,
         resourcePath: "/ipp/print",
@@ -473,7 +472,7 @@ describe("page-printer management routes", () => {
     expect(JSON.parse(text)).toEqual([
       {
         id,
-        name: "Oficina",
+        name: "Office",
         host: "10.61.7.1",
         port: 631,
         resourcePath: "/ipp/print",
@@ -487,7 +486,7 @@ describe("page-printer management routes", () => {
       },
       {
         id: orphan!.id,
-        name: "Sin agente",
+        name: "Unassigned printer",
         host: "10.61.7.2",
         port: 631,
         resourcePath: "/ipp/print",
@@ -513,7 +512,7 @@ describe("page-printer management routes", () => {
     expect(await res.json()).toEqual({ id, outcome: "repointed" });
     expect((await list(app))[0]).toMatchObject({
       id,
-      name: "Oficina",
+      name: "Office",
       agentId: second.agentId,
       agentName: "Second agent",
     });
@@ -540,17 +539,17 @@ describe("page-printer management routes", () => {
 
     const renamed = await send(app, "PATCH", `/management-api/page-printers/${id}`, {
       cookie: managerCookie,
-      body: { name: "  Recepción  " },
+      body: { name: "  Reception  " },
     });
     expect(renamed.status).toBe(204);
-    expect((await stored(id))!.name).toBe("Recepción");
+    expect((await stored(id))!.name).toBe("Reception");
 
     const impact = await send(app, "GET", `/management-api/page-printers/${id}/delete-impact`, {
       cookie: managerCookie,
     });
     expect(impact.status).toBe(200);
     expect(await impact.json()).toEqual({
-      target: { id, name: "Recepción" },
+      target: { id, name: "Reception" },
       refusals: [],
       ends: [],
       removes: [],
@@ -565,7 +564,7 @@ describe("page-printer management routes", () => {
     });
     expect(disabled.status).toBe(200);
     expect(await disabled.json()).toEqual({
-      target: { id, name: "Recepción" },
+      target: { id, name: "Reception" },
       refusals: [],
       ends: [],
       removes: [],
@@ -575,18 +574,18 @@ describe("page-printer management routes", () => {
 
     const enable = await send(app, "PATCH", `/management-api/page-printers/${id}`, {
       cookie: managerCookie,
-      body: { name: "Otra", active: true },
+      body: { name: "Other printer", active: true },
     });
     expect(enable.status).toBe(400);
     expect(await enable.json()).toEqual({
       error: { code: "management.request_invalid", params: { field: "active" } },
     });
-    expect(await stored(id)).toMatchObject({ name: "Recepción", active: false });
+    expect(await stored(id)).toMatchObject({ name: "Reception", active: false });
 
     const res = await register(app, target(agentId, host, { name: "Ignored" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id, outcome: "enabled" });
-    expect(await stored(id)).toMatchObject({ name: "Recepción", active: true });
+    expect(await stored(id)).toMatchObject({ name: "Reception", active: true });
   });
 
   it("refuses a malformed or empty PATCH, and an unknown id", async () => {
@@ -610,7 +609,7 @@ describe("page-printer management routes", () => {
         error: { code: "management.request_invalid", params: { field } },
       });
     }
-    expect(await stored(id)).toMatchObject({ name: "Oficina", active: true });
+    expect(await stored(id)).toMatchObject({ name: "Office", active: true });
 
     const malformed = await send(app, "PATCH", "/management-api/page-printers/nope", {
       cookie: managerCookie,
@@ -671,6 +670,6 @@ describe("a page printer is never a receipt printer", () => {
     expect(attach.status).toBe(404);
     expect(await attach.json()).toMatchObject({ error: { code: "printer.not_found" } });
     expect(await suite.db.select().from(stationPrinters)).toEqual([]);
-    expect(await stored(id)).toMatchObject({ name: "Oficina", active: true });
+    expect(await stored(id)).toMatchObject({ name: "Office", active: true });
   });
 });
