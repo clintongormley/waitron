@@ -21,6 +21,7 @@ import { buildServeOptions, type TlsFiles } from "./tls.js";
 import { mintedBoxLeaf, tightenTlsDir } from "./box-secrets.js";
 import { errnoOf } from "./errno.js";
 import { mountDiscovery } from "./discovery-api.js";
+import { mountDeclarationPages } from "./declaration-pages.js";
 import { isLoopbackHost } from "./primary-url.js";
 import "./errors.js";
 
@@ -100,7 +101,7 @@ export async function needsConnectionBootstrap(
   );
 }
 
-/** Unusable box TLS admits only public connection routes, never the supplied recovery app. */
+/** Unusable box TLS admits only public connection routes and `/legal/*`, never the supplied recovery app. */
 export async function serveRecovery(
   app: Hono,
   opts: RecoveryServeOptions,
@@ -124,6 +125,7 @@ export async function serveRecovery(
   return new Promise((resolve, reject) => {
     const tls = bootstrap ? undefined : recoveryTlsFiles(opts.stateDir);
     const surface = new Hono();
+    mountDeclarationPages(surface, {}, opts.log);
     if (bootstrap) mountConnectionBootstrap(surface, connection);
     else
       mountDiscovery(

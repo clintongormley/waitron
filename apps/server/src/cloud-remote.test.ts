@@ -156,6 +156,8 @@ it("the staff entrance forwards only dashboard requests and marks their source r
     "/api/backup/status",
     "/api/box/health",
     "/help/en/staff",
+    "/legal/declaration",
+    "/legal/about",
     "/media/presentations?ids=logo",
     "/media/renditions/v1/image/cover/center",
     "/media/logo.webp",
@@ -195,6 +197,10 @@ it("the staff entrance forwards only dashboard requests and marks their source r
   ).toBe(404);
   expect(
     (await staff.request("https://staff.example.test/media/logo.webp", { method: "POST" })).status,
+  ).toBe(404);
+  expect(
+    (await staff.request("https://staff.example.test/legal/declaration", { method: "POST" }))
+      .status,
   ).toBe(404);
 });
 it("refuses another venue hostname and does not accept a remote marker from HTTP headers", async () => {

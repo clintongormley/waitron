@@ -51,6 +51,7 @@ import { runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { menuActivationJob } from "./menu-activation.js";
 import { readVenueDetails } from "./venue-details.js";
 import { serverFixture } from "./testing/server-fixture.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import {
   copyMigrationsRoot,
   withMockedKill,
@@ -410,6 +411,9 @@ describe("startup zone admission", () => {
       venueName: "Zone Admission SL",
       tradingAdmission: { state: "invalid" },
     });
+    const declaration = await fetch(`${url}/legal/declaration`);
+    expect(declaration.status).toBe(404);
+    expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
     await refusal(
       await request(PATH, "GET", undefined, staffToken),
       403,

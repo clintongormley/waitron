@@ -28,6 +28,7 @@ import {
 } from "./recovery-surface.js";
 import { escapeHtml } from "./html-page.js";
 import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
+import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 
 const state = afterFailure(
   afterFailure(afterFailure(FRESH, "module.config_invalid", new Date()), "x", new Date()),
@@ -347,6 +348,19 @@ describe("the page's language", () => {
       });
     expect(await (await app("en-GB")).text()).toContain("Last error: none at never");
     expect(await (await app(SPANISH)).text()).toContain("Último error: ninguno, fecha: nunca");
+  });
+
+  it("links the declaration, under its Spanish name, in both languages", async () => {
+    const app = recoveryApp({ state, logDir: "/nonexistent", onRetry: vi.fn() });
+    for (const [lang, acceptLanguage] of LOCALES) {
+      const body = await (
+        await app.request("/", { headers: { "Accept-Language": acceptLanguage } })
+      ).text();
+      expect(body).toContain(`<html lang="${lang}">`);
+      expect(body).toContain(
+        `<p><a href="/legal/declaration">${escapeHtml(DECLARATION_LINK_WORDS.title)}</a></p>\n</body>`,
+      );
+    }
   });
 
   // The three strings from outside the image are shown as they came, in either language.

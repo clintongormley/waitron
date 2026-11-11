@@ -17,6 +17,7 @@ export default defineConfig({
     proxy: {
       "/setup-api": devServerProxy(),
       "/api/node/handover": devServerProxy(),
+      "/legal": devServerProxy(),
     },
   },
 });

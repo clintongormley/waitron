@@ -8,6 +8,7 @@ import type { NewerBucketMain } from "./stream-host.js";
 import type { StartedServer } from "./boot.js";
 import { mountCarryOn, type CarryOnTurn } from "./carry-on.js";
 import type { DeploymentEnvironment } from "./config.js";
+import { mountDeclarationPages } from "./declaration-pages.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { stepDown, type StepDownRequest, type StepDownResult } from "./handover-stepdown.js";
 import { healthApp, type HealthState } from "./health.js";
@@ -103,6 +104,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   const gate = createHandoverGate();
   app.use("*", gate.middleware);
   app.use("*", deps.pageCheck);
+  mountDeclarationPages(app, {}, log);
   app.use("/api/*", deps.cors);
   mountNodeApi(
     app,

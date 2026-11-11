@@ -14,6 +14,7 @@ import {
   holderStalledText,
   type OperatorText,
 } from "./i18n/recovery-page.js";
+import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -236,6 +237,7 @@ ${lead}<h2>${escapeHtml(page.details)}</h2>
 ${freeSpaceLine(freeBytes, locale)}${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>
 <pre>${tail}</pre>
+<p><a href="/legal/declaration">${escapeHtml(DECLARATION_LINK_WORDS.title)}</a></p>
 </body>
 </html>
 `;

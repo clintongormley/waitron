@@ -353,6 +353,7 @@ import { accountPurposeKey, resolveAccountKey } from "./account-key.js";
 import { readPendingAdoption, runFinishAdoption } from "./finish-adoption.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { mountGuidePages } from "./guide-pages.js";
+import { mountDeclarationPages } from "./declaration-pages.js";
 import {
   startMdnsResponder,
   watchVenueNameInSetup,
@@ -1344,6 +1345,7 @@ async function bootServer(
     log,
   );
   mountGuidePages(app, {}, log);
+  mountDeclarationPages(app, { build }, log);
 
   if (config.node === undefined) {
     // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves

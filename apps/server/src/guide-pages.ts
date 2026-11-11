@@ -101,7 +101,8 @@ ul { padding-inline-start: var(--wt-space-5); }
 main { padding-inline: var(--wt-space-4); }
 }`;
 
-function page(lang: GuideLanguage, title: string, body: string): string {
+/** The guides' page look, shared with the `/legal/*` pages. */
+export function renderBoxPage(lang: GuideLanguage, title: string, body: string): string {
   return `<!doctype html>
 <html lang="${lang}">
 <head>
@@ -119,7 +120,7 @@ ${body}
 </html>`;
 }
 
-function answer(c: Context, html: string, status: 200 | 404 | 500): Response {
+export function boxPageAnswer(c: Context, html: string, status: 200 | 404 | 500): Response {
   return c.html(html, status, { "Cache-Control": "no-cache", "Content-Security-Policy": CSP });
 }
 
@@ -132,7 +133,7 @@ function notFound(c: Context, lang: GuideLanguage): Response {
 <h1>${escapeHtml(text.notFoundTitle)}</h1>
 <p>${escapeHtml(text.notFound)}</p>
 <ul>${links}</ul>`;
-  return answer(c, page(lang, text.notFoundTitle, body), 404);
+  return boxPageAnswer(c, renderBoxPage(lang, text.notFoundTitle, body), 404);
 }
 
 function broken(c: Context, lang: GuideLanguage): Response {
@@ -140,7 +141,7 @@ function broken(c: Context, lang: GuideLanguage): Response {
   const body = `<p class="trail">${escapeHtml(text.trail)}</p>
 <h1>${escapeHtml(text.brokenTitle)}</h1>
 <p>${escapeHtml(text.broken)}</p>`;
-  return answer(c, page(lang, text.brokenTitle, body), 500);
+  return boxPageAnswer(c, renderBoxPage(lang, text.brokenTitle, body), 500);
 }
 
 export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): void {
@@ -187,7 +188,7 @@ export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): v
     const shownText = GUIDE_FRAME_WORDS[shownLang];
     const body = `<p class="trail">${escapeHtml(shownText.trail)} › ${escapeHtml(shownText.names[name])}</p>
 ${notice}${rendered.html}`;
-    return answer(c, page(shownLang, rendered.title, body), 200);
+    return boxPageAnswer(c, renderBoxPage(shownLang, rendered.title, body), 200);
   });
 
   app.get("/help/*", (c) => {

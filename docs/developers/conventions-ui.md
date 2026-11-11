@@ -352,14 +352,15 @@ The page's own words (the "Waitron guide" trail, each guide's short name, the mi
 
 ### Which boots serve it
 
-`mountGuidePages` is called in `bootServer` (`apps/server/src/boot.ts:948`), beside `mountDiscovery`
+`mountGuidePages` is called in `bootServer` (`apps/server/src/boot.ts:1347`), beside `mountDiscovery`
 and before the first branch on the box's mode, so setup mode, the adoption-pending boot and every
 trading boot (primary, read-only mirror, fenced) serve it, ahead of the built apps' catch-alls. The
 cases that fetch a guide are in `apps/server/src/boot.test.ts` (a setup box, a trading box, and a
 trading box whose till catch-all would otherwise answer) and `apps/server/src/boot.mirror.test.ts`.
-Two surfaces do not serve the guides: the failed-start recovery page (`recoveryApp`, started from
-`apps/server/src/node-entry.ts` outside `bootServer`), and the plain-HTTP landing listener
-(`apps/server/src/landing-app.ts`, certificate help only).
+Only `bootServer`'s main app serves the guides. The other listeners build their own apps without
+them, among them the failed-start recovery page (`recoveryApp`, started from
+`apps/server/src/node-entry.ts`), the waiting start and the plain-HTTP landing listener
+(`apps/server/src/landing-app.ts`, certificate help and the `/legal/*` pages).
 
 ### How the dashboard links a guide
 
@@ -411,6 +412,76 @@ because a till runs full screen and has no tab bar to come back by (the design,
   server (`apps/till/vite.config.ts`, pinned by `scripts/dev-proxy-config.test.ts`).
 - The page follows the till's theme by itself: both read `waitron-theme` from the same origin's
   `localStorage` (above).
+
+## The declaration pages
+
+The box serves the software's declaración responsable (A940) from `mountDeclarationPages`
+(`apps/server/src/declaration-pages.ts`), at four addresses that need no sign-in:
+
+- `/legal/declaration`: the declaration as a page, in Spanish whatever the reader's language, with
+  «Descargar PDF» and «Descargar texto» links under it that download the two files below as
+  `waitron-<version>-declaration.pdf` and `.txt`.
+- `/legal/declaration.pdf` and `/legal/declaration.txt`: the two files as written.
+- `/legal/about`: JSON `{ release: { version, releasedOn } | null, build }` (`LegalAbout`,
+  `packages/shared/src/legal-about.ts`), where `build` is `applicationVersion(process.env)`, the
+  value the main app sends as `x-waitron-build` (`apps/server/src/boot.ts:1283`, `:1311`).
+
+Any other address under `/legal` answers a "Page not found" page.
+
+### The folder
+
+The files come from `/app/declaration/` in the image, found beside the bundle as the guides are
+(`declarationRoot()`). Slice 4's release run is to write it; until then no image has it. The folder
+holds four files: `declaration.html` (exactly what slice 2's `renderDeclaration` writes),
+`declaration.pdf`, `declaration.txt` and `release.json` (`{ "version": "1.0.0", "releasedOn":
+"2026-12-03" }`, the date being the day the producer signed). It is read on every request; nothing
+is cached. For a development copy, see `apps/server/src/testing/declaration-folder.ts`; its default
+place, `apps/server/src/declaration/`, is in `.gitignore`. Delete it before running the server's
+tests: the mount-site cases expect the "this build has none" page from that folder.
+
+`readDeclarationFolder` gives one of three answers, never a partial one:
+
+- **No folder** (`stat` answers `ENOENT`): "this build has no declaración responsable", 404, and
+  `/legal/about` answers `release: null`.
+- **Damaged**: the folder is not a readable directory, a file is missing or unreadable,
+  `release.json` does not hold a `x.y.z` version and a real `YYYY-MM-DD` date, `declaration.html`
+  does not have exactly one `<body>` line and one `</body>` line, or `declaration.txt` does not
+  have exactly one line starting `1.c) ` (the renderer's version item) or that line does not end
+  with `: ` and `release.json`'s version. Answers "cannot be shown", 500, and logs
+  `declaration.folder_damaged` with the `file` at fault, and the error's `code` when the folder's
+  `stat` or the file's read failed with one, on every request; `/legal/about` answers
+  `release: null`.
+- Otherwise, the release.
+
+The no-folder, damaged and not-found pages follow the browser's `Accept-Language` (Spanish or
+English), not a language chosen in the till or the dashboard, which the server cannot see. Their
+words are in `apps/server/src/i18n/declaration-page.ts`.
+
+### The page's look
+
+The renderer's HTML has no style. So `/legal/declaration` takes the text between its `<body>` and
+`</body>` lines and serves it in the guide pages' frame (`renderBoxPage` and `boxPageAnswer` in
+`apps/server/src/guide-pages.ts`): the same tokens, theme script, `no-cache` and policy, including
+`frame-ancestors 'self'`. The file itself is left as rendered. The "the page holds the legal text
+whole" case in `apps/server/src/declaration-pages.test.ts` pins this against a folder written by
+slice 2's real renderer.
+
+### Which listeners serve them
+
+These serve them:
+
+- the main app, in every mode, from `bootServer` beside the guides (`apps/server/src/boot.ts:1348`),
+  before the first branch on the box's mode and before the spare and read-only gates;
+- the waiting start, while a box waits for its peer (`apps/server/src/waiting-start.ts:107`);
+- the plain-HTTP listener, both its forms (`apps/server/src/landing-app.ts:28`);
+- the recovery listener (`apps/server/src/recovery-listener.ts:128`);
+- the Waitron Cloud staff entrance, which lets `/legal/` reads through beside `/help/`
+  (`apps/server/src/cloud-remote.ts:143-144`).
+
+The plain-HTTP page, in both forms (`trust-page.ts`, `connection-bootstrap-page.ts`), and the
+recovery page (`recovery-surface.ts`) link to `/legal/declaration` at their foot. The guides are
+still mounted only in `bootServer`, so the waiting start, plain-HTTP and recovery listeners do not
+serve `/help/…`.
 
 ## A refusal reaches a field by what the error carries, not by one parameter name
 
@@ -2084,11 +2155,11 @@ every writer of `ended_at` is a logout, a device or profile change, or a credent
 `connection-bootstrap.ts` mounts `/setup/connection` and the empty-body
 `POST /setup-api/connection/repair`, followed by an explicit empty-body
 `POST /setup-api/connection/continue`. A damaged retained box certificate admits only the public
-connection app on the main HTTP port and enabled landing port. The protected recovery app,
-Retry, setup inspection and private setup actions stay off that fallback. Normal discovery and
-landing apps mirror the connection guide; their CA downloads parse the public certificate and
-check its signing authority, validity and box constraints before offering it. Resolution discovery
-uses the same public-CA check. An operator TLS choice refuses box repair.
+connection app and the `/legal/*` pages on the main HTTP port and enabled landing port. The
+protected recovery app, Retry, setup inspection and private setup actions stay off that fallback.
+Normal discovery and landing apps mirror the connection guide; their CA downloads parse the public
+certificate and check its signing authority, validity and box constraints before offering it.
+Resolution discovery uses the same public-CA check. An operator TLS choice refuses box repair.
 
 The resolution screen opens the guide in a separate tab without passing its draft, owner token or
 password. The page sends no body and omits credentials. Its fixed EN/ES messages distinguish

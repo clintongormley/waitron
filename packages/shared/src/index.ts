@@ -515,3 +515,5 @@ export type {
   RecoveryResolution,
   DocumentOffers,
 } from "./document-delivery.js";
+
+export type { LegalAbout } from "./legal-about.js";

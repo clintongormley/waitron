@@ -57,3 +57,6 @@ apps/server/src/state/
 # (~44 content-addressed PNGs). Same from-source/dist split as state/ above; deployment sets
 # WAITRON_MEDIA_DIR to a served path. Never let the dev seed pollute the working tree.
 apps/server/src/media/
+
+# A development copy of the declaration folder (`src/testing/declaration-folder.ts`).
+apps/server/src/declaration/

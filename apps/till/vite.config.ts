@@ -38,6 +38,7 @@ export default defineConfig({
       "/api": devServerProxy(),
       // The guide sheet's frame loads the box's guide pages.
       "/help": devServerProxy(),
+      "/legal": devServerProxy(),
       // Product images are served same-origin in production.
       "/media": devServerProxy(),
     },

@@ -5,6 +5,7 @@ import { renderTrustPage, type TrustPageInput } from "./trust-page.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
+import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 
 let browser: Browser | undefined;
 beforeAll(async () => {
@@ -45,6 +46,13 @@ async function open(
   });
   await page.goto("http://waitron.local:8080/setup/connection");
 }
+
+it.each(["en", "es"] as const)("links the declaration at the foot of the %s page", (locale) => {
+  const html = renderTrustPage({ ...base, connection: retained, locale });
+  expect(html).toContain(
+    `<p class="note"><a href="/legal/declaration" lang="es">${DECLARATION_LINK_WORDS.title}</a></p>\n</main>`,
+  );
+});
 
 it("repairs by a credential-free empty request and keeps the retained certificate instructions", async () => {
   const page = await browser!.newPage();

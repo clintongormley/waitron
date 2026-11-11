@@ -4,6 +4,7 @@ import type { Logger } from "./logger.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, renderTrustPage } from "./trust-page.js";
 import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
+import { mountDeclarationPages } from "./declaration-pages.js";
 
 /** HTTP exposes public connection setup; application and recovery inputs stay on HTTPS. */
 export interface LandingDeps {
@@ -24,6 +25,7 @@ const CA_DOWNLOAD_PATH = "/ca.crt";
 
 export function buildLandingApp(deps: LandingDeps): Hono {
   const app = new Hono();
+  mountDeclarationPages(app, {}, deps.log);
   if (deps.connection !== undefined) {
     mountConnectionBootstrap(app, deps.connection);
     return app;

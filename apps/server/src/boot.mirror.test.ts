@@ -32,6 +32,7 @@ import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
 import { singletonPass } from "./singleton-pass.js";
 import { seedFiscalRegistro } from "./testing/fiscal-fixtures.js";
@@ -270,6 +271,12 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
         expect(page.headers.get("cache-control")).toBe("no-store");
         expect(await page.text()).toContain("Restaurant screens are closed here");
       }
+      const declaration = await fetch(`${base}/legal/declaration`);
+      expect(declaration.status).toBe(404);
+      expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
+      const about = await fetch(`${base}/legal/about`);
+      expect(about.status).toBe(200);
+      expect(await about.json()).toMatchObject({ release: null });
       for (const path of [
         "/management-api/catalogues",
         `/management-api/staff/${MIRROR_STAFF_ID}/personal-data/export`,
@@ -764,6 +771,9 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       expect(trust.status).toBe(200);
       expect(await trust.text()).toContain("to this Waitron server");
       expect((await fetch(`${base}/help/en/products`)).status).toBe(200);
+      const declaration = await fetch(`${base}/legal/declaration`);
+      expect(declaration.status).toBe(404);
+      expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
       expect((await fetch(`${base}/setup-api/discovery`)).status).toBe(404);
       const reset = await fetch(`${base}/setup-api/reset-incomplete-adopt`, {
         method: "POST",

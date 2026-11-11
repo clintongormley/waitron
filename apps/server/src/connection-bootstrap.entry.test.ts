@@ -22,6 +22,7 @@ import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { runEntry, type EntryDeps } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
+import { DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
 
 const { renameMock } = vi.hoisted(() => ({ renameMock: vi.fn() }));
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -150,6 +151,9 @@ it.each(["missing-key", "malformed", "mismatch", "missing-ca", "expired"] as con
     expect(page.status).toBe(200);
     expect(await page.text()).toContain("repair-required");
     expect(await (await get(port, "/")).text()).not.toContain("PRIVATE RECOVERY LOG");
+    const declaration = await get(port, "/legal/declaration");
+    expect(declaration.status).toBe(404);
+    expect(await declaration.text()).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
     for (const path of [
       "/setup-api/status",
       "/setup-api/first-setup/resolution",
@@ -354,6 +358,12 @@ it("healthy recovery keeps its protected Retry on verified HTTPS and flushes its
   });
   expect(result).toEqual({ status: 200, body: JSON.stringify({ ok: true }) });
   await vi.waitFor(() => expect(onRetry).toHaveBeenCalledWith("normal"));
+  const declaration = await verifiedGet(port, "/legal/declaration", material.caCertPem);
+  expect(declaration.status).toBe(404);
+  expect(declaration.body).toContain(DECLARATION_PAGE_WORDS.en.noneTitle);
+  expect((await verifiedGet(port, "/", material.caCertPem)).body).toContain(
+    'href="/legal/declaration"',
+  );
 });
 
 it("real HTTP refuses forged origins and streamed private input while an empty action remains usable", async () => {
