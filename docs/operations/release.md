@@ -115,8 +115,8 @@ The release pull request that `pnpm release prepare` opened goes through `/finis
 branch, on the light review path when it touches no risk trigger, and lands only after that, never
 on green CI alone. The reason: the review seat that runs the change runs on every branch (the
 owner's standing rule), a generated declaration file is no exception, and the declaration is the
-legal document the producer signs. Source: the watcher's decision of 2026-11-11 15:53 (A940
-slice 3 plan).
+legal document the producer signs. Source: the watcher's decision of 2026-11-11 15:53, in lane A's
+`~/waitron-campaign/questions.md`.
 
 ## 6. Tag
 

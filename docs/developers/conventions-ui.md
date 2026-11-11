@@ -357,9 +357,10 @@ and before the first branch on the box's mode, so setup mode, the adoption-pendi
 trading boot (primary, read-only mirror, fenced) serve it, ahead of the built apps' catch-alls. The
 cases that fetch a guide are in `apps/server/src/boot.test.ts` (a setup box, a trading box, and a
 trading box whose till catch-all would otherwise answer) and `apps/server/src/boot.mirror.test.ts`.
-Two surfaces do not serve the guides: the failed-start recovery page (`recoveryApp`, started from
-`apps/server/src/node-entry.ts` outside `bootServer`), and the plain-HTTP landing listener
-(`apps/server/src/landing-app.ts`, certificate help only).
+Only `bootServer`'s main app serves the guides. The other listeners build their own apps without
+them, among them the failed-start recovery page (`recoveryApp`, started from
+`apps/server/src/node-entry.ts`), the waiting start and the plain-HTTP landing listener
+(`apps/server/src/landing-app.ts`, certificate help and the `/legal/*` pages).
 
 ### How the dashboard links a guide
 
@@ -435,7 +436,8 @@ holds four files: `declaration.html` (exactly what slice 2's `renderDeclaration`
 `declaration.pdf`, `declaration.txt` and `release.json` (`{ "version": "1.0.0", "releasedOn":
 "2026-12-03" }`, the date being the day the producer signed). It is read on every request; nothing
 is cached. For a development copy, see `apps/server/src/testing/declaration-folder.ts`; its default
-place, `apps/server/src/declaration/`, is in `.gitignore`.
+place, `apps/server/src/declaration/`, is in `.gitignore`. Delete it before running the server's
+tests: the mount-site cases expect the "this build has none" page from that folder.
 
 `readDeclarationFolder` gives one of three answers, never a partial one:
 
@@ -444,8 +446,11 @@ place, `apps/server/src/declaration/`, is in `.gitignore`.
 - **Damaged**: the folder is not a readable directory, a file is missing or unreadable,
   `release.json` does not hold a `x.y.z` version and a real `YYYY-MM-DD` date, `declaration.html`
   does not have exactly one `<body>` line and one `</body>` line, or `declaration.txt` does not
-  contain the version. Answers "cannot be shown", 500, and logs `declaration.folder_damaged` with
-  the `file` at fault, on every request; `/legal/about` answers `release: null`.
+  have exactly one line starting `1.c) ` (the renderer's version item) or that line does not end
+  with `: ` and `release.json`'s version. Answers "cannot be shown", 500, and logs
+  `declaration.folder_damaged` with the `file` at fault, and the error's `code` when the folder's
+  `stat` or the file's read failed with one, on every request; `/legal/about` answers
+  `release: null`.
 - Otherwise, the release.
 
 The no-folder, damaged and not-found pages follow the browser's `Accept-Language` (Spanish or
@@ -2150,11 +2155,11 @@ every writer of `ended_at` is a logout, a device or profile change, or a credent
 `connection-bootstrap.ts` mounts `/setup/connection` and the empty-body
 `POST /setup-api/connection/repair`, followed by an explicit empty-body
 `POST /setup-api/connection/continue`. A damaged retained box certificate admits only the public
-connection app on the main HTTP port and enabled landing port. The protected recovery app,
-Retry, setup inspection and private setup actions stay off that fallback. Normal discovery and
-landing apps mirror the connection guide; their CA downloads parse the public certificate and
-check its signing authority, validity and box constraints before offering it. Resolution discovery
-uses the same public-CA check. An operator TLS choice refuses box repair.
+connection app and the `/legal/*` pages on the main HTTP port and enabled landing port. The
+protected recovery app, Retry, setup inspection and private setup actions stay off that fallback.
+Normal discovery and landing apps mirror the connection guide; their CA downloads parse the public
+certificate and check its signing authority, validity and box constraints before offering it.
+Resolution discovery uses the same public-CA check. An operator TLS choice refuses box repair.
 
 The resolution screen opens the guide in a separate tab without passing its draft, owner token or
 password. The page sends no body and omits credentials. Its fixed EN/ES messages distinguish

@@ -133,7 +133,10 @@ guarded by `scripts/module-seams.test.ts`).
    any of the four files missing or unreadable; `release.json` not matching
    `{ version: /^\d+\.\d+\.\d+$/, releasedOn: a real YYYY-MM-DD date }`; `declaration.html` not in
    the renderer's shape; or `declaration.txt` not containing `release.version` (item 1.c) holds it),
-   which catches a `release.json` from another render. Otherwise → the release. Files are read on
+   which catches a `release.json` from another render. (As built, 2026-11-11, after review: the
+   text must have exactly one `1.c) ` line ending `: <version>`, since a substring test accepted
+   `1.2.3` beside `11.2.3`, and the damaged log also carries the error's `code`; the current rule is
+   in `docs/developers/conventions-ui.md`.) Otherwise → the release. Files are read on
    each request, as the guides are; nothing is cached. The none and damaged pages follow the
    browser's `Accept-Language`, not the language chosen in the till or the dashboard: the server
    cannot see that choice, as the recovery page cannot.

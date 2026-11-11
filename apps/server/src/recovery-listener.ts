@@ -101,7 +101,7 @@ export async function needsConnectionBootstrap(
   );
 }
 
-/** Unusable box TLS admits only public connection routes, never the supplied recovery app. */
+/** Unusable box TLS admits only public connection routes and `/legal/*`, never the supplied recovery app. */
 export async function serveRecovery(
   app: Hono,
   opts: RecoveryServeOptions,
