@@ -453,5 +453,14 @@ declare module "@waitron/shared" {
       partial: boolean;
       unconfirmed: boolean;
     };
+
+    /** A declaration's text holds a `‹…›` slot nothing fills; `slot` is the slot, brackets included. */
+    "declaration.slot_unfilled": { slot: string };
+    /** A declaration still carries `release-blocker` lines; `count` is how many. */
+    "declaration.release_blocked": { count: number };
+    /** A declaration's item does not say what the software records say; `item` is e.g. `1.b`. */
+    "declaration.disagrees": { item: string };
+    /** A `- ` line of `declarations/functions.md` has no ` — ` route; `line` is 1-based. */
+    "declaration.functions_malformed": { line: number };
   }
 }
