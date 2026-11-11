@@ -1,4 +1,5 @@
 import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { signEnvelope, type HandoverState } from "@waitron/handover";
@@ -20,6 +21,7 @@ import {
   type CheckPeersDeps,
 } from "./boot-peer-check.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
+import { freePorts } from "./testing/free-ports.js";
 import {
   mintBoxAuthority,
   startBoxServer,
@@ -1360,7 +1362,7 @@ describe("askPeerStatus", () => {
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
 
-  it("a peer that does not answer within the time limit is null", async () => {
+  it("a timed-out fetch replacement cannot establish connection silence", async () => {
     const onSilent = vi.fn();
     const fetchFn = vi.fn(
       (_url: string | URL | Request, init?: RequestInit) =>
@@ -1369,8 +1371,45 @@ describe("askPeerStatus", () => {
         }),
     );
     expect(await realAsk({ fetch: fetchFn, timeoutMs: 20, onSilent })(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+  });
+
+  it("a refused real TCP connection still counts as silence", async () => {
+    const [port] = await freePorts(1);
+    const onSilent = vi.fn();
+    expect(await realAsk({ onSilent })({ ...PEER, url: `http://127.0.0.1:${port}` })).toBeNull();
     expect(onSilent).toHaveBeenCalledWith(SPARE, "unreachable");
   });
+
+  it.each([false, true])(
+    "a connected %s-TLS peer that withholds its answer is not established",
+    async (secure) => {
+      let received = 0;
+      const receive: import("node:http").RequestListener = (req) => {
+        received += 1;
+        req.resume();
+      };
+      const server = secure
+        ? createHttpsServer({ key: authorityX.keyPem, cert: authorityX.certPem }, receive)
+        : createHttpServer(receive);
+      await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const onSilent = vi.fn();
+        expect(
+          await realAsk({ timeoutMs: 1000, authorityOf: () => authorityX.caPem, onSilent })({
+            ...PEER,
+            url: `${secure ? "https" : "http"}://localhost:${port}`,
+          }),
+        ).toBeNull();
+        expect(received).toBe(1);
+        expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((done) => server.close(() => done()));
+      }
+    },
+  );
 
   describe("over HTTPS to a box serving a leaf from its own authority", () => {
     it("with the peer's authority pinned, the signed answer verifies", async () => {

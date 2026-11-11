@@ -6,7 +6,13 @@ import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
+import {
+  openVenueDatabase,
+  readNodeMembership,
+  writeNodeMembership,
+  type VenueDatabase,
+} from "@waitron/db";
+import { signDocumentBody } from "@waitron/membership";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { managementSessions, persons } from "@waitron/identity";
@@ -76,7 +82,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-function service() {
+function service(origin = "https://spare.example") {
   const app = new Hono();
   const log = vi.fn();
   const emergency = mountHandoverEmergencyApi(
@@ -88,7 +94,7 @@ function service() {
       ring,
       venueDir: dirs().spareVenue,
       modules: fiscalModules,
-      origin: "https://spare.example",
+      origin,
       credentialKeyRing: TOTP_KEY_RING,
       passwordThrottle: createPasswordThrottle(),
       fetch: async (_url, init) => {
@@ -119,10 +125,10 @@ function service() {
     const socket = new TLSSocket(new Socket());
     sockets.push(socket);
     const response = await app.request(
-      "https://spare.example/api/node/handover/emergency/declare",
+      `${origin}/api/node/handover/emergency/declare`,
       {
         method: "POST",
-        headers: { "content-type": "application/json", origin: "https://spare.example" },
+        headers: { "content-type": "application/json", origin },
         body: JSON.stringify(body),
       },
       https ? { incoming: { socket } } : {},
@@ -236,6 +242,49 @@ it("refuses an uncertain transport failure rather than declaring the source stop
   external.fault = "CERT_HAS_EXPIRED";
   expect((await service().post()).body.error?.code).toBe("handover.source_not_established");
   expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it("refuses declaration even when the answering source is restricted to this spare", async () => {
+  external.restriction = { kind: "superseded", successorNodeId: standby.nodeId, operationId: null };
+  expect((await service().post()).body.error?.code).toBe("handover.source_still_answering");
+  expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+});
+
+it.each(["https://spare.example", "https://dashboard.example"])(
+  "does not ask its own address %s",
+  async (sourceUrl) => {
+    const held = (await readNodeMembership(placed.venue))!;
+    const body = {
+      ...held.body,
+      nodes: held.body.nodes.map((node) =>
+        node.nodeId === primary.nodeId ? { ...node, contactUrl: sourceUrl } : node,
+      ),
+    };
+    await writeNodeMembership(placed.venue, {
+      ...held,
+      body,
+      signature: signDocumentBody(body, mainKey),
+    });
+    expect((await service("https://dashboard.example").post()).body.error?.code).toBe(
+      "handover.source_not_established",
+    );
+    expect(external.calls).toBe(0);
+    expect(await readOpenHandoverOperation(placed.node, standby.nodeId)).toBeNull();
+  },
+);
+
+it("replays its saved binding after the held chart changes", async () => {
+  const s = service();
+  const first = await s.post();
+  const held = (await readNodeMembership(placed.venue))!;
+  const body = { ...held.body, term: 2 };
+  await writeNodeMembership(placed.venue, {
+    ...held,
+    body,
+    signature: signDocumentBody(body, mainKey),
+  });
+  expect(await s.post()).toEqual(first);
+  expect(external.calls).toBe(1);
 });
 
 it("requires a new process to recheck the copy, and refuses changed activity", async () => {

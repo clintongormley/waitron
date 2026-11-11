@@ -41,6 +41,7 @@ import {
   askPeerStatus,
   isRecord,
   isRestriction,
+  originOf,
   type AskPeerStatusDeps,
   type SilentReason,
 } from "./boot-peer-check.js";
@@ -136,6 +137,8 @@ export function mountHandoverEmergencyApi(
     const held = await readNodeMembership(deps.db);
     const source = held?.body.nodes.find((n) => n.nodeId === sourceNodeId);
     const own = held?.body.nodes.find((n) => n.nodeId === deps.nodeId);
+    if (source !== undefined && originOf(source.contactUrl) === originOf(deps.origin))
+      throw new AppError("handover.source_not_established", {});
     const link = await readMirrorLink(deps.node, deps.nodeId);
     let reason: SilentReason | undefined;
     const answer = await askPeerStatus({

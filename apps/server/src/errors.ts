@@ -255,8 +255,11 @@ declare module "@waitron/shared" {
     "handover.copy_mismatch": Record<string, never>;
     /** The copy fails the database's own integrity check. */
     "handover.copy_damaged": Record<string, never>;
+    /** A declaration got an answer, or activation got no restriction naming this successor. */
     "handover.source_still_answering": Record<string, never>;
+    /** Neither a verified answer nor one of the allowed silence reasons was obtained. */
     "handover.source_not_established": Record<string, never>;
+    /** Only this source's prepared controlled destination may be replaced. */
     "handover.controlled_unresolved": Record<string, never>;
     /** `module`'s records in the copy a spare received fail that module's own check. */
     "handover.chain_broken": { module: string };

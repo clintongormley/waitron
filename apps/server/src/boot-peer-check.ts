@@ -345,6 +345,8 @@ export function boxRefusal(text: string): { code: string; params: unknown } | nu
   return { code: error.code, params: error.params };
 }
 
+class PeerSilenceUnestablished extends Error {}
+
 /** One signed exchange with another box, stopped at `timeoutMs`; a failure is thrown. */
 export async function postToBox(
   deps: Pick<AskPeerStatusDeps, "fetch" | "authorityOf"> & { timeoutMs: number },
@@ -353,6 +355,7 @@ export async function postToBox(
   body: string,
 ): Promise<{ status: number; text: string }> {
   const signal = AbortSignal.timeout(deps.timeoutMs);
+  let connected = false;
   try {
     if (deps.fetch !== undefined) {
       const res = await deps.fetch(url, {
@@ -373,10 +376,16 @@ export async function postToBox(
         trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
         signal,
         body,
+        onConnected: () => {
+          connected = true;
+        },
       },
       MAX_STATUS_BYTES,
     );
   } catch (error) {
+    // A connected peer may still sell. A fetch replacement exposes no connection phase.
+    if (connected || (signal.aborted && deps.fetch !== undefined))
+      throw new PeerSilenceUnestablished("peer exchange did not finish", { cause: error });
     if (signal.aborted) throw signal.reason;
     throw error;
   }
@@ -420,6 +429,7 @@ export function askPeerStatus(
         JSON.stringify(query),
       );
     } catch (error) {
+      if (error instanceof PeerSilenceUnestablished) return silent("not_established");
       const code = firstCodeInCauseChain(error, () => true);
       const unreachable =
         ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "ETIMEDOUT"].includes(code ?? "") ||

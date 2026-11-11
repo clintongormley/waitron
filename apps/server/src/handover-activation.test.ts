@@ -263,7 +263,7 @@ async function emergencySpare(gate = true) {
   const exchange = vi.fn(async () => {
     throw Object.assign(new Error("source off"), { code: "ECONNREFUSED" });
   });
-  const emergency = mountHandoverEmergencyApi(declarationApp, {
+  const emergencyDeps = {
     db: placed.venue,
     node: placed.node,
     nodeId: standby.nodeId,
@@ -273,7 +273,8 @@ async function emergencySpare(gate = true) {
     origin: "https://box.test",
     credentialKeyRing: TOTP_KEY_RING,
     fetch: exchange,
-  });
+  };
+  const emergency = mountHandoverEmergencyApi(declarationApp, emergencyDeps);
   const declarationBody = {
     operationId: OPERATION,
     signIn,
@@ -287,7 +288,11 @@ async function emergencySpare(gate = true) {
   expect(declared.status, JSON.stringify(declared.body)).toBe(200);
   return {
     store: placed,
-    ...spareOn(placed, serviceFor(placed), gate ? emergency : undefined),
+    ...spareOn(
+      placed,
+      serviceFor(placed),
+      gate ? emergency : mountHandoverEmergencyApi(new Hono(), emergencyDeps),
+    ),
     declared: declared.body as unknown as { declaration: unknown },
     repeat: () => request(declarationApp, "declare", declarationBody, { operationId: "emergency" }),
     exchange,

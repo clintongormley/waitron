@@ -93,7 +93,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/emergency/declare",
     boxes: ["mirror"],
     authenticates:
-      "own-origin HTTPS, fresh password and enrolled authenticator code for `node.promote`, three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
+      "own-origin HTTPS, fresh password and authenticator code when enrolled for `node.promote`, three shutdown and uncertainty statements, checked copy and transport silence (`handover-emergency-api.ts`)",
   },
 ];
 

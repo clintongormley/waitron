@@ -1518,8 +1518,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta copia no está confirmada para este traspaso. Un traspaso controlado vuelve a pedirla. Tras reiniciar durante una emergencia, repite la declaración para comprobarla; una copia que haya cambiado no puede activar una declaración guardada.",
   },
   "handover.copy_damaged": {
-    en: "This copy is damaged, so this box has not taken over. Retry when a working copy is available.",
-    es: "Esta copia está dañada, así que este equipo no ha tomado el relevo. Reintenta cuando haya una copia válida disponible.",
+    en: "This copy is damaged. A controlled handover fetches it again. In an emergency, retry when a working copy is available.",
+    es: "Esta copia está dañada. Un traspaso controlado vuelve a pedirla. En una emergencia, reintenta cuando haya una copia válida disponible.",
   },
   "handover.chain_broken": {
     en: "The records in this copy failed their check, so this box has not taken over. Retry when a working copy is available.",
@@ -1590,8 +1590,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El equipo antiguo sigue respondiendo. Apágalo antes de declarar un traspaso de emergencia o usa un traspaso controlado. Antes de activar, debe estar apagado o confirmar que este equipo lo sustituye.",
   },
   "handover.source_not_established": {
-    en: "The old box's status could not be established. Check its address and connection, then try again.",
-    es: "No se ha podido determinar el estado del equipo antiguo. Comprueba su dirección y conexión y vuelve a intentarlo.",
+    en: "The old box's status could not be established. Switch it off at the plug, check its address and connection, then try again.",
+    es: "No se ha podido determinar el estado del equipo antiguo. Desenchúfalo, comprueba su dirección y conexión y vuelve a intentarlo.",
   },
   "handover.controlled_unresolved": {
     en: "This box has an unfinished handover that an emergency declaration cannot replace. Resume that handover before starting another.",
