@@ -758,7 +758,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
     if (!bootstrapSucceeded(bootstrap.serial))
       throw new Error("bootstrap did not restart without Docker");
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
-    const { chromium } = require("playwright");
+    const { chromium, request } = require("playwright");
     async function inspect(name) {
       const guest = await boot(
         name,
@@ -937,6 +937,18 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         )
           throw new Error("returned PCR15 was not extended exactly once");
         if (!guest.returnEvidence) throw new Error("missing reset/hash evidence");
+        // Kernel diagnostics can interleave with serial output; HTTPS keeps the response framed.
+        const healthContext = await request.newContext({ ignoreHTTPSErrors: true });
+        let health;
+        try {
+          const response = await healthContext.get("https://127.0.0.1/health", { timeout: 10000 });
+          if (response.status() !== 200)
+            throw new Error(`returned health HTTP ${response.status()}`);
+          health = await response.json();
+          if (health.ok !== true) throw new Error("returned health is not ready");
+        } finally {
+          await healthContext.dispose();
+        }
         await writeFile(
           join(runDir, "existing-stick.json"),
           JSON.stringify(
@@ -948,7 +960,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
               firmware,
               disk,
               pcrs,
-              health: JSON.parse(rigLine(serial, "B3_RETURN_HEALTH:")),
+              health,
             },
             null,
             2,

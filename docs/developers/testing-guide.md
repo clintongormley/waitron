@@ -1,5 +1,15 @@
 # Testing guide
 
+## Read the returned box’s health through HTTPS
+
+The box-installer rig reads the returned app’s `/health` through its existing HTTPS forward,
+and keeps the serial response for diagnostics. Kernel audit output can appear inside a serial
+JSON line. On 11 November 2026, `node bench/box-installer/run.mjs --case existing-stick` reached
+its returned app but failed at the serial health parser: one audit record split a JSON property.
+The captured line failed parsing; removing that record alone made the same response parse as
+`ok:true`. That forensic control did not count as a passing rehearsal. Keep the full serial log,
+and require a fresh whole-case pass after changing the reader.
+
 ## A counted copy request has not finished downloading
 
 When you wait for a comparison after a copy request arrives, give that wait time for the
