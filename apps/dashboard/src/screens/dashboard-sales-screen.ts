@@ -21,6 +21,7 @@ import type {
   CategoryReportMode,
   CategorySalesDto,
   CategoryTotalDto,
+  ClosureSummaryDto,
   DailyCloseDto,
   DashboardApi,
   ReportPrinter,
@@ -105,6 +106,9 @@ export class SalesScreen extends LitElement {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-4);
+      }
+      table + .metric {
+        margin-top: var(--wt-space-2);
       }
       .metric {
         display: flex;
@@ -700,9 +704,14 @@ export class SalesScreen extends LitElement {
   #renderClose(close: DailyCloseDto): TemplateResult {
     return html`
       <div data-test="daily-close">
-        ${this.#renderTender(close.cash)} ${this.#renderVat(close.vat)}
+        ${this.#renderTender(close.cash, close.closureSummary)} ${this.#renderVat(close.vat)}
         <h2>${t("sales.counts_title")}</h2>
         <div class="counts" data-test="counts">
+          ${renderMetric(
+            t("sales.bills_closed"),
+            `${close.closureSummary.billsClosed.count} · ${money(close.closureSummary.billsClosed.total)}`,
+            "bills-closed",
+          )}
           ${renderMetric(t("sales.sales"), String(close.counts.sales), "count-sales")}
           ${renderMetric(t("sales.corrections"), String(close.counts.corrections), "count-corrections")}
           ${renderMetric(t("sales.voids"), String(close.counts.voids), "count-voids")}
@@ -724,7 +733,7 @@ export class SalesScreen extends LitElement {
     `;
   }
 
-  #renderTender(cash: CashUpDto): TemplateResult {
+  #renderTender(cash: CashUpDto, summary: ClosureSummaryDto): TemplateResult {
     return html`
       <h2>${t("sales.tender_title")}</h2>
       <table data-test="tender-table">
@@ -738,27 +747,34 @@ export class SalesScreen extends LitElement {
         </thead>
         <tbody>
           ${cash.byOrigin.map((origin) =>
-            origin.byMethod.map(
-              (line) =>
-                html`<tr
-                  data-test=${`tender-row-${origin.deviceId ?? origin.source}-${line.method}`}
-                >
-                  <th scope="row">${sourceLabel(origin)}</th>
-                  <td>${line.method}</td>
-                  <td class="num">${money(line.amount)}</td>
-                  <td class="num">${money(line.tip)}</td>
-                </tr>`,
-            ),
+            origin.byMethod
+              .filter((line) => line.method !== "transfer")
+              .map(
+                (line) =>
+                  html`<tr
+                    data-test=${`tender-row-${origin.deviceId ?? origin.source}-${line.method}`}
+                  >
+                    <th scope="row">${sourceLabel(origin)}</th>
+                    <td>${line.method}</td>
+                    <td class="num">${money(line.amount)}</td>
+                    <td class="num">${money(line.tip)}</td>
+                  </tr>`,
+              ),
           )}
         </tbody>
         <tfoot>
           <tr>
             <th scope="row" colspan="2">${t("sales.tender_total")}</th>
-            <td class="num" data-test="tender-total">${money(cash.tenderTotal)}</td>
+            <td class="num" data-test="tender-total">${money(summary.received)}</td>
             <td class="num" data-test="tip-total">${money(cash.tipTotal)}</td>
           </tr>
         </tfoot>
       </table>
+      ${renderMetric(
+        t("sales.to_be_paid_by_transfer"),
+        money(summary.toBePaidByTransfer),
+        "transfer-total",
+      )}
     `;
   }
 

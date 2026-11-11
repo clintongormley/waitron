@@ -59,6 +59,11 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getSalesOverview: async () => ({
       businessDay: "2026-08-30",
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      closureSummary: {
+        billsClosed: { count: 0, total: "0.00" },
+        toBePaidByTransfer: "0.00",
+        received: "0.00",
+      },
       counts: { sales: 0, corrections: 0, voids: 0 },
       openTables: { open: 0, total: 0 },
       topSellers: [],

@@ -233,6 +233,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     getSalesOverview: vi.fn().mockResolvedValue({
       businessDay: "2026-08-30",
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+      closureSummary: {
+        billsClosed: { count: 0, total: "0.00" },
+        toBePaidByTransfer: "0.00",
+        received: "0.00",
+      },
       counts: { sales: 0, corrections: 0, voids: 0 },
       openTables: { open: 0, total: 0 },
       topSellers: [],
@@ -241,6 +246,11 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       businessDay: "2026-08-30",
       vat: { byRate: [], baseTotal: "0.00", taxTotal: "0.00", grossTotal: "0.00" },
       cash: { byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" },
+      closureSummary: {
+        billsClosed: { count: 0, total: "0.00" },
+        toBePaidByTransfer: "0.00",
+        received: "0.00",
+      },
       counts: { sales: 0, corrections: 0, voids: 0 },
       topSellers: [],
     }),
@@ -5290,6 +5300,11 @@ it("keeps an overflowing read-only Overview accessible and scrollable by keyboar
       getSalesOverview: async () => ({
         businessDay: "2026-11-09",
         takings: { tenderTotal: "80.00", tipTotal: "0.00", grossTotal: "80.00" },
+        closureSummary: {
+          billsClosed: { count: 40, total: "80.00" },
+          toBePaidByTransfer: "0.00",
+          received: "80.00",
+        },
         counts: { sales: 40, corrections: 0, voids: 0 },
         openTables: { open: 0, total: 10 },
         topSellers: Array.from({ length: 40 }, (_, i) => ({

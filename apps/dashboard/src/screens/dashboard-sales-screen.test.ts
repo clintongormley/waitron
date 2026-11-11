@@ -4,6 +4,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DailyCloseDto, DashboardApi, SalesOverview, SalesPeriodDto } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";
 import { SalesScreen } from "./dashboard-sales-screen.js";
@@ -38,6 +39,11 @@ const close: DailyCloseDto = {
     tenderTotal: "176.00",
     tipTotal: "8.00",
   },
+  closureSummary: {
+    billsClosed: { count: 10, total: "176.00" },
+    toBePaidByTransfer: "0.00",
+    received: "176.00",
+  },
   counts: { sales: 10, corrections: 1, voids: 2 },
   topSellers: [
     {
@@ -71,6 +77,11 @@ function overview(businessDay: string): SalesOverview {
   return {
     businessDay,
     takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },
+    closureSummary: {
+      billsClosed: { count: 0, total: "0.00" },
+      toBePaidByTransfer: "0.00",
+      received: "0.00",
+    },
     counts: { sales: 0, corrections: 0, voids: 0 },
     openTables: { open: 0, total: 0 },
     topSellers: [],
@@ -313,6 +324,54 @@ describe("dashboard-sales-screen", () => {
       "€176.00",
     ]);
     expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual(["Coffee, Double", "3", "€7.50"]);
+  });
+
+  it("leaves a transfer out of the tender table and shows it, and the bills closed, on their own lines", async () => {
+    const transferDay: DailyCloseDto = {
+      ...close,
+      cash: {
+        byOrigin: [
+          {
+            source: "device",
+            deviceId: "device-1",
+            deviceName: "Bar 1",
+            byMethod: [
+              { method: "cash", amount: "10.00", tip: "0.00" },
+              { method: "transfer", amount: "220.00", tip: "0.00" },
+            ],
+            cashTakings: "10.00",
+          },
+        ],
+        tenderTotal: "230.00",
+        tipTotal: "0.00",
+      },
+      closureSummary: {
+        billsClosed: { count: 2, total: "320.00" },
+        toBePaidByTransfer: "220.00",
+        received: "110.00",
+      },
+    };
+    const api = stubApi({ getDailyClose: vi.fn().mockResolvedValue(transferDay) });
+    setLocale("en-GB");
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+    const root = el.shadowRoot!;
+    const text = (test: string) => root.querySelector(`[data-test=${test}]`)!.textContent;
+    expect(root.querySelector("[data-test=tender-row-device-1-cash]")).not.toBeNull();
+    expect(root.querySelector("[data-test=tender-row-device-1-transfer]")).toBeNull();
+    expect(text("tender-total")).toBe("€110.00");
+    expect(text("transfer-total")).toBe("€220.00");
+    expect(text("bills-closed")).toBe("2 · €320.00");
+
+    setLocale("es-ES");
+    const spanish = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(spanish.el);
+    const label = (test: string) =>
+      spanish.el
+        .shadowRoot!.querySelector(`[data-test=${test}]`)!
+        .parentElement!.querySelector(".label")!.textContent;
+    expect(label("transfer-total")).toBe(es["sales.to_be_paid_by_transfer"]);
+    expect(label("bills-closed")).toBe("Cuentas cerradas");
   });
 
   it("heads each device's rows with its name, and a job's rows with the job's name", async () => {

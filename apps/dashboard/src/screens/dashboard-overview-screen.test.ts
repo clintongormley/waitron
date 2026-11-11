@@ -12,6 +12,11 @@ useLocale("es-ES");
 const overview: SalesOverview = {
   businessDay: "2026-08-29",
   takings: { tenderTotal: "1234.50", tipTotal: "45.00", grossTotal: "1279.50" },
+  closureSummary: {
+    billsClosed: { count: 42, total: "1279.50" },
+    toBePaidByTransfer: "0.00",
+    received: "1234.50",
+  },
   counts: { sales: 42, corrections: 2, voids: 1 },
   openTables: { open: 3, total: 12 },
   topSellers: [
@@ -91,6 +96,31 @@ describe("dashboard-overview-screen", () => {
       [...root.querySelectorAll(`[data-test="${test}"] td`)].map((cell) => cell.textContent);
     expect(cells("seller-row-0")).toEqual(["18", "€36.00"]);
     expect(cells("seller-row-0-variant-1")).toEqual(["8", "€14.00"]);
+  });
+
+  it("shows bills closed and the deferred-payment amount apart from the money received", async () => {
+    setLocale("en-GB");
+    const api = stubApi({
+      getSalesOverview: vi.fn().mockResolvedValue({
+        ...overview,
+        takings: { ...overview.takings, tenderTotal: "330.00" },
+        closureSummary: {
+          billsClosed: { count: 2, total: "320.00" },
+          toBePaidByTransfer: "220.00",
+          received: "110.00",
+        },
+      }),
+    });
+    const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
+    await flush(el);
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-test=bills-closed]")!.textContent).toBe("2 · €320.00");
+    expect(root.querySelector("[data-test=transfer-total]")!.textContent).toBe("€220.00");
+    expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("€110.00");
+    expect(
+      root.querySelector("[data-test=transfer-total]")!.parentElement!.querySelector(".label")!
+        .textContent,
+    ).toBe("Deferred payment");
   });
 
   it("renders the record counts", async () => {
