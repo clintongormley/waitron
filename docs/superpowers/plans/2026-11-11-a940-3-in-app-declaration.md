@@ -39,18 +39,32 @@ serves files, it never renders.
 
 **Review path: LIGHT** (design §10). No pull request touches a risk trigger: nothing fiscal,
 no migration, no sign-in or permission check, no write route (all four addresses are reads that
-need no sign-in, as `/help/…` does). Per CLAUDE.md, the plan is read once against the spec by a
-fresh-context reviewer before any implementer starts, and every branch still goes through
-`/finish-branch` (its run-it seat runs on every branch). Every commit `git commit -s`; never
-`--no-verify`.
+need no sign-in, as `/help/…` does). PR 1 does widen one allowlist, the Waitron Cloud staff
+entrance's (`apps/server/src/cloud-remote.ts:132-143`); LIGHT still holds because the addition
+is GET and HEAD only, under `/legal/`, where the box answers four fixed file names and its own
+404 — no sign-in, no data, no write. Task 2 gets a per-task review anyway, because of that list.
+Per CLAUDE.md, the plan is read once against the spec by a fresh-context reviewer before any
+implementer starts, and every branch still goes through `/finish-branch` (its run-it seat runs on
+every branch). Every commit `git commit -s`; never `--no-verify`.
+
+## Departures from the approved design and decisions needing the watcher's approval
+
+1. Handheld More: About Waitron sits just above Log out, not "very last" (§6.3); today More always ends with Log out, followed only by "Powered by" while a venue logo is in use (`till-shell.ts:1241-1245`).
+2. A fourth address, `/legal/about` (JSON: the release's version and date, and the build), which the titles and the sign-in foot line need; the design names three.
+3. A fourth file, `release.json`, in `/app/declaration/`, holding the version and the declaration's own date, which slice 4 writes in the same run from the same `v<version>.md`.
+4. The download links («Descargar PDF», «Descargar texto») sit inside the Spanish declaration page, in Spanish only, and download rather than open, so no terminal repeats them; the design put them on the dashboard's About page.
+5. Kiosk tills get the corner ⓘ as well as kitchen screens, because the shell draws that corner for both (`till-shell.ts:993-999`).
+6. The dashboard's About is a window over the current screen, not a page with its own address, so the signed-out sign-in screen opens the same thing.
+7. The setup wizard's ⓘ opens a full-screen sheet, not a new tab.
+8. Three states, never a partial one: no folder → "this build has none" (404); a folder with any file missing or inconsistent → "cannot be shown" (500); otherwise the declaration.
 
 ## What a person can do once each pull request lands
 
 - **After PR 1:** anyone can open `https://waitron.local/legal/declaration` (or `.pdf`, `.txt`),
   or `http://waitron.local/legal/declaration` on the plain-HTTP page, on a box in any state —
-  before setup, trading, a spare, a box waiting for its peer, a box repairing its time zone, a box
-  stopped on its recovery page — and the plain-HTTP page and the recovery page link to it at their
-  foot. **Today every box answers "this build has no declaración responsable"**, because no image
+  before setup, trading, a spare, a box waiting for its peer, a box restricted after a handover, a
+  box repairing its time zone, a box stopped on its recovery page — and the plain-HTTP page (both
+  its forms) and the recovery page link to it at their foot. **Today every box answers "this build has no declaración responsable"**, because no image
   carries the folder until slice 4; a box given slice 4's folder shows the declaration with no
   further change. The release runbook says the release pull request goes through `/finish-branch`.
 - **After PR 2:** on the dashboard, the account menu (person icon) has **About Waitron** between
@@ -101,14 +115,23 @@ guarded by `scripts/module-seams.test.ts`).
    and `release.json` = `{ "version": "1.0.0", "releasedOn": "2026-12-03" }`. Reason: the About
    window shows "the date it was released" (§6.1), and nothing on a box knows a release's date or
    number today; one folder holding every release fact means a build either has all of it or none.
-   `releasedOn` is a `YYYY-MM-DD` date that slice 4 chooses (the tag's day in Madrid is the
-   obvious value); slice 3 only shows it.
-2. **Three states, never a partial one.** The folder absent → "no declaration" (404). The folder
-   present but any file missing, `release.json` not matching
-   `{ version: /^\d+\.\d+\.\d+$/, releasedOn: a real YYYY-MM-DD date }`, or `declaration.html` not
-   in the renderer's shape → "damaged" (500, logged `declaration.folder_damaged { file }`, worded
-   differently, because saying "this build is not a release" there would be false). Otherwise →
-   the release. Files are read on each request, as the guides are; nothing is cached.
+   **`release.json` is not a second source.** Slice 4 writes it in the same render run, from the
+   same `v<version>.md`, as the three other files: `version` is the version rendered, and
+   `releasedOn` is the declaration's own date — the `YYYY-MM-DD` Madrid day of signing that fills
+   ‹fecha› (`packages/fiscal-verifactu/src/declaration/source.ts:11-12`, `:40`; `docs/operations/release.md:92`).
+   Slice 4 owes a test that pins both. So "released" on the About window means the day the
+   producer signed that version's declaration.
+2. **Three states, never a partial one.** The folder absent (`stat` answers `ENOENT`) → "no
+   declaration" (404). Anything else wrong → "damaged" (500, logged
+   `declaration.folder_damaged { file }`, worded differently, because saying "this build is not a
+   release" there would be false): the folder cannot be read or is not a directory (`file: "."`);
+   any of the four files missing or unreadable; `release.json` not matching
+   `{ version: /^\d+\.\d+\.\d+$/, releasedOn: a real YYYY-MM-DD date }`; `declaration.html` not in
+   the renderer's shape; or `declaration.txt` not containing `release.version` (item 1.c) holds it),
+   which catches a `release.json` from another render. Otherwise → the release. Files are read on
+   each request, as the guides are; nothing is cached. The none and damaged pages follow the
+   browser's `Accept-Language`, not the language chosen in the till or the dashboard: the server
+   cannot see that choice, as the recovery page cannot.
 3. **The server shows the declaration inside the box's own page look.** The renderer's HTML has no
    style at all (`render.ts:139-149`: a bare `<html lang="es">` document). Framed in a dark-theme
    till it would be a white panel in the browser's serif font. So the route takes the text between
@@ -133,7 +156,10 @@ guarded by `scripts/module-seams.test.ts`).
    place at every width, and the counter till's placement (§6.2).
 8. **The kitchen corner uses the shell's sheet; the PIN and pairing screens get a small widget
    with a sheet of its own** (§6.4: "they get their own copy of the sheet"). Reason for the first:
-   the shell's two-minute help idle (`till-shell.ts:96-101`) then closes it too.
+   the shell's two-minute help idle (`till-shell.ts:96-101`) then closes it too. **Kiosks get the
+   ⓘ as well:** the shell draws that corner whenever it has no bar — a kiosk or a kitchen screen
+   (`till-shell.ts:993-999`) — and a kiosk can invoice, so it is a terminal the design's duty
+   covers.
 9. **The setup wizard's ⓘ opens a sheet, not a new tab.** A setup wizard on a box's own screen has
    no tab bar to come back by — the reason the till uses a sheet (conventions-ui.md, "How the till
    links a guide").
@@ -141,12 +167,27 @@ guarded by `scripts/module-seams.test.ts`).
     existing page fits (the list is `apps/server/src/guide-catalogue.ts:5-24`). It says where the
     declaration is on each terminal and to download the PDF when an inspector or the gestor asks —
     the only thing it changes in what staff do.
-11. **The cloud staff entrance and the time-zone repair gate list `/legal/` reads** beside
-    `/help/` (`cloud-remote.ts:136-143`, `zone-repair-serving.ts:34-40`), following the sibling
-    entry. For the repair gate it is belt and braces: the routes are registered at `boot.ts:1345`,
-    before the gate at `:2191`, so they answer first either way.
+11. **The cloud staff entrance lists `/legal/` reads** beside `/help/` (`cloud-remote.ts:136-143`):
+    it is a separate front with its own allowlist, so without the line a remote dashboard's About
+    window would frame a 404. **The time-zone repair gate is left alone:** the routes are registered
+    at `boot.ts:1345`, before the gate at `:2191`, so the gate never sees them, and a line there
+    would be one no request reaches. A real-boot case in repair mode (Task 2) proves they answer.
 12. **No image-smoke step in slice 3.** The image has no folder until slice 4; slice 4 adds a
     smoke step that fetches `/legal/declaration` from the image.
+13. **No shared "framed page" component.** The till's sheet, the dashboard's window and the setup
+    sheet each wrap `wt-modal size="full"` round a frame, but what they add differs: the till's
+    relays touches for idle sign-out and registers with the till's dialog tracking
+    (`guide-sheet.ts:62-82`, `trackDialog` at `:91`), the dashboard's carries the version, licence and note
+    lines, the setup one is bare. The common part is about 25 lines of layout. Moving it into
+    `packages/ui` would make it a `wt-*` primitive, with its token-painting and axe tests and
+    `ui`'s mutation floor, and would rewrite a tested till widget — more code and risk than the
+    duplication it removes.
+14. **About from More or a corner opens at once,** headed "About Waitron", and the heading gains
+    the version when `readLegalAbout()` answers; a failed read leaves it as is.
+15. **A development copy of the folder** is written by
+    `pnpm --filter @waitron/server exec tsx -e 'await (await import("./src/testing/declaration-folder.ts")).writeDeclarationFolder("src/declaration")'`
+    (Task 1 runs it once to confirm it works, and fixes the command here if it does not), and
+    `apps/server/src/declaration/` goes in `.gitignore` so a copy is never committed.
 
 ## Questions for the owner
 
@@ -175,7 +216,9 @@ Moved, or no longer holding:
 - §6.5 `apps/setup/src/setup-app.ts:2064-2074` (header) — now `:2273-2287`.
 - §7.2 `apps/server/src/landing-app.ts` — holds, with one addition the design does not mention:
   `buildLandingApp` has a second shape, the connection-repair page, which returns early
-  (`landing-app.ts:27-30`). PR 1 mounts before that branch.
+  (`landing-app.ts:27-30`) and is drawn by `renderConnectionPage`
+  (`apps/server/src/connection-bootstrap-page.ts:62`, reached from `trust-page.ts:77`). PR 1 mounts
+  before that branch and puts the foot link on both pages.
 - Outside the design: `docs/developers/conventions-ui.md`, "Which boots serve it", cites
   `boot.ts:948` for `mountGuidePages`; it is now `:1345`. PR 1 corrects it while it adds the
   declaration's section beside it.
@@ -187,7 +230,15 @@ Moved, or no longer holding:
 - Spanish words only in translation homes: `apps/server/src/i18n/`, each app's `strings.ts` or
   `i18n/` files, `apps/server/src/guide/es/` (`isHome`, `packages/db/src/english-only.ts:22-33`).
   The legal name «Declaración responsable» is Spanish in every language (§6.6); it lives in those
-  files too.
+  files too. **Every other new or changed file holds no accented letter at all** —
+  `scripts/english-only.test.ts:739-760` runs `findAccented` (`packages/db/src/english-only.ts:228`)
+  over every scanned file, tests included. So a test never types an expected Spanish string: it
+  takes it from the renderer's output, the files `writeDeclarationFolder` wrote, or the words
+  module it tests. A producer value with markup is ASCII (`Smith & Sons <Ltd>`). The English guide
+  writes the legal name in guillemets, «declaración responsable». Measured 2026-11-11 by calling
+  `findAccented` through `tsx` on single lines: `## Show the «declaración responsable» {#declaration}`
+  gave 0 findings, the same line without guillemets 1, `const h = "<h1>DECLARACIÓN</h1>";` 1, and
+  `name: "Smith & Sons <Ltd>"` 0. Task 10 still runs the whole guard over the real file.
 - The declaration is Spanish only, in every interface language (§6.6). Its page is
   `<html lang="es">`.
 - Every colour, spacing, radius and font reads a `--wt-*` token. Server pages read the copies in
@@ -217,15 +268,17 @@ Moved, or no longer holding:
    naming `1.2` — must answer the damaged page, never the declaration and never "not a release";
    `/legal/about` says `release: null`. Task 1.
 2. **Addresses near the real ones** — `/legal`, `/legal/`, `/legal/declaration/`,
-   `/legal/declaration.PDF`, `/legal/declaration.html` — answer the box's own 404, not a front
-   end's catch-all 200. Task 1, and Task 2's case on a trading box whose till catch-all would answer.
+   `/legal/declaration.PDF`, `/legal/declaration.html` — answer the box's own 404 page, not
+   whatever a front end's catch-all would give (in Task 1 a stand-in catch-all answering 200; on a
+   real trading box the till's catch-all answers an empty 404, `boot.test.ts:2266-2267`, so Task 2
+   tells them apart by the page's words). Task 1, and Task 2.
 3. **A dashboard reached through Waitron Cloud's staff entrance** frames `/legal/declaration`; the
    entrance must pass it, and still refuse a POST to it. Task 2.
-4. **A producer value holding markup** (`Pérez & Hijos <SL>`) stays escaped after the server lifts
+4. **A producer value holding markup** (`Smith & Sons <Ltd>`) stays escaped after the server lifts
    the body out of the renderer's page. Task 1.
 5. **The till's sheet opened from More on a till left idle** still counts touches inside the
    framed page as activity, so idle sign-out works (§6.2), and Close returns focus to More's
-   button. Task 8.
+   button. Task 8a.
 
 ## Root guards and sweeps: which apply
 
@@ -262,6 +315,7 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
   `apps/server/vitest.config.ts:49`)
 - Create: `packages/shared/src/legal-about.ts`; modify `packages/shared/src/index.ts` (export)
 - Modify: `apps/server/src/guide-pages.ts` (export the page frame)
+- Modify: `.gitignore` — add `apps/server/src/declaration/` (decision 15)
 
 **Interfaces:**
 - Produces, in `packages/shared/src/legal-about.ts`:
@@ -274,8 +328,10 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
   - `declarationRoot(): string` — `fileURLToPath(new URL("./declaration/", import.meta.url))`.
   - `type DeclarationFolder = { kind: "release"; version: string; releasedOn: string; body: string } | { kind: "none" } | { kind: "damaged"; file: string }`
   - `readDeclarationFolder(root: string): Promise<DeclarationFolder>` — `none` only when `stat(root)`
-    fails with `ENOENT`; `damaged` names the first bad file in the order `release.json`,
-    `declaration.html`, `declaration.pdf`, `declaration.txt`.
+    fails with `ENOENT`; `damaged` with `file: "."` when `stat(root)` fails otherwise or `root` is
+    not a directory; otherwise `damaged` names the first bad file in the order `release.json`,
+    `declaration.html`, `declaration.pdf`, `declaration.txt` (the last also when it lacks
+    `release.version`).
   - `mountDeclarationPages(app: Hono, deps: { root?: string; build?: string }, log: Logger): void`
     — `build` defaults to `applicationVersion(process.env)` (`@waitron/db`).
 - Produces, in `apps/server/src/testing/declaration-folder.ts`:
@@ -287,31 +343,42 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
   Also accepts an optional producer override for Review focus 4.
 
 - [ ] **Step 1: Write the failing tests** in `declaration-pages.test.ts`, each mounting on a bare
-  `new Hono()` with `root` a `mkdtemp` folder and `build: "test-build"`:
+  `new Hono()` with `root` a `mkdtemp` folder and `build: "test-build"`. No expected Spanish is
+  typed into the test (Global constraints): it is read from the files the helper wrote, or imported
+  from `i18n/declaration-page.ts`.
   - `serves a release's declaration in the box page look, in Spanish`: 200,
-    `content-type` contains `text/html`; body contains `<html lang="es">`,
-    `<h1>DECLARACIÓN RESPONSABLE DEL SISTEMA INFORMÁTICO DE FACTURACIÓN</h1>`, `PRODUCER PERSON`,
+    `content-type` contains `text/html`; body contains `<html lang="es">`, `PRODUCER PERSON`,
     `href="/legal/declaration.pdf" download="waitron-1.2.3-declaration.pdf"` and the `.txt` twin;
     the `content-security-policy` header equals the guide pages' (compare with a `/help/en/products`
     answer from `mountGuidePages` on the same app) and so contains `frame-ancestors 'self'`.
+  - `the page holds the legal text whole`: read `declaration.html` from the folder, take the text
+    between `"<body>\n"` and `"\n</body>"` (`render.ts:139-149`), and expect the page to contain it
+    verbatim; then, for every non-empty line of `declaration.txt` (a leading `- ` stripped), expect
+    the page with its HTML entities decoded and tags removed to contain that line. **Deletion
+    proof:** make the extraction drop the body's last line — this case must fail.
   - `serves the PDF and the text exactly as written`: bytes equal the files;
     `content-type` `application/pdf` and `text/plain; charset=utf-8`;
     `content-disposition` `inline; filename="waitron-1.2.3-declaration.pdf"` (and `.txt`).
   - `/legal/about names the release and the build`: `toEqual({ release: { version: "1.2.3", releasedOn: "2026-10-22" }, build: "test-build" })`.
   - `with no folder, the three addresses say this build has none, and nothing is logged`: each
-    404, body holds "This build has no declaración responsable"; with `Accept-Language: es`, holds
-    «Esta compilación no tiene declaración responsable»; `/legal/about` 200 with `release: null`;
-    the log spy was never called.
+    404, body holds the English none title from `i18n/declaration-page.ts`, and with
+    `Accept-Language: es` the Spanish one; `/legal/about` 200 with `release: null`; the log spy
+    was never called.
   - `it.each(["release.json", "declaration.html", "declaration.pdf", "declaration.txt"])("a folder without %s is damaged")`:
-    500 with "cannot be shown", `/legal/about` `release: null`, log called once with
+    500 with the damaged title, `/legal/about` `release: null`, log called once with
     `("warn", "declaration.folder_damaged", { file })`.
   - `it.each(['{}', '{"version":"1.2","releasedOn":"2026-10-22"}', '{"version":"1.2.3","releasedOn":"2026-02-30"}', 'not json'])("release.json %s is damaged")`.
+  - `a release.json naming another version is damaged`: `{ "version": "9.9.9", … }` beside a
+    1.2.3 declaration → damaged, `file: "declaration.txt"`.
   - `a declaration.html not in the renderer's shape is damaged`: write `<p>x</p>` → damaged,
     `file: "declaration.html"`.
+  - `a folder that is a file, or cannot be read, is damaged`: `root` a plain file → damaged,
+    `file: "."`; and (skipped when the test runs as root) a folder with mode `000` → damaged,
+    `file: "."` or the first file, whichever the reader meets — the case asserts 500 and one log.
   - `it.each(["/legal", "/legal/", "/legal/declaration/", "/legal/declaration.PDF", "/legal/declaration.html", "/legal/x/y"])("answers its own 404 at %s")`:
     with `app.get("*", (c) => c.text("spa", 200))` mounted after, the answer is 404 and not `spa`.
   - `a producer value with markup stays escaped`: folder rendered with producer name
-    `Pérez & Hijos <SL>` → page contains `Pérez &amp; Hijos &lt;SL&gt;` and not `<SL>`.
+    `Smith & Sons <Ltd>` → page contains `Smith &amp; Sons &lt;Ltd&gt;` and not `<Ltd>`.
   - `finds its folder beside the module`: `declarationRoot()` equals
     `fileURLToPath(new URL("./declaration/", import.meta.url))`.
 
@@ -328,9 +395,12 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
   the recovery page does (`recovery-surface.ts`, `app.get("/")`), and send `Vary: Accept-Language`.
   The PDF and text answers carry `Cache-Control: no-cache`.
 
-- [ ] **Step 4: Run them, then prove two by deletion.** Same command — PASS. Delete the shape check:
-  the "not in the renderer's shape" case fails because it is served. Make `none` cover every `ENOENT`
-  (any missing file): the "without declaration.pdf" case fails. Restore both.
+- [ ] **Step 4: Run them, then prove three by deletion.** Same command — PASS. Delete the shape
+  check: the "not in the renderer's shape" case fails because it is served. Make `none` cover every
+  `ENOENT` (any missing file): the "without declaration.pdf" case fails. Delete the version check:
+  the "another version" case fails. Restore all three. Then run decision 15's command once, check
+  it writes four files into `apps/server/src/declaration/`, that `git status` does not list them,
+  and delete them; fix the command in this plan if it fails.
 
 - [ ] **Step 5: Commit** — `git commit -s -m "Read the declaration's folder and answer its four addresses (A940 slice 3)"`.
 
@@ -339,38 +409,48 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
 **Files:**
 - Modify: `apps/server/src/boot.ts:1345` (call `mountDeclarationPages(app, { build }, log)` right
   after `mountGuidePages`; `build` is `:1281`'s)
-- Modify: `apps/server/src/waiting-start.ts:100-104` (mount on the waiting app, after `healthApp`)
-- Modify: `apps/server/src/cloud-remote.ts:136-143`, `apps/server/src/zone-repair-serving.ts:34-40`
-  (`path.startsWith("/legal/")` beside `/help/`)
+- Modify: `apps/server/src/waiting-start.ts:105` (mount on the waiting app right after
+  `app.use("*", deps.pageCheck)`, as the main app mounts it after its own handover gate,
+  `boot.ts:1287` before `:1345`)
+- Modify: `apps/server/src/cloud-remote.ts:136-143` (`path.startsWith("/legal/")` among the reads,
+  beside `/help/`). **Not** `zone-repair-serving.ts` (decision 11).
 - Modify: `apps/dashboard/vite.config.ts:16-21`, `apps/till/vite.config.ts:37-43`,
   `apps/setup/vite.config.ts:17-20` (`"/legal": devServerProxy()`)
 - Test: `apps/server/src/boot.test.ts`, `apps/server/src/boot.mirror.test.ts`,
+  `apps/server/src/boot.restricted.test.ts`, `apps/server/src/boot.zone-admission.test.ts`,
   `apps/server/src/waiting-start.test.ts`, `apps/server/src/cloud-remote.test.ts`,
-  `apps/server/src/zone-repair-serving.test.ts`, `scripts/dev-proxy-config.test.ts`
+  `scripts/dev-proxy-config.test.ts`
 
 **Interfaces:** consumes `mountDeclarationPages` (Task 1).
 
-- [ ] **Step 1: Write the failing tests.**
-  - `boot.test.ts`, the setup-mode case beside `:2210`:
-    `expect((await fetch(…/legal/declaration)).status).toBe(404)` and its text contains "This build
-    has no declaración responsable"; `/legal/about` answers `release: null`.
-  - `boot.test.ts`, the built-apps case beside `:2268` (whose till catch-all answers an unknown
-    path): `/legal/declaration` with `Accept: text/html` answers the none page, not `till-spa-root`.
+**Review:** this task gets a per-task reviewer although the path is LIGHT, because it widens the
+Cloud staff entrance's allowlist.
+
+- [ ] **Step 1: Write the failing tests.** Every "none page" below is recognised by the English
+  none title imported from `i18n/declaration-page.ts`.
+  - `boot.test.ts`, the setup-mode case beside `:2210`: `/legal/declaration` is 404 with the none
+    page; `/legal/about` answers `release: null`.
+  - `boot.test.ts`, the built-apps case beside `:2268`: `/legal/declaration` with
+    `Accept: text/html` answers the none page. The till's catch-all also answers 404 there, with an
+    empty body (`:2266-2267`), so the case asserts the page's words, not the status.
   - `boot.mirror.test.ts` beside `:763`: a spare answers the none page.
+  - `boot.restricted.test.ts`, beside its `/api/node` read (`:223`): a box restricted after a
+    handover (`startRestricted` is handed the main `app`, `boot.ts:1812`) answers the none page.
+  - `boot.zone-admission.test.ts`, in the case that reads the explanation in repair mode (`:378`):
+    `/legal/declaration` answers the none page. This, not a gate entry, is what proves repair mode
+    serves it.
   - `waiting-start.test.ts`: `serves the declaration while it waits` — the waiting app's
     `/legal/declaration` is the none page.
   - `cloud-remote.test.ts`: add `/legal/declaration` and `/legal/about` to the GET-200 list
     (`:151-161`); a POST to `/legal/declaration` is 404.
-  - `zone-repair-serving.test.ts`: allowed `["GET", "/legal/declaration"]`; denied
-    `["POST", "/legal/declaration"]`.
   - `scripts/dev-proxy-config.test.ts:21-25`: `"/legal"` in all three apps' expected routes.
 - [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/server exec vitest run src/boot.test.ts src/boot.mirror.test.ts src/waiting-start.test.ts src/cloud-remote.test.ts src/zone-repair-serving.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/boot.test.ts src/boot.mirror.test.ts src/boot.restricted.test.ts src/boot.zone-admission.test.ts src/waiting-start.test.ts src/cloud-remote.test.ts`
   and `pnpm exec vitest run scripts/dev-proxy-config.test.ts` — FAIL on the new cases only.
 - [ ] **Step 3: Implement** the lines listed under Files.
 - [ ] **Step 4: Run both commands** — PASS. Then move the `boot.ts` call below the setup branch, which
   returns at `:1685` and closes at `:1697`: the setup-mode case must fail; put it back.
-- [ ] **Step 5: Commit** — `git commit -s -m "Serve the declaration in every mode of the main app and through the gates"`.
+- [ ] **Step 5: Commit** — `git commit -s -m "Serve the declaration in every mode of the main app and through the staff entrance"`.
 
 ### Task 3: The plain-HTTP listener and the recovery listener, and their foot links
 
@@ -382,26 +462,30 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
   `serveRecovery` caller: `node-entry.ts:448`, `:472`, `:518`, `:546`, `:615`, `:829`, and
   `first-setup-launch.ts:66`)
 - Modify: `apps/server/src/trust-page.ts:76-137` (a foot line after the last section:
-  `<p class="note"><a href="/legal/declaration" lang="es">Declaración responsable</a></p>`, label from
-  `i18n/declaration-page.ts`)
+  `<p class="note"><a href="/legal/declaration" lang="es">…</a></p>`, the label imported from
+  `i18n/declaration-page.ts`, never typed here — this file is scanned for accented letters)
+- Modify: `apps/server/src/connection-bootstrap-page.ts:62-185` (`renderConnectionPage`, the
+  connection-repair form of the same page: the same foot line before `</main>` at `:185`)
 - Modify: `apps/server/src/recovery-surface.ts:242-260` (the same line after the log tail)
 - Test: `apps/server/src/landing-app.test.ts`, `apps/server/src/connection-bootstrap.entry.test.ts`,
-  `apps/server/src/trust-page.test.ts`, `apps/server/src/recovery-surface.test.ts`
+  `apps/server/src/trust-page.test.ts`, `apps/server/src/connection-bootstrap-page.test.ts`,
+  `apps/server/src/recovery-surface.test.ts`
 
 - [ ] **Step 1: Write the failing tests.**
   - `landing-app.test.ts`: `it.each(["trust page", "connection repair"])` — `buildLandingApp` with
     and without `connection` answers `/legal/declaration` with the none page over plain HTTP.
-  - `trust-page.test.ts`: the rendered page contains `href="/legal/declaration"`.
+  - `trust-page.test.ts` and `connection-bootstrap-page.test.ts`: each rendered page contains
+    `href="/legal/declaration"`.
   - `connection-bootstrap.entry.test.ts`: in the bootstrap-only case (`:134`) and the recovery-app
     case (`:325`), `GET /legal/declaration` on the HTTPS port answers the none page; the recovery
     page `/` contains `href="/legal/declaration"`.
   - `recovery-surface.test.ts`: the page links the declaration in English and Spanish.
 - [ ] **Step 2: Run and watch them fail.**
-  `pnpm --filter @waitron/server exec vitest run src/landing-app.test.ts src/trust-page.test.ts src/connection-bootstrap.entry.test.ts src/recovery-surface.test.ts src/i18n/recovery-page.test.ts`
+  `pnpm --filter @waitron/server exec vitest run src/landing-app.test.ts src/trust-page.test.ts src/connection-bootstrap-page.test.ts src/connection-bootstrap.entry.test.ts src/recovery-surface.test.ts src/i18n/recovery-page.test.ts`
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** — PASS. Move the `recovery-listener.ts` mount into the `else` branch: the
   bootstrap case must fail; put it back.
-- [ ] **Step 5: Look at it.** Write the trust page and the recovery page to files from a test run
+- [ ] **Step 5: Look at it.** Write the trust page, the connection-repair page and the recovery page to files from a test run
   and open them with the workspace's Playwright Chromium, light and dark, 1280 px and 375 px wide
   (CLAUDE.md §4, string-rendered pages); the foot line must not crowd the "Continue" button or the
   log. Open the declaration page from `writeDeclarationFolder` the same way. Keep the screenshots
@@ -427,9 +511,14 @@ listener (A940 slice 3, part 1 of 4); every box says it has none until slice 4."
   files (decision 1); the three states (decision 2); the body lifted into the guide page frame and
   the test that pins it (decision 3); every surface that serves it (Tasks 2-3), and that
   `/help/…` is still not served on the landing and recovery listeners.
-- [ ] **Step 3: Add the design pointer:** "**2026-11-1x, A940 slice 3:** the [slice 3 plan](../plans/2026-11-11-a940-3-in-app-declaration.md)'s
-  decisions add `/legal/about` and `release.json` to §6, make the dashboard's About a window, put
-  About Waitron just above Log out on the handheld (§6.3), and give the setup wizard a sheet."
+- [ ] **Step 3: Add the design pointer,** dated the day PR 1 lands (written as `<date>` here):
+  "**<date>, A940 slice 3:** the [slice 3 plan](../plans/2026-11-11-a940-3-in-app-declaration.md)'s
+  departures replace parts of §6 and §7: a fourth address, `/legal/about`, and a fourth file,
+  `release.json`; three states for the box's folder; the download links inside the Spanish page,
+  in Spanish, rather than on the dashboard's About page; the dashboard's About as a window; About
+  Waitron just above Log out on the handheld (§6.3); the corner ⓘ on kiosks as well as kitchen
+  screens, and a small widget with its own sheet on the PIN and pairing screens (§6.4); and a sheet
+  for the setup wizard's ⓘ (§6.5)."
 - [ ] **Step 4:** `pnpm exec prettier --file-info docs/operations/release.md` prints
   `"ignored": true` (docs is ignored); read the three changes once more for claims without receipts.
 - [ ] **Step 5: Commit** — `git commit -s -m "Release runbook: the release pull request goes through finish-branch; document the declaration pages"`.
@@ -465,7 +554,8 @@ part 2 of 4)."
   only, the fixed note above); `about.close` "Close" / «Cerrar»; `about.foot` "Waitron {version} ·
   Declaración responsable" (both languages).
 
-- [ ] **Step 1: Write the failing tests.**
+- [ ] **Step 1: Write the failing tests.** Expected words come from the strings table (`t(...)`,
+  filled), never typed Spanish (Global constraints).
   - `client-routes.test.ts`: `reads /legal/about passively` — one call to `/legal/about`, `GET`,
     header `x-waitron-live: 1`.
   - `about-dialog.test.ts`:
@@ -499,6 +589,9 @@ part 2 of 4)."
   out (`:2241-2247`); the sign-in page (`:1859-1876`): after `this.#poweredBy()`, a ghost
   `wt-button` `data-test="about-foot"` reading `about.foot` when a release is known and
   `about.title` otherwise; one `<dashboard-about-dialog>` rendered from `render()`.
+- Modify: `docs/developers/design-system.md:3869-3870` ("Dashboard banner": the account menu's
+  list "Account settings, Theme, Language and Log out" gains About Waitron before Log out, and one
+  sentence on the sign-in screen's foot line)
 - Test: `apps/dashboard/src/dashboard-app.test.ts`
 
 - [ ] **Step 1: Write the failing tests.**
@@ -507,8 +600,8 @@ part 2 of 4)."
   - `About Waitron opens the window with what /legal/about answered`: click → the dialog is open and
     its `about` equals the stubbed answer.
   - `the sign-in screen's foot names the release and opens the same window`: stub
-    `{ release: { version: "1.2.3", … } }` → text "Waitron 1.2.3 · Declaración responsable"; click
-    opens the dialog. With `release: null` the foot reads "About Waitron".
+    `{ release: { version: "1.2.3", … } }` → the foot's text equals `about.foot` filled with
+    `1.2.3`; click opens the dialog. With `release: null` the foot reads `t("about.title")`.
   - `a failed /legal/about read still offers the foot`: the stub rejects → the foot reads "About
     Waitron" and opens the window with `about: null`.
 - [ ] **Step 2:** `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.test.ts -t "About"` — FAIL.
@@ -519,8 +612,10 @@ part 2 of 4)."
 - [ ] **Step 5: Look at it.** `wa-wt demo <worktree-name>`; open the account menu and the window,
   and the sign-in screen, in light and dark, at desktop width and 375 px. Also open the window over
   a real declaration: copy the folder `writeDeclarationFolder` writes into
-  `apps/server/src/declaration/` of the worktree (delete it afterwards; it must never be committed).
-- [ ] **Step 6: Commit** — `git commit -s -m "Dashboard: About Waitron in the account menu and on the sign-in screen"`.
+  `apps/server/src/declaration/` of the worktree with decision 15's command (it is ignored by git;
+  delete it afterwards).
+- [ ] **Step 6: Update `design-system.md`** as listed under Files, from the code as built.
+- [ ] **Step 7: Commit** — `git commit -s -m "Dashboard: About Waitron in the account menu and on the sign-in screen"`.
 
 ---
 
@@ -554,48 +649,78 @@ part 3 of 4)."
 - [ ] **Step 4: Run** — PASS.
 - [ ] **Step 5: Commit** — `git commit -s -m "Till: the guide sheet takes a heading; read the running release"`.
 
-### Task 8: The menus, the kitchen corner, and the PIN and pairing screens
+### Task 8a: The shell's menus and its corner
 
 **Files:**
 - Modify: `apps/till/src/widgets/till-shell.ts` — `#tillMenu()` (`:1255-1290`) and `#menu()`
   (`:1193-1246`): an `about` ghost `wt-button` just above Log out (`:1278`, `:1241`); the corner
   (`:1434-1438`): `<wt-button variant="ghost" aria-label=…><span aria-hidden="true">ⓘ</span></wt-button>`
-  as `basket.ts:948-955` draws an ⓘ; all three open the shell's sheet with `href="/legal/declaration"`
-  and `heading` from `aboutHeading(await readLegalAbout())`; a `@state() guideHeading`, cleared with
-  `guideHref` on close and on the help idle (`:96-101`, `:122-126`).
-- Create: `apps/till/src/widgets/about-button.ts` (`till-about-button`: the ⓘ plus its own
-  `till-guide-sheet`), `about-button.test.ts`, `about-button.a11y.test.ts`
-- Modify: `apps/till/src/screens/till-lock-screen.ts:338-344`,
-  `apps/till/src/screens/till-enrol-screen.ts:190-196` (a `till-about-button` first in the corner)
-- Test: create `apps/till/src/widgets/till-shell.about.test.ts`; add to
-  `apps/till/src/screens/till-lock-screen.test.ts` and `till-enrol-screen.test.ts`
+  as `basket.ts:948-955` draws an ⓘ. All three open the shell's sheet at once with
+  `href="/legal/declaration"` and `heading` `aboutHeading(null)`, then set the heading to
+  `aboutHeading(about)` when `readLegalAbout()` answers (decision 14), unless the sheet has closed
+  meanwhile. A `@state() guideHeading` is cleared with `guideHref` on close and on the help idle
+  (`:96-101`, `:122-126`). Close returns focus to the button that opened it (More's trigger or the ⓘ).
+- Modify: `docs/developers/design-system.md:5812-5815` (the counter till's More list) and
+  `:5856-5860` (the handheld's More order), adding About Waitron before Log out, and the corner's ⓘ
+  where that section describes the corner.
+- Modify: `apps/server/src/guide/en/table-service.md:270-273` and its twin
+  `apps/server/src/guide/es/table-service.md:284-289` (the list of what More holds: About Waitron
+  before Log out). The English line writes nothing accented.
+- Test: create `apps/till/src/widgets/till-shell.about.test.ts`
 
 **Interfaces:** consumes Task 7's `heading`, `readLegalAbout`, `aboutHeading`.
 
 - [ ] **Step 1: Write the failing tests** (`till-shell.about.test.ts`, with `fetch` stubbed to
-  answer a release `1.2.3`):
+  answer a release `1.2.3`; expected words from `aboutHeading` and `t(...)`, never typed Spanish):
   - `a counter till's More offers About Waitron just above Log out`: the menu's buttons end
     `["about", "logout"]`.
   - `a handheld's More offers it just above Log out, at phone and tablet width`.
-  - `About Waitron opens the declaration in the sheet, headed with the version`: sheet `href`
-    `/legal/declaration`, heading "About Waitron · 1.2.3".
+  - `About Waitron opens the sheet at once, then heads it with the version`: before the stubbed
+    read answers, sheet `href` is `/legal/declaration` and its heading `aboutHeading(null)`; after,
+    `aboutHeading(release 1.2.3)`.
   - `a touch inside the framed page still counts as activity` (Review focus 5): as
     `guide-sheet.test.ts`'s relay case, with the sheet opened from More.
   - `closing returns focus to More's button`.
-  - `a kitchen screen's corner has the ⓘ, and two idle minutes close what it opened`.
-  - `about-button.test.ts`: `opens its own sheet headed "About Waitron" when the read fails`.
-  - lock and enrol screens: `the corner has the ⓘ`.
-  - `about-button.a11y.test.ts`: axe over the closed button and the open sheet, light and dark.
-- [ ] **Step 2:** `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.about.test.ts src/widgets/about-button.test.ts src/widgets/about-button.a11y.test.ts src/screens/till-lock-screen.test.ts src/screens/till-enrol-screen.test.ts`
+  - `a kiosk's and a kitchen screen's corner have the ⓘ, and two idle minutes close what it opened`.
+- [ ] **Step 2:** `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.about.test.ts`
   — FAIL (check free memory first, as Task 5).
+- [ ] **Step 3: Implement**, then update the two documents listed under Files from the code as built.
+- [ ] **Step 4: Run** it, then the shell's neighbours that pin the menus and corners:
+  `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts src/widgets/till-shell.handheld-bar.test.ts src/widgets/till-shell.kitchen-help.test.ts src/widgets/till-shell.menu-help.test.ts src/widgets/till-shell.powered-by.test.ts src/widgets/till-shell.a11y.test.ts`
+  and `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` — PASS.
+- [ ] **Step 5: Look at it.** `wa-wt demo <worktree-name>`: a counter till, a handheld at 360×640
+  and at tablet width, a kiosk and a kitchen screen — light and dark — with More open and the sheet
+  open. At 360×640, Log out must still be reachable in More (by scrolling, as More does when it is
+  taller than the room below), and the corner's ⓘ must not crowd the theme and language choosers.
+- [ ] **Step 6: Commit** — `git commit -s -m "Till: About Waitron in More, and an ⓘ in the kiosk and kitchen corner"`.
+
+### Task 8b: The PIN and pairing screens
+
+**Files:**
+- Create: `apps/till/src/widgets/about-button.ts` (`till-about-button`: the ⓘ plus its own
+  `till-guide-sheet`, opening at once and heading it as Task 8a does), `about-button.test.ts`,
+  `about-button.a11y.test.ts`
+- Modify: `apps/till/src/screens/till-lock-screen.ts:338-344`,
+  `apps/till/src/screens/till-enrol-screen.ts:190-196` (a `till-about-button` first in the corner)
+- Test: add to `apps/till/src/screens/till-lock-screen.test.ts` and `till-enrol-screen.test.ts`
+
+**Interfaces:** consumes Task 7's `heading`, `readLegalAbout`, `aboutHeading`. Produces
+`<till-about-button>`, no properties.
+
+- [ ] **Step 1: Write the failing tests.**
+  - `about-button.test.ts`: `opens its own sheet on /legal/declaration, headed with the version`;
+    `stays headed aboutHeading(null) when the read fails`; `Close and Escape return focus to the ⓘ`.
+  - lock and enrol screens: `the corner has the ⓘ, first`.
+  - `about-button.a11y.test.ts`: axe over the closed button and the open sheet, light and dark.
+- [ ] **Step 2:** `pnpm --filter @waitron/till exec vitest run src/widgets/about-button.test.ts src/widgets/about-button.a11y.test.ts src/screens/till-lock-screen.test.ts src/screens/till-enrol-screen.test.ts`
+  — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** the same, then the shell's neighbours that pin the menus and corners:
-  `pnpm --filter @waitron/till exec vitest run src/widgets/till-shell.test.ts src/widgets/till-shell.handheld-bar.test.ts src/widgets/till-shell.kitchen-help.test.ts src/widgets/till-shell.menu-help.test.ts src/widgets/till-shell.powered-by.test.ts src/widgets/till-shell.a11y.test.ts src/screens/till-lock-screen.a11y.test.ts src/screens/till-enrol-screen.a11y.test.ts`
+- [ ] **Step 4: Run** the same and
+  `pnpm --filter @waitron/till exec vitest run src/screens/till-lock-screen.a11y.test.ts src/screens/till-enrol-screen.a11y.test.ts`
   — PASS.
-- [ ] **Step 5: Look at it.** `wa-wt demo <worktree-name>`: a counter till, a handheld at 375 px
-  and at tablet width, a kitchen screen, the PIN screen — light and dark — with the menu open and
-  the sheet open, the corner's ⓘ not crowding the theme and language choosers.
-- [ ] **Step 6: Commit** — `git commit -s -m "Till: About Waitron in More, and an ⓘ in every corner"`.
+- [ ] **Step 5: Look at it:** the PIN and pairing screens at 360×640 and tablet width, light and
+  dark, closed and open.
+- [ ] **Step 6: Commit** — `git commit -s -m "Till: an ⓘ on the PIN and pairing screens"`.
 
 ---
 
@@ -610,7 +735,7 @@ First line: "Adds the setup wizard's ⓘ and the About Waitron guide page (A940 
   "About Waitron", a frame on `/legal/declaration`, Close; `open` property, `about-close` event),
   `about-sheet.test.ts`, `about-sheet.a11y.test.ts`
 - Modify: `apps/setup/src/setup-app.ts:2276-2286` (an ⓘ `wt-button` first in `.header-controls`,
-  drawn as Task 8's)
+  drawn as Task 8a's)
 - Modify: the setup app's strings (`apps/setup/src/i18n/strings/`, English and Spanish:
   `about.title`, `about.close`)
 - Test: `apps/setup/src/setup-app.test.ts`, `apps/setup/src/setup-app.chooser-clearance.test.ts`
@@ -640,7 +765,8 @@ First line: "Adds the setup wizard's ⓘ and the About Waitron guide page (A940 
   → sections `["declaration"]`, as the Box status case at `:74` is written.
 - [ ] **Step 2:** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts src/guide-pages.test.ts` — FAIL.
 - [ ] **Step 3: Write the page,** from the code PRs 2-4 built, not from this plan: `# About Waitron`,
-  then `## Show the declaración responsable {#declaration}` — what it is in one sentence; where it
+  then `## Show the «declaración responsable» {#declaration}` (the legal name in guillemets
+  wherever the English page uses it, Global constraints) — what it is in one sentence; where it
   is: the person menu's About Waitron on the dashboard (and the sign-in screen's foot), More on a
   till, the ⓘ on a kitchen screen, the PIN screen and the setup wizard; `/legal/declaration` on
   the box's address before setup or while it is stopped; download the PDF when an inspector or
@@ -657,8 +783,10 @@ First line: "Adds the setup wizard's ⓘ and the About Waitron guide page (A940 
 - [ ] **Step 1:** In both, replace "Slices 3 to 6 remain" with: slice 3 landed (the four pull
   requests' numbers; this plan's link): every listener serves `/legal/declaration`, `.pdf`, `.txt`
   and `/legal/about`, and every terminal opens it; every box says it has none until slice 4. Slice
-  4 must now also put the four files of decision 1 in `/app/declaration/` (`release.json` with the
-  version and the release date) and add an image-smoke step that fetches `/legal/declaration`.
+  4 must now also put the four files of decision 1 in `/app/declaration/`, all from one render run
+  of the same `v<version>.md`, with `release.json`'s `version` the version rendered and its
+  `releasedOn` the declaration's own date (the day of signing that fills ‹fecha›), pinned by a
+  test of slice 4's; and add an image-smoke step that fetches `/legal/declaration`.
   Slices 4 to 6 remain. Delete nothing else; the entry stays open.
 - [ ] **Step 2:** read the changed lines against what landed (CLAUDE.md §1: a claim needs a receipt).
 - [ ] **Step 3: Commit** — `git commit -s -m "Backlog: A940 slice 3 landed; what slice 4 now owes"`.
@@ -676,7 +804,8 @@ First line: "Adds the setup wizard's ⓘ and the About Waitron guide page (A940 
 | 5    | 100              | 120        |
 | 6    | 40               | 90         |
 | 7    | 35               | 70         |
-| 8    | 85               | 170        |
+| 8a   | 50               | 120        |
+| 8b   | 40               | 80         |
 | 9    | 55               | 70         |
 | 10   | 5, plus two guide pages | 15  |
 | 11   | docs only        | —          |
