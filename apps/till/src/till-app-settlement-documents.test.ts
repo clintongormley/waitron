@@ -14,6 +14,7 @@ import {
 } from "../test/bill-pay-app.js";
 
 import { transactionRow } from "../test/find-bill-fixtures.js";
+import type { InvoiceDeliveryStatus } from "./api/client.js";
 
 const originalLocale = currentLocale();
 beforeEach(() => {
@@ -23,6 +24,57 @@ beforeEach(() => {
 afterEach(() => {
   cleanupWidgets();
   setLocale(originalLocale);
+});
+
+it("emails an F2 receipt only after Send and offers paper as a copy afterwards", async () => {
+  const status: InvoiceDeliveryStatus = {
+    current: null,
+    originalCompleted: false,
+    originalPrinterId: null,
+    history: [],
+    actions: {
+      print: null,
+      retryOriginal: null,
+      receiptInstead: null,
+      email: { designation: "original" },
+    },
+  };
+  const api = stubApi({
+    recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), invoiceType: "F2" }),
+    getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    getReceiptEmailDeliveries: vi.fn().mockResolvedValue(status),
+    requestEmailDelivery: vi.fn().mockResolvedValue({}),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const order = await openTable(el);
+  emit(order, "pay-tab", { method: "cash", amount: "120.00" });
+  await flush(el);
+  const chooser = el.shadowRoot!.querySelector("till-settlement-document-dialog")!;
+  const email = chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=email-invoice]");
+  expect(email).not.toBeNull();
+  email!.click();
+  await flush(el);
+  const form = chooser.shadowRoot!.querySelector("till-invoice-email-dialog");
+  expect(form).not.toBeNull();
+  expect(api.requestEmailDelivery).not.toHaveBeenCalled();
+  const input = form!.shadowRoot!.querySelector("wt-input")!;
+  emit(input, "wt-change", { value: "guest@example.com" });
+  await flush(el);
+  vi.mocked(api.getReceiptEmailDeliveries).mockResolvedValue({
+    ...status,
+    originalCompleted: true,
+    actions: { ...status.actions, email: { designation: "duplicate" } },
+  });
+  form!.shadowRoot!.querySelector<HTMLElement>("wt-form-actions wt-button:not([slot])")!.click();
+  await flush(el);
+  expect(api.requestEmailDelivery).toHaveBeenCalledExactlyOnceWith(
+    "wo-4",
+    "guest@example.com",
+    expect.any(String),
+  );
+  expect(chooser.shadowRoot!.querySelector("till-invoice-email-dialog")).toBeNull();
+  expect(chooser.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+  expect(chooser.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
 });
 
 it("offers documents to the active editor when changing a line settles its bill", async () => {
@@ -98,6 +150,62 @@ it("reads an unprinted F2 original when it is opened later from Find bill", asyn
   await flush(el);
   expect(ticket.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
   expect(ticket.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+});
+
+it("opens the receipt email form and retries a failed original from Find bill", async () => {
+  const attempt = {
+    id: "email-original",
+    medium: "email" as const,
+    designation: "original" as const,
+    status: "failed" as const,
+    failureCode: "email.transport_failed",
+    requestedAt: "2026-11-11T12:00:00.000Z",
+    at: null,
+    personId: "p1",
+    printerHold: null,
+    lateSuccess: false,
+  };
+  const status: InvoiceDeliveryStatus = {
+    current: attempt,
+    history: [attempt],
+    originalCompleted: false,
+    originalPrinterId: null,
+    actions: {
+      print: null,
+      receiptInstead: null,
+      retryOriginal: { medium: "email" },
+      email: { designation: "original" },
+    },
+  };
+  const api = stubApi({
+    getTransactionReceipt: vi.fn().mockResolvedValue({ ...invoiceOf("120.00"), invoiceType: "F2" }),
+    getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    getReceiptEmailDeliveries: vi.fn().mockResolvedValue(status),
+    retryEmailDelivery: vi.fn().mockResolvedValue({}),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await openTable(el);
+  emit(shell(el), "find-bill");
+  await flush(el);
+  emit(el.shadowRoot!.querySelector("till-find-bill-screen")!, "find-transaction-open", {
+    row: transactionRow({ workingOrderId: "wo-4" }),
+  });
+  await flush(el);
+  const ticket = el.shadowRoot!.querySelector("till-ticket-view")!;
+  ticket.shadowRoot!.querySelector<HTMLElement>("[data-test=email-invoice]")!.click();
+  await flush(el);
+  expect(ticket.shadowRoot!.querySelector("till-invoice-email-dialog")).not.toBeNull();
+  emit(ticket, "invoice-email-cancel");
+  await flush(el);
+  ticket.shadowRoot!.querySelector<HTMLElement>("[data-test=email-again]")!.click();
+  await flush(el);
+  expect(api.retryEmailDelivery).toHaveBeenCalledExactlyOnceWith(
+    "wo-4",
+    "email-original",
+    expect.any(String),
+  );
+  expect(ticket.shadowRoot!.querySelector("[data-test=print-invoice]")).toBeNull();
+  expect(ticket.shadowRoot!.querySelector("[data-test=receipt-instead]")).toBeNull();
 });
 
 it("clears another sale's print status before opening an orderless correction", async () => {

@@ -167,6 +167,46 @@ it("keeps failed F2 original recovery in the document choice", async () => {
   expect(heard).toHaveBeenCalledOnce();
 });
 
+it("waits for an F2 email original before offering a paper copy", async () => {
+  const attempt = {
+    id: "email-original",
+    medium: "email" as const,
+    designation: "original" as const,
+    status: "sending" as const,
+    failureCode: null,
+    requestedAt: "2026-11-11T12:00:00.000Z",
+    at: null,
+    personId: "p1",
+    printerHold: null,
+    lateSuccess: false,
+  };
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      result: { ...invoiceOf("30.00"), invoiceType: "F2" },
+      originalReceiptPrint: { status: "not_queued" },
+      deliveries: {
+        current: attempt,
+        history: [attempt],
+        originalCompleted: false,
+        originalPrinterId: null,
+        actions: { print: null, receiptInstead: null, retryOriginal: null, email: null },
+      },
+    },
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=delivery-status]")?.textContent).toContain(
+    "Sending",
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=print-receipt], [data-test=reprint]")).toBeNull();
+  el.deliveries = {
+    ...el.deliveries!,
+    current: { ...attempt, status: "sent" },
+    originalCompleted: true,
+  };
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+});
+
 it.each(["cash", "card"] as const)(
   "shows the completion’s cash change for %s despite an earlier cash tender",
   async (method) => {
