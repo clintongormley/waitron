@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "../client.js";
@@ -127,13 +127,13 @@ describe("seedNode", () => {
 
   it("inserts one node for the tenant + location and returns its id", async () => {
     await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        operationDescription: "Restaurant",
-      })
-      .returning({ id: locations.id });
-    await seedVenueSettings(db, { name: "Test location", invoiceLocales: ["es"] });
+    const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(db, {
+      name: "Test location",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+    });
+    await seedBusinessDay(db, {});
     const location = loc!.id;
     const node = await seedNode(db, location);
     const result = await db.execute<{ n: number }>(
@@ -144,10 +144,9 @@ describe("seedNode", () => {
 
   it("seedNode with an explicit location puts the node there, not at the venue", async () => {
     await seedVenue(db);
-    const [second] = await db
-      .insert(locations)
-      .values({ operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
+    const [second] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(db, { operationDescription: "Restaurant" });
+    await seedBusinessDay(db, {});
     const node = await seedNode(db, second!.id);
     const [row] = await db
       .select({ locationId: nodes.locationId })
@@ -176,12 +175,9 @@ describe("seedKitchenStation", () => {
 
   async function seedTenantAndLocation() {
     await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        operationDescription: "Restaurant",
-      })
-      .returning({ id: locations.id });
+    const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(db, { operationDescription: "Restaurant" });
+    await seedBusinessDay(db, {});
     return { location: loc!.id };
   }
 
@@ -220,12 +216,9 @@ describe("seedDevice", () => {
   });
 
   async function seedLocation(database: Database) {
-    const [loc] = await database
-      .insert(locations)
-      .values({
-        operationDescription: "Restaurant",
-      })
-      .returning({ id: locations.id });
+    const [loc] = await database.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(database, { operationDescription: "Restaurant" });
+    await seedBusinessDay(database, {});
     return loc!.id;
   }
 
@@ -276,10 +269,9 @@ describe("seedDevice", () => {
 
   it("seedDevice with an explicit locationId puts the device there, not at the venue", async () => {
     await seedVenue(db);
-    const [second] = await db
-      .insert(locations)
-      .values({ operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
+    const [second] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(db, { operationDescription: "Restaurant" });
+    await seedBusinessDay(db, {});
     const { deviceId } = await seedDevice(db, { locationId: second!.id });
     const [row] = await db
       .select({ locationId: devices.locationId })

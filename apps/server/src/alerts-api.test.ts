@@ -13,7 +13,12 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedVenue,
+  seedVenueSettings,
+  seedBusinessDay,
+} from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import {
@@ -716,11 +721,13 @@ async function seedLowReader(name = "Card reader"): Promise<void> {
 
 /** A document print job old enough to count as stuck, on an active printer. */
 async function seedStuckPrintJob(): Promise<void> {
-  const [loc] = await db
-    .insert(locations)
-    .values({ operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  await seedVenueSettings(db, { name: "Bar", invoiceLocales: ["es-ES"] });
+  const [loc] = await db.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Retail",
+  });
+  await seedBusinessDay(db, {});
   const [printer] = await db
     .insert(printers)
     .values({

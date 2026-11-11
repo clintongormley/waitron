@@ -155,7 +155,7 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
             : [],
         })),
         effective,
-        0,
+        1,
       );
       return {
         departmentId: restaurant,

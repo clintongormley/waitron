@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtempSync, rmSync } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -76,10 +76,13 @@ const suite = useVenueDb({
       .values({ id: 1, country: "GB", taxId: "TEST-ONLY", legalName: "Placement fixture" });
     await db.insert(locations).values({
       id: location,
-
+    });
+    await seedVenueSettings(db, {
+      name: "Placement location",
+      invoiceLocales: ["en"],
       operationDescription: "Sale",
     });
-    await seedVenueSettings(db, { name: "Placement location", invoiceLocales: ["en"] });
+    await seedBusinessDay(db, {});
     await db.insert(nodes).values({ id: node, locationId: location, name: "Placement node" });
     await db.insert(invoiceSeries).values({
       id: "30000000-0000-4000-8000-000000000003",
@@ -414,8 +417,8 @@ it("refuses a copy holding two venue rows before moving the database", async () 
     const copy = new DatabaseSync(validated.databasePath);
     try {
       copy
-        .prepare("insert into locations (id, operation_description) values (?, ?)")
-        .run("10000000-0000-4000-8000-000000000099", "Sale");
+        .prepare("insert into locations (id) values (?)")
+        .run("10000000-0000-4000-8000-000000000099");
     } finally {
       copy.close();
     }

@@ -17,7 +17,6 @@ import {
   workingOrders,
   workingOrderLines,
   products,
-  locations,
   tenants,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -55,7 +54,9 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
   try {
     const v = await setupSplitExtrasVenue();
     const id = await withTransaction(suite.db, async (tx) => {
-      await tx.update(locations).set({ timeZone: "Atlantic/Canary" });
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Atlantic/Canary"}) where module = 'business_day'`,
+      );
       return fireNewOrder(tx, v.cfg, [{ productId: v.products.burger, quantity: "2" }]);
     });
     const original = await jobs();
@@ -66,7 +67,9 @@ it("uses the saved venue zone for every new paper and keeps already queued bytes
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderId, id));
     await withTransaction(suite.db, async (tx) => {
-      await tx.update(locations).set({ timeZone: "Asia/Tokyo" });
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Asia/Tokyo"}) where module = 'business_day'`,
+      );
       await enqueueCorrectionSlips(
         tx,
         v.cfg,

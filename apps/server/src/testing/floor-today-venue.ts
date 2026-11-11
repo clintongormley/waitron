@@ -189,7 +189,7 @@ export async function setsDepartment(
         ],
       })),
       paintedAt,
-      0,
+      1,
     );
     const set = async (setName: string) => {
       const [row] = await tx

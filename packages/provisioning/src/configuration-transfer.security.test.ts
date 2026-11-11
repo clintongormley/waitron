@@ -59,11 +59,11 @@ function seed() {
 
 it("exports the current business-day cutover without retaining an obsolete setting", async () => {
   const target = await seed();
-  const venueId = await venueLocationId(suite.db);
+
   await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`insert into location_day_cutover_changes
-      (location_id, effective_business_day, day_cutover)
-      values (${venueId}, '2026-10-16', '04:30:00')`),
+    tx.execute(sql`insert into day_cutover_changes
+      ( effective_business_day, day_cutover)
+      values ('2026-10-16', '04:30:00')`),
   );
   const bundle = await buildConfigurationBundle(suite.db, target, [], now, {});
   expect(bundle.venue.dayCutover).toBe("04:30:00");
@@ -73,17 +73,21 @@ it("exports the current business-day cutover without retaining an obsolete setti
 
 it("refuses export while a future cutover change would be lost", async () => {
   const target = await seed();
-  const venueId = await venueLocationId(suite.db);
+
   await withTransaction(suite.db, (tx) =>
-    tx.execute(sql`insert into location_day_cutover_changes
-      (location_id, effective_business_day, day_cutover)
-      values (${venueId}, '2026-10-17', '04:30:00')`),
+    tx.execute(sql`insert into day_cutover_changes
+      ( effective_business_day, day_cutover)
+      values ('2026-10-17', '04:30:00')`),
   );
   await expect(buildConfigurationBundle(suite.db, target, [], now, {})).rejects.toMatchObject(
     invalid("businessDayStart"),
   );
   expect(
-    (await suite.db.execute(sql`select day_cutover from location_day_cutover_changes`)).rows,
+    (
+      await suite.db.execute(
+        sql`select day_cutover from day_cutover_changes where effective_business_day > '2000-01-01'`,
+      )
+    ).rows,
   ).toEqual([{ day_cutover: "04:30:00" }]);
 });
 

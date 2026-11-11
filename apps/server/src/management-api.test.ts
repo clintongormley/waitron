@@ -1594,7 +1594,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
           repeatsYearly: false,
           dates: [{ date, closedAllDay: false }],
           paint: [],
-          expectedClockRevision: 0,
+          expectedClockRevision: 1,
         });
       const create = async (date: string) => {
         const response = await req(
@@ -1634,7 +1634,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
             (
               await req(
                 dayPath(id),
-                { method: "DELETE", body: JSON.stringify({ expectedClockRevision: 0 }) },
+                { method: "DELETE", body: JSON.stringify({ expectedClockRevision: 1 }) },
                 managerCookie,
               )
             ).status,

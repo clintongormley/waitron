@@ -9,8 +9,8 @@ function walk(node, visit) {
 
 function apply(source, edits) {
   const unique = new Map(edits.map((edit) => [`${edit.start}:${edit.end}`, edit]));
-  for (const { start, end } of [...unique.values()].sort((a, b) => b.start - a.start))
-    source = source.slice(0, start) + source.slice(end);
+  for (const { start, end, text = "" } of [...unique.values()].sort((a, b) => b.start - a.start))
+    source = source.slice(0, start) + text + source.slice(end);
   return source;
 }
 
@@ -214,6 +214,35 @@ export function transformSource(path, source, options) {
     });
     source = apply(source, unused);
   } while (source !== previous);
+  const renames = new Map((options.renameIdentifiers ?? []).map((value) => value.split("=")));
+  const renamed = [];
+  walk(parse(), (node) => {
+    if (!ts.isIdentifier(node) || !renames.has(node.text)) return;
+    const parent = node.parent;
+    if (
+      parent.name === node &&
+      (ts.isPropertyAccessExpression(parent) ||
+        ts.isPropertyAssignment(parent) ||
+        ts.isPropertyDeclaration(parent) ||
+        ts.isPropertySignature(parent) ||
+        ts.isMethodDeclaration(parent) ||
+        ts.isMethodSignature(parent))
+    )
+      return;
+    const value = renames.get(node.text);
+    const shorthand =
+      ts.isShorthandPropertyAssignment(parent) ||
+      (ts.isBindingElement(parent) &&
+        parent.name === node &&
+        parent.propertyName === undefined &&
+        ts.isObjectBindingPattern(parent.parent));
+    renamed.push({
+      start: node.getStart(),
+      end: node.end,
+      text: shorthand ? `${node.text}: ${value}` : value,
+    });
+  });
+  source = apply(source, renamed);
   const report = source
     .split("\n")
     .flatMap((line, index) =>
@@ -225,11 +254,12 @@ export function transformSource(path, source, options) {
 }
 
 export function main(args) {
-  const options = { tables: [], helperProps: [], helperArgs: [] };
+  const options = { tables: [], helperProps: [], helperArgs: [], renameIdentifiers: [] };
   const files = [];
   let write = false;
   const keys = {
     "--tables": "tables",
+    "--rename-identifier": "renameIdentifiers",
     "--helper-prop": "helperProps",
     "--helper-arg": "helperArgs",
   };

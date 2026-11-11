@@ -1,8 +1,8 @@
 import { decimal } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
-import { invoiceSeries, locations, printers, withTransaction } from "@waitron/db";
+import { invoiceSeries, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
@@ -145,10 +145,9 @@ function sentRecords(batches: EnvioRegistro[][]) {
   });
 }
 async function breakCurrentZone() {
-  await v.db
-    .update(locations)
-    .set({ timeZone: "Invalid/Zone" })
-    .where(eq(locations.id, v.cfg.locationId));
+  await v.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+  );
 }
 
 it.each(["cash", "reader"] as const)(
@@ -348,8 +347,7 @@ it("configuration export carries settings without fiscal, payment, location hist
     ...Object.keys(before),
     "locations",
     "nodes",
-    "location_business_day_settings",
-    "location_business_day_changes",
+    "day_cutover_changes",
     "fiscal_allocations",
     "registro_sif",
   ])

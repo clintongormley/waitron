@@ -134,10 +134,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(t)).toEqual({ reservedTime: "13:30" });
   });
 
-  it("does not crash when locations.time_zone is an invalid IANA zone (falls back to the default)", async () => {
-    // `locations.time_zone` is free-text with NO CHECK constraint, so a typo can be stored;
-    // `Intl.DateTimeFormat` throws `RangeError` on an unknown zone. The read falls back to the column's
-    // own default (Europe/Madrid), so with `MADRID_NOON` the 14:00 booking still surfaces.
+  it("does not crash when the saved venue zone is an invalid IANA zone (falls back to the default)", async () => {
     const v = await setupVenue({ timeZone: "Not/AZone" });
     const t = await makeTable(v, "13");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
@@ -145,7 +142,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
-  it("derives venue-local 'today' from locations.time_zone, not UTC (date boundary)", async () => {
+  it("derives venue-local 'today' from the saved venue zone, not UTC (date boundary)", async () => {
     // now = 2026-09-01T23:00:00Z. In Pacific/Kiritimati (UTC+14) that is 2026-09-02 13:00 — a DIFFERENT
     // calendar day than the UTC 2026-09-01.
     const v = await setupVenue({ timeZone: "Pacific/Kiritimati" });
@@ -158,7 +155,7 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(t)).toEqual({ reservedTime: "15:00" });
   });
 
-  it("derives venue-local 'now' from locations.time_zone (hour boundary)", async () => {
+  it("derives venue-local 'now' from the saved venue zone (hour boundary)", async () => {
     // Same instant/tz → venue now is 2026-09-02 13:00. 12:00 (before) excluded; 14:00 (after) surfaces.
     const v = await setupVenue({ timeZone: "Pacific/Kiritimati" });
     const clock = new Date("2026-09-01T23:00:00Z");
@@ -204,7 +201,9 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     try {
       await annotate(MADRID_NOON, [t]); // same zone, twice
       await annotate(MADRID_NOON, [t]);
-      await db.execute(sql`update locations set time_zone = ${tzB}`);
+      await db.execute(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${tzB}) where module = 'business_day'`,
+      );
       await annotate(MADRID_NOON, [t]); // a different zone
 
       const builtFor = (tz: string): Intl.DateTimeFormat[] =>

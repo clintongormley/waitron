@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import { OpeningHoursApi } from "./opening-hours-client.js";
-for (const type of ["location_business_day_settings", "location_day_cutover_changes"]) {
+for (const type of ["settings.business_day", "day_cutover_changes"]) {
   for (const kind of ["hours", "year"]) {
     it(`${kind} rereads ${type} changes passively`, async () => {
       const live = new LiveData();

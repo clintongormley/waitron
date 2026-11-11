@@ -1,7 +1,9 @@
+import { sql } from "drizzle-orm";
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -28,11 +30,12 @@ const suite = useVenueDb({
 });
 it("an admitted future cutover change does not block activity on its already discovered preceding day", async () => {
   const venue = await setupVenue(suite.db);
-  const locationId = venue.cfg.locationId;
-  await suite.db
-    .update(locations)
-    .set({ dayCutover: "04:00:00", timeZone: "Europe/Madrid" })
-    .where(eq(locations.id, locationId));
+  await (async () => {
+    await seedBusinessDay(suite.db, { dayCutover: "04:00:00" });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+    );
+  })();
   const [worker] = await suite.db.select().from(persons).where(eq(persons.role, "staff"));
   const [version] = await suite.db
     .insert(rosterVersions)
@@ -84,7 +87,7 @@ it("an admitted future cutover change does not block activity on its already dis
     body: JSON.stringify({
       effectiveBusinessDay: "2026-01-08",
       dayCutover: "06:00",
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     }),
   });
   expect(changed.status).toBe(200);
@@ -116,11 +119,12 @@ it("an admitted future cutover change does not block activity on its already dis
 
 it("a Save that moves today's end makes attendance evaluate today up to the new end", async () => {
   const venue = await setupVenue(suite.db);
-  const locationId = venue.cfg.locationId;
-  await suite.db
-    .update(locations)
-    .set({ dayCutover: "04:00:00", timeZone: "Europe/Madrid" })
-    .where(eq(locations.id, locationId));
+  await (async () => {
+    await seedBusinessDay(suite.db, { dayCutover: "04:00:00" });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+    );
+  })();
   const [worker] = await suite.db.select().from(persons).where(eq(persons.role, "staff"));
   const [version] = await suite.db
     .insert(rosterVersions)
@@ -167,7 +171,7 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
     () => {},
   );
   const preview = await app.request(
-    "/management-api/venue-details/business-day-start/preview?dayCutover=06%3A00&expectedClockRevision=0",
+    "/management-api/venue-details/business-day-start/preview?dayCutover=06%3A00&expectedClockRevision=1",
     { headers: { cookie: venue.managerCookie } },
   );
   expect(preview.status).toBe(200);
@@ -179,7 +183,7 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
     body: JSON.stringify({
       effectiveBusinessDay: effectiveDay.businessDay,
       dayCutover: "06:00",
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     }),
   });
   expect(saved.status).toBe(200);

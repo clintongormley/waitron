@@ -1,3 +1,5 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -23,7 +25,6 @@ import {
   departments,
   floorZones,
   kitchenStations,
-  locations,
   products,
   routingCellPeriods,
   routingCells,
@@ -507,7 +508,9 @@ describe("stored preparation rules", () => {
   it("routingModel returns active-zone columns in display order, the category tree, active top-level products by main category, explicit cells and active station names", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+      );
       await tx.update(floorZones).set({ displayOrder: 2 }).where(eq(floorZones.id, f.terrace));
       const [inside, garden] = await tx
         .insert(floorZones)
@@ -846,10 +849,9 @@ describe("resolveMakers", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const at = new Date("2026-10-02T18:00:00Z");
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.drinks, station(f.terraceBar));
       await closeStationForToday(tx, f.terraceBar, f.bar, at);
       const expected = {
@@ -892,10 +894,9 @@ describe("resolveMakers", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const at = new Date("2026-10-02T18:00:00Z");
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
@@ -909,10 +910,9 @@ describe("resolveMakers", () => {
         byHand: null,
         sendsTo: null,
       });
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       expect((await stationStates(tx, at)).get(f.terraceBar)).toMatchObject({
         open: true,
         why: "open",
@@ -931,10 +931,9 @@ describe("resolveMakers", () => {
   it("sends a station closed for today to its destination, and an open one to itself", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.drinks, { kind: "station", stationId: f.terraceBar });
       expect(
         (await resolveMakers(tx, null, [f.mojito], new Date("2026-10-02T18:30:00Z"))).get(f.mojito),
@@ -958,10 +957,9 @@ describe("resolveMakers", () => {
         .update(kitchenStations)
         .set({ isDefault: false })
         .where(eq(kitchenStations.id, f.bar));
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.drinks, { kind: "station", stationId: f.terraceBar });
       await setStationToday(tx, f.terraceBar, "closed", new Date("2026-10-02T18:00:00Z"));
       expect(
@@ -990,10 +988,9 @@ describe("resolveMakers", () => {
   it("ignores hours when the venue's clock cannot be read", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.drinks, { kind: "station", stationId: f.terraceBar });
       expect(
         (await resolveMakers(tx, null, [f.mojito], new Date("2026-10-02T20:00:00Z"))).get(f.mojito),
@@ -1005,10 +1002,9 @@ describe("resolveMakers", () => {
   it("reports every station's active and open state at an instant", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       const states = await stationStates(tx, new Date("2026-10-02T20:00:00Z"));
       expect(states.get(f.bar)).toEqual({
         open: true,
@@ -2265,7 +2261,9 @@ describe("timed routing", () => {
   it("routes to the station unless it is closed for today, reopening restores it", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       const { at } = fridayLate;
       await setStationToday(tx, f.terraceBar, "closed", at);
@@ -2302,10 +2300,9 @@ describe("timed routing", () => {
   it("does not apply hours while the venue clock cannot be read", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       expect(await routedAt(tx, f, fridayLate.at)).toMatchObject({
         mojito: { kind: "made", route: station(f.terraceBar) },
@@ -2316,7 +2313,9 @@ describe("timed routing", () => {
     scoped(async (tx) => {
       const f = await fixture(tx);
       const { at } = fridayLate;
-      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await setStationToday(tx, f.terraceBar, "closed", at);
       expect(await routedAt(tx, f, at)).toMatchObject({
@@ -2335,7 +2334,9 @@ describe("timed routing", () => {
 const fixedInstant = new Date("2026-10-02T18:30:00Z");
 async function extrasFixture(tx: Transaction) {
   const f = await fixture(tx);
-  await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+  await tx.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+  );
   const [grill, fryer] = await tx
     .insert(kitchenStations)
     .values([
@@ -2790,10 +2791,9 @@ describe("routingAt", () => {
   it("keeps a station available when the venue clock cannot apply its hours", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       const resolver = await routingAt(tx, new Date("2026-10-02T22:00:00Z"));
       expect(await resolver.makers(null, [f.mojito])).toEqual(
@@ -2865,16 +2865,15 @@ describe("hours from special dates", () => {
         dates: [{ date, closedAllDay: false }],
       },
       SAVED_AT,
-      0,
+      1,
     );
 
   it("special dates do not close a station on either Friday", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       await setCategoryCell(tx, f.cocktails, { kind: "station", stationId: f.terraceBar });
       await closedOn(tx, "2026-10-09", f.terraceBar);
       // 18:00 UTC is 20:00 in Madrid on both Fridays.
@@ -2891,10 +2890,9 @@ describe("hours from special dates", () => {
   it("reads the same number of times however many stations and special dates there are", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      );
       const at = new Date("2026-10-09T18:00:00Z");
       await closedOn(tx, "2026-10-09", f.terraceBar);
       const session = (
@@ -2931,10 +2929,12 @@ describe("routing on repeating special days", () => {
   it("a repeating Closed-all-day special day does not close prep stations", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid", dayCutover: "06:00:00" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await (async () => {
+        await tx.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+        );
+        await seedBusinessDay(tx, { dayCutover: "06:00:00" });
+      })();
       await setCategoryCell(tx, f.cocktails, station(f.terraceBar));
       const [navidad] = await tx
         .insert(specialDays)
@@ -2974,7 +2974,9 @@ describe("routing during a service period", () => {
    * Afternoon (14:00–18:00) has no line. */
   async function periodFixture(tx: Transaction) {
     const f = await fixture(tx);
-    await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+    await tx.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+    );
     const [dining] = await tx
       .insert(floorZones)
       .values({ ...f.cfg, name: "Dining room" })
@@ -3002,7 +3004,7 @@ describe("routing during a service period", () => {
         ],
       })),
       fridayAt("10:00"),
-      0,
+      1,
     );
     await setCategoryCell(tx, f.cocktails, station(upstairs!.id));
     const [cell] = await tx
@@ -3086,10 +3088,9 @@ describe("routing during a service period", () => {
   it("uses Any other time and asks for no period while the venue's clock cannot be read", async () =>
     scoped(async (tx) => {
       const f = await periodFixture(tx);
-      await tx
-        .update(locations)
-        .set({ timeZone: "Mars/Base" })
-        .where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+      );
       const asked: string[] = [];
       const resolver = await routingAt(tx, fridayAt("13:00"), {
         runningPeriod: async (departmentId) => {
@@ -3586,7 +3587,9 @@ describe("saving a cell's period choices", () => {
   it("routes by a saved No preparation line while its period runs, an extra then following its dish", async () =>
     scoped(async (tx) => {
       const f = await choicesFixture(tx);
-      await tx.update(locations).set({ timeZone: "UTC" }).where(eq(locations.id, f.cfg.locationId));
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+      );
       await replaceMenuWeek(
         tx,
         f.department,
@@ -3595,7 +3598,7 @@ describe("saving a cell's period choices", () => {
           slots: [{ periodId: f.lunch, startsAt: "12:00", endsAt: "14:00" }],
         })),
         new Date("2026-10-02T10:00:00Z"),
-        0,
+        1,
       );
       await setRoutingCell(tx, everyZone(f), station(f.upstairs), [line(f.lunch, noPrep)]);
       const lunch = await routingAt(tx, at);
@@ -3763,7 +3766,7 @@ describe("saving a cell's period choices", () => {
           ],
         })),
         new Date("2026-10-02T10:00:00Z"),
-        0,
+        1,
       );
       const order = (await routingModel(tx, at)).periods
         .map((period) => period.id)
@@ -3795,7 +3798,7 @@ describe("saving a cell's period choices", () => {
             slots: weekday === 3 ? [{ periodId, startsAt, endsAt }] : [],
           })),
           new Date("2026-10-02T10:00:00Z"),
-          0,
+          1,
           { seasonId },
         );
       // By name Lunch sorts before Staff lunch; only Winter's earlier start puts Staff lunch first.
@@ -3825,7 +3828,7 @@ describe("saving a cell's period choices", () => {
                   : [],
         })),
         new Date("2026-10-02T10:00:00Z"),
-        0,
+        1,
       );
       const [root] = await tx
         .select({ id: sections.id })

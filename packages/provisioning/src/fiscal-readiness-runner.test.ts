@@ -817,7 +817,9 @@ describe("saved-zone readiness clocks", () => {
       let before: unknown[];
       try {
         before = db.prepare("select * from sales").all();
-        db.prepare("update locations set time_zone = ?").run(zone);
+        db.prepare(
+          "update settings set doc = json_set(doc, '$.timeZone', ?) where module = 'business_day'",
+        ).run(zone);
       } finally {
         db.close();
       }
@@ -879,7 +881,9 @@ it("refuses the saved bad zone of a reused readiness venue that has no sample ye
   try {
     await applyVenue(planVenue(venue, modules), { db: store.venue, modules });
     const { sql } = await import("drizzle-orm");
-    await store.venue.execute(sql`update locations set time_zone = 'Invalid/Zone'`);
+    await store.venue.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
+    );
   } finally {
     await store.close();
   }

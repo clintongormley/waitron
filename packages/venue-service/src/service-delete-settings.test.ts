@@ -550,7 +550,7 @@ async function paintSeasons(tx: Transaction) {
             : [],
       })),
       at,
-      0,
+      1,
       seasonId === undefined ? {} : { seasonId },
     );
   const closure = (seasonId: string) =>
@@ -561,7 +561,7 @@ async function paintSeasons(tx: Transaction) {
         weekday,
         ranges: weekday === 5 ? [{ startsAt: "22:00", endsAt: "23:30" }] : [],
       })),
-      0,
+      1,
       at,
       { seasonId },
     );

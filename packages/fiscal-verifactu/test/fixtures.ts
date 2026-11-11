@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
-import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 
@@ -54,10 +54,13 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
   if (venueId === undefined) {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
-
+    });
+    await seedVenueSettings(db, {
+      name: "Local principal",
+      invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
-    await seedVenueSettings(db, { name: "Local principal", invoiceLocales: ["es"] });
+    await seedBusinessDay(db, {});
     venueId = TENANT_A.locationId;
   }
   await db.insert(nodes).values({ id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" });
@@ -111,10 +114,12 @@ export async function seedTenants(db: Database): Promise<void> {
   if (venueId === undefined) {
     await db.insert(locations).values({
       id: TENANT_A.locationId,
-
+    });
+    await seedVenueSettings(db, {
+      name: "Local principal",
       operationDescription: "Venta en establecimiento",
     });
-    await seedVenueSettings(db, { name: "Local principal" });
+    await seedBusinessDay(db, {});
     venueId = TENANT_A.locationId;
   }
   await db.insert(nodes).values([
@@ -131,10 +136,12 @@ export async function seedVenueNodes(db: Database): Promise<void> {
     .onConflictDoNothing({ target: tenants.id });
   await db.insert(locations).values({
     id: TENANT_A.locationId,
-
+  });
+  await seedVenueSettings(db, {
+    name: "Local principal",
     operationDescription: "Venta en establecimiento",
   });
-  await seedVenueSettings(db, { name: "Local principal" });
+  await seedBusinessDay(db, {});
   await db.insert(nodes).values([
     { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
     { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
@@ -249,13 +256,14 @@ async function insertLocationNodeSeries(
   const [location] =
     existing.length === 1
       ? existing
-      : await tx
-          .insert(locations)
-          .values({
-            operationDescription: "Venta en establecimiento",
-          })
-          .returning({ id: locations.id });
-  if (existing.length !== 1) await seedVenueSettings(tx, { name: "Sala principal" });
+      : await tx.insert(locations).values({}).returning({ id: locations.id });
+  if (existing.length !== 1) {
+    await seedVenueSettings(tx, {
+      name: "Sala principal",
+      operationDescription: "Venta en establecimiento",
+    });
+    await seedBusinessDay(tx);
+  }
   const [node] = await tx
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node 1" })

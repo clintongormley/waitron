@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { stageStreamRestore } from "./restore-request.js";
@@ -79,10 +79,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Old venue" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Old location",
+    invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
-  await seedVenueSettings(suite.db, { name: "Old location", invoiceLocales: ["es-ES"] });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Old node" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
   oldName = await readRecoveryKeyName(suite.node, NODE);
@@ -164,9 +167,9 @@ it("reads the selected copy's node-key name after the live box has replaced its 
 it("refuses a copy with two venue rows as an unknown identity", async () => {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000003",
-
-    operationDescription: "Restaurant",
   });
+  await seedVenueSettings(suite.db, { operationDescription: "Restaurant" });
+  await seedBusinessDay(suite.db, {});
   artifact = await packSelected();
   await expect(previewRecoveryArchive(args())).rejects.toMatchObject({
     code: "restore.identity_unknown",

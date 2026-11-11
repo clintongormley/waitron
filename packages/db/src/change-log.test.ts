@@ -10,16 +10,11 @@ import { withTransaction } from "./tenancy.js";
 import type { Transaction } from "./client.js";
 import { useVenueDb } from "./testing/venue-db.js";
 
-// `locations` is a change source, so one fixture table serves every case here.
-// `operation_description` is Spanish test DATA, not a schema identifier — the same shape the
-// sibling join-requests and dining-table suites use. The id is supplied here because `id` columns
-// take their default from a JavaScript call (`newId`, `./schema/columns.ts`) and raw SQL never
-// reaches it.
+// Raw SQL supplies the id because the schema's JavaScript default is not evaluated.
 async function insertLocation(tx: Transaction): Promise<string> {
   const id = randomUUID();
   await tx.execute(sql`
-    insert into locations (id, operation_description)
-    values (${id}, 'Hostelería')`);
+    insert into locations (id) values (${id})`);
   return id;
 }
 

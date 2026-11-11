@@ -1,6 +1,7 @@
+import { sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { locations, newId } from "@waitron/db";
+import { newId } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { type BusinessDayClock } from "@waitron/shared";
@@ -153,10 +154,9 @@ it("keeps an overnight 210-minute shift and both end dates on its stored local s
   await event("breakStart", "2026-01-31T22:00:00Z", 60);
   await event("breakEnd", "2026-01-31T22:30:00Z", 60);
   await event("clockOut", "2026-02-01T01:00:00Z", 60);
-  await f.suite.db
-    .update(locations)
-    .set({ timeZone: "America/New_York" })
-    .where(eq(locations.id, f.locationId));
+  await f.suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"America/New_York"}) where module = 'business_day'`,
+  );
   const value = await read(undefined, f.personId, now, { ...clock, timeZone: "America/New_York" });
   expect(value.workedMinutes).toBe(210);
   expect(value.days.at(-1)).toMatchObject({

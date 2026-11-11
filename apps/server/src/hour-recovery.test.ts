@@ -1,4 +1,5 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash } from "node:crypto";
 import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -19,7 +20,6 @@ import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { eq } from "drizzle-orm";
 
 const moduleNames = ["core", "fiscal-verifactu", "fiscal-none"];
 const modules = ALL_MODULES.filter((module) => moduleNames.includes(module.name));
@@ -44,12 +44,14 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Selected venue",
+    invoiceLocales: ["es"],
     operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
-    timeZone: "Europe/Madrid",
   });
-  await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["es"] });
+  await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Selected box" });
   await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, NODE);
 });
@@ -199,10 +201,14 @@ it.each([
   "selects the recovery module only for a supported recorded jurisdiction: %s",
   async (_name, country, fiscalTerritory, timeZone) => {
     await suite.db.update(tenants).set({ country });
-    await suite.db
-      .update(locations)
-      .set({ fiscalTerritory, timeZone })
-      .where(eq(locations.id, LOCATION));
+    await (async () => {
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.fiscalTerritory', ${fiscalTerritory}) where module = 'venue'`,
+      );
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
+    })();
     const f = await archive();
     const selection = (await previewRecoveryArchive(deps(f.artifact))).fiscalSelection;
     if (_name === "unreadable zone")
@@ -218,7 +224,14 @@ it.each([
 
 it("uses the recorded non-filing module for a supported non-fiscal territory", async () => {
   await suite.db.update(tenants).set({ country: "GB" });
-  await suite.db.update(locations).set({ fiscalTerritory: "GB-vat", timeZone: "Europe/London" });
+  await (async () => {
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.fiscalTerritory', ${"GB-vat"}) where module = 'venue'`,
+    );
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/London"}) where module = 'business_day'`,
+    );
+  })();
   const f = await archive({ modules: { "fiscal-verifactu": false, "fiscal-none": true } });
   expect((await previewRecoveryArchive(deps(f.artifact))).fiscalSelection).toEqual({
     country: "GB",

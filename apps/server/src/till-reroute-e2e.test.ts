@@ -19,7 +19,7 @@ import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db
 import { hashPin, hashDeviceToken, persons } from "@waitron/identity";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
-import { seedWorkingOrder, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { serverFixture } from "./testing/server-fixture.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -163,11 +163,14 @@ async function seedVenueWithNodesAndTill(db: Database): Promise<void> {
     .insert(locations)
     .values({
       id: LOCATION,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing({ target: locations.id });
-  await seedVenueSettings(db, { name: "Loc", invoiceLocales: ["en"] });
+  await seedVenueSettings(db, {
+    name: "Loc",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(db, {});
   for (const node of [NODE_A, NODE_B]) {
     await db
       .insert(nodes)

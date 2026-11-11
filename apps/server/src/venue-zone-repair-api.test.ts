@@ -25,7 +25,7 @@ const PATH = "/management-api/venue-details/time-zone-repair";
 const ORIGIN = "https://manage.example.test";
 const RAW = "Invalid/Zone?secret=must-not-escape";
 const AT = new Date("2026-10-14T23:30:00.000Z");
-const body = { timeZone: "Europe/Madrid", expectedClockRevision: 0, confirmed: true };
+const body = { timeZone: "Europe/Madrid", expectedClockRevision: 1, confirmed: true };
 let scope: { nodeId: string; locationId: string };
 let token: string;
 let actor: string;
@@ -88,8 +88,10 @@ function request(method = "POST", input: unknown = body, headers: Record<string,
   );
 }
 const rows = () => ({
-  locations: suite.db.all(sql`select * from locations`),
-  settings: suite.db.all(sql`select * from location_business_day_settings`),
+  locations: suite.db.all(
+    sql`select l.*, json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from locations l join settings v on v.module = 'venue' join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+  ),
+  settings: suite.db.all(sql`select * from settings where module = 'business_day'`),
   incidents: suite.db.all(sql`select * from incidents`),
 });
 function gate() {
@@ -117,7 +119,7 @@ describe("time-zone repair management boundary", () => {
         category: "invalid",
         eligible: true,
         admission: { state: "invalid" },
-        clockRevision: 0,
+        clockRevision: 1,
       });
       expect(view).not.toHaveProperty("locationId");
       expect(restart).not.toHaveBeenCalled();
@@ -125,7 +127,7 @@ describe("time-zone repair management boundary", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         repaired: true,
-        clockRevision: 1,
+        clockRevision: 2,
         admission: "restart_required",
       });
       expect(admission.snapshot()).toEqual({ state: "restart_required" });
@@ -400,7 +402,7 @@ describe("time-zone repair management boundary", () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         repaired: true,
-        clockRevision: 1,
+        clockRevision: 2,
         admission: "restart_required",
       });
       expect(events).toEqual(["finish", "restart"]);
@@ -414,7 +416,7 @@ describe("time-zone repair management boundary", () => {
   it("rejects a stale revision and country-excluded preview without leaking the old zone", async () => {
     const before = rows();
     await refusal(
-      await request("POST", { ...body, expectedClockRevision: 9 }),
+      await request("POST", { ...body, expectedClockRevision: 10 }),
       409,
       "venue.business_day_changed",
     );
@@ -517,7 +519,7 @@ it("serves a native same-origin browser GET with the dashboard no-referrer polic
     }, PATH);
     expect(seen[0]).toEqual({ method: "GET", origin: undefined, site: "same-origin" });
     expect(read.status).toBe(200);
-    expect(read.body).toMatchObject({ eligible: true, category: "invalid", clockRevision: 0 });
+    expect(read.body).toMatchObject({ eligible: true, category: "invalid", clockRevision: 1 });
     const preview = await page.evaluate(async (path) => {
       const response = await fetch(path + "?timeZone=Europe%2FMadrid", { credentials: "include" });
       return { status: response.status, body: await response.json() };
@@ -539,7 +541,7 @@ it("serves a native same-origin browser GET with the dashboard no-referrer polic
       { path: PATH, input: body },
     );
     expect(saved.status).toBe(200);
-    expect(saved.body).toEqual({ repaired: true, clockRevision: 1, admission: "restart_required" });
+    expect(saved.body).toEqual({ repaired: true, clockRevision: 2, admission: "restart_required" });
     expect(seen.at(-1)).toEqual({ method: "POST", origin, site: "same-origin" });
     expect(restart).toHaveBeenCalledTimes(1);
     expect(rows().incidents).toHaveLength(1);

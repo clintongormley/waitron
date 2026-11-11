@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
@@ -54,9 +55,10 @@ async function seedVenueCfg(
   };
   if (options.tenant === true) await seedVenue(db, venue);
   else {
-    const { name, province, invoiceLocales, ...columns } = venue;
+    const { name, province, invoiceLocales, operationDescription, ...columns } = venue;
     await db.insert(locations).values(columns);
-    await seedVenueSettings(db, { name, province, invoiceLocales });
+    await seedVenueSettings(db, { name, province, invoiceLocales, operationDescription });
+    await seedBusinessDay(db);
   }
   return { locationId: await venueLocationId(db) };
 }

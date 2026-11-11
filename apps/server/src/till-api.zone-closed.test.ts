@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { oneBill, observedRelocationSender } from "./testing/table-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
@@ -6,7 +7,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  locations,
   parties,
   partyTables,
   workingOrders,
@@ -39,10 +39,7 @@ async function venue() {
   at("23:00");
   const v = await provisionBillVenue(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(locations)
-      .set({ dayCutover: "06:00" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await seedBusinessDay(tx, { dayCutover: "06:00" });
     const [policy] = await tx
       .select()
       .from(zoneServicePolicies)
@@ -61,7 +58,7 @@ async function venue() {
         slots: [{ periodId: period!.id, startsAt: "06:00", endsAt: "06:00" }],
       })),
       new Date(),
-      0,
+      1,
     );
     await replaceZoneClosedWeek(
       tx,
@@ -70,7 +67,7 @@ async function venue() {
         weekday,
         ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
       })),
-      0,
+      1,
       new Date(),
     );
   });

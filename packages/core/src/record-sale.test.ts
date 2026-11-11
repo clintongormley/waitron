@@ -25,8 +25,6 @@ import {
   constraintTarget,
   isUniqueViolation,
   invoiceSeries,
-  locations,
-  nodes,
   saleLines,
   saleSettlements,
   sales,
@@ -43,7 +41,6 @@ import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -55,7 +52,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -227,10 +224,9 @@ describe("recordSale — the sale's origin", () => {
   );
 
   it("describes a device sale from the venue whatever the device's location column holds", async () => {
-    await suite.db
-      .update(locations)
-      .set({ operationDescription: "Counter service" })
-      .where(eq(locations.id, locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Counter service"}) where module = 'venue'`,
+    );
     await suite.db.execute(sql`pragma foreign_keys = off`);
     try {
       await suite.db.execute(
@@ -245,14 +241,9 @@ describe("recordSale — the sale's origin", () => {
   });
 
   it("describes a sale with no device from the venue", async () => {
-    const [node] = await suite.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, nodeId));
-    await suite.db
-      .update(locations)
-      .set({ operationDescription: "Counter service" })
-      .where(eq(locations.id, node!.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Counter service"}) where module = 'venue'`,
+    );
     const seen = await descriptionsFiled({ origin: jobOrigin("readiness_test") });
     expect(seen).toEqual(["Counter service"]);
   });
@@ -2023,7 +2014,9 @@ describe("recordSale — saved full-invoice service date", () => {
     ["2026-02-28T23:10:00Z", "Europe/Madrid", "2026-03-01"],
     ["2026-02-28T23:10:00Z", "Atlantic/Canary", "2026-02-28"],
   ])("saves the bill opening date %s in %s", async (openedAt, timeZone, expected) => {
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     const bill = await seedWorkingOrder(suite.db, {
       source: "device",
       deviceId,
@@ -2057,19 +2050,17 @@ describe("recordSale — saved full-invoice service date", () => {
     const [saved] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(saved).toMatchObject({ operationDate: expected, issuedAt: "2026-03-01T12:05:00.000Z" });
     expect(filed).not.toHaveProperty("operationDate");
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Pacific/Honolulu" })
-      .where(eq(locations.id, locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Pacific/Honolulu"}) where module = 'business_day'`,
+    );
     const [retained] = await suite.db.select().from(sales).where(eq(sales.id, saleId));
     expect(retained).toEqual(saved);
   });
 
   it("dates a full invoice's bill in the venue's zone whatever the order's location column holds", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Europe/Madrid" })
-      .where(eq(locations.id, locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+    );
     const bill = await seedWorkingOrder(suite.db, {
       source: "device",
       deviceId,

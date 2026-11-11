@@ -1,3 +1,5 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -30,9 +32,8 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     await suite.db.insert(locations).values([
       {
         id: LOCATION_A2,
-        operationDescription: "Hostelería",
       },
-      { id: LOCATION_B, operationDescription: "Hostelería" },
+      { id: LOCATION_B },
     ]);
   });
 
@@ -221,9 +222,9 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
     await suite.db.insert(locations).values({
       id: probeLocation,
-
-      operationDescription: "Hostelería",
     });
+    await seedVenueSettings(suite.db, { operationDescription: "Hostelería" });
+    await seedBusinessDay(suite.db, {});
     await seedStation(probeLocation, "Probe default", true);
     const [index] = suite.db.all<{ sql: string }>(
       sql`select sql from sqlite_master where type = 'index' and name = 'kitchen_stations_default_key'`,

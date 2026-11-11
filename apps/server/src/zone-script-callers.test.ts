@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { build } from "esbuild";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { locations, sales } from "@waitron/db";
+import { sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decodeRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";
@@ -131,7 +131,9 @@ describe("saved-zone script callers", () => {
   );
   it("refuses installed Demo's unusable saved zone before seeding catalogue or sales", async () => {
     const venue = await provision();
-    await suite.db.update(locations).set({ timeZone: "Invalid/Zone" });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
     const before = suite.db.all(sql`select * from catalogues`);
     const refusal = await seedInstalledDemo(suite.db, venue, {
       country: "ES",

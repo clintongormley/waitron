@@ -1,16 +1,10 @@
+import { sql } from "drizzle-orm";
 import { validateCapabilities } from "@waitron/layouts";
 import jsQR from "jsqr";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  locations,
-  printers,
-  printJobs,
-  sales,
-  withTransaction,
-} from "@waitron/db";
+import { deviceProfiles, printers, printJobs, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
@@ -67,7 +61,9 @@ describe("receipt issue facts independent of recipient and current venue zone", 
       const sale = await issue(prepared);
       const [before] = await v.db.select().from(sales).where(eq(sales.id, sale.saleId));
       for (const timeZone of ["Europe/Madrid", "Europe/London", "Invalid/Zone"]) {
-        await v.db.update(locations).set({ timeZone }).where(eq(locations.id, v.cfg.locationId));
+        await v.db.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+        );
         await withTransaction(v.db, async (tx) => {
           const facts = await readReceiptIssuer(v.backend, tx, sale.saleId);
           expect(facts).toMatchObject({
@@ -145,7 +141,9 @@ describe("receipt issue facts independent of recipient and current venue zone", 
     expect(new URL(original.qr).searchParams.get("fecha")).toBe("15-10-2026");
     const stored = await v.db.select().from(sales);
     for (const timeZone of ["Europe/London", "Invalid/Zone"]) {
-      await v.db.update(locations).set({ timeZone }).where(eq(locations.id, v.cfg.locationId));
+      await v.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const replay = await pay();
       expect(replay.status).toBe(200);
       expect(await replay.json()).toEqual(original);

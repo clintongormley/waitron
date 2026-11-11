@@ -695,7 +695,7 @@ describe("transactions and other callers", () => {
           paint: [],
         },
         new Date("2026-04-01T10:00:00Z"),
-        0,
+        1,
       ),
     );
     const after = await run((tx) => store.readHolidays(tx, "2026-01-01", "2026-12-31"));
@@ -715,7 +715,7 @@ describe("transactions and other callers", () => {
           paint: [],
         },
         new Date("2025-12-01T10:00:00Z"),
-        0,
+        1,
       ),
     );
     const rows = async () => ({

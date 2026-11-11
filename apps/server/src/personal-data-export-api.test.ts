@@ -4,7 +4,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -40,7 +40,7 @@ const COLLEAGUE = {
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
 const logger = vi.fn();
-let locationId: string, martaId: string, colleagueId: string;
+let martaId: string, colleagueId: string;
 let martaToken: string, colleagueToken: string;
 let order: string[];
 let subjects: PersonalDataSubject[];
@@ -114,7 +114,7 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  locationId = await venueLocationId(suite.db);
+
   await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)
@@ -272,11 +272,9 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("dates the file in UTC when the venue's stored zone is unknown", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Not/AZone" })
-      .where(eq(locations.id, locationId))
-      .run();
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+    );
     const response = await ask(mounted());
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe(
@@ -300,11 +298,9 @@ describe("GET /management-api/me/personal-data/export", () => {
   });
 
   it("names the file for the real date when the box's clock reads 1970", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "UTC" })
-      .where(eq(locations.id, locationId))
-      .run();
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+    );
     const response = await ask(mounted({ now: () => new Date("1970-01-01T00:00:00Z") }));
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toBe(

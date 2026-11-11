@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -32,10 +32,13 @@ describe("dining_tables columns", () => {
     LOCATION_A = await venueLocationId(db);
     await db.insert(locations).values({
       id: LOCATION_B,
-
+    });
+    await seedVenueSettings(db, {
+      name: "Loc B",
+      invoiceLocales: ["es"],
       operationDescription: "Restaurant",
     });
-    await seedVenueSettings(db, { name: "Loc B", invoiceLocales: ["es"] });
+    await seedBusinessDay(db, {});
   });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {

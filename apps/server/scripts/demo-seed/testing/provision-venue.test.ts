@@ -32,9 +32,11 @@ describe("the demo scripts' test venue", () => {
       invoiceLocale: "es-ES",
     })();
 
-    expect(suite.db.all(sql`select operation_description from locations`)).toEqual([
-      { operation_description: "Sale on premises" },
-    ]);
+    expect(
+      suite.db.all(
+        sql`select json_extract(doc, '$.operationDescription') as operation_description from settings where module = 'venue'`,
+      ),
+    ).toEqual([{ operation_description: "Sale on premises" }]);
   });
 
   it.each([
@@ -69,8 +71,8 @@ describe("the demo scripts' test venue", () => {
 
     expect(
       suite.db.all(sql`
-        select json_extract(settings.doc, '$.name') as name, json_extract(settings.doc, '$.addressLine1') as address_line1, json_extract(settings.doc, '$.invoiceLocales') as invoice_locales, fiscal_territory, time_zone
-        from locations cross join settings on settings.module = 'venue'
+        select json_extract(settings.doc, '$.name') as name, json_extract(settings.doc, '$.addressLine1') as address_line1, json_extract(settings.doc, '$.invoiceLocales') as invoice_locales, json_extract(settings.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(b.doc, '$.timeZone') as time_zone
+        from settings cross join settings b where settings.module = 'venue' and b.module = 'business_day'
       `),
     ).toEqual([fixture.location]);
   });

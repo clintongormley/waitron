@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -414,10 +414,13 @@ describe("comparison immediately before real archive placement", () => {
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Test venue" });
     await suite.db.insert(locations).values({
       id: locationId,
-
+    });
+    await seedVenueSettings(suite.db, {
+      name: "Test room",
+      invoiceLocales: ["en"],
       operationDescription: "Meal",
     });
-    await seedVenueSettings(suite.db, { name: "Test room", invoiceLocales: ["en"] });
+    await seedBusinessDay(suite.db, {});
     await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Test node" });
     const sourceDir = await mkdtemp(join(tmpdir(), "qualified-source-"));
     roots.push(sourceDir);

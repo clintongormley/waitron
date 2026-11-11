@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
   openVenueDatabase,
   stampDeployment,
   invoiceSeries,
@@ -16,7 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { businessDayBounds } from "@waitron/shared";
 import { resolveDepartmentService } from "@waitron/venue-service";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { ALL_MODULES } from "./modules.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -36,23 +36,25 @@ const suite = useVenueDb({ migrations });
 describe("business-day timeline through cold restore and reset", () => {
   it("retains effective and pending rows, derives activation on reads and clears them only on a venue wipe", async () => {
     const venue = await setupVenue(suite.db);
-    await suite.db.insert(locationDayCutoverChanges).values([
+    await suite.db.insert(dayCutoverChanges).values([
       {
-        locationId: venue.cfg.locationId,
         effectiveBusinessDay: "2026-11-04",
         dayCutover: "03:00:00",
       },
       {
-        locationId: venue.cfg.locationId,
         effectiveBusinessDay: "2026-11-10",
         dayCutover: "07:00:00",
       },
     ]);
     await suite.db
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: venue.cfg.locationId, revision: 4 });
-    const changes = await suite.db.select().from(locationDayCutoverChanges);
-    const settings = await suite.db.select().from(locationBusinessDaySettings);
+      .update(businessDaySettingsTable)
+      .set({ revision: 5 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
+    const changes = await suite.db.select().from(dayCutoverChanges);
+    const settings = await suite.db
+      .select({ revision: businessDaySettingsTable.revision })
+      .from(businessDaySettingsTable)
+      .where(eq(businessDaySettingsTable.module, "business_day"));
     const department = (
       await suite.db.execute<{ id: string }>(sql`select id from departments where is_default`)
     ).rows[0]!.id;
@@ -142,7 +144,7 @@ describe("business-day timeline through cold restore and reset", () => {
           const model = await withTransaction(restored.venue, (tx) =>
             readVenueDetails(tx, new Date(moment)),
           );
-          expect(model.businessDayClock.revision).toBe(4);
+          expect(model.businessDayClock.revision).toBe(5);
           expect(model.businessDayClock.currentBusinessDay).toBe(
             index === 0 ? "2026-11-09" : "2026-11-10",
           );
@@ -153,8 +155,13 @@ describe("business-day timeline through cold restore and reset", () => {
             ),
           ).toEqual(serviceBefore[index]);
         }
-        expect(await restored.venue.select().from(locationDayCutoverChanges)).toEqual(changes);
-        expect(await restored.venue.select().from(locationBusinessDaySettings)).toEqual(settings);
+        expect(await restored.venue.select().from(dayCutoverChanges)).toEqual(changes);
+        expect(
+          await restored.venue
+            .select({ revision: businessDaySettingsTable.revision })
+            .from(businessDaySettingsTable)
+            .where(eq(businessDaySettingsTable.module, "business_day")),
+        ).toEqual(settings);
       } finally {
         await restored.close();
       }
@@ -162,8 +169,13 @@ describe("business-day timeline through cold restore and reset", () => {
       await applyMigrations(venueDir, migrations);
       const reset = await openVenueDatabase(venueDir);
       try {
-        expect(await reset.venue.select().from(locationDayCutoverChanges)).toEqual([]);
-        expect(await reset.venue.select().from(locationBusinessDaySettings)).toEqual([]);
+        expect(await reset.venue.select().from(dayCutoverChanges)).toEqual([]);
+        expect(
+          await reset.venue
+            .select({ revision: businessDaySettingsTable.revision })
+            .from(businessDaySettingsTable)
+            .where(eq(businessDaySettingsTable.module, "business_day")),
+        ).toEqual([]);
       } finally {
         await reset.close();
       }

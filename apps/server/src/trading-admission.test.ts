@@ -1,7 +1,8 @@
+import { sql } from "drizzle-orm";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { IssueScope } from "@waitron/fiscal";
@@ -80,7 +81,9 @@ describe("economic transaction admission", () => {
   ])("rechecks saved %j even after admission", async (timeZone, reason) => {
     const admission = new TradingAdmission();
     admission.admit();
-    await suite.db.update(locations).set({ timeZone });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     const write = vi.fn();
     await expect(
       withTransaction(suite.db, async (tx) => {

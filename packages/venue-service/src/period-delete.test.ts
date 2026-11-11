@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -13,7 +14,6 @@ import {
   departmentDayRanges,
   departmentDays,
   kitchenStations,
-  locations,
   menuPeriods,
   routingCellPeriods,
   routingCells,
@@ -99,10 +99,10 @@ async function venue() {
         restaurant,
         week([slot(lunch, "12:00", "16:00"), slot(dinner, "20:00", "23:00")]),
         WRITE_AT,
-        0,
+        1,
         { seasonId: season(name) },
       );
-    await replaceMenuWeek(tx, restaurant, week([slot(dinner, "20:00", "23:00")]), WRITE_AT, 0, {
+    await replaceMenuWeek(tx, restaurant, week([slot(dinner, "20:00", "23:00")]), WRITE_AT, 1, {
       seasonId: season("Winter"),
     });
     return {
@@ -141,7 +141,7 @@ const specialDay = (
             paint: dates.map((date) => ({ departmentId: v.restaurant, date, ranges: paint })),
           },
           WRITE_AT,
-          0,
+          1,
         )
       ).id,
   );
@@ -242,7 +242,7 @@ describe("where a period is painted", () => {
               ],
             },
             WRITE_AT,
-            0,
+            1,
           )
         ).id,
     );
@@ -272,7 +272,9 @@ describe("where a period is painted", () => {
       ["2026-09-01"],
       [slot(v.afternoon, "16:00", "19:00")],
     );
-    await db.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, v.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+    );
 
     const painted = await scoped((tx) => readPaintedIn(tx, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.afternoon, AT));
@@ -323,7 +325,7 @@ describe("what deleting a period touches", () => {
         { id: v.afternoon, name: "Afternoon" },
         { id: v.dinner, name: "Dinner" },
       ],
-      clockRevision: 0,
+      clockRevision: 1,
     });
     expect(impact.routingUses).toEqual(routing.get(v.lunch));
   });
@@ -341,7 +343,7 @@ describe("what deleting a period touches", () => {
         { id: v.dinner, name: "Dinner" },
         { id: v.lunch, name: "Lunch" },
       ],
-      clockRevision: 0,
+      clockRevision: 1,
     });
   });
 
@@ -464,7 +466,7 @@ describe("deleting a period", () => {
     };
   }
 
-  const remove = (periodId: string, replacementId: string | null, revision = 0) =>
+  const remove = (periodId: string, replacementId: string | null, revision = 1) =>
     scoped((tx) => deletePeriod(tx, periodId, replacementId, AT, revision));
 
   /** The refusal of `write`'s whole transaction. */
@@ -496,7 +498,7 @@ describe("deleting a period", () => {
                 : [],
           })),
           WRITE_AT,
-          0,
+          1,
           { seasonId: v.seasons.autumn },
         ),
       );
@@ -676,7 +678,7 @@ describe("deleting a period", () => {
       const v = await deleteVenue();
       const before = await stored(v);
 
-      const error = await refusal(() => remove(v.lunch, v.afternoon, 1));
+      const error = await refusal(() => remove(v.lunch, v.afternoon, 2));
 
       expect(error.code).toBe("hours.clock_changed");
       expect(await stored(v)).toEqual(before);

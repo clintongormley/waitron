@@ -1,13 +1,15 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
+  BUSINESS_DAY_SETTINGS,
+  readSettings,
   CORE_MIGRATIONS,
-  locations,
   incidents,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -30,7 +32,7 @@ const RAW = "Invalid/Zone?token=private-invalid-value";
 let scope: { nodeId: string; locationId: string };
 let token: string;
 let actor: string;
-const body = { timeZone: "Europe/Madrid", expectedClockRevision: 0, confirmed: true };
+const body = { timeZone: "Europe/Madrid", expectedClockRevision: 1, confirmed: true };
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Counter",
@@ -56,11 +58,13 @@ const read = (candidate?: string) =>
     readVenueZoneRepair(tx, scope, token, new TradingAdmission().snapshot(), AT, candidate),
   );
 const snapshot = () => ({
-  locations: suite.db.all<Record<string, unknown>>(sql`select * from locations`),
-  settings: suite.db.all<Record<string, unknown>>(
-    sql`select * from location_business_day_settings`,
+  locations: suite.db.all<Record<string, unknown>>(
+    sql`select l.*, json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from locations l join settings v on v.module = 'venue' join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
-  cutovers: suite.db.all<Record<string, unknown>>(sql`select * from location_day_cutover_changes`),
+  settings: suite.db.all<Record<string, unknown>>(
+    sql`select * from settings where module = 'business_day'`,
+  ),
+  cutovers: suite.db.all<Record<string, unknown>>(sql`select * from day_cutover_changes`),
   incidents: suite.db.all<Record<string, unknown>>(sql`select * from incidents`),
   orders: suite.db.all<Record<string, unknown>>(sql`select * from working_orders`),
 });
@@ -69,12 +73,14 @@ describe("atomic unusable-zone confirmation", () => {
   it.each([" Europe/Madrid", "Europe/Madrid "])(
     "repairs unreadable saved %j using an explicitly normalized choice",
     async (timeZone) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       expect(await read()).toMatchObject({ category: "invalid", eligible: true });
       const before = snapshot();
       expect(await confirm({ ...body, timeZone: " Europe/Madrid " })).toEqual({
         repaired: true,
-        clockRevision: 1,
+        clockRevision: 2,
         admission: "restart_required",
       });
       const after = snapshot();
@@ -86,24 +92,27 @@ describe("atomic unusable-zone confirmation", () => {
       expect(after.incidents).toHaveLength(1);
     },
   );
-  it("commits only the canonical zone, revision one and one immediately handled warning", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
+  it("commits only the canonical zone, the next revision and one immediately handled warning", async () => {
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
     ]);
     await seedWorkingOrder(suite.db, { source: "operator_script", orderNumber: 1 });
     const before = snapshot();
     const result = await confirm();
-    expect(result).toEqual({ repaired: true, clockRevision: 1, admission: "restart_required" });
+    expect(result).toEqual({ repaired: true, clockRevision: 2, admission: "restart_required" });
     const after = snapshot();
     expect(after.locations).toEqual(
       before.locations.map((row) => ({ ...row, time_zone: "Europe/Madrid" })),
     );
     expect(after.cutovers).toEqual(before.cutovers);
     expect(after.orders).toEqual(before.orders);
-    expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-      { locationId: scope.locationId, revision: 1 },
-    ]);
+    expect(
+      await suite.db
+        .select({ revision: businessDaySettingsTable.revision })
+        .from(businessDaySettingsTable)
+        .where(eq(businessDaySettingsTable.module, "business_day")),
+    ).toEqual([{ revision: 2 }]);
     expect(await suite.db.select().from(incidents)).toEqual([
       {
         id: expect.any(String),
@@ -119,8 +128,8 @@ describe("atomic unusable-zone confirmation", () => {
         params: {
           nodeId: scope.nodeId,
           timeZone: "Europe/Madrid",
-          previousRevision: 0,
-          clockRevision: 1,
+          previousRevision: 1,
+          clockRevision: 2,
           oldCategory: "invalid",
           oldFingerprint: createHash("sha256").update(RAW).digest("hex"),
         },
@@ -129,23 +138,35 @@ describe("atomic unusable-zone confirmation", () => {
     expect(JSON.stringify(after.incidents)).not.toContain(RAW);
   });
   it.each(["", "   "])("repairs missing %j without inventing an old zone", async (timeZone) => {
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     await confirm();
     expect((await suite.db.select().from(incidents))[0]!.params).toMatchObject({
       oldCategory: "missing",
       oldFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
-    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/Madrid");
+    expect(
+      suite.db.all<{ timeZone: string }>(
+        sql`select json_extract(doc, '$.timeZone') as timeZone from settings where module = 'business_day'`,
+      )[0]!.timeZone,
+    ).toBe("Europe/Madrid");
   });
   it("canonicalizes a country-allowed alias", async () => {
     await suite.db.execute(sql`update tenants set country = 'GB'`);
     await confirm({ ...body, timeZone: "GB" });
-    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe("Europe/London");
+    expect(
+      suite.db.all<{ timeZone: string }>(
+        sql`select json_extract(doc, '$.timeZone') as timeZone from settings where module = 'business_day'`,
+      )[0]!.timeZone,
+    ).toBe("Europe/London");
   });
   it.each(["Europe/Madrid", "US/Eastern", "Europe/London"])(
     "refuses valid saved %s even with order history",
     async (timeZone) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       await seedWorkingOrder(suite.db, { source: "operator_script", orderNumber: 1 });
       const before = snapshot();
       await expect(confirm()).rejects.toMatchObject({
@@ -167,16 +188,17 @@ describe("atomic unusable-zone confirmation", () => {
   );
   it("compares the revision again while the saved zone is still invalid", async () => {
     await suite.db
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: scope.locationId, revision: 3 });
+      .update(businessDaySettingsTable)
+      .set({ revision: 4 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
     const before = snapshot();
     await expect(confirm()).rejects.toMatchObject({
       code: "venue.business_day_changed",
       params: {},
     });
     expect(snapshot()).toEqual(before);
-    expect(await confirm({ ...body, expectedClockRevision: 3 })).toMatchObject({
-      clockRevision: 4,
+    expect(await confirm({ ...body, expectedClockRevision: 4 })).toMatchObject({
+      clockRevision: 5,
     });
   });
   it("serializes competing confirmations and refuses a lost-response retry without another event", async () => {
@@ -190,14 +212,20 @@ describe("atomic unusable-zone confirmation", () => {
     ]);
     await expect(confirm()).rejects.toMatchObject({ code: "venue.time_zone_repair_not_needed" });
     expect(await suite.db.select().from(incidents)).toHaveLength(1);
-    expect((await suite.db.select().from(locationBusinessDaySettings))[0]!.revision).toBe(1);
+    expect(
+      (
+        await suite.db
+          .select({ revision: businessDaySettingsTable.revision })
+          .from(businessDaySettingsTable)
+          .where(eq(businessDaySettingsTable.module, "business_day"))
+      )[0]!.revision,
+    ).toBe(2);
   });
   it("refuses a stale confirmation after a later corruption rather than recording a second success", async () => {
     await confirm();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Invalid/Again" })
-      .where(eq(locations.id, scope.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Again"}) where module = 'business_day'`,
+    );
     const before = snapshot();
     await expect(confirm()).rejects.toMatchObject({ code: "venue.business_day_changed" });
     expect(snapshot()).toEqual(before);
@@ -205,14 +233,13 @@ describe("atomic unusable-zone confirmation", () => {
   });
   it("records a distinct handled event for a later independent corruption", async () => {
     await confirm();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Invalid/Again" })
-      .where(eq(locations.id, scope.locationId));
-    await confirm({ ...body, expectedClockRevision: 1 });
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Again"}) where module = 'business_day'`,
+    );
+    await confirm({ ...body, expectedClockRevision: 2 });
     const rows = await suite.db.select().from(incidents);
     expect(rows).toHaveLength(2);
-    expect(rows.map((row) => row.params.clockRevision).sort()).toEqual([1, 2]);
+    expect(rows.map((row) => row.params.clockRevision).sort()).toEqual([2, 3]);
     expect(
       rows.every((row) => row.acknowledgedAt === AT.toISOString() && row.acknowledgedBy === actor),
     ).toBe(true);
@@ -230,10 +257,12 @@ describe("atomic unusable-zone confirmation", () => {
     }
   });
   it("keeps malformed retained cutovers as an independent refusal", async () => {
-    await suite.db
-      .update(locations)
-      .set({ dayCutover: "bad" })
-      .where(eq(locations.id, scope.locationId));
+    await suite.db.run(sql`pragma ignore_check_constraints = on`);
+    try {
+      await seedBusinessDay(suite.db, { dayCutover: "bad" });
+    } finally {
+      await suite.db.run(sql`pragma ignore_check_constraints = off`);
+    }
     const before = snapshot();
     await expect(confirm()).rejects.toMatchObject({
       code: "business_day.clock_invalid",
@@ -260,7 +289,7 @@ describe("atomic unusable-zone confirmation", () => {
       province: "Madrid",
       category: "invalid",
       eligible: true,
-      clockRevision: 0,
+      clockRevision: 1,
       choices: ["Europe/Madrid", "Atlantic/Canary"],
       suggestion: "Europe/Madrid",
       admission: { state: "unchecked" },
@@ -310,7 +339,11 @@ describe("atomic unusable-zone confirmation", () => {
   it("uses the country area's normalized code for the suggestion only", async () => {
     await seedVenueSettings(suite.db, { province: " 35 " });
     expect(await read()).toMatchObject({ suggestion: "Atlantic/Canary", eligible: true });
-    expect((await suite.db.select().from(locations))[0]!.timeZone).toBe(RAW);
+    expect(
+      suite.db.all<{ timeZone: string }>(
+        sql`select json_extract(doc, '$.timeZone') as timeZone from settings where module = 'business_day'`,
+      )[0]!.timeZone,
+    ).toBe(RAW);
   });
   it("does not invent choices or a suggestion for an unknown stored country", async () => {
     await suite.db.execute(sql`update tenants set country = 'ZZ'`);
@@ -342,14 +375,25 @@ describe("atomic unusable-zone confirmation", () => {
   });
   it("shows a valid alias as ineligible without exposing raw invalid text", async () => {
     expect(JSON.stringify(await read())).not.toContain(RAW);
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "US/Eastern" })
-      .where(eq(locations.id, scope.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"US/Eastern"}) where module = 'business_day'`,
+    );
     expect(await read()).toMatchObject({
       category: "valid",
       eligible: false,
       timeZone: "America/New_York",
     });
+  });
+});
+
+it("the zone repair returns the saved document revision", async () => {
+  expect(await confirm({ ...body, expectedClockRevision: 1 })).toEqual({
+    repaired: true,
+    clockRevision: 2,
+    admission: "restart_required",
+  });
+  expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).toEqual({
+    doc: { timeZone: "Europe/Madrid" },
+    revision: 2,
   });
 });

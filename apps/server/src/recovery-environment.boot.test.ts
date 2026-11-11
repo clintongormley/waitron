@@ -26,7 +26,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedNonproductionHistory } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { beginEnvironmentMove } from "@waitron/provisioning";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -375,9 +375,8 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
-  await suite.db
-    .insert(locations)
-    .values({ id: sourceLocation, operationDescription: "Restaurant" });
+  await suite.db.insert(locations).values({ id: sourceLocation });
+  await seedBusinessDay(suite.db, {});
   await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["en-GB"] });
   await suite.db
     .insert(nodes)

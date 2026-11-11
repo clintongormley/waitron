@@ -61,11 +61,12 @@ describe("core backup contribution", () => {
     suite.db.run(
       `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`,
     );
+    suite.db.run(`insert into locations (id) values ('venue')`);
     suite.db.run(
-      `insert into locations (id, operation_description) values ('venue', 'Restaurant')`,
+      `insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00.000Z') on conflict (module) do nothing`,
     );
     suite.db.run(
-      `insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T00:00:00.000Z') on conflict (module) do nothing`,
+      "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
     suite.db.run(
       `insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,
@@ -90,11 +91,12 @@ describe("core backup contribution", () => {
     suite.db.run(
       `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`,
     );
+    suite.db.run(`insert into locations (id) values ('venue')`);
     suite.db.run(
-      `insert into locations (id, operation_description) values ('venue', 'Restaurant')`,
+      `insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00.000Z') on conflict (module) do nothing`,
     );
     suite.db.run(
-      `insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T00:00:00.000Z') on conflict (module) do nothing`,
+      "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
     suite.db.run(
       `insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,

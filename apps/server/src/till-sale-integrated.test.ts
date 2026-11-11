@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
-import { locations, sales, withTransaction } from "@waitron/db";
+import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/catalogue";
@@ -328,13 +328,12 @@ describe("saved-zone payment transactions", () => {
         const deps = zoneDeps(source.clock);
         const req = zoneRequest();
         const original = zoneDb.db.all<{ time_zone: string }>(
-          sql`select time_zone from locations where id = ${zoneVenue.cfg.locationId}`,
+          sql`select json_extract(doc, '$.timeZone') as time_zone from settings where module = 'business_day'`,
         )[0]!.time_zone;
         if (fault === "name")
-          await zoneDb.db
-            .update(locations)
-            .set({ timeZone: "Invalid/Zone" })
-            .where(eq(locations.id, zoneVenue.cfg.locationId));
+          await zoneDb.db.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+          );
         if (fault === "instant") source.set("invalid");
         if (fault === "formatter")
           vi.spyOn(Intl.DateTimeFormat.prototype, "formatToParts").mockImplementation(() => {
@@ -354,10 +353,9 @@ describe("saved-zone payment transactions", () => {
           expect(deps.admission.snapshot()).toEqual({ state: "ready" });
         } finally {
           vi.restoreAllMocks();
-          await zoneDb.db
-            .update(locations)
-            .set({ timeZone: original })
-            .where(eq(locations.id, zoneVenue.cfg.locationId));
+          await zoneDb.db.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${original}) where module = 'business_day'`,
+          );
         }
       },
     );

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -11,8 +12,7 @@ import {
   CORE_MIGRATIONS,
   departmentDays,
   floorZones,
-  locationDayCutoverChanges,
-  locations,
+  dayCutoverChanges,
   specialDayDates,
   specialDays,
   withTransaction,
@@ -80,7 +80,7 @@ async function venue() {
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-const save = (id: string | null, input: unknown, at = AT, revision = 0) =>
+const save = (id: string | null, input: unknown, at = AT, revision = 1) =>
   scoped((tx) => saveSpecialDay(tx, id, input, at, revision));
 const read = (id: string) => scoped((tx) => readSpecialDay(tx, id));
 const refusal = async (promise: Promise<unknown>) => {
@@ -608,10 +608,9 @@ describe("saveSpecialDay", () => {
 
   it("saves without the clock-skip check when the venue's clock cannot be read", async () => {
     const v = await venue();
-    await db
-      .update(locations)
-      .set({ timeZone: "Mars/Base" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+    );
     const saved = await save(
       null,
       {
@@ -643,7 +642,7 @@ describe("saveSpecialDay", () => {
       weekday,
       slots: weekday === 2 ? [{ periodId: null, startsAt: "12:00", endsAt: "14:00" }] : [],
     }));
-    expect(await refusal(scoped((tx) => replaceMenuWeek(tx, v.restaurant, week, AT, 0)))).toEqual({
+    expect(await refusal(scoped((tx) => replaceMenuWeek(tx, v.restaurant, week, AT, 1)))).toEqual({
       code: "menu_timetable.invalid",
       params: { field: "days.2.slots.0.periodId" },
     });
@@ -683,11 +682,11 @@ describe("saveSpecialDay", () => {
     const v = await venue();
     const before = await christmasDinners(v);
     const input = { name: "Renamed", repeatsYearly: false, dates: dates(["2030-12-01"]) };
-    expect(await refusal(save(before.id, input, AT, 1))).toEqual({
+    expect(await refusal(save(before.id, input, AT, 2))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
-    expect(await refusal(save(null, input, AT, 1))).toEqual({
+    expect(await refusal(save(null, input, AT, 2))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
@@ -828,8 +827,7 @@ describe("saveSpecialDay", () => {
     const AFTER = new Date("2031-02-01T10:00:00Z");
     const withChange = async () => {
       const v = await venue();
-      await db.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await db.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2031-01-01",
         dayCutover: "03:00:00",
       });
@@ -902,7 +900,7 @@ describe("deleteSpecialDay", () => {
     const v = await venue();
     const before = await christmasDinners(v);
     const ids = (await dateRows(before.id)).map((row) => row.id);
-    await scoped((tx) => deleteSpecialDay(tx, before.id, AT, 0));
+    await scoped((tx) => deleteSpecialDay(tx, before.id, AT, 1));
     expect(await refusal(read(before.id))).toEqual({
       code: "special_day.not_found",
       params: { specialDayId: before.id },
@@ -919,12 +917,12 @@ describe("deleteSpecialDay", () => {
   it("refuses a stale revision and an unknown id, deleting nothing", async () => {
     const v = await venue();
     const before = await christmasDinners(v);
-    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, before.id, AT, 1)))).toEqual({
+    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, before.id, AT, 2)))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
     const missing = randomUUID();
-    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, missing, AT, 0)))).toEqual({
+    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, missing, AT, 1)))).toEqual({
       code: "special_day.not_found",
       params: { specialDayId: missing },
     });

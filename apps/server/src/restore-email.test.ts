@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -63,10 +63,13 @@ const suite = useVenueDb({
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Restore venue" });
     await db.insert(locations).values({
       id: T.locationId,
-
+    });
+    await seedVenueSettings(db, {
+      name: "Restaurant",
+      invoiceLocales: ["es"],
       operationDescription: "Venta",
     });
-    await seedVenueSettings(db, { name: "Restaurant", invoiceLocales: ["es"] });
+    await seedBusinessDay(db, {});
     await db
       .insert(nodes)
       .values({ id: T.nodeId, locationId: T.locationId, name: "Original node" });

@@ -10,7 +10,12 @@ import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedNode,
+  seedVenue,
+  seedVenueSettings,
+  seedBusinessDay,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tenantCredentials } from "@waitron/credentials";
 import { managementSessions } from "@waitron/identity";
@@ -74,10 +79,13 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
-  await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["en"] });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
     id: PRIMARY,
     locationId: LOCATION,
@@ -155,9 +163,9 @@ it("the pending-adoption start answers the main box's signed query", async () =>
     .values({ id: 1, country: "ES", taxId: "50000000R", legalName: "Boot Adoption SL" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-
-    operationDescription: "Hospitality",
   });
+  await seedVenueSettings(suite.db, { operationDescription: "Hospitality" });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({
     id: PRIMARY,
     locationId: LOCATION,

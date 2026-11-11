@@ -1,12 +1,5 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
-import {
-  incidents,
-  locations,
-  locationBusinessDaySettings,
-  venueLocationId,
-  type Transaction,
-} from "@waitron/db";
+import { incidents, BUSINESS_DAY_SETTINGS, saveSettings, type Transaction } from "@waitron/db";
 import { findAdministrativeArea } from "@waitron/country";
 import { getCountryPack, requireCountryTimeZone } from "@waitron/country-packs";
 import type { IssueScope } from "@waitron/fiscal";
@@ -73,16 +66,11 @@ export async function confirmVenueZone(
     throw new AppError("venue.business_day_changed", {});
   const timeZone = requireCountryTimeZone(context.country, request.timeZone);
   await validateRetainedZoneClock(tx, scope, timeZone, at);
-  const clockRevision = context.clockRevision + 1;
-  const venueId = await venueLocationId(tx);
-  await tx.update(locations).set({ timeZone }).where(eq(locations.id, venueId));
-  await tx
-    .insert(locationBusinessDaySettings)
-    .values({ locationId: venueId, revision: clockRevision })
-    .onConflictDoUpdate({
-      target: locationBusinessDaySettings.locationId,
-      set: { revision: clockRevision },
-    });
+  const { revision: clockRevision } = await saveSettings(tx, BUSINESS_DAY_SETTINGS, {
+    doc: { timeZone },
+    expectedRevision: context.clockRevision,
+    personId: authorizedBy,
+  });
   await tx.insert(incidents).values({
     source: "dashboard",
     code: "venue.time_zone_repaired",

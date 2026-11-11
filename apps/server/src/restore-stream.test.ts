@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { readdirSync } from "node:fs";
 import { copyFile, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -134,10 +134,13 @@ beforeAll(async () => {
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
   await db.insert(locations).values({
     id: T.locationId,
-
+  });
+  await seedVenueSettings(db, {
+    name: VENUE.venueName,
+    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(db, { name: VENUE.venueName, invoiceLocales: ["es"] });
+  await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db.insert(invoiceSeries).values({ nodeId: T.nodeId, code: "FF", purpose: "full" });
@@ -669,7 +672,7 @@ describe("prepareStreamRestore", () => {
   it.each([
     [
       "two venue rows",
-      "insert into locations (id, operation_description) values ('c0000000-0000-4000-8000-0000000000aa', 'Venta')",
+      "insert into locations (id) values ('c0000000-0000-4000-8000-0000000000aa')",
     ],
     ["no venue row", "delete from invoice_series; delete from nodes; delete from locations"],
   ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {

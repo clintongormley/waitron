@@ -1,9 +1,11 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import { renderRecoveryPack } from "@waitron/recovery-pack";
 import { beforeEach, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { locations, withTransaction, stampDeployment } from "@waitron/db";
+import { withTransaction, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -42,7 +44,9 @@ for (const locale of ["en", "es"] as const)
   ])(
     `the %s saved zone keeps completed ${locale} recovery evidence readable without modifying history`,
     async (timeZone, time, zone) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, node.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = await suite.db.select().from(registroSif);
       const part = await withTransaction(suite.db, (tx) =>
         FISCAL_RECOVERY_PACK_PAGE(tx, node, {
@@ -114,8 +118,7 @@ for (const locale of ["en", "es"] as const)
         await task.destroy();
       }
       expect(
-        (await suite.db.select().from(locations).where(eq(locations.id, node.locationId)))[0]!
-          .timeZone,
+        (await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]))[0]!.timeZone,
       ).toBe(timeZone);
       expect(await suite.db.select().from(registroSif)).toEqual(before);
     },

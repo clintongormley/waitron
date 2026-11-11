@@ -169,13 +169,13 @@ export class BusinessDayStartEditor extends LitElement {
       // keeps a model still stale after that re-read from asking again.
       if (this.#rereadPassed === next.startsAt) return;
       this.#rereadPassed = next.startsAt;
-      this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+      this.api.liveData.invalidate([{ type: "day_cutover_changes" }]);
       return;
     }
     if (delay > LONGEST_TIMER_MS) return;
     this.#changeoverTimer = setTimeout(() => {
       this.#changeoverTimer = undefined;
-      this.api.liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+      this.api.liveData.invalidate([{ type: "day_cutover_changes" }]);
     }, delay);
   }
   #newStart(change: Waiting) {

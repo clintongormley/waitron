@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { deviceId as brandDeviceId, nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceId, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "../client.js";
@@ -10,7 +10,9 @@ import { workingOrders } from "../schema/orders.js";
 import { locations } from "../schema/tenants.js";
 import { nowIso } from "../schema/columns.js";
 import { settings } from "../schema/settings.js";
-import type { VenueSettings } from "../venue-settings.js";
+import { BUSINESS_DAY_SETTINGS, FIRST_DAY_START, type VenueSettings } from "../venue-settings.js";
+import { readSettings, saveSettings } from "../settings.js";
+import { dayCutoverChanges } from "../schema/day-cutover-changes.js";
 
 export async function seedVenueSettings(
   db: Database | Transaction,
@@ -25,6 +27,8 @@ export async function seedVenueSettings(
       db,
       {
         name: "Test venue",
+        fiscalTerritory: "ES-common",
+        operationDescription: "Restaurant",
         invoiceLocales: ["es"],
         contentLanguages: null,
         defaultContentLanguage: null,
@@ -86,10 +90,13 @@ export async function seedVenue(
     postalCode,
     city,
     province,
+    timeZone,
+    dayCutover,
+    fiscalTerritory,
+    operationDescription,
     ...columns
   } = overrides;
   await db.insert(locations).values({
-    operationDescription: "Restaurant",
     ...columns,
     ...(defaultCatalogueId === undefined ? {} : { catalogueId: defaultCatalogueId }),
   });
@@ -102,9 +109,12 @@ export async function seedVenue(
     postalCode,
     city,
     province,
+    fiscalTerritory,
+    operationDescription,
   }))
     if (value !== undefined) Object.assign(doc, { [key]: value });
   await seedVenueSettings(db, doc);
+  await seedBusinessDay(db, { timeZone, dayCutover });
 }
 
 /** Seeds one node and returns its id: at the venue unless `location` is given. */
@@ -188,4 +198,40 @@ export async function seedWorkingOrder(
     })
     .returning();
   return row!;
+}
+
+export async function seedBusinessDay(
+  db: Database | Transaction,
+  overrides: { timeZone?: string; dayCutover?: string } = {},
+): Promise<void> {
+  const current = await readSettings(db, BUSINESS_DAY_SETTINGS);
+  if (current.revision === 0 || overrides.timeZone !== undefined) {
+    await saveSettings(db, BUSINESS_DAY_SETTINGS, {
+      doc: {
+        ...current.doc,
+        ...(overrides.timeZone === undefined ? {} : { timeZone: overrides.timeZone }),
+      },
+      expectedRevision: current.revision,
+      personId: null,
+    });
+  }
+  const value = overrides.dayCutover ?? "06:00:00";
+  const stored = value.length === 5 ? `${value}:00` : value;
+  if (overrides.dayCutover !== undefined) {
+    await db
+      .delete(dayCutoverChanges)
+      .where(
+        and(
+          eq(dayCutoverChanges.effectiveBusinessDay, FIRST_DAY_START),
+          ne(dayCutoverChanges.dayCutover, stored),
+        ),
+      );
+  }
+  await db
+    .insert(dayCutoverChanges)
+    .values({
+      effectiveBusinessDay: FIRST_DAY_START,
+      dayCutover: stored,
+    })
+    .onConflictDoNothing({ target: dayCutoverChanges.effectiveBusinessDay });
 }

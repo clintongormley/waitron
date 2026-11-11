@@ -25,7 +25,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
@@ -69,11 +69,13 @@ async function fixture(
   operationDescriptionDefault?: string,
 ): Promise<Fixture> {
   await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({ operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  await seedVenueSettings(db, { name: "Venue", invoiceLocales: ["en-GB"] });
+  const [location] = await db.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(db, {
+    name: "Venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(db, {});
   const scopedLocationId = location!.id;
   const [zone] = await db
     .insert(floorZones)
@@ -3380,7 +3382,7 @@ it("the station planning route returns the configured period ranges for a non-de
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
-      0,
+      1,
     );
     const [station] = await tx
       .insert(kitchenStations)
@@ -3892,7 +3894,7 @@ it("A724: the station planning route returns last orders at its period's own end
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
-      0,
+      1,
     );
     const [station] = await tx
       .insert(kitchenStations)

@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { randomUUID } from "node:crypto";
 import { sql, and, eq, inArray } from "drizzle-orm";
@@ -18,8 +19,7 @@ import {
   floorTodayTables,
   floorTodayZones,
   floorZones,
-  locations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   joinedTableApart,
   shortNameColumns,
   stillJoinedPart,
@@ -546,14 +546,13 @@ describe("building today's plan from a zone's layout", () => {
     const t1 = await v.table("Day 1", z);
     await masterOf(z, [{ label: "Day 1", live: t1 }]);
     const [{ cutover }] = (await inTx(v, (tx) =>
-      tx
-        .select({ cutover: locations.dayCutover })
-        .from(locations)
-        .where(eq(locations.id, v.cfg.locationId)),
+      Promise.resolve(
+        tx.all<{ cutover: string }>(
+          sql`select c.day_cutover as cutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+        ),
+      ),
     )) as [{ cutover: string }];
-    await inTx(v, (tx) =>
-      tx.update(locations).set({ dayCutover: "04:00" }).where(eq(locations.id, v.cfg.locationId)),
-    );
+    await inTx(v, (tx) => seedBusinessDay(tx, { dayCutover: "04:00" }));
     // Europe/Madrid is two hours ahead of UTC on these dates.
     const at = (utc: string) => inTx(v, (tx) => ensureToday(tx, NONE, new Date(utc)));
 
@@ -565,9 +564,7 @@ describe("building today's plan from a zone's layout", () => {
       await at("2026-10-09T04:00:00Z");
       expect(await todayZone(z)).toMatchObject({ businessDay: "2026-10-09", revision: 2 });
     } finally {
-      await inTx(v, (tx) =>
-        tx.update(locations).set({ dayCutover: cutover }).where(eq(locations.id, v.cfg.locationId)),
-      );
+      await inTx(v, (tx) => seedBusinessDay(tx, { dayCutover: cutover }));
     }
   });
 
@@ -601,11 +598,10 @@ describe("building today's plan from a zone's layout", () => {
     const z = await zone();
     const t1 = await v.table("Clock 1", z, { today: false });
     await masterOf(z, [{ label: "Clock 1", live: t1 }]);
-    await inTx(v, (tx) =>
-      tx
-        .update(locations)
-        .set({ timeZone: "Nowhere/Never" })
-        .where(eq(locations.id, v.cfg.locationId)),
+    await inTx(v, async (tx) =>
+      tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Nowhere/Never"}) where module = 'business_day'`,
+      ),
     );
     try {
       expect(await inTx(v, (tx) => todayBusinessDay(tx, NOW))).toBeNull();
@@ -614,11 +610,10 @@ describe("building today's plan from a zone's layout", () => {
       expect(await todayZone(z)).toBeUndefined();
       expect(await todayRow(t1)).toBeUndefined();
     } finally {
-      await inTx(v, (tx) =>
-        tx
-          .update(locations)
-          .set({ timeZone: "Europe/Madrid" })
-          .where(eq(locations.id, v.cfg.locationId)),
+      await inTx(v, async (tx) =>
+        tx.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+        ),
       );
     }
   });
@@ -1204,15 +1199,27 @@ it.each(["03:00", "07:00"])(
     const z = await zone();
     await masterOf(z, [{ label: "Dated reset" }]);
     const [clock] = await inTx(v, (tx) =>
-      tx.select().from(locations).where(eq(locations.id, v.cfg.locationId)),
+      Promise.resolve(
+        tx.all<{
+          id: string;
+          bumpMode: string;
+          fireControl: string;
+          catalogueId: string | null;
+          timeZone: string;
+          dayCutover: string;
+        }>(
+          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+        ),
+      ),
     );
     await inTx(v, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "UTC", dayCutover: "05:00:00" })
-        .where(eq(locations.id, v.cfg.locationId));
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await (async () => {
+        await tx.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"UTC"}) where module = 'business_day'`,
+        );
+        await seedBusinessDay(tx, { dayCutover: "05:00:00" });
+      })();
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: `${cutover}:00`,
       });
@@ -1235,12 +1242,14 @@ it.each(["03:00", "07:00"])(
     } finally {
       await inTx(v, async (tx) => {
         await tx
-          .delete(locationDayCutoverChanges)
-          .where(eq(locationDayCutoverChanges.locationId, v.cfg.locationId));
-        await tx
-          .update(locations)
-          .set({ timeZone: clock!.timeZone, dayCutover: clock!.dayCutover })
-          .where(eq(locations.id, v.cfg.locationId));
+          .delete(dayCutoverChanges)
+          .where(sql`${dayCutoverChanges.effectiveBusinessDay} > '2000-01-01'`);
+        await (async () => {
+          await tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${clock!.timeZone}) where module = 'business_day'`,
+          );
+          await seedBusinessDay(tx, { dayCutover: clock!.dayCutover });
+        })();
       });
     }
   },

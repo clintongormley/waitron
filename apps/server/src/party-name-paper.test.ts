@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { fireGroup } from "./order-groups.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import * as printing from "@waitron/printing";
@@ -9,7 +10,6 @@ import {
   kitchenStations,
   orderGroups,
   parties,
-  locations,
   printJobs,
   printers,
   ticketItems,
@@ -199,7 +199,11 @@ it("names paid but unserved work in the current saved venue zone", async () => {
   const p = await seat(v, await v.table("Table 4"));
   await order(v, p.tabId, "Burger");
   await pay(v, p.tabId, "12.00");
-  await inTx(v, (tx) => tx.update(locations).set({ timeZone: "Asia/Tokyo" }));
+  await inTx(v, async (tx) =>
+    tx.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Asia/Tokyo"}) where module = 'business_day'`,
+    ),
+  );
   const out = await rename(p.partyId, "Ann");
   expect(out).toHaveLength(1);
   expect(printedLines(out[0]!.payload)).toContain("21:30");

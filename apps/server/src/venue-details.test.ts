@@ -22,6 +22,8 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { sql } from "drizzle-orm";
 import {
+  BUSINESS_DAY_SETTINGS,
+  readSettings,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
@@ -44,7 +46,7 @@ import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedBusinessDay, seedNode } from "@waitron/db/testing/seed.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
@@ -72,7 +74,7 @@ describe("ordinary zone edit revision", () => {
         changes: { timeZone: "UTC" },
       }),
     );
-    expect(saved.model.businessDayClock.revision).toBe(1);
+    expect(saved.model.businessDayClock.revision).toBe(2);
     const result = await sell();
     expect(result).toMatchObject({ issuedAt: "2026-10-06T12:00:00.000Z", issuedOffsetMinutes: 0 });
     expect(suite.db.all(sql`select issued_offset_minutes from sales`)).toEqual([
@@ -110,9 +112,9 @@ describe("ordinary zone edit revision", () => {
       formatter.mockRestore();
     }
     expect((await read()).details.timeZone).toBe("Europe/Madrid");
-    expect((await read()).businessDayClock.revision).toBe(0);
+    expect((await read()).businessDayClock.revision).toBe(1);
   });
-  it("advances the absent clock revision once for a real zone change and not for a retry", async () => {
+  it("advances the clock document revision once for a real zone change and not for a retry", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
@@ -120,7 +122,7 @@ describe("ordinary zone edit revision", () => {
         changes: { timeZone: "UTC" },
       }),
     );
-    expect(saved.model.businessDayClock.revision).toBe(1);
+    expect(saved.model.businessDayClock.revision).toBe(2);
     const retry = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
@@ -128,17 +130,13 @@ describe("ordinary zone edit revision", () => {
       }),
     );
     expect(retry.changed).toBe(false);
-    expect(retry.model.businessDayClock.revision).toBe(1);
-    expect(
-      suite.db.all(
-        sql`select revision from location_business_day_settings where location_id = ${venue.cfg.locationId}`,
-      ),
-    ).toEqual([{ revision: 1 }]);
+    expect(retry.model.businessDayClock.revision).toBe(2);
+    expect(suite.db.all(sql`select revision from settings where module = 'business_day'`)).toEqual([
+      { revision: 2 },
+    ]);
   });
   it("increments an existing revision and rolls both zone and revision back on refusal", async () => {
-    await suite.db.execute(
-      sql`insert into location_business_day_settings(location_id, revision) values (${venue.cfg.locationId}, 7)`,
-    );
+    await suite.db.execute(sql`update settings set revision = 8 where module = 'business_day'`);
     const initial = await read();
     await expect(
       withTransaction(suite.db, async (tx) => {
@@ -146,18 +144,18 @@ describe("ordinary zone edit revision", () => {
           expected: initial.details,
           changes: { timeZone: "UTC" },
         });
-        expect(saved.model.businessDayClock.revision).toBe(8);
+        expect(saved.model.businessDayClock.revision).toBe(9);
         throw new Error("abort zone edit");
       }),
     ).rejects.toThrow("abort zone edit");
-    expect((await read()).businessDayClock.revision).toBe(7);
+    expect((await read()).businessDayClock.revision).toBe(8);
     expect((await read()).details.timeZone).toBe("Europe/Madrid");
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, { expected: initial.details, changes: { timeZone: "UTC" } }),
     );
-    expect(saved.model.businessDayClock.revision).toBe(8);
+    expect(saved.model.businessDayClock.revision).toBe(9);
   });
-  it("leaves the clock revision absent for an equivalent alias and an unrelated edit", async () => {
+  it("leaves the clock document revision unchanged for an equivalent alias and an unrelated edit", async () => {
     const initial = await read();
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
@@ -165,12 +163,10 @@ describe("ordinary zone edit revision", () => {
         changes: { timeZone: "Europe/Madrid", name: "Updated label" },
       }),
     );
-    expect(saved.model.businessDayClock.revision).toBe(0);
-    expect(
-      suite.db.all(
-        sql`select revision from location_business_day_settings where location_id = ${venue.cfg.locationId}`,
-      ),
-    ).toEqual([]);
+    expect(saved.model.businessDayClock.revision).toBe(1);
+    expect(suite.db.all(sql`select revision from settings where module = 'business_day'`)).toEqual([
+      { revision: 1 },
+    ]);
   });
   it("publishes a changed location only after its zone and revision commit", async () => {
     await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
@@ -179,10 +175,10 @@ describe("ordinary zone edit revision", () => {
     const unsubscribe = subscribeToChanges((event) =>
       published.push({
         event,
-        revision: suite.db.all(
-          sql`select revision from location_business_day_settings where location_id = ${venue.cfg.locationId}`,
+        revision: suite.db.all(sql`select revision from settings where module = 'business_day'`),
+        zone: suite.db.all(
+          sql`select json_extract(doc, '$.timeZone') as time_zone from settings where module = 'business_day'`,
         ),
-        zone: suite.db.all(sql`select time_zone from locations where id = ${venue.cfg.locationId}`),
       }),
     );
     try {
@@ -196,7 +192,7 @@ describe("ordinary zone edit revision", () => {
       expect(published.length).toBeGreaterThan(0);
       for (const snapshot of published)
         expect(snapshot).toMatchObject({
-          revision: [{ revision: 1 }],
+          revision: [{ revision: 2 }],
           zone: [{ time_zone: "UTC" }],
         });
     } finally {
@@ -355,7 +351,7 @@ describe("venue detail edits", () => {
     );
     expect(saved.model.details.addressLine2).toBeNull();
     const rows = await suite.db.execute(
-      sql`select operation_description, fiscal_territory from locations where id = ${venue.cfg.locationId}`,
+      sql`select json_extract(doc, '$.operationDescription') as operation_description, json_extract(doc, '$.fiscalTerritory') as fiscal_territory from settings where module = 'venue'`,
     );
     expect(rows.rows).toEqual([
       {
@@ -369,7 +365,7 @@ describe("venue detail edits", () => {
       sql`update settings set doc = json_set(doc, '$.name', '  Main room  ', '$.province', 'Madrid') where module = 'venue'`,
     );
     await suite.db.execute(
-      sql`update locations set time_zone = 'Europe/Madrid', day_cutover = '05:00:00' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.timeZone', 'Europe/Madrid') where module = 'business_day'`,
     );
     const initial = await read();
     for (const changes of [{}, { name: "Main room", province: "28", dayCutover: "05:00:00" }]) {
@@ -598,7 +594,9 @@ describe("venue history locks", () => {
   it("permits a time-zone override before operational history without saving the venue document", async () => {
     const initial = await read();
     const document = suite.db.all(sql`select * from settings where module = 'venue'`);
-    const activity = suite.db.all(sql`select * from activity_log where kind = 'settings.saved'`);
+    const activity = suite.db.all(
+      sql`select * from activity_log where kind = 'settings.saved' and subject_id = 'venue'`,
+    );
     const saved = await withTransaction(suite.db, (tx) =>
       writeVenueDetails(tx, {
         expected: initial.details,
@@ -608,11 +606,13 @@ describe("venue history locks", () => {
     expect(saved.model.details.timeZone).toBe("UTC");
     expect(saved.model.details.dayCutover).toBe("05:00");
     expect(suite.db.all(sql`select * from settings where module = 'venue'`)).toEqual(document);
-    expect(suite.db.all(sql`select * from activity_log where kind = 'settings.saved'`)).toEqual(
-      activity,
-    );
+    expect(
+      suite.db.all(
+        sql`select * from activity_log where kind = 'settings.saved' and subject_id = 'venue'`,
+      ),
+    ).toEqual(activity);
     const { rows } = await suite.db.execute(
-      sql`select day_cutover from locations where id = ${venue.cfg.locationId}`,
+      sql`select day_cutover from day_cutover_changes where effective_business_day = '2000-01-01'`,
     );
     expect(rows).toEqual([{ day_cutover: "05:00:00" }]);
   });
@@ -693,7 +693,7 @@ describe("crafted detail bodies and legacy values", () => {
   });
   it("keeps exact invalid legacy values as no-ops without normalizing other fields", async () => {
     await suite.db.execute(
-      sql`update locations set time_zone = 'legacy-invalid' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.timeZone', 'legacy-invalid') where module = 'business_day'`,
     );
     await suite.db.execute(
       sql`update settings set doc = json_set(doc, '$.province', 'Unknown legacy province') where module = 'venue'`,
@@ -960,7 +960,7 @@ describe("venue details preserve committed history", () => {
   });
   it("serves a recognized zone alias after history without rewriting its stored spelling", async () => {
     await suite.db.execute(
-      sql`update locations set time_zone = 'US/Eastern' where id = ${venue.cfg.locationId}`,
+      sql`update settings set doc = json_set(doc, '$.timeZone', 'US/Eastern') where module = 'business_day'`,
     );
     await (
       await prepareSale()
@@ -1006,7 +1006,7 @@ describe("venue details preserve committed history", () => {
     const sell = await prepareSale(() =>
       clocksReadAtIssuance.push(
         suite.db.all(
-          sql`select time_zone, day_cutover from locations where id = ${venue.cfg.locationId}`,
+          sql`select json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from settings b join day_cutover_changes c on c.effective_business_day = '2000-01-01' where b.module = 'business_day'`,
         ),
       ),
     );
@@ -1023,7 +1023,7 @@ describe("venue details preserve committed history", () => {
             slots: [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }],
           })),
           new Date(),
-          0,
+          1,
         );
     });
     const initial = await read();
@@ -1120,9 +1120,7 @@ describe("all retained sale rows lock venue clocks", () => {
 
 describe("venue detail consumer reads", () => {
   it("changes current station days and booking annotations without rewriting their intentions", async () => {
-    await suite.db.execute(
-      sql`update locations set day_cutover = '00:00:00' where id = ${venue.cfg.locationId}`,
-    );
+    await seedBusinessDay(suite.db, { dayCutover: "00:00:00" });
     const at = new Date("2026-10-02T23:30:00Z");
     const stationIds = await withTransaction(suite.db, async (tx) => {
       const rows = await tx
@@ -1719,9 +1717,12 @@ describe("reviewed legacy geography and clock repairs", () => {
     },
   );
   it("keeps a malformed saved cutover visible and refuses an undated correction", async () => {
-    await suite.db.execute(
-      sql`update locations set day_cutover = '06:00garbage' where id = ${venue.cfg.locationId}`,
-    );
+    await suite.db.run(sql`PRAGMA ignore_check_constraints = on`);
+    try {
+      await seedBusinessDay(suite.db, { dayCutover: "06:00garbage" });
+    } finally {
+      await suite.db.run(sql`PRAGMA ignore_check_constraints = off`);
+    }
     const model = await read();
     expect(model.details.dayCutover).toBe("06:00garbage");
     await expect(
@@ -1736,7 +1737,9 @@ describe("reviewed legacy geography and clock repairs", () => {
       params: { field: "dayCutover", reason: "effective_date_required" },
     });
     expect(
-      suite.db.all(sql`select day_cutover from locations where id = ${venue.cfg.locationId}`),
+      suite.db.all(
+        sql`select day_cutover from day_cutover_changes where effective_business_day = '2000-01-01'`,
+      ),
     ).toEqual([{ day_cutover: "06:00garbage" }]);
   });
 });
@@ -1763,7 +1766,7 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
         slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "14:00" }],
       })),
       new Date(),
-      0,
+      1,
     );
   });
   await expect(
@@ -1811,4 +1814,19 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
     },
   });
   expect((await read()).details).toEqual(initial.details);
+});
+
+it("a zone change raises the business-day document revision", async () => {
+  const initial = await read();
+  const saved = await withTransaction(suite.db, (tx) =>
+    writeVenueDetails(tx, {
+      expected: initial.details,
+      changes: { timeZone: "UTC" },
+    }),
+  );
+  expect(saved.model.businessDayClock.revision).toBe(2);
+  expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).toEqual({
+    doc: { timeZone: "UTC" },
+    revision: 2,
+  });
 });

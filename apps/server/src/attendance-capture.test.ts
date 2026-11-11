@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  locationDayCutoverChanges,
-  type Transaction,
-  venueLocationId,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, dayCutoverChanges, type Transaction, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -21,7 +15,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
-let personId: string, other: string, locationId: string;
+let personId: string, other: string;
 const fact = () => ({
   source: "whole-payment" as const,
   key: "attempt:one",
@@ -43,7 +37,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
+
   const people = await suite.db
     .insert(persons)
     .values([
@@ -62,8 +56,8 @@ describe("transactional attendance operation capture", () => {
       await capture(fact());
       const [before] = await suite.db.select().from(attendanceDayWork);
       await suite.db
-        .insert(locationDayCutoverChanges)
-        .values({ locationId, effectiveBusinessDay: "2026-01-06", dayCutover: "06:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-01-06", dayCutover: "06:00:00" });
       await expect(
         capture({ ...fact(), key: "after-cutover-setting", at: "2026-01-05T16:42:00Z" }),
       ).resolves.toBeUndefined();

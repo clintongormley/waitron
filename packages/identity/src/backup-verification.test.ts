@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import crypto, { createHmac, generateKeyPairSync } from "node:crypto";
 import { syncBuiltinESMExports } from "node:module";
 import { isoCBOR } from "@simplewebauthn/server/helpers";
@@ -71,8 +71,13 @@ const passed = {
 
 beforeEach(async () => {
   for (const suite of [original, restored]) {
-    await suite.db.insert(locations).values({ id: location, operationDescription: "Sale" });
-    await seedVenueSettings(suite.db, { name: "Main", invoiceLocales: ["en"] });
+    await suite.db.insert(locations).values({ id: location });
+    await seedVenueSettings(suite.db, {
+      name: "Main",
+      invoiceLocales: ["en"],
+      operationDescription: "Sale",
+    });
+    await seedBusinessDay(suite.db, {});
     await suite.db
       .insert(deviceProfiles)
       .values({ id: profile, name: "Till", formFactor: "till", capabilities: [] });

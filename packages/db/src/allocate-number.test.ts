@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import { allocateInvoiceNumber } from "./allocate-number.js";
@@ -24,10 +24,13 @@ async function seed(db: Database): Promise<void> {
   nodeA1 = await seedNode(db);
   await db.insert(locations).values({
     id: LOCATION_B,
-
+  });
+  await seedVenueSettings(db, {
+    name: "Fixture Location B",
+    invoiceLocales: ["es"],
     operationDescription: "Hostelería",
   });
-  await seedVenueSettings(db, { name: "Fixture Location B", invoiceLocales: ["es"] });
+  await seedBusinessDay(db, {});
   await seedNode(db, LOCATION_B);
 }
 

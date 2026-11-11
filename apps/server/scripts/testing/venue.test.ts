@@ -20,8 +20,8 @@ describe("the operator scripts' shared test venue", () => {
   it("stores English location text while retaining the Spanish fiscal and receipt settings", () => {
     expect(
       suite.db.all(sql`
-      select json_extract(settings.doc, '$.name') as name, operation_description, json_extract(settings.doc, '$.addressLine1') as address_line1, json_extract(settings.doc, '$.invoiceLocales') as invoice_locales,
-        fiscal_territory, time_zone from locations cross join settings on settings.module = 'venue'
+      select json_extract(settings.doc, '$.name') as name, json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(settings.doc, '$.addressLine1') as address_line1, json_extract(settings.doc, '$.invoiceLocales') as invoice_locales,
+        json_extract(settings.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(b.doc, '$.timeZone') as time_zone from settings cross join settings b where settings.module = 'venue' and b.module = 'business_day'
     `),
     ).toEqual([
       {

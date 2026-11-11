@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodes, locations } from "@waitron/db";
@@ -55,10 +56,13 @@ it("durably completed ordinary trading needs no fresh outside consultation", asy
       { kind: "complete" },
     ] as const)
       state = await f.store.update(f.context.attemptId, state.revision, change);
-    await suite.db
-      .insert(locations)
-      .values([{ id: LOCATION, operationDescription: "Hospitality" }]);
-    await seedVenueSettings(suite.db, { name: "Main", invoiceLocales: ["en"] });
+    await suite.db.insert(locations).values([{ id: LOCATION }]);
+    await seedVenueSettings(suite.db, {
+      name: "Main",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    await seedBusinessDay(suite.db);
     await suite.db
       .insert(nodes)
       .values({ id: f.context.binding.targetNodeId, locationId: LOCATION, name: "Box" });

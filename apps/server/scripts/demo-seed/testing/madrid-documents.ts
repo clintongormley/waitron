@@ -1,3 +1,4 @@
+import { FIRST_DAY_START } from "@waitron/db";
 import { stable, type CanonicalMadridSemantics, type MadridColumn } from "./madrid-semantics.js";
 
 export function madridWithDocument(
@@ -10,7 +11,7 @@ export function madridWithDocument(
     revision: number;
     updatedAt: string;
     updatedBy: string | null;
-    mode?: "row";
+    mode?: "row" | "business-day";
     targetField?: string;
     defaults?: Readonly<Record<string, unknown>>;
   },
@@ -60,7 +61,13 @@ export function madridWithDocument(
     const row = {
       module: metadata.module,
       version: metadata.version,
-      revision: metadata.revision,
+      revision:
+        metadata.revision +
+        (metadata.mode === "business-day"
+          ? Number(
+              Object.values(result.tables.location_business_day_settings!.rows)[0]?.revision ?? 0,
+            )
+          : 0),
       doc: {
         ...metadata.defaults,
         ...(previous?.doc as Record<string, unknown> | undefined),
@@ -77,6 +84,32 @@ export function madridWithDocument(
   if (metadata.mode === "row") {
     source.rows = {};
     return result;
+  }
+  if (metadata.mode === "business-day") {
+    const old = result.tables.location_day_cutover_changes!;
+    const starts = Object.values(old.rows).map((row) => ({
+      effective_business_day: row.effective_business_day,
+      day_cutover: row.day_cutover,
+    }));
+    if (rows.length === 1)
+      starts.unshift({
+        effective_business_day: FIRST_DAY_START,
+        day_cutover: rows[0]!.day_cutover,
+      });
+    result.tables.day_cutover_changes = {
+      columns: old.columns
+        .filter(({ name }) => name !== "location_id")
+        .map((column) => ({ ...column, pk: column.name === "effective_business_day" ? 1 : 0 })),
+      foreignKeys: [],
+      rows: Object.fromEntries(
+        starts
+          .map((row) => [stable(row), row])
+          .sort(([a], [b]) => String(a).localeCompare(String(b))),
+      ),
+    };
+    delete result.tables.location_day_cutover_changes;
+    delete result.tables.location_business_day_settings;
+    fields = { ...fields, day_cutover: "dayCutover" };
   }
   source.columns = source.columns.filter((column) => !Object.hasOwn(fields, column.name));
   source.rows = Object.fromEntries(

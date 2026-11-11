@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
@@ -12,7 +13,6 @@ import {
   departmentDayRanges,
   departmentDays as departmentDayRows,
   floorZones,
-  locations,
   seasons,
   specialDayDates,
   specialDays,
@@ -119,9 +119,9 @@ const closedWeek = (days: Record<number, Range[]>) =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: days[weekday] ?? [] }));
 
 const menuSeason = (v: Venue, seasonId: string, days: Record<number, Slot[]>) =>
-  scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(days), AT, 0, { seasonId }));
+  scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(days), AT, 1, { seasonId }));
 const zoneSeason = (zoneId: string, seasonId: string, days: Record<number, Range[]>) =>
-  scoped((tx) => replaceZoneClosedWeek(tx, zoneId, closedWeek(days), 0, AT, { seasonId }));
+  scoped((tx) => replaceZoneClosedWeek(tx, zoneId, closedWeek(days), 1, AT, { seasonId }));
 
 async function autumnAndWinter(): Promise<Venue> {
   const v = await venue();
@@ -284,10 +284,9 @@ describe("the till's service on a season boundary", () => {
 
   it("an unreadable clock still opens every period's menus", async () => {
     const v = await autumnAndWinter();
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     const service = await scoped((tx) =>
       resolveDepartmentService(tx, v.departmentId, new Date("2030-11-30T23:15:00Z")),
     );
@@ -304,10 +303,9 @@ describe("the till's service on a season boundary", () => {
     });
     const at = new Date("2030-11-30T23:15:00Z");
     expect([...(await scoped((tx) => closedZoneIdsAt(tx, at)))]).toEqual([v.sala]);
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     expect([...(await scoped((tx) => closedZoneIdsAt(tx, at)))]).toEqual([]);
   });
 
@@ -316,10 +314,9 @@ describe("the till's service on a season boundary", () => {
     await zoneSeason(v.sala, v.seasons.Autumn!, {
       [SATURDAY]: [{ startsAt: "00:00", endsAt: "05:00" }],
     });
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     const states = await scoped((tx) =>
       readZoneClosingStates(tx, [v.sala, v.terraza], new Date("2030-11-30T23:15:00Z")),
     );
@@ -333,10 +330,9 @@ describe("the till's service on a season boundary", () => {
 
   it("an unreadable clock keeps the till's menus and zone open", async () => {
     const v = await autumnAndWinter();
-    await db
-      .update(locations)
-      .set({ timeZone: "not/a-zone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"not/a-zone"}) where module = 'business_day'`,
+    );
     const state = await scoped((tx) => menuState(tx, v.sala, new Date("2030-11-30T23:15:00Z")));
     expect(state.service).toMatchObject({ open: true, zoneOpen: true, zoneKeepOpen: null });
   });
@@ -379,7 +375,7 @@ describe("a day plan shared between resolvers", () => {
         id,
         menuWeek({ [TUESDAY]: [{ periodId: period, startsAt: "21:00", endsAt: "03:00" }] }),
         AT,
-        0,
+        1,
         { seasonId: v.seasons.Autumn! },
       );
       return { id, period };
@@ -591,7 +587,7 @@ describe("special-day paint over the season", () => {
         id,
         menuWeek({ [FRIDAY]: [{ periodId: period, startsAt: "19:00", endsAt: "23:00" }] }),
         AT,
-        0,
+        1,
         { seasonId: v.seasons.Winter! },
       );
       return id;

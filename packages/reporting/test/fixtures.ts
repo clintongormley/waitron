@@ -41,6 +41,7 @@ import {
   seedDevice,
   seedVenue,
   seedVenueSettings,
+  seedBusinessDay,
 } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
@@ -72,14 +73,12 @@ export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
     await seedVenue(db, venue);
     locationId = await venueLocationId(db);
   } else {
-    const [location] = await db
-      .insert(locations)
-      .values({
-        operationDescription: venue.operationDescription,
-        dayCutover: venue.dayCutover,
-      })
-      .returning({ id: locations.id });
-    await seedVenueSettings(db, { invoiceLocales: venue.invoiceLocales });
+    const [location] = await db.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(db, {
+      invoiceLocales: venue.invoiceLocales,
+      operationDescription: venue.operationDescription,
+    });
+    await seedBusinessDay(db, { dayCutover: venue.dayCutover });
     locationId = location!.id;
   }
   const { deviceId } = await seedDevice(db, { locationId });

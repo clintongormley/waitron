@@ -311,6 +311,8 @@ for (const locale of ["en", "es"] as const) {
         "locations",
         {
           name: "name",
+          fiscal_territory: "fiscalTerritory",
+          operation_description: "operationDescription",
           invoice_locales: "invoiceLocales",
           address_line1: "addressLine1",
           address_line2: "addressLine2",
@@ -350,13 +352,27 @@ for (const locale of ["en", "es"] as const) {
         });
         phases[phase]![table] = 0;
       }
-      phases[phase]!.settings = phase === "before" ? 0 : 1;
+      expected[phase] = madridWithDocument(
+        expected[phase],
+        "locations",
+        { time_zone: "timeZone" },
+        { ...venueMetadata, module: "business_day", revision: 1, mode: "business-day" },
+      );
+      delete phases[phase]!.location_business_day_settings;
+      delete phases[phase]!.location_day_cutover_changes;
+      phases[phase]!.day_cutover_changes = Object.keys(
+        expected[phase].tables.day_cutover_changes!.rows,
+      ).length;
+      phases[phase]!.settings = phase === "before" ? 0 : 2;
       const revisions = phase === "before" ? [] : phase === "seeded" ? [1, 2, 3] : [1, 2];
       expected[phase].tables.activity_log = {
         ...structuredClone(canonical[phase].tables.activity_log!),
         rows: Object.fromEntries(
-          revisions.map((revision) => {
-            const id = `@activity_log:${stable(["settings.saved", "venue", at, JSON.stringify({ revision })])}`;
+          [
+            ...revisions.map((revision) => ({ revision, module: "venue" })),
+            ...(phase === "before" ? [] : [{ revision: 1, module: "business_day" }]),
+          ].map(({ revision, module }) => {
+            const id = `@activity_log:${stable(["settings.saved", module, at, JSON.stringify({ revision })])}`;
             return [
               id,
               {
@@ -364,7 +380,7 @@ for (const locale of ["en", "es"] as const) {
                 at,
                 kind: "settings.saved",
                 subject_kind: "settings",
-                subject_id: "venue",
+                subject_id: module,
                 person_id: null,
                 device_id: null,
                 data: { revision },
@@ -373,7 +389,7 @@ for (const locale of ["en", "es"] as const) {
           }),
         ),
       };
-      phases[phase]!.activity_log = revisions.length;
+      phases[phase]!.activity_log = revisions.length + (phase === "before" ? 0 : 1);
       for (const name of ADDED_TABLES) {
         const added = canonical[phase].tables[name];
         expect(added, `${phase}/${name}`).toBeDefined();

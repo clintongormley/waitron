@@ -23,7 +23,7 @@ import { shiftSwaps } from "../src/schema/shift-swaps.js";
 import type { ShiftSwapStatus } from "../src/schema/shift-swaps.js";
 import { shiftTemplates } from "../src/schema/shift-templates.js";
 import { shifts } from "../src/schema/shifts.js";
-import { seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 
 /**
  * A `WorkTimeRuleset` at what a default `convenio_config` row resolves to
@@ -63,13 +63,12 @@ export async function seedLocation(db: Database): Promise<string> {
     await seedVenue(db, venue);
     return venueLocationId(db);
   }
-  const [row] = await db
-    .insert(locations)
-    .values({
-      operationDescription: venue.operationDescription,
-    })
-    .returning({ id: locations.id });
-  await seedVenueSettings(db, { invoiceLocales: venue.invoiceLocales });
+  const [row] = await db.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(db, {
+    invoiceLocales: venue.invoiceLocales,
+    operationDescription: venue.operationDescription,
+  });
+  await seedBusinessDay(db, {});
   return row!.id;
 }
 

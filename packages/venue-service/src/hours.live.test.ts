@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -9,7 +10,6 @@ import {
   installChangeFeed,
   kitchenNotices,
   kitchenStations,
-  locations,
   subscribeToChanges,
   tenants,
   withTransaction,
@@ -53,7 +53,7 @@ const reaches = (types: Set<string>, query: readonly string[]) =>
 
 it("refreshes Calendar and routing from special days, clock and daily station status", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
-  const { cfg, departmentId, bar, kitchen } = await withTransaction(db, async (tx) => {
+  const { departmentId, bar, kitchen } = await withTransaction(db, async (tx) => {
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],
@@ -94,25 +94,28 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   });
   let id = "";
   const created = await announced(async (tx) => {
-    id = (await saveSpecialDay(tx, null, party(["2030-10-15"]), at, 0)).id;
+    id = (await saveSpecialDay(tx, null, party(["2030-10-15"]), at, 1)).id;
   });
   const dayTables = ["special_days", "special_day_dates"];
   expect(reaches(created, calendar)).toEqual(dayTables);
   expect(reaches(created, routing)).toEqual(dayTables);
   const added = await announced((tx) =>
-    saveSpecialDay(tx, id, party(["2030-10-15", "2030-10-22"]), at, 0),
+    saveSpecialDay(tx, id, party(["2030-10-15", "2030-10-22"]), at, 1),
   );
   expect(reaches(added, calendar)).toEqual(["special_day_dates"]);
   expect(reaches(added, routing)).toEqual(["special_day_dates"]);
-  const removed = await announced((tx) => deleteSpecialDay(tx, id, at, 0));
+  const removed = await announced((tx) => deleteSpecialDay(tx, id, at, 1));
   expect(reaches(removed, calendar)).toEqual(dayTables);
   expect(reaches(removed, routing)).toEqual(dayTables);
 
-  const clock = await announced((tx) =>
-    tx.update(locations).set({ timeZone: "Europe/Lisbon" }).where(eq(locations.id, cfg.locationId)),
+  const clock = await announced(
+    async (tx) =>
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Lisbon"}) where module = 'business_day'`,
+      ),
   );
-  expect(reaches(clock, calendar)).toEqual(["locations"]);
-  expect(reaches(clock, routing)).toEqual(["locations"]);
+  expect(reaches(clock, calendar)).toEqual(["settings.business_day"]);
+  expect(reaches(clock, routing)).toEqual(["settings.business_day"]);
 
   const renamed = await announced((tx) =>
     tx.update(departments).set({ name: "Shop" }).where(eq(departments.id, departmentId)),
@@ -177,7 +180,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
       null,
       { name: "Arán", repeatsYearly: false, dates: [{ date: "2026-06-17", closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
-      0,
+      1,
     ),
   );
   expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
@@ -216,7 +219,7 @@ it("daily station status refreshes routing and special days refresh Opening hour
       null,
       { name: "Party", repeatsYearly: false, dates: [{ date: "2030-10-15", closedAllDay: false }] },
       at,
-      0,
+      1,
     );
     return { bar: bar!.id, dateId: date.id };
   });
@@ -233,7 +236,7 @@ it("daily station status refreshes routing and special days refresh Opening hour
         dates: [{ date: "2030-10-15", closedAllDay: false }],
       },
       at,
-      0,
+      1,
     ),
   );
   expect(reaches(named, sources[1]!)).toEqual(["special_days"]);

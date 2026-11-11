@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { oneBill, observedTableActionBody } from "./testing/table-action-fixture.js";
@@ -15,7 +16,6 @@ import {
   floorTodayZones,
   floorZones,
   joinedTableApart,
-  locations,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
@@ -486,14 +486,13 @@ describe("the till's floor routes catch today's plan up", () => {
  */
 async function onNextDay(act: () => Promise<void>): Promise<void> {
   const [{ cutover }] = (await inTx(v, (tx) =>
-    tx
-      .select({ cutover: locations.dayCutover })
-      .from(locations)
-      .where(eq(locations.id, v.cfg.locationId)),
+    Promise.resolve(
+      tx.all<{ cutover: string }>(
+        sql`select c.day_cutover as cutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+      ),
+    ),
   )) as [{ cutover: string }];
-  await inTx(v, (tx) =>
-    tx.update(locations).set({ dayCutover: "04:00" }).where(eq(locations.id, v.cfg.locationId)),
-  );
+  await inTx(v, (tx) => seedBusinessDay(tx, { dayCutover: "04:00" }));
   // Two hours ahead of UTC on this date.
   clockAt = new Date("2026-10-11T03:00:00Z");
   try {
@@ -501,10 +500,7 @@ async function onNextDay(act: () => Promise<void>): Promise<void> {
   } finally {
     clockAt = NOW;
     await withTransaction(v.db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ dayCutover: cutover })
-        .where(eq(locations.id, v.cfg.locationId));
+      await seedBusinessDay(tx, { dayCutover: cutover });
       await tx
         .update(floorTodayZones)
         .set({ businessDay: "2026-10-10" })

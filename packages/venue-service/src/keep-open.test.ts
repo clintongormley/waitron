@@ -1,10 +1,12 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   floorZones,
   locations,
   specialDayDates,
@@ -77,7 +79,7 @@ async function fixture() {
         slots: [{ periodId: lunch, startsAt: "12:00", endsAt: "14:00" }],
       })),
       at("12:00"),
-      0,
+      1,
     );
     return { cfg, departmentId, zoneId: zone!.id, lunch, afternoon, menuId: menu.id };
   });
@@ -93,7 +95,7 @@ async function zoneFixture(endsAt = "03:00") {
         slots: [{ periodId: f.lunch, startsAt: "21:00", endsAt }],
       })),
       at("21:00"),
-      0,
+      1,
     );
     await replaceZoneClosedWeek(
       tx,
@@ -102,7 +104,7 @@ async function zoneFixture(endsAt = "03:00") {
         weekday,
         ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
       })),
-      0,
+      1,
     );
   });
   return f;
@@ -199,7 +201,7 @@ describe("keeping a zone open today", () => {
           ],
         })),
         at("21:00"),
-        0,
+        1,
       ),
     );
     await expect(
@@ -238,7 +240,7 @@ describe("keeping a zone open today", () => {
         tx,
         f.zoneId,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: [] })),
-        0,
+        1,
       ),
     );
     expect((await run((tx) => readKeepOpen(tx, f.zoneId, at("23:00")))).zone).toBeNull();
@@ -320,8 +322,11 @@ it("keeps removal available after the department closes", async () => {
   await run((tx) => VENUE_SERVICE.keepZoneOpen(tx, f.zoneId, { until: "00:30" }, at("23:00")));
   await run((tx) => keep.keepZoneOpen(tx, f.zoneId, { until: null }, at("01:15", "2026-10-10")));
   expect(await zoneRows(f)).toEqual([]);
-  await run((tx) =>
-    tx.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, f.cfg.locationId)),
+  await run(
+    async (tx) =>
+      await tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+      ),
   );
   await expect(
     run((tx) => keep.keepZoneOpen(tx, f.zoneId, { until: "01:30" }, at("23:00"))),
@@ -356,7 +361,7 @@ it("retains a spanning extension in both readouts and when replacing it after th
         slots: [{ periodId: f.lunch, startsAt: "21:00", endsAt: "06:00" }],
       })),
       at("21:00"),
-      0,
+      1,
     );
     await replaceZoneClosedWeek(
       tx,
@@ -368,7 +373,7 @@ it("retains a spanning extension in both readouts and when replacing it after th
           { startsAt: "01:00", endsAt: "03:00" },
         ],
       })),
-      0,
+      1,
     );
     await keep.keepZoneOpen(tx, f.zoneId, { until: "02:00" }, at("23:00"));
   });
@@ -410,7 +415,7 @@ it("shows the effective extension after a manager moves the closure start", asyn
         weekday,
         ranges: [{ startsAt: "23:00", endsAt: "06:00" }],
       })),
-      0,
+      1,
     ),
   );
   const instant = at("23:45");
@@ -483,7 +488,7 @@ it.each([
           weekday,
           ranges: [{ startsAt: "01:00", endsAt: "03:00" }],
         })),
-        0,
+        1,
       );
       await tx
         .insert(zoneExtensions)
@@ -525,10 +530,9 @@ it("a zone offers nothing and refuses on a whole-venue closed day", async () => 
 
 it("the zone read answers nothing for an unreadable clock", async () => {
   const f = await zoneFixture();
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "Not/AZone" })
-    .where(eq(locations.id, f.cfg.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+  );
   expect(await run((tx) => readKeepOpen(tx, f.zoneId, at("23:00")))).toEqual({
     zone: null,
   });
@@ -565,10 +569,7 @@ it.each([
   async (cutover, end, dayEndsAt) => {
     const f = await fixture();
     await run(async (tx) => {
-      await tx
-        .update(locations)
-        .set({ dayCutover: cutover })
-        .where(eq(locations.id, f.cfg.locationId));
+      await seedBusinessDay(tx, { dayCutover: cutover });
       await replaceMenuWeek(
         tx,
         f.departmentId,
@@ -577,7 +578,7 @@ it.each([
           slots: [{ periodId: f.lunch, startsAt: "21:00", endsAt: end }],
         })),
         at("21:00"),
-        0,
+        1,
       );
       await replaceZoneClosedWeek(
         tx,
@@ -586,7 +587,7 @@ it.each([
           weekday,
           ranges: [{ startsAt: "23:30", endsAt: end }],
         })),
-        0,
+        1,
       );
     });
     const zone = await run((tx) => keep.readZoneKeepOpen(tx, f.zoneId, at("23:00")));
@@ -608,8 +609,7 @@ describe("zone extensions use the actual following boundary", () => {
   ])("bounds a zone's choices before a %s start", async (cutover, lastChoice, refusedUntil) => {
     const f = await zoneFixture("06:00");
     await run((tx) =>
-      tx.insert(locationDayCutoverChanges).values({
-        locationId: f.cfg.locationId,
+      tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: `${cutover}:00`,
       }),

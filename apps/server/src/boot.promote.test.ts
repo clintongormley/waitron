@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -122,11 +122,14 @@ async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void>
     .insert(locations)
     .values({
       id: TILL_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["en"] });
+  await seedVenueSettings(db, {
+    name: "Barra",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(db, {});
   await db
     .insert(nodes)
     .values({
@@ -353,11 +356,10 @@ async function seedMirrorIdentity(
     .insert(locations)
     .values({
       id: MIRROR_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra" });
+  await seedVenueSettings(db, { name: "Barra", operationDescription: "Hospitality" });
+  await seedBusinessDay(db, {});
   const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 
@@ -496,7 +498,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       expect(persisted.WAITRON_ENV).toBe("production");
       await server.close();
       await mirrorDb.execute(
-        sql`update locations set time_zone = 'Invalid/Zone' where id = ${MIRROR_LOCATION_ID}`,
+        sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
       );
       const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
       const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);

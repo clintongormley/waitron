@@ -1,3 +1,5 @@
+import { locations, readVenue } from "@waitron/db";
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -10,7 +12,6 @@ import {
   deviceProfiles,
   devices,
   joinRequests,
-  locations,
   nowIso,
   printAgents,
   printJobs,
@@ -185,7 +186,7 @@ async function send(
 
 it("refuses the retired venue-wide receipt mode write without changing the location", async () => {
   const app = mountApp();
-  const before = await suite.db.select().from(locations).where(eq(locations.id, locationId));
+  const before = await Promise.all([suite.db.select().from(locations), readVenue(suite.db)]);
 
   const response = await send(
     app,
@@ -195,7 +196,7 @@ it("refuses the retired venue-wide receipt mode write without changing the locat
   );
 
   expect(response.status).toBe(404);
-  expect(await suite.db.select().from(locations).where(eq(locations.id, locationId))).toEqual(
+  expect(await Promise.all([suite.db.select().from(locations), readVenue(suite.db)])).toEqual(
     before,
   );
 });
@@ -2439,18 +2440,16 @@ describe("mountPrintApi — management: print-test-page", () => {
   const NOW = new Date("2026-10-01T13:05:00.000Z");
 
   async function withVenueTimeZone<T>(timeZone: string, fn: () => Promise<T>): Promise<T> {
-    const [before] = await suite.db
-      .select({ timeZone: locations.timeZone })
-      .from(locations)
-      .where(eq(locations.id, locationId));
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, locationId));
+    const [before] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     try {
       return await fn();
     } finally {
-      await suite.db
-        .update(locations)
-        .set({ timeZone: before!.timeZone })
-        .where(eq(locations.id, locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${before!.timeZone}) where module = 'business_day'`,
+      );
     }
   }
 

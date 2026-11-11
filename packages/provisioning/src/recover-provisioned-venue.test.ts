@@ -85,7 +85,10 @@ it.each(["name", "fiscalTerritory"] as const)(
     await fixture();
     await withTransaction(suite.db, async (tx) => {
       if (field === "name") await seedVenueSettings(tx, { name: "Renamed venue" });
-      else await tx.execute(sql`update locations set fiscal_territory = 'ES-common'`);
+      else
+        await tx.execute(
+          sql`update settings set doc = json_set(doc, '$.fiscalTerritory', 'ES-common') where module = 'venue'`,
+        );
     });
     const before = {
       venue: (await suite.db.execute(sql`select * from locations`)).rows,

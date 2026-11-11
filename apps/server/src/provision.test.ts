@@ -1,17 +1,18 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import {
   readDeploymentEnvironment,
   stampDeployment,
   kitchenStations,
   floorZones,
-  locationDayCutoverChanges,
-  locationBusinessDaySettings,
+  dayCutoverChanges,
+  settings as businessDaySettingsTable,
   venueLocationId,
   withTransaction,
   type Database,
@@ -528,7 +529,7 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    await venueLocationId(db);
+
     const [fiesta, date, day] = [randomUUID(), randomUUID(), randomUUID()];
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
@@ -654,14 +655,20 @@ it("refuses setup/configuration replacement of a venue with dated history withou
     { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
     request,
   );
-  const venueId = await venueLocationId(db);
-  await db.insert(locationDayCutoverChanges).values([
-    { locationId: venueId, effectiveBusinessDay: "2000-01-01", dayCutover: "03:00:00" },
-    { locationId: venueId, effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" },
-  ]);
-  await db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 4 });
-  const rows = await db.select().from(locationDayCutoverChanges);
-  const settings = await db.select().from(locationBusinessDaySettings);
+
+  await seedBusinessDay(db, { dayCutover: "03:00:00" });
+  await db
+    .insert(dayCutoverChanges)
+    .values([{ effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" }]);
+  await db
+    .update(businessDaySettingsTable)
+    .set({ revision: 5 })
+    .where(eq(businessDaySettingsTable.module, "business_day"));
+  const rows = await db.select().from(dayCutoverChanges);
+  const settings = await db
+    .select({ revision: businessDaySettingsTable.revision })
+    .from(businessDaySettingsTable)
+    .where(eq(businessDaySettingsTable.module, "business_day"));
   const fiscal = await fiscalCounts(db);
   let imported = false;
   await expect(
@@ -679,7 +686,12 @@ it("refuses setup/configuration replacement of a venue with dated history withou
     ),
   ).rejects.toMatchObject({ code: "setup.already_provisioned" });
   expect(imported).toBe(false);
-  expect(await db.select().from(locationDayCutoverChanges)).toEqual(rows);
-  expect(await db.select().from(locationBusinessDaySettings)).toEqual(settings);
+  expect(await db.select().from(dayCutoverChanges)).toEqual(rows);
+  expect(
+    await db
+      .select({ revision: businessDaySettingsTable.revision })
+      .from(businessDaySettingsTable)
+      .where(eq(businessDaySettingsTable.module, "business_day")),
+  ).toEqual(settings);
   expect(await fiscalCounts(db)).toEqual(fiscal);
 });

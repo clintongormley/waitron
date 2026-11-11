@@ -205,18 +205,13 @@ describe("readStaffingMonth", () => {
     expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
   });
 
-  it("reads each table once, joins included, and not floor_zones, the holiday tables or the clock status", async () => {
+  it("reads each table once, joins included, and not floor_zones, the holiday tables ", async () => {
     await painted();
     const { tables } = await tablesRead((tx) => readStaffingMonth(tx, "2026-08", AT));
     expect(tables).toContain("staffing_days");
-    expect(tables).toContain("location_day_cutover_changes");
+    expect(tables).toContain("day_cutover_changes");
     expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
-    for (const unshown of [
-      "floor_zones",
-      "holiday_geographies",
-      "location_business_day_settings",
-      "tenants",
-    ])
+    for (const unshown of ["floor_zones", "holiday_geographies", "tenants"])
       expect(tables).not.toContain(unshown);
   });
 
@@ -249,10 +244,18 @@ describe("readStaffingMonth", () => {
       expect(tables.filter((table) => table === holidayTable)).toHaveLength(1);
     const watched: readonly string[] = QUERY_DEPENDENCIES["staffing-month"];
     expect(
-      tables.filter((table) => !watched.includes(table === "settings" ? "settings.venue" : table)),
+      tables.filter(
+        (table) =>
+          !watched.includes(
+            table === "settings"
+              ? "settings.venue"
+              : table === "locations"
+                ? "settings.business_day"
+                : table,
+          ),
+      ),
     ).toEqual([]);
-    for (const unshown of ["floor_zones", "location_business_day_settings"])
-      expect(tables).not.toContain(unshown);
+    for (const unshown of ["floor_zones"]) expect(tables).not.toContain(unshown);
   });
 });
 
@@ -288,7 +291,7 @@ describe("rota counts in the staffing month", () => {
       tables.filter(
         (t) =>
           !(QUERY_DEPENDENCIES["staffing-month"] as readonly string[]).includes(
-            t === "settings" ? "settings.venue" : t,
+            t === "settings" ? "settings.venue" : t === "locations" ? "settings.business_day" : t,
           ),
       ),
     ).toEqual([]);

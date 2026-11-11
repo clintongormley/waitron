@@ -1,16 +1,17 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import {
   archiveHost,
   bucketCommand,
-  node,
   recordedRecoveryRows,
   recoveryInvoices,
   suite,
 } from "../test/hour-recovery-host.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+
 import { expect, it } from "vitest";
-import { invoiceSeries, locations, openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, openVenueDatabase } from "@waitron/db";
 import { restoreFromArtifact } from "./restore.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { packArchive } from "./backup-archive.js";
@@ -20,7 +21,9 @@ import { writeStreamRestore } from "./restore-stream.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 
 async function savedZone(timeZone: string) {
-  await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, node.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+  );
 }
 
 it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
@@ -48,10 +51,9 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
     });
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
-      const [location] = await placed.venue
-        .select()
-        .from(locations)
-        .where(eq(locations.id, node.locationId));
+      const [location] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
+        doc,
+      ]);
       expect(location!.timeZone).toBe(timeZone);
       expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
       const after = await placed.venue.select().from(invoiceSeries);
@@ -91,10 +93,9 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
   expect(entry.failures).toEqual([]);
   const placed = await openVenueDatabase(entry.f.roots.venueDir);
   try {
-    const [location] = await placed.venue
-      .select()
-      .from(locations)
-      .where(eq(locations.id, node.locationId));
+    const [location] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
+      doc,
+    ]);
     expect(location!.timeZone).toBe("Not/A_Zone");
     expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
     expect(

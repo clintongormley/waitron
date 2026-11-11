@@ -28,9 +28,12 @@ const absent = useVenueDb({
 });
 beforeEach(() => {
   for (const db of [original.db, restored.db]) {
-    db.run(sql`insert into locations (id, operation_description) values ('venue', 'Hospitality')`);
+    db.run(sql`insert into locations (id) values ('venue')`);
     db.run(
-      sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
+      sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Hospitality"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
+    );
+    db.run(
+      "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
     );
     db.run(
       sql`insert into working_orders (id,source,location_id,order_number,opened_at) values ('order','operator_script','venue',1,'2026-10-20T08:00:00.000Z')`,

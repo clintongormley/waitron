@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -189,11 +189,14 @@ async function seedMirror(
     .insert(locations)
     .values({
       id: MIRROR_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(admin, { name: "Barra", invoiceLocales: ["en"] });
+  await seedVenueSettings(admin, {
+    name: "Barra",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(admin, {});
   const t = await admin.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
   const nif = t.rows[0]!.tax_id;
 

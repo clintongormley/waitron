@@ -1,14 +1,14 @@
 import { AppError, type BusinessDayClock } from "@waitron/shared";
-import { asc, eq } from "drizzle-orm";
+import { asc, sql, inArray } from "drizzle-orm";
 import "./errors.js";
 import type { Transaction } from "./client.js";
-import { locationDayCutoverChanges } from "./schema/business-day-clock.js";
+import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 import { locations } from "./schema/tenants.js";
 import { settings } from "./schema/settings.js";
 import { decodeSettingsRow, readSettings, saveSettings, type SettingsRead } from "./settings.js";
-import { VENUE_SETTINGS, type VenueSettings } from "./venue-settings.js";
+import { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, type VenueSettings } from "./venue-settings.js";
 
-function requireVenue(read: SettingsRead<VenueSettings>): SettingsRead<VenueSettings> {
+function requireVenue<T>(read: SettingsRead<T>): SettingsRead<T> {
   if (read.revision === 0) throw new AppError("venue.not_found", {});
   return read;
 }
@@ -62,32 +62,28 @@ export interface VenuePlace {
 }
 
 async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> {
-  const rows = await tx
-    .select({
-      id: locations.id,
-      operationDescription: locations.operationDescription,
-      fiscalTerritory: locations.fiscalTerritory,
-      timeZone: locations.timeZone,
-      dayCutover: locations.dayCutover,
-      defaultCatalogueId: locations.catalogueId,
-    })
-    .from(locations)
-    .limit(2);
-  const { id, ...venue } = theOneRow(rows);
-  const doc = (await readVenueSettings(tx)).doc;
+  const { first, doc, businessDay } = await clockRows(tx);
   return {
-    id,
+    id: first.id,
     venue: {
-      ...venue,
       name: doc.name,
       invoiceLocales: doc.invoiceLocales,
+      operationDescription: doc.operationDescription,
+      fiscalTerritory: doc.fiscalTerritory,
       addressLine1: doc.addressLine1,
       addressLine2: doc.addressLine2,
       postalCode: doc.postalCode,
       city: doc.city,
       province: doc.province,
+      timeZone: businessDay.timeZone,
+      dayCutover: first.dayCutover!,
+      defaultCatalogueId: first.defaultCatalogueId,
     },
   };
+}
+
+export async function readBusinessDayRevision(tx: Transaction): Promise<number> {
+  return requireVenue(await readSettings(tx, BUSINESS_DAY_SETTINGS)).revision;
 }
 
 function theOneRow<T>(rows: T[]): T {
@@ -108,17 +104,14 @@ function storedCutover(value: string): string {
   return /^([01]\d|2[0-3]):[0-5]\d:00$/.test(value) ? value.slice(0, 5) : value;
 }
 
-export async function readVenueClockAndPlace(
-  tx: Transaction,
-): Promise<{ clock: BusinessDayClock; place: VenuePlace }> {
+async function clockRows(tx: Transaction) {
   const rows = await tx
     .select({
       id: locations.id,
-      timeZone: locations.timeZone,
-      dayCutover: locations.dayCutover,
-      effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
-      changedCutover: locationDayCutoverChanges.dayCutover,
-      settings: {
+      defaultCatalogueId: locations.catalogueId,
+      effectiveBusinessDay: dayCutoverChanges.effectiveBusinessDay,
+      dayCutover: dayCutoverChanges.dayCutover,
+      document: {
         module: settings.module,
         version: settings.version,
         revision: settings.revision,
@@ -126,31 +119,45 @@ export async function readVenueClockAndPlace(
       },
     })
     .from(locations)
-    .leftJoin(settings, eq(settings.module, "venue"))
-    .leftJoin(locationDayCutoverChanges, eq(locationDayCutoverChanges.locationId, locations.id))
-    .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
-  const venue = rows[0];
-  if (venue === undefined) throw new AppError("venue.not_found", {});
-  if (rows.some((row) => row.id !== venue.id)) {
+    .leftJoin(settings, inArray(settings.module, ["venue", "business_day"]))
+    .leftJoin(dayCutoverChanges, sql`true`)
+    .orderBy(asc(dayCutoverChanges.effectiveBusinessDay));
+  const location = rows[0];
+  if (location === undefined) throw new AppError("venue.not_found", {});
+  if (rows.some((row) => row.id !== location.id))
     throw new AppError("provisioning.second_venue", {});
-  }
-  const place = requireVenue(decodeSettingsRow(venue.settings ?? undefined, VENUE_SETTINGS)).doc;
+  const doc = requireVenue(
+    decodeSettingsRow(
+      rows.find((row) => row.document?.module === "venue")?.document ?? undefined,
+      VENUE_SETTINGS,
+    ),
+  ).doc;
+  const businessDay = requireVenue(
+    decodeSettingsRow(
+      rows.find((row) => row.document?.module === "business_day")?.document ?? undefined,
+      BUSINESS_DAY_SETTINGS,
+    ),
+  ).doc;
+  const dayRows = rows.filter((row) => row.document?.module === "venue");
+  const first = dayRows[0]!;
+  if (first.effectiveBusinessDay === null) throw new AppError("venue.not_found", {});
+  return { rows: dayRows, first, doc, businessDay };
+}
+
+export async function readVenueClockAndPlace(
+  tx: Transaction,
+): Promise<{ clock: BusinessDayClock; place: VenuePlace }> {
+  const { rows, first, doc, businessDay } = await clockRows(tx);
   return {
     clock: {
-      timeZone: venue.timeZone,
-      dayCutover: storedCutover(venue.dayCutover),
-      cutoverChanges: rows.flatMap((row) =>
-        row.effectiveBusinessDay === null
-          ? []
-          : [
-              {
-                effectiveBusinessDay: row.effectiveBusinessDay,
-                dayCutover: storedCutover(row.changedCutover!),
-              },
-            ],
-      ),
+      timeZone: businessDay.timeZone,
+      dayCutover: storedCutover(first.dayCutover!),
+      cutoverChanges: rows.slice(1).map((row) => ({
+        effectiveBusinessDay: row.effectiveBusinessDay!,
+        dayCutover: storedCutover(row.dayCutover!),
+      })),
     },
-    place: { province: place.province, city: place.city, holidayArea: place.holidayArea },
+    place: { province: doc.province, city: doc.city, holidayArea: doc.holidayArea },
   };
 }
 

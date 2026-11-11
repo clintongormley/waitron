@@ -135,7 +135,7 @@ async function send(
               body !== null &&
               typeof body === "object" &&
               !Array.isArray(body)
-              ? { expectedClockRevision: 0, ...body }
+              ? { expectedClockRevision: 1, ...body }
               : body,
           ),
         }),
@@ -163,7 +163,7 @@ async function create(date: string, name: string) {
       null,
       { name, repeatsYearly: false, dates: [{ date, closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
-      0,
+      1,
     ),
   );
 }

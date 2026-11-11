@@ -149,10 +149,9 @@ describe("the pack's server-key page seat", () => {
   });
 
   it("draws in the saved venue's time zone", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Atlantic/Canary" })
-      .where(eq(locations.id, node.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Atlantic/Canary"}) where module = 'business_day'`,
+    );
     const result = await page({ newKey });
     expect(result.page.rows.at(-1)).toEqual({
       label: "Created",

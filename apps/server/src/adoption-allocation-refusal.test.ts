@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -205,8 +205,13 @@ it("a pending allocated adoption refuses without creating a selling identity and
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Synthetic SL" });
-  await suite.db.insert(locations).values({ id: LOCATION, operationDescription: "Venta" });
-  await seedVenueSettings(suite.db, { name: "Venue", invoiceLocales: ["es"] });
+  await suite.db.insert(locations).values({ id: LOCATION });
+  await seedVenueSettings(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta",
+  });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
   const pending: PendingAdoption = {
     originNodeId: PRIMARY,

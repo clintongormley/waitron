@@ -1,3 +1,5 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type {
   HourPeriod,
@@ -78,9 +80,17 @@ async function fixture(): Promise<Fixture> {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     });
-    const { name: venueName, ...columns } = venue("Venue");
+    const {
+      name: venueName,
+      invoiceLocales,
+      operationDescription,
+      timeZone,
+      dayCutover,
+      ...columns
+    } = venue("Venue");
     const [location] = await tx.insert(locations).values(columns).returning();
-    await seedVenueSettings(tx, { name: venueName });
+    await seedVenueSettings(tx, { name: venueName, invoiceLocales, operationDescription });
+    await seedBusinessDay(tx, { timeZone, dayCutover });
     const department = (location: string, name: string, isDefault = false) => ({
       locationId: location,
       name,
@@ -129,7 +139,7 @@ async function fixture(): Promise<Fixture> {
         slots: [{ periodId: calendarPeriod.id, startsAt: "06:00", endsAt: "06:00" }],
       })),
       new Date(),
-      0,
+      1,
     );
     return {
       cfg: { locationId: location!.id },
@@ -169,7 +179,7 @@ async function send(
   body?: unknown,
 ): Promise<Response> {
   if (method === "DELETE" && path.startsWith("/special-dates/") && body === undefined)
-    body = { expectedClockRevision: 0 };
+    body = { expectedClockRevision: 1 };
   const headers: Record<string, string> = {};
   if (cookie !== undefined) headers.cookie = cookie;
   if (body !== undefined) headers["content-type"] = "application/json";
@@ -184,7 +194,7 @@ async function send(
               body !== null &&
               typeof body === "object" &&
               !Array.isArray(body)
-              ? { expectedClockRevision: 0, ...body }
+              ? { expectedClockRevision: 1, ...body }
               : body,
           ),
         }),
@@ -241,7 +251,7 @@ const createDay = (
         paint: (options.paint ?? []).map((entry) => ({ ...entry, date })),
       },
       options.at ?? new Date(),
-      0,
+      1,
     ),
   );
 
@@ -270,7 +280,7 @@ describe("reading Hours", () => {
       expect(model.civilDate).toBe("2026-10-12");
       expect(model).toEqual({
         businessDayClock: { timeZone: "Europe/Madrid", dayCutover: "06:00", cutoverChanges: [] },
-        clockRevision: 0,
+        clockRevision: 1,
         currentBusinessDay: businessDay,
         pending: null,
         timeZone: "Europe/Madrid",
@@ -359,7 +369,7 @@ describe("reading Hours", () => {
         fx.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         new Date(),
-        0,
+        1,
       );
       const [menu] = await tx.insert(catalogues).values({ name: randomUUID() }).returning();
       const period = await saveMenuPeriod(tx, fx.departmentIds.deli, {
@@ -375,7 +385,7 @@ describe("reading Hours", () => {
           slots: weekday === 1 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
         })),
         new Date(),
-        0,
+        1,
       );
       return period;
     });
@@ -413,7 +423,7 @@ describe("reading Hours", () => {
             weekday === 2 ? [{ periodId: deliPeriod.id, startsAt: "09:00", endsAt: "17:00" }] : [],
         })),
         new Date(),
-        0,
+        1,
       ),
     );
     const open = await withTransaction(db, (tx) =>
@@ -445,7 +455,7 @@ describe("reading Hours", () => {
   });
 
   it("limits the Calendar to its requested range", async () => {
-    const fx = await fixture();
+    await fixture();
     /** Sunday 6 October 2030, 12:00 in Madrid. */
     const at = new Date("2030-10-06T10:00:00Z");
     const days: Record<string, string> = {};
@@ -463,10 +473,9 @@ describe("reading Hours", () => {
     ]);
     for (const field of ["specialDates", "specialCells", "subjects", "week"])
       expect(model).not.toHaveProperty(field);
-    await db
-      .update(locations)
-      .set({ timeZone: "Mars/Base" })
-      .where(eq(locations.id, fx.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Mars/Base"}) where module = 'business_day'`,
+    );
     const unreadable = await read();
     expect([unreadable.civilDate, unreadable.clockReadable]).toEqual([null, false]);
     expect(unreadable.days).toEqual(model.days);
@@ -497,8 +506,13 @@ describe("Hours when the venue's clock changes", () => {
   /** Thursday 15 October 2026 01:30 in Madrid; Wednesday 14 October 19:30 in New York. */
   const AT = new Date("2026-10-14T23:30:00Z");
 
-  const setClock = (fx: Fixture, clock: { timeZone?: string; dayCutover?: string }) =>
-    db.update(locations).set(clock).where(eq(locations.id, fx.cfg.locationId));
+  const setClock = async (_fx: Fixture, clock: { timeZone?: string; dayCutover?: string }) => {
+    if (clock.timeZone !== undefined)
+      await db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${clock.timeZone}) where module = 'business_day'`,
+      );
+    if (clock.dayCutover !== undefined) await seedBusinessDay(db, { dayCutover: clock.dayCutover });
+  };
 
   const barStatus = (fx: Fixture, at: Date) =>
     withTransaction(db, async (tx) => {

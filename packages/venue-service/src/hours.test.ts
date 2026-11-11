@@ -100,7 +100,7 @@ async function fixture(): Promise<Fixture> {
         slots: [{ periodId: calendarPeriod.id, startsAt: "06:00", endsAt: "06:00" }],
       })),
       new Date(),
-      0,
+      1,
     );
     return {
       cfg,
@@ -137,7 +137,7 @@ const saveDay = (
         paint: dates.flatMap((date) => (options.paint ?? []).map((entry) => ({ ...entry, date }))),
       },
       AT,
-      0,
+      1,
     ),
   );
 
@@ -258,7 +258,7 @@ describe("the calendar's Closed colour", () => {
               : [],
         })),
         AT,
-        0,
+        1,
       );
       return deliPeriod;
     });
@@ -298,7 +298,7 @@ describe("the calendar's Closed colour", () => {
           slots: weekday === 3 ? [{ periodId: period.id, startsAt: "09:00", endsAt: "17:00" }] : [],
         })),
         AT,
-        0,
+        1,
       );
     });
     expect(await toneAndClosed("2026-10-21")).toEqual(["special_day", false]);
@@ -390,7 +390,7 @@ describe("holiday facts beside the calendar", () => {
     expect(days[1]!.specialDay?.name).toBe("Renamed party");
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 0));
+    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 1));
     days = await calendar(reader);
     expect(days[1]!.specialDay).toBeNull();
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
@@ -576,7 +576,7 @@ describe("Hours with the holiday store", () => {
     const moved = await calendar();
     expect(moved.map(({ specialDay }) => specialDay?.id ?? null)).toEqual([added.id, null]);
     expect(moved.map(({ holidays }) => holidays)).toEqual(before.map(({ holidays }) => holidays));
-    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 0));
+    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 1));
     expect(await calendar()).toEqual(before);
   });
 });

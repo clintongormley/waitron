@@ -1,9 +1,10 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import Stripe from "stripe";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { incidents, locations, locationBusinessDaySettings, withTransaction } from "@waitron/db";
+import { incidents, settings as businessDaySettingsTable, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { authorizeManager, persons, startManagementSession } from "@waitron/identity";
@@ -44,10 +45,9 @@ beforeEach(async () => {
     .returning();
   manager = person!.id;
   token = (await inTx((tx) => startManagementSession(tx, { personId: manager }))).token;
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "Invalid/Zone" })
-    .where(eq(locations.id, v.cfg.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+  );
   v.deps.admission.repairOnly("invalid");
 });
 afterEach(() => vi.useRealTimers());
@@ -60,7 +60,7 @@ async function repairZone() {
       token,
       {
         timeZone: "Europe/Madrid",
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
         confirmed: true,
       },
       new Date(BEHIND),
@@ -109,7 +109,7 @@ it("confirming the zone preserves the exact clock stop, all saved facts and mana
   ).toEqual({ authorizedBy: manager, role: "manager" });
   expect(await repairZone()).toEqual({
     repaired: true,
-    clockRevision: 1,
+    clockRevision: 2,
     admission: "restart_required",
   });
   expect(savedFacts()).toEqual(before);
@@ -117,9 +117,12 @@ it("confirming the zone preserves the exact clock stop, all saved facts and mana
   expect(await clockStop()).toEqual(expected);
   expect(await clockStop(840)).toEqual({ ...expected, offsetMinutes: 840 });
   expect(await clockStop(-720)).toEqual({ ...expected, offsetMinutes: -720 });
-  expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
-    { locationId: v.cfg.locationId, revision: 1 },
-  ]);
+  expect(
+    await suite.db
+      .select({ revision: businessDaySettingsTable.revision })
+      .from(businessDaySettingsTable)
+      .where(eq(businessDaySettingsTable.module, "business_day")),
+  ).toEqual([{ revision: 2 }]);
   expect(
     await suite.db.select().from(incidents).where(eq(incidents.code, "venue.time_zone_repaired")),
   ).toEqual([expect.objectContaining({ acknowledgedBy: manager, acknowledgedAt: BEHIND })]);
@@ -176,8 +179,7 @@ it("an actual clock confirmation leaves the invalid-zone stop and all invoice fa
   expect(await clockStop()).toBeNull();
   expect(v.deps.admission.snapshot()).toEqual({ state: "invalid" });
   expect(
-    (await suite.db.select().from(locations).where(eq(locations.id, v.cfg.locationId)))[0]!
-      .timeZone,
+    (await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]))[0]!.timeZone,
   ).toBe("Invalid/Zone");
   const before = v.snapshot();
   const pay = await newPayment();

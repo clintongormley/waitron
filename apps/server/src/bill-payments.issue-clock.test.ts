@@ -1,3 +1,4 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
@@ -5,13 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  billPayments,
-  locations,
-  withTransaction,
-  workingOrders,
-  venueLocationId,
-} from "@waitron/db";
+import { billPayments, withTransaction, workingOrders, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -280,14 +275,13 @@ describe("the invoice at full payment", () => {
         ),
       );
       const [location] = await inTx((tx) =>
-        tx.select().from(locations).where(eq(locations.id, venue.cfg.locationId)),
+        readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]),
       );
       try {
-        await inTx((tx) =>
-          tx
-            .update(locations)
-            .set({ timeZone: "Pacific/Honolulu" })
-            .where(eq(locations.id, venue.cfg.locationId)),
+        await inTx(async (tx) =>
+          tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${"Pacific/Honolulu"}) where module = 'business_day'`,
+          ),
         );
         const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
         for (const invoice of [completed.invoice!, replay]) {
@@ -296,11 +290,10 @@ describe("the invoice at full payment", () => {
         }
         expect(replay.invoiceNumber).toBe(completed.invoice!.invoiceNumber);
       } finally {
-        await inTx((tx) =>
-          tx
-            .update(locations)
-            .set({ timeZone: location!.timeZone })
-            .where(eq(locations.id, venue.cfg.locationId)),
+        await inTx(async (tx) =>
+          tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+          ),
         );
       }
     },
@@ -347,14 +340,13 @@ describe("the invoice at full payment", () => {
         ),
       );
       const [location] = await inTx((tx) =>
-        tx.select().from(locations).where(eq(locations.id, venue.cfg.locationId)),
+        readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]),
       );
       try {
-        await inTx((tx) =>
-          tx
-            .update(locations)
-            .set({ timeZone: "Pacific/Honolulu" })
-            .where(eq(locations.id, venue.cfg.locationId)),
+        await inTx(async (tx) =>
+          tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${"Pacific/Honolulu"}) where module = 'business_day'`,
+          ),
         );
         const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
         for (const invoice of [completed.invoice!, replay]) {
@@ -364,11 +356,10 @@ describe("the invoice at full payment", () => {
         }
         expect(replay.invoiceNumber).toBe(completed.invoice!.invoiceNumber);
       } finally {
-        await inTx((tx) =>
-          tx
-            .update(locations)
-            .set({ timeZone: location!.timeZone })
-            .where(eq(locations.id, venue.cfg.locationId)),
+        await inTx(async (tx) =>
+          tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+          ),
         );
       }
     },
@@ -381,20 +372,15 @@ async function withSavedIssueZone<T>(
   issue: () => Promise<T>,
 ): Promise<T> {
   const zones: Record<number, string> = { 60: "Etc/GMT-1", 0: "Etc/UTC", [-480]: "Etc/GMT+8" };
-  const [location] = await tx
-    .select()
-    .from(locations)
-    .where(eq(locations.id, venue.cfg.locationId));
-  await tx
-    .update(locations)
-    .set({ timeZone: zones[offsetMinutes] })
-    .where(eq(locations.id, venue.cfg.locationId));
+  const [location] = await readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
+  await tx.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${zones[offsetMinutes]}) where module = 'business_day'`,
+  );
   try {
     return await issue();
   } finally {
-    await tx
-      .update(locations)
-      .set({ timeZone: location!.timeZone })
-      .where(eq(locations.id, venue.cfg.locationId));
+    await tx.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${location!.timeZone}) where module = 'business_day'`,
+    );
   }
 }

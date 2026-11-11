@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { StatementSync } from "node:sqlite";
 import { asc, eq, sql } from "drizzle-orm";
@@ -6,8 +7,7 @@ import {
   installChangeFeed,
   removeChangeFeed,
   appendOrderAmendment,
-  locations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   newId,
   parties,
   orderDrafts,
@@ -147,8 +147,8 @@ describe("durable attendance discovery", () => {
   });
   it("uses cutover history, exact boundaries and oldest-first catchup without creating empty days", async () => {
     await suite.db
-      .insert(locationDayCutoverChanges)
-      .values({ locationId, effectiveBusinessDay: "2026-01-07", dayCutover: "06:00:00" });
+      .insert(dayCutoverChanges)
+      .values({ effectiveBusinessDay: "2026-01-07", dayCutover: "06:00:00" });
     for (const at of ["2026-01-05T03:00:00Z", "2026-01-06T03:00:00Z", "2026-01-07T05:00:00Z"])
       await signIn(at);
     await begin();
@@ -325,8 +325,7 @@ describe("durable attendance discovery", () => {
       });
     await begin();
     await drain();
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-01-11",
       dayCutover: "06:00:00",
     });
@@ -838,8 +837,8 @@ it("refreshes unprocessed future bounds after a scheduled cutover change", async
   await begin();
   await drain();
   await suite.db
-    .insert(locationDayCutoverChanges)
-    .values({ locationId, effectiveBusinessDay: "2026-01-11", dayCutover: "06:00:00" });
+    .insert(dayCutoverChanges)
+    .values({ effectiveBusinessDay: "2026-01-11", dayCutover: "06:00:00" });
   expect(await next(new Date("2026-01-10T20:00:00Z"))).toBeNull();
   const [work] = await rows();
   expect(work).toMatchObject({
@@ -877,8 +876,8 @@ it.each([
     await drain();
     const [before] = await rows();
     await suite.db
-      .insert(locationDayCutoverChanges)
-      .values({ locationId, effectiveBusinessDay: "2026-01-11", dayCutover: cutover });
+      .insert(dayCutoverChanges)
+      .values({ effectiveBusinessDay: "2026-01-11", dayCutover: cutover });
     const answer = next(new Date(instant));
     await expect(answer).resolves.toEqual(
       due ? { businessDay: "2026-01-10", startAt: "2026-01-10T03:00:00.000Z", endAt } : null,
@@ -897,7 +896,7 @@ it("refuses a changed historical bound rather than relabeling an evaluated day",
     .set({ dirtyRevision: work!.dirtyRevision + 1 })
     .where(eq(attendanceDayWork.id, work!.id));
   const before = await rows();
-  await suite.db.update(locations).set({ dayCutover: "06:00" }).where(eq(locations.id, locationId));
+  await seedBusinessDay(suite.db, { dayCutover: "06:00" });
   await expect(next()).rejects.toMatchObject({ code: "attendance.invalid" });
   expect(await rows()).toEqual(before);
 });
@@ -1091,8 +1090,8 @@ it("reassigns a future published shift to its new start-day after a scheduled cu
   await drain();
   expect((await rows()).map((r) => r.businessDay)).toEqual(["2026-01-11"]);
   await suite.db
-    .insert(locationDayCutoverChanges)
-    .values({ locationId, effectiveBusinessDay: "2026-01-11", dayCutover: "06:00:00" });
+    .insert(dayCutoverChanges)
+    .values({ effectiveBusinessDay: "2026-01-11", dayCutover: "06:00:00" });
   await drain();
   expect((await rows()).map((r) => r.businessDay)).toEqual(["2026-01-10", "2026-01-11"]);
   expect((await next(new Date("2026-01-11T05:00:00Z")))?.businessDay).toBe("2026-01-10");

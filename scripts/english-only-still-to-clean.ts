@@ -1000,7 +1000,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/db/src/allocate-number.test.ts",
   "packages/db/src/allocate-order-number.test.ts",
   "packages/db/src/append-order-amendment.test.ts",
-  "packages/db/src/change-log.test.ts",
   "packages/db/src/configuration-transfer.test.ts",
   "packages/db/src/joined-parts.test.ts",
   "packages/db/src/party-table-labels.test.ts",

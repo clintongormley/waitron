@@ -350,7 +350,7 @@ describe("boot's authority clock wiring", () => {
           body: JSON.stringify({
             effectiveBusinessDay: "2026-10-14",
             dayCutover: "07:00",
-            expectedClockRevision: 0,
+            expectedClockRevision: 1,
           }),
         },
       );

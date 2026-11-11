@@ -1476,17 +1476,20 @@ describe("live data", () => {
     return { liveData, background };
   }
 
-  it.each(["adjustments", "working_orders", "working_order_lines", "persons", "locations"])(
-    "reads the report again, passively, when %s changes",
-    async (type) => {
-      const { liveData, background } = await watched();
-      liveData.invalidate([{ type }]);
-      await vi.waitFor(() => expect(background.getReport).toHaveBeenCalledOnce());
-      liveData.clear();
-    },
-  );
+  it.each([
+    "adjustments",
+    "working_orders",
+    "working_order_lines",
+    "persons",
+    "settings.business_day",
+  ])("reads the report again, passively, when %s changes", async (type) => {
+    const { liveData, background } = await watched();
+    liveData.invalidate([{ type }]);
+    await vi.waitFor(() => expect(background.getReport).toHaveBeenCalledOnce());
+    liveData.clear();
+  });
 
-  it.each(["adjustments", "working_orders", "persons", "locations"])(
+  it.each(["adjustments", "working_orders", "persons", "settings.business_day"])(
     "reads the open list again, passively, when %s changes",
     async (type) => {
       const { liveData, background } = await watched();

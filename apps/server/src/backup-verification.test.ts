@@ -66,11 +66,12 @@ async function seedSource(db: VenueDb["db"]) {
   db.run(
     `insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'private-tax-sentinel', 'Private company sentinel', '2026-10-20T00:00:00Z')`,
   );
-  await db.run(
-    sql`insert into locations (id, operation_description) values (${locationId}, 'Restaurant')`,
+  await db.run(sql`insert into locations (id) values (${locationId})`);
+  db.run(
+    sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture location","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T08:00:00.000Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
   );
   db.run(
-    sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture location","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T08:00:00.000Z') on conflict (module) do nothing`,
+    "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
   );
   await db.run(
     sql`insert into nodes (id, location_id, name, created_at) values (${sourceNodeId}, ${locationId}, 'Source node', '2026-10-20T00:00:00Z')`,
@@ -726,9 +727,7 @@ describe("complete backup verification", () => {
     const f = await fixture();
     const db = new DatabaseSync(f.databasePath);
     try {
-      db.exec(
-        `insert into locations (id, operation_description) values ('10000000-0000-4000-8000-000000000099', 'Restaurant')`,
-      );
+      db.exec(`insert into locations (id) values ('10000000-0000-4000-8000-000000000099')`);
     } finally {
       db.close();
     }

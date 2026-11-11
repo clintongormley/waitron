@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -104,13 +104,13 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
   });
 
   it("allows equal names in separate locations", async () => {
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        operationDescription: "Hostelería",
-      })
-      .returning({ id: locations.id });
-    await seedVenueSettings(suite.db, { name: "Loc B", invoiceLocales: ["es"] });
+    const [other] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
+    await seedVenueSettings(suite.db, {
+      name: "Loc B",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    await seedBusinessDay(suite.db, {});
     const first = await seedZone(LOCATION_A, "Shared");
     const second = await seedZone(other!.id, "Shared");
     expect(second).not.toBe(first);

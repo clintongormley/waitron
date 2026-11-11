@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createCatalogue } from "@waitron/catalogue";
@@ -5,9 +6,8 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
-  locations,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
   withTransaction,
   type Database,
   venueLocationId,
@@ -73,7 +73,7 @@ async function venue() {
           slots: weekday === 1 ? [{ periodId, startsAt, endsAt }] : [],
         })),
         new Date(),
-        0,
+        1,
         { seasonId },
       );
     }
@@ -222,15 +222,12 @@ describe("assertSeasonClosuresInHours", () => {
   it("reads the department's hours from the start in force, not the venue's first start", async () => {
     const v = await venue();
     await withTransaction(db, async (tx) => {
+      await seedBusinessDay(tx, { dayCutover: "05:00:00" });
       await tx
-        .update(locations)
-        .set({ dayCutover: "05:00:00" })
-        .where(eq(locations.id, v.cfg.locationId));
-      await tx
-        .insert(locationBusinessDaySettings)
-        .values({ locationId: v.cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day"));
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-01-07",
         dayCutover: "03:00:00",
       });
@@ -249,7 +246,7 @@ describe("assertSeasonClosuresInHours", () => {
           slots: weekday === 1 ? [{ periodId, startsAt: "04:00", endsAt: "06:00" }] : [],
         })),
         at,
-        1,
+        2,
         { seasonId: v.seasonId },
       );
     });

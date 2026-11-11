@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -109,11 +109,14 @@ async function seedIdentity(admin: Database): Promise<void> {
     .insert(locations)
     .values({
       id: TILL_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(admin, { name: "Loc", invoiceLocales: ["en"] });
+  await seedVenueSettings(admin, {
+    name: "Loc",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(admin, {});
   await admin
     .insert(nodes)
     .values({

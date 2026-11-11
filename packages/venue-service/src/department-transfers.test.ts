@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -558,10 +559,12 @@ describe("departmental tab transfers", () => {
   it("refuses a closed destination without resolving its transfer or changing its bill", async () => {
     const v = await pending();
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid", dayCutover: "06:00" })
-        .where(eq(locations.id, v.cfg.locationId));
+      await (async () => {
+        await tx.run(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+        );
+        await seedBusinessDay(tx, { dayCutover: "06:00" });
+      })();
       await service.replaceZoneClosedWeek(
         tx,
         v.bz,
@@ -569,7 +572,7 @@ describe("departmental tab transfers", () => {
           weekday,
           ranges: [{ startsAt: "23:30", endsAt: "06:00" }],
         })),
-        0,
+        1,
         new Date("2026-10-05T12:00:00Z"),
       );
     });

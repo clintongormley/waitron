@@ -13,7 +13,7 @@ import {
   departmentDayRanges,
   departmentDays,
   kitchenStations,
-  locationBusinessDaySettings,
+  settings as businessDaySettingsTable,
   menuPeriods,
   routingCellPeriods,
   routingCells,
@@ -106,7 +106,7 @@ async function routed() {
         restaurant,
         week([slot(lunch, "12:00", "16:00"), slot(dinner, "20:00", "23:00")]),
         new Date(),
-        0,
+        1,
         { seasonId: season(name) },
       );
     const specialDay = async (name: string, date: string, paint: MenuSlot[]) =>
@@ -121,7 +121,7 @@ async function routed() {
             paint: [{ departmentId: restaurant, date, ranges: paint }],
           },
           new Date(),
-          0,
+          1,
         )
       ).id;
     const anniversary = await specialDay("Anniversary", FUTURE, [
@@ -305,7 +305,7 @@ describe("the period-delete routes", () => {
         { id: r.afternoon, name: "Afternoon" },
         { id: r.dinner, name: "Dinner" },
       ],
-      clockRevision: 0,
+      clockRevision: 1,
     });
   });
 
@@ -320,8 +320,9 @@ describe("the period-delete routes", () => {
     const before = await revision();
     await scoped((tx) =>
       tx
-        .insert(locationBusinessDaySettings)
-        .values({ locationId: r.cfg.locationId, revision: before + 2 }),
+        .update(businessDaySettingsTable)
+        .set({ revision: before + 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day")),
     );
     const after = await revision();
     expect(after).toBe(before + 2);
@@ -370,7 +371,7 @@ describe("the period-delete routes", () => {
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
       replacementPeriodId: r.afternoon,
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
 
     await answers(response, 204);
@@ -392,7 +393,7 @@ describe("the period-delete routes", () => {
 
     const response = await r.send("POST", `/${r.lunch}/delete`, r.manager, {
       replacementPeriodId: null,
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     });
 
     await answers(response, 204);
@@ -414,7 +415,7 @@ describe("the period-delete routes", () => {
     await answers(
       await r.send("POST", `/${r.lunch}/delete`, r.supervisor, {
         replacementPeriodId: r.afternoon,
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
       403,
       { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
@@ -430,7 +431,7 @@ describe("the period-delete routes", () => {
       r.send("POST", `/${periodId}/delete`, r.manager, body);
 
     await answers(
-      await remove(missing, { replacementPeriodId: null, expectedClockRevision: 0 }),
+      await remove(missing, { replacementPeriodId: null, expectedClockRevision: 1 }),
       404,
       {
         code: "menu_period.not_found",
@@ -438,12 +439,12 @@ describe("the period-delete routes", () => {
       },
     );
     for (const replacementPeriodId of [r.deliLunch, r.lunch, missing])
-      await answers(await remove(r.lunch, { replacementPeriodId, expectedClockRevision: 0 }), 400, {
+      await answers(await remove(r.lunch, { replacementPeriodId, expectedClockRevision: 1 }), 400, {
         code: "menu_period.invalid",
         params: { field: "replacementPeriodId" },
       });
     await answers(
-      await remove(r.lunch, { replacementPeriodId: r.afternoon, expectedClockRevision: 1 }),
+      await remove(r.lunch, { replacementPeriodId: r.afternoon, expectedClockRevision: 2 }),
       409,
       { code: "hours.clock_changed", params: {} },
     );
@@ -454,9 +455,9 @@ describe("the period-delete routes", () => {
     const r = await routed();
     const before = await stored(r);
     const cases: [unknown, string][] = [
-      [{ expectedClockRevision: 0 }, "replacementPeriodId"],
-      [{ replacementPeriodId: "not-a-uuid", expectedClockRevision: 0 }, "replacementPeriodId"],
-      [{ replacementPeriodId: null, expectedClockRevision: 0, force: true }, "force"],
+      [{ expectedClockRevision: 1 }, "replacementPeriodId"],
+      [{ replacementPeriodId: "not-a-uuid", expectedClockRevision: 1 }, "replacementPeriodId"],
+      [{ replacementPeriodId: null, expectedClockRevision: 1, force: true }, "force"],
       [{}, "replacementPeriodId"],
     ];
     for (const [body, field] of cases)

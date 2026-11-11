@@ -317,7 +317,7 @@ describe("GET /api/zones reads one moment", () => {
           weekday,
           ranges: [{ startsAt: "15:00", endsAt: "17:00" }],
         })),
-        0,
+        1,
         new Date("2026-10-09T06:00:00Z"),
       );
       return zone.id;

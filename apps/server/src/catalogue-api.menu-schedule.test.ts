@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -23,7 +23,6 @@ const DAY_AFTER_AT = "2026-10-09T06:00:00.000Z";
 const AFTERNOON = { date: "2026-10-07", time: "16:00" };
 const AFTERNOON_AT = "2026-10-07T14:00:00.000Z";
 
-let locationId: string;
 let managerId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -43,7 +42,7 @@ const suite = useVenueDb({
       operationDescription: "Venta",
       timeZone: "Europe/Madrid",
     });
-    locationId = await venueLocationId(db);
+
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await tx
         .insert(persons)
@@ -193,7 +192,7 @@ async function status(app: Hono, menuId: string): Promise<MenuStatus> {
 
 async function setVenueZone(timeZone: string): Promise<void> {
   await suite.db.execute(
-    sql`update locations set time_zone = ${timeZone} where id = ${locationId}`,
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
   );
 }
 

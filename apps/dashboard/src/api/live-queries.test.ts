@@ -221,8 +221,8 @@ it.each([
   ["listReaders", [], "device_profile_card_readers"],
   ["listServers", [], "node_membership"],
   ["listServers", [], "nodes"],
-  ["getReceiptLanguage", [], "locations"],
-  ["getVenueDefaults", [], "locations"],
+  ["getReceiptLanguage", [], "settings.business_day"],
+  ["getVenueDefaults", [], "settings.business_day"],
   ["getVenueDefaults", [], "catalogue_settings"],
   ["getVenuePrivacy", [], "tenants"],
   ["getGoogleConfig", [], "tenants"],
@@ -441,13 +441,12 @@ it.each([
       "sale_lines",
       "sale_voids",
       "sale_substitutions",
-      "locations",
+      "settings.business_day",
       "settings.venue",
       "products",
       "categories",
       "category_details",
-      "location_business_day_settings",
-      "location_day_cutover_changes",
+      "day_cutover_changes",
     ],
   ],
   // At time of sale names each line's category from the snapshot the line recorded, so no
@@ -460,10 +459,9 @@ it.each([
       "sale_lines",
       "sale_voids",
       "sale_substitutions",
-      "locations",
+      "settings.business_day",
       "settings.venue",
-      "location_business_day_settings",
-      "location_day_cutover_changes",
+      "day_cutover_changes",
     ],
   ],
   ["getReportPrinters", [], ["printers"]],
@@ -652,7 +650,7 @@ it("leaves the category report at time of sale alone when the catalogue is edite
   }
 });
 
-it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
+it.each(["settings.business_day", "tenants", "sales", "working_orders", "daily_closes"])(
   "refreshes venue details passively after %s changes, retaining active PATCH activity",
   async (type) => {
     const model = venueDetailsFixture();
@@ -676,14 +674,13 @@ it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
     const api = new DashboardApi("", fetchImpl, undefined, active);
     const query = dashboardQuery(api, "getVenueDetails", []);
     expect(query.dependencies).toEqual([
-      { type: "locations" },
+      { type: "settings.business_day" },
       { type: "settings.venue" },
       { type: "tenants" },
       { type: "sales" },
       { type: "working_orders" },
       { type: "daily_closes" },
-      { type: "location_business_day_settings" },
-      { type: "location_day_cutover_changes" },
+      { type: "day_cutover_changes" },
     ]);
     const observed = api.liveData.observe(query, () => {});
     try {
@@ -798,10 +795,10 @@ it("subscribes catalogue defaults to their stored settings", async () => {
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
 
-it("subscribes the venue defaults to the location, venue document and catalogue settings", () => {
+it("subscribes the venue defaults to the clock document, venue document and catalogue settings", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
-    { type: "locations" },
+    { type: "settings.business_day" },
     { type: "settings.venue" },
     { type: "catalogue_settings" },
   ]);
@@ -927,7 +924,7 @@ it("scopes department receipt subscriptions by department and refreshes passivel
     { type: "department_receipts" },
     { type: "department_sale_policies" },
     { type: "departments" },
-    { type: "locations" },
+    { type: "settings.business_day" },
     { type: "settings.venue" },
   ]);
   const other = dashboardQuery(api, "getDepartmentReceipt", ["cafe"]);
@@ -967,7 +964,7 @@ it("department receipt, policy, content and address refresh through the departme
     for (const [index, type] of [
       "department_sale_policies",
       "settings.venue",
-      "locations",
+      "settings.business_day",
       "department_receipts",
       "departments",
     ].entries()) {
@@ -1210,7 +1207,7 @@ it.each(["Zone", "Department"] as const)(
   },
 );
 
-for (const type of ["location_business_day_settings", "location_day_cutover_changes"]) {
+for (const type of ["settings.business_day", "day_cutover_changes"]) {
   it(`an order detail is refreshed passively when ${type} changes its today's-order visibility`, async () => {
     let reads = 0;
     const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
@@ -1402,4 +1399,11 @@ it("refreshes device join claims passively when pairing changes", async () => {
   } finally {
     observed.unsubscribe();
   }
+});
+
+it("subscribes the sales overview to the clock document once", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getSalesOverview", []);
+  expect(query.dependencies.filter(({ type }) => type === "settings.business_day")).toEqual([
+    { type: "settings.business_day" },
+  ]);
 });

@@ -16,7 +16,7 @@ import type { Entorno, RegistroRow } from "../src/registro-row.js";
 import { TEST_SISTEMA, nifWithControlLetter } from "../src/testing/seed.js";
 import { seedTenantWithSif } from "./fixtures.js";
 import { steadyClock } from "./write-path-fixtures.js";
-import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 
 /**
  * Every row here is inserted through its TABLE DEFINITION, for the reason `./fixtures.ts`'s own
@@ -449,15 +449,12 @@ export async function seedSecondChain(
   const location =
     existing.length === 1
       ? existing[0]!
-      : (
-          await db
-            .insert(locations)
-            .values({
-              operationDescription: "Venta en establecimiento",
-            })
-            .returning({ id: locations.id })
-        )[0]!;
-  await seedVenueSettings(db, { invoiceLocales: ["es"] });
+      : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
+  await seedVenueSettings(db, {
+    invoiceLocales: ["es"],
+    operationDescription: "Venta en establecimiento",
+  });
+  await seedBusinessDay(db, {});
   if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala B" });
   const [node] = await db
     .insert(nodes)
@@ -504,14 +501,7 @@ export async function seedIndependentChain(
   const location =
     existing.length === 1
       ? existing[0]!
-      : (
-          await db
-            .insert(locations)
-            .values({
-              operationDescription: "Venta en establecimiento",
-            })
-            .returning({ id: locations.id })
-        )[0]!;
+      : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
   if (existing.length !== 1) await seedVenueSettings(db, { name: "Sala Z" });
   const [node] = await db
     .insert(nodes)
@@ -569,14 +559,7 @@ export async function seedPinnedChain(
   const location =
     existing.length === 1
       ? existing[0]!
-      : (
-          await db
-            .insert(locations)
-            .values({
-              operationDescription: "Venta en establecimiento",
-            })
-            .returning({ id: locations.id })
-        )[0]!;
+      : (await db.insert(locations).values({}).returning({ id: locations.id }))[0]!;
   if (existing.length !== 1)
     await seedVenueSettings(db, { name: `Sala ${params.sifId.slice(0, 4)}` });
   const [node] = await db

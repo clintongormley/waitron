@@ -1,17 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
-import {
-  count,
-  enumCheck,
-  enumType,
-  id,
-  label,
-  newId,
-  now,
-  table,
-  timeOfDay,
-  ts,
-} from "./columns.js";
+import { count, enumCheck, enumType, id, label, newId, now, table, ts } from "./columns.js";
 import { catalogues } from "./catalogue.js";
 
 /** The venue time-zone default, shared with runtime fallbacks. */
@@ -55,10 +44,6 @@ export const locations = table(
   "locations",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    operationDescription: label("operation_description").notNull(),
-    fiscalTerritory: label("fiscal_territory").notNull().default("ES-common"),
-    timeZone: label("time_zone").notNull().default(DEFAULT_TIME_ZONE),
-    dayCutover: timeOfDay("day_cutover").notNull().default("06:00:00"),
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
     // This location's DEFAULT catalogue (menu); a venue may exist before a menu is assigned.

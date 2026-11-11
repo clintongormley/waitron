@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/catalogue";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine, recallLines, sendLines } from "./testing/order-writer-fixture.js";
@@ -10,7 +11,6 @@ import {
   deviceProfiles,
   kitchenStations,
   incidents,
-  locations,
   orderGroupHoldStations,
   orderGroups,
   printJobs,
@@ -1018,11 +1018,10 @@ describe("release", () => {
     useSplitExtrasDb(splitSuite.db);
     const split = await setupSplitExtrasVenue();
     const at = new Date("2026-10-02T18:45:00.000Z");
-    await splitTx((tx) =>
-      tx
-        .update(locations)
-        .set({ timeZone: "Europe/Madrid" })
-        .where(eq(locations.id, split.cfg.locationId)),
+    await splitTx(async (tx) =>
+      tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+      ),
     );
     const revision = (
       await splitTx((tx) =>
@@ -1160,16 +1159,19 @@ describe("release", () => {
       );
       const at = new Date(instant);
       const [clockBefore] = await inTx(venue, (tx) =>
-        tx
-          .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
-          .from(locations)
-          .where(eq(locations.id, venue.cfg.locationId)),
+        Promise.resolve(
+          tx.all<{ timeZone: string; dayCutover: string }>(
+            sql`select json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+          ),
+        ),
       );
       await inTx(venue, async (tx) => {
-        await tx
-          .update(locations)
-          .set({ timeZone: "Europe/Madrid", dayCutover: "21:00:00" })
-          .where(eq(locations.id, venue.cfg.locationId));
+        await (async () => {
+          await tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+          );
+          await seedBusinessDay(tx, { dayCutover: "21:00:00" });
+        })();
         await tx
           .update(kitchenStations)
           .set({ isDefault: false })
@@ -1258,10 +1260,10 @@ describe("release", () => {
         stationStates.mockRestore();
         await inTx(venue, async (tx) => {
           await setStationToday(tx, bar, null, at);
-          await tx
-            .update(locations)
-            .set(clockBefore!)
-            .where(eq(locations.id, venue.cfg.locationId));
+          await tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${clockBefore!.timeZone}) where module = 'business_day'`,
+          );
+          await seedBusinessDay(tx, { dayCutover: clockBefore!.dayCutover });
           await tx
             .update(kitchenStations)
             .set({ isDefault: false })

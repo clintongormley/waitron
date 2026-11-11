@@ -74,7 +74,7 @@ function rig(model = venueDetailsFixture()) {
     set(value: VenueDetailsModel) {
       current = value;
     },
-    async notify(el: Panel, source = "locations") {
+    async notify(el: Panel, source = "settings.business_day") {
       liveData.invalidate([{ type: source }]);
       await vi.waitFor(() => expect(api.getVenueDetails).toHaveBeenCalledTimes(2));
       await flush(el);
@@ -287,7 +287,7 @@ it("read failures and recovery cannot erase an action refusal", async () => {
   await r.notify(el);
   expect(field(el, "addressLine1").error).toBe(refusal);
   vi.mocked(r.api.getVenueDetails).mockResolvedValue(venueDetailsFixture({ name: "Newest" }));
-  r.api.liveData!.invalidate([{ type: "locations" }]);
+  r.api.liveData!.invalidate([{ type: "settings.business_day" }]);
   await flush(el);
   await flush(el);
   expect(field(el, "addressLine1").error).toBe(refusal);
@@ -370,7 +370,7 @@ it("keeps the opening read generation separate from a reopened panel", async () 
   complete(venueDetailsFixture({ name: "Old generation" }));
   await flush(el);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Reopened");
-  expect(api.liveData!.interests).toHaveLength(8);
+  expect(api.liveData!.interests).toHaveLength(7);
   el.remove();
   expect(api.liveData!.interests).toEqual([]);
 });

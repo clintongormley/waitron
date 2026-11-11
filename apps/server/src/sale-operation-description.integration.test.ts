@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   departmentReceipts,
   zoneServicePolicies,
@@ -41,10 +41,9 @@ useVenueDb({
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, venue.zoneId));
     departmentId = zone!.departmentId;
-    await db
-      .update(locations)
-      .set({ operationDescription: "Generic location service" })
-      .where(eq(locations.id, venue.cfg.locationId));
+    await db.run(
+      sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Generic location service"}) where module = 'venue'`,
+    );
     await authored("Dining meals");
   },
 });

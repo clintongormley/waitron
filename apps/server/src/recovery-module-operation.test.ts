@@ -1,5 +1,5 @@
 import { readVenue } from "@waitron/db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -45,10 +45,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
   await suite.db.insert(locations).values({
     id: target.locationId,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Restaurant",
+    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["es"] });
+  await seedBusinessDay(suite.db, {});
   await suite.db
     .insert(nodes)
     .values({ id: target.nodeId, locationId: target.locationId, name: "Restored node" });

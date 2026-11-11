@@ -273,6 +273,7 @@ async function copyBase() {
       "tenants",
       "locations",
       "settings",
+      "day_cutover_changes",
       "device_profiles",
       "nodes",
       "invoice_series",

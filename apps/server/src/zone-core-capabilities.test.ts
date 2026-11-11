@@ -1,13 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  invoiceSeries,
-  locations,
-  sales,
-  tenants,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { invoiceSeries, sales, tenants, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -294,7 +287,9 @@ describe("core-only callers prepare the saved writing zone", () => {
   it.each(["", "Invalid/Zone"])(
     "a direct core caller refuses saved zone %j before allocating or writing",
     async (timeZone) => {
-      await v.db.update(locations).set({ timeZone }).where(eq(locations.id, v.cfg.locationId));
+      await v.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = snapshot();
       await expect(
         withTransaction(v.db, async (tx) =>
@@ -317,10 +312,9 @@ describe("core-only callers prepare the saved writing zone", () => {
           : capability === "F3"
             ? await addSeries("full")
             : v.seriesId;
-      await v.db
-        .update(locations)
-        .set({ timeZone: "Invalid/Zone" })
-        .where(eq(locations.id, v.cfg.locationId));
+      await v.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+      );
       const before = snapshot();
       await expect(
         withTransaction(v.db, async (tx) => {

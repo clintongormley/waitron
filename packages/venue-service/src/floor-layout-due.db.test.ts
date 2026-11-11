@@ -94,7 +94,7 @@ async function fixture() {
               ],
       })),
       at("10:00"),
-      0,
+      1,
     );
     const standard = await newSet(tx, cfg, restaurant, "Standard");
     const dinnerSet = await newSet(tx, cfg, restaurant, "Dinner");
@@ -185,7 +185,7 @@ describe("which floor layout is due", () => {
           ],
         })),
         at("08:00"),
-        0,
+        1,
       );
       const standard = await newSet(tx, f.cfg, f.bar, "Standard");
       const late = await newSet(tx, f.cfg, f.bar, "Late");

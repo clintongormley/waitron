@@ -142,7 +142,7 @@ package, eg Spain has two time zones, one for mainland and one for las canarias"
 not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
 `packages/country-es/src/spain.ts:180`, gives Las Palmas and Santa Cruz de Tenerife
 `Atlantic/Canary` and every other province `Europe/Madrid`; the UK pack gives `Europe/London`). But
-the column, `locations.time_zone`, is plain text, and provisioning copies whatever it is given
+the `settings.business_day` document stores the zone as plain text, and provisioning copies whatever it is given
 (`packages/provisioning/src/venue-apply.ts`).
 Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
 emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),

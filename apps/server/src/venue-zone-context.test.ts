@@ -1,11 +1,12 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   locations,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -43,11 +44,11 @@ const read = () => withTransaction(suite.db, (tx) => readZoneContext(tx, scope))
 const preview = (zone = "Europe/Madrid", at = AT) =>
   withTransaction(suite.db, (tx) => validateRetainedZoneClock(tx, scope, zone, at));
 const retained = () => ({
-  locations: suite.db.all(sql`select * from locations`),
-  changes: suite.db.all(
-    sql`select * from location_day_cutover_changes order by effective_business_day`,
+  locations: suite.db.all(
+    sql`select l.*, json_extract(v.doc, '$.fiscalTerritory') as fiscal_territory, json_extract(v.doc, '$.operationDescription') as operation_description, json_extract(b.doc, '$.timeZone') as time_zone, c.day_cutover from locations l join settings v on v.module = 'venue' join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
   ),
-  settings: suite.db.all(sql`select * from location_business_day_settings`),
+  changes: suite.db.all(sql`select * from day_cutover_changes order by effective_business_day`),
+  settings: suite.db.all(sql`select * from settings where module = 'business_day'`),
   periods: suite.db.all(sql`select * from menu_periods`),
   days: suite.db.all(sql`select * from department_days`),
   ranges: suite.db.all(sql`select * from department_day_ranges`),
@@ -57,7 +58,9 @@ describe("raw saved zone context", () => {
   it.each([" Europe/Madrid", "Europe/Madrid "])(
     "keeps unreadable saved %j eligible for repair without changing it",
     async (timeZone) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       const before = retained();
       const context = await read();
       expect(context.savedZone).toEqual({ kind: "invalid" });
@@ -79,7 +82,7 @@ describe("raw saved zone context", () => {
       province: "Madrid",
       savedZone: { kind: "invalid" },
       clock: { timeZone: "Invalid/Zone", dayCutover: "06:00", cutoverChanges: [] },
-      clockRevision: 0,
+      clockRevision: 1,
     });
     expect(ordinary).not.toHaveBeenCalled();
     expect(clock).not.toHaveBeenCalled();
@@ -87,7 +90,9 @@ describe("raw saved zone context", () => {
   it.each(["", "   "])(
     "classifies missing saved text %j without inventing a zone",
     async (timeZone) => {
-      await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+      await suite.db.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
       expect((await read()).savedZone).toEqual({ kind: "missing" });
       expect((await read()).clock.timeZone).toBe(timeZone);
     },
@@ -96,7 +101,9 @@ describe("raw saved zone context", () => {
     ["US/Eastern", "America/New_York"],
     ["Europe/London", "Europe/London"],
   ])("keeps supported saved %s valid outside the country list", async (timeZone, canonical) => {
-    await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
     expect((await read()).savedZone).toEqual({ kind: "valid", timeZone: canonical });
   });
   it("refuses an unknown writing node", async () => {
@@ -148,11 +155,12 @@ describe("retained clock candidate validation", () => {
   });
   it("previews the candidate with all past and future cutovers and revision unchanged", async () => {
     await suite.db
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: scope.locationId, revision: 7 });
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
+      .update(businessDaySettingsTable)
+      .set({ revision: 8 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
+      { effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
     ]);
     const before = retained();
     expect(await preview()).toEqual({
@@ -163,14 +171,16 @@ describe("retained clock candidate validation", () => {
         { effectiveBusinessDay: "2026-11-01", dayCutover: "07:00" },
       ],
     });
-    expect((await read()).clockRevision).toBe(7);
+    expect((await read()).clockRevision).toBe(8);
     expect(retained()).toEqual(before);
   });
   it("rejects a malformed retained baseline without replacing it", async () => {
-    await suite.db
-      .update(locations)
-      .set({ dayCutover: "06:00garbage" })
-      .where(eq(locations.id, scope.locationId));
+    await suite.db.run(sql`PRAGMA ignore_check_constraints = on`);
+    try {
+      await seedBusinessDay(suite.db, { dayCutover: "06:00garbage" });
+    } finally {
+      await suite.db.run(sql`PRAGMA ignore_check_constraints = off`);
+    }
     const before = retained();
     await expect(preview()).rejects.toMatchObject({
       code: "business_day.clock_invalid",
@@ -179,8 +189,7 @@ describe("retained clock candidate validation", () => {
     expect(retained()).toEqual(before);
   });
   it("rejects an impossible retained date even though its stored shape passes", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: scope.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-02-30",
       dayCutover: "05:00:00",
     });
@@ -192,8 +201,7 @@ describe("retained clock candidate validation", () => {
     expect(retained()).toEqual(before);
   });
   it("rejects a non-increasing historical boundary away from the preview instant", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: scope.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2011-12-30",
       dayCutover: "06:00:00",
     });
@@ -225,10 +233,9 @@ describe("retained clock candidate validation", () => {
     expect((await read()).savedZone).toEqual({ kind: "invalid" });
   });
   it("preserves real saved schedules while validating the candidate clock", async () => {
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Europe/Madrid" })
-      .where(eq(locations.id, scope.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
+    );
     await withTransaction(suite.db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Test menu" });
       const department = await createDepartment(tx, { name: "Dining", orderStart: "counter" });
@@ -245,14 +252,13 @@ describe("retained clock candidate validation", () => {
           slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "14:00" }],
         })),
         AT,
-        0,
+        1,
       );
       return period.id;
     });
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Invalid/Zone" })
-      .where(eq(locations.id, scope.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Invalid/Zone"}) where module = 'business_day'`,
+    );
     const before = retained();
     const schedules = suite.db.all(sql`select * from department_day_ranges`);
     expect(await preview()).toEqual({

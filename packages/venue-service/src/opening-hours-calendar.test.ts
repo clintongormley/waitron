@@ -1,3 +1,5 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
 import { listVenueReadiness } from "./operations.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
@@ -10,8 +12,8 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
   locations,
   specialDayDates,
   tenants,
@@ -87,7 +89,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
             : [{ periodId: lunch, startsAt: "12:00", endsAt: "16:00" }],
         })),
         AT,
-        0,
+        1,
       );
     }
     const seasons = Object.fromEntries(
@@ -98,7 +100,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
 }
 
 const read = (year: number) => run((tx) => readOpeningHoursYear(tx, year, AT));
-const special = (input: unknown) => run((tx) => saveSpecialDay(tx, null, input, AT, 0));
+const special = (input: unknown) => run((tx) => saveSpecialDay(tx, null, input, AT, 1));
 const dayOf = (year: Awaited<ReturnType<typeof read>>, date: string) =>
   year.days.find((day) => day.date === date);
 
@@ -114,7 +116,7 @@ describe("the Opening hours year read", () => {
     expect(year.year).toBe(2030);
     expect(year.timeZone).toBe("Europe/Madrid");
     expect(year.today).toBe("2026-10-09");
-    expect(year.clockRevision).toBe(0);
+    expect(year.clockRevision).toBe(1);
     expect(year.days).toHaveLength(365);
     expect(year.days[0]!.date).toBe("2030-01-01");
     expect(year.days.at(-1)!.date).toBe("2030-12-31");
@@ -333,13 +335,13 @@ async function monthVenue() {
     const lunch = await period(diningDepartment, "Lunch");
     const dinner = await period(diningDepartment, "Dinner");
     const barLunch = await period(barDepartment, "Lunch");
-    await replaceMenuWeek(tx, diningDepartment, everyDay(lunch, "12:00", "16:00"), AT, 0, {
+    await replaceMenuWeek(tx, diningDepartment, everyDay(lunch, "12:00", "16:00"), AT, 1, {
       seasonId: seasons.Autumn,
     });
-    await replaceMenuWeek(tx, diningDepartment, everyDay(dinner, "20:00", "23:30"), AT, 0, {
+    await replaceMenuWeek(tx, diningDepartment, everyDay(dinner, "20:00", "23:30"), AT, 1, {
       seasonId: seasons.Winter,
     });
-    await replaceMenuWeek(tx, barDepartment, everyDay(barLunch, "13:00", "15:00"), AT, 0);
+    await replaceMenuWeek(tx, barDepartment, everyDay(barLunch, "13:00", "15:00"), AT, 1);
     const terrace = await zone("Terrace", 1, diningDepartment);
     const bar = await zone("Bar", 2, diningDepartment);
     const counter = await zone("Counter", 3, barDepartment);
@@ -350,7 +352,7 @@ async function monthVenue() {
         weekday,
         ranges: weekday === 0 ? [{ startsAt: "20:00", endsAt: "22:00" }] : [],
       })),
-      0,
+      1,
       AT,
       { seasonId: seasons.Winter },
     );
@@ -617,14 +619,13 @@ describe("the Opening hours month read", () => {
       closedAllDay: true,
     });
     expect(frame.plan.seasonIdOn.get("2025-12-29")).toBe(v.seasons.Winter);
-    for (const unread of ["floor_zones", "holiday_geographies", "location_business_day_settings"])
+    for (const unread of ["floor_zones", "holiday_geographies"])
       expect(tables).not.toContain(unread);
   });
 
   it("gives each day its own changeover and length across a pending changeover change, with the clock's status", async () => {
-    const v = await venue();
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: v.cfg.locationId,
+    await venue();
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
@@ -650,10 +651,9 @@ describe("the Opening hours month read", () => {
 
   it("still gives the hours, with no today, when the venue's stored time zone cannot be read", async () => {
     const v = await venue();
-    await suite.db
-      .update(locations)
-      .set({ timeZone: "Not/AZone" })
-      .where(eq(locations.id, v.cfg.locationId));
+    await suite.db.run(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${"Not/AZone"}) where module = 'business_day'`,
+    );
     const month = await readMonth("2030-12");
     expect(month.today).toBeNull();
     expect(month.days).toHaveLength(42);
@@ -713,7 +713,17 @@ describe("the Opening hours month read", () => {
       }
     });
     expect(
-      [...new Set(tables.map((table) => (table === "settings" ? "settings.venue" : table)))].sort(),
+      [
+        ...new Set(
+          tables.map((table) =>
+            table === "settings"
+              ? "settings.venue"
+              : table === "locations"
+                ? "settings.business_day"
+                : table,
+          ),
+        ),
+      ].sort(),
     ).toEqual([...CALENDAR_MONTH_PLAN_READS].sort());
   });
 
@@ -862,9 +872,8 @@ describe("the season days read", () => {
   });
 
   it("gives each date its own changeover across a pending changeover change", async () => {
-    const v = await venue([]);
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: v.cfg.locationId,
+    await venue([]);
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
@@ -880,17 +889,15 @@ describe("a past day's range around a start change", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
   async function lateSaturday() {
     const { cfg } = await venue([]);
-    await suite.db
-      .update(locations)
-      .set({ dayCutover: "05:00:00" })
-      .where(eq(locations.id, cfg.locationId));
+    await seedBusinessDay(suite.db, { dayCutover: "05:00:00" });
     await run(async (tx) => {
       await tx
-        .insert(locationBusinessDaySettings)
-        .values({ locationId: cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values([
-        { locationId: cfg.locationId, effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
-        { locationId: cfg.locationId, effectiveBusinessDay: "2026-10-28", dayCutover: "05:00:00" },
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day"));
+      await tx.insert(dayCutoverChanges).values([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
+        { effectiveBusinessDay: "2026-10-28", dayCutover: "05:00:00" },
       ]);
     });
     return run(async (tx) => {
@@ -914,7 +921,7 @@ describe("a past day's range around a start change", () => {
               : [],
         })),
         AFTER_RETURN,
-        1,
+        2,
       );
       const [zone] = await tx
         .insert(floorZones)
@@ -928,7 +935,7 @@ describe("a past day's range around a start change", () => {
           weekday,
           ranges: weekday === 6 ? [{ startsAt: "23:00", endsAt: "04:00" }] : [],
         })),
-        1,
+        2,
         AFTER_RETURN,
       );
       return { cfg, diningDepartment, lunch, dinner, terrace: zone!.id };
@@ -987,7 +994,7 @@ describe("a past day's range around a start change", () => {
           ],
         },
         AFTER_RETURN,
-        1,
+        2,
       ),
     );
     expect(onSaturday(await october(), "2026-10-24").ranges).toEqual([
@@ -1012,7 +1019,7 @@ describe("a past day's range around a start change", () => {
           ],
         },
         AFTER_RETURN,
-        1,
+        2,
       ),
     );
     const year = await run((tx) => readOpeningHoursYear(tx, 2026, AFTER_RETURN));

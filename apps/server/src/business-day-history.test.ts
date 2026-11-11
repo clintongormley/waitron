@@ -2,14 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  dailyCloseChain,
-  dailyCloses,
-  locations,
-  sales,
-  withTransaction,
-  readVenueClock,
-} from "@waitron/db";
+import { dailyCloseChain, dailyCloses, sales, withTransaction, readVenueClock } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";
@@ -99,7 +92,7 @@ async function schedule(cutover: string) {
           slots: periodId === undefined ? [] : [{ periodId, startsAt: "09:00", endsAt: "17:00" }],
         })),
         new Date(),
-        0,
+        1,
       );
     }
   });
@@ -111,7 +104,7 @@ async function schedule(cutover: string) {
     body: JSON.stringify({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: cutover,
-      expectedClockRevision: 0,
+      expectedClockRevision: 1,
     }),
   });
   vi.setSystemTime(resume);
@@ -388,8 +381,20 @@ describe("dated business-day reporting through real storage", () => {
     expect(await suite.db.select().from(dailyCloseChain)).toEqual([]);
     expect(await suite.db.select().from(dailyCloses)).toEqual([]);
     expect(
-      (await suite.db.select().from(locations).where(eq(locations.id, venue.cfg.locationId)))[0]!
-        .dayCutover,
+      (
+        await Promise.resolve(
+          suite.db.all<{
+            id: string;
+            bumpMode: string;
+            fireControl: string;
+            catalogueId: string | null;
+            timeZone: string;
+            dayCutover: string;
+          }>(
+            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
+          ),
+        )
+      )[0]!.dayCutover,
     ).toBe("05:00:00");
   });
 });
@@ -413,7 +418,7 @@ describe("recorded facts refuse retrospective boundary changes", () => {
       body: JSON.stringify({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: "07:00",
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
     });
     expect(response.status).toBe(409);
@@ -438,7 +443,7 @@ describe("recorded facts refuse retrospective boundary changes", () => {
       body: JSON.stringify({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: "03:00",
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
     });
     expect(response.status).toBe(409);
@@ -534,7 +539,7 @@ it.each(["void", "tender", "payment", "refund", "notice"])(
       body: JSON.stringify({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: "03:00",
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
     });
     expect(response.status).toBe(409);

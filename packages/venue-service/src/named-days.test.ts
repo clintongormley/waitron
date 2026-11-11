@@ -1,4 +1,5 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -27,15 +28,13 @@ const run = <T>(body: Parameters<typeof withTransaction<T>>[1]) => withTransacti
 
 async function fixture() {
   return run(async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      })
-      .returning();
-    await seedVenueSettings(tx, { name: randomUUID(), invoiceLocales: ["en-GB"] });
+    const [location] = await tx.insert(locations).values({}).returning();
+    await seedVenueSettings(tx, {
+      name: randomUUID(),
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    await seedBusinessDay(tx, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
     const cfg = { locationId: location!.id };
     const [department, other] = await tx
       .insert(departments)
@@ -73,7 +72,7 @@ async function fixture() {
           slots: [{ periodId: period.id, startsAt: "12:00", endsAt: "16:00" }],
         })),
         now,
-        0,
+        1,
       );
       ids.push(period.id);
     }
@@ -290,7 +289,7 @@ describe("special-days Calendar model", () => {
 });
 
 it("returns the country's area options and the chosen venue area without inventing a geography", async () => {
-  const f = await fixture();
+  await fixture();
   await run(async (tx) => {
     await tx
       .insert(tenants)
@@ -317,10 +316,9 @@ it("returns the country's area options and the chosen venue area without inventi
   const after = await run((tx) => readSpecialDaysModel(tx, "2026-02-02", "2026-02-02", now));
   expect(after.area).toEqual({ ...before.area, required: false, chosen: "tenerife" });
   expect(after.days[0]!.tone).toBe("public_holiday");
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "unreadable" })
-    .where(eq(locations.id, f.cfg.locationId));
+  await suite.db.run(
+    sql`update settings set doc = json_set(doc, '$.timeZone', ${"unreadable"}) where module = 'business_day'`,
+  );
   expect(
     await run((tx) => readSpecialDaysModel(tx, "2026-02-02", "2026-02-02", now)),
   ).toMatchObject({

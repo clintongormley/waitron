@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   nodes,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -239,8 +239,8 @@ describe("till own clock state", () => {
 
   it("honours a scheduled cutover and its half-open business-day boundary", async () => {
     await suite.db
-      .insert(locationDayCutoverChanges)
-      .values({ locationId, effectiveBusinessDay: "2026-01-05", dayCutover: "06:00:00" });
+      .insert(dayCutoverChanges)
+      .values({ effectiveBusinessDay: "2026-01-05", dayCutover: "06:00:00" });
     await withTransaction(suite.db, (tx) => backend.clockIn(tx, event("2026-01-05T05:00:00Z")));
     expect(await read("2026-01-05T04:59:59Z")).toMatchObject({
       businessDay: "2026-01-04",

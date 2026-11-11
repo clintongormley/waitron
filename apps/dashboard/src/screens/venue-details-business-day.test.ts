@@ -62,7 +62,7 @@ it("reads clock-table events passively while retaining the editor draft and a sa
   );
   await editor.updateComplete;
   current = { ...current, businessDayClock: { ...current.businessDayClock, revision: 1 } };
-  liveData.invalidate([{ type: "location_day_cutover_changes" }]);
+  liveData.invalidate([{ type: "day_cutover_changes" }]);
   await expect.poll(() => background).toBe(1);
   await expect.poll(() => editor.model.revision).toBe(1);
   expect(editor.shadowRoot!.querySelector<WtInput>("[name=dayCutover]")!.value).toBe("bad");

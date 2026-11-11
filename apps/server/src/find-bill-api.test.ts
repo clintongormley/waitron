@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
@@ -6,7 +7,6 @@ import {
   deviceProfiles,
   devices,
   floorZones,
-  locations,
   sales,
   workingOrders,
   workingOrderLines,
@@ -67,11 +67,10 @@ type Options = {
 
 describe("Find a bill list routes", () => {
   it("returns the venue time zone for formatting both lists", async () => {
-    await inTx(venue, (tx) =>
-      tx
-        .update(locations)
-        .set({ timeZone: "Pacific/Honolulu" })
-        .where(eq(locations.id, venue.cfg.locationId)),
+    await inTx(venue, async (tx) =>
+      tx.run(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${"Pacific/Honolulu"}) where module = 'business_day'`,
+      ),
     );
     expect(await get("/api/find-bill/options")).toMatchObject({
       status: 200,

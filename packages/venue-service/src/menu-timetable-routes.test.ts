@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -9,8 +10,8 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  settings as businessDaySettingsTable,
+  dayCutoverChanges,
   floorPlanSets,
   floorZones,
   kitchenStations,
@@ -108,7 +109,7 @@ async function routed() {
           paint: [],
         },
         new Date(),
-        0,
+        1,
       )
     ).id;
     const person = async (role: "manager" | "supervisor" | "staff") => {
@@ -149,13 +150,13 @@ async function routed() {
       },
       ...(body === undefined
         ? method === "DELETE" && path.startsWith("/special-dates/")
-          ? { body: JSON.stringify({ expectedClockRevision: 0 }) }
+          ? { body: JSON.stringify({ expectedClockRevision: 1 }) }
           : {}
         : {
             body: JSON.stringify(
               body !== null && typeof body === "object" && !Array.isArray(body)
                 ? {
-                    ...(isPeriodSave(method, path) ? {} : { expectedClockRevision: 0 }),
+                    ...(isPeriodSave(method, path) ? {} : { expectedClockRevision: 1 }),
                     ...(method === "PUT" && /\/(?:menu|closed)-week$/.test(path)
                       ? { seasonId: season }
                       : {}),
@@ -266,7 +267,7 @@ describe("the opening-hours routes", () => {
     await answers(
       await r.send("POST", `/menu-periods/${middayPeriod.id}/delete`, r.manager, {
         replacementPeriodId: null,
-        expectedClockRevision: 0,
+        expectedClockRevision: 1,
       }),
       204,
     );
@@ -374,7 +375,7 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/menu-periods/${r.morningPeriod}/delete`,
-        { replacementPeriodId: null, expectedClockRevision: 0 },
+        { replacementPeriodId: null, expectedClockRevision: 1 },
       ],
       ["PUT", `/departments/${r.restaurant}/menu-week`, { days: week([]) }],
     ];
@@ -483,14 +484,14 @@ describe("the opening-hours routes", () => {
       [
         "POST",
         `/departments/${r.restaurant}/menu-periods`,
-        { name: "Afternoons", menuId: r.coffeeMenu, staffMenuIds: [], expectedClockRevision: 0 },
+        { name: "Afternoons", menuId: r.coffeeMenu, staffMenuIds: [], expectedClockRevision: 1 },
       ],
       [
         "PATCH",
         `/menu-periods/${r.morningPeriod}`,
-        { name: "Afternoons", expectedClockRevision: 0 },
+        { name: "Afternoons", expectedClockRevision: 1 },
       ],
-      ["PATCH", `/menu-periods/${r.morningPeriod}`, { expectedClockRevision: 0 }],
+      ["PATCH", `/menu-periods/${r.morningPeriod}`, { expectedClockRevision: 1 }],
     ] as const)
       await answers(await r.send(method, path, r.manager, body), 400, {
         code: "management.request_invalid",
@@ -863,23 +864,23 @@ it("accepts a fitting week, refuses a clashing one and a stale one while a chang
   const r = await routed();
   await scoped(async (tx) => {
     await tx
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: r.cfg.locationId, revision: 1 });
-    await tx.insert(locationDayCutoverChanges).values({
-      locationId: r.cfg.locationId,
+      .update(businessDaySettingsTable)
+      .set({ revision: 2 })
+      .where(eq(businessDaySettingsTable.module, "business_day"));
+    await tx.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     });
   });
   const path = `/departments/${r.restaurant}/menu-week`;
   const days = week([{ periodId: r.morningPeriod, startsAt: "09:00", endsAt: "14:00" }]);
-  const stale = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 0 });
+  const stale = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
   await answers(stale, 409, { code: "hours.clock_changed", params: {} });
-  const fits = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 });
+  const fits = await r.send("PUT", path, r.manager, { days, expectedClockRevision: 2 });
   await answers(fits, 204);
   const kept = (await r.model()).departments;
   const clash = week([{ periodId: r.morningPeriod, startsAt: "06:00", endsAt: "08:00" }]);
-  const refused = await r.send("PUT", path, r.manager, { days: clash, expectedClockRevision: 1 });
+  const refused = await r.send("PUT", path, r.manager, { days: clash, expectedClockRevision: 2 });
   await answers(refused, 409, {
     code: "hours.clock_change_conflict",
     params: {
@@ -1007,7 +1008,10 @@ describe("week routes name one season", () => {
   it("refuses a changing week save with no clock revision or a stale one", async () => {
     const r = await routed();
     await scoped((tx) =>
-      tx.insert(locationBusinessDaySettings).values({ locationId: r.cfg.locationId, revision: 1 }),
+      tx
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day")),
     );
     const before = await r.model();
     for (const [path, days] of writes(r))
@@ -1018,7 +1022,7 @@ describe("week routes name one season", () => {
         });
     expect(await r.model()).toEqual(before);
     for (const [path, days] of writes(r))
-      await answers(await r.send("PUT", path, r.manager, { days, expectedClockRevision: 1 }), 204);
+      await answers(await r.send("PUT", path, r.manager, { days, expectedClockRevision: 2 }), 204);
   });
 });
 
@@ -1296,7 +1300,10 @@ describe("the season weeks route", () => {
   it("refuses a save with no clock revision or a stale one, changing nothing", async () => {
     const r = await routed();
     await scoped((tx) =>
-      tx.insert(locationBusinessDaySettings).values({ locationId: r.cfg.locationId, revision: 1 }),
+      tx
+        .update(businessDaySettingsTable)
+        .set({ revision: 2 })
+        .where(eq(businessDaySettingsTable.module, "business_day")),
     );
     const before = await r.model();
     for (const expectedClockRevision of [undefined, 0])
@@ -1312,7 +1319,7 @@ describe("the season weeks route", () => {
     await answers(
       await r.send("PUT", `/seasons/${r.season}/weeks`, r.manager, {
         ...body(r),
-        expectedClockRevision: 1,
+        expectedClockRevision: 2,
       }),
       204,
     );

@@ -246,3 +246,14 @@ describe("location-column codemod", () => {
     }
   });
 });
+
+it("drops old-table keys before renaming imports and uses, while keeping property names and strings", () => {
+  const input =
+    'import { oldTable, oldTable as renamed } from "db";\nawait db.insert(oldTable).values({ locationId: venue, day });\nconst view = { oldTable: oldTable, text: "oldTable" };\nview.oldTable;\nconst short = { oldTable };';
+  const opts = { tables: ["oldTable"], renameIdentifiers: ["oldTable=newTable"] };
+  const expected =
+    'import { newTable, newTable as renamed } from "db";\nawait db.insert(newTable).values({ day });\nconst view = { oldTable: newTable, text: "oldTable" };\nview.oldTable;\nconst short = { oldTable: newTable };';
+  const first = transformSource("fixture.ts", input, opts).source;
+  expect(first).toBe(expected);
+  expect(transformSource("fixture.ts", first, opts).source).toBe(expected);
+});

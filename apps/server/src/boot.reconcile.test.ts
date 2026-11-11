@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { createServer as createHttpServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -97,11 +97,14 @@ async function seed(db: Database): Promise<void> {
     .insert(locations)
     .values({
       id: TILL_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Loc", invoiceLocales: ["en"] });
+  await seedVenueSettings(db, {
+    name: "Loc",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(db, {});
   await db
     .insert(nodes)
     .values({

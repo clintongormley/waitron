@@ -13,7 +13,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "../testing/migrations.js";
 import { bookings } from "./bookings.js";
 
@@ -62,10 +62,13 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
     await seedTenant(suite.db);
     await suite.db.insert(locations).values({
       id: LOCATION,
-
+    });
+    await seedVenueSettings(suite.db, {
+      name: "Loc A",
+      invoiceLocales: ["es"],
       operationDescription: "Hospitality",
     });
-    await seedVenueSettings(suite.db, { name: "Loc A", invoiceLocales: ["es"] });
+    await seedBusinessDay(suite.db, {});
     const [zone] = await suite.db
       .insert(floorZones)
       .values({ locationId: LOCATION, name: "Booking zone" })

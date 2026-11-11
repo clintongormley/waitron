@@ -554,7 +554,7 @@ it("re-reads the venue details passively at the waiting change's moment", async 
     await vi.advanceTimersByTimeAsync(59_999);
     expect(invalidate).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
-    expect(invalidate.mock.calls).toEqual([[[{ type: "location_day_cutover_changes" }]]]);
+    expect(invalidate.mock.calls).toEqual([[[{ type: "day_cutover_changes" }]]]);
     expect(getVenueDetails).not.toHaveBeenCalled();
     el.remove();
   } finally {
@@ -568,7 +568,7 @@ it("re-reads once at once when a model read before its changeover arrives after 
     const { el, api } = await rig({}, waitingModel());
     const invalidate = api.liveData.invalidate as ReturnType<typeof vi.fn>;
     await vi.advanceTimersByTimeAsync(1_000);
-    expect(invalidate.mock.calls).toEqual([[[{ type: "location_day_cutover_changes" }]]]);
+    expect(invalidate.mock.calls).toEqual([[[{ type: "day_cutover_changes" }]]]);
     el.model = waitingModel();
     await el.updateComplete;
     await vi.advanceTimersByTimeAsync(1_000);

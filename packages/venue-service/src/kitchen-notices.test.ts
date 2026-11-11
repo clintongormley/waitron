@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -14,8 +15,7 @@ import {
   CORE_MIGRATIONS,
   kitchenNotices,
   kitchenStations,
-  locations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   withTransaction,
   workingLineContexts,
   workingOrderLines,
@@ -1150,7 +1150,7 @@ describe("listStationNotices", () => {
   it("returns the newest fifty unacknowledged notices, oldest first", async () => {
     const v = await venue();
     const order = await seedOrder(1, null);
-    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(90) });
     const base = Date.now() - 60 * 60_000;
     for (let index = 0; index < 55; index += 1) {
       await noticeAt(
@@ -1181,10 +1181,10 @@ describe("listStationNotices", () => {
       (await inTx((tx) => listStationNotices(tx, v.grill))).map((n) => n.lineName);
 
     // The day began about 23.5 hours ago: yesterday's notice from 23 hours ago is still today's.
-    await db.update(locations).set({ dayCutover: cutoverFromNow(30) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(30) });
     expect(await listed()).toEqual(["23 hours ago", "an hour ago", "just now"]);
     // The day began about half an hour ago: the notice from an hour ago belongs to yesterday.
-    await db.update(locations).set({ dayCutover: cutoverFromNow(-30) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(-30) });
     expect(await listed()).toEqual(["just now"]);
   });
 
@@ -1218,7 +1218,7 @@ describe.each([
   it("keeps each station's own newest fifty, oldest first, whatever another station holds", async () => {
     const v = await venue();
     const order = await seedOrder(1, null);
-    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(90) });
     const base = Date.now() - 60 * 60_000;
     for (let index = 0; index < 55; index += 1) {
       const at = new Date(base + index * 1000).toISOString();
@@ -1237,7 +1237,7 @@ describe.each([
   it("orders notices recorded in the same instant by insertion, and keeps the newest fifty of them", async () => {
     const v = await venue();
     const order = await seedOrder(1, null);
-    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(90) });
     const at = minutesAgo(1);
     for (let index = 0; index < 51; index += 1) {
       await noticeAt(v.grill, order.orderId, at, `N${index}`);
@@ -1254,7 +1254,7 @@ describe.each([
   it("answers a notice with every field the single-station read gives", async () => {
     const v = await venue();
     const order = await seedOrder(1, null);
-    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(90) });
     const [row] = await db
       .insert(kitchenNotices)
       .values({
@@ -1388,12 +1388,8 @@ it.each(["03:00", "07:00"])(
   "keeps the notice lower bound until the actual %s transition",
   async (cutover) => {
     const v = await venue();
-    await db
-      .update(locations)
-      .set({ dayCutover: "05:00:00" })
-      .where(eq(locations.id, v.locationId));
-    await db.insert(locationDayCutoverChanges).values({
-      locationId: v.locationId,
+    await seedBusinessDay(db, { dayCutover: "05:00:00" });
+    await db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: `${cutover}:00`,
     });
@@ -1737,7 +1733,7 @@ describe("A807 one notice per kitchen-note change", () => {
   it("keeps a note change's notice whole at the fifty limit", async () => {
     const v = await venue();
     const order = await seedOrder(1, null);
-    await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
+    await seedBusinessDay(db, { dayCutover: cutoverFromNow(90) });
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
