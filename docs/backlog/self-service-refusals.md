@@ -186,6 +186,7 @@ State: The restored box failed its first-start completion. That completion reads
 Route: Existing: restart attempts completion again. Missing: tell the administrator what to correct if restart repeats the failure, using the actual completion refusal rather than a support escalation.
 
 _2026-11-11, A1089 slice 1: the words no longer say to contact support. They say each start tries again, so switch the box off and on, and if the message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page (the first start reads the bucket's pointer), then switch it off and on again. Still open: the dashboard has no restart button, and a failure that is not the bucket (the certificate or the list of machines) still has no specific remedy. The rest of this entry records the earlier tree._
+_2026-11-11, A1498: the dashboard now has Restart the box on the Box status page (administrators; it restarts Waitron on the box, not the machine), and this alert tells the person to press it. A person who is not an administrator is offered the administrator sign-in there._
 
 ### `chain.verification_failed`
 
@@ -883,6 +884,7 @@ The effective-key diagnosis and correction workflow remains open.
 **A repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
 
 _2026-11-11, A1089 slice 1: the alert now says to switch the box off and on, and to check the internet connection and the bucket if it stays, instead of contacting support; a box restart button and a persistent non-bucket failure are still open._
+_2026-11-11, A1498: the alert now says to press Restart the box on the Box status page instead of switching the box off and on._
 
 ### fiscal-integrity
 
