@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
@@ -27,6 +28,9 @@ const LS_REMOTE = `${OTHER_SHA}\trefs/tags/v0.9.0\n${OTHER_SHA}\trefs/tags/pre-s
 const PR_BODY =
   `Adds ${FILE}, the declaration for Waitron 1.0.0, ` +
   "which the producer read and signed with `pnpm release prepare`.";
+
+const SHOWN = { show: true };
+const argvOnly = (calls) => calls.map((call) => call.filter((part) => typeof part === "string"));
 
 const RUN_SUCCESS = '[{"status":"completed","conclusion":"success"}]\n';
 const ON_MAIN = { "git rev-parse --abbrev-ref HEAD": "main\n" };
@@ -58,7 +62,7 @@ const tagPath = (version = "1.0.0") => [
     "1",
   ],
   ["git", "tag", "-a", `v${version}`, "-m", `Waitron ${version}`],
-  ["git", "push", "origin", `v${version}`],
+  ["git", "push", "origin", `v${version}`, SHOWN],
 ];
 
 const happyPath = (version = "1.0.0", place = "Elche", date = "2026-11-11") => [
@@ -96,7 +100,7 @@ const happyPath = (version = "1.0.0", place = "Elche", date = "2026-11-11") => [
   ],
   ["git", "add", `packages/fiscal-verifactu/declarations/v${version}.md`],
   ["git", "commit", "-s", "-m", `Release ${version}`],
-  ["git", "push", "-u", "origin", `release/${version}`],
+  ["git", "push", "-u", "origin", `release/${version}`, SHOWN],
   [
     "gh",
     "pr",
@@ -108,15 +112,15 @@ const happyPath = (version = "1.0.0", place = "Elche", date = "2026-11-11") => [
     "--body",
     `Adds packages/fiscal-verifactu/declarations/v${version}.md, the declaration for Waitron ${version}, ` +
       "which the producer read and signed with `pnpm release prepare`.",
+    SHOWN,
   ],
 ];
 
 function fakeRun(answers = {}) {
   const calls = [];
-  const run = (file, args) => {
-    const call = [file, ...args];
-    calls.push(call);
-    const key = call.join(" ");
+  const run = (file, args, options) => {
+    const key = [file, ...args].join(" ");
+    calls.push(options === undefined ? [file, ...args] : [file, ...args, options]);
     if (Object.hasOwn(answers, key)) {
       const answer = answers[key];
       if (answer instanceof Error) throw answer;
@@ -204,7 +208,7 @@ describe("prepareRelease", () => {
     expect(printed.join("")).toContain("THE DECLARATION TEXT\n");
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toMatch(/yes/);
-    expect(calls.at(-1).at(-1)).toBe(PR_BODY);
+    expect(calls.at(-1).at(-2)).toBe(PR_BODY);
   });
 
   it("accepts an answer of yes surrounded by spaces", async () => {
@@ -368,6 +372,13 @@ describe("tagRelease", () => {
     expect(calls).toEqual(tagPath().slice(0, count));
     expect(tagged(calls)).toEqual([]);
   });
+
+  it("deletes the tag it made when the push stops, and refuses with the push's message", async () => {
+    const push = "git push origin v1.0.0";
+    const { calls, error } = await tag({ [push]: new Error(`${push} exited with status 1`) });
+    expect(error?.message).toBe(`${push} exited with status 1`);
+    expect(calls).toEqual([...tagPath(), ["git", "tag", "-d", "v1.0.0"]]);
+  });
 });
 
 describe("main", () => {
@@ -433,18 +444,86 @@ describe("the real wrappers", () => {
   it("nodeRun throws naming the command and its status, never its output", () => {
     expect(() =>
       nodeRun(process.execPath, ["-e", "process.stdout.write('SECRET'); process.exit(3)"]),
-    ).toThrow(/exited with status 3/);
-    try {
-      nodeRun(process.execPath, ["-e", "process.stdout.write('SECRET'); process.exit(3)"]);
-    } catch (error) {
-      expect(error.message).not.toContain("SECRET");
-    }
+    ).toThrow(/^node exited with status 3$/);
   });
 
   it("nodeRun names the signal that ended a command", () => {
     expect(() => nodeRun(process.execPath, ["-e", "process.kill(process.pid, 'SIGKILL')"])).toThrow(
-      /exited with status SIGKILL/,
+      /^node exited with status SIGKILL$/,
     );
+  });
+
+  it("nodeRun names a shown command's status too", () => {
+    expect(() => nodeRun(process.execPath, ["-e", "process.exit(4)"], SHOWN)).toThrow(
+      /^node exited with status 4$/,
+    );
+  });
+
+  it("nodeRun says when a command could not start", () => {
+    expect(() => nodeRun("waitron-release-no-such-command", ["push"])).toThrow(
+      /^waitron-release-no-such-command push could not start \(ENOENT\)$/,
+    );
+  });
+
+  it("nodeRun stops a command that runs past its time", () => {
+    expect(() =>
+      nodeRun(process.execPath, ["-e", "setTimeout(() => {}, 10_000)"], { timeout: 100 }),
+    ).toThrow(/^node did not finish within 0\.1 seconds$/);
+  });
+
+  it.each([
+    [
+      ["--filter", "@waitron/fiscal-verifactu", "declaration", "show", "--place", "Elche"],
+      "declaration show",
+    ],
+    [["push", "-u", "origin", "release/1.0.0"], "push"],
+    [
+      ["pr", "create", "--base", "main", "--title", "Release 1.0.0", "--body", PR_BODY],
+      "pr create",
+    ],
+    [["fetch", "origin", "main"], "fetch origin main"],
+  ])("nodeRun names the step for %j, never the options' values", (args, step) => {
+    expect(() => nodeRun("waitron-release-no-such-command", args)).toThrow(
+      new Error(`waitron-release-no-such-command ${step} could not start (ENOENT)`),
+    );
+  });
+
+  const moduleRunning = (body) =>
+    spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { nodeRun } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, "waitron-release.mjs")).href)};\n${body}`,
+      ],
+      { encoding: "utf8", timeout: 10_000, killSignal: "SIGKILL" },
+    );
+
+  it("nodeRun sends a shown command's standard output to the terminal, and returns an unshown one's", () => {
+    const result = moduleRunning(`
+      nodeRun(process.execPath, ["-e", "process.stdout.write('SHOWN-MARKER')"], { show: true });
+      const quiet = nodeRun(process.execPath, ["-e", "process.stdout.write('QUIET-MARKER')"]);
+      process.stderr.write("returned " + quiet);
+    `);
+    expect(result.error).toBeUndefined();
+    expect(result.stdout).toBe("SHOWN-MARKER");
+    expect(result.stderr).toBe("returned QUIET-MARKER");
+  });
+
+  it("nodeRun ends a command that ignores the polite stop once its time is up", () => {
+    // The stand-in ends itself after 15 seconds, so a regression cannot leave it running for ever.
+    const result = moduleRunning(`
+      const start = Date.now();
+      try {
+        nodeRun(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setTimeout(() => {}, 15_000)"], { timeout: 200 });
+      } catch (error) {
+        process.stdout.write(error.message + "|" + (Date.now() - start));
+      }
+    `);
+    expect(result.error).toBeUndefined();
+    const [message, elapsed] = result.stdout.split("|");
+    expect(message).toBe("node did not finish within 0.2 seconds");
+    expect(Number(elapsed)).toBeLessThan(5_000);
   });
 
   it("nodeAsk prints the prompt and answers one line", async () => {
@@ -474,7 +553,15 @@ const STUB = `#!/bin/sh
 printf '%s' "$(basename "$0")" >> "$WT_CALLS"
 for argument in "$@"; do printf '\\037%s' "$argument" >> "$WT_CALLS"; done
 printf '\\036' >> "$WT_CALLS"
-case "$(basename "$0") $*" in
+call="$(basename "$0") $*"
+case "$call" in
+  "git push"*) echo "the hook's own words" ;;
+  "gh pr create"*) echo https://example.invalid/pull/1 ;;
+esac
+if [ -n "$WT_FAIL" ]; then
+  case "$call" in "$WT_FAIL"*) echo FAILED-CALL-OUTPUT; exit 1 ;; esac
+fi
+case "$call" in
   "git rev-parse --abbrev-ref HEAD") echo "\${WT_BRANCH:-release/1.0.0}" ;;
   "gh run list"*) echo '[{"status":"completed","conclusion":"success"}]' ;;
   "git rev-parse HEAD"|"git rev-parse origin/main") echo ${HEAD_SHA} ;;
@@ -531,13 +618,39 @@ describe("the entry point", () => {
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("THE DECLARATION TEXT\n");
-    expect(recorded).toEqual(happyPath("1.0.0", "Elche", madridDate(new Date())));
+    expect(result.stdout).toContain("the hook's own words\nhttps://example.invalid/pull/1\n");
+    expect(recorded).toEqual(argvOnly(happyPath("1.0.0", "Elche", madridDate(new Date()))));
   });
 
   it("runs tag end to end through the real wrappers", () => {
     const { result, recorded } = runEntryPoint(["tag", "1.0.0"], { WT_BRANCH: "main" }, "");
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-    expect(recorded).toEqual(tagPath());
+    expect(result.stdout).toBe("the hook's own words\n");
+    expect(recorded).toEqual(argvOnly(tagPath()));
+  });
+
+  it("names the step that stopped prepare, and prints none of its output", () => {
+    const { result, recorded } = runEntryPoint(
+      ["prepare", "1.0.0", "--place", "Elche"],
+      { WT_FAIL: "pnpm --filter @waitron/fiscal-verifactu declaration show" },
+      "yes\n",
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("release: pnpm declaration show exited with status 1\n");
+    expect(result.stdout).not.toContain("FAILED-CALL-OUTPUT");
+    expect(recorded).toHaveLength(7);
+  });
+
+  it("shows the hook's words when the tag's push stops, and deletes the tag", () => {
+    const { result, recorded } = runEntryPoint(
+      ["tag", "1.0.0"],
+      { WT_BRANCH: "main", WT_FAIL: "git push origin v1.0.0" },
+      "",
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("release: git push origin v1.0.0 exited with status 1\n");
+    expect(result.stdout).toBe("the hook's own words\nFAILED-CALL-OUTPUT\n");
+    expect(recorded).toEqual([...argvOnly(tagPath()), ["git", "tag", "-d", "v1.0.0"]]);
   });
 });

@@ -94,6 +94,17 @@ It stops at the first thing that is wrong, and changes nothing until you sign. I
 The committed file leaves the producer's three facts as blanks; the declaration printed in step 3
 fills them from the settings in your shell.
 
+If `prepare` stops after you typed `yes`, at the push or at opening the pull request, the commit
+is already made. The branch is then ahead of `origin/main`, so running `prepare` again refuses
+(`release/1.0.0 must point at origin/main`). Run `git log -1 --stat`: if the last commit is
+"Release 1.0.0" adding `declarations/v1.0.0.md`, fix what stopped it and finish by hand. Skip the
+push if `git status` says the branch is up to date with `origin/release/1.0.0`:
+
+```sh
+git push -u origin release/1.0.0
+gh pr create --base main --title "Release 1.0.0" --body 'Adds packages/fiscal-verifactu/declarations/v1.0.0.md, the declaration for Waitron 1.0.0, which the producer read and signed with `pnpm release prepare`.'
+```
+
 ## 5. Land the pull request
 
 The release pull request lands like any other, after its CI.
@@ -120,10 +131,11 @@ and `tag`, which is why it checks the declaration again. Then it makes the annot
 `main`'s green run proves less than it sounds: an ordinary push to `main` runs no package tests.
 The tag's own CI run is the full one, and publishing the image waits for it.
 
-The push goes through the repository's pre-push hook. Nobody has pushed a tag through it yet:
-what it does with an annotated tag's id, which is the tag's own id rather than its commit's, was
-read (`.husky/pre-push:24-40`), not run. If the push stops there, read the hook's message, and
-never push with `--no-verify`.
+The push goes through the repository's pre-push hook, whose messages are printed as it runs.
+Nobody has pushed a tag through it yet: what it does with an annotated tag's id, which is the
+tag's own id rather than its commit's, was read (`.husky/pre-push:24-40`), not run. If the push
+stops, the command deletes the tag it made on your machine; fix what the hook's message names and
+run `pnpm release tag 1.0.0` again. Never push with `--no-verify`.
 
 ## 7. Watch the tag's CI run
 

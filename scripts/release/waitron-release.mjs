@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { basename } from "node:path";
 import { createInterface } from "node:readline";
 import { parseArgs } from "node:util";
 import { isMainScript } from "../is-main-script.mjs";
@@ -9,6 +10,7 @@ const USAGE =
   "usage: pnpm release prepare <version> --place <place>\n       pnpm release tag <version>\n";
 // The push runs the pre-push hook, which typechecks; that can take minutes.
 const COMMAND_TIMEOUT_MS = 20 * 60_000;
+const SHOWN = { show: true };
 
 export function parseVersion(text) {
   const match = VERSION.exec(text);
@@ -43,18 +45,11 @@ export function madridDate(now) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-const declaration = (subcommand, version, place, date) => [
-  "--filter",
-  "@waitron/fiscal-verifactu",
-  "declaration",
-  subcommand,
-  "--version",
-  version,
-  "--place",
-  place,
-  "--date",
-  date,
-];
+function declarationArgs(subcommand, version, place, date) {
+  const args = ["--filter", "@waitron/fiscal-verifactu", "declaration", subcommand];
+  if (subcommand === "check") return [...args, "--version", version];
+  return [...args, "--version", version, "--place", place, "--date", date];
+}
 
 function onCleanBranchAtOriginMain(run, branch) {
   const git = (...args) => run("git", args).trim();
@@ -89,27 +84,31 @@ export async function prepareRelease({ version, place, run, ask, now, print }) {
   refuseUnlessNextVersion(run, version);
 
   const date = madridDate(now);
-  print(run("pnpm", declaration("show", version, place, date)));
+  print(run("pnpm", declarationArgs("show", version, place, date)));
   const answer = await ask(`Type yes to sign the declaration for Waitron ${version}: `);
   if (answer.trim() !== "yes")
     throw new Error("the declaration was not signed; nothing was written");
 
   const file = declarationFile(version);
-  run("pnpm", declaration("write", version, place, date));
+  run("pnpm", declarationArgs("write", version, place, date));
   run("git", ["add", file]);
   run("git", ["commit", "-s", "-m", `Release ${version}`]);
-  run("git", ["push", "-u", "origin", branch]);
-  run("gh", [
-    "pr",
-    "create",
-    "--base",
-    "main",
-    "--title",
-    `Release ${version}`,
-    "--body",
-    `Adds ${file}, the declaration for Waitron ${version}, ` +
-      "which the producer read and signed with `pnpm release prepare`.",
-  ]);
+  run("git", ["push", "-u", "origin", branch], SHOWN);
+  run(
+    "gh",
+    [
+      "pr",
+      "create",
+      "--base",
+      "main",
+      "--title",
+      `Release ${version}`,
+      "--body",
+      `Adds ${file}, the declaration for Waitron ${version}, ` +
+        "which the producer read and signed with `pnpm release prepare`.",
+    ],
+    SHOWN,
+  );
 }
 
 export async function tagRelease({ version, run }) {
@@ -121,14 +120,7 @@ export async function tagRelease({ version, run }) {
   } catch {
     throw new Error(`${file} is not committed on main; land the release pull request first`);
   }
-  run("pnpm", [
-    "--filter",
-    "@waitron/fiscal-verifactu",
-    "declaration",
-    "check",
-    "--version",
-    version,
-  ]);
+  run("pnpm", declarationArgs("check", version));
   refuseUnlessNextVersion(run, version);
 
   const runs = JSON.parse(
@@ -155,23 +147,46 @@ export async function tagRelease({ version, run }) {
     throw new Error(`main's CI run for ${head} is ${status}, ${conclusion || "no conclusion"}`);
   }
 
-  run("git", ["tag", "-a", `v${version}`, "-m", `Waitron ${version}`]);
-  run("git", ["push", "origin", `v${version}`]);
+  const tag = `v${version}`;
+  run("git", ["tag", "-a", tag, "-m", `Waitron ${version}`]);
+  try {
+    run("git", ["push", "origin", tag], SHOWN);
+  } catch (error) {
+    run("git", ["tag", "-d", tag]);
+    throw error;
+  }
 }
 
-// Standard error is inherited so a refusal's own words reach the signer; the error thrown here never
-// carries the command's output, which can hold the producer's settings.
-export function nodeRun(file, args) {
+// The step is the command's words before its first option, after pnpm's `--filter <package>`, so
+// no option's value (a pull request's body, a place) reaches a message.
+function stepName(file, args) {
+  const words = args[0] === "--filter" ? args.slice(2) : args;
+  const end = words.findIndex((word) => word.startsWith("-"));
+  return [basename(file), ...words.slice(0, end === -1 ? undefined : end)].join(" ");
+}
+
+function outcome(error, timeout) {
+  if (error.code === "ETIMEDOUT") return `did not finish within ${timeout / 1000} seconds`;
+  if (error.status === null && error.signal === null) return `could not start (${error.code})`;
+  return `exited with status ${error.status ?? error.signal}`;
+}
+
+// Standard error, and a shown call's standard output, go straight to the terminal so a refusal's
+// own words reach the signer. The error thrown here never carries a command's output, which for
+// the declaration commands can hold the producer's settings.
+export function nodeRun(file, args, { show = false, timeout = COMMAND_TIMEOUT_MS } = {}) {
   try {
     return execFileSync(file, args, {
       encoding: "utf8",
-      timeout: COMMAND_TIMEOUT_MS,
+      timeout,
+      // At the timeout, a command that ignores the default SIGTERM keeps this call waiting.
+      killSignal: "SIGKILL",
       maxBuffer: 16 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "inherit"],
+      stdio: ["ignore", show ? "inherit" : "pipe", "inherit"],
     });
   } catch (error) {
     // eslint-disable-next-line preserve-caught-error -- the caught error holds the command's output.
-    throw new Error(`${file} ${args[0]} exited with status ${error.status ?? error.signal}`);
+    throw new Error(`${stepName(file, args)} ${outcome(error, timeout)}`);
   }
 }
 
