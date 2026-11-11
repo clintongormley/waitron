@@ -330,6 +330,9 @@ describe("duration packing across package projects", () => {
         expect(Sequencer.table).toBeDefined();
         const table = JSON.parse(readFileSync(join(root, "test-durations.json"), "utf8"));
         expect(Sequencer.table).toEqual(table);
+        expect(
+          specs.some((spec) => Object.hasOwn(table, relativeTestPath(root, spec.moduleId))),
+        ).toBe(true);
         for (const [file, seconds] of Object.entries(table)) {
           expect(Number.isFinite(seconds) && seconds > 0, file).toBe(true);
         }
