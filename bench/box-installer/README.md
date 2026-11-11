@@ -148,7 +148,6 @@ missing-container/no-console behavior, the failure page, recovery screen and key
 update resealing, kiosk and physical box/stick/Android qualification remain release gates.
 This unsigned development image carries no theft-protection or release-readiness claim.
 Protected encryption before go-live remains required.
-Certificate errors are ignored only for rendering the setup screen.
 
 After retaining the small results, remove your rehearsal resources. Do not remove
 shared images, volumes or build caches. Export the image first with `docker cp`
