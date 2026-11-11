@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -32,7 +33,7 @@ import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocati
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { persons, hashPassword } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -128,9 +129,12 @@ beforeEach(async () => {
     })),
   );
   await stampDeployment(suite.db, "preproduction");
-  await suite.db
-    .insert(persons)
-    .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: hash });
+  await seedPersons(suite.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: hash,
+  });
   let value: unknown = null;
   const first = { ...joinBinding, action: "setup", eventId: "first", targetNodeId: primary.nodeId };
   const setup = createHourPreparation({
@@ -1092,9 +1096,12 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     filingModule: "verifactu",
     taxModule: "vat",
   });
-  await spare.db
-    .insert(persons)
-    .values({ id: ADMIN, displayName: "Administrator", role: "admin", passwordHash: hash });
+  await seedPersons(spare.db, {
+    id: ADMIN,
+    displayName: "Administrator",
+    role: "admin",
+    passwordHash: hash,
+  });
   await stampDeployment(spare.db, "preproduction");
   await withTransaction(spare.db, (tx) =>
     seedFixtureSif(tx, {

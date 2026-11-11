@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomBytes } from "node:crypto";
 import {
   copyFile,
@@ -46,7 +47,7 @@ import {
   type HandoverBinding,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
-import { persons } from "@waitron/identity";
+
 import {
   endorseKey,
   signDocumentBody,
@@ -265,10 +266,7 @@ async function rig() {
     nodeId: m1.nodeId,
     publicKey: nodeSigningPublicKey(m1Key),
   });
-  const [person] = await db
-    .insert(persons)
-    .values({ displayName: "Owner", role: "admin", status: "active" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(db, { displayName: "Owner", role: "admin", status: "active" });
   const authorisedBy = person!.id;
 
   const binding: HandoverBinding = {

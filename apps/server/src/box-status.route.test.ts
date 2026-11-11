@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
@@ -78,16 +79,13 @@ async function provisionTenant(): Promise<{ nodeId: string; managerId: string }>
     // Through the table definition, not raw SQL: `persons.id` and `persons.created_at` are
     // `$defaultFn` generators (`packages/db/src/schema/identity/persons.ts`) that raw SQL never
     // reaches.
-    const [manager] = await tx
-      .insert(persons)
-      .values({
-        displayName: "The Manager",
-        email: MANAGER_EMAIL,
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(PASSWORD),
-        role: "manager",
-      })
-      .returning({ id: persons.id });
+    const [manager] = await seedPersons(tx, {
+      displayName: "The Manager",
+      email: MANAGER_EMAIL,
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(PASSWORD),
+      role: "manager",
+    });
     return manager!.id;
   });
   return { nodeId: venue.nodeId, managerId };

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { attendanceMailRows } from "@waitron/workforce/test/fixtures.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -8,7 +9,7 @@ import { sql } from "drizzle-orm";
 import { newId, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, sessions, hashSessionToken } from "@waitron/identity";
+import { sessions, hashSessionToken } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { jobOrigin } from "@waitron/shared";
 import {
@@ -48,13 +49,10 @@ beforeEach(async () => {
   });
   nodeId = await seedNode(suite.db);
   const deviceId = (await seedDevice(suite.db)).deviceId;
-  const people = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Clocked worker", role: "admin" },
-      { displayName: "Missing clock", email: "worker@example.test" },
-    ])
-    .returning();
+  const people = await seedPersons(suite.db, [
+    { displayName: "Clocked worker", role: "admin" },
+    { displayName: "Missing clock", email: "worker@example.test" },
+  ]);
   [personId, missingPersonId] = people.map((p) => p.id) as [string, string];
   await withTransaction(suite.db, async (tx) => {
     await new WorkforceBackend().clockIn(tx, {

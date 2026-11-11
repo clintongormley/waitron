@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder, placeOrder } from "./testing/order-writer-fixture.js";
@@ -8,7 +9,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { workingOrderLines, workingOrders } from "@waitron/db";
-import { persons } from "@waitron/identity";
+
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
@@ -131,10 +132,10 @@ async function transfer(partyId: string, fromBillId: string, toBillId: string, n
 /** Cancels the whole of the bill's line of `name`, as the till's cancel does. */
 async function cancelLine(billId: string, name: string) {
   await inTx(v, async (tx) => {
-    const [operator] = await tx
-      .insert(persons)
-      .values({ displayName: `Cancels ${randomUUID()}`, role: "manager" })
-      .returning({ id: persons.id });
+    const [operator] = await seedPersons(tx, {
+      displayName: `Cancels ${randomUUID()}`,
+      role: "manager",
+    });
     const reason = await createAdjustmentReason(tx, {
       name: `Mistake ${randomUUID()}`,
       names: { en: "Mistake", es: "Error" },

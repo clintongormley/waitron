@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // `GET /api/backup/settings-evidence` on a real venue database, one case per row of the design's
 // cause table. Each failure is produced by a real supervisor loading the record as boot does, except
 // the `unknown` row: no read this suite can produce fails without a code, so that case swaps in a
@@ -21,7 +22,7 @@ import {
   tenantCredentials,
   type KeyRing,
 } from "@waitron/credentials";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue } from "@waitron/provisioning";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -208,7 +209,7 @@ async function setupTenant(): Promise<void> {
     { db: suite.db, modules: ALL_MODULES },
   );
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(persons).values({
+    await seedPersons(tx, {
       displayName: "The Manager",
       email: MANAGER_EMAIL,
       pinHash: hashPin("1234"),

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -25,7 +26,7 @@ import {
   type HandoverBinding,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
-import { persons } from "@waitron/identity";
+
 import {
   canonicalize,
   endorseKey,
@@ -687,10 +688,11 @@ describe("two real starts: the old box restricted, the spare a mirror", () => {
     await mainBox.db
       .insert(nodes)
       .values({ id: spareId, locationId: own!.locationId, name: "Spare", publicKey: sparePublic });
-    const [owner] = await mainBox.db
-      .insert(persons)
-      .values({ displayName: "Owner", role: "admin", status: "active" })
-      .returning({ id: persons.id });
+    const [owner] = await seedPersons(mainBox.db, {
+      displayName: "Owner",
+      role: "admin",
+      status: "active",
+    });
 
     const tenant = (await readTenant(mainBox.db))!;
     const binding: HandoverBinding = {

@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPin, persons, startManagementSession, type PersonRoleValue } from "@waitron/identity";
+import { hashPin, startManagementSession, type PersonRoleValue } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { BOX_HOST_ROUTE_CALLS, mountBoxHostApi } from "./box-host-api.js";
@@ -28,10 +29,7 @@ let supervisorCookie: string;
 
 async function seedCookie(role: PersonRoleValue, name: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const [p] = await tx
-      .insert(persons)
-      .values({ displayName: name, pinHash: hashPin("1234"), role })
-      .returning({ id: persons.id });
+    const [p] = await seedPersons(tx, { displayName: name, pinHash: hashPin("1234"), role });
     const session = await startManagementSession(tx, { personId: p!.id });
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   });

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { publishRestoreFlow } from "./restore-flow.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
@@ -279,7 +280,7 @@ describe("startServer — background listeners and sinks that fail or close", ()
     try {
       const db = venue.store.venue;
       await seedTradingVenue(db);
-      await db.insert(persons).values({
+      await seedPersons(db, {
         displayName: "Reset Person",
         pinHash: hashPin("1234"),
         passwordHash: hashPassword("resetPass123"),

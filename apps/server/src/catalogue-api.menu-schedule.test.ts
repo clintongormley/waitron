@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { activateDueMenuPublications } from "@waitron/catalogue";
 import type { MenuPreview, MenuPublicationsAnswer, MenuStatus } from "@waitron/catalogue";
 
@@ -44,14 +45,16 @@ const suite = useVenueDb({
     });
 
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
-      const [manager] = await tx
-        .insert(persons)
-        .values({ displayName: "manager-ana", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
-      const [staff] = await tx
-        .insert(persons)
-        .values({ displayName: "The Clerk", pinHash: hashPin("1234"), role: "staff" })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: "manager-ana",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
+      const [staff] = await seedPersons(tx, {
+        displayName: "The Clerk",
+        pinHash: hashPin("1234"),
+        role: "staff",
+      });
       managerId = manager!.id;
       const managerSession = await startManagementSession(tx, { personId: manager!.id });
       const staffSession = await startManagementSession(tx, { personId: staff!.id });

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { AppError } from "@waitron/shared";
 import { readBillEditState, requireBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -27,8 +28,8 @@ async function fixture() {
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const [anna] = await tx.insert(persons).values({ displayName: "Anna" }).returning();
-    const [lewis] = await tx.insert(persons).values({ displayName: "Lewis" }).returning();
+    const [anna] = await seedPersons(tx, { displayName: "Anna" });
+    const [lewis] = await seedPersons(tx, { displayName: "Lewis" });
     const [party] = await tx.insert(parties).values({ openedBy: anna!.id }).returning();
     const bill = await seedWorkingOrder(tx, {
       source: "dashboard",

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
@@ -9,13 +10,7 @@ import { describe, expect, it } from "vitest";
 import { nowIso, openVenueDatabase, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  hashPassword,
-  hashPin,
-  persons,
-  verifyPassword,
-  webauthnCredentials,
-} from "@waitron/identity";
+import { hashPassword, hashPin, verifyPassword, webauthnCredentials } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { openBreakGlassVenue, runBreakGlassReset } from "./break-glass-command.js";
@@ -262,15 +257,12 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
   it("two admins, no --person → returns 1 and lists both ids; --person resets exactly one", async () => {
     const { adminId } = await setupTenant();
     // Through the table definition, for the `$defaultFn` reason above (`persons.id`).
-    const [inserted] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Second Admin",
-        pinHash: hashPin("1234"),
-        passwordHash: hashPassword(OLD_PASSWORD),
-        role: "admin",
-      })
-      .returning({ id: persons.id });
+    const [inserted] = await seedPersons(suite.db, {
+      displayName: "Second Admin",
+      pinHash: hashPin("1234"),
+      passwordHash: hashPassword(OLD_PASSWORD),
+      role: "admin",
+    });
     const secondId = inserted!.id;
 
     const ambiguous = await run(baseEnv());
@@ -329,7 +321,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
     const { adminId } = await setupTenant();
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     // The suspended admin's name is outside the live-name index, so another person may take it.
-    await suite.db.insert(persons).values({
+    await seedPersons(suite.db, {
       displayName: "Administrator",
       pinHash: hashPin("5678"),
       role: "staff",
@@ -408,15 +400,12 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
     try {
       await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
       const seeded = await openVenueDatabase(directory);
-      const [admin] = await seeded.venue
-        .insert(persons)
-        .values({
-          displayName: "Live Admin",
-          pinHash: hashPin("1234"),
-          passwordHash: hashPassword(OLD_PASSWORD),
-          role: "admin",
-        })
-        .returning({ id: persons.id });
+      const [admin] = await seedPersons(seeded.venue, {
+        displayName: "Live Admin",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword(OLD_PASSWORD),
+        role: "admin",
+      });
       await seeded.close();
 
       const out: string[] = [];

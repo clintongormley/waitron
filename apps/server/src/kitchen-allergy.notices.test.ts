@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashSessionToken, persons, sessions } from "@waitron/identity";
+import { hashSessionToken, sessions } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import {
   createExtraList,
@@ -74,7 +75,7 @@ const original: KitchenAllergyBlock = {
 };
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  await v.db.insert(persons).values({ id: OPERATOR, displayName: "Test operator", role: "staff" });
+  await seedPersons(v.db, { id: OPERATOR, displayName: "Test operator", role: "staff" });
   const token = randomUUID();
   await v.db
     .update(sessions)

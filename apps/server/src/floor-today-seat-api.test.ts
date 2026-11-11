@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { and, eq, isNull } from "drizzle-orm";
@@ -58,10 +59,11 @@ beforeAll(async () => {
   );
   const deviceId = await seedSessionDevice(v.db);
   const session = await inTx(v, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Anna",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
   cookie = await sessionCookieForTest(v.db, session.token);

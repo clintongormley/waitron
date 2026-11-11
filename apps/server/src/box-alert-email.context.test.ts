@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBoxEmailContext } from "./box-alert-email.js";
 
@@ -19,10 +20,11 @@ describe("readBoxEmailContext", () => {
       invoiceLocales: ["en-GB"],
       operationDescription: "Sale",
     });
-    const [admin] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
-      .returning({ id: persons.id });
+    const [admin] = await seedPersons(suite.db, {
+      displayName: "Admin",
+      role: "admin",
+      email: "admin@example.test",
+    });
     const deps = { ring, venueLanguage: "en" as const };
 
     await expect(readBoxEmailContext(suite.db, { ...deps, practiceMode: false })).resolves.toEqual({

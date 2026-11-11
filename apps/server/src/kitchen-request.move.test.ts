@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
@@ -15,7 +16,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
 import {
@@ -141,10 +142,11 @@ async function transferredCounterOrder(
   beforeTransfer: (items: (typeof ticketItems.$inferSelect)[]) => Promise<void> = async () => {},
 ) {
   const v = await setupPartyVenue(db);
-  const [person] = await db
-    .insert(persons)
-    .values({ displayName: "Transfer operator", pinHash: hashPin("5555"), role: "staff" })
-    .returning();
+  const [person] = await seedPersons(db, {
+    displayName: "Transfer operator",
+    pinHash: hashPin("5555"),
+    role: "staff",
+  });
   const app = new Hono();
   mountTillApi(
     app,

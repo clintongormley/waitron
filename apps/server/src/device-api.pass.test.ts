@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
@@ -1303,10 +1304,11 @@ describe("A773 pass release: route", () => {
     ]);
 
     const [cook] = await inTx(f.v, (tx) =>
-      tx
-        .insert(persons)
-        .values({ displayName: "Second cook", pinHash: fixturePinHash("2468"), role: "staff" })
-        .returning({ id: persons.id }),
+      seedPersons(tx, {
+        displayName: "Second cook",
+        pinHash: fixturePinHash("2468"),
+        role: "staff",
+      }),
     );
     const cookToken = (
       await inTx(f.v, (tx) =>

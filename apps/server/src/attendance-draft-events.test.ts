@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { firstOpenBillOf } from "./testing/party-bill-of.js";
 import {
@@ -7,7 +8,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { orderDraftEvents, orderDraftLines, orderDrafts, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
@@ -28,14 +29,12 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00.987Z"));
   v = await setupPartyVenue(suite.db);
-  await suite.db
-    .insert(persons)
-    .values({ id: OPERATOR, displayName: "Owner", pinHash: "scrypt$00$00" });
+  await seedPersons(suite.db, { id: OPERATOR, displayName: "Owner", pinHash: "scrypt$00$00" });
   ({ partyId } = await seat(v, await v.table("Draft snapshots")));
-  const [row] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Acting worker", pinHash: "scrypt$00$00" })
-    .returning();
+  const [row] = await seedPersons(suite.db, {
+    displayName: "Acting worker",
+    pinHash: "scrypt$00$00",
+  });
   other = row!.id;
 });
 afterEach(() => vi.useRealTimers());

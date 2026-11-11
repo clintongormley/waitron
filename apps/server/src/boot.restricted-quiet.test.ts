@@ -1,10 +1,11 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { createHash, randomUUID } from "node:crypto";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction, withTransaction, persons, enqueueMail } from "@waitron/db";
+import { withNodeTransaction, withTransaction, enqueueMail } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -166,7 +167,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     const venue = await setupVenue(suite.db);
     const nodeId = venue.cfg.nodeId;
     const personId = randomUUID();
-    await suite.db.insert(persons).values({ id: personId, displayName: "Queued recipient" });
+    await seedPersons(suite.db, { id: personId, displayName: "Queued recipient" });
     await withTransaction(suite.db, (tx) =>
       enqueueMail(tx, {
         kind: "account_action",

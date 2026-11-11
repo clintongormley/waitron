@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 /**
  * The assembled device join-and-accept flow, with `device-api` and `join-api` mounted on one app
@@ -554,10 +555,11 @@ describe("a deleted device comes back as the same device", () => {
 
   /** A staff member with PIN 4321, signed in on each device given: one session cookie per device. */
   async function signedInOn(devices: { deviceId: string; jar: string }[]): Promise<string[]> {
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: `Server ${randomUUID()}`, pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: `Server ${randomUUID()}`,
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     const cookies: string[] = [];
     for (const { deviceId, jar } of devices) {
       const session = await withTransaction(suite.db, (tx) =>
@@ -707,10 +709,11 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
     );
@@ -798,10 +801,11 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     between.pinCheckAndSignIn = async () => {
       between.pinCheckAndSignIn = async () => {};
       await disable(app, venue, deviceId);
@@ -820,10 +824,11 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     let enabledJar = "";
     between.pinCheckAndSignIn = async () => {
       between.pinCheckAndSignIn = async () => {};
@@ -857,10 +862,11 @@ describe("a deleted device comes back as the same device", () => {
     );
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     between.pinCheckAndSignIn = async () => {
       between.pinCheckAndSignIn = async () => {};
       await moveOnto(app, venue, deviceId, kitchenId, venue.defaultStationId);
@@ -891,10 +897,11 @@ describe("a deleted device comes back as the same device", () => {
       kitchenScreens: [stationScreen(venue.defaultStationId)],
     });
     expect(accepted.status).toBe(200);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     let pinChecked = false;
     between.pinCheckAndSignIn = async () => {
       pinChecked = true;
@@ -918,10 +925,11 @@ describe("a deleted device comes back as the same device", () => {
     const otherTillId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     let moved = false;
     between.pinCheckAndSignIn = async () => {
       between.pinCheckAndSignIn = async () => {};
@@ -945,10 +953,11 @@ describe("a deleted device comes back as the same device", () => {
       .values({ deviceProfileId: managersOnly, role: "manager" });
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     let moved = false;
     between.pinCheckAndSignIn = async () => {
       between.pinCheckAndSignIn = async () => {};
@@ -985,13 +994,10 @@ describe("a deleted device comes back as the same device", () => {
       },
     });
     expect(approved.status).toBe(204);
-    const [manager, staff] = await suite.db
-      .insert(persons)
-      .values([
-        { displayName: "Manager", pinHash: hashPin("4321"), role: "manager" },
-        { displayName: "Server", pinHash: hashPin("4321"), role: "staff" },
-      ])
-      .returning({ id: persons.id });
+    const [manager, staff] = await seedPersons(suite.db, [
+      { displayName: "Manager", pinHash: hashPin("4321"), role: "manager" },
+      { displayName: "Server", pinHash: hashPin("4321"), role: "staff" },
+    ]);
     const managerIn = await signIn(app, jar, manager!.id);
     expect(managerIn.status).toBe(200);
     let switched = false;
@@ -1028,10 +1034,11 @@ describe("a deleted device comes back as the same device", () => {
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar: oldJar } = await addDevice(app, venue, holdId, "Bar till", profileId);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Server",
+      pinHash: hashPin("4321"),
+      role: "staff",
+    });
     expect((await signIn(app, oldJar, person!.id)).status).toBe(200);
     const deleted = await send(app, "DELETE", `/management-api/devices/${deviceId}`, {
       cookie: venue.managerCookie,

@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp, cancelItemRequest } from "./testing/cancel-line.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
@@ -266,10 +267,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     }
     await assignCatalogueToVenue(tx, cat.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Ann", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: "Ann",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     const [profile] = await tx
       .insert(deviceProfiles)
       .values({
@@ -3913,15 +3915,12 @@ describe("the device a bill payment and its refund name", () => {
 describe("who can approve a refund (GET /api/refund-authorizers)", () => {
   async function addPerson(role: "staff" | "supervisor" | "manager", status = "active") {
     const [person] = await inTx((tx) =>
-      tx
-        .insert(persons)
-        .values({
-          displayName: `${role}-${randomUUID().slice(0, 8)}`,
-          pinHash: hashPin("5555"),
-          role,
-          status: status as "active" | "suspended",
-        })
-        .returning({ id: persons.id }),
+      seedPersons(tx, {
+        displayName: `${role}-${randomUUID().slice(0, 8)}`,
+        pinHash: hashPin("5555"),
+        role,
+        status: status as "active" | "suspended",
+      }),
     );
     return person!.id;
   }

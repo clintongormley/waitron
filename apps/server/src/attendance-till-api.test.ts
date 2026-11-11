@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPin, persons, sessions, startManagementSession } from "@waitron/identity";
+import { hashPin, sessions, startManagementSession } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -45,9 +46,12 @@ const suite = useVenueDb({
 let v: PartyVenue, cookie: string, deviceId: string;
 beforeEach(async () => {
   v = await setupPartyVenue(suite.db);
-  await suite.db
-    .insert(persons)
-    .values({ id: OPERATOR, displayName: "Worker", pinHash: hashPin("1234"), role: "admin" });
+  await seedPersons(suite.db, {
+    id: OPERATOR,
+    displayName: "Worker",
+    pinHash: hashPin("1234"),
+    role: "admin",
+  });
   const [device] = await suite.db
     .select()
     .from(devices)
@@ -439,10 +443,11 @@ describe("till refund attendance", () => {
     });
     expect(paid.status).toBe(200);
     const body = (await paid.json()) as { payment: { id: string } };
-    const [worker] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Refund initiator", pinHash: hashPin("2468"), role: "staff" })
-      .returning({ id: persons.id });
+    const [worker] = await seedPersons(suite.db, {
+      displayName: "Refund initiator",
+      pinHash: hashPin("2468"),
+      role: "staff",
+    });
     const signed = await login(api, "2468", worker!.id);
     expect(signed.status).toBe(200);
     const workerCookie = signed.headers.get("set-cookie")!.split(";")[0]!;

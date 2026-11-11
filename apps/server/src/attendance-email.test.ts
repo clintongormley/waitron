@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -397,15 +398,12 @@ describe("attendance_question queue owner", () => {
     });
     locationId = await venueLocationId(suite.db);
     nodeId = await seedNode(suite.db);
-    const [person] = await suite.db
-      .insert(persons)
-      .values({
-        displayName: "Worker",
-        email: "worker@example.test",
-        pendingEmail: "unverified@example.test",
-        locale: "es-ES",
-      })
-      .returning();
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Worker",
+      email: "worker@example.test",
+      pendingEmail: "unverified@example.test",
+      locale: "es-ES",
+    });
     personId = person!.id;
   });
 
@@ -436,10 +434,7 @@ describe("attendance_question queue owner", () => {
           recipient: "saved@example.test",
           outcome: status === "sending" ? null : status,
         });
-      const [manager] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Approver", role: "admin" })
-        .returning();
+      const [manager] = await seedPersons(suite.db, { displayName: "Approver", role: "admin" });
       const result = await run(async (tx) =>
         executeAttendanceCommand(tx, {
           nodeId,
@@ -615,10 +610,10 @@ describe("attendance_question queue owner", () => {
     await seedMissing();
     await suite.db.update(persons).set({ email: null }).where(eq(persons.id, personId));
     const oldPerson = personId;
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Second", email: "second@example.test" })
-      .returning();
+    const [person] = await seedPersons(suite.db, {
+      displayName: "Second",
+      email: "second@example.test",
+    });
     personId = person!.id;
     await seedMissing("2026-01-06");
     await pass();

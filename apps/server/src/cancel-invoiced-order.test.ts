@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { deviceId as brandDeviceId } from "@waitron/shared";
@@ -186,10 +187,11 @@ useVenueDb({
     productIdOf = (name) => productIds.get(name)!;
     offerOf = (name) => offers.offerFor(productIdOf(name));
     const session = await inTx(venue, async (tx) => {
-      const [person] = await tx
-        .insert(persons)
-        .values({ displayName: "Sophia", pinHash: hashPin(SUPERVISOR_PIN), role: "supervisor" })
-        .returning({ id: persons.id });
+      const [person] = await seedPersons(tx, {
+        displayName: "Sophia",
+        pinHash: hashPin(SUPERVISOR_PIN),
+        role: "supervisor",
+      });
       supervisorId = person!.id;
       return loginWithPin(tx, {
         deviceId: venue.deviceId,
@@ -1525,15 +1527,12 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
 describe("who may approve a cancel and credit (GET /api/cancel-credit-authorizers)", () => {
   it("lists the active holders of sale.rectify, and no one else, by id and name only", async () => {
     const [suspended] = await inTx(venue, (tx) =>
-      tx
-        .insert(persons)
-        .values({
-          displayName: "Suspendida",
-          pinHash: hashPin("5555"),
-          role: "manager",
-          status: "suspended",
-        })
-        .returning({ id: persons.id }),
+      seedPersons(tx, {
+        displayName: "Suspendida",
+        pinHash: hashPin("5555"),
+        role: "manager",
+        status: "suspended",
+      }),
     );
 
     const listed = await send(venue.app, venue.cookie, "GET", "/api/cancel-credit-authorizers");

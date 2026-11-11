@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
@@ -241,10 +242,11 @@ async function state(tab: string) {
 
 beforeAll(async () => {
   v = await setupPartyVenue(suite.db);
-  const [p] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Transfer operator", pinHash: hashPin("5555"), role: "staff" })
-    .returning();
+  const [p] = await seedPersons(suite.db, {
+    displayName: "Transfer operator",
+    pinHash: hashPin("5555"),
+    role: "staff",
+  });
   personId = p!.id;
   operator = {
     personId,
@@ -1356,7 +1358,7 @@ describe("department transfer tab lifecycle", () => {
       });
       const id = await pendingPartyFixture(f);
       const before = await suite.db.select().from(sales).where(eq(sales.workingOrderId, f.tab));
-      await suite.db.update(persons).set({ role: "supervisor" }).where(eq(persons.id, personId));
+      await setBuiltInRoleForTest(suite.db, personId, "supervisor");
       try {
         const departure = await post(f.source.cookie, `/api/parties/${party}/unpaid-departure`, {
           expectedPartyRevision: 0,
@@ -1367,7 +1369,7 @@ describe("department transfer tab lifecycle", () => {
           body: { state: "closed", departures: [{ workingOrderId: f.tab, amount: "2.00" }] },
         });
       } finally {
-        await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, personId));
+        await setBuiltInRoleForTest(suite.db, personId, "staff");
       }
       expect((await state(f.tab)).tab!.status).toBe("placed");
       await withdrawn(f, id);

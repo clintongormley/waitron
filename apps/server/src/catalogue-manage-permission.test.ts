@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { hashPin, persons, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -37,10 +38,11 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     cookie = await withTransaction(db, async (tx) => {
-      const [manager] = await tx
-        .insert(persons)
-        .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
-        .returning({ id: persons.id });
+      const [manager] = await seedPersons(tx, {
+        displayName: "Manager",
+        pinHash: hashPin("1234"),
+        role: "manager",
+      });
       const session = await startManagementSession(tx, { personId: manager!.id });
       return `${MANAGEMENT_COOKIE}=${session.token}`;
     });

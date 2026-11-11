@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
 // module-preparation-state.json? The cases asking this put the spare's clock on the minute of
@@ -48,7 +49,7 @@ import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocated-standby.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { persons, hashPassword } from "@waitron/identity";
+import { hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -185,7 +186,7 @@ beforeEach(async () => {
     })),
   );
   await stampDeployment(suite.db, "preproduction");
-  await suite.db.insert(persons).values({
+  await seedPersons(suite.db, {
     id: ADMIN,
     displayName: "Administrator",
     role: "admin",

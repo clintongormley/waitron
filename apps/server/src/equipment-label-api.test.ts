@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import jsQR from "jsqr";
 import { Hono } from "hono";
@@ -7,7 +8,7 @@ import { printers, printJobs, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { persons, hashPin, startManagementSession } from "@waitron/identity";
+import { hashPin, startManagementSession } from "@waitron/identity";
 import { readRasterText } from "@waitron/printing";
 import { cardReaders } from "@waitron/payments";
 import { formatEquipmentCode, nodeId } from "@waitron/shared";
@@ -56,10 +57,7 @@ beforeEach(async () => {
   )[0]!.id;
   const login = (role: "manager" | "staff") =>
     withTransaction(suite.db, async (tx) => {
-      const [p] = await tx
-        .insert(persons)
-        .values({ displayName: role, pinHash: hashPin("1234"), role })
-        .returning();
+      const [p] = await seedPersons(tx, { displayName: role, pinHash: hashPin("1234"), role });
       return `${MANAGEMENT_COOKIE}=${(await startManagementSession(tx, { personId: p!.id })).token}`;
     });
   cookie = await login("manager");

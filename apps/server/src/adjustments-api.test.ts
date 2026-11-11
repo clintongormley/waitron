@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -886,10 +887,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const pin = "5151";
     const [colleague] = await inTx(venue, (tx) =>
-      tx
-        .insert(persons)
-        .values({ displayName: "Pablo", pinHash: fixturePinHash(pin), role: "staff" })
-        .returning({ id: persons.id }),
+      seedPersons(tx, { displayName: "Pablo", pinHash: fixturePinHash(pin), role: "staff" }),
     );
 
     const refused = await postCancel(

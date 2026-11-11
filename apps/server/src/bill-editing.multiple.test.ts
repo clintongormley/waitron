@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -13,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { AppError } from "@waitron/shared";
 import {
   parseBillEditExpecteds,
@@ -49,10 +50,11 @@ async function fixture(owners: ("Anna" | "Lewis" | null)[]) {
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const [anna, lewis, sam] = await tx
-      .insert(persons)
-      .values([{ displayName: "Anna" }, { displayName: "Lewis" }, { displayName: "Sam" }])
-      .returning();
+    const [anna, lewis, sam] = await seedPersons(tx, [
+      { displayName: "Anna" },
+      { displayName: "Lewis" },
+      { displayName: "Sam" },
+    ]);
     const [party] = await tx.insert(parties).values({ openedBy: anna!.id }).returning();
     const states: BillEditState[] = [];
     for (const [index, owner] of owners.entries()) {

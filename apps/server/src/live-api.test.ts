@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // This suite checks route authorization and stream lifecycle; what the database itself delivers is
 // `packages/db/src/change-feed.test.ts`.
 import { Hono } from "hono";
@@ -36,10 +37,11 @@ async function fixture() {
   const session = await withTransaction(suite.db, async (tx) => {
     // Through the table definition: `persons.id` and `persons.created_at` are NOT NULL `$defaultFn`
     // generators a raw insert never reaches.
-    const [p] = await tx
-      .insert(persons)
-      .values({ displayName: "Manager", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
+    const [p] = await seedPersons(tx, {
+      displayName: "Manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     return startManagementSession(tx, { personId: p!.id });
   });
   const bus = new LiveEvents();

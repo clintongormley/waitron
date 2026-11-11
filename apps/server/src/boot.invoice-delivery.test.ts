@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { once } from "node:events";
 import { createServer as createNetServer, type AddressInfo, type Socket } from "node:net";
 import { randomUUID } from "node:crypto";
@@ -37,7 +38,6 @@ import {
   loginWithPin,
   queueAccountMail,
   completeAccountAction,
-  persons,
 } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -771,10 +771,11 @@ describe("invoice-choice email context at trading boot", () => {
         WAITRON_ONBOARDING_INTENT: intent,
         WAITRON_ENV: development ? "dev" : ctx.env.WAITRON_ENV,
       };
-      const [person] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Invoice operator", pinHash: hashPin("5555"), role: "staff" })
-        .returning();
+      const [person] = await seedPersons(suite.db, {
+        displayName: "Invoice operator",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
       const device = await seedDevice(suite.db, {
         capabilities: ["take-orders"],
       });
@@ -871,7 +872,7 @@ describe("queued account mail primary admission at real boot", () => {
       const smtp = await smtpFixture();
       ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
       const personId = randomUUID();
-      await suite.db.insert(persons).values({
+      await seedPersons(suite.db, {
         id: personId,
         displayName: "Mail administrator",
         email: "reset-boot@example.test",
@@ -969,18 +970,15 @@ describe("queued account mail at a fresh server start", () => {
     const ctx = await fixture();
     const smtp = await smtpFixture();
     ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
-    const [admin, invited] = await suite.db
-      .insert(persons)
-      .values([
-        {
-          displayName: "Restart inviter",
-          email: "reset-restart@example.test",
-          role: "admin",
-          status: "active",
-        },
-        { displayName: "Restart invited", email: "invite-restart@example.test", status: "pending" },
-      ])
-      .returning({ id: persons.id });
+    const [admin, invited] = await seedPersons(suite.db, [
+      {
+        displayName: "Restart inviter",
+        email: "reset-restart@example.test",
+        role: "admin",
+        status: "active",
+      },
+      { displayName: "Restart invited", email: "invite-restart@example.test", status: "pending" },
+    ]);
     const now = new Date();
     await withTransaction(suite.db, async (tx) => {
       await putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp });

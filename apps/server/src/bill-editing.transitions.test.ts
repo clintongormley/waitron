@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
@@ -13,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
-import { persons } from "@waitron/identity";
+
 import { AppError } from "@waitron/shared";
 import * as editing from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -28,10 +29,7 @@ async function fixture() {
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const [ana, luis] = await tx
-      .insert(persons)
-      .values([{ displayName: "Ana" }, { displayName: "Luis" }])
-      .returning();
+    const [ana, luis] = await seedPersons(tx, [{ displayName: "Ana" }, { displayName: "Luis" }]);
     const [party] = await tx.insert(parties).values({ openedBy: ana!.id }).returning();
     const bill = await seedWorkingOrder(tx, { orderNumber: 1, partyId: party!.id });
     const other = await seedWorkingOrder(tx, { orderNumber: 2, partyId: party!.id });

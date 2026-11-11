@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, newId, withTransaction, type Transaction } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import {
   WORKFORCE_MIGRATIONS,
@@ -30,10 +31,10 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   nodeId = await seedNode(suite.db);
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Collector", pinHash: "scrypt$00$00" })
-    .returning();
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Collector",
+    pinHash: "scrypt$00$00",
+  });
   personId = person!.id;
   orderId = newId();
   await seedWorkingOrder(suite.db, { id: orderId, source: "dashboard", nodeId, orderNumber: 1 });

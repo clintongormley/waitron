@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -87,10 +88,11 @@ async function setupVenue(): Promise<Venue> {
     // Through the table definition: `persons.id` and `created_at` are NOT NULL `$defaultFn`
     // generators a raw insert never reaches.
     const seedPerson = async (role: PersonRoleValue): Promise<string> => {
-      const [p] = await tx
-        .insert(persons)
-        .values({ displayName: `The ${role}`, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [p] = await seedPersons(tx, {
+        displayName: `The ${role}`,
+        pinHash: hashPin("1234"),
+        role,
+      });
       const session = await startManagementSession(tx, { personId: p!.id });
       return session.token;
     };

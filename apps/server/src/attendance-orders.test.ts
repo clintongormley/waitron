@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import {
@@ -10,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { newId, withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { persons } from "@waitron/identity";
+
 import { createExtraList, createOptionList, writeProductModifiers } from "@waitron/catalogue";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
@@ -29,13 +30,15 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00Z"));
   v = await setupPartyVenue(suite.db);
-  await suite.db
-    .insert(persons)
-    .values({ id: OPERATOR, displayName: "Original author", pinHash: "scrypt$00$00" });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Actual editor", pinHash: "scrypt$00$00" })
-    .returning({ id: persons.id });
+  await seedPersons(suite.db, {
+    id: OPERATOR,
+    displayName: "Original author",
+    pinHash: "scrypt$00$00",
+  });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Actual editor",
+    pinHash: "scrypt$00$00",
+  });
   worker = person!.id;
   const reading = v.clock.now();
   vi.spyOn(v.clock, "now").mockReturnValue({

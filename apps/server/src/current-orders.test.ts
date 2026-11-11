@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -38,7 +39,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { persons } from "@waitron/identity";
+
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -1820,10 +1821,7 @@ describe("where each submission's groups go (spec §3)", () => {
 
 describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)", () => {
   const staff = async (displayName: string) => {
-    const [row] = await suite.db
-      .insert(persons)
-      .values({ displayName })
-      .returning({ id: persons.id });
+    const [row] = await seedPersons(suite.db, { displayName });
     return row!.id;
   };
   const submitAs = async (
@@ -2059,9 +2057,7 @@ describe("a paid held dish fired on its own", () => {
       line(v, "flan"),
     ]);
     await inTx(async (tx) => {
-      await tx
-        .insert(persons)
-        .values({ id: ALEX, displayName: "Alex", role: "admin", status: "active" });
+      await seedPersons(tx, { id: ALEX, displayName: "Alex", role: "admin", status: "active" });
       const reason = await createAdjustmentReason(tx, {
         name: "Held dish discount",
         names: {},

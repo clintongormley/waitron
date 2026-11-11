@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -161,11 +162,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
           .update(persons)
           .set({ status: "suspended" })
           .where(eq(persons.id, f.session.personId));
-      if (mode === "permission")
-        await tx
-          .update(persons)
-          .set({ role: "supervisor" })
-          .where(eq(persons.id, f.session.personId));
+      if (mode === "permission") await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
     });
     const before = await rawState(suite.db);
     const decrypt = vi.spyOn(credentials, "tryGetCredential");
@@ -215,10 +212,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
           await withTransaction(suite.db, async (tx) => {
             if (mode === "revoked") await endManagementSession(tx, f.session.token);
             if (mode === "permission")
-              await tx
-                .update(persons)
-                .set({ role: "supervisor" })
-                .where(eq(persons.id, f.session.personId));
+              await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             if (mode === "suspended")
               await tx
                 .update(persons)
@@ -355,10 +349,7 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
       const f = await fixture();
       if (mode === "permission")
         await withTransaction(suite.db, async (tx) => {
-          await tx
-            .update(persons)
-            .set({ role: "supervisor" })
-            .where(eq(persons.id, f.session.personId));
+          await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
         });
       const runner = createCertificateDiagnosisRunner({ fiscalId: "fixture" });
       let release!: () => void;

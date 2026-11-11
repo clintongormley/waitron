@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { hashPin, loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   assignCatalogueToVenue,
@@ -79,13 +80,10 @@ async function setup() {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-  const [ana, sam] = await db
-    .insert(persons)
-    .values([
-      { displayName: "Anna", pinHash: hashPin("5555"), role: "staff" },
-      { displayName: "Sam", pinHash: hashPin("6666"), role: "staff" },
-    ])
-    .returning();
+  const [ana, sam] = await seedPersons(db, [
+    { displayName: "Anna", pinHash: hashPin("5555"), role: "staff" },
+    { displayName: "Sam", pinHash: hashPin("6666"), role: "staff" },
+  ]);
   const stocked = await withTransaction(db, async (tx) => {
     const early = await createCourse(tx, { name: "Starters", displayOrder: 0 });
     const late = await createCourse(tx, { name: "Recorded mains", displayOrder: 7 });

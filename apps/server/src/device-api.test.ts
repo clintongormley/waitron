@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import type { TradingContext } from "./trading-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -54,7 +55,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { decimal, PERSON_HEADER } from "@waitron/shared";
-import { deviceProfileAdmissionRoles, loginWithPin, persons, sessions } from "@waitron/identity";
+import { deviceProfileAdmissionRoles, loginWithPin, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import {
   deleteDeviceProfile,
@@ -222,10 +223,11 @@ async function seedPagePrinter(): Promise<string> {
 
 /** An open till session on `deviceId` for a new staff member, as the cookie the till sends. */
 async function openTillSession(deviceId: string): Promise<string> {
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Server", pinHash: fixturePinHash("4321"), role: "staff" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Server",
+    pinHash: fixturePinHash("4321"),
+    role: "staff",
+  });
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
   );
@@ -3965,10 +3967,11 @@ describe("a device's approved profiles and switching its active one", () => {
     role: "staff" | "manager" = "staff",
   ): Promise<{ cookie: string; personId: string }> {
     const { deviceId, jar } = device;
-    const [person] = await suite.db
-      .insert(persons)
-      .values({ displayName: `Person ${randomUUID()}`, pinHash: fixturePinHash("4321"), role })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(suite.db, {
+      displayName: `Person ${randomUUID()}`,
+      pinHash: fixturePinHash("4321"),
+      role,
+    });
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
     );

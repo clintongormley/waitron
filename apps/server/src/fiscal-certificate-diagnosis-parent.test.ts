@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,8 +19,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { SIN_DATOS_BODY } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { startDiagnosticServer } from "@waitron/fiscal-verifactu/test/certificate-diagnosis-fixtures.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu/src/slot.js";
-import { persons } from "@waitron/identity";
-import { eq } from "drizzle-orm";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 
@@ -137,11 +137,7 @@ describe("real certificate parent and isolated child preserve persistent state",
             await withTransaction(suite.db, async (tx) => {
               if (mode === "stale")
                 await putCredential(tx, f.deps.ring, { purpose: "fiscal.aeat", value: material() });
-              else
-                await tx
-                  .update(persons)
-                  .set({ role: "supervisor" })
-                  .where(eq(persons.id, f.session.personId));
+              else await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             });
             expected = await rawState(suite.db);
             release();

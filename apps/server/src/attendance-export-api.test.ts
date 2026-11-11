@@ -1,3 +1,4 @@
+import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -482,11 +483,7 @@ describe("authenticated working-time downloads", () => {
               .update(persons)
               .set({ status: "suspended" })
               .where(eq(persons.id, fixture.managerId));
-          if (kind === "demoted")
-            await tx
-              .update(persons)
-              .set({ role: "staff" })
-              .where(eq(persons.id, fixture.managerId));
+          if (kind === "demoted") await setBuiltInRoleForTest(tx, fixture.managerId, "staff");
         });
       } finally {
         held.release();

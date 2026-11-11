@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -643,14 +644,11 @@ describe("invoice receipt API attempt boundary", () => {
 
 async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
   const session = await withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({
-        displayName: "Printer manager",
-        pinHash: hashPin("1234"),
-        role: "manager",
-      })
-      .returning();
+    const [person] = await seedPersons(tx, {
+      displayName: "Printer manager",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     return startManagementSession(tx, { personId: person!.id });
   });
   return async (path: string, body: unknown, method = "POST") =>

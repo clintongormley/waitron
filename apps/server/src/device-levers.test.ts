@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
@@ -94,10 +95,11 @@ async function fixture() {
     { db: suite.db, cfg: v.cfg, secureCookies: false, pairingMode: createPairingMode() },
     log,
   );
-  const [ana] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "admin" })
-    .returning({ id: persons.id });
+  const [ana] = await seedPersons(suite.db, {
+    displayName: "Anna",
+    pinHash: hashPin("5555"),
+    role: "admin",
+  });
   /** A seated party with one Burger held in a group of its own. */
   const heldBurger = async () => {
     const seated = await seat(v, await v.table(`T${floorLabelSuffix().padStart(4, "0")}`));

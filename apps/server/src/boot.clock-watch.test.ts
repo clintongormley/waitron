@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { randomUUID } from "node:crypto";
 import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -196,10 +197,11 @@ describe("boot's clock watch", () => {
         entorno: "preproduction",
         generatedAt: new Date(Date.now() + DAY),
       });
-      const [person] = await suite.db
-        .insert(persons)
-        .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
-        .returning();
+      const [person] = await seedPersons(suite.db, {
+        displayName: "Anna",
+        pinHash: hashPin("5555"),
+        role: "staff",
+      });
       const device = await seedDevice(suite.db, {
         capabilities: ["take-orders"],
       });

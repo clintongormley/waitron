@@ -1,9 +1,10 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, incidents, invoiceSeries, printers, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
-import { hashPin, persons } from "@waitron/identity";
+import { hashPin } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { eq, sql } from "drizzle-orm";
@@ -437,10 +438,11 @@ describe("collectBoxHealth", () => {
       partial: true,
       unconfirmed: true,
     });
-    const [rosa] = await suite.db
-      .insert(persons)
-      .values({ displayName: "Rosa Handler", pinHash: hashPin("1234"), role: "manager" })
-      .returning({ id: persons.id });
+    const [rosa] = await seedPersons(suite.db, {
+      displayName: "Rosa Handler",
+      pinHash: hashPin("1234"),
+      role: "manager",
+    });
     const ids = await suite.db
       .insert(incidents)
       .values([

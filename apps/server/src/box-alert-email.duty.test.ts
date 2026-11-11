@@ -1,5 +1,6 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, incidents, outgoingMail, persons } from "@waitron/db";
+import { CORE_MIGRATIONS, incidents, outgoingMail } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { boxAlertMail } from "./box-alert-mail.js";
@@ -37,7 +38,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 beforeEach(async () => {
   await seedVenue(suite.db, { name: VENUE });
   for (const recipient of [ANA, BEN]) {
-    await suite.db.insert(persons).values({
+    await seedPersons(suite.db, {
       id: recipient.personId,
       displayName: recipient.personId,
       role: "admin",

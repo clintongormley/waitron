@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, dayCutoverChanges, type Transaction, withTransaction } from "@waitron/db";
@@ -38,13 +39,10 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
 
-  const people = await suite.db
-    .insert(persons)
-    .values([
-      { displayName: "Collector", pinHash: "scrypt$00$00" },
-      { displayName: "Later operator", pinHash: "scrypt$00$00" },
-    ])
-    .returning({ id: persons.id });
+  const people = await seedPersons(suite.db, [
+    { displayName: "Collector", pinHash: "scrypt$00$00" },
+    { displayName: "Later operator", pinHash: "scrypt$00$00" },
+  ]);
   [personId, other] = people.map((r) => r.id) as [string, string];
 });
 

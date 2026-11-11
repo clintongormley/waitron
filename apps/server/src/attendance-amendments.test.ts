@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -15,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createPinThrottle, persons } from "@waitron/identity";
+import { createPinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
@@ -41,16 +42,16 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-01-05T09:00:00Z"));
   v = await setupPartyVenue(suite.db);
-  await suite.db.insert(persons).values({
+  await seedPersons(suite.db, {
     id: OPERATOR,
     displayName: "Original author",
     pinHash: "scrypt$00$00",
     role: "admin",
   });
-  const [person] = await suite.db
-    .insert(persons)
-    .values({ displayName: "Actual actor", pinHash: "scrypt$00$00" })
-    .returning({ id: persons.id });
+  const [person] = await seedPersons(suite.db, {
+    displayName: "Actual actor",
+    pinHash: "scrypt$00$00",
+  });
   worker = person!.id;
   const reading = v.clock.now();
   vi.spyOn(v.clock, "now").mockReturnValue({
@@ -321,9 +322,11 @@ describe("amendments without workforce installed", () => {
   });
   it("places and cancels with no attendance or time tables", async () => {
     const venue = await setupPartyVenue(withoutWorkforce.db);
-    await withoutWorkforce.db
-      .insert(persons)
-      .values({ id: OPERATOR, displayName: "Worker", pinHash: "scrypt$00$00" });
+    await seedPersons(withoutWorkforce.db, {
+      id: OPERATOR,
+      displayName: "Worker",
+      pinHash: "scrypt$00$00",
+    });
     const id = newId();
     await parkOrder({ db: withoutWorkforce.db }, venue.cfg, {
       id,

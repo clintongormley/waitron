@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -98,10 +99,10 @@ let ownAdmins = 0;
 async function ownAdmin() {
   ownAdmins += 1;
   return withTransaction(suite.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: `Case Admin ${ownAdmins}`, role: "admin" })
-      .returning({ id: persons.id });
+    const [person] = await seedPersons(tx, {
+      displayName: `Case Admin ${ownAdmins}`,
+      role: "admin",
+    });
     const { token } = await startManagementSession(tx, { personId: person!.id });
     return { id: person!.id, token, cookie: `${MANAGEMENT_COOKIE}=${token}` };
   });
@@ -369,7 +370,7 @@ describe("the invoice customer download", () => {
     const admin = await ownAdmin();
     const render = async () => {
       await withTransaction(suite.db, async (tx) => {
-        await tx.update(persons).set({ role: "manager" }).where(eq(persons.id, admin.id));
+        await setBuiltInRoleForTest(tx, admin.id, "manager");
       });
       return stubPdf();
     };

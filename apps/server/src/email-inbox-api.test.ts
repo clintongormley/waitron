@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 // The management-session permission gate over a migrated venue database: a real session row, a real
 // person row and a real permission lookup, with only the Mailpit client faked.
 import { eq } from "drizzle-orm";
@@ -60,10 +61,11 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
     // `$defaultFn` generators (`packages/db/src/schema/identity/persons.ts`) a raw insert never
     // reaches.
     const start = async (role: "manager" | "staff") => {
-      const [inserted] = await tx
-        .insert(persons)
-        .values({ displayName: role, pinHash: hashPin("1234"), role })
-        .returning({ id: persons.id });
+      const [inserted] = await seedPersons(tx, {
+        displayName: role,
+        pinHash: hashPin("1234"),
+        role,
+      });
       return startManagementSession(tx, {
         personId: inserted!.id,
       });

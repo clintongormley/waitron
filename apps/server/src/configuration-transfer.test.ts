@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -842,7 +843,7 @@ describe("configuration transfer database path", () => {
       // Rows are written through their table definitions: the NOT NULL timestamp columns are
       // `$defaultFn` generators a raw insert never reaches, and the definition encodes the JSON
       // columns.
-      await tx.insert(persons).values({
+      await seedPersons(tx, {
         id: "12121212-aaaa-aaaa-aaaa-121212121212",
         displayName: "Second admin",
         pinHash: "second-admin-pin",
@@ -875,7 +876,7 @@ describe("configuration transfer database path", () => {
         .update(products)
         .set({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" })
         .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
-      await tx.insert(persons).values({
+      await seedPersons(tx, {
         id: "33333333-aaaa-aaaa-aaaa-333333333333",
         displayName: "Ada",
         pinHash: "source-pin-secret",
@@ -2036,10 +2037,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
       .from(seasons)
 
       .limit(1);
-    const [holder] = await tx
-      .insert(persons)
-      .values({ displayName: "Holder", role: "staff" })
-      .returning({ id: persons.id });
+    const [holder] = await seedPersons(tx, { displayName: "Holder", role: "staff" });
     const waiter = randomUUID();
     const runner = randomUUID();
     // Raw: apps/server does not depend on @waitron/staffing, and these tables have no `$defaultFn`
@@ -4764,10 +4762,11 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
       .select({ id: persons.id })
       .from(persons)
       .where(eq(persons.role, "admin"));
-    const [mia] = await tx
-      .insert(persons)
-      .values({ displayName: "Mia", pinHash: hashPin("5555"), role: "staff" })
-      .returning({ id: persons.id });
+    const [mia] = await seedPersons(tx, {
+      displayName: "Mia",
+      pinHash: hashPin("5555"),
+      role: "staff",
+    });
     const [live, retired] = await tx
       .insert(deviceProfiles)
       .values([

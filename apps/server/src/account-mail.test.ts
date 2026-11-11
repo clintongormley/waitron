@@ -1,8 +1,9 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { randomUUID, randomInt } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, persons, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   completeAccountAction,
@@ -31,9 +32,11 @@ describe("account mail owner", () => {
     time = new Date("2026-11-09T12:00:00.000Z");
     messages = [];
     connections = [];
-    await suite.db
-      .insert(persons)
-      .values({ id: personId, displayName: "Recipient", email: "person@example.test" });
+    await seedPersons(suite.db, {
+      id: personId,
+      displayName: "Recipient",
+      email: "person@example.test",
+    });
     deps = {
       db: suite.db,
       now: () => time,

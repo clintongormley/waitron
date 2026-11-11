@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { withTransaction, type Transaction } from "@waitron/db";
@@ -71,15 +72,12 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
   );
   return withTransaction(suite.db, async (tx) => {
     const start = async (role: Role): Promise<Signed> => {
-      const [inserted] = await tx
-        .insert(persons)
-        .values({
-          displayName: `The ${role}`,
-          pinHash: hashPin("1234"),
-          role,
-          email: `${role}-${nif}@example.test`,
-        })
-        .returning({ id: persons.id });
+      const [inserted] = await seedPersons(tx, {
+        displayName: `The ${role}`,
+        pinHash: hashPin("1234"),
+        role,
+        email: `${role}-${nif}@example.test`,
+      });
       const session = await startManagementSession(tx, { personId: inserted!.id });
       await setFreshManagementSignIn(tx, session.token);
       return {

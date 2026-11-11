@@ -1,3 +1,4 @@
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -66,15 +67,12 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
   );
   const sessions = await withTransaction(suite.db, async (tx) => {
     const start = async (role: "manager" | "staff") => {
-      const [inserted] = await tx
-        .insert(persons)
-        .values({
-          displayName: role,
-          pinHash: hashPin("1234"),
-          role,
-          email: `${role}@example.test`,
-        })
-        .returning({ id: persons.id });
+      const [inserted] = await seedPersons(tx, {
+        displayName: role,
+        pinHash: hashPin("1234"),
+        role,
+        email: `${role}@example.test`,
+      });
       return startManagementSession(tx, {
         personId: inserted!.id,
       });

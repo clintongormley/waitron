@@ -1,3 +1,4 @@
+import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Socket } from "node:net";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -179,7 +180,7 @@ beforeEach(async () => {
     })),
   );
   await stampDeployment(suite.db, "preproduction");
-  await suite.db.insert(persons).values({
+  await seedPersons(suite.db, {
     id: ADMIN,
     displayName: "Administrator",
     role: "admin",
@@ -872,7 +873,7 @@ describe("the handover's preparation route", () => {
     it("a person without node.promote is refused authorization.not_permitted", async () => {
       const s = service();
       await controlledAtFilingAssumed();
-      await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, ADMIN));
+      await setBuiltInRoleForTest(suite.db, ADMIN, "staff");
       expect(await attempt(route(s), signIn)).toMatchObject({
         status: 403,
         body: { error: { code: "authorization.not_permitted" } },
@@ -1146,7 +1147,7 @@ describe("the spare's dormant setup, written at a good sign-in", () => {
   it("a person without node.promote writes nothing", async () => {
     await controlledAtFilingAssumed();
     const other = "e1000000-0000-4000-8000-000000000005";
-    await suite.db.insert(persons).values({
+    await seedPersons(suite.db, {
       id: other,
       displayName: "Waiter",
       role: "staff",
