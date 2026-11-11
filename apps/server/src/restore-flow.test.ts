@@ -150,9 +150,11 @@ it("reports the first start independently of a waiting request", async () => {
   expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
 });
 
-it("treats an unreadable flow as an unknown pending first start", async () => {
+it("refuses to treat an unreadable flow as a completed restore", async () => {
   expect(await firstStartPending(stateDir)).toBeNull();
   await publishRestoreFlow(stateDir, firstStart, async () => {});
   await writeFile(join(stateDir, "flows", "restore", "record.json"), "{ torn");
-  expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+  await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+    code: "restore.flow_unreadable",
+  });
 });

@@ -299,7 +299,7 @@ describe("staged restore requests", () => {
     expect(await readFile(join(stateDir, "setup-operation.json"), "utf8")).toBe("restore receipt");
   });
 
-  it("logs an unreadable flow and leaves an unknown first start pending without running a restore", async () => {
+  it("refuses an unreadable restore flow without starting the box", async () => {
     const stateDir = await fresh();
     await mkdir(join(stateDir, "flows/restore/record.json"), { recursive: true });
     const restore = vi.fn(async () => {});
@@ -309,9 +309,11 @@ describe("staged restore requests", () => {
         { stateDir, venueDir: join(stateDir, "venue"), migrationsRoot: null, log },
         restore,
       ),
-    ).resolves.toBe(false);
+    ).rejects.toMatchObject({ code: "restore.flow_unreadable" });
     expect(log).toHaveBeenCalledWith("error", "restore.flow_unreadable", {});
-    expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+    await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+      code: "restore.flow_unreadable",
+    });
     expect(restore).not.toHaveBeenCalled();
   });
 

@@ -350,7 +350,7 @@ export async function runStagedRestore(
   const phase = await readRestoreFlowPhase(deps.stateDir);
   if (phase === "unreadable") {
     deps.log("error", "restore.flow_unreadable", {});
-    return false;
+    throw new AppError("restore.flow_unreadable", {});
   }
   if (phase === null) return false;
   if (phase === "first-start") {

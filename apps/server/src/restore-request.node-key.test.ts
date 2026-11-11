@@ -376,8 +376,12 @@ it.each(["marker-json", "marker-shape", "operation", "archive-key", "stream-entr
     }
     const restore = vi.fn(async () => {});
     if (part === "marker-json") {
-      await expect(runStagedRestore(deps(stateDir), restore, restore)).resolves.toBe(false);
-      expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+      await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
+      await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
       expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
       expect(restore).not.toHaveBeenCalled();
       return;
@@ -482,14 +486,18 @@ it.each(["staging", "restart-db", "restart-entries"])(
   },
 );
 
-it("an unreadable restart record retains the key until its unknown first start ends", async () => {
+it("an unreadable restart record refuses start and retains the key for discard", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
   await rm(join(stateDir, "flows/restore/record.json"));
   await mkdir(join(stateDir, "flows/restore/record.json"));
   const restore = vi.fn(async () => {});
-  await expect(runStagedRestore(deps(stateDir), restore)).resolves.toBe(false);
-  expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+  await expect(runStagedRestore(deps(stateDir), restore)).rejects.toMatchObject({
+    code: "restore.flow_unreadable",
+  });
+  await expect(firstStartPending(stateDir)).rejects.toMatchObject({
+    code: "restore.flow_unreadable",
+  });
   expect(restore).not.toHaveBeenCalled();
   expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
 });

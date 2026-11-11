@@ -406,6 +406,17 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Necesita sitio para otra copia entera del local, y los detalles de abajo indican cuántos bytes. Waitron no puede liberar más espacio por sí solo. La copia se conserva. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» para volver a intentarlo.",
     },
   },
+  "restore.flow_unreadable": {
+    "en-GB": {
+      title: "The unfinished restore request cannot be read.",
+      action: "The box cannot finish this restore. It has stopped before serving the venue.",
+    },
+    "es-ES": {
+      title: "No se puede leer la solicitud de restauración sin terminar.",
+      action:
+        "El equipo no puede terminar esta restauración. Se ha detenido antes de atender al local.",
+    },
+  },
   "restore.placement_failed": {
     // Shown only if this is the last failure when the box reaches recovery; a failed setup restore
     // is not retried, so one failed placement does not get here. Which database was kept is in the

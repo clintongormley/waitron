@@ -1,3 +1,5 @@
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -85,7 +87,7 @@ export async function firstStartPending(
   stateDir: string,
 ): Promise<{ source: RebuildSource | "unknown" } | null> {
   const phase = await readRestoreFlowPhase(stateDir);
-  if (phase === "unreadable") return { source: "unknown" };
+  if (phase === "unreadable") throw new AppError("restore.flow_unreadable", {});
   const record = await readRestoreFlow(stateDir);
   if (record?.firstStart === undefined) return null;
   const source = record.firstStart.source;

@@ -246,18 +246,20 @@ describe("completeRebuild", () => {
   });
 
   it.each(["{ torn", "{}"])(
-    "runs on a marker whose body names no source (%s), because only a restore writes one",
+    "refuses unreadable restore state on both first-start paths (%s)",
     async (markerBody) => {
       const stateDir = await rebuiltStateDir(false);
+      const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
       await writeFile(join(stateDir, RESTORE_RECORD), markerBody);
-      const logged: Array<[string, Record<string, unknown> | undefined]> = [];
-      expect(
-        await completeRebuild(
-          deps(stateDir, { log: (_level, event, fields) => logged.push([event, fields]) }),
-        ),
-      ).toBe(true);
-      expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
-      expect(logged).toContainEqual(["restore.first_start_done", { term: 1, source: "unknown" }]);
+      await expect(runFirstStart(deps(stateDir))).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
+      await expect(deferFirstStart(stateDir, () => {})).rejects.toMatchObject({
+        code: "restore.flow_unreadable",
+      });
+      expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+      expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
+      expect(await readFile(join(stateDir, RESTORE_RECORD), "utf8")).toBe(markerBody);
     },
   );
 
@@ -270,11 +272,13 @@ describe("completeRebuild", () => {
     expect(logged).toContainEqual(["restore.first_start_done", { term: 1, source: "stream" }]);
   });
 
-  it("runs the first start when the restore record cannot be read", async () => {
+  it("refuses first start when the restore record cannot be read", async () => {
     const stateDir = await rebuiltStateDir(false);
     await mkdir(join(stateDir, RESTORE_RECORD));
-    expect(await completeRebuild(deps(stateDir))).toBe(true);
-    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+    await expect(completeRebuild(deps(stateDir))).rejects.toMatchObject({
+      code: "restore.flow_unreadable",
+    });
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });
 
   it("repairs a PEM whose certificate and key do not match", async () => {
@@ -907,14 +911,14 @@ describe("assertRestoredMembershipReadable", () => {
     await expect(assertRestoredMembershipReadable(stateDir, db)).rejects.toBe(failure);
   });
 
-  it("accepts valid membership when the restore record cannot be reached", async () => {
+  it("refuses membership admission when restore state cannot be reached", async () => {
     const dir = await mkdtemp(join(tmpdir(), "waitron-rebuild-"));
     dirs.push(dir);
     const notADirectory = join(dir, "state");
     await writeFile(notADirectory, "");
-    await expect(
-      assertRestoredMembershipReadable(notADirectory, suite.db),
-    ).resolves.toBeUndefined();
+    await expect(assertRestoredMembershipReadable(notADirectory, suite.db)).rejects.toMatchObject({
+      code: "restore.flow_unreadable",
+    });
   });
 });
 
@@ -943,15 +947,14 @@ describe("deferFirstStart", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
-  it("holds the stream when it cannot tell whether the marker is there", async () => {
+  it("refuses deferred startup when restore state cannot be read", async () => {
     // The state folder is a file, so looking inside it fails with ENOTDIR rather than ENOENT.
     const dir = await mkdtemp(join(tmpdir(), "waitron-rebuild-"));
     dirs.push(dir);
     const notADirectory = join(dir, "state");
     await writeFile(notADirectory, "");
-    await expect(deferFirstStart(notADirectory, () => {})).resolves.toEqual({
-      mayStream: false,
-      failedSince: null,
+    await expect(deferFirstStart(notADirectory, () => {})).rejects.toMatchObject({
+      code: "restore.flow_unreadable",
     });
   });
 });
