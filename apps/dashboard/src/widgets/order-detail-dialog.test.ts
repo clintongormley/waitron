@@ -141,6 +141,32 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   expect(api.getOrder).toHaveBeenCalledWith("bill-1");
 });
 
+it("names a transfer closure as still to be paid, with no card and no tip", async () => {
+  setLocale("en-GB");
+  const closed = {
+    ...detail,
+    row: { ...detail.row, status: "to_be_paid_by_transfer" as const, stillOwed: null },
+    tenders: [{ method: "transfer", amount: "30.00", tip: "0.00" }],
+    payments: [],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(closed),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  const payments = [...el.shadowRoot!.querySelectorAll("section")].find(
+    (section) => section.querySelector("h3")?.textContent === "Payments",
+  )!;
+  const words = payments.textContent!.replace(/\s+/g, " ").trim();
+  expect(words).toContain("To be paid by transfer");
+  expect(words).not.toContain("Card");
+  expect(words).not.toContain("Tip");
+});
+
 it.each([
   ["en-GB", "Full invoice", "Customer"],
   ["es-ES", "Factura completa", "Cliente"],

@@ -2291,6 +2291,7 @@ export const ORDER_STATUS_FILTERS = [
   "left_without_paying",
   "unpaid",
   "paid",
+  "to_be_paid_by_transfer",
   "cancelled",
   "voided",
 ] as const;

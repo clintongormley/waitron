@@ -55,7 +55,7 @@ export async function transferCloseVenue(db: Database) {
 
 export type TransferCloseKit = ReturnType<typeof transferCloseKit>;
 
-function transferCloseKit(venue: BillVenue, counterZone: string) {
+export function transferCloseKit(venue: BillVenue, counterZone: string) {
   function depsWith(over: Partial<TransferCloseDeps> = {}): TransferCloseDeps {
     return {
       db: venue.db,
