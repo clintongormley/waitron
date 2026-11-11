@@ -1686,7 +1686,7 @@ export const en = {
   "printers.saved_agents": "Previously added print agents",
   "printers.add_agent_retained_hint":
     "Add only an agent you still trust. Adding it again may print queued jobs.",
-  "printers.delete_agent_heading": "Delete {name}?",
+  "printers.delete_agent_heading": "Delete print agent?",
   "printers.delete_agent_hint":
     "Printers reached only through this agent cannot print until you add it again. They stay listed. Adding this same agent again may print queued jobs.",
   "printers.agent_setup_hint":
@@ -5544,7 +5544,7 @@ export const es: Record<StringKey, string> = {
   "printers.saved_agents": "Agentes de impresión añadidos anteriormente",
   "printers.add_agent_retained_hint":
     "Añade solo un agente en el que sigas confiando. Al añadirlo de nuevo pueden imprimirse trabajos pendientes.",
-  "printers.delete_agent_heading": "¿Eliminar {name}?",
+  "printers.delete_agent_heading": "¿Eliminar agente de impresión?",
   "printers.delete_agent_hint":
     "Las impresoras accesibles solo a través de este agente no pueden imprimir hasta que lo añadas de nuevo. Siguen en la lista. Al añadir este mismo agente de nuevo pueden imprimirse trabajos pendientes.",
   "printers.agent_setup_hint":

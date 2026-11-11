@@ -1292,6 +1292,8 @@ export class PrintersScreen extends LitElement {
     await this.#mutate(async () => {
       await this.api.revokeAgent(id);
       this.deletingAgent = null;
+      await this.updateComplete;
+      this.#tabAction("open-add-agent")?.focus();
     });
     this.submitting = false;
     if (this.deletingAgent === null) {
@@ -2394,15 +2396,13 @@ export class PrintersScreen extends LitElement {
       .open=${true}
       .impact=${{ target: { id: agent.id, name: agent.name }, refusals: [], ends: [], removes: [] }}
       .submitting=${this.submitting}
-      .readError=${this.refreshErrorKey ? codeMessage(this.refreshErrorKey) : ""}
       .actionError=${this.errorKey ? codeMessage(this.errorKey) : ""}
-      .copy=${{ ...printerDeleteCopy(), heading: fill("printers.delete_agent_heading", { name: agent.name }), irreversible: t("printers.delete_agent_hint") }}
+      .copy=${{ ...printerDeleteCopy(), heading: t("printers.delete_agent_heading"), irreversible: t("printers.delete_agent_hint") }}
       .opener=${this.#agentDeleteOpener}
       @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
         event.stopPropagation();
         void this.#revokeAgent(event.detail.id);
       }}
-      @wt-delete-retry=${() => void this.#load()}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.deletingAgent = null;

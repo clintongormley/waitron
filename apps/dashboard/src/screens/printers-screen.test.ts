@@ -1966,10 +1966,16 @@ describe("printers-screen", () => {
 
   it("Deletes an agent only after confirmation, then Adds its trusted identity with the saved name", async () => {
     const retained = { ...agents[0]!, active: false };
+    let finishReload!: () => void;
     const api = stubApi({
       listAgents: vi.fn().mockResolvedValue(agents),
       revokeAgent: vi.fn(async () => {
-        vi.mocked(api.listAgents).mockResolvedValue([retained, agents[1]!]);
+        vi.mocked(api.listAgents).mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finishReload = () => resolve([retained, agents[1]!]);
+            }),
+        );
       }),
       allowAgent: vi.fn(async () => {
         vi.mocked(api.listAgents).mockResolvedValue(agents);
@@ -1992,6 +1998,14 @@ describe("printers-screen", () => {
     q(el, "[data-test=delete-confirm]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=delete-agent-modal]")).toBeNull());
     expect(api.revokeAgent).toHaveBeenCalledExactlyOnceWith("a1");
+    await vi.waitFor(() => expect(finishReload).toBeTypeOf("function"));
+    try {
+      expect(el.shadowRoot!.activeElement).toBe(
+        q(el, '[slot="actions"] [data-test="open-add-agent"]'),
+      );
+    } finally {
+      finishReload();
+    }
     await vi.waitFor(() => expect(q(el, "[data-test=agent-row-a1]")).toBeNull());
     await expect
       .poll(() => el.shadowRoot!.activeElement)
@@ -2010,8 +2024,8 @@ describe("printers-screen", () => {
   });
 
   it.each([
-    { locale: "en", del: "Delete", title: "Delete Kitchen agent?", add: "Add" },
-    { locale: "es-ES", del: "Eliminar", title: "¿Eliminar Kitchen agent?", add: "Añadir" },
+    { locale: "en", del: "Delete", title: "Delete print agent?", add: "Add" },
+    { locale: "es-ES", del: "Eliminar", title: "¿Eliminar agente de impresión?", add: "Añadir" },
   ])("words agent Delete and Add in $locale", async ({ locale, del, title, add }) => {
     setLocale(locale);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
@@ -2042,12 +2056,18 @@ describe("printers-screen", () => {
   });
 
   it("shows an error and keeps the list when an agent's Delete is rejected", async () => {
-    const api = stubApi({ revokeAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
+    const api = stubApi({
+      revokeAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
+      listDiscoveredPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
 
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
+    expect(q(el, "[data-test=delete-confirm]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
+      false,
+    );
     q(el, "[data-test=delete-confirm]")!.click();
     await flush(el);
 
