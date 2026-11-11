@@ -454,6 +454,7 @@ it("a refused public adoption retains its independently signed reservation witho
         ownerNode: unadopted.node,
         ring: RING,
         advertisedOrigin: "https://spare.test",
+        spareStorePort: 7443,
         environment: "preproduction",
         database: "synthetic-empty-spare",
         listIpv4: () => [],

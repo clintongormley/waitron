@@ -133,6 +133,7 @@ beforeAll(async () => {
       ownerNode: bStore.node,
       ring: RING_B_OWN,
       advertisedOrigin: "https://spare.test",
+      spareStorePort: 7443,
       environment: "preproduction",
       database: "spare",
       listIpv4: () => [],

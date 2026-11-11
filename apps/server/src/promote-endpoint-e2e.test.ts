@@ -239,7 +239,7 @@ async function seedMirror(
   });
 
   await writeMirrorLink(node, standby.nodeId, {
-    relayUrl: "https://127.0.0.1:1/",
+    originUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca-pem",
     originNodeId: MIRROR_ORIGIN_NODE_ID,

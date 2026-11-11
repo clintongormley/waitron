@@ -142,7 +142,7 @@ async function halfAdoptedBox(joined = false): Promise<{
     await stampDeployment(store.venue, "preproduction");
     await setNodeMode({ venue: store.venue, node: store.node }, NODE_ID, "mirror");
     await writeMirrorLink(store.node, NODE_ID, {
-      relayUrl: "https://relay.example",
+      originUrl: "https://relay.example",
       boxHostname: "waitron.local",
       boxCaPem: "pem",
       originNodeId: PRIMARY_NODE_ID,
@@ -402,6 +402,7 @@ describe("runStagedReset", () => {
               };
             },
             advertisedOrigin: "https://standby.example",
+            spareStorePort: 7443,
             environment: "preproduction",
             persistTrading: async (cfg) => {
               await writeTradingEnv(stateDir, cfg);

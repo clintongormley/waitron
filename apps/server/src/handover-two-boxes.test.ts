@@ -183,6 +183,7 @@ async function joined() {
         return bundle as MirrorBundle;
       },
       advertisedOrigin: SPARE_URL,
+      spareStorePort: 7443,
       environment: "preproduction",
       persistTrading: async (args) => {
         spareId = args.nodeId;

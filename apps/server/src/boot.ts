@@ -1644,6 +1644,7 @@ async function bootServer(
               persistCredentialsRing: (r) => writeCredentialsRing(config.stateDir, r),
               fetchBundle: fetchMirrorBundle,
               advertisedOrigin: config.advertisedOrigin,
+              spareStorePort: config.spareStorePort,
               environment: config.environment,
               persistTrading,
               persistModuleConfig: async (c) => {
@@ -2049,7 +2050,7 @@ async function bootServer(
         held,
         nodeId: config.node.nodeId,
         // The mirror link is owner-written trusted config, so no SSRF screen.
-        peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
+        peerUrl: `${peer.originUrl.replace(/\/+$/, "")}/management-api/membership`,
         fetchPeerMembership: fetchPeerMembershipDocument,
         // Persist-if-accepted, so a newer verified chart is held even when it does not fence this node.
         // Judged against the chart held BEFORE it, never the incoming one: a retirement chart is

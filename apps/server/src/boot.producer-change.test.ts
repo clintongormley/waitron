@@ -201,7 +201,7 @@ describe("a start whose node's chain was recorded under another producer", () =>
   // Stays last: it leaves the shared venue a mirror.
   it("trades as a mirror with the other producer", async () => {
     await writeMirrorLink(node, NODE_ID, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca-pem",
       originNodeId: ORIGIN_NODE_ID,

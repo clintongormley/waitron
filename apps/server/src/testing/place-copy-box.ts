@@ -285,7 +285,7 @@ export function placeCopyBoxes(deps: {
     await beginHandover(store, binding, "destination");
     await setNodeMode({ venue: suite.db, node: suite.node }, nodeId, mode);
     await writeMirrorLink(suite.node, nodeId, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: mintSelfSignedServerCert({
         hostnames: ["box.local"],

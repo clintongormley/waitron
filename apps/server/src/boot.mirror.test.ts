@@ -182,7 +182,7 @@ beforeAll(async () => {
 
   // `noConfig` deliberately gets none.
   await writeMirrorLink(stores.mirror.node, TILL_ENV.WAITRON_NODE_ID, {
-    relayUrl: MIRROR_RELAY_URL,
+    originUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
     originNodeId: MIRROR_ORIGIN_NODE,

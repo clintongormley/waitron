@@ -23,7 +23,7 @@ const OTHER = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PRIMARY_NODE = "11111111-1111-4111-8111-111111111111";
 
 const SAMPLE: Parameters<typeof writeMirrorLink>[2] = {
-  relayUrl: "https://relay.test:9000/",
+  originUrl: "https://relay.test:9000/",
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nX\n-----END CERTIFICATE-----\n",
   originNodeId: PRIMARY_NODE,
@@ -81,7 +81,7 @@ describe("node_mirror_link accessors", () => {
 
   it("a second write for the same node updates its row in place", async () => {
     await writeMirrorLink(suite.node, NODE, {
-      relayUrl: "https://relay-one.test:9000/",
+      originUrl: "https://relay-one.test:9000/",
       boxHostname: "a",
       boxCaPem: "a",
       originNodeId: PRIMARY_NODE,
@@ -91,7 +91,7 @@ describe("node_mirror_link accessors", () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 5));
     await writeMirrorLink(suite.node, NODE, {
-      relayUrl: "https://relay-two.test:9000/",
+      originUrl: "https://relay-two.test:9000/",
       boxHostname: "b",
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,
@@ -101,7 +101,7 @@ describe("node_mirror_link accessors", () => {
     );
     expect(count.rows[0]?.n).toBe(1);
     expect(await readMirrorLink(suite.node, NODE)).toEqual({
-      relayUrl: "https://relay-two.test:9000/",
+      originUrl: "https://relay-two.test:9000/",
       boxHostname: "b",
       boxCaPem: "b",
       originNodeId: PRIMARY_NODE,

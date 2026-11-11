@@ -43,6 +43,8 @@ export interface ServerConfig {
    * served over plain HTTP.
    */
   landingPort: number;
+  /** `WAITRON_SPARE_STORE_PORT`: where a spare's store listens for the main box's copy (D11). */
+  spareStorePort: number;
   /** Defaults to loopback, because `/health` is unauthenticated. */
   httpHost: string;
   minTickMs: number;
@@ -143,6 +145,7 @@ const DEFAULT_MIN_TICK_MS = 5_000;
 export const DEFAULT_HTTP_PORT = 8080;
 /** Port 80, where a phone lands by typing the box's bare address. Exported for recovery. */
 export const DEFAULT_HTTP_LANDING_PORT = 80;
+const DEFAULT_SPARE_STORE_PORT = 7443;
 const DEFAULT_LOG_MAX_BYTES = 10_000_000;
 const DEFAULT_LOG_MAX_FILES = 5;
 /** Loopback, so an unconfigured box never binds a public interface. Exported for recovery. */
@@ -399,6 +402,13 @@ export function loadConfig(
       reason: "port_out_of_range",
     });
   }
+  const spareStorePort = positiveInt(env, "WAITRON_SPARE_STORE_PORT", DEFAULT_SPARE_STORE_PORT);
+  if (spareStorePort > MAX_HTTP_PORT) {
+    throw new AppError("server.config_invalid", {
+      variable: "WAITRON_SPARE_STORE_PORT",
+      reason: "port_out_of_range",
+    });
+  }
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.
@@ -488,6 +498,7 @@ export function loadConfig(
     paymentTestProviders: paymentTestProviders(env),
     httpPort,
     landingPort: boundedPort(env, "WAITRON_HTTP_LANDING_PORT", DEFAULT_HTTP_LANDING_PORT),
+    spareStorePort,
     httpHost: isUnset(httpHost) ? DEFAULT_HTTP_HOST : httpHost,
     minTickMs,
     maxTickMs,

@@ -148,7 +148,7 @@ function observeStart(options: StartCase): () => Observed {
     if (options.mirror === true) {
       await setNodeMode(nodeHandles, box, "mirror");
       await writeMirrorLink(suite.node, box, {
-        relayUrl: "https://127.0.0.1:1/",
+        originUrl: "https://127.0.0.1:1/",
         boxHostname: "box.test",
         boxCaPem: "unused",
         originNodeId: first,

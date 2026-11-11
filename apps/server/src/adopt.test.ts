@@ -9,8 +9,10 @@ import { readDeploymentEnvironment, stampDeployment, tenants, withTransaction } 
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
+  NODE_CLASSIFICATION,
   readMirrorLink,
   readNodeMode,
+  readPairLink,
   readPinnedPrimaryKey,
   readRecoveryKeyName,
 } from "@waitron/node-db";
@@ -22,10 +24,12 @@ import {
   nodeSigningPublicKey,
   putCredential,
   readNodeSigningKey,
+  readPairSecret,
 } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import {
   adoptFromPrimary,
+  nodeTablesAdoptLeaves,
   type AdoptCredential,
   type AdoptHooks,
   type PersistTradingArgs,
@@ -56,7 +60,7 @@ vi.mock("./modules.js", async (importOriginal) => {
 // One identity for every adopt, so a fixture can endorse the identity the box sends.
 vi.mock("./reserved-identity.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./reserved-identity.js")>();
-  return { ...actual, generateStandbyIdentity: () => STANDBY };
+  return { ...actual, generateStandbyIdentity: () => standbyIdentity };
 });
 
 // Cases depend on `useVenueDb`'s default `resetPerTest`: each starts from an unstamped `deployment`
@@ -72,6 +76,8 @@ const STANDBY: StandbyIdentity = {
   nodeId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   ...generateNodeKeyPair(),
 };
+
+let standbyIdentity: StandbyIdentity = STANDBY;
 
 const RESERVED: ReservedIdentity = {
   modules: {
@@ -136,6 +142,7 @@ const suite = useVenueDb({
 let stateDir: string;
 
 beforeEach(async () => {
+  standbyIdentity = STANDBY;
   stateDir = await mkdtemp(join(tmpdir(), "waitron-adopt-state-"));
 });
 
@@ -152,7 +159,7 @@ function deps(
     fetchBundle?: (
       url: string,
       c: AdoptCredential,
-      s: { nodeId: string; publicKey: string; contactUrl: string },
+      s: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string },
       confirmedCaPem?: string,
     ) => Promise<MirrorBundle>;
     environment?: "production" | "preproduction";
@@ -165,6 +172,7 @@ function deps(
     ownerNode: suite.node,
     ring: RING,
     advertisedOrigin: extra.advertisedOrigin ?? ADVERTISED_ORIGIN,
+    spareStorePort: 7443,
     environment: extra.environment ?? ("preproduction" as const),
     fetchBundle: extra.fetchBundle ?? (async () => makeBundle()),
     persistTrading: extra.persistTrading ?? (async () => {}),
@@ -226,7 +234,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     const ownNodeId = persistedTrading[0]!.nodeId;
     expect((await readNodeMode(suite.node, ownNodeId)).mode).toBe("mirror");
     const cfg = (await readMirrorLink(suite.node, ownNodeId))!;
-    expect(cfg.relayUrl).toBe("https://relay.test:9000/");
+    expect(cfg.originUrl).toBe("https://box.deli.test");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
 
     expect(persistedTrading).toHaveLength(1);
@@ -390,6 +398,99 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       NO_HOOKS,
     );
     expect(capturedStandby!.contactUrl).toBe("https://box-aaaa.waitron.local:8443");
+  });
+
+  it("keeps the pair's key sealed in node.db, opening under the venue's ring", async () => {
+    await adoptFromPrimary(deps(), REQ, NO_HOOKS);
+    const bundle = makeBundle();
+    expect(await readPairLink(suite.node, STANDBY.nodeId)).toMatchObject({
+      role: "serves",
+      state: "awaiting_copy",
+      peerNodeId: DESIGNATED.nodeId,
+      peerPublicKey: PRIMARY_KEYS.publicKey,
+      storeUrl: "https://standby.deli.test:7443",
+      venueId: "pair-venue",
+      accessKeyId: "waitron0123456789abcdef",
+      ringVersion: BUNDLE_RING.version,
+    });
+    expect(
+      await readPairSecret(suite.node, loadKeyRing(keyRingEnv(BUNDLE_RING)), STANDBY.nodeId),
+    ).toBe(bundle.store.secretAccessKey);
+    // Control: the box's own ring, which the main box's replaces, does not open it.
+    await expect(readPairSecret(suite.node, RING, STANDBY.nodeId)).rejects.toMatchObject({
+      code: "credentials.decrypt_failed",
+    });
+    const raw = await suite.node.execute(sql`select * from node_pair_link`);
+    expect(JSON.stringify(raw.rows)).not.toContain(bundle.store.secretAccessKey);
+  });
+
+  it("sends its own store address with the joining request", async () => {
+    let sent: { contactUrl: string; storeUrl: string } | undefined;
+    await adoptFromPrimary(
+      {
+        ...deps({
+          advertisedOrigin: "https://waitron.local:8443",
+          fetchBundle: async (_u, _c, s) => {
+            sent = s;
+            return makeBundle();
+          },
+        }),
+        spareStorePort: 7500,
+      },
+      REQ,
+      NO_HOOKS,
+    );
+    expect(sent!.storeUrl).toBe("https://box-aaaa.waitron.local:7500");
+    expect(sent!.contactUrl).toBe("https://box-aaaa.waitron.local:8443");
+  });
+
+  it("a second join under a new id removes the first attempt's node.db rows", async () => {
+    const first: StandbyIdentity = {
+      nodeId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      ...generateNodeKeyPair(),
+    };
+    standbyIdentity = first;
+    await adoptFromPrimary(
+      deps({
+        fetchBundle: async () =>
+          makeBundle({
+            reservedIdentity: {
+              ...RESERVED,
+              endorsement: endorseKey(
+                first.nodeId,
+                first.publicKey,
+                DESIGNATED.nodeId,
+                PRIMARY_KEYS.privateKey,
+              ),
+            },
+          }),
+      }),
+      REQ,
+      NO_HOOKS,
+    );
+    standbyIdentity = STANDBY;
+    await adoptFromPrimary(deps(), REQ, NO_HOOKS);
+
+    for (const table of [
+      "node_mode",
+      "node_mirror_link",
+      "node_signing_key",
+      "node_recovery_key",
+      "node_primary_key",
+      "node_pair_link",
+    ]) {
+      expect(
+        (await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows,
+        table,
+      ).toEqual([{ node_id: STANDBY.nodeId }]);
+    }
+  });
+
+  it("every node.db table is either swept by adopt or named as kept", () => {
+    const tables = NODE_CLASSIFICATION.map((entry) => entry.table);
+    expect(nodeTablesAdoptLeaves(tables)).toEqual([]);
+    // Control: a table with neither a sweep nor a kept name is reported.
+    expect(nodeTablesAdoptLeaves([...tables, "node_new_table"])).toEqual(["node_new_table"]);
   });
 
   it("calls beforeFirstWrite once, before the deployment is stamped", async () => {
@@ -735,6 +836,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       "node_signing_key",
       "node_recovery_key",
       "node_primary_key",
+      "node_pair_link",
     ]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
@@ -892,6 +994,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       "node_signing_key",
       "node_recovery_key",
       "node_primary_key",
+      "node_pair_link",
     ]) {
       expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual([]);
     }
@@ -924,6 +1027,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         "node_signing_key",
         "node_recovery_key",
         "node_mirror_link",
+        "node_pair_link",
       ]) {
         expect((await suite.node.execute(sql.raw(`select node_id from ${table}`))).rows).toEqual(
           [],

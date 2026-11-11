@@ -87,6 +87,7 @@ function deps(value = bundle()) {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     }),
     advertisedOrigin: "https://spare.test",
+    spareStorePort: 7443,
     environment: "preproduction" as const,
     // The main box endorses the identity this box sends.
     fetchBundle: async (

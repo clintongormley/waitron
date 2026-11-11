@@ -120,6 +120,7 @@ async function joinAsSpare(stateDir: string, venueDir: string): Promise<void> {
             },
           }),
           advertisedOrigin: "https://standby.example",
+          spareStorePort: 7443,
           environment: "preproduction",
           persistTrading: async (cfg) => {
             await writeTradingEnv(stateDir, cfg);

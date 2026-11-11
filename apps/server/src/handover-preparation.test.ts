@@ -936,7 +936,7 @@ describe("the handover's preparation route", () => {
   it("a real mirror start serves the route over verified HTTPS", async () => {
     await controlledAtFilingAssumed();
     await writeMirrorLink(suite.node, standby.nodeId, {
-      relayUrl: "https://127.0.0.1:1/",
+      originUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca",
       originNodeId: primary.nodeId,

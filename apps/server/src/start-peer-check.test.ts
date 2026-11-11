@@ -842,7 +842,7 @@ describe("the real start check's transport", () => {
 
   async function linkTo(b: Box, authorityPem: string): Promise<void> {
     await writeMirrorLink(suite.node, b.nodeId, {
-      relayUrl: "https://relay.example",
+      originUrl: "https://relay.example",
       boxHostname: "localhost",
       boxCaPem: authorityPem,
       originNodeId: PEER.nodeId,

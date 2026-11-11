@@ -821,7 +821,7 @@ it("the real mirror boot serves preparation over verified HTTPS and promotes the
   await admit(s);
   const stateDir = join(root, "state");
   await writeMirrorLink(suite.node, standby.nodeId, {
-    relayUrl: "https://127.0.0.1:1/",
+    originUrl: "https://127.0.0.1:1/",
     boxHostname: "box.test",
     boxCaPem: "unused-ca",
     originNodeId: primary.nodeId,
@@ -921,7 +921,7 @@ it.each(["key", "manager"])(
     )) as { input: unknown };
     expect(selected).toMatchObject({ identity: "0CNQR" });
     await writeMirrorLink(suite.node, standby.nodeId, {
-      relayUrl: "https://127.0.0.1:1/",
+      originUrl: "https://127.0.0.1:1/",
       boxHostname: "box.test",
       boxCaPem: "unused-ca",
       originNodeId: primary.nodeId,

@@ -298,7 +298,7 @@ export function placedSpareFixture(boxes: {
     await advanceHandover(spareStore, OPERATION, "filing_assumed", {}, relinquishment);
 
     await writeMirrorLink(spareBefore.node, standby.nodeId, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: mintSelfSignedServerCert({
         hostnames: ["box.local"],

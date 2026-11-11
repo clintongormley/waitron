@@ -458,7 +458,7 @@ describe("startServer, against a migrated venue directory", () => {
       const [port, deadPeerPort] = await freePorts(2);
       if (withPeer) {
         await writeMirrorLink(venue.store.node, TILL_ENV.WAITRON_NODE_ID, {
-          relayUrl: `http://127.0.0.1:${deadPeerPort}`,
+          originUrl: `http://127.0.0.1:${deadPeerPort}`,
           boxHostname: "waitron.local",
           boxCaPem: "unused",
           originNodeId: TILL_ENV.WAITRON_NODE_ID,

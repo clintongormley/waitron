@@ -161,7 +161,7 @@ async function boot(
     if (start === "mirror" || start === "mirror-zone-repair") {
       await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
       await writeMirrorLink(suite.node, NODE, {
-        relayUrl: "http://127.0.0.1:1/",
+        originUrl: "http://127.0.0.1:1/",
         boxHostname: "main-box.local",
         boxCaPem: own.caCertPem,
         originNodeId: ORIGIN,
