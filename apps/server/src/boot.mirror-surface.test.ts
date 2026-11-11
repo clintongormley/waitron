@@ -482,9 +482,9 @@ describe("a spare's network surface", () => {
       const fromBox = { current: false };
       const { server, app, stateDir } = await boot(start, { fromBox });
       try {
-        const before = await readFile(join(stateDir, "tls", "server.crt"));
+        const before = await readFile(join(stateDir, "tls", "server.pem"));
         expect(await repair(app)).toEqual({ status: 403, code: "connection.refused" });
-        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(before);
+        expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(before);
         fromBox.current = true;
         expect(await repair(app)).toEqual({ status: 200 });
       } finally {
@@ -501,13 +501,13 @@ describe("a spare's network surface", () => {
       const { server, stateDir } = await boot(start, {});
       try {
         const { port } = await listenerFor(HTTP_PORT);
-        const before = await readFile(join(stateDir, "tls", "server.crt"));
+        const before = await readFile(join(stateDir, "tls", "server.pem"));
         const answer = await reset.sendThenReset(port, REPAIR_REQUEST, { tls: true });
         expect([answer.status, JSON.parse(answer.body)]).toEqual([
           403,
           { error: "connection.refused" },
         ]);
-        expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(before);
+        expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(before);
         expect(await repairOverLoopback(port)).toBe(200);
       } finally {
         await server.close();
@@ -541,8 +541,7 @@ describe("a spare's network surface", () => {
           ipAddresses: [],
           now: new Date(),
         });
-        await writeFile(join(tls, "server.crt"), leaf.serverCertPem);
-        await writeFile(join(tls, "server.key"), leaf.serverKeyPem);
+        await writeFile(join(tls, "server.pem"), leaf.serverCertPem + leaf.serverKeyPem);
         expect(await page(first.app)).toEqual({
           state: "repair-required",
           status: CONNECTION_TEXT.en.serverOnly,
