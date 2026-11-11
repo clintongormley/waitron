@@ -88,7 +88,7 @@ describe("table in service", () => {
     const rows = await suite.db
       .select({ id: diningTables.id, inService: tableInService(diningTables.id) })
       .from(locations)
-      .innerJoin(diningTables, eq(diningTables.locationId, locations.id))
+      .innerJoin(diningTables, sql`true`)
       .orderBy(diningTables.id);
     expect(rows).toEqual([
       { id: PRESENT, inService: 1 },

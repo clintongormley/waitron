@@ -2703,7 +2703,7 @@ describe("the routing that names a period", () => {
     const [cocina] = await db
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, v.locationId));
+      .where(sql`true`);
     const [cocktails] = await db
       .insert(categories)
       .values({ name: "Cocktails" })
@@ -2791,7 +2791,7 @@ describe("the routing that names a period", () => {
     const [cocina] = await db
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, v.locationId));
+      .where(sql`true`);
     const { drinksCocktails, brunchCocktails, mojito, bread } = await scoped(async (tx) => {
       const drinks = (await createCategory(tx, { name: "Drinks" })).id;
       const brunch = (await createCategory(tx, { name: "Brunch" })).id;

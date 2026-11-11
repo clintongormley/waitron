@@ -12,7 +12,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
+
 import { publishWorkingMenu } from "./publish-menu.js";
 
 export interface ZoneOffers {
@@ -34,8 +34,6 @@ export interface OfferProductsOptions {
   productIds?: readonly string[];
 }
 
-type Cfg = Pick<WithVenueRowId, "locationId">;
-
 const MENU_NAME = "Test offers";
 const COUNTER_ZONE = "Test counter";
 const TABLES_ZONE = "Test tables";
@@ -49,12 +47,12 @@ const TABLES_ZONE = "Test tables";
  */
 export async function offerProducts(
   tx: Transaction,
-  cfg: Cfg,
+  _cfg: unknown,
   options: OfferProductsOptions = {},
 ): Promise<ZoneOffers> {
   const zone = options.zone ?? "counter";
   const orderStart = options.orderStart ?? (zone === "tables" ? "table" : "counter");
-  const zoneId = await resolveZone(tx, cfg, zone, orderStart);
+  const zoneId = await resolveZone(tx, zone, orderStart);
   if (options.paidWhen !== undefined) {
     await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", options.paidWhen);
   }
@@ -84,7 +82,6 @@ export async function offerProducts(
 
 async function resolveZone(
   tx: Transaction,
-  cfg: Cfg,
   zone: NonNullable<OfferProductsOptions["zone"]>,
   orderStart: "table" | "counter",
 ): Promise<string> {
@@ -96,9 +93,9 @@ async function resolveZone(
       .select({ zoneId: zoneServicePolicies.zoneId })
       .from(zoneServicePolicies)
       .where(and(eq(zoneServicePolicies.isCounterDefault, true)));
-    zoneId = counter?.zoneId ?? (await floorZone(tx, cfg, COUNTER_ZONE));
+    zoneId = counter?.zoneId ?? (await floorZone(tx, COUNTER_ZONE));
   } else {
-    zoneId = await floorZone(tx, cfg, TABLES_ZONE);
+    zoneId = await floorZone(tx, TABLES_ZONE);
   }
 
   const [policy] = await tx
@@ -124,8 +121,8 @@ async function resolveZone(
   return zoneId;
 }
 
-async function floorZone(tx: Transaction, cfg: Cfg, name: string): Promise<string> {
-  const where = and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.name, name));
+async function floorZone(tx: Transaction, name: string): Promise<string> {
+  const where = and(eq(floorZones.name, name));
   const [existing] = await tx.select({ id: floorZones.id }).from(floorZones).where(where);
   if (existing !== undefined) return existing.id;
   const [created] = await tx.insert(floorZones).values({ name }).returning({ id: floorZones.id });

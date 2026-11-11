@@ -30,7 +30,7 @@ import { basisPointsToDecimal, nodeId as brandNodeId, thousandthsToDecimal } fro
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import type { TillSaleResult } from "./till-sale.js";
@@ -39,6 +39,7 @@ import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";
@@ -77,7 +78,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,

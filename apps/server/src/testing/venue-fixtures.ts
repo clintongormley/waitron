@@ -139,7 +139,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
   });
 
   const { rows } = await db.execute<{ id: string }>(sql`
-    select id from kitchen_stations where location_id = ${cfg.locationId} and is_default and active`);
+    select id from kitchen_stations where is_default and active`);
 
   return {
     cfg,

@@ -52,7 +52,6 @@ export interface Venue {
   timeZone: string;
   /** As stored: "HH:MM:SS". */
   dayCutover: string;
-  defaultCatalogueId: string | null;
 }
 
 export interface VenuePlace {
@@ -77,7 +76,6 @@ async function venueRow(tx: Transaction): Promise<{ id: string; venue: Venue }> 
       province: doc.province,
       timeZone: businessDay.timeZone,
       dayCutover: first.dayCutover!,
-      defaultCatalogueId: first.defaultCatalogueId,
     },
   };
 }
@@ -108,7 +106,6 @@ async function clockRows(tx: Transaction) {
   const rows = await tx
     .select({
       id: locations.id,
-      defaultCatalogueId: locations.catalogueId,
       effectiveBusinessDay: dayCutoverChanges.effectiveBusinessDay,
       dayCutover: dayCutoverChanges.dayCutover,
       document: {

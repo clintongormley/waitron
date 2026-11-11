@@ -7,12 +7,6 @@ import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 
-/**
- * The whole of what a caller does to print: a printer check, a venue read unless the caller passes
- * `venueId`, and one insert, with no socket and no wait on hardware, so a slow, broken or absent
- * printer can never delay the caller (CLAUDE.md §5). `saleId` names the sale a receipt prints. A
- * caller queuing several jobs reads the venue's id once and passes it to each as `venueId`.
- */
 export async function enqueuePrintJob(
   tx: Transaction,
   printerId: string,
@@ -21,14 +15,12 @@ export async function enqueuePrintJob(
   {
     saleId = null,
     receiptCopy = null,
-    venueId,
-  }: { saleId?: string | null; receiptCopy?: boolean | null; venueId?: string } = {},
+  }: { saleId?: string | null; receiptCopy?: boolean | null } = {},
 ): Promise<{ jobId: string }> {
   return insertPrintJob(tx, printerId, payload, kind, {
     resendOf: null,
     saleId,
     receiptCopy,
-    venueId,
   });
 }
 
@@ -41,12 +33,10 @@ async function insertPrintJob(
     resendOf,
     saleId,
     receiptCopy,
-    venueId,
   }: {
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
-    venueId?: string;
   },
 ): Promise<{ jobId: string }> {
   // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.

@@ -115,7 +115,6 @@ export async function seedFloor(
       .from(kitchenStations)
       .where(
         and(
-          eq(kitchenStations.locationId, locationId),
           inArray(kitchenStations.name, [
             plain(dataSet.stations.downstairsBar),
             plain(dataSet.stations.upstairsBar),
@@ -216,7 +215,7 @@ export async function seedFloor(
     const [existing] = await tx
       .select({ label: diningTables.label })
       .from(diningTables)
-      .where(and(eq(diningTables.locationId, locationId), eq(diningTables.zoneId, zoneId)))
+      .where(eq(diningTables.zoneId, zoneId))
       .orderBy(diningTables.label)
       .limit(1);
     if (existing !== undefined) {

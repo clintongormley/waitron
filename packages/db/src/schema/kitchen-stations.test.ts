@@ -110,11 +110,7 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
 
     const collision = await captureError(() => seedStation(LOCATION_A, name));
     expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(collision)).toBe(
-      "UNIQUE constraint failed: kitchen_stations.location_id, kitchen_stations.name",
-    );
-    const elsewhereId = await seedStation(LOCATION_A2, name);
-    expect(elsewhereId).not.toBe(replacementId);
+    expect(engineErrorMessage(collision)).toBe("UNIQUE constraint failed: kitchen_stations.name");
     await inTx((tx) =>
       tx
         .update(kitchenStations)
@@ -228,16 +224,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     }
   });
 
-  it("rejects a SECOND default station per location (the WHERE is_default partial unique)", async () => {
-    // A non-default sibling and a default at another location are both accepted, so the refusal is
-    // the partial predicate and not a plain unique.
-    await seedStation(LOCATION_A, "Default one", true);
-    await seedStation(LOCATION_A, "Non-default sibling", false);
-    await seedStation(LOCATION_A2, "Default elsewhere", true);
-    const e = await captureError(() => seedStation(LOCATION_A, "Default two", true));
-    expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
-  });
-
   it("the partial unique index is what blocks the second default (proof by deletion of the index)", async () => {
     // The index is recreated in a `finally` so every other case still meets it.
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
@@ -258,14 +244,12 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
         tx
           .select({ n: sql<number>`cast(count(*) as int)` })
           .from(kitchenStations)
-          .where(
-            and(eq(kitchenStations.locationId, probeLocation), eq(kitchenStations.isDefault, true)),
-          ),
+          .where(and(eq(kitchenStations.isDefault, true))),
       );
       expect(counted!.n).toBe(2);
     } finally {
       // The probe rows go first: recreating the index over their two defaults would fail.
-      await suite.db.delete(kitchenStations).where(eq(kitchenStations.locationId, probeLocation));
+      await suite.db.delete(kitchenStations).where(eq(kitchenStations.isDefault, true));
       suite.db.run(sql.raw(index!.sql));
     }
   });

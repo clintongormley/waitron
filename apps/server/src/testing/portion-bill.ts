@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import { expandPortionRows, registerPortions, type PortionRef } from "../order-portions.js";
 import type { OriginConfig } from "../trading-context.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
+
 import {
   bumpRevision,
   fireLines,
@@ -46,7 +46,7 @@ export async function addPortionRound(
 /** A fresh party's bill at a fresh table in `zoneId`, holding `lines` as portions. */
 export async function portionBill(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   zoneId: string,
   lines: TabRoundLine[],
 ): Promise<{ billId: string; portions: PortionRef[] }> {

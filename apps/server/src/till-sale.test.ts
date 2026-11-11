@@ -786,7 +786,7 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
   async function setupBareVenue(
     invoiceLocales: string[],
     customerName: Record<string, string>,
-  ): Promise<{ cfg: DeviceRequestConfig; zoneId: string; menuItemId: string }> {
+  ): Promise<{ cfg: WithVenueRowId<DeviceRequestConfig>; zoneId: string; menuItemId: string }> {
     const venue = await applyVenue(
       planVenue(
         {

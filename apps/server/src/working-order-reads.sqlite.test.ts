@@ -19,12 +19,13 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { listTables } from "./tables.js";
 import { listStationQueue, listTablesWithState } from "./working-order.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { boardCards, boardItems, boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { numberBill } from "./testing/bill-identities.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
 
@@ -37,7 +38,7 @@ const suite = useVenueDb({
   resetPerTest: false,
 });
 let db: Database;
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let stationId: string;
 let tableId: string;
 

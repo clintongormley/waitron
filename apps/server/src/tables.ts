@@ -100,7 +100,7 @@ export async function updateZone(
       patch.name !== undefined &&
       refusalOn(error, UNIQUE_VIOLATION, {
         table: "floor_zones",
-        columns: ["location_id", "name"],
+        columns: ["name"],
       })
     ) {
       throw new AppError("zone.name_taken", { name: patch.name });

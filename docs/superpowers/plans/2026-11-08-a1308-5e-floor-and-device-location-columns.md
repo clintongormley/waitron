@@ -419,3 +419,6 @@ Split point for a fresh implementer.
   area's, not this slice's.
 - [ ] **Step 3:** Protection list: compare, paste, mark (rules §3).
 - [ ] **Step 4:** `pnpm format:check`; commit; `/finish-branch`.
+
+
+**2026-11-11 amendment, watcher 20:44 (Lane H questions.md):** Keep `WithVenueRowId` only in node, Cloud and backup fixtures that still read the venue row's id; retire those uses with 5f/5g. Remove it from fixtures that only filled dropped columns. The protected fiscal pair still reads `devices.location_id`; its fixture prerequisite is with the owner, and neither protected file is edited without the owner's answer recorded in the lane.

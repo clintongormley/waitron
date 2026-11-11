@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 18,
+  version: 19,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -71,7 +71,6 @@ const bundle: ConfigurationBundle = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
-  defaultCatalogueId: null,
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1" }] },

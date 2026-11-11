@@ -185,7 +185,6 @@ describe("registering a page printer from discovery", () => {
     expect(await printerRows()).toEqual([
       {
         id: result.id,
-        locationId: v.locationId,
         name: "Back office",
         host: "192.0.2.40",
         port: 8631,

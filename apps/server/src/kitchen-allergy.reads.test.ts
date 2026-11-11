@@ -62,7 +62,7 @@ beforeEach(async () => {
   const [station] = await v.db
     .select()
     .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, v.cfg.locationId));
+    .where(sql`true`);
   stationId = station!.id;
   await inTx(v, (tx) => updateProduct(tx, v.productId("Burger"), { allergens: { milk: {} } }));
 });

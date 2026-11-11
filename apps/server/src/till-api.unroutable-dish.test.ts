@@ -1683,7 +1683,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
-        .where(eq(kitchenStations.locationId, v.cfg.locationId));
+        .where(sql`true`);
       await tx
         .update(kitchenStations)
         .set({ isDefault: true })

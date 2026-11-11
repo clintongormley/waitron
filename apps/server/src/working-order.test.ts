@@ -3268,7 +3268,7 @@ async function placeOrderWith(
  */
 async function fireContextless(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   productIds: string[],
 ): Promise<{ id: string }> {
   const id = randomUUID();

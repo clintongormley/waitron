@@ -9,7 +9,6 @@ import {
   joinRequests,
   nowIso,
   printAgents,
-  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { deviceTokenMatches, endDeviceSessions, hashDeviceToken } from "@waitron/identity";
@@ -555,7 +554,6 @@ export async function acceptDeviceJoinRequest(
 
   await insertDevice(tx, {
     id: row.id,
-    locationId: await venueLocationId(tx),
     deviceProfileId: input.profileId,
     label: input.label,
     tokenHash: row.tokenHash,

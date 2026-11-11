@@ -37,7 +37,7 @@ import type { PortionRef } from "./order-portions.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-extras-venue.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { readLockedLines, splitLinesWithinOrder, type StoredOrderLine } from "./working-order.js";
 
 const DAY = "2026-10-27";
@@ -441,7 +441,7 @@ describe("A803 monetary comparison: operations on portions through the real path
     timeoutMs: 60_000,
   });
   let db: Database;
-  let cfg: WithVenueRowId<DeviceRequestConfig>;
+  let cfg: DeviceRequestConfig;
   let ids: {
     croquette: string;
     burger: string;
@@ -850,7 +850,7 @@ describe("A803 monetary comparison: a whole-bill discount over registered portio
     timeoutMs: 60_000,
   });
   let db: Database;
-  let cfg: WithVenueRowId<DeviceRequestConfig>;
+  let cfg: DeviceRequestConfig;
   let offers: ZoneOffers;
   let ids: {
     drink: string;

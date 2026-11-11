@@ -314,7 +314,6 @@ export async function saveDraft(
   await requireCourses(tx, lines, previous);
   const offers = await offersFor(
     tx,
-    cfg,
     partyId,
     lines.map((line) => line.menuItemId),
   );
@@ -786,7 +785,6 @@ export async function submitDraft(
       );
       const offers = await offersFor(
         tx,
-        cfg,
         partyId,
         lines.map((line) => line.menuItemId),
       );
@@ -1362,7 +1360,6 @@ async function readOpenDrafts(
     known ??
     (await offersFor(
       tx,
-      cfg,
       partyId,
       lines.map(({ line }) => line.menuItemId),
     ));
@@ -1422,12 +1419,11 @@ function soldMeasured(offer: ZoneMenuOffer | undefined): boolean {
 /** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */
 async function offersFor(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   menuItemIds: readonly string[],
 ): Promise<Map<string, ZoneMenuOffer>> {
   if (menuItemIds.length === 0) return new Map();
-  const zoneId = await partyZone(tx, cfg, partyId);
+  const zoneId = await partyZone(tx, partyId);
   if (zoneId === null) return new Map();
   const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, {
     menuItemIds: [...new Set(menuItemIds)],

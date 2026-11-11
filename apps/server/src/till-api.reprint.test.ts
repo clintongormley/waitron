@@ -19,18 +19,19 @@ import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
 // is pinned in `kitchen-print.test.ts`.
 const COFFEE = "Cafe con leche";
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 let stationId: string;
 let coffeeOffer: string;
@@ -74,7 +75,7 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
+function makeCfg(locationId: string, nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: locationId,

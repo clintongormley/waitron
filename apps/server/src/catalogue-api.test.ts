@@ -31,10 +31,11 @@ import { venueFiscalSelection } from "@waitron/provisioning";
 import { createCourse } from "./kitchen.js";
 import { setRoutingCell, createDepartment, configureZone } from "@waitron/venue-service";
 import { floorZones, kitchenStations } from "@waitron/db";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The catalogue ROUTES end to end in-process: the body and id screens and the permission gate. The
 // staff refusal over every write route is in `catalogue-api.full-manifest.test.ts`.
@@ -660,7 +661,7 @@ beforeEach(async () => {
  * The venue's location id, for the kitchen stations and zones these cases insert and look up
  * directly; the other fields only fill the type.
  */
-function venueCfg(): WithVenueRowId {
+function venueCfg(): TradingContext {
   return {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     locationId: locationId,
@@ -676,7 +677,7 @@ function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageR
     app,
     {
       db: suite.db,
-      venueCfg: venueCfg(),
+
       venueLocale,
       ...(contentLanguageRules === undefined ? {} : { contentLanguageRules }),
     },
@@ -1762,12 +1763,7 @@ describe("mountCatalogueApi — products", () => {
       const [cocktailBar] = await tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
-        .where(
-          and(
-            eq(kitchenStations.locationId, cfg.locationId),
-            eq(kitchenStations.name, "Cocktail bar"),
-          ),
-        );
+        .where(and(eq(kitchenStations.name, "Cocktail bar")));
       await setRoutingCell(
         tx,
         { row: { kind: "category", categoryId: drinks }, zoneId: null },

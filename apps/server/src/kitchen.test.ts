@@ -23,7 +23,7 @@ import {
   nodeId as brandNodeId,
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import {
   createCourse,
   createStation,
@@ -48,7 +48,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(): Promise<WithVenueRowId> {
+async function setupVenue(): Promise<TradingContext> {
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: [LOCALE],

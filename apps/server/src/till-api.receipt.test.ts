@@ -76,7 +76,7 @@ import type { TranslationItemPage } from "@waitron/catalogue/src/content-transla
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { CAPABILITY_FLAGS, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
@@ -158,7 +158,7 @@ function nextNif(): string {
   return nifWithControlLetter(64_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
@@ -173,7 +173,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
 async function setupVenue(): Promise<{
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   each: AvailableProduct & { menuItemId: string };
   operatorId: string;
   supervisorId: string;
@@ -297,7 +297,7 @@ let venueReceiptPrinter: string | null = null;
 /** Puts every device of the venue, and each one enrolled after, on `printerId` for receipts and
  *  payment slips; `null` leaves them with no printer. */
 async function configureReceipt(
-  cfg: WithVenueRowId,
+  cfg: TradingContext,
   opts: { printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -310,7 +310,7 @@ async function configureReceipt(
           paymentSlipPrinterId: opts.printerId,
           cashDrawerPrinterId: opts.printerId,
         })
-        .where(eq(devices.locationId, cfg.locationId));
+        .where(sql`true`);
     }
   });
 }
@@ -1056,7 +1056,7 @@ describe("an original receipt whose printer was deleted", () => {
 
   async function open(): Promise<{
     app: Hono;
-    cfg: WithVenueRowId;
+    cfg: TradingContext;
     orderId: string;
     cookie: string;
     printerId: string;

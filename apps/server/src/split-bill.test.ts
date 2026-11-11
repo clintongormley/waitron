@@ -118,7 +118,7 @@ async function setupVenue(): Promise<Seeded> {
 }
 
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
-const offersByCfg = new WeakMap<OriginConfig, ZoneOffers>();
+const offersByCfg = new WeakMap<WithVenueRowId<OriginConfig>, ZoneOffers>();
 
 /**
  * `openTab`, selling each line through the venue's offer for its product. Its lines are stored
@@ -126,7 +126,7 @@ const offersByCfg = new WeakMap<OriginConfig, ZoneOffers>();
  */
 async function openTabWith(
   tx: Transaction,
-  cfg: OriginConfig,
+  cfg: WithVenueRowId<OriginConfig>,
   req: { tableId: string; lines?: { productId: string; quantity: string }[] },
 ) {
   const opened = await openPartyTab(tx, cfg, { tableId: req.tableId });
@@ -135,7 +135,10 @@ async function openTabWith(
   return opened;
 }
 
-function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(
+  cfg: WithVenueRowId<OriginConfig>,
+  fn: (tx: Transaction) => Promise<T>,
+): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -346,7 +349,7 @@ async function ticketOf(lineId: string) {
 }
 
 /** A cloud-poll printer attached to the station, so a fire or a correction there prints. */
-async function printerAt(cfg: OriginConfig, stationId: string): Promise<string> {
+async function printerAt(cfg: WithVenueRowId<OriginConfig>, stationId: string): Promise<string> {
   return asApp(cfg, async (tx) => {
     const { id } = await createPrinter(tx, {
       name: `P-${randomUUID().slice(0, 8)}`,
@@ -386,7 +389,7 @@ async function noticesOn(...orderIds: string[]) {
 }
 
 /** Each order at the station, with the quantities its items ask for. */
-async function queueAt(cfg: OriginConfig, stationId: string) {
+async function queueAt(cfg: WithVenueRowId<OriginConfig>, stationId: string) {
   const groups = await asApp(cfg, (tx) => listStationQueue(tx, stationId));
   return Object.fromEntries(
     groups.map((group) => [group.orderId, group.items.map((item) => item.quantity)]),
@@ -657,7 +660,7 @@ describe("splitting a line the kitchen has", () => {
 });
 
 /** A station's notices, every field a cook reads, oldest first. */
-async function kitchenNoticesAt(cfg: OriginConfig, stationId: string) {
+async function kitchenNoticesAt(cfg: WithVenueRowId<OriginConfig>, stationId: string) {
   return (await asApp(cfg, (tx) => listStationNotices(tx, stationId))).map((notice) => ({
     stationId: notice.stationId,
     workingOrderId: notice.workingOrderId,

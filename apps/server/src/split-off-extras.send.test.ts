@@ -1006,7 +1006,10 @@ describe("sending split-off extras", () => {
       expect(extra).toMatchObject({ madeHere: true, state: "ready", firedAt: expect.any(String) });
       expect(sink.has(lines.find((line) => line.parentLineId !== null)!.id)).toBe(true);
       expect(
-        await tx.select().from(printJobs).where(eq(printJobs.locationId, cfg.locationId)),
+        await tx
+          .select()
+          .from(printJobs)
+          .where(sql`true`),
       ).toEqual([]);
     });
   });

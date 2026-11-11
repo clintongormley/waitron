@@ -3,7 +3,7 @@ import type { VenueSettings } from "./venue-settings.js";
 import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { catalogues } from "./schema/catalogue.js";
+
 import { dayCutoverChanges } from "./schema/day-cutover-changes.js";
 import { locations } from "./schema/tenants.js";
 import { withTransaction } from "./tenancy.js";
@@ -60,10 +60,6 @@ describe("the venue accessor", () => {
   }
 
   it("reads the one venue's settings", async () => {
-    const [catalogue] = await suite.db
-      .insert(catalogues)
-      .values({ name: "Main menu" })
-      .returning({ id: catalogues.id });
     await insertVenue({
       name: "Bar Tenerife",
       invoiceLocales: ["es", "en"],
@@ -76,7 +72,6 @@ describe("the venue accessor", () => {
       province: "Santa Cruz de Tenerife",
       timeZone: "Atlantic/Canary",
       dayCutover: "04:30:00",
-      catalogueId: catalogue!.id,
     });
 
     // toEqual, not toMatchObject: a key left out of a matcher is never checked at all.
@@ -92,7 +87,6 @@ describe("the venue accessor", () => {
       province: "Santa Cruz de Tenerife",
       timeZone: "Atlantic/Canary",
       dayCutover: "04:30:00",
-      defaultCatalogueId: catalogue!.id,
     });
   });
 

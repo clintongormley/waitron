@@ -545,7 +545,7 @@ export const QUERY_DEPENDENCIES = {
     "day_cutover_changes",
   ],
   getReceiptLanguage: ["settings.business_day", "settings.venue"],
-  getVenueDefaults: ["settings.business_day", "settings.venue", "catalogue_settings"],
+  getVenueDefaults: ["settings.business_day", "settings.venue", "catalogue_settings", "catalogues"],
   getVenuePrivacy: ["tenants"],
   getProfile: ["persons", "webauthn_credentials"],
   // The venue's name; the language list itself is fixed.

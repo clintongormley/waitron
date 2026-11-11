@@ -186,8 +186,7 @@ async function moveBillOnce(
     ...(destination.kind === "party" ? await readPartyBillIds(tx, [destination.partyId]) : []),
   ];
   await requireRelocatableBillEditors(tx, affected, options.operatorId, options.expectedEdits);
-  const zoneId =
-    destination.kind === "party" ? await partyZone(tx, cfg, destination.partyId) : null;
+  const zoneId = destination.kind === "party" ? await partyZone(tx, destination.partyId) : null;
   const expectedEdit = options.expectedEdits.find((e) => e.billId === billId)!;
   const open = path.status === "open";
   const activity =

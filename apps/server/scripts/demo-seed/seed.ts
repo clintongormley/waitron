@@ -132,12 +132,7 @@ export async function seedDemoRestaurant(
     const [zone] = await tx
       .select({ id: floorZones.id })
       .from(floorZones)
-      .where(
-        and(
-          eq(floorZones.locationId, locationId),
-          eq(floorZones.name, demoPlainText(terrace.name, dataSet, locale)),
-        ),
-      );
+      .where(and(eq(floorZones.name, demoPlainText(terrace.name, dataSet, locale))));
     if (zone === undefined) throw new Error("seedDemoRestaurant: no Terrace zone");
     const clock = await readVenueClock(tx);
     await replaceZoneClosedWeek(

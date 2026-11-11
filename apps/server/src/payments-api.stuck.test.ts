@@ -76,7 +76,7 @@ import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
@@ -148,7 +148,7 @@ const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
 }) as unknown as MakeStripe);
 
 interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   /** Two devices at the venue: payments start on `deviceId` unless a case says otherwise. */
   deviceId: string;
   otherDeviceId: string;

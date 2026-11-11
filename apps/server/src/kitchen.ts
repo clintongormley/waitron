@@ -17,11 +17,11 @@ import {
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { assertProductWritable, productWithId, type ProductScope } from "@waitron/catalogue";
-export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
 import { assertStationTiming } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
+export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
 // `venue.configure` (`withVenueAuth` in management-api.ts) and, where a station's printers are

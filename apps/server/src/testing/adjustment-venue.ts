@@ -589,7 +589,7 @@ export async function billWith(
 /** One group placed as `placeGroups` placed it before portions, each line stored once; answers its id. */
 export async function placeGrouped(
   tx: Transaction,
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   seated: { partyId: string; tabId: string },
   lines: TabRoundLine[],
   release: "fire" | "hold",

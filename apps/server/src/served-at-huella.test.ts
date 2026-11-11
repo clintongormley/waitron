@@ -37,7 +37,6 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 
 import { createTable } from "./testing/live-table.js";
 import { advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
@@ -48,6 +47,7 @@ import { fireAll, openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The fiscal firewall (CLAUDE.md §5): our own metadata never enters `computeHuella`. `served_at` is
 // a `working_order_lines` field the pay path never reads: `payWorkingOrder` files from the tab's
@@ -136,7 +136,7 @@ function venueRequest(nif: string): VenueRequest {
   };
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,

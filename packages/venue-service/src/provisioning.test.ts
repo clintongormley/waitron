@@ -653,7 +653,10 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
   const node = { nodeId: await seedNode(db) };
   const [old] = await db.insert(floorZones).values({ name: "Counter", active: false }).returning();
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-  const rows = await db.select().from(floorZones).where(eq(floorZones.locationId, locationId));
+  const rows = await db
+    .select()
+    .from(floorZones)
+    .where(sql`true`);
   expect(rows).toHaveLength(2);
   expect(rows).toContainEqual(old);
   const replacement = rows.find((row) => row.active)!;
@@ -667,7 +670,10 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
     ).rows,
   ).toEqual([{ zone_id: replacement.id }]);
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
-  expect(await db.select().from(floorZones).where(eq(floorZones.locationId, locationId))).toEqual(
-    rows,
-  );
+  expect(
+    await db
+      .select()
+      .from(floorZones)
+      .where(sql`true`),
+  ).toEqual(rows);
 });

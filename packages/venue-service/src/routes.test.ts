@@ -1306,7 +1306,10 @@ describe("venue service management routes", () => {
         error: { code: "management.request_invalid", params: { field: "displayOrder" } },
       });
       expect(
-        await db.select().from(floorZones).where(eq(floorZones.locationId, fx.locationId)),
+        await db
+          .select()
+          .from(floorZones)
+          .where(sql`true`),
       ).toMatchObject([{ name: "Terrace" }]);
     },
   );

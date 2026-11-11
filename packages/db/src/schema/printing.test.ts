@@ -2,12 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
-import {
-  CHECK_VIOLATION,
-  FOREIGN_KEY_VIOLATION,
-  NOT_NULL_VIOLATION,
-  UNIQUE_VIOLATION,
-} from "../sql-state.js";
+import { CHECK_VIOLATION, NOT_NULL_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
@@ -105,18 +100,9 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     );
     const [row] = await inTx((tx) => tx.select().from(printAgents).where(eq(printAgents.id, id)));
     expect(row!.name).toBe("Kitchen USB agent");
-    expect(row!.locationId).toBe(LOCATION_A);
+
     expect(row!.active).toBe(true);
     expect(row!.lastSeenAt).not.toBeNull();
-  });
-
-  it("print_agents: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
-    const e = await captureError(() =>
-      inTx((tx) =>
-        tx.insert(printAgents).values({ name: "Ghost location", tokenHash: TOKEN_HASH }),
-      ),
-    );
-    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("print_agent_pairing_codes no longer exists (join-and-accept replaced the pairing code)", () => {
@@ -227,8 +213,8 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
     const error = await captureError(() =>
       inTx(async (tx) =>
         tx.run(
-          sql`insert into print_jobs (id, location_id, printer_id, payload, kind, created_at)
-              values (${`job-${String(kind)}`}, ${LOCATION_A}, ${printer}, x'1b700019fa',
+          sql`insert into print_jobs (id, printer_id, payload, kind, created_at)
+              values (${`job-${String(kind)}`}, ${printer}, x'1b700019fa',
                       ${kind}, ${new Date().toISOString()})`,
         ),
       ),
@@ -335,8 +321,6 @@ describe("printing schema (print_agents/printers/print_jobs — columns, CHECKs,
       sql.raw(`select "table" from pragma_foreign_key_list('printers')`),
     );
     expect(keys.filter((key) => key.table === "print_agents")).toEqual([]);
-    // Control: the read finds the foreign key that is there.
-    expect(keys.filter((key) => key.table === "locations")).toHaveLength(1);
     const cols = suite.db.all<{ name: string }>(
       sql`select name from pragma_table_info('printers')
            where name in ('agent_id', 'usb_path')`,

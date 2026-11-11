@@ -108,7 +108,7 @@ describe("devices schema (columns, FKs, unique)", () => {
     );
     const [row] = await inTx((tx) => tx.select().from(devices).where(eq(devices.id, id)));
     expect(row!.deviceProfileId).toBe(KDS_PROFILE_A);
-    expect(row!.locationId).toBe(LOCATION_A);
+
     expect(row!.label).toBe("Kitchen screen");
     expect(row!.active).toBe(true);
     expect(row!.lastSeenAt).not.toBeNull();
@@ -154,13 +154,6 @@ describe("devices schema (columns, FKs, unique)", () => {
     });
     const second = await seedDevice("Till 1");
     expect(second).not.toBe(first);
-  });
-
-  it("devices: the location FK rejects a non-existent location (direct location_id → locations.id)", async () => {
-    // Positive control first, so the rejection below is the location FK and not a malformed row.
-    await seedDevice("Real location", LOCATION_B);
-    const e = await captureError(() => seedDevice("Ghost location", GHOST_LOCATION));
-    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   describe("the invoice printer choice", () => {

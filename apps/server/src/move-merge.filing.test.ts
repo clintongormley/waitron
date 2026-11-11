@@ -23,7 +23,7 @@ import { nodeId as brandNodeId, rawCentsToDecimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -75,7 +75,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
@@ -86,7 +86,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 }
 
 interface SeededVenue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   coffee: AvailableProduct;
   water: AvailableProduct;
@@ -168,7 +168,7 @@ function offersOf(cfg: DeviceRequestConfig): ZoneOffers {
 }
 
 /** Seed one active dining table in the venue's tables zone; returns its id. */
-async function seedTable(cfg: WithVenueRowId<DeviceRequestConfig>, label: string): Promise<string> {
+async function seedTable(cfg: DeviceRequestConfig, label: string): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     return createTable(tx, cfg, { label, zoneId: offersOf(cfg).zoneId }).then((r) => r.id);
   });

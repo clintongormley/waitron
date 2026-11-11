@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { nodeId as brandNodeId } from "@waitron/shared";
-import type { TradingContext } from "./trading-context.js";
+
 import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -211,7 +211,7 @@ describe("accepting a device writes its kitchen screens", () => {
   }
 
   async function accept(
-    cfg: TradingContext,
+    cfg: WithVenueRowId,
     profileId: string,
     kitchenScreens: readonly DeviceKitchenScreen[],
   ) {

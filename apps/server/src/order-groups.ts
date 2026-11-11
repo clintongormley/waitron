@@ -636,14 +636,12 @@ export async function fireHeldLine(
  */
 export async function bumpGroupReady(
   tx: Transaction,
-  cfg: TradingContext,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
   firer: Firer = { personId: args.operatorId },
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
-  void cfg;
   return passStep(
     tx,
     partyId,

@@ -73,9 +73,9 @@ export async function insertFiscalSale(db: Database, ids: FiscalIds): Promise<vo
   await db.insert(sales).values({
     id: ids.saleId,
     // A reused venue with no device paired: its sale is a Demo seed one.
-    source: sql`case when exists (select 1 from devices where location_id = ${ids.locationId})
+    source: sql`case when exists (select 1 from devices)
       then 'device' else 'demo_seed' end`,
-    deviceId: sql`(select id from devices where location_id = ${ids.locationId} order by id limit 1)`,
+    deviceId: sql`(select id from devices order by id limit 1)`,
     nodeId: ids.nodeId,
     seriesId: ids.seriesId,
     invoiceNumber: 1,

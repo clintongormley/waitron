@@ -58,7 +58,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 import { createTable } from "./testing/live-table.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   createBareDepartment,
@@ -66,6 +66,7 @@ import {
   sendAsTill as rawSendAsTill,
   SIGNED_IN_TILL_LOCALE,
 } from "./testing/signed-in-till.js";
+import type { TradingContext } from "./trading-context.js";
 
 registerModulePermissions(VENUE_SERVICE_PERMISSIONS);
 
@@ -101,7 +102,7 @@ const MENUS = [
 type MenuName = (typeof MENUS)[number];
 
 interface Venue {
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   app: Hono;
   cookie: string;
   personId: string;

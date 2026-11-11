@@ -589,7 +589,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     const defaults = await db
       .select({ id: kitchenStations.id, isDefault: kitchenStations.isDefault })
       .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, f.cfg.locationId));
+      .where(sql`true`);
     expect(defaults.filter((row) => row.isDefault).map((row) => row.id)).toEqual([f.bar]);
     expect(await readStoredCells()).toEqual([]);
   });

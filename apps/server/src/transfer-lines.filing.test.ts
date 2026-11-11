@@ -23,7 +23,7 @@ import { nodeId as brandNodeId, rawCentsToDecimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -34,6 +34,7 @@ import { partyRevisionOfOrder } from "./parties.js";
 import { createOpenOrder } from "./working-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
@@ -76,7 +77,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
@@ -87,7 +88,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
 }
 
 interface SeededVenue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   available: AvailableProduct[];
   /** "Café" — each, 1.50 gross, general(21%). */
   coffee: AvailableProduct;

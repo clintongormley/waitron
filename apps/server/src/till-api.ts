@@ -3362,7 +3362,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       run(c, log, async () => {
         const session = await requireSession(deps, c, { action });
         const { personId } = session;
-        const cfg = requestCfg(deps.cfg, session);
         const partyId = requirePartyParam(c.req.param("id"));
         const groupId = c.req.param("gid");
         if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
@@ -3371,7 +3370,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           await checkZones(tx, session, [{ partyId }]);
           return command(
             tx,
-            cfg,
             partyId,
             groupId,
             args,
@@ -3781,7 +3779,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         if (selected.length !== ids.size || selected.some((line) => line.sourceLineId !== null))
           throw invalid("lineIds");
         const lines = selected.filter((line) => line.sourceLineId === null);
-        const zoneId = await partyZone(tx, cfg, partyId);
+        const zoneId = await partyZone(tx, partyId);
         const priced = await priceOrderLines(
           tx,
           cfg,

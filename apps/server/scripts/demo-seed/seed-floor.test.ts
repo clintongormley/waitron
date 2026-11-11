@@ -16,7 +16,7 @@ import { readLayout } from "../../src/floor-plan.js";
 import { defaultLayout } from "../../src/testing/floor-sets.js";
 import type { Placement } from "../../src/floor-reset-plan.js";
 import { createTable } from "../../src/testing/live-table.js";
-import type { WithVenueRowId } from "../../src/testing/venue-row-id.js";
+
 import { DEMO_TABLES } from "./testing/data.js";
 import { seedFloor } from "./seed-floor.js";
 import { seedCatalogues } from "./seed-catalogue.js";
@@ -24,6 +24,7 @@ import { CASA_DELGADO_ES } from "./testing/data.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
+import type { TradingContext } from "../../src/trading-context.js";
 
 const LOCALE: SeedLocale = "en";
 const TRADING_NAMES = { restaurant: "Front Bar", deli: "Back Deli" };
@@ -441,10 +442,14 @@ describe("seedFloor", () => {
         sql`select zone_id from zone_service_policies
             where is_counter_default limit 1`,
       );
-      await createTable(tx, { locationId: locationId } as WithVenueRowId, {
-        label: "Stray",
-        zoneId: rows[0]!.zone_id,
-      });
+      await createTable(
+        tx,
+        {},
+        {
+          label: "Stray",
+          zoneId: rows[0]!.zone_id,
+        },
+      );
       await seedFloor(tx, {
         locationId,
         locale: LOCALE,
@@ -463,7 +468,7 @@ describe("seedFloor", () => {
         where is_counter_default limit 1`);
       await createTable(
         tx,
-        { locationId: locationId } as WithVenueRowId,
+        {},
         { label: "Disabled stray", zoneId: rows[0]!.zone_id },
         { today: false },
       );

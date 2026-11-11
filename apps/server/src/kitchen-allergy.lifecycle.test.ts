@@ -59,9 +59,7 @@ beforeEach(async () => {
   const [station] = await v.db
     .select()
     .from(kitchenStations)
-    .where(
-      and(eq(kitchenStations.locationId, v.cfg.locationId), eq(kitchenStations.isDefault, true)),
-    );
+    .where(and(eq(kitchenStations.isDefault, true)));
   stationId = station!.id;
   await inTx(v, async (tx) => {
     const p = await createPrinter(tx, {

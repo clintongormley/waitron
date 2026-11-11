@@ -92,7 +92,6 @@ describe("dining_tables columns", () => {
     const [row] = await inTx((tx) => tx.select().from(diningTables).where(eq(diningTables.id, id)));
     expect(row).toMatchObject({
       id,
-      locationId: LOCATION_A,
       label: "T-zoned",
       zoneId: expect.any(String),
       planTableId: null,
@@ -104,7 +103,7 @@ describe("dining_tables columns", () => {
     const error = await captureError(() =>
       inTx(async (tx) => {
         tx.run(
-          sql`insert into dining_tables (id, location_id, label, created_at) values (${id}, ${LOCATION_A}, ${"T-no-zone"}, ${"2026-10-11T10:00:00.000Z"})`,
+          sql`insert into dining_tables (id, label, created_at) values (${id}, ${"T-no-zone"}, ${"2026-10-11T10:00:00.000Z"})`,
         );
       }),
     );
@@ -120,7 +119,6 @@ describe("dining_tables columns", () => {
       "created_at",
       "id",
       "label",
-      "location_id",
       "needs_clearing_since",
       "plan_table_id",
       "short_name",
@@ -134,7 +132,7 @@ describe("dining_tables columns", () => {
     const error = await captureError(() => seedTable(LOCATION_A, "Tower 1", "t1"));
     expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toBe(
-      "UNIQUE constraint failed: dining_tables.location_id, dining_tables.short_name_key",
+      "UNIQUE constraint failed: dining_tables.short_name_key",
     );
   });
 
@@ -165,9 +163,8 @@ describe("dining_tables columns", () => {
     expect(row).toEqual({ shortNameKey: "T1" });
   });
 
-  it("lets two venues use one short name, and any number of tables have none", async () => {
-    await seedTable(LOCATION_A, "Garden 1", "G1");
-    const other = await seedTable(LOCATION_B, "Garden 1", "G1");
+  it("allows any number of tables without a short name", async () => {
+    const other = await seedTable(LOCATION_A, "Garden 1", "G1");
     const first = await seedTable(LOCATION_A, "Unnamed 1");
     const second = await seedTable(LOCATION_A, "Unnamed 2");
     const rows = await inTx((tx) =>

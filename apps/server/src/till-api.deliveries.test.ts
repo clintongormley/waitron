@@ -59,7 +59,7 @@ import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { deletePrinter } from "./printer-delete.js";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createOpenOrder } from "./working-order.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -114,7 +114,7 @@ interface Venue {
   /** Whether the till's mail transport check answers available; true unless a case says. */
   email: { transport: boolean | Error };
   logged: unknown[][];
-  cfg: WithVenueRowId;
+  cfg: TradingContext;
   scriptCfg: TradingContext & { origin: ReturnType<typeof jobOrigin> };
   app: Hono;
   cookie: string;
@@ -162,7 +162,7 @@ async function venue(): Promise<Venue> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const venueId = await venueLocationId(suite.db);
-  const cfg: WithVenueRowId = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(result.nodeId),
     locationId: venueId,
     locale: LOCALE,
@@ -401,13 +401,13 @@ async function upstairsOffice(v: Venue): Promise<string> {
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
       .from(devices)
-      .where(eq(devices.locationId, v.cfg.locationId))) {
+      .where(sql`true`)) {
       await listInvoicePrinter(tx, { profileId, pagePrinterId: upstairs!.id, isDefault: false });
     }
     await tx
       .update(devices)
       .set({ invoicePrinterId: null, invoicePagePrinterId: upstairs!.id })
-      .where(eq(devices.locationId, v.cfg.locationId));
+      .where(sql`true`);
     return upstairs!.id;
   });
 }
@@ -953,13 +953,13 @@ async function invoiceReceiptPrinter(v: Venue): Promise<string> {
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
       .from(devices)
-      .where(eq(devices.locationId, v.cfg.locationId))) {
+      .where(sql`true`)) {
       await listInvoicePrinter(tx, { profileId, printerId: printer.id, isDefault: false });
     }
     await tx
       .update(devices)
       .set({ invoicePrinterId: printer.id, invoicePagePrinterId: null })
-      .where(eq(devices.locationId, v.cfg.locationId));
+      .where(sql`true`);
     return printer.id;
   });
 }
@@ -1178,7 +1178,7 @@ describe("a receipt printer as the till's invoice printer", () => {
       for (const { profileId } of await tx
         .selectDistinct({ profileId: devices.deviceProfileId })
         .from(devices)
-        .where(eq(devices.locationId, v.cfg.locationId))) {
+        .where(sql`true`)) {
         const lists = await readProfilePrinterLists(tx, profileId!);
         await setProfilePrinterLists(tx, profileId!, {
           ...lists,
@@ -1339,7 +1339,7 @@ describe("a receipt printer as the till's invoice printer", () => {
     await suite.db
       .update(devices)
       .set({ receiptPrinterId: replacement.id })
-      .where(eq(devices.locationId, v.cfg.locationId));
+      .where(sql`true`);
     expect((await readStatus(v, orderId)).body).toMatchObject({
       actions: { retryOriginal: { medium: "receipt" } },
     });

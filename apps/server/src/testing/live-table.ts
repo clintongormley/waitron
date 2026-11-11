@@ -8,11 +8,10 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import type { WithVenueRowId } from "./venue-row-id.js";
 
 export async function createTable(
   tx: Transaction,
-  cfg: WithVenueRowId,
+  _cfg: unknown,
   input: { label: string; zoneId: string; shortName?: string },
   options: { today?: boolean } = {},
 ): Promise<{ id: string }> {

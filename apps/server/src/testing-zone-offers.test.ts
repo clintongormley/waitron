@@ -34,7 +34,7 @@ import { parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeCategoryTo, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -47,7 +47,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   catalogueId: string;
   coffee: string;
   toast: string;
@@ -66,7 +66,7 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
   await seedLegacySellingUnits(db);
   const locationId = await venueLocationId(db);
   const kitchen = await seedKitchenStation(db, {});
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db)),
     locationId,

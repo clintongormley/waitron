@@ -97,7 +97,6 @@ describe("seedVenue", () => {
       province: null,
       timeZone: "Atlantic/Canary",
       dayCutover: "06:00:00",
-      defaultCatalogueId: null,
     });
   });
 
@@ -107,7 +106,9 @@ describe("seedVenue", () => {
       .values({ name: "Menu" })
       .returning({ id: catalogues.id });
     await seedVenue(db, { defaultCatalogueId: catalogue!.id });
-    expect((await readVenue(db)).defaultCatalogueId).toBe(catalogue!.id);
+    expect(
+      await db.select({ id: catalogues.id }).from(catalogues).where(eq(catalogues.isDefault, true)),
+    ).toEqual([{ id: catalogue!.id }]);
   });
 
   it("seedVenue refuses a second venue", async () => {
@@ -182,19 +183,19 @@ describe("seedKitchenStation", () => {
   }
 
   it("defaults to a DEFAULT station named 'Cocina' and returns its id", async () => {
-    const { location } = await seedTenantAndLocation();
+    await seedTenantAndLocation();
     const id = await seedKitchenStation(db, {});
     // Read through the table rather than as raw SQL: SQLite stores a flag as 0/1 and only the
     // column's own mapping turns it back into a boolean.
     const rows = await db
       .select({ name: kitchenStations.name, isDefault: kitchenStations.isDefault })
       .from(kitchenStations)
-      .where(and(eq(kitchenStations.id, id), eq(kitchenStations.locationId, location)));
+      .where(and(eq(kitchenStations.id, id)));
     expect(rows[0]).toEqual({ name: "Cocina", isDefault: true });
   });
 
   it("honours an overridden name and is_default", async () => {
-    const { location } = await seedTenantAndLocation();
+    await seedTenantAndLocation();
     const id = await seedKitchenStation(db, {
       name: "Barra",
       isDefault: false,
@@ -223,13 +224,12 @@ describe("seedDevice", () => {
 
   it("seedDevice pairs an active device on a new till profile at the location", async () => {
     await seedTenant(db);
-    const location = await seedLocation(db);
+    await seedLocation(db);
     const { deviceId, profileId } = await seedDevice(db, { label: "Barra" });
     const [row] = await db
       .select({
         label: devices.label,
         active: devices.active,
-        locationId: devices.locationId,
         formFactor: deviceProfiles.formFactor,
         capabilities: deviceProfiles.capabilities,
       })
@@ -239,7 +239,6 @@ describe("seedDevice", () => {
     expect(row).toEqual({
       label: "Barra",
       active: true,
-      locationId: location,
       formFactor: "till",
       capabilities: [],
     });
@@ -248,7 +247,7 @@ describe("seedDevice", () => {
 
   it("seedDevice reuses a given profile and takes the form factor and capabilities asked for", async () => {
     await seedTenant(db);
-    const location = await seedLocation(db);
+    await seedLocation(db);
     const first = await seedDevice(db, {
       formFactor: "phone-portrait",
       capabilities: ["take-cash"],
@@ -263,29 +262,6 @@ describe("seedDevice", () => {
       })
       .from(deviceProfiles);
     expect(profiles).toEqual([{ formFactor: "phone-portrait", capabilities: ["take-cash"] }]);
-  });
-
-  it("seedDevice with an explicit locationId puts the device there, not at the venue", async () => {
-    await seedVenue(db);
-    const [second] = await db.insert(locations).values({}).returning({ id: locations.id });
-    await seedVenueSettings(db, { operationDescription: "Restaurant" });
-    await seedBusinessDay(db, {});
-    const { deviceId } = await seedDevice(db, {});
-    const [row] = await db
-      .select({ locationId: devices.locationId })
-      .from(devices)
-      .where(eq(devices.id, deviceId));
-    expect(row!.locationId).toBe(second!.id);
-  });
-
-  it("seedDevice with no locationId puts the device at the venue", async () => {
-    await seedVenue(db);
-    const { deviceId } = await seedDevice(db);
-    const [row] = await db
-      .select({ locationId: devices.locationId })
-      .from(devices)
-      .where(eq(devices.id, deviceId));
-    expect(row!.locationId).toBe(await venueLocationId(db));
   });
 
   it("seedDevice with no venue refuses before writing a profile", async () => {
@@ -305,17 +281,15 @@ describe("seedWorkingOrder", () => {
 
   it("seedWorkingOrder writes an open order at the venue", async () => {
     await seedVenue(db);
-    const venueId = await venueLocationId(db);
     const order = await seedWorkingOrder(db);
     expect(order).toMatchObject({
       status: "open",
       source: "dashboard",
       orderNumber: 1,
-      locationId: venueId,
     });
     const node = await seedNode(db);
     const overridden = await seedWorkingOrder(db, { orderNumber: 7, nodeId: node });
-    expect(overridden).toMatchObject({ orderNumber: 7, nodeId: node, locationId: venueId });
+    expect(overridden).toMatchObject({ orderNumber: 7, nodeId: node });
   });
 });
 
@@ -330,6 +304,6 @@ describe("the helpers inside a transaction", () => {
       return seedWorkingOrder(tx, { nodeId: node });
     });
     expect((await readVenue(suite.db)).name).toBe("In a transaction");
-    expect(order.locationId).toBe(await venueLocationId(suite.db));
+    expect(order.nodeId).toEqual(expect.any(String));
   });
 });

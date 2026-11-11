@@ -22,7 +22,7 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { parkOrder, moveOrderLines } from "./working-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -48,7 +48,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: WithVenueRowId<OriginConfig>;
+  cfg: OriginConfig;
   coffeeId: string;
   waterId: string;
   hamId: string;
@@ -71,7 +71,7 @@ async function setupVenue(): Promise<Seeded> {
   await seedLegacySellingUnits(db);
   const locationId = await venueLocationId(db);
   const nodeId = await seedNode(db);
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locationId: locationId,
@@ -356,7 +356,7 @@ describe("transfer — extras children (FIX 2 cascade)", () => {
    *  line names. `minPicks: 0` leaves the list optional, so the dish still orders on its own. */
   async function addExtra(
     tx: Transaction,
-    cfg: WithVenueRowId<OriginConfig>,
+    cfg: OriginConfig,
     dishId: string,
     extraProductId: string,
   ): Promise<string> {

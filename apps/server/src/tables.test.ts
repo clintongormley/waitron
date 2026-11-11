@@ -30,7 +30,7 @@ import {
 } from "@waitron/catalogue";
 import { AppError, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { listTables, listZones, updateZone } from "./tables.js";
 import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -61,7 +61,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(opts: { timeZone?: string } = {}): Promise<WithVenueRowId<OriginConfig>> {
+async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfig> {
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
   await seedVenue(db, {
     name: "Main bar",
@@ -392,7 +392,7 @@ async function setupTabVenue(): Promise<{
   const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { name: "Kitchen" });
   const nodeId = await seedNode(db);
-  const cfg: WithVenueRowId<OriginConfig> = {
+  const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     locationId: locationId,

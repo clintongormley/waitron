@@ -50,6 +50,9 @@ import {
   sealedStateAlertSource,
 } from "./alert-sources.js";
 import { createTtlCache } from "./ttl-cache.js";
+import { createAlertRegistry } from "./alerts.js";
+import { ALL_ALERT_CLAIMS } from "./modules.js";
+import "./errors.js";
 
 // No real role holds hardware.manage without fiscal.view and system.manage, so a test replaces
 // one role's held set while the real alert claims stay in force.
@@ -65,9 +68,6 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 afterEach(() => {
   roleOverride.clear();
 });
-import { createAlertRegistry } from "./alerts.js";
-import { ALL_ALERT_CLAIMS } from "./modules.js";
-import "./errors.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

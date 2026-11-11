@@ -79,12 +79,9 @@ export async function prepareStandbyDatabase(
     .from(invoiceSeries)
     .where(and(eq(invoiceSeries.nodeId, primary.nodeId), isNull(invoiceSeries.retiredAt)));
   await target.insert(tenants).values(tenant);
-  if (location.catalogueId !== null) {
-    const catalogue = (
-      await source.select().from(catalogues).where(eq(catalogues.id, location.catalogueId))
-    )[0]!;
-    await target.insert(catalogues).values(catalogue);
-  }
+  const catalogue = await source.select().from(catalogues).where(eq(catalogues.isDefault, true));
+  if (catalogue.length > 0) await target.insert(catalogues).values(catalogue);
+
   await target.insert(locations).values(location);
   await seedVenueSettings(target, (await readVenueSettings(source)).doc);
   await target.insert(nodes).values(node);

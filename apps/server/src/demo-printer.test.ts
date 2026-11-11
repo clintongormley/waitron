@@ -182,7 +182,7 @@ describe("the Demo printer", () => {
     expect(job?.status).toBe("failed");
   });
 
-  it("finds its printer on the venue and local-key index, not a scan", async () => {
+  it("finds its printer on the local-key index, not a scan", async () => {
     await venue();
     await configureDemoPrinter(suite.db, true);
     const session = (
@@ -209,9 +209,7 @@ describe("the Demo printer", () => {
     });
     const plan = await withTransaction(suite.db, (tx) => tx.execute<{ detail: string }>(statement));
     expect(plan.rows.map((row) => row.detail)).toEqual([
-      expect.stringContaining(
-        "SEARCH printers USING INDEX printers_local_key_key (location_id=? AND local_key=?)",
-      ),
+      expect.stringContaining("SEARCH printers USING INDEX printers_local_key_key (local_key=?)"),
     ]);
   });
 

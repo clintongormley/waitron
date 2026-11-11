@@ -334,7 +334,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const made = (await groupsOf(receivingParty.partyId)).at(-1)!.id;
     expect(await passGroupsOf(b2)).toEqual([made]);
     const ready = await command(receivingParty.partyId);
-    await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, receivingParty.partyId, made, ready));
+    await inTx(v, (tx) => bumpGroupReady(tx, receivingParty.partyId, made, ready));
     expect(await firedTicketsOf(b2)).toEqual([{ lineId: expect.any(String), state: "ready" }]);
   });
 
@@ -893,12 +893,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
       tx
         .select({ id: kitchenStations.id, name: kitchenStations.name })
         .from(kitchenStations)
-        .where(
-          and(
-            eq(kitchenStations.locationId, v.cfg.locationId),
-            eq(kitchenStations.isDefault, true),
-          ),
-        ),
+        .where(and(eq(kitchenStations.isDefault, true))),
     );
     return station!;
   }

@@ -784,7 +784,7 @@ describe("kitchen groups when a bill leaves its party", () => {
       operatorId: OPERATOR,
     });
     const readyArgs = await args();
-    await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, ana.partyId, wine!.groupId!, readyArgs));
+    await inTx(v, (tx) => bumpGroupReady(tx, ana.partyId, wine!.groupId!, readyArgs));
     const servedArgs = await args();
     await inTx(v, (tx) =>
       markServed(tx, v.cfg, ana.partyId, [{ lineId: wine!.id, quantity: "1" }], servedArgs),

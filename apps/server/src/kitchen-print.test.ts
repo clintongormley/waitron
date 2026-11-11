@@ -37,7 +37,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter, endDeletedPrinterJobs } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import {
   createCourse,
   createStation,
@@ -498,7 +498,7 @@ async function makeSharedPrinter(
  */
 async function fireContextlessDish(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   dishId: string,
   pickIds: string[],
 ): Promise<string> {
@@ -2541,11 +2541,7 @@ describe("the table a slip names (spec decision 9)", () => {
 });
 
 describe("a station printer that was deleted", () => {
-  async function stationWithTwo(
-    tx: Transaction,
-    cfg: WithVenueRowId<OriginConfig>,
-    catalogueId: string,
-  ) {
+  async function stationWithTwo(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
     const kitchenStation = await createStation(tx, { name: "Kitchen", isDefault: true });
     const p = await makePrinter(tx, "Old kitchen");
     const q = await makePrinter(tx, "Kitchen Q");
@@ -2734,7 +2730,7 @@ describe("the party's name on a kitchen ticket", () => {
       const [station] = await tx
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
-        .where(eq(kitchenStations.locationId, v.cfg.locationId));
+        .where(sql`true`);
       const id = await makePrinter(tx, "Kitchen");
       await attachPrinterToStation(tx, {
         stationId: station!.id,
@@ -2875,11 +2871,7 @@ describe("A803 portion grouping", () => {
   /** Kitchen (with a printer, showing the rest of the order) and Fryer (with its own printer); a
    * Burger with a Cheese extra of up to two and Oysters at Kitchen, Chips and Octopus (sold by
    * weight) at Fryer; and a party's open bill at a fresh table. */
-  async function portionKitchen(
-    tx: Transaction,
-    cfg: WithVenueRowId<OriginConfig>,
-    catalogueId: string,
-  ) {
+  async function portionKitchen(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
     const kitchen = await createStation(tx, { name: "Kitchen", isDefault: true });
     const fryer = await createStation(tx, { name: "Fryer" });
     await updateStation(tx, kitchen.id, { showsRestOfOrder: true });

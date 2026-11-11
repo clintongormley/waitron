@@ -513,8 +513,8 @@ describe("working_orders state machine (enforce_transition)", () => {
     const error = await captureError(() =>
       inTx(async (tx) =>
         tx.run(sql`
-      insert into working_orders (id, source, device_id, node_id, location_id, order_number, status, opened_at, invoice_type)
-      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${LOCATION_A}, ${nextOrderNumber++}, 'open', ${AT}, 'other')
+      insert into working_orders (id, source, device_id, node_id, order_number, status, opened_at, invoice_type)
+      values ('invalid-invoice-choice', 'device', ${deviceA}, ${nodeA}, ${nextOrderNumber++}, 'open', ${AT}, 'other')
     `),
       ),
     );
@@ -536,7 +536,6 @@ describe("working_orders state machine (enforce_transition)", () => {
   it.each([
     ["the device that opened it", "device", () => ({ deviceId: deviceB })],
     ["its source", "dashboard", () => ({ source: "kitchen_timer" as const })],
-    ["its location", "device", () => ({ locationId: LOCATION_B })],
   ] as const)("rejects changing %s on a placed order", async (_what, opener, change) => {
     const id = await open(
       opener === "device"

@@ -392,7 +392,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 18,
+  version: 19,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -418,7 +418,6 @@ const bundle: ConfigurationBundle = {
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
-  defaultCatalogueId: null,
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1", name: "Coffee" }] },
@@ -3944,9 +3943,7 @@ async function importedShortNames(target: { locationId: string }) {
   return targetSuite.db
     .select({ shortName: diningTables.shortName, shortNameKey: diningTables.shortNameKey })
     .from(diningTables)
-    .where(
-      and(eq(diningTables.locationId, target.locationId), eq(diningTables.label, "Rt table 1")),
-    );
+    .where(and(eq(diningTables.label, "Rt table 1")));
 }
 
 it("carries each table's short name, and the import sets the live table's key from it", async () => {

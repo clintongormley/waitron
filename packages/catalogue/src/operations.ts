@@ -23,7 +23,6 @@ import {
 import {
   catalogues,
   categories,
-  locations,
   menuItems,
   menuItemVariantOverrides,
   now,
@@ -34,8 +33,6 @@ import {
   units,
 } from "@waitron/db";
 import { readCategory } from "./categories.js";
-export { createCategory, listCategories, updateCategory } from "./categories.js";
-export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
 import "./errors.js"; // load the code registry for the `catalogue.*`/`product.*`/`menu_*` codes thrown below
 import { publishedAllergens } from "./derivation.js";
@@ -89,6 +86,7 @@ import {
 } from "./variant-fallback.js";
 export type {
   AvailableProduct,
+  ListedVariant,
   MenuItem,
   MenuOffer,
   MenuOfferVariant,
@@ -98,8 +96,10 @@ export type {
   OfferedExtrasList,
   OfferedModifier,
   OfferedOptionsList,
+  Product,
 } from "@waitron/shared";
-export type { ListedVariant, Product } from "@waitron/shared";
+export { createCategory, listCategories, updateCategory } from "./categories.js";
+export type { Category } from "./categories.js";
 
 /**
  * Deactivation is `active = false`, never DELETE: a product may sit behind historical sale-line
@@ -1206,8 +1206,17 @@ export async function deactivateProduct(tx: Transaction, id: string): Promise<vo
   await archiveProducts(tx, [id]);
 }
 
+export async function readDefaultCatalogueId(tx: Transaction): Promise<string | null> {
+  const [row] = await tx
+    .select({ id: catalogues.id })
+    .from(catalogues)
+    .where(eq(catalogues.isDefault, true));
+  return row?.id ?? null;
+}
+
 export async function assignCatalogueToVenue(tx: Transaction, catalogueId: string): Promise<void> {
-  await tx.update(locations).set({ catalogueId });
+  await tx.update(catalogues).set({ isDefault: false }).where(eq(catalogues.isDefault, true));
+  await tx.update(catalogues).set({ isDefault: true }).where(eq(catalogues.id, catalogueId));
 }
 
 export async function setVenueDefaultCatalogue(

@@ -36,15 +36,16 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import type { PassBoard, PassCard, PassCardItem } from "./pass-card.js";
 import { boardCards, boardItems } from "./testing/pass-board-probe.js";
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
+import type { TradingContext } from "./trading-context.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let ana: { id: string };
 let starterCourseId: string;
 let mainCourseId: string;
@@ -123,7 +124,7 @@ function collect(
 }
 
 /** `seriesId` is unused (no fiscal write on the coursing/fire path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): WithVenueRowId {
+function makeCfg(locationId: string, nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: locationId,

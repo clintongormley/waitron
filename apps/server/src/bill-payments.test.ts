@@ -410,7 +410,7 @@ describe("invoice selection before reserving new bill money", () => {
 
   async function pay(
     billId: string,
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     method: "cash" | "manual" | "reader",
     amount = "1.00",
   ) {

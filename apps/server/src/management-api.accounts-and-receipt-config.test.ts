@@ -38,12 +38,11 @@ import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
 import { AppError, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import type { AccountEmail } from "./account-email.js";
 import { flushAccountMail } from "./testing/account-mail.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import type { MailTransport } from "./mail-sender.js";
-type MailSink = (message: AccountEmail) => Promise<"sent" | "captured">;
+import type { TradingContext } from "./trading-context.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
 import {
   mountManagementApi,
@@ -52,6 +51,7 @@ import {
 } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+type MailSink = (message: AccountEmail) => Promise<"sent" | "captured">;
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -92,7 +92,7 @@ function invitationBody(
   };
 }
 
-let venueCfg: WithVenueRowId | undefined;
+let venueCfg: TradingContext | undefined;
 
 async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   const venue = await applyVenue(

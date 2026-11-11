@@ -1,4 +1,3 @@
-import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -13,7 +12,6 @@ import { venueLocationId } from "../venue.js";
 import { diningTables } from "./dining-tables.js";
 import { floorZones } from "./floor-zones.js";
 import { workingOrderLines } from "./orders.js";
-import { locations } from "./tenants.js";
 
 // What this suite proves is the schema half: the Drizzle export's column mapping, and the
 // `dining_tables.zone_id` foreign key.
@@ -98,25 +96,6 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
     await expect(seedZone(LOCATION_A, "Live duplicate")).rejects.toThrow(
       "UNIQUE constraint failed:",
     );
-  });
-
-  it("allows equal names in separate locations", async () => {
-    const [other] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
-    await seedVenueSettings(suite.db, {
-      name: "Loc B",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    });
-    await seedBusinessDay(suite.db, {});
-    const first = await seedZone(LOCATION_A, "Shared");
-    const second = await seedZone(other!.id, "Shared");
-    expect(second).not.toBe(first);
-    expect(
-      await suite.db
-        .select({ name: floorZones.name })
-        .from(floorZones)
-        .where(eq(floorZones.name, "Shared")),
-    ).toEqual([{ name: "Shared" }, { name: "Shared" }]);
   });
 
   it("working_order_lines.served_at is readable and writable", async () => {

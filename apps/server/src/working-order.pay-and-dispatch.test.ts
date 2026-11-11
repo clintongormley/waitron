@@ -499,7 +499,7 @@ async function ticketItemIdsFor(orderId: string): Promise<string[]> {
  * `withTransaction` scope — they run on a CALLER-supplied transaction.
  */
 async function asTenant<T>(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {
   void cfg;
@@ -513,7 +513,9 @@ async function asTenant<T>(
  * device of its own.
  */
 /** `cfg` as a request from a second device at the venue. */
-async function addDevice(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
+async function addDevice(
+  cfg: WithVenueRowId<DeviceRequestConfig>,
+): Promise<WithVenueRowId<DeviceRequestConfig>> {
   return deviceRequestCfg(suite.db, cfg);
 }
 
@@ -523,7 +525,9 @@ async function addDevice(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig>
  * they are venue-wide (#259): a node reaches the venue's open tabs regardless of the
  * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
-async function addNode(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
+async function addNode(
+  cfg: WithVenueRowId<DeviceRequestConfig>,
+): Promise<WithVenueRowId<DeviceRequestConfig>> {
   return { ...cfg, nodeId: await seedNode(suite.db) };
 }
 
@@ -2657,7 +2661,7 @@ describe("the pass board — venue-wide", () => {
       OPERATOR,
     );
 
-    const orderIdsOn = (cfg: DeviceRequestConfig) =>
+    const orderIdsOn = (cfg: WithVenueRowId<DeviceRequestConfig>) =>
       asTenant(cfg, async (tx) =>
         boardCards(await readScopedPassBoard(tx, EVERY)).flatMap((card) =>
           card.orders.map((order) => order.orderId),

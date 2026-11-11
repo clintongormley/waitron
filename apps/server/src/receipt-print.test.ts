@@ -89,7 +89,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow } from "./till-config.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import {
   collectOrderOrchestration as collectOrder,
   printSaleReceipt,
@@ -145,6 +145,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
+import type { TradingContext } from "./trading-context.js";
 
 /**
  * PRINTING NEVER OPENS THE DRAWER (CLAUDE.md §5): a receipt is a `document` job carrying no drawer
@@ -194,7 +195,7 @@ function nextTaxId(): string {
   return nifWithControlLetter(60_000_000 + taxIdCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowId {
+function tillConfigFromVenue(venue: VenueResult, venueId: string): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: venueId,
@@ -209,7 +210,7 @@ function tillConfigFromVenue(venue: VenueResult, venueId: string): WithVenueRowI
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   each: AvailableProduct & { menuItemId: string };
   zoneId: string;
 }> {
@@ -318,7 +319,7 @@ async function makePrinter({
 }
 
 async function configureReceipt(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   opts: { printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -340,9 +341,9 @@ const NO_DRAWER_CAPABILITY = CAPABILITY_FLAGS.filter((flag) => flag !== "open-ca
 
 /** `cfg` as a request from a new device at its location whose profile lacks `capability`. */
 async function deviceWithout(
-  cfg: WithVenueRowId<DeviceRequestConfig>,
+  cfg: DeviceRequestConfig,
   capability: string,
-): Promise<WithVenueRowId<DeviceRequestConfig>> {
+): Promise<DeviceRequestConfig> {
   const { deviceId } = await seedDevice(suite.db, {
     capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== capability),
   });
@@ -1511,10 +1512,10 @@ describe("receipt commands and cash drawer jobs after filing", () => {
 describe("every device whose profile allows the drawer opens its chosen drawer", () => {
   /** Another till device at the venue's location, and the config a sale there runs under. */
   async function addNode(
-    cfg: WithVenueRowId<DeviceRequestConfig>,
+    cfg: DeviceRequestConfig,
     name: string,
     capabilities: string[] = [...CAPABILITY_FLAGS],
-  ): Promise<WithVenueRowId<DeviceRequestConfig>> {
+  ): Promise<DeviceRequestConfig> {
     const { deviceId } = await seedDevice(suite.db, {
       label: name,
       capabilities,
@@ -2089,10 +2090,7 @@ describe("a record with no device prints nothing", () => {
 });
 
 describe("the device's invoice printer", () => {
-  async function officePrinter(
-    cfg: WithVenueRowId<DeviceRequestConfig>,
-    active = true,
-  ): Promise<string> {
+  async function officePrinter(cfg: DeviceRequestConfig, active = true): Promise<string> {
     const [row] = await suite.db
       .insert(pagePrinters)
       .values({
@@ -3536,7 +3534,7 @@ describe("department receipt presentation on thermal jobs", () => {
       await suite.db
         .update(printers)
         .set({ paperWidth })
-        .where(eq(printers.locationId, cfg.locationId));
+        .where(sql`true`);
 
       await storeDepartmentReceipt(departmentId, { logo: `${"b".repeat(64)}.png` }, OWN_PAIR);
       const ticket = await sell();
@@ -3849,7 +3847,7 @@ describe("the theme's logo on thermal receipts", () => {
     await suite.db
       .update(printers)
       .set({ paperWidth })
-      .where(eq(printers.locationId, cfg.locationId));
+      .where(sql`true`);
     const [{ departmentId }] = await suite.db
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)

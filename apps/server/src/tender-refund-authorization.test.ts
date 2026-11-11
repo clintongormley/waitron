@@ -37,7 +37,7 @@ import {
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import {
   watchDerivationsAndLock,
@@ -55,7 +55,7 @@ const PIN = "4567";
 const PIN_HASH = hashPin(PIN);
 const CAPS = ["take-cash", "hand-keyed-card-payment", "integrated-card-payment"];
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: WithVenueRowId<DeviceRequestConfig>;
+let cfg: DeviceRequestConfig;
 let profileId: string;
 let personId: string;
 let managerId: string;

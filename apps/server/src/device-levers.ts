@@ -75,7 +75,6 @@ export function mountDeviceLevers(
   app.post("/api/device/parties/:id/groups/:gid/ready", (c) =>
     run(c, log, async () => {
       const device = await requireKitchenDisplay(deps, c, "prepare-orders");
-      const cfg = requestCfg(deps.cfg, device);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
@@ -84,7 +83,7 @@ export function mountDeviceLevers(
       const answer = await withTransaction(deps.db, async (tx) => {
         const zoneId = (await partyWatchZones(tx, [partyId])).get(partyId) ?? null;
         await VENUE_SERVICE.assertPassScreenZone(tx, device.deviceId, zoneId);
-        return bumpGroupReady(tx, cfg, partyId, groupId, args, { deviceId: device.deviceId });
+        return bumpGroupReady(tx, partyId, groupId, args, { deviceId: device.deviceId });
       });
       return c.json(answer);
     }),

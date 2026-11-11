@@ -84,7 +84,7 @@ async function seed(db: Database): Promise<void> {
     operationDescription: "Hostelería",
   });
   LOCATION_A = await venueLocationId(db);
-  DASHBOARD_ORDER = { source: "dashboard", deviceId: null, locationId: LOCATION_A };
+  DASHBOARD_ORDER = { source: "dashboard", deviceId: null };
   const [catA] = await db
     .insert(catalogues)
     .values({ name: "Deli A" })
@@ -149,8 +149,8 @@ describe("working_orders", () => {
       db.execute(
         // `id` and `order_number` are named so the statement reaches the status CHECK rather than
         // a NOT NULL refusal: `id` is a `$defaultFn` generator a raw insert never runs.
-        sql`insert into working_orders (id, source, location_id, order_number, status, opened_at)
-             values (${randomUUID()}, 'dashboard', ${LOCATION_A}, ${++orderNumberSeq}, 'paid', ${AT})`,
+        sql`insert into working_orders (id, source, order_number, status, opened_at)
+             values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'paid', ${AT})`,
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -160,8 +160,8 @@ describe("working_orders", () => {
     // assertion above just as well; `placed` is a listed status and no other case in this file
     // writes one, so it is the value that separates "this list is enforced" from "nothing gets in".
     await db.execute(
-      sql`insert into working_orders (id, source, location_id, order_number, status, opened_at)
-           values (${randomUUID()}, 'dashboard', ${LOCATION_A}, ${++orderNumberSeq}, 'placed', ${AT})`,
+      sql`insert into working_orders (id, source, order_number, status, opened_at)
+           values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'placed', ${AT})`,
     );
     const placed = await rows<{ status: string }>(
       db,
@@ -311,7 +311,7 @@ describe("working_orders", () => {
       .set({ status: "settled", settledAt: AT })
       .where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.update(workingOrders).set({}).where(eq(workingOrders.id, id)),
+      db.update(workingOrders).set({ status: "settled" }).where(eq(workingOrders.id, id)),
     );
     expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
@@ -320,7 +320,7 @@ describe("working_orders", () => {
     const id = await openOrder(db);
     await db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     const error = await captureError(() =>
-      db.update(workingOrders).set({}).where(eq(workingOrders.id, id)),
+      db.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id)),
     );
     expect(triggerRaised(error, TRANSITION_REFUSAL)).toBe(true);
   });
@@ -421,13 +421,12 @@ describe("working_orders", () => {
         id: workingOrders.id,
         source: workingOrders.source,
         deviceId: workingOrders.deviceId,
-        locationId: workingOrders.locationId,
       })
       .from(workingOrders);
     expect(stored).toEqual(
       expect.arrayContaining([
-        { id: fromDevice!.id, source: "device", deviceId, locationId: LOCATION_A },
-        { id: fromDashboard, source: "dashboard", deviceId: null, locationId: LOCATION_A },
+        { id: fromDevice!.id, source: "device", deviceId },
+        { id: fromDashboard, source: "dashboard", deviceId: null },
       ]),
     );
   });
@@ -466,27 +465,15 @@ describe("working_orders", () => {
   it("refuses a source that is not on the list", async () => {
     const error = await captureError(() =>
       db.execute(
-        sql`insert into working_orders (id, source, location_id, order_number, status, opened_at)
-             values (${randomUUID()}, 'till', ${LOCATION_A}, ${++orderNumberSeq}, 'open', ${AT})`,
+        sql`insert into working_orders (id, source, order_number, status, opened_at)
+             values (${randomUUID()}, 'till', ${++orderNumberSeq}, 'open', ${AT})`,
       ),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toBe("CHECK constraint failed: working_orders_source_ck");
   });
 
-  it("refuses an order with no location", async () => {
-    const error = await captureError(() =>
-      db.execute(
-        sql`insert into working_orders (id, source, order_number, status, opened_at)
-             values (${randomUUID()}, 'dashboard', ${++orderNumberSeq}, 'open', ${AT})`,
-      ),
-    );
-    expect(engineErrorMessage(error)).toBe(
-      "NOT NULL constraint failed: working_orders.location_id",
-    );
-  });
-
-  it("rejects a device or a location that does not exist with a foreign-key violation", async () => {
+  it("rejects a device that does not exist with a foreign-key violation", async () => {
     const ghost = "99999999-9999-4999-8999-999999999999";
     const noDevice = await captureError(() =>
       db.insert(workingOrders).values({
@@ -497,14 +484,6 @@ describe("working_orders", () => {
       }),
     );
     expect(isRefusal(noDevice, FOREIGN_KEY_VIOLATION)).toBe(true);
-    const noLocation = await captureError(() =>
-      db.insert(workingOrders).values({
-        ...DASHBOARD_ORDER,
-        orderNumber: ++orderNumberSeq,
-        openedAt: AT,
-      }),
-    );
-    expect(isRefusal(noLocation, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 });
 

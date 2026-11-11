@@ -11,6 +11,7 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { catalogues } from "./catalogue.js";
+import { UNIQUE_VIOLATION } from "../sql-state.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -34,6 +35,24 @@ const AT = "2026-07-20T19:20:30.000Z";
 async function columnsOf(db: Database, table: string): Promise<ColumnRow[]> {
   return rows<ColumnRow>(db, sql`select name, "notnull" from pragma_table_info(${table})`);
 }
+
+it("a second default menu is refused, while two non-default menus are allowed", async () => {
+  const insert = (id: string, isDefault: number) =>
+    suite.db.run(sql`
+    insert into catalogues (id, name, is_default, created_at, updated_at)
+    values (${id}, ${id}, ${isDefault}, ${AT}, ${AT})`);
+  await insert("house", 1);
+  await insert("day", 0);
+  await insert("evening", 0);
+  const error = await captureError(() => insert("duplicate", 1));
+  expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+  expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: catalogues.is_default");
+  expect(suite.db.all(sql`select id, is_default from catalogues order by id`)).toEqual([
+    { id: "day", is_default: 0 },
+    { id: "evening", is_default: 0 },
+    { id: "house", is_default: 1 },
+  ]);
+});
 
 describe("catalogue — menu, taxonomy and priced items", () => {
   let db: Database;
@@ -77,12 +96,12 @@ describe("catalogue — menu, taxonomy and priced items", () => {
     await db.execute(insertProduct("each", "general"));
   });
 
-  it("has a snapshot category column on both line tables and catalogue_id on locations", async () => {
+  it("has a snapshot category column on both line tables and no catalogue_id on locations", async () => {
     const present = async (table: string, column: string) =>
       (await columnsOf(db, table)).some((c) => c.name === column);
     expect(await present("sale_lines", "category")).toBe(true);
     expect(await present("working_order_lines", "category")).toBe(true);
-    expect(await present("locations", "catalogue_id")).toBe(true);
+    expect(await present("locations", "catalogue_id")).toBe(false);
   });
 
   it("products carries a plain-text name and a nullable customer_name, and no descriptions", async () => {

@@ -320,7 +320,7 @@ function cannedProvider(
  * same order find that charge unfiled and file it (`recover` / `recover-settle`). `second()` is that
  * Pay's outcome; `reader` is the client it would have asked.
  */
-function chargedThenFiledBySecondPay(cfg: DeviceRequestConfig) {
+function chargedThenFiledBySecondPay(cfg: WithVenueRowId<DeviceRequestConfig>) {
   const { deps, client: reader } = integratedDeps(suite.db);
   let second: IntegratedPayOutcome | undefined;
   const provider: PaymentProvider = {
@@ -378,7 +378,7 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
+async function makeReceiptPrinter(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, {
       name: "Recibos",
@@ -395,7 +395,7 @@ async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
 
 /** The receipt payloads enqueued to `printerId`, as the shared `binary` column hands them back. */
 async function printJobPayloads(
-  cfg: DeviceRequestConfig,
+  cfg: WithVenueRowId<DeviceRequestConfig>,
   printerId: string,
 ): Promise<Uint8Array[]> {
   void cfg;
@@ -409,7 +409,7 @@ async function printJobPayloads(
 }
 
 /** The count of `drawer_opens` rows. */
-async function drawerOpenCount(cfg: DeviceRequestConfig): Promise<number> {
+async function drawerOpenCount(cfg: WithVenueRowId<DeviceRequestConfig>): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select().from(drawerOpens);
@@ -558,7 +558,7 @@ async function rawPaymentsFor(
 }
 
 /** The venue's rectificative series. */
-function rectificativeSeries(cfg: DeviceRequestConfig): string {
+function rectificativeSeries(cfg: WithVenueRowId<DeviceRequestConfig>): string {
   return suite.db.all<{ id: string }>(sql`
     select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
   `)[0]!.id;
@@ -566,7 +566,10 @@ function rectificativeSeries(cfg: DeviceRequestConfig): string {
 
 /** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
  *  `recordCorrection`. */
-async function correctToZero(cfg: DeviceRequestConfig, saleId: string): Promise<void> {
+async function correctToZero(
+  cfg: WithVenueRowId<DeviceRequestConfig>,
+  saleId: string,
+): Promise<void> {
   const adminId = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
     .id;
   const deviceId = await seedSessionDevice(suite.db);
@@ -613,7 +616,7 @@ beforeAll(() => {
 
 describe("active fiscal conflict stops new money", () => {
   async function seedConflict(
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     cause: "fiscal.huella_divergente" | "fiscal.duplicado_anulado",
   ) {
     const [record] = suite.db.all<{ id: string }>(sql`
@@ -637,7 +640,7 @@ describe("active fiscal conflict stops new money", () => {
     });
   }
 
-  async function originalSale(cfg: DeviceRequestConfig, coffee: OfferedProduct) {
+  async function originalSale(cfg: WithVenueRowId<DeviceRequestConfig>, coffee: OfferedProduct) {
     return payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
@@ -849,7 +852,7 @@ describe("active fiscal conflict stops new money", () => {
 });
 
 describe("a box the held chart does not name primary takes no new money", () => {
-  async function chartNamingAnotherBoxPrimary(cfg: DeviceRequestConfig) {
+  async function chartNamingAnotherBoxPrimary(cfg: WithVenueRowId<DeviceRequestConfig>) {
     await writeNodeMembership(suite.db, {
       body: {
         term: 2,
@@ -1800,7 +1803,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
   /** Seed an OPEN order with a locked café line and a captured stripe payment whose `sale_id` is
    *  NULL. `capturedAmount` is the gross the card was charged. */
   async function seedLostCapture(
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     coffee: OfferedProduct,
     quantity: string,
     capturedAmount: string,
@@ -2218,7 +2221,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
 describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   /** Place an order and seed an unpaid invoice for the settlement tests. */
   async function placedIssuedBill(
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     coffee: OfferedProduct,
     quantity = "1",
   ): Promise<{ id: string; saleId: string }> {
@@ -2501,7 +2504,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
 
   describe("lost-T2 recovery settles (never re-files)", () => {
     async function seedLostCaptureOnPlaced(
-      cfg: DeviceRequestConfig,
+      cfg: WithVenueRowId<DeviceRequestConfig>,
       id: string,
       capturedAmount: string,
     ): Promise<string> {
@@ -3484,7 +3487,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   /** Place the tab and seed an outstanding invoice for settlement tests. */
-  async function placed(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
+  async function placed(cfg: WithVenueRowId<DeviceRequestConfig>, tabId: string): Promise<void> {
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock },
       cfg,
@@ -3501,7 +3504,10 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   /** A captured card payment of the tab's 1.50 that no sale was filed for. */
-  async function lostCapture(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
+  async function lostCapture(
+    cfg: WithVenueRowId<DeviceRequestConfig>,
+    tabId: string,
+  ): Promise<void> {
     const origin = await orderDeviceOrigin(suite.db);
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
@@ -3517,7 +3523,11 @@ describe("a party's bill request goes when a card or collect settles its last ow
     );
   }
 
-  async function payByCard(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
+  async function payByCard(
+    cfg: WithVenueRowId<DeviceRequestConfig>,
+    tabId: string,
+    log?: Logger,
+  ): Promise<void> {
     const { deps } = integratedDeps(suite.db);
     expect(
       (await payWorkingOrderIntegrated({ ...deps, log }, cfg, { id: tabId, lines: [] })).outcome,
@@ -3525,7 +3535,11 @@ describe("a party's bill request goes when a card or collect settles its last ow
     expect((await orderState(tabId)).status).toBe("settled");
   }
 
-  async function payInCash(cfg: DeviceRequestConfig, tabId: string, log?: Logger): Promise<void> {
+  async function payInCash(
+    cfg: WithVenueRowId<DeviceRequestConfig>,
+    tabId: string,
+    log?: Logger,
+  ): Promise<void> {
     await payWorkingOrder(
       { admission: testTradingAdmission(), db: suite.db, backend, clock, log },
       cfg,
@@ -3536,7 +3550,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   async function collectInCash(
-    cfg: DeviceRequestConfig,
+    cfg: WithVenueRowId<DeviceRequestConfig>,
     tabId: string,
     log?: Logger,
   ): Promise<void> {
@@ -3580,7 +3594,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
   const paths: [
     string,
     ServiceMode,
-    (cfg: DeviceRequestConfig, tabId: string, log?: Logger) => Promise<void>,
+    (cfg: WithVenueRowId<DeviceRequestConfig>, tabId: string, log?: Logger) => Promise<void>,
   ][] = [
     ["a card capture of an open bill", "table_tab", payByCard],
     ["a cash payment of an open bill", "table_tab", payInCash],

@@ -15,7 +15,7 @@ import {
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { DeviceRequestConfig, OriginConfig, TradingContext } from "../trading-context.js";
-import type { WithVenueRowId } from "./venue-row-id.js";
+
 import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -36,7 +36,7 @@ export function useSplitExtrasDb(database: Database): void {
 }
 
 export interface Venue {
-  cfg: WithVenueRowId<DeviceRequestConfig>;
+  cfg: DeviceRequestConfig;
   catalogueId: string;
 }
 
@@ -61,7 +61,7 @@ export async function setupVenue(): Promise<Venue> {
     locale: LOCALE,
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies WithVenueRowId);
+  } satisfies TradingContext);
   return { cfg, catalogueId };
 }
 
@@ -226,7 +226,7 @@ export type ProductLine = {
  *  product. Call once the suite's products, stations and extras are final. */
 export async function createOfferedOrder(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   id: string,
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
@@ -240,7 +240,7 @@ export async function createOfferedOrder(
  *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
 export async function fireNewOrder(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();
@@ -252,7 +252,7 @@ export async function fireNewOrder(
 /** `fireNewOrder` with each line stored once, as a counter order written before portions holds it. */
 export async function fireGroupedOrder(
   tx: Transaction,
-  cfg: WithVenueRowId<OriginConfig>,
+  cfg: OriginConfig,
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();

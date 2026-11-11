@@ -1135,7 +1135,7 @@ describe("routing outcomes and menu readiness", () => {
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
-        .where(eq(kitchenStations.locationId, cfg.locationId));
+        .where(sql`true`);
       const kitchen = await insertStation(tx, cfg.locationId, "Kitchen");
       const closedGrill = await insertStation(tx, cfg.locationId, "Closed grill");
       const parent = await createCategory(tx, { name: "Food" });
@@ -3163,7 +3163,7 @@ describe("orderZoneIdSql", () => {
       const joined = await tx
         .select({ id: workingOrders.id, zoneId: expression })
         .from(locations)
-        .innerJoin(workingOrders, eq(workingOrders.locationId, locations.id))
+        .innerJoin(workingOrders, sql`true`)
         .where(inArray(workingOrders.id, ids));
       expect(joined.sort((a, b) => a.id.localeCompare(b.id))).toEqual(expected);
     });

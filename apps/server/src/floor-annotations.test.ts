@@ -9,7 +9,7 @@ import { bookings } from "@waitron/bookings";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
@@ -29,7 +29,7 @@ beforeAll(() => {
 
 const LOCALE = "es-ES";
 
-async function setupVenue(): Promise<WithVenueRowId> {
+async function setupVenue(): Promise<TradingContext> {
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
@@ -54,7 +54,7 @@ function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Pro
   });
 }
 
-async function insertBooking(cfg: WithVenueRowId, tableId: string, time: string): Promise<void> {
+async function insertBooking(cfg: TradingContext, tableId: string, time: string): Promise<void> {
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({
       tableId,

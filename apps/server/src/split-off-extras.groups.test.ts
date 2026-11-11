@@ -96,7 +96,7 @@ describe("groups with split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [line(v, "burger")], release: "fire" }],
       });
-      await bumpGroupReady(tx, v.cfg, v.party.partyId, second.groups[0]!.id, await command(tx, v));
+      await bumpGroupReady(tx, v.party.partyId, second.groups[0]!.id, await command(tx, v));
       expect(
         (await records(tx, second.tabId))
           .filter((item) => item.lineId !== grill.lineId && item.lineId !== fryer.lineId)

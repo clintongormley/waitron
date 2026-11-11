@@ -5,7 +5,7 @@ import { listProductVariants, setMenuVariants, setProductVariants } from "./vari
 import { applyLiveFields } from "./menu-document.js";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { menusFixture } from "../test/menus-fixture.js";
-import { menuItems, products, readVenue, withTransaction } from "@waitron/db";
+import { menuItems, products, withTransaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
@@ -13,24 +13,7 @@ import type { PriceableProduct } from "./pricing.js";
 import type { PricingUnit } from "@waitron/shared";
 import { customerPresentationText } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
-
-// The till resolves an AvailableProduct's customer-facing text (customerName, falling back to the
-// staff name) before pricing — the three-name model's seam between a catalogue read and a sale
-// line, owned by product-presentation.ts rather than re-implemented here.
-const toPriceable = (p: AvailableProduct): PriceableProduct => ({
-  ...p,
-  descriptions: customerPresentationText(
-    {
-      name: p.name,
-      customerName: p.customerName,
-      kitchenName: null,
-      variantName: null,
-      variantCustomerName: null,
-      variantKitchenName: null,
-    },
-    "en",
-  ).product,
-});
+import { readDefaultCatalogueId } from "./operations.js";
 import {
   assignCatalogueToVenue,
   catalogueExists,
@@ -63,6 +46,24 @@ import {
   useCatalogueDb,
 } from "../test/fixtures.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
+
+// The till resolves an AvailableProduct's customer-facing text (customerName, falling back to the
+// staff name) before pricing — the three-name model's seam between a catalogue read and a sale
+// line, owned by product-presentation.ts rather than re-implemented here.
+const toPriceable = (p: AvailableProduct): PriceableProduct => ({
+  ...p,
+  descriptions: customerPresentationText(
+    {
+      name: p.name,
+      customerName: p.customerName,
+      kitchenName: null,
+      variantName: null,
+      variantCustomerName: null,
+      variantKitchenName: null,
+    },
+    "en",
+  ).product,
+});
 
 // Query behaviour. Each case starts with empty authoring tables.
 const fx = useCatalogueDb();
@@ -1255,13 +1256,31 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("setVenueDefaultCatalogue moves the default flag and leaves one default", async () => {
+    await asTenant(async (tx) => {
+      const house = await createCatalogue(tx, { name: "House" });
+      const day = await createCatalogue(tx, { name: "Day" });
+      await setVenueDefaultCatalogue(tx, house.id);
+      await setVenueDefaultCatalogue(tx, day.id);
+      expect(
+        (
+          await tx.execute<{ id: string; is_default: number }>(sql`
+        select id, is_default from catalogues order by name`)
+        ).rows,
+      ).toEqual([
+        { id: day.id, is_default: 1 },
+        { id: house.id, is_default: 0 },
+      ]);
+    });
+  });
+
   it("setVenueDefaultCatalogue moves the default and leaves the old default an active menu", async () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
       const day = await createCatalogue(tx, { name: "Día" });
       await assignCatalogueToVenue(tx, house.id);
       await setVenueDefaultCatalogue(tx, day.id);
-      expect((await readVenue(tx)).defaultCatalogueId).toBe(day.id);
+      expect(await readDefaultCatalogueId(tx)).toBe(day.id);
       expect((await listCatalogues(tx)).find(({ id }) => id === house.id)).toMatchObject({
         active: true,
       });
@@ -1272,7 +1291,7 @@ describe("catalogue operations", () => {
     await asTenant(async (tx) => {
       const house = await createCatalogue(tx, { name: "Casa" });
       await setVenueDefaultCatalogue(tx, house.id);
-      expect((await readVenue(tx)).defaultCatalogueId).toBe(house.id);
+      expect(await readDefaultCatalogueId(tx)).toBe(house.id);
     });
   });
 

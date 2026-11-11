@@ -167,7 +167,7 @@ const fiscal = () => ({ db: suite.db, backend, clock });
 
 interface Till {
   seriesId: ReturnType<typeof brandSeriesId>;
-  cfg: DeviceRequestConfig;
+  cfg: WithVenueRowId<DeviceRequestConfig>;
   operator: { personId: string; sessionId: string };
   printerId: string;
 }

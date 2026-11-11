@@ -18,7 +18,7 @@ import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -106,7 +106,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     });
     const locationId = await venueLocationId(suite.db);
     const nodeId = await seedNode(suite.db);
-    const cfg: WithVenueRowId<OriginConfig> = {
+    const cfg: OriginConfig = {
       origin: jobOrigin("dashboard"),
       nodeId: brandNodeId(nodeId),
       locationId: locationId,

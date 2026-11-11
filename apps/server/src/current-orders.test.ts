@@ -1488,7 +1488,7 @@ describe("readCurrentOrders (spec §4)", () => {
     const starters = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
     const mains = await group(v, s.partyId, "fire", [line(v, "steak")]);
     const command = await args(s.partyId);
-    await inTx((tx) => bumpGroupReady(tx, v.cfg, s.partyId, mains.id, command));
+    await inTx((tx) => bumpGroupReady(tx, s.partyId, mains.id, command));
 
     const read = await currentOrders(s.partyId);
 

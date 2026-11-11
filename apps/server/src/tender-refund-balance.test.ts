@@ -18,8 +18,9 @@ import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/t
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { readRefundableTenders } from "./tender-refund-balance.js";
+import type { TradingContext } from "./trading-context.js";
 
 const AT = "2026-10-16T08:00:00.000Z";
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
@@ -27,7 +28,7 @@ const store = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: true,
 });
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let deviceId: string;
 let seriesId: string;
 let orderId: string;

@@ -11,14 +11,15 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import type { WithVenueRowId } from "./testing/venue-row-id.js";
+
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 import { departmentOf, setSteps } from "./testing/service-steps.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: WithVenueRowId;
+let cfg: TradingContext;
 let personId: string;
 let token: string;
 let requestCookie: string;

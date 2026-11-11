@@ -21,7 +21,6 @@ import {
   saveVenueFields,
   VENUE_SETTINGS,
   readVenueClock,
-  venueLocationId,
   type Database,
   type Transaction,
 } from "@waitron/db";
@@ -119,7 +118,7 @@ export async function buildConfigurationBundle(
     fullSeriesCode,
     rectificativeSeriesCode,
   } = row;
-  const { defaultCatalogueId, ...fields } = await readVenue(db);
+  const fields = await readVenue(db);
   const { doc } = await readVenueSettings(db);
   const clock = await readVenueClock(db);
   const businessDay = businessDayAt(clock, now);
@@ -127,7 +126,7 @@ export async function buildConfigurationBundle(
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 18,
+    version: 19,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -141,7 +140,6 @@ export async function buildConfigurationBundle(
       fullSeriesCode,
       rectificativeSeriesCode,
     },
-    defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
     contentLanguages:
       doc.contentLanguages === null
@@ -158,23 +156,12 @@ export async function buildConfigurationBundle(
   };
 }
 
-export async function applyPreparedVenue(
-  tx: Transaction,
-  venue: { defaultCatalogueId: string | null },
-): Promise<void> {
-  await tx.execute(sql`
-    update locations set catalogue_id = ${venue.defaultCatalogueId}
-    where id = ${await venueLocationId(tx)}
-  `);
-}
-
 export interface ConfigurationBundle {
-  version: 18;
+  version: 19;
   settings: Record<string, TransferredSettings>;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
-  defaultCatalogueId: string | null;
   privacyContact: PrivacyContact;
   contentLanguages: { defaultLanguage: string; languages: string[] } | null;
   holidayArea: {
@@ -553,10 +540,10 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 18) {
+  if (typeof value.version === "number" && value.version > 19) {
     throw new AppError("setup.configuration_newer", {});
   }
-  if (value.version !== 18) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 19) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const modules = value.modules;
   const tables = value.tables;
@@ -565,7 +552,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     Number.isNaN(Date.parse(value.createdAt)) ||
     typeof value.sourceOperatorId !== "string" ||
     !isRecord(venue) ||
-    (value.defaultCatalogueId !== null && typeof value.defaultCatalogueId !== "string") ||
     !isRecord(modules) ||
     Object.values(modules).some((version) => !Number.isInteger(version) || Number(version) < 0) ||
     !isRecord(tables) ||
@@ -793,9 +779,6 @@ export async function importConfigurationTables(
   const blobColumns = new Map<string, Set<string>>();
   // A name or other text may equal a bundle id, so only these columns are rewritten to new ids.
   const idColumns = new Map<string, Set<string>>();
-  // Every foreign key into `locations` is filled with the importing venue's one row, whatever the
-  // bundle says.
-  const venueColumns = new Map<string, string[]>();
   for (const [declaration] of checked) {
     // The table-valued `pragma_table_info(?)` binds its argument, unlike the `pragma table_info`
     // statement. An unknown table yields no rows, which the empty check below refuses.
@@ -822,10 +805,6 @@ export async function importConfigurationTables(
       declaration.name,
       new Set(["id", ...keys.rows.map((row) => row.from), ...(declaration.references ?? [])]),
     );
-    venueColumns.set(
-      declaration.name,
-      keys.rows.filter((row) => row.table === "locations").map((row) => row.from),
-    );
   }
   for (const [declaration, rows] of checked) {
     const allowed = columns.get(declaration.name)!;
@@ -835,12 +814,6 @@ export async function importConfigurationTables(
       }
     }
   }
-
-  // A fresh venue's default menu is the initial catalogue created by catalogue provisioning. The
-  // imported catalogue set replaces that seed, so release the foreign key before deletion; the
-  // remapped source default is restored by applyPreparedVenue after the rows are inserted.
-  const venueId = await venueLocationId(tx);
-  await applyPreparedVenue(tx, { defaultCatalogueId: null });
 
   // Moves the key checks to COMMIT, for this transaction only; the caller's commit still checks the
   // final state.
@@ -892,9 +865,6 @@ export async function importConfigurationTables(
           row[field] = idMap.get(value)!;
         else if (blobs.has(field)) row[field] = decodeBytes(value);
       }
-      for (const column of venueColumns.get(declaration.name)!) {
-        if (column in row) row[column] = venueId;
-      }
       if (declaration.name === "persons") {
         row.pin_hash = `disabled-import:${randomUUID()}`;
         row.password_hash = null;
@@ -927,12 +897,6 @@ export async function importConfigurationTables(
       `);
     }
   }
-  await applyPreparedVenue(tx, {
-    defaultCatalogueId:
-      bundle.defaultCatalogueId === null
-        ? null
-        : (idMap.get(bundle.defaultCatalogueId) ?? bundle.defaultCatalogueId),
-  });
   const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
   await savePrivacyContact(tx, {
     privacyNoticeUrl:

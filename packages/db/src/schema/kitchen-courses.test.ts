@@ -99,11 +99,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
 
     const collision = await captureError(() => seedCourse(LOCATION_A, name));
     expect(isRefusal(collision, UNIQUE_VIOLATION)).toBe(true);
-    expect(engineErrorMessage(collision)).toBe(
-      "UNIQUE constraint failed: kitchen_courses.location_id, kitchen_courses.name",
-    );
-    const elsewhereId = await seedCourse(LOCATION_A2, name);
-    expect(elsewhereId).not.toBe(replacementId);
+    expect(engineErrorMessage(collision)).toBe("UNIQUE constraint failed: kitchen_courses.name");
     await inTx((tx) =>
       tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, replacementId)),
     );
