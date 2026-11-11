@@ -37,6 +37,7 @@ import {
   readNewerBucketMain,
   STREAM_PURPOSE,
   StreamHost,
+  streamService,
   streamSettingsPayload,
   type StreamHostDeps,
 } from "./stream-host.js";
@@ -433,6 +434,18 @@ describe("the live copy's wiring", () => {
     );
   });
 
+  it("describes an unconfigured stream service without claiming it is running", async () => {
+    const rt = runtime();
+    const service = streamService(rt, () => true);
+    try {
+      await service.start();
+      expect(service.describe()).toEqual({ running: false, reason: "not_configured" });
+      expect(service.applies()).toBe(true);
+    } finally {
+      await service.stop();
+    }
+  });
+
   describe("with a bucket stored", () => {
     beforeEach(async () => {
       await withTransaction(db, (tx) =>
@@ -786,6 +799,39 @@ describe("the live copy's wiring", () => {
           );
         } finally {
           await rt.stop();
+        }
+      });
+
+      it("suspends the stream service, starts it on promotion, and stops it for good", async () => {
+        let primary = true;
+        let now = AT;
+        const litestream = new FakeLitestream();
+        const rt = runtime({
+          spawn: litestream.spawn,
+          store: new SwitchableStore(() => now),
+          now: () => now,
+        });
+        const service = streamService(rt, () => primary);
+        try {
+          await service.start();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined());
+          expect(service.describe()).toEqual({ running: true, reason: null });
+          primary = false;
+          expect(service.applies()).toBe(false);
+          await service.suspend();
+          expect(litestream.running()).toBeUndefined();
+          expect(rt.status()).toEqual({ state: "off" });
+          primary = true;
+          now = new Date(AT.getTime() + 1_000);
+          await service.start();
+          await vi.waitFor(() => expect(litestream.running()).toBeDefined());
+          expect(litestream.replicas()).toHaveLength(2);
+          await service.stop();
+          await service.start();
+          expect(litestream.running()).toBeUndefined();
+          expect(litestream.replicas()).toHaveLength(2);
+        } finally {
+          await service.stop();
         }
       });
 
