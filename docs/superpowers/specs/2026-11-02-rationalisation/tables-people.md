@@ -100,6 +100,8 @@ below is work those slices do anyway; this design only says what replaces each l
 - **`shift_assignments` is one-to-one with `shifts`** (its primary key is `shift_id`) → folds into
   `shifts`. The loop that stood in the way has gone: staffing's tables join the `workforce` set and
   roles join core (README U1).
+- **2026-11-11: superseded** by the [A1002 redesign](../2026-11-11-a1002-roles-redesign-design.md):
+  the owner chose two lists, so the fold below no longer happens.
 - **One list of roles for access and for the rota** (owner, 2026-11-04). `staff_roles` and
   `person_staff_roles` go into A1002's roles and memberships, with colour, position and an on-rota
   flag on the role, and `persons.role` goes with them. A person may hold several roles. A1002 lands

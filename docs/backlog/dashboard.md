@@ -52,14 +52,11 @@ change what deleting a person does.
 
 ## Roles the admin can edit (A7)
 
-**A1002 design approved 2026-11-07, with the 2026-11-08 watcher corrections.**
-The [design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) and
-[reviewed plan](../superpowers/plans/2026-11-08-a1002-custom-roles.md) keep two working cuts:
-the approved same-default permission names, then the complete roles transition. The roles cut
-needs A1308's shared activity writer and functional outgoing-mail sender.
-The general history screen is a follow-up. Before cut 2 builds, the owner must decide whether the
-existing Admin-default `fiscal.remedy` may be assigned to another role; its behavior stays unchanged.
-Implementation remains open.
+**A1002 redesigned and approved 2026-11-11.** The [redesign](../superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
+replaces the [7 November design](../superpowers/specs/2026-10-22-a1002-custom-roles-design.md) where
+they differ (its §9 lists what was dropped and kept) and supersedes the unmerged cut 2 scope
+forecast. `fiscal.remedy` is Admin by default and assignable (owner 2026-11-09). Cut 1 (#2578) has
+landed; the build plan comes next.
 
 ## Every `wt-data-table` list lets each person choose its columns (C45, #834) — left open
 

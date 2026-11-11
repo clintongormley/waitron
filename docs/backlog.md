@@ -1438,11 +1438,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Review every permission: fewer, coarser, and consistently named**
   [Detail](backlog/dashboard.md#review-every-permission-fewer-coarser-and-consistently-named)
 
-- **A1002: several roles per person, fixed built-in names and editable ordinary grants.**
-  [Approved design](superpowers/specs/2026-10-22-a1002-custom-roles-design.md) and
-  [reviewed plan](superpowers/plans/2026-11-08-a1002-custom-roles.md): approved same-default permission
-  names are used throughout the code. The complete roles cut still needs A1308's activity
-  writer/mail sender and the owner's `fiscal.remedy` assignability decision.
+- **A1002: access roles and job roles.** [Approved redesign, 2026-11-11](superpowers/specs/2026-11-11-a1002-roles-redesign-design.md)
+  replaces the 7 November design: access roles are ticked permission lists, several per person,
+  combined; job roles drive the rota and device sign-in and grant nothing. Next: the build plan,
+  sized from current source. Cut 1's permission names (#2578) have landed.
   [Detail](backlog/dashboard.md#roles-are-something-an-admin-can-add-and-edit-the-four-built-ins-are-only-defaults)
 
 - **Shared database-backed table paging, search and sorting** (owner decision 2026-09-12; users
