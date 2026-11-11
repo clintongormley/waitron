@@ -402,6 +402,76 @@ describe("certificate diagnosis admission", () => {
     expect(child.listenerCount("exit")).toBe(0);
   });
 
+  it("waits for a signalled child's exit report when a held event loop delays cleanup", async () => {
+    const { child } = controlledChild();
+    const order: string[] = [];
+    child.kill.mockImplementation((killSignal?: NodeJS.Signals | number) => {
+      setImmediate(() => child.emit("exit", null, killSignal));
+      return true;
+    });
+    child.once("exit", () => order.push("exit"));
+    const value = runner({ workMs: 1_000, cleanupMs: 40, entry: new URL("file:///fixture.js") });
+    const controller = new AbortController();
+    const held = value.attempt(
+      async (runChild, abort) => ({ result: await runChild(null, abort) }),
+      controller.signal,
+    );
+    const answered = held.then(
+      () => order.push("resolved"),
+      (error: unknown) => {
+        order.push("rejected");
+        throw error;
+      },
+    );
+    controller.abort();
+    setTimeout(() => {
+      const until = performance.now() + 200;
+      while (performance.now() < until);
+    }, 0);
+    await expect(answered).rejects.toMatchObject({
+      code: "fiscal.certificate_diagnosis_unavailable",
+    });
+    expect(order).toEqual(["exit", "rejected"]);
+    expect(child.kill.mock.calls).toEqual([["SIGTERM"]]);
+    await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+  });
+
+  it.each([
+    ["SIGTERM", [["SIGTERM"]]],
+    ["SIGKILL", [["SIGTERM"], ["SIGKILL"]]],
+  ])(
+    "waits for a child that only %s stops when cleanup starts after the attempt's whole budget has run out",
+    async (stoppedBy, kills) => {
+      const { child } = controlledChild();
+      const order: string[] = [];
+      child.kill.mockImplementation((killSignal?: NodeJS.Signals | number) => {
+        if (killSignal === stoppedBy) setTimeout(() => child.emit("exit", null, killSignal), 5);
+        return true;
+      });
+      child.once("exit", () => order.push("exit"));
+      const value = runner({ workMs: 20, cleanupMs: 200, entry: new URL("file:///fixture.js") });
+      const answered = value
+        .attempt(async (runChild, abort) => ({ result: await runChild(null, abort) }), signal())
+        .then(
+          () => order.push("resolved"),
+          (error: unknown) => {
+            order.push("rejected");
+            throw error;
+          },
+        );
+      setTimeout(() => {
+        const until = performance.now() + 300;
+        while (performance.now() < until);
+      }, 0);
+      await expect(answered).rejects.toMatchObject({
+        code: "fiscal.certificate_diagnosis_unavailable",
+      });
+      expect(order).toEqual(["exit", "rejected"]);
+      expect(child.kill.mock.calls).toEqual(kills);
+      await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+    },
+  );
+
   it("removes all timers after cancellation without a child", async () => {
     vi.useFakeTimers();
     const value = runner();
