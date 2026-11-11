@@ -6243,10 +6243,11 @@ describe("held print pulls", () => {
     await vi.waitFor(() => expect(bus.subscriberCount).toBe(count));
   }
 
-  it("waits through another agent's USB job and answers when its own work arrives", async () => {
+  it("keeps unseen USB work queued while reachable work wakes the pull", async () => {
     const r = await rig();
     const usb = await createUsbPrinter(r.app, "other-usb");
     const network = await createNetworkPrinter(r.app, "192.0.2.7", 9100);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const pending = r.request();
     await held(r.bus);
     const other = await enqueue(usb, new Uint8Array([1]));
