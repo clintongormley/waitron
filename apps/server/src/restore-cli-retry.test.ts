@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor, manifestSets } from "@waitron/migrations";
 import { invoiceSeries, withTransaction, stampDeployment } from "@waitron/db";
 import { nodeId } from "@waitron/shared";
-import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
+import { seedNamedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
 import { seedTradingVenue, TILL_ENV, copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ALL_MODULES } from "./modules.js";
@@ -32,11 +32,11 @@ it("runs the command-line restore again over a pending first start", async () =>
     { nodeId: node.nodeId, code: "FF", purpose: "full" },
   ]);
   await withTransaction(suite.db, (tx) =>
-    seedFixtureSif(tx, {
+    seedNamedFixtureSif(tx, {
       nodeId: node.nodeId,
-      nif: "90000001R",
-      idSistemaInformatico: "WT",
-      numeroInstalacion: "S000001",
+      taxpayerNif: "90000001R",
+      softwareId: "WT",
+      installationIdentity: "S000001",
     }),
   );
   await stampDeployment(suite.db, "preproduction");

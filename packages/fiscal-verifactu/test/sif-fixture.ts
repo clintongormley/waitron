@@ -3,6 +3,23 @@ import { and, eq } from "drizzle-orm";
 import { registerSif, type RegisterSifParams } from "../src/registro-sif.js";
 import { registroSif } from "../src/schema/sif.js";
 
+export function seedNamedFixtureSif(
+  tx: Transaction,
+  params: {
+    nodeId: RegisterSifParams["nodeId"];
+    taxpayerNif: string;
+    softwareId: string;
+    installationIdentity: string;
+  },
+) {
+  return seedFixtureSif(tx, {
+    nodeId: params.nodeId,
+    nif: params.taxpayerNif,
+    idSistemaInformatico: params.softwareId,
+    numeroInstalacion: params.installationIdentity,
+  });
+}
+
 export async function fixtureSifIdentities(tx: Transaction) {
   return tx.select({ identity: registroSif.numeroInstalacion }).from(registroSif);
 }
