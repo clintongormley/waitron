@@ -57,8 +57,7 @@ function entries(): ArchiveEntry[] {
     "trading.env": `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ENV=preproduction\nWAITRON_ACCOUNT_KEY=${account}\n`,
     "tls/ca.crt": pem(ca),
     "tls/ca.key": privatePem(caKeys.privateKey),
-    "tls/server.crt": pem(leaf),
-    "tls/server.key": privatePem(serverKeys.privateKey),
+    "tls/server.pem": pem(leaf) + privatePem(serverKeys.privateKey),
   }).map(([name, text]) => ({ name: "secrets/" + name, bytes: Buffer.from(text) }));
 }
 function set(input: ArchiveEntry[], name: string, text: string): ArchiveEntry[] {
@@ -127,8 +126,8 @@ describe("private host recovery material", () => {
     "trading.env",
     "tls/ca.crt",
     "tls/ca.key",
-    "tls/server.crt",
-    "tls/server.key",
+    "tls/server.pem",
+    "tls/server.pem",
   ])("refuses unusable bytes in %s", async (name) => {
     const expected = name === "secrets.env" ? unavailable : invalid;
     expect(
@@ -139,7 +138,7 @@ describe("private host recovery material", () => {
       ),
     ).toEqual(expected);
   });
-  it.each(["tls/ca.key", "tls/server.key"])(
+  it.each(["tls/ca.key", "tls/server.pem"])(
     "matches parseable private key %s to its certificate",
     async (name) => {
       const wrong = name === "tls/ca.key" ? serverKeys.privateKey : caKeys.privateKey;
@@ -161,7 +160,7 @@ describe("private host recovery material", () => {
     );
     expect(new X509Certificate(pem(wrong)).issuer).toBe(new X509Certificate(pem(ca)).subject);
     expect(
-      await verifyBackupStateSecrets(set(entries(), "tls/server.crt", pem(wrong)), source, now),
+      await verifyBackupStateSecrets(set(entries(), "tls/server.pem", pem(wrong)), source, now),
     ).toEqual(invalid);
   });
   it("requires a CA certificate rather than a matching self-signed leaf", async () => {
@@ -304,7 +303,7 @@ describe("private host recovery material", () => {
     const results = [
       await verifyBackupStateSecrets(entries(), source, now, await seal(entries())),
       await verifyBackupStateSecrets(
-        set(entries(), "tls/server.key", "private-malformed-sentinel"),
+        set(entries(), "tls/server.pem", "private-malformed-sentinel"),
         source,
         now,
       ),
@@ -474,7 +473,11 @@ it.each(["CA", "server"])("checks the %s validity independently", async (which) 
         ]);
   expect(
     await verifyBackupStateSecrets(
-      set(entries(), which === "CA" ? "tls/ca.crt" : "tls/server.crt", pem(changed)),
+      set(
+        entries(),
+        which === "CA" ? "tls/ca.crt" : "tls/server.pem",
+        pem(changed) + (which === "server" ? privatePem(serverKeys.privateKey) : ""),
+      ),
       source,
       now,
     ),
@@ -526,7 +529,7 @@ it("checks the server issuer name as well as its signature", async () => {
   );
   expect(new X509Certificate(pem(wrong)).verify(new X509Certificate(pem(ca)).publicKey)).toBe(true);
   expect(
-    await verifyBackupStateSecrets(set(entries(), "tls/server.crt", pem(wrong)), source, now),
+    await verifyBackupStateSecrets(set(entries(), "tls/server.pem", pem(wrong)), source, now),
   ).toEqual(invalid);
 });
 it("accepts an equal derived account key redundantly supplied by backup.env", async () => {

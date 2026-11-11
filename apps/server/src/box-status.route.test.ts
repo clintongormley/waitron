@@ -244,7 +244,7 @@ describe("GET /api/box/status with a configured TLS cert", () => {
   beforeAll(async () => {
     const { nodeId } = await setupTenant();
     // `now` is 30 days before the fixture's notAfter, so `daysRemaining` is a deterministic 30.
-    const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.crt");
+    const certPath = join(mkdtempSync(join(tmpdir(), "box-status-cert-")), "server.pem");
     writeFileSync(certPath, FIXTURE_CERT_PEM);
     app = buildApp(nodeId, {
       now: new Date("2036-07-27T13:07:51.000Z"),

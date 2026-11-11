@@ -291,7 +291,7 @@ describe("returned-box membership reconciliation at boot", () => {
       join(stateDir, REBUILD_MARKER),
       JSON.stringify({ version: 1, source: "archive" }),
     );
-    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+    const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
     const dispatcher = new Agent({
       connect: { ca: await readFile(join(stateDir, "tls", "ca.crt")) },
     });
@@ -312,7 +312,7 @@ describe("returned-box membership reconciliation at boot", () => {
       expect(await node.json()).toMatchObject({ acceptingSales: false });
       expect((await readNodeMembership(db))?.body.term).toBe(2);
       expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
-      expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+      expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
     } finally {
       await server.close();
       await peer.stop();

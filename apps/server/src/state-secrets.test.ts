@@ -89,10 +89,10 @@ describe("state-secrets", () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-symlink-"));
     const outside = mkdtempSync(join(tmpdir(), "state-secrets-outside-"));
     await chmod(outside, 0o755);
-    // Pre-existing `destDir/tls -> outside`: the key `tls/server.key` is lexically fine, but writing
+    // Pre-existing `destDir/tls -> outside`: the key `tls/server.pem` is lexically fine, but writing
     // it would follow the symlink and land in `outside`. The symlink-aware guard must reject it.
     await symlink(outside, join(dest, "tls"));
-    await expect(unpackStateFiles({ "tls/server.key": "pwned\n" }, dest)).rejects.toThrow(
+    await expect(unpackStateFiles({ "tls/server.pem": "pwned\n" }, dest)).rejects.toThrow(
       new AppError("recovery.archive_path_unsafe", {}),
     );
     // Nothing was written into the outside dir the symlink pointed at, and its mode is untouched.
@@ -106,7 +106,7 @@ describe("state-secrets", () => {
     await symlink(outside, join(dest, "tls"));
     let refusal: unknown;
     const events = await syncsAndRenames(() =>
-      unpackStateFiles({ "tls/sub/server.key": "pwned\n" }, dest).catch((err: unknown) => {
+      unpackStateFiles({ "tls/sub/server.pem": "pwned\n" }, dest).catch((err: unknown) => {
         refusal = err;
       }),
     );
@@ -127,7 +127,7 @@ describe("state-secrets", () => {
       return real.mkdir(path, options);
     }) as typeof fs.mkdir);
     try {
-      await expect(unpackStateFiles({ "tls/server.key": "pwned\n" }, dest)).rejects.toMatchObject({
+      await expect(unpackStateFiles({ "tls/server.pem": "pwned\n" }, dest)).rejects.toMatchObject({
         code: "recovery.archive_path_unsafe",
         params: {},
       });
@@ -205,8 +205,8 @@ describe("state-secrets", () => {
     const dest = mkdtempSync(join(tmpdir(), "state-secrets-linked-"));
     await mkdir(join(dest, "real-tls"));
     await symlink(join(dest, "real-tls"), join(dest, "tls"));
-    await unpackStateFiles({ "tls/server.key": "key\n" }, dest);
-    expect(await readFile(join(dest, "real-tls", "server.key"), "utf8")).toBe("key\n");
+    await unpackStateFiles({ "tls/server.pem": "key\n" }, dest);
+    expect(await readFile(join(dest, "real-tls", "server.pem"), "utf8")).toBe("key\n");
   });
 
   it("unpacks a bundle to a dir with 0600 files and a tls/ subdir, round-tripping contents", async () => {

@@ -281,7 +281,7 @@ describe("runStagedReset", () => {
   it("a staged reset of a box that joined leaves no authority, leaf, client certificate or key ring", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
     const tls = join(stateDir, "tls");
-    for (const name of ["ca.key", "server.crt", "server.key", "client.crt", "server.key.tmp"]) {
+    for (const name of ["ca.key", "server.pem", "client.crt", "server.pem.tmp"]) {
       await writeFile(join(tls, name), name);
     }
     await stageResetRequest(stateDir, operationId);
@@ -298,7 +298,7 @@ describe("runStagedReset", () => {
       now: () => new Date(),
       listIpv4: () => [],
     });
-    expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.crt", "server.key"]);
+    expect((await readdir(tls)).sort()).toEqual(["ca.crt", "ca.key", "server.pem"]);
     expect(await readFile(join(tls, "ca.crt"), "utf8")).not.toBe("ca");
   });
 
@@ -322,7 +322,7 @@ describe("runStagedReset", () => {
   it("a staged reset of a box that joined removes its joined record after everything else in tls, and its request last", async () => {
     const { stateDir, venueDir, operationId } = await halfAdoptedBox(true);
     const tls = join(stateDir, "tls");
-    for (const name of ["ca.key", "server.crt", "server.key"]) {
+    for (const name of ["ca.key", "server.pem"]) {
       await writeFile(join(tls, name), name);
     }
     await stageResetRequest(stateDir, operationId);
@@ -331,7 +331,7 @@ describe("runStagedReset", () => {
     expect(await runStagedReset({ stateDir, venueDir, log: () => {} })).toBe(true);
 
     const joinedAt = removed.indexOf(join(tls, "joined.json"));
-    const others = ["ca.crt", "ca.key", "server.crt", "server.key"].map((name) =>
+    const others = ["ca.crt", "ca.key", "server.pem"].map((name) =>
       removed.indexOf(join(tls, name)),
     );
     for (const at of [...others, removed.indexOf(join(stateDir, "secrets.env"))]) {
@@ -619,7 +619,7 @@ describe("a start after a reset of a box that joined was cut short in tls/", () 
     });
     await markJoined(stateDir, PRIMARY_NODE_ID);
     await stageResetRequest(stateDir, operationId);
-    watchRemovals(join(stateDir, "tls", "server.key"));
+    watchRemovals(join(stateDir, "tls", "server.pem"));
     await expect(runStagedReset({ stateDir, venueDir, log: () => {} })).rejects.toThrow(
       "power lost",
     );

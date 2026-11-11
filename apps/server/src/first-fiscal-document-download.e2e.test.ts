@@ -121,7 +121,7 @@ it.each(["en", "es"] as const)(
       };
       time.aheadMs = 0;
       server = await startServer(env, {}, { testClock: time.clock });
-      const leaf = new X509Certificate(await readFile(join(stateDir, "tls/server.crt")));
+      const leaf = new X509Certificate(await readFile(join(stateDir, "tls/server.pem")));
       const pin = createHash("sha256")
         .update(leaf.publicKey.export({ type: "spki", format: "der" }))
         .digest("base64");

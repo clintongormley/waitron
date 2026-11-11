@@ -46,7 +46,7 @@ export async function prepareDevEnv(env: NodeJS.ProcessEnv): Promise<NodeJS.Proc
   if (configuredUrl) return { ...env, WAITRON_STATE_DIR: stateDir };
 
   const tlsDir = join(boxState, "tls");
-  const hasLeaf = existsSync(join(tlsDir, "server.crt")) && existsSync(join(tlsDir, "server.key"));
+  const hasLeaf = existsSync(join(tlsDir, "server.pem"));
   if (hasLeaf) {
     // The local CA is available even when the unprivileged dev server cannot bind port 80.
     await mkdir(stateDir, { recursive: true });

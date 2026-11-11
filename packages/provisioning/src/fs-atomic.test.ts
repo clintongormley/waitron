@@ -66,12 +66,12 @@ describe("writeFileDurable", () => {
     const real = join(d, "real-tls");
     await fs.mkdir(real);
     await fs.symlink(real, join(d, "tls"));
-    const target = join(d, "tls", "server.key");
+    const target = join(d, "tls", "server.pem");
 
     const events = await syncsAndRenames(() => writeFileDurable(target, "key", 0o600));
 
     expect(events.at(-1)).toBe(`sync ${real}`);
-    expect(await readFile(join(real, "server.key"), "utf8")).toBe("key");
+    expect(await readFile(join(real, "server.pem"), "utf8")).toBe("key");
   });
 
   it("does not inherit a stale working copy's broader permissions", async () => {
@@ -233,7 +233,7 @@ describe("writeFileDurable", () => {
 describe("stageFileDurable", () => {
   it("syncs a working copy beside the target at the given mode, leaving the target alone", async () => {
     const d = await newDir();
-    const target = join(d, "server.key");
+    const target = join(d, "server.pem");
     await writeFile(target, "old");
     let staged = "";
 
@@ -250,7 +250,7 @@ describe("stageFileDurable", () => {
 
   it("does not inherit a stale working copy's broader permissions", async () => {
     const d = await newDir();
-    const target = join(d, "server.key");
+    const target = join(d, "server.pem");
     await writeFile(`${target}.tmp`, "stale", { mode: 0o644 });
     const staged = await stageFileDurable(target, "fresh-secret", 0o600);
     expect(await readFile(staged, "utf8")).toBe("fresh-secret");
@@ -259,7 +259,7 @@ describe("stageFileDurable", () => {
 
   it("removes the working copy and throws the sync's error when the sync fails", async () => {
     const d = await newDir();
-    const target = join(d, "server.key");
+    const target = join(d, "server.pem");
     await writeFile(target, "old");
     const syncError = Object.assign(new Error("sync"), { code: "EIO" });
     const real = await vi.importActual<typeof fs>("node:fs/promises");
@@ -283,7 +283,7 @@ describe("stageFileDurable", () => {
 
   it("removes the working copy and throws the close's error when only the close fails", async () => {
     const d = await newDir();
-    const target = join(d, "server.key");
+    const target = join(d, "server.pem");
     const closeError = Object.assign(new Error("close"), { code: "EIO" });
     const real = await vi.importActual<typeof fs>("node:fs/promises");
     vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {

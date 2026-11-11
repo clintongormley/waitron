@@ -93,8 +93,10 @@ how to enable them. If repair keeps failing, stop here: some certificate problem
 repair this page does not offer. Authenticated certificate diagnosis/replacement and linked-layout
 repair remain [open work](../../docs/backlog/box.md#authenticated-server-certificate-recovery).
 
-Repair retains the original fixed TLS files under a private `tls/repair-archive/` directory and
-resumes a reserved replacement after interruption. It does not recreate the vault or change the
+Repair keeps its progress and private candidate in `flows/tls-repair/` and replaces the
+previous repair copy in `tls/repair/`. A start that stays healthy for two minutes removes
+both folders. The certificate and its private key share `tls/server.pem`, with the certificate
+first, so replacing the leaf takes one file replacement. It does not recreate the vault or change the
 setup attempt, recovery records or fiscal identity. The public HTTP guide stays available while you download
 and install the certificate, even if the repair answer was lost. Choose **Reconnect** when you are
 ready. A supervised process then restarts after sending that answer; a direct process repeats its

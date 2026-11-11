@@ -133,7 +133,7 @@ function deps(stateDir: string, overrides: Partial<RebuildDeps> = {}): RebuildDe
 }
 
 async function leafOf(stateDir: string): Promise<X509Certificate> {
-  return new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
+  return new X509Certificate(await readFile(join(stateDir, "tls", "server.pem"), "utf8"));
 }
 
 const INTRUDER: MembershipNode = {
@@ -166,16 +166,15 @@ describe("completeRebuild", () => {
       const stateDir = await rebuiltStateDir(source);
       const caBefore = await readFile(join(stateDir, "tls", "ca.crt"), "utf8");
       expect(await completeRebuild(deps(stateDir))).toBe(true);
-      // The two files `mintedBoxLeaf` (box-secrets.ts) hands the trading listener.
       const leaf = await leafOf(stateDir);
       expect(leaf.subjectAltName).toContain(`IP Address:${NEW_ADDRESS}`);
       expect(leaf.subjectAltName).not.toContain(OLD_ADDRESS);
       const ca = await readFile(join(stateDir, "tls", "ca.crt"), "utf8");
       expect(ca).toBe(caBefore);
       expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
-      const key = await readFile(join(stateDir, "tls", "server.key"), "utf8");
+      const key = await readFile(join(stateDir, "tls", "server.pem"), "utf8");
       expect(leaf.checkPrivateKey(createPrivateKey(key))).toBe(true);
-      expect((await stat(join(stateDir, "tls", "server.key"))).mode & 0o777).toBe(0o600);
+      expect((await stat(join(stateDir, "tls", "server.pem"))).mode & 0o777).toBe(0o600);
     },
   );
 
@@ -212,9 +211,9 @@ describe("completeRebuild", () => {
 
   it("does nothing on an ordinary start — the leaf stays byte-for-byte and the term does not move", async () => {
     const stateDir = await rebuiltStateDir(false);
-    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+    const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
     expect(await completeRebuild(deps(stateDir))).toBe(false);
-    expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+    expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });
 
@@ -251,18 +250,20 @@ describe("completeRebuild", () => {
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });
 
-  // What a crash between the two renames in `reissueBoxLeaf` leaves: a certificate whose key does
-  // not match it. The marker is still there, so the next start replaces both.
-  it("repairs a mismatched pair left by an interrupted re-issue", async () => {
+  it("repairs a PEM whose certificate and key do not match", async () => {
     const stateDir = await rebuiltStateDir("archive");
     const other = await mkdtemp(join(tmpdir(), "waitron-rebuild-other-"));
     dirs.push(other);
     await ensureBoxSecrets({ stateDir: other, hostnames: ["waitron.local"], now: () => NOW });
     await writeFile(
-      join(stateDir, "tls", "server.key"),
-      await readFile(join(other, "tls", "server.key")),
+      join(stateDir, "tls", "server.pem"),
+      new X509Certificate(await readFile(join(stateDir, "tls", "server.pem"))).toString() +
+        createPrivateKey(await readFile(join(other, "tls", "server.pem"))).export({
+          type: "pkcs8",
+          format: "pem",
+        }),
     );
-    const key = () => readFile(join(stateDir, "tls", "server.key"), "utf8");
+    const key = () => readFile(join(stateDir, "tls", "server.pem"), "utf8");
     expect((await leafOf(stateDir)).checkPrivateKey(createPrivateKey(await key()))).toBe(false);
     await completeRebuild(deps(stateDir));
     expect((await leafOf(stateDir)).checkPrivateKey(createPrivateKey(await key()))).toBe(true);
@@ -363,14 +364,14 @@ describe("completeRebuild", () => {
       const stateDir = await rebuiltStateDir(source);
       await tamperHeldRow();
       const before = await storedRow();
-      const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+      const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
       const pointerTerm = vi.fn(async () => null);
       await expect(completeRebuild(deps(stateDir, { pointerTerm }))).rejects.toMatchObject({
         code: "restore.membership_invalid",
         params: { reason: "bad_signature" },
       });
       expect(await storedRow()).toEqual(before);
-      expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+      expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
       expect(pointerTerm).not.toHaveBeenCalled();
       await stat(join(stateDir, REBUILD_MARKER));
     },
@@ -893,7 +894,7 @@ describe("assertRestoredMembershipReadable", () => {
 describe("deferFirstStart", () => {
   it("leaves the marker, the certificate and the term alone, and holds the stream", async () => {
     const stateDir = await rebuiltStateDir("archive");
-    const leafBefore = await readFile(join(stateDir, "tls", "server.crt"));
+    const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
     const log = vi.fn();
     await expect(deferFirstStart(stateDir, log)).resolves.toEqual({
       mayStream: false,
@@ -901,7 +902,7 @@ describe("deferFirstStart", () => {
     });
     expect(log).toHaveBeenCalledWith("warn", "restore.first_start_deferred", {});
     await stat(join(stateDir, REBUILD_MARKER));
-    expect(await readFile(join(stateDir, "tls", "server.crt"))).toEqual(leafBefore);
+    expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });
 

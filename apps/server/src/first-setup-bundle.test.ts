@@ -31,8 +31,7 @@ it.each(["bin.ts", "node-entry.ts"])(
       for (const [name, value] of Object.entries({
         "ca.crt": tls.caCertPem,
         "ca.key": tls.caKeyPem,
-        "server.crt": tls.serverCertPem,
-        "server.key": tls.serverKeyPem,
+        "server.pem": tls.serverCertPem + tls.serverKeyPem,
       }))
         await writeFile(join(stateDir, "tls", name), value);
       await mkdir(venueDir);

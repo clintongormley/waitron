@@ -26,7 +26,7 @@ async function fixture() {
   const stateDir = join(root, "state");
   await mkdir(join(stateDir, "tls"), { recursive: true });
   await writeFile(join(stateDir, "tls/ca.key"), material.caKeyPem);
-  await writeFile(join(stateDir, "tls/server.crt"), material.serverCertPem);
+  await writeFile(join(stateDir, "tls/server.pem"), material.serverCertPem);
   await writeFile(join(stateDir, "secrets.env"), "unchanged synthetic vault");
   await writeFile(join(stateDir, "first-setup.json"), "unchanged synthetic attempt");
   const script = join(root, "repair.mts");
@@ -43,14 +43,14 @@ const rename=fs.rename;
 fs.rename=async(from,to)=>{
  await rename(from,to);
  const target=String(to);
- if(target.endsWith("/repair-pending.json")) markers++;
+ if(target.endsWith("/record.json")) markers++;
  if((boundary==="pending"&&markers===1)||(boundary==="complete"&&markers===2)||
     (boundary&&!["pending","complete","archive-file"].includes(boundary)&&target.endsWith("/"+boundary))) stop();
 };
 const open=fs.open;
 fs.open=async(path,...args)=>{
  const handle=await open(path,...args);
- if(boundary==="archive-file"&&String(path).includes("/repair-archive/")&&String(path).endsWith("/ca.key")){
+ if(boundary==="archive-file"&&String(path).includes("/repair/")&&String(path).endsWith("/ca.key")){
   const sync=handle.sync.bind(handle);handle.sync=async()=>{await sync();stop();};
  }
  return handle;
@@ -76,8 +76,7 @@ it.each([
   "candidate.json",
   "ca.crt",
   "ca.key",
-  "server.crt",
-  "server.key",
+  "server.pem",
   "complete",
 ])(
   "a process interrupted after %s preserves originals and resumes under the released lock",
@@ -88,27 +87,27 @@ it.each([
       (error) => ({ code: error.code, stdout: error.stdout }),
     );
     expect(failed).toEqual({ code: 73, stdout: "INTERRUPTED\n" });
-    const archiveRoot = join(f.stateDir, "tls/repair-archive");
+    const archiveRoot = join(f.stateDir, "tls/repair");
     const before = await readdir(archiveRoot);
-    const archivedKey = await readFile(join(archiveRoot, before[0]!, "ca.key"), "utf8");
+    const archivedKey = await readFile(join(archiveRoot, "ca.key"), "utf8");
     expect(archivedKey).toBe(material.caKeyPem);
-    const candidate = await readFile(join(archiveRoot, before[0]!, "candidate.json"), "utf8").then(
-      JSON.parse,
-      (error) => {
-        if (error.code === "ENOENT") return null;
-        throw error;
-      },
-    );
+    const candidate = await readFile(
+      join(f.stateDir, "flows/tls-repair/candidate.json"),
+      "utf8",
+    ).then(JSON.parse, (error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
     const resumed = JSON.parse((await f.child()).stdout);
     expect(resumed).toMatchObject({ state: "healthy", trust: "new-required", caAvailable: true });
     const ca = await readFile(join(f.stateDir, "tls/ca.crt"), "utf8");
     if (candidate !== null) expect(ca).toBe(candidate.caCertPem);
-    const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.crt")));
+    const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.pem")));
     expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
     expect(
-      leaf.checkPrivateKey(createPrivateKey(await readFile(join(f.stateDir, "tls/server.key")))),
+      leaf.checkPrivateKey(createPrivateKey(await readFile(join(f.stateDir, "tls/server.pem")))),
     ).toBe(true);
-    expect(await readFile(join(archiveRoot, before[0]!, "ca.key"), "utf8")).toBe(material.caKeyPem);
+    expect(await readFile(join(archiveRoot, "ca.key"), "utf8")).toBe(material.caKeyPem);
     expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe(
       "unchanged synthetic vault",
     );
@@ -125,5 +124,9 @@ it("two real processes produce one repair generation and identical public trust"
   const states = results.map((r) => JSON.parse(r.stdout));
   expect(states[0]).toMatchObject({ state: "healthy", trust: "new-required" });
   expect(states[1]).toEqual(states[0]);
-  expect(await readdir(join(f.stateDir, "tls/repair-archive"))).toHaveLength(1);
+  expect(await readdir(join(f.stateDir, "tls/repair"))).toEqual([
+    "ca.key",
+    "manifest.json",
+    "server.pem",
+  ]);
 });

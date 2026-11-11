@@ -1078,18 +1078,18 @@ describe("restore hooks (identity phase)", () => {
     const aliased = (second: string) =>
       buildArtifact([
         ...FULL_ENTRIES,
-        { name: "secrets/tls/server.key", bytes: Buffer.from("first-key") },
+        { name: "secrets/tls/server.pem", bytes: Buffer.from("first-key") },
         { name: second, bytes: Buffer.from("second-key") },
       ]);
 
     it.each([
-      ["through a folder link", "secrets/real-tls/server.key"],
-      ["differing only in case", "secrets/tls/SERVER.KEY"],
+      ["through a folder link", "secrets/real-tls/server.pem"],
+      ["differing only in case", "secrets/tls/SERVER.PEM"],
     ])("are refused %s before anything changes", async (_, second) => {
       await seedOldBox();
       await mkdir(join(stateDir, "real-tls"));
       await symlink(join(stateDir, "real-tls"), join(stateDir, "tls"));
-      await writeFile(join(stateDir, "real-tls/server.key"), OLD_KEY);
+      await writeFile(join(stateDir, "real-tls/server.pem"), OLD_KEY);
       const migrate = vi.fn(async () => {});
       const onDatabasePlaced = vi.fn();
       const deps = makeRestoreDeps({ artifact: aliased(second), migrate, onDatabasePlaced });
@@ -1099,8 +1099,8 @@ describe("restore hooks (identity phase)", () => {
       expect(migrate).not.toHaveBeenCalled();
       expect(onDatabasePlaced).not.toHaveBeenCalled();
       await expectOldBox();
-      expect(await readFile(join(stateDir, "real-tls/server.key"), "utf8")).toBe(OLD_KEY);
-      expect(await readdir(join(stateDir, "real-tls"))).toEqual(["server.key"]);
+      expect(await readFile(join(stateDir, "real-tls/server.pem"), "utf8")).toBe(OLD_KEY);
+      expect(await readdir(join(stateDir, "real-tls"))).toEqual(["server.pem"]);
       expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
     });
 
@@ -1108,33 +1108,33 @@ describe("restore hooks (identity phase)", () => {
       await seedOldBox();
       await mkdir(join(stateDir, "real-tls"));
       await mkdir(join(stateDir, "tls"));
-      await writeFile(join(stateDir, "real-tls/server.key"), OLD_KEY);
+      await writeFile(join(stateDir, "real-tls/server.pem"), OLD_KEY);
       await restoreFromArtifact(
-        makeRestoreDeps({ artifact: aliased("secrets/real-tls/server.key") }),
+        makeRestoreDeps({ artifact: aliased("secrets/real-tls/server.pem") }),
       );
-      expect(await readFile(join(stateDir, "tls/server.key"), "utf8")).toBe("first-key");
-      expect(await readFile(join(stateDir, "real-tls/server.key"), "utf8")).toBe("second-key");
+      expect(await readFile(join(stateDir, "tls/server.pem"), "utf8")).toBe("first-key");
+      expect(await readFile(join(stateDir, "real-tls/server.pem"), "utf8")).toBe("second-key");
       expect(await stagedOrPrevious()).toEqual([]);
     });
   });
 
   it("a secret whose target is a folder is refused before anything changes", async () => {
     await seedOldBox();
-    await mkdir(join(stateDir, "tls/server.key"), { recursive: true });
+    await mkdir(join(stateDir, "tls/server.pem"), { recursive: true });
     const migrate = vi.fn(async () => {});
     await expect(
       restoreFromArtifact(
         makeRestoreDeps({
           artifact: buildArtifact([
             ...FULL_ENTRIES,
-            { name: "secrets/tls/server.key", bytes: Buffer.from("KEY") },
+            { name: "secrets/tls/server.pem", bytes: Buffer.from("KEY") },
           ]),
           migrate,
         }),
       ),
     ).rejects.toMatchObject({
       code: "restore.unsafe_entry_path",
-      params: { name: "secrets/tls/server.key" },
+      params: { name: "secrets/tls/server.pem" },
     });
     expect(migrate).not.toHaveBeenCalled();
     await expectOldBox();
@@ -1278,14 +1278,14 @@ describe("restore hooks (identity phase)", () => {
     const onDatabasePlaced = vi.fn();
     const thrown = await failingOn(
       "rename",
-      (_from, to) => to === join(stateDir, "tls/server.key"),
+      (_from, to) => to === join(stateDir, "tls/server.pem"),
       failure,
       () =>
         restoreFromArtifact(
           makeRestoreDeps({
             artifact: buildArtifact([
               ...FULL_ENTRIES,
-              { name: "secrets/tls/server.key", bytes: Buffer.from("KEY") },
+              { name: "secrets/tls/server.pem", bytes: Buffer.from("KEY") },
             ]),
             onDatabasePlaced,
           }),
@@ -1303,18 +1303,18 @@ describe("restore hooks (identity phase)", () => {
   it("a finished restore leaves no staged or previous files", async () => {
     await seedOldBox();
     await mkdir(join(stateDir, "tls"));
-    await writeFile(join(stateDir, "tls/server.key"), "OLD KEY");
+    await writeFile(join(stateDir, "tls/server.pem"), "OLD KEY");
     await restoreFromArtifact(
       makeRestoreDeps({
         artifact: buildArtifact([
           ...FULL_ENTRIES,
-          { name: "secrets/tls/server.key", bytes: Buffer.from("KEY") },
+          { name: "secrets/tls/server.pem", bytes: Buffer.from("KEY") },
         ]),
       }),
     );
     await expectVenueRestored();
     expect(await readFile(join(stateDir, "secrets.env"), "utf8")).toBe(SECRET);
-    expect(await readFile(join(stateDir, "tls/server.key"), "utf8")).toBe("KEY");
+    expect(await readFile(join(stateDir, "tls/server.pem"), "utf8")).toBe("KEY");
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(TRADING_ENV);
     expect(await stagedOrPrevious()).toEqual([]);
   });

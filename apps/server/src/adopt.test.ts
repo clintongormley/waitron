@@ -589,11 +589,11 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     const tls = join(stateDir, "tls");
     expect(await readFile(join(tls, "ca.crt"), "utf8")).toBe(makeBundle().boxCaPem);
     expect(await readFile(join(tls, "ca.key"), "utf8")).toBe(CA_KEY_PEM);
-    for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
+    for (const name of ["ca.crt", "ca.key", "server.pem"]) {
       expect((await stat(join(tls, name))).mode & 0o777).toBe(0o600);
     }
     expect(await tlsSetMatches(stateDir)).toBe(true);
-    const leaf = new X509Certificate(await readFile(join(tls, "server.crt"), "utf8"));
+    const leaf = new X509Certificate(await readFile(join(tls, "server.pem"), "utf8"));
     expect(leaf.subjectAltName).toContain("DNS:box-aaaa.waitron.local");
   });
 

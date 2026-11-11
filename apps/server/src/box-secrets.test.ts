@@ -15,6 +15,7 @@ import {
   tightenTlsDir,
   writeCredentialsRing,
 } from "./box-secrets.js";
+import { inspectBoxTls } from "./box-tls-repair.js";
 import { finishTlsInstall } from "./box-tls-install.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import {
@@ -80,7 +81,7 @@ describe("ensureBoxSecrets", () => {
     const d = await newDir();
     const tls = join(d, "tls");
     const events = await syncsAndRenames(() => ensureBoxSecrets(deps(d)));
-    for (const name of ["ca.crt", "ca.key", "server.crt", "server.key"]) {
+    for (const name of ["ca.crt", "ca.key", "server.pem"]) {
       expect(writtenDurably(events, join(tls, name), tls), name).toBe(true);
     }
     expect(writtenDurably(events, join(d, "secrets.env"), d), "secrets.env").toBe(true);
@@ -104,24 +105,18 @@ describe("ensureBoxSecrets", () => {
   it("materialises the cert + secrets on first call and returns the TLS paths", async () => {
     const d = await newDir();
     const tls = await ensureBoxSecrets(deps(d));
-    expect(tls.certFile).toBe(join(d, "tls", "server.crt"));
-    expect(tls.keyFile).toBe(join(d, "tls", "server.key"));
+    expect(tls.certFile).toBe(join(d, "tls", "server.pem"));
+    expect(tls.keyFile).toBe(join(d, "tls", "server.pem"));
     expect(tls.caCertFile).toBe(join(d, "tls", "ca.crt"));
     const env = await readFile(join(d, "secrets.env"), "utf8");
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY=/m);
     expect(env).toMatch(/^WAITRON_CREDENTIALS_KEY_VERSION=1$/m);
   });
 
-  it("writes all four PEMs and the secrets file 0600 (owner-only, uniform)", async () => {
+  it("writes the PEM files and the secrets file 0600 (owner-only, uniform)", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
-    for (const f of [
-      "tls/server.key",
-      "tls/ca.key",
-      "tls/server.crt",
-      "tls/ca.crt",
-      "secrets.env",
-    ]) {
+    for (const f of ["tls/server.pem", "tls/ca.key", "tls/ca.crt", "secrets.env"]) {
       const mode = (await stat(join(d, f))).mode & 0o777;
       expect(mode).toBe(0o600);
     }
@@ -188,10 +183,10 @@ describe("ensureBoxSecrets", () => {
       listIpv4: vi.fn(base.listIpv4),
     };
     await ensureBoxSecrets(spied);
-    const before = await readFile(join(d, "tls", "server.crt"), "utf8");
+    const before = await readFile(join(d, "tls", "server.pem"), "utf8");
     const beforeEnv = await readFile(join(d, "secrets.env"), "utf8");
     await ensureBoxSecrets(spied); // second boot
-    expect(await readFile(join(d, "tls", "server.crt"), "utf8")).toBe(before);
+    expect(await readFile(join(d, "tls", "server.pem"), "utf8")).toBe(before);
     expect(await readFile(join(d, "secrets.env"), "utf8")).toBe(beforeEnv);
     expect(spied.mint).toHaveBeenCalledTimes(1);
     expect(spied.listIpv4).toHaveBeenCalledTimes(1);
@@ -202,7 +197,7 @@ describe("ensureBoxSecrets", () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
     const { X509Certificate } = await import("node:crypto");
-    const cert = new X509Certificate(await readFile(join(d, "tls", "server.crt"), "utf8"));
+    const cert = new X509Certificate(await readFile(join(d, "tls", "server.pem"), "utf8"));
     expect(cert.subjectAltName).toContain("127.0.0.1");
     expect(cert.subjectAltName).toContain("192.168.1.50");
     expect(cert.subjectAltName).toContain("DNS:waitron.local");
@@ -212,7 +207,7 @@ describe("ensureBoxSecrets", () => {
     const d = await newDir();
     await ensureBoxSecrets({ ...deps(d), listIpv4: () => ["127.0.0.1"] });
     const { X509Certificate } = await import("node:crypto");
-    const cert = new X509Certificate(await readFile(join(d, "tls", "server.crt"), "utf8"));
+    const cert = new X509Certificate(await readFile(join(d, "tls", "server.pem"), "utf8"));
     const san = cert.subjectAltName ?? "";
     // No other injected IP overlaps this substring (the dNSNames and 192.168.* are absent here), so a
     // plain count of the loopback address is exactly its SAN multiplicity.
@@ -227,7 +222,7 @@ describe("ensureBoxSecrets", () => {
       listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
     });
     const { X509Certificate } = await import("node:crypto");
-    const cert = new X509Certificate(await readFile(join(d, "tls", "server.crt"), "utf8"));
+    const cert = new X509Certificate(await readFile(join(d, "tls", "server.pem"), "utf8"));
     const san = cert.subjectAltName ?? "";
     expect(san).toContain("127.0.0.1"); // loopback — inside 127.0.0.0/8
     expect(san).toContain("192.168.1.50"); // a permitted RFC1918 LAN IP is retained
@@ -319,24 +314,8 @@ describe("reissueBoxLeaf", () => {
       listIpv4: () => ["192.168.1.77"],
     });
   const pairOf = async (stateDir: string) => ({
-    cert: await readFile(join(stateDir, "tls", "server.crt"), "utf8"),
-    key: await readFile(join(stateDir, "tls", "server.key"), "utf8"),
-  });
-
-  it("syncs both new files before renaming them into place, and the folder after both", async () => {
-    const d = await newDir();
-    await ensureBoxSecrets(deps(d));
-    const tls = join(d, "tls");
-    const events = await syncsAndRenames(() => reissue(d));
-    expect(writtenDurably(events, join(tls, "server.crt"), tls)).toBe(true);
-    expect(writtenDurably(events, join(tls, "server.key"), tls)).toBe(true);
-    const keyRenamed = events.indexOf(
-      `rename ${join(tls, "server.key.tmp")} ${join(tls, "server.key")}`,
-    );
-    expect(events.indexOf(`sync ${join(tls, "server.key.tmp")}`)).toBeLessThan(
-      events.indexOf(`rename ${join(tls, "server.crt.tmp")} ${join(tls, "server.crt")}`),
-    );
-    expect(events.lastIndexOf(`sync ${tls}`)).toBeGreaterThan(keyRenamed);
+    cert: await readFile(join(stateDir, "tls", "server.pem"), "utf8"),
+    key: await readFile(join(stateDir, "tls", "server.pem"), "utf8"),
   });
 
   it("replaces the pair and leaves no working file behind", async () => {
@@ -347,25 +326,20 @@ describe("reissueBoxLeaf", () => {
     const after = await pairOf(d);
     expect(after.cert).not.toBe(before.cert);
     expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
-    expect((await readdir(join(d, "tls"))).sort()).toEqual([
-      "ca.crt",
-      "ca.key",
-      "server.crt",
-      "server.key",
-    ]);
+    expect((await readdir(join(d, "tls"))).sort()).toEqual(["ca.crt", "ca.key", "server.pem"]);
   });
 
   it("writes the new key owner-only even over a stale world-readable working copy", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
-    await writeFile(join(d, "tls", "server.key.tmp"), "stale", { mode: 0o644 });
+    await writeFile(join(d, "tls", "server.pem.tmp"), "stale", { mode: 0o644 });
     await reissue(d);
-    expect((await stat(join(d, "tls", "server.key"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(d, "tls", "server.pem"))).mode & 0o777).toBe(0o600);
   });
 
   // The listener reads both files and refuses a certificate whose key does not match, so a write
   // that fails part-way must leave the pair it found.
-  it.each(["server.crt", "server.key"])(
+  it.each(["server.pem"])(
     "keeps the old, matching pair when writing the new %s fails",
     async (blocked) => {
       const d = await newDir();
@@ -388,7 +362,7 @@ describe("reissueBoxLeaf", () => {
     const before = await pairOf(d);
     const passthrough = renameMock.getMockImplementation()!;
     renameMock.mockImplementation(async (from: string, to: string) => {
-      if (to === join(d, "tls", "server.key")) {
+      if (to === join(d, "tls", "server.pem")) {
         throw Object.assign(new Error("injected rename failure"), { code: "EIO" });
       }
       return passthrough(from, to);
@@ -401,97 +375,11 @@ describe("reissueBoxLeaf", () => {
     const after = await pairOf(d);
     expect(() => createSecureContext(after)).not.toThrow();
     expect(after).toEqual(before);
-    expect((await stat(join(d, "tls", "server.crt"))).mode & 0o777).toBe(0o600);
-    expect((await readdir(join(d, "tls"))).sort()).toEqual([
-      "ca.crt",
-      "ca.key",
-      "server.crt",
-      "server.key",
-    ]);
+    expect((await stat(join(d, "tls", "server.pem"))).mode & 0o777).toBe(0o600);
+    expect((await readdir(join(d, "tls"))).sort()).toEqual(["ca.crt", "ca.key", "server.pem"]);
   });
 
-  it("keeps the old pair and no stray file when copying the old certificate aside fails", async () => {
-    const d = await newDir();
-    await ensureBoxSecrets(deps(d));
-    const before = await pairOf(d);
-    const passthrough = copyFileMock.getMockImplementation()!;
-    copyFileMock.mockImplementation(async (from: string, to: string) => {
-      if (to === join(d, "tls", "server.crt.previous")) {
-        throw Object.assign(new Error("injected copy failure"), { code: "ENOSPC" });
-      }
-      return passthrough(from, to);
-    });
-    try {
-      await expect(reissue(d)).rejects.toMatchObject({ code: "ENOSPC" });
-    } finally {
-      copyFileMock.mockImplementation(passthrough);
-    }
-    const after = await pairOf(d);
-    expect(() => createSecureContext(after)).not.toThrow();
-    expect(after).toEqual(before);
-    expect((await readdir(join(d, "tls"))).sort()).toEqual([
-      "ca.crt",
-      "ca.key",
-      "server.crt",
-      "server.key",
-    ]);
-  });
-
-  it("keeps the old pair and no stray file when renaming the new certificate into place fails", async () => {
-    const d = await newDir();
-    await ensureBoxSecrets(deps(d));
-    const before = await pairOf(d);
-    const passthrough = renameMock.getMockImplementation()!;
-    renameMock.mockImplementation(async (from: string, to: string) => {
-      if (from === join(d, "tls", "server.crt.tmp")) {
-        throw Object.assign(new Error("injected rename failure"), { code: "EIO" });
-      }
-      return passthrough(from, to);
-    });
-    try {
-      await expect(reissue(d)).rejects.toMatchObject({ code: "EIO" });
-    } finally {
-      renameMock.mockImplementation(passthrough);
-    }
-    const after = await pairOf(d);
-    expect(() => createSecureContext(after)).not.toThrow();
-    expect(after).toEqual(before);
-    expect((await readdir(join(d, "tls"))).sort()).toEqual([
-      "ca.crt",
-      "ca.key",
-      "server.crt",
-      "server.key",
-    ]);
-  });
-
-  it("reports the key rename's error and keeps the old certificate aside when putting it back fails too", async () => {
-    const d = await newDir();
-    await ensureBoxSecrets(deps(d));
-    const before = await pairOf(d);
-    const previous = join(d, "tls", "server.crt.previous");
-    const keyFailure = Object.assign(new Error("injected key rename failure"), { code: "EIO" });
-    const passthrough = renameMock.getMockImplementation()!;
-    renameMock.mockImplementation(async (from: string, to: string) => {
-      if (to === join(d, "tls", "server.key")) throw keyFailure;
-      if (from === previous) {
-        throw Object.assign(new Error("injected put-back failure"), { code: "EROFS" });
-      }
-      return passthrough(from, to);
-    });
-    try {
-      await expect(reissue(d)).rejects.toBe(keyFailure);
-    } finally {
-      renameMock.mockImplementation(passthrough);
-    }
-    const names = await readdir(join(d, "tls"));
-    expect(names.filter((name) => name.endsWith(".tmp"))).toEqual([]);
-    expect(await readFile(previous, "utf8")).toBe(before.cert);
-    const after = await pairOf(d);
-    expect(after.key).toBe(before.key);
-    expect(after.cert).not.toBe(before.cert);
-  });
-
-  it("keeps the new pair and the old certificate aside when the folder sync after both renames fails", async () => {
+  it("keeps the new PEM when its following folder sync fails", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
     const before = await pairOf(d);
@@ -502,7 +390,7 @@ describe("reissueBoxLeaf", () => {
     const openThrough = openMock.getMockImplementation()!;
     renameMock.mockImplementation(async (from: string, to: string) => {
       await renameThrough(from, to);
-      if (to === join(tls, "server.key")) keyRenamed = true;
+      if (to === join(tls, "server.pem")) keyRenamed = true;
     });
     openMock.mockImplementation(async (p: unknown, ...rest: unknown[]) => {
       if (keyRenamed && p === tls) throw syncFailure;
@@ -517,19 +405,18 @@ describe("reissueBoxLeaf", () => {
     const after = await pairOf(d);
     expect(after.cert).not.toBe(before.cert);
     expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
-    expect(await readFile(join(tls, "server.crt.previous"), "utf8")).toBe(before.cert);
     expect((await readdir(tls)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
-  it("a process stop between the two renames leaves a pair the next start finishes", async () => {
+  it("a process stop after the PEM rename leaves a complete leaf for the next start", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
     const stopped = await newDir();
     const passthrough = renameMock.getMockImplementation()!;
     renameMock.mockImplementation(async (from: string, to: string) => {
       await passthrough(from, to);
-      // What the disk holds if the process stops right after the certificate's rename.
-      if (to === join(d, "tls", "server.crt")) {
+      // Snapshot the replacement before its parent folder is flushed.
+      if (to === join(d, "tls", "server.pem")) {
         await cp(join(d, "tls"), join(stopped, "tls"), { recursive: true });
       }
     });
@@ -539,7 +426,7 @@ describe("reissueBoxLeaf", () => {
       renameMock.mockImplementation(passthrough);
     }
 
-    expect(await finishTlsInstall(stopped)).toBe("finished");
+    expect(await finishTlsInstall(stopped)).toBe("none");
     const after = await pairOf(stopped);
     expect(new X509Certificate(after.cert).checkPrivateKey(createPrivateKey(after.key))).toBe(true);
     expect(() => createSecureContext(after)).not.toThrow();
@@ -584,21 +471,12 @@ describe("mintedBoxLeaf", () => {
     expect(mintedBoxLeaf(await newDir())).toBeUndefined();
   });
 
-  it("is undefined when only one half of the pair is present (a half-written quartet)", async () => {
-    // `server.key` is `ensureBoxSecrets`'s presence sentinel, written LAST, so a crash between the
-    // renames can leave `server.crt` alone — the box must NOT try to serve that lone cert.
-    const d = await newDir();
-    await mkdir(join(d, "tls"));
-    await writeFile(join(d, "tls", "server.crt"), "x");
-    expect(mintedBoxLeaf(d)).toBeUndefined();
-  });
-
   it("is the box's own leaf when the state volume holds both halves", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
     expect(mintedBoxLeaf(d)).toEqual({
-      certFile: join(d, "tls", "server.crt"),
-      keyFile: join(d, "tls", "server.key"),
+      certFile: join(d, "tls", "server.pem"),
+      keyFile: join(d, "tls", "server.pem"),
     });
   });
 });
@@ -624,7 +502,7 @@ describe.runIf(haveOpenssl())("ensureBoxSecrets leaf verifies against its own CA
     });
     const out = execFileSync(
       "openssl",
-      ["verify", "-CAfile", join(d, "tls", "ca.crt"), join(d, "tls", "server.crt")],
+      ["verify", "-CAfile", join(d, "tls", "ca.crt"), join(d, "tls", "server.pem")],
       { encoding: "utf8" },
     );
     expect(out).toMatch(/OK/);
@@ -676,4 +554,39 @@ describe("tightenTlsDir", () => {
       await chmod(d, 0o700);
     }
   });
+});
+
+it("mints one certificate-first PEM that the TLS server and health check both accept", async () => {
+  const d = await newDir();
+  const files = await ensureBoxSecrets(deps(d));
+  expect(files.certFile).toBe(join(d, "tls/server.pem"));
+  expect(files.keyFile).toBe(files.certFile);
+  const pem = await readFile(files.certFile, "utf8");
+  expect(pem.startsWith("-----BEGIN CERTIFICATE-----")).toBe(true);
+  expect(() => createSecureContext({ key: pem, cert: pem })).not.toThrow();
+  expect(await inspectBoxTls(deps(d))).toMatchObject({ state: "healthy" });
+});
+
+it("reissues the leaf with one flushed replacement that still inspects as healthy", async () => {
+  const d = await newDir();
+  await ensureBoxSecrets(deps(d));
+  const options = { ...deps(d), listIpv4: () => ["192.168.1.77"] };
+  const events = await syncsAndRenames(() => reissueBoxLeaf(options));
+  expect(events.filter((event) => event.startsWith("rename "))).toEqual([
+    `rename ${join(d, "tls/server.pem.tmp")} ${join(d, "tls/server.pem")}`,
+  ]);
+  expect(writtenDurably(events, join(d, "tls/server.pem"), join(d, "tls"))).toBe(true);
+  expect(await inspectBoxTls(options)).toMatchObject({ state: "healthy" });
+});
+
+it("refuses a key-first PEM through the real health check", async () => {
+  const d = await newDir();
+  const files = await ensureBoxSecrets(deps(d));
+  const cert = new X509Certificate(await readFile(files.certFile)).toString();
+  const key = createPrivateKey(await readFile(files.keyFile)).export({
+    type: "pkcs8",
+    format: "pem",
+  });
+  await writeFile(join(d, "tls/server.pem"), key + cert);
+  expect(await inspectBoxTls(deps(d))).toMatchObject({ state: "repair-required" });
 });

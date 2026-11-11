@@ -844,9 +844,9 @@ describe("createWifiRecordReader reads the one fixed record", () => {
     expect(await f.read()).toEqual(LOADED);
   });
 
-  it("ca.key, server.key and recovery.key beside wifi.json → loaded, and none was opened or lstat'd", async () => {
+  it("ca.key, server.pem and recovery.key beside wifi.json → loaded, and none was opened or lstat'd", async () => {
     const f = await fixture();
-    for (const name of ["ca.key", "server.key", "recovery.key"])
+    for (const name of ["ca.key", "server.pem", "recovery.key"])
       await f.writeFile(name, "secret\n");
     expect(await f.read()).toEqual(LOADED);
     expect(touched(f)).toEqual([f.bootRoot, f.folder, f.recordPath]);

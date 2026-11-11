@@ -1961,9 +1961,8 @@ describe("waitron.sh reset", () => {
     const state = resetStateWith([
       "ca.crt",
       "ca.key",
-      "server.crt",
-      "server.key",
-      "server.key.tmp",
+      "server.pem",
+      "server.pem.tmp",
       "install.json",
       "joined.json",
     ]);
@@ -1972,23 +1971,18 @@ describe("waitron.sh reset", () => {
   });
 
   it("a reset of a box that joined, cut short in tls/, keeps its joined record, so the next reset empties tls/", () => {
-    const state = stateWith(["ca.crt", "ca.key", "server.crt", "server.key", "joined.json"]);
-    expect(cleanUp(state, "server.key")).not.toBe(0);
-    expect(readdirSync(join(state, "tls")).sort()).toEqual(["joined.json", "server.key"]);
+    const state = stateWith(["ca.crt", "ca.key", "server.pem", "joined.json"]);
+    expect(cleanUp(state, "server.pem")).not.toBe(0);
+    expect(readdirSync(join(state, "tls")).sort()).toEqual(["joined.json", "server.pem"]);
 
     expect(cleanUp(state)).toBe(0);
     expect(readdirSync(join(state, "tls"))).toEqual([]);
   });
 
   it("the reset of a box that never joined keeps its authority and leaf", () => {
-    const state = resetStateWith(["ca.crt", "ca.key", "server.crt", "server.key"]);
+    const state = resetStateWith(["ca.crt", "ca.key", "server.pem"]);
     expect(readdirSync(state)).toEqual(["tls"]);
-    expect(readdirSync(join(state, "tls")).sort()).toEqual([
-      "ca.crt",
-      "ca.key",
-      "server.crt",
-      "server.key",
-    ]);
+    expect(readdirSync(join(state, "tls")).sort()).toEqual(["ca.crt", "ca.key", "server.pem"]);
     expect(readFileSync(join(state, "tls", "ca.key"), "utf8")).toBe("ca.key");
   });
 

@@ -27,11 +27,11 @@ describe("resolveTradingTls", () => {
   it("returns the persisted box leaf used by the HTTPS listener", () => {
     const dir = stateDir();
     mkdirSync(join(dir, "tls"));
-    writeFileSync(join(dir, "tls", "server.crt"), "certificate");
-    writeFileSync(join(dir, "tls", "server.key"), "key");
+    writeFileSync(join(dir, "tls", "server.pem"), "certificate");
+    writeFileSync(join(dir, "tls", "server.pem"), "key");
     expect(resolveTradingTls({ stateDir: dir })).toEqual({
-      certFile: join(dir, "tls", "server.crt"),
-      keyFile: join(dir, "tls", "server.key"),
+      certFile: join(dir, "tls", "server.pem"),
+      keyFile: join(dir, "tls", "server.pem"),
     });
   });
 

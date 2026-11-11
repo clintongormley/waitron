@@ -1126,7 +1126,7 @@ async function bootServer(
   //
   // It does NOT keep them agreeing over time: the leaf is minted once and reused (except on the first
   // start after a restore, `rebuild-first-start.ts`), while discovery and mDNS resolve per request.
-  // Changing `WAITRON_BOX_ADDRESSES` on a box that already holds `<stateDir>/tls/server.key` moves the
+  // Changing `WAITRON_BOX_ADDRESSES` on a box that already holds `<stateDir>/tls/server.pem` moves the
   // QR and mDNS answers to an address the certificate does not cover. Set it on the FIRST boot of a
   // state dir, or discard the `tls/` files to re-mint.
   const boxAddresses = (): string[] => config.boxAddresses ?? listBoxIpv4();

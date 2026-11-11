@@ -128,6 +128,7 @@ Step 1 runs the box's own health check over the file the code writes, under CI's
 ## Files
 
 - Modify: `packages/store/src/state-layout.ts`, `apps/server/src/box-tls-repair.ts`,
+  `apps/server/src/box-tls-install.ts` (watcher, 2026-11-11 11:13),
   `apps/server/src/box-secrets.ts`, `apps/server/src/node-entry.ts:689`, the readers in What it
   builds 5, `scripts/handover-manifest-complete.test.ts` if it pins the two names,
   `scripts/durable-writes.test.ts`, `apps/server/README.md:92`, `deploy/README.md:415-420` (the

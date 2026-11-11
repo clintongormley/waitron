@@ -291,8 +291,8 @@ export function useBackupVerificationFixture() {
       "trading.env": `WAITRON_NODE_ID=${verificationNode.nodeId}\nWAITRON_ENV=production\n`,
       "tls/ca.crt": forge.pki.certificateToPem(ca),
       "tls/ca.key": forge.pki.privateKeyToPem(pair.privateKey),
-      "tls/server.crt": forge.pki.certificateToPem(server),
-      "tls/server.key": forge.pki.privateKeyToPem(pair.privateKey),
+      "tls/server.pem":
+        forge.pki.certificateToPem(server) + forge.pki.privateKeyToPem(pair.privateKey),
     };
     for (const [name, value] of Object.entries(files)) {
       await mkdir(dirname(join(stateDir, name)), { recursive: true });

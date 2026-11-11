@@ -1,15 +1,11 @@
-import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import {
-  chmod,
-  copyFile,
-  lstat,
-  open,
-  readFile,
-  realpath,
-  rename,
-  rm,
-  type FileHandle,
-} from "node:fs/promises";
+  SECRETS_ENV_FILE,
+  TLS_DIR,
+  TLS_REPAIR_DIR,
+  TLS_REPAIR_FLOW_DIR,
+  SERVER_PEM_FILE,
+} from "@waitron/store";
+import { chmod, lstat, open, readFile, type FileHandle } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { join } from "node:path";
@@ -18,9 +14,9 @@ import { AppError } from "@waitron/shared";
 import { withRecoveryLock } from "./recovery-lock.js";
 import "./errors.js";
 import { listBoxIpv4 } from "./box-reach.js";
-import { closeTlsInstall, dropTlsInstall, fileExists, stageTlsInstall } from "./box-tls-install.js";
+import { fileExists } from "./box-tls-install.js";
 import { leafIpv4s, mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
-import { mkdirDurable, stagedPath, writeFileDurable } from "./fs-atomic.js";
+import { mkdirDurable, writeFileDurable } from "./fs-atomic.js";
 import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
@@ -48,8 +44,8 @@ function boxTlsPaths(stateDir: string) {
   const tlsDir = join(stateDir, TLS_DIR);
   return {
     tlsDir,
-    certFile: join(tlsDir, "server.crt"),
-    keyFile: join(tlsDir, "server.key"),
+    certFile: join(stateDir, SERVER_PEM_FILE),
+    keyFile: join(stateDir, SERVER_PEM_FILE),
     caCertFile: caCertPath(stateDir),
     caKeyFile: caKeyPath(stateDir),
   };
@@ -83,14 +79,9 @@ export function keyRingEnv(ring: EncodedKeyRing): Record<string, string> {
   return env;
 }
 
-/**
- * The box's own minted leaf, or `undefined` when either half is missing: `buildServeOptions` reads
- * both, and a half-written pair would throw inside the serve call. A phone or till trusts the box's
- * CA, not the leaf, so a new leaf the same CA signs needs no new trust step.
- */
 export function mintedBoxLeaf(stateDir: string): TlsFiles | undefined {
   const { certFile, keyFile } = boxTlsPaths(stateDir);
-  if (!existsSync(certFile) || !existsSync(keyFile)) return undefined;
+  if (!existsSync(certFile)) return undefined;
   return { certFile, keyFile };
 }
 
@@ -166,8 +157,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
       files.caCertFile,
       files.caKeyFile,
       files.certFile,
-      `${files.certFile}.previous`,
-      join(files.tlsDir, "repair-archive"),
+      join(deps.stateDir, TLS_REPAIR_DIR),
       join(deps.stateDir, SECRETS_ENV_FILE),
     ]) {
       if (await fileExists(path)) throw new AppError("setup.not_ready", {});
@@ -179,8 +169,7 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
     });
     await writeFileDurable(files.caCertFile, m.caCertPem, 0o600);
     await writeFileDurable(files.caKeyFile, m.caKeyPem, 0o600);
-    await writeFileDurable(files.certFile, m.serverCertPem, 0o600);
-    await writeFileDurable(files.keyFile, m.serverKeyPem, 0o600);
+    await writeFileDurable(files.certFile, m.serverCertPem + m.serverKeyPem, 0o600);
   }
 
   const secretsFile = join(deps.stateDir, SECRETS_ENV_FILE);
@@ -196,17 +185,6 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
   return { certFile: files.certFile, keyFile: files.keyFile, caCertFile: files.caCertFile };
 }
 
-/**
- * Replace the leaf with one naming THIS machine's addresses, signed by the authority already in
- * `<stateDir>/tls`, which stays untouched. The new pair goes through `stageTlsInstall`, so a stop
- * during the writes or renames leaves the old pair or one `finishTlsInstall` completes at the next
- * start. A failed write removes the working files and the list. A failed key rename puts the old
- * certificate back. If that rename fails too, the old certificate is kept as `server.crt.previous`
- * and the new certificate stays beside the old key. A stop while the put-back runs can also leave a
- * certificate and key that do not belong together. `ensureLeaf` reissues either at the next start.
- * A failed folder sync after both renames throws with the new pair in place and the old certificate
- * kept as `server.crt.previous`.
- */
 export async function reissueBoxLeaf(deps: {
   stateDir: string;
   hostnames: string[];
@@ -231,45 +209,13 @@ async function reissueBoxLeafLocked(deps: {
     ipAddresses: leafIpv4s(deps.listIpv4),
     now: deps.now(),
   });
-  // The certificate moves first: only its old copy is kept for a put-back, never the old key.
-  const pair = [
-    { name: "server.crt", pem: leaf.serverCertPem },
-    { name: "server.key", pem: leaf.serverKeyPem },
-  ] as const;
-  const names = pair.map(({ name }) => name);
-  try {
-    await stageTlsInstall(deps.stateDir, pair);
-  } catch (error) {
-    await dropTlsInstall(deps.stateDir, names);
-    throw error;
-  }
-  const previousCert = `${files.certFile}.previous`;
-  let certReplaced = false;
-  try {
-    await copyFile(files.certFile, previousCert);
-    await rename(stagedPath(files.certFile), files.certFile);
-    certReplaced = true;
-    await rename(stagedPath(files.keyFile), files.keyFile);
-  } catch (error) {
-    let putBackFailed = false;
-    if (certReplaced) {
-      await rename(previousCert, files.certFile).catch(() => {
-        putBackFailed = true;
-      });
-    }
-    await dropTlsInstall(deps.stateDir, names);
-    // A failed put-back leaves the copy as the only one of the old certificate.
-    if (!putBackFailed) await rm(previousCert, { force: true }).catch(() => {});
-    throw error;
-  }
-  await closeTlsInstall(deps.stateDir);
-  await rm(previousCert, { force: true });
+  await writeFileDurable(files.certFile, leaf.serverCertPem + leaf.serverKeyPem, 0o600);
 }
 
 /**
  * Reissues the box's leaf with {@link reissueBoxLeaf} when it lacks one of `hostnames` or a current
  * permitted address, does not verify under the current `tls/ca.crt`, or is not the certificate of
- * `tls/server.key`; otherwise leaves both files untouched. A box with no minted leaf is left alone.
+ * `tls/server.pem`; otherwise leaves the file untouched. A box with no minted leaf is left alone.
  */
 export async function ensureLeaf(deps: {
   stateDir: string;
@@ -293,14 +239,10 @@ export async function ensureLeaf(deps: {
 }
 
 async function assertNoPendingTlsRepair(stateDir: string): Promise<void> {
-  let tlsDir: string;
-  try {
-    tlsDir = await realpath(join(stateDir, TLS_DIR));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-  const record = await readDurableHostJson(join(tlsDir, "repair-pending.json"), 131072);
+  const record = await readDurableHostJson(
+    join(stateDir, TLS_REPAIR_FLOW_DIR, "record.json"),
+    131072,
+  );
   if (record !== null && (record as { complete?: unknown }).complete !== true) {
     throw new AppError("setup.not_ready", {});
   }

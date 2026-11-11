@@ -12,8 +12,7 @@ import "./errors.js";
 const SECRETS_PREFIX = "secrets/";
 
 export const STAGED_SECRET_SUFFIX = ".incoming";
-/** Not `.previous`: the certificate reissue keeps its own `tls/server.crt.previous`
- * (`box-secrets.ts`). A killed restore can leave `.incoming`, `.incoming.tmp` and
+/** A killed restore can leave `.incoming`, `.incoming.tmp` and
  * `.restore-previous` files beside the secrets. One killed while publishing can leave a target
  * missing, with the box's old file as `.restore-previous` and the backup's as `.incoming`. The next
  * restore replaces only those of the names its own archive carries, so a `tls/*.restore-previous`
@@ -43,7 +42,7 @@ export interface StagedSecrets {
 }
 
 interface Secret {
-  /** Relative to the state folder, posix: `tls/server.key`. */
+  /** Relative to the state folder, posix: `tls/server.pem`. */
   rel: string;
   entryName: string;
   contents: string;

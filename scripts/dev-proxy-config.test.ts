@@ -43,8 +43,8 @@ function proxyFrontEnds(): { app: string; configPath: string }[] {
 
 beforeAll(() => {
   mkdirSync(join(stateDir, "tls"));
-  writeFileSync(join(stateDir, "tls", "server.crt"), "certificate");
-  writeFileSync(join(stateDir, "tls", "server.key"), "key");
+  writeFileSync(join(stateDir, "tls", "server.pem"), "certificate");
+  writeFileSync(join(stateDir, "tls", "server.pem"), "key");
   process.env.WAITRON_STATE_DIR = stateDir;
 });
 

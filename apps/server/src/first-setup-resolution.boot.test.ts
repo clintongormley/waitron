@@ -376,8 +376,7 @@ async function startingBox(box: Box) {
   for (const [name, value] of Object.entries({
     "ca.crt": material.caCertPem,
     "ca.key": material.caKeyPem,
-    "server.crt": material.serverCertPem,
-    "server.key": material.serverKeyPem,
+    "server.pem": material.serverCertPem + material.serverKeyPem,
   }))
     await writeFile(join(stateDir, "tls", name), value);
   const roots = { stateDir, venueDir };
@@ -686,8 +685,7 @@ async function foundFilesBox() {
   for (const [name, value] of Object.entries({
     "ca.crt": material.caCertPem,
     "ca.key": material.caKeyPem,
-    "server.crt": material.serverCertPem,
-    "server.key": material.serverKeyPem,
+    "server.pem": material.serverCertPem + material.serverKeyPem,
   }))
     await writeFile(join(stateDir, "tls", name), value);
   await writeFile(join(venueDir, "venue.db"), "found database");

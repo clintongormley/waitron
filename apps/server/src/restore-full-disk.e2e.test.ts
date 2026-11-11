@@ -144,7 +144,7 @@ it("a disk too full for the secrets refuses before anything is replaced", async 
   const small = needDisk(ctx);
   const box = await oldBox(small, "secrets");
   const bytes = artifact(0, [
-    { name: "secrets/tls/server.crt", bytes: Buffer.alloc(2 * MIB, "c") },
+    { name: "secrets/tls/server.pem", bytes: Buffer.alloc(2 * MIB, "c") },
   ]);
   small.fill(512 * KIB);
   expect(small.free()).toBeGreaterThan(64 * KIB);
@@ -168,7 +168,7 @@ it("a disk too full for the secrets refuses before anything is replaced", async 
   expect(thrown).toMatchObject({ code: "ENOSPC", syscall: "write" });
   // The rebuild marker is written before the secrets are staged; had it taken the failure, no
   // staged file would have been opened.
-  expect(openedPaths.at(-1)).toBe(join(box.stateDir, "tls", "server.crt.incoming.tmp"));
+  expect(openedPaths.at(-1)).toBe(join(box.stateDir, "tls", "server.pem.incoming.tmp"));
   await expectOldBox(box);
 }, 120_000);
 

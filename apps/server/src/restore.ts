@@ -386,7 +386,7 @@ async function validateEntryMetadata(
     // Two names for one file would share one staged and one set-aside copy, and the second publish
     // would set the first one's new file aside over the box's old one. Resolved through links (the
     // guard has made the parent), and the name in lower case because a case-insensitive filesystem
-    // treats `server.key` and `SERVER.KEY` as one file.
+    // treats `server.pem` and `SERVER.PEM` as one file.
     const location = join(await realpath(dirname(target)), basename(target)).toLowerCase();
     if (destinations.has(location)) {
       throw new AppError("restore.unsafe_entry_path", { name: entry.name });

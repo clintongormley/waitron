@@ -3585,6 +3585,12 @@ name — it covers only the duties it names, so a new one that forgets is seen b
 
 ## A box that joined another holds that venue's authority as its own, and both resets remove it
 
+**2026-11-11, A1308 fl6:** the joined-box install now lists three files: `ca.key`, `ca.crt`
+and the certificate-first `server.pem` containing the leaf and its private key. A leaf reissue
+replaces that PEM with one flushed rename; it no longer uses the install list or a previous
+certificate copy. The four-file install and two-rename reissue described below are the earlier
+A947 mechanism. The current reissue checks live in `box-secrets.test.ts`.
+
 **The rule.** When a spare joins a main box, `adoptFromPrimary` (`apps/server/src/adopt.ts`)
 first writes `tls/joined.json` (`TLS_JOINED_FILE`, `packages/store/src/state-layout.ts`), holding
 the main box's node id, before `stampDeployment` and before the main box's key ring replaces

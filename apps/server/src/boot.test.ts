@@ -997,7 +997,7 @@ describe("startServer, against a migrated venue directory", () => {
         const stateDir = await tradingStateDir("waitron-boot-tls-leaf-kept-");
         await ensureBoxSecrets({ stateDir, hostnames: ["localhost"], now: () => new Date() });
         await rm(join(stateDir, "tls", "ca.key"));
-        const before = await readFile(join(stateDir, "tls", "server.crt"), "utf8");
+        const before = await readFile(join(stateDir, "tls", "server.pem"), "utf8");
         const server = await startTrading(stateDir, port);
         const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
         try {
@@ -1007,7 +1007,7 @@ describe("startServer, against a migrated venue directory", () => {
           const line = await waitForEvent(lines, "tls.leaf_reissue_failed");
           expect(line).toMatchObject({ level: "warn", errno: "ENOENT" });
           expect(JSON.stringify(line)).not.toContain(stateDir);
-          expect(await readFile(join(stateDir, "tls", "server.crt"), "utf8")).toBe(before);
+          expect(await readFile(join(stateDir, "tls", "server.pem"), "utf8")).toBe(before);
         } finally {
           await server.close();
           await close();
@@ -1036,7 +1036,7 @@ describe("startServer, against a migrated venue directory", () => {
       WAITRON_BOX_ADDRESSES: override,
     });
     try {
-      const leaf = new X509Certificate(await readFile(join(stateDir, "tls", "server.crt"), "utf8"));
+      const leaf = new X509Certificate(await readFile(join(stateDir, "tls", "server.pem"), "utf8"));
       const san = leaf.subjectAltName ?? "";
       const ca = await readFile(join(stateDir, "tls", "ca.crt"));
       expect(san).toContain(override);
@@ -1532,7 +1532,7 @@ describe("startServer, against a migrated venue directory", () => {
 
       // The box's own fallback leaf was minted too, so a later boot that drops the operator vars still
       // has a cert to serve.
-      expect(existsSync(join(stateDir, "tls", "server.crt"))).toBe(true);
+      expect(existsSync(join(stateDir, "tls", "server.pem"))).toBe(true);
       const discovery = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/discovery`, via);
       expect(await discovery.json()).toMatchObject({ caDownloadAvailable: false });
       for (const path of ["/ca.crt", "/setup-api/ca.crt"]) {

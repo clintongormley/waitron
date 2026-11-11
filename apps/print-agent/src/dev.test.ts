@@ -50,8 +50,7 @@ describe("development print agent", () => {
 
   it("uses the box HTTPS leaf and caches its public CA without needing port 80", async () => {
     await mkdir(join(stateDir, "tls"));
-    await writeFile(join(stateDir, "tls", "server.crt"), "leaf");
-    await writeFile(join(stateDir, "tls", "server.key"), "private key");
+    await writeFile(join(stateDir, "tls", "server.pem"), "leaf and private key");
     await writeFile(join(stateDir, "tls", "ca.crt"), "development CA");
     const env = await prepareDevEnv({ WAITRON_STATE_DIR: stateDir });
     expect(readEnv(env, "dev-machine").serverUrl).toBe("https://127.0.0.1:8080");
@@ -65,9 +64,9 @@ describe("development print agent", () => {
     );
   });
 
-  it("keeps HTTP when only one leaf file exists", async () => {
+  it("keeps HTTP before the leaf working copy is published", async () => {
     await mkdir(join(stateDir, "tls"));
-    await writeFile(join(stateDir, "tls", "server.crt"), "leaf");
+    await writeFile(join(stateDir, "tls", "server.pem.tmp"), "leaf and private key");
     expect((await prepareDevEnv({ WAITRON_STATE_DIR: stateDir })).WAITRON_SERVER_URL).toBe(
       "http://127.0.0.1:8080",
     );

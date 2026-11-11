@@ -33,8 +33,8 @@ async function stateDirWithLeaf(): Promise<string> {
   const d = await mkdtemp(join(tmpdir(), "waitron-land-boot-"));
   dirs.push(d);
   await mkdir(join(d, "tls"), { recursive: true });
-  await writeFile(join(d, "tls", "server.crt"), material.serverCertPem);
-  await writeFile(join(d, "tls", "server.key"), material.serverKeyPem);
+  await writeFile(join(d, "tls", "server.pem"), material.serverCertPem);
+  await writeFile(join(d, "tls", "server.pem"), material.serverKeyPem);
   await writeFile(join(d, "tls", "ca.crt"), material.caCertPem);
   return d;
 }
