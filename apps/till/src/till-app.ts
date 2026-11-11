@@ -1,5 +1,5 @@
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
-import { liveRefresh } from "./state/live-gate.js";
+import { liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
 import {
   recoveryLink,
   recoveryRefusalOf,
@@ -2251,6 +2251,8 @@ export class TillApp extends LitElement {
 
   #live?: TillLiveConnection;
   #liveApi?: TillApi;
+  #billDraftLive?: { stop(): void };
+  #deliveryLive?: { stop(): void };
   readonly #routerLive = () => this.router?.setLive(this.#live?.up ?? false);
   readonly #pauseLive = () => {
     this.#live?.stop();
@@ -2499,11 +2501,13 @@ export class TillApp extends LitElement {
 
   readonly #onDraftFocus = (): void => {
     void this.#refreshBillDraft();
+    void this.#rereadBillsOnTimer();
     void this.#refreshTableAllergy();
   };
 
   readonly #onVisibility = (): void => {
     void this.#refreshBillDraft();
+    void this.#rereadBillsOnTimer();
     this.sessionActivity.reacquire();
     this.#syncEquipmentNfc();
   };
@@ -2617,6 +2621,8 @@ export class TillApp extends LitElement {
     window.removeEventListener("pageshow", this.#resumeLive);
     this.#pauseLive();
     this.#live = undefined;
+    this.#billDraftLive?.stop();
+    this.#deliveryLive?.stop();
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
     super.disconnectedCallback();
@@ -2998,6 +3004,7 @@ export class TillApp extends LitElement {
   @state() private resolvingDraftCandidate: DraftSync | null = null;
   #billDraftTimer?: ReturnType<typeof setTimeout>;
   #billDraftReading?: DraftSync;
+  #billDraftReadDone?: Promise<void>;
   readonly #candidateOwner = {};
   #candidateScope?: DraftScope<string>;
   #candidateObserved = "[]";
@@ -4766,12 +4773,47 @@ export class TillApp extends LitElement {
           this.#live.addInterests(
             "device",
             Object.entries(TILL_LIVE_TYPES)
-              .filter(([name]) => name !== "transfers")
+              .filter(([name]) => name !== "transfers" && name !== "clocking")
               .flatMap(([, types]) => types),
           );
           this.#live.addEventListener("up", this.#routerLive);
           this.#live.addEventListener("down", this.#routerLive);
           this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
+          this.#billDraftLive?.stop();
+          this.#deliveryLive?.stop();
+          const live = this.#live;
+          this.#billDraftLive = queuedLiveRefresh(live, {
+            types: TILL_LIVE_TYPES.billDraft!,
+            beforeRun: () => this.#billDraftReadDone,
+            run: async () => {
+              if (this.isConnected && this.#live === live)
+                await Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+            },
+          });
+          this.#deliveryLive = queuedLiveRefresh(live, {
+            types: TILL_LIVE_TYPES.deliveries!,
+            run: async () => {
+              const id = this.ticketWorkingOrderId;
+              if (
+                this.isConnected &&
+                this.#live === live &&
+                id !== undefined &&
+                this.#ticketIsCurrent(id, this.#operatorSession, this.#receiptPrintVisit)
+              )
+                await Promise.all([
+                  this.#readReceiptPrint(id, this.#operatorSession, this.#receiptPrintVisit),
+                  ...(this.result?.invoiceType === "F1"
+                    ? [
+                        this.#readInvoiceDeliveries(
+                          id,
+                          this.#operatorSession,
+                          this.#receiptPrintVisit,
+                        ),
+                      ]
+                    : []),
+                ]);
+            },
+          });
           this.#live.start();
         }
       } else {
@@ -4921,6 +4963,7 @@ export class TillApp extends LitElement {
       (action, state) => {
         if (current()) this.#settleClockAction(action, state);
       },
+      this.#live,
     );
     this.#clocking = controller;
     void controller.start(personId);
@@ -12231,16 +12274,16 @@ export class TillApp extends LitElement {
   #scheduleBillDraftRefresh(): void {
     clearTimeout(this.#billDraftTimer);
     this.#billDraftTimer = setTimeout(() => {
-      void Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]).finally(() => {
+      const refresh = this.#live?.up
+        ? Promise.resolve()
+        : Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
+      void refresh.finally(() => {
         if (this.isConnected && (this.#draftSync !== undefined || this.#splitPanel !== undefined))
           this.#scheduleBillDraftRefresh();
       });
     }, 15_000);
   }
 
-  /** The till has no push from the server, so another till merging or moving the bill on screen away
-   * (D11 rule 3) is seen only by a bills read; the draft's timer makes one. So does Split a table's
-   * panel on a party with no sync, or a bill started elsewhere would never reach it. */
   async #rereadBillsOnTimer(): Promise<void> {
     const partyId = this.#draftSync?.partyId ?? this.#splitPanel?.partyId;
     if (
@@ -12303,6 +12346,10 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const before = sync.edit;
     this.#billDraftReading = sync;
+    let complete!: () => void;
+    this.#billDraftReadDone = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
     try {
       const loaded = await sync.load(
         this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
@@ -12329,7 +12376,11 @@ export class TillApp extends LitElement {
       }
       this.requestUpdate();
     } finally {
-      if (this.#billDraftReading === sync) this.#billDraftReading = undefined;
+      if (this.#billDraftReading === sync) {
+        this.#billDraftReading = undefined;
+        this.#billDraftReadDone = undefined;
+      }
+      complete();
     }
   }
 
@@ -20890,6 +20941,7 @@ export class TillApp extends LitElement {
         .operatorSession=${this.#operatorSession}
         embedded
         monitor
+        .live=${this.#live}
         .api=${this.api}
         .deviceMode=${this.deviceMode}
         .deviceName=${this.deviceName}
@@ -20901,6 +20953,7 @@ export class TillApp extends LitElement {
       ? html`<till-pass-screen
           .operatorSession=${this.#operatorSession}
           embedded
+          .live=${this.#live}
           .api=${this.api}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceMode=${this.deviceMode}
@@ -20912,6 +20965,7 @@ export class TillApp extends LitElement {
       : html`<till-station-screen
           .operatorSession=${this.#operatorSession}
           embedded
+          .live=${this.#live}
           .api=${this.api}
           .deviceMode=${this.deviceMode}
           .initialDeviceStation=${this.initialDeviceStation}
@@ -21149,6 +21203,7 @@ export class TillApp extends LitElement {
         return html`<till-station-screen
           .operatorSession=${this.#operatorSession}
           slot="drill"
+          .live=${this.#live}
           .api=${this.api}
           .backKey=${this.#homeScreen() === "counter" ? "station.back" : "action.back"}
           .canMoveStation=${this.capabilities.includes("take-orders")}
@@ -21162,6 +21217,7 @@ export class TillApp extends LitElement {
         return html`<till-pass-screen
           .operatorSession=${this.#operatorSession}
           slot="drill"
+          .live=${this.#live}
           .api=${this.api}
           .backKey=${this.#homeScreen() === "counter" ? "expo.back" : "action.back"}
           .runsPass=${this.capabilities.includes("run-the-pass")}

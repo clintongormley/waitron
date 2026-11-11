@@ -12,7 +12,14 @@ on time or server memory. Transfers keep their timer to detect ended person sess
 timed reads stay quiet while connected and resume when thirty seconds of silence counts the
 connection down. Payment-owned equipment changes use the equipment timer, so disabling payments
 does not leave a rejected subscription. Handhelds and kitchen displays retain
-timed reads under jr11's measured tills-only fallback. The remaining screen reads belong to jr14.
+timed reads under jr11's measured tills-only fallback, including handheld pending-payment reads.
+On tills, station and pass screens, clocking, receipt delivery and the open bill draft also refresh
+on their declared changes. Kitchen, clocking and delivery timers remain because their answers age
+with time. Clocking interests follow the available clocking controller, so workforce-disabled
+setups never request workforce resources. Bill drafts quiet their fifteen-second chain while
+connected and refresh on reconnect or loss; their draft, bill-family and balance reads use stored
+rows. Kitchen event bursts have one read in flight and one queued; their timed reads retain their
+independent bounded overlap for recovery.
 
 At a venue with one logical box, the till pauses its five-second primary-server probe while its
 device connection is ready and the last probe found a primary. A lost or stopped connection

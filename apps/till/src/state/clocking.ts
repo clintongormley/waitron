@@ -1,3 +1,5 @@
+import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
+import { liveGate } from "./live-gate.js";
 import { isNetworkFailure, type TillApi, type TillClockState } from "../api/client.js";
 
 export type TillClockAction = "in" | "out" | "break-start" | "break-end";
@@ -43,7 +45,7 @@ export class ClockingController {
   #generation = 0;
   #readVersion = 0;
   #readRequest?: AbortController;
-  #poll?: ReturnType<typeof setInterval>;
+  #poll?: { stop(): void };
   readonly #requests = new Set<AbortController>();
   #pending: { action: TillClockAction; beforeId: string | null } | null = null;
 
@@ -51,6 +53,7 @@ export class ClockingController {
     api: ClockApi,
     changed: (snapshot: ClockingSnapshot) => void,
     settled: (action: TillClockAction, state: TillClockState | null) => void,
+    private readonly connection?: TillLiveConnection,
   ) {
     this.#api = api;
     this.#changed = changed;
@@ -60,9 +63,14 @@ export class ClockingController {
   async start(personId: string): Promise<void> {
     this.stop();
     this.#personId = personId;
-    this.#poll = setInterval(() => {
-      if (this.#pending === null) void this.refresh();
-    }, 15_000);
+    this.#poll = liveGate(this.connection, {
+      types: TILL_LIVE_TYPES.clocking!,
+      intervalMs: 15_000,
+      quietWhileConnected: false,
+      run: () => {
+        if (this.#pending === null) void this.refresh();
+      },
+    });
     await this.#read();
   }
 
@@ -71,7 +79,7 @@ export class ClockingController {
     ++this.#readVersion;
     this.#personId = null;
     this.#pending = null;
-    clearInterval(this.#poll);
+    this.#poll?.stop();
     this.#poll = undefined;
     for (const request of this.#requests) request.abort();
     this.#readRequest = undefined;

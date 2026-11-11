@@ -343,7 +343,7 @@ with, opens beside the order, and **Back** closes it.
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, use **Merge bills**. If another till
 merges the bill on your screen into another bill, or moves it to another table, your screen
-switches, within about 15 seconds, to another of the table's bills, when one is left, and says so,
+switches to another of the table's bills, when one is left, and says so,
 such as **Bill 2 is no longer at this table. Now showing Bill 1.** Dishes you had added to the bill
 that went and not sent are not moved onto the bill now shown: they are listed under **Your changes
 have not been saved.**, with **Discard changes** and **Update the order**. A bill paid on another

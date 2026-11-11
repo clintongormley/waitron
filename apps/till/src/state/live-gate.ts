@@ -58,3 +58,42 @@ export function liveGate(
     },
   };
 }
+
+export function queuedLiveRefresh(
+  connection: TillLiveConnection | undefined,
+  options: {
+    types: readonly string[];
+    run(): Promise<unknown>;
+    beforeRun?(): Promise<void> | undefined;
+  },
+): { stop(): void } {
+  let stopped = false,
+    running = false,
+    queued = false;
+  const refresh = liveRefresh(connection, {
+    types: options.types,
+    run: () => {
+      queued = true;
+      if (running) return;
+      running = true;
+      void (async () => {
+        try {
+          while (queued && !stopped) {
+            await options.beforeRun?.();
+            if (stopped) break;
+            queued = false;
+            await options.run();
+          }
+        } finally {
+          running = false;
+        }
+      })();
+    },
+  });
+  return {
+    stop() {
+      stopped = true;
+      refresh.stop();
+    },
+  };
+}

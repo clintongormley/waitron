@@ -2279,11 +2279,8 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: A bill another till moved, merged or part-paid
 
-3 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size M.
 
-- **A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
-  open by A803 slice 3, #2360).** Re-read the bills there too (`apps/till/src/till-app.ts`).
-  [Detail](till.md#a1264-a-bill-another-till-merged-or-moved-away-is-noticed-only-on-the-15-second-timer)
 - **A1267. A dish typed on a bill another till merged or moved away is kept nowhere a waiter can see
   when no bill is left to show (left open by A803 slice 3, #2360).** Decide where those lines go.
   [Detail](till.md#a1267-a-dish-typed-on-a-bill-another-till-merged-or-moved-away-is-kept-nowhere-a-waiter-can-see-when-no-bill-is-left-to-show)
@@ -4113,7 +4110,7 @@ of page colour round every badge in `wt-help-tooltip`, which changes every badge
 ticket/receipt grouping, has landed. What it leaves open is A1191–A1198, A1201, A1217 and the store limit under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235 and A1237. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-main bill, has landed (#2360); it leaves open A1261, A1264–A1267 and A1269. Slice
+main bill, has landed (#2360); it leaves open A1261, A1265–A1267 and A1269. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1287–A1294 and A1299–A1300. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1347–A1352, A1358–A1360, A1362, A1365 and A1366. Remaining: pre-bills through A446, which
@@ -4148,15 +4145,6 @@ Owner question 2, #2360).** As built, the ⋮ offers Full invoice only for a bil
 not yet invoiced; for a paid bill it is a correction, which A802 has not built. Once A802 gives
 the till a way in, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
 quiet and explain on tap", that needs a new sentence in English and Spanish first.
-
-## A1264. A bill another till merged or moved away is noticed only on the 15-second timer
-
-**A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
-open by A803 slice 3, #2360).** The till has no push from the server. Since the LOOK fix F1 it
-re-reads the party's bills on its draft timer and after a refused save; a window focus, or the
-page becoming visible again, re-reads the draft but not the bills (by reading, not run), so the
-screen can keep the gone bill for up to 15 seconds after the till is picked up. Re-read the
-bills there too (`apps/till/src/till-app.ts`).
 
 ## A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts below the fold
 

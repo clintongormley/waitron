@@ -1100,7 +1100,10 @@ product failures.
   Tills use the device stream for menu, equipment, floor, transfer and table-allergy refreshes;
   transfers retain their access timer to notice ended sessions, and payment-owned equipment changes
   retain their timed refresh so the connection also works with payments disabled;
-  the remaining screen reads belong to jr14. A one-box till pauses primary-server probes while its
+  station, pass, clocking and receipt-delivery reads also refresh on changes while keeping their
+  clock-dependent timers. The open bill draft refreshes on changes and quiets its row-based timer
+  while connected. Clocking interests are present only when clocking is available.
+  A one-box till pauses primary-server probes while its
   device connection is ready and the last probe found a primary, resuming immediately when it drops;
   lists with more than one box keep probing and handing on membership charts.
   Handhelds and kitchen displays keep timed reads under

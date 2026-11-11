@@ -1,3 +1,4 @@
+import { liveReadFixture } from "../test/live-connection.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { SessionActivity } from "./session-activity.js";
@@ -430,4 +431,23 @@ describe("till clocking integration", () => {
       );
     },
   );
+});
+
+it("the signed-in clock follows live time entries on the device connection", async () => {
+  const stream = liveReadFixture();
+  const f = await clockApp({ api: { readLiveEvents: stream.read } });
+  await signIn(f.el);
+  await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
+  const reads = f.api.getClockState.mock.calls.length;
+  stream.event("ready");
+  await vi.waitFor(() => expect(f.api.getClockState.mock.calls.length).toBeGreaterThan(reads));
+  await vi.waitFor(() =>
+    expect((clockPage(f.el) as HTMLElement & { reading: boolean }).reading).toBe(false),
+  );
+  f.setState(clockState("working", "other-till"));
+  stream.event("change", '[{"type":"time_entries"}]');
+  await vi.waitFor(() =>
+    expect((clockPage(f.el) as HTMLElement & { canClockIn: boolean }).canClockIn).toBe(false),
+  );
+  expect(stream.reads.at(-1)!.types).toContain("time_entries");
 });

@@ -214,3 +214,128 @@ it("re-reads table allergies on change and quiets their timer while connected", 
   await vi.advanceTimersByTimeAsync(15_000);
   expect(read).toHaveBeenCalledTimes(before + 3);
 });
+
+it("a workforce-disabled till opens its shared connection without clocking interests", async () => {
+  const stream = liveReadFixture();
+  const { el } = await mountApp({
+    readLiveEvents: stream.read,
+    getTill: vi.fn().mockResolvedValue({ ...till("till"), clockingAvailable: false }),
+  });
+  await signIn(el);
+  expect(stream.reads.at(-1)!.types).not.toContain("time_entries");
+  stream.event("ready");
+  await flush(el);
+  expect(stream.reads.at(-1)!.signal?.aborted).toBe(false);
+});
+
+it("live bill changes immediately reread the open draft and bills", async () => {
+  const stream = liveReadFixture();
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  await openTable(el);
+  stream.event("ready");
+  await flush(el);
+  const drafts = api.listDrafts!.mock.calls.length;
+  const bills = api.getPartyBills!.mock.calls.length;
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(drafts + 1);
+  expect(api.getPartyBills).toHaveBeenCalledTimes(bills + 1);
+});
+
+it("the bill-draft timer quiets while connected and resumes after a connection ends", async () => {
+  const stream = liveReadFixture();
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  await openTable(el);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  el.api = { ...api } as unknown as import("./api/client.js").TillApi;
+  await vi.advanceTimersByTimeAsync(0);
+  await el.updateComplete;
+  stream.event("ready");
+  await vi.advanceTimersByTimeAsync(0);
+  const drafts = api.listDrafts!.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(15_000);
+  await el.updateComplete;
+  expect(api.listDrafts).toHaveBeenCalledTimes(drafts);
+  stream.reads.at(-1)!.end();
+  await vi.advanceTimersByTimeAsync(0);
+  const resumed = api.listDrafts!.mock.calls.length;
+  expect(resumed).toBe(drafts + 1);
+  await vi.advanceTimersByTimeAsync(15_000);
+  await el.updateComplete;
+  expect(api.listDrafts).toHaveBeenCalledTimes(resumed + 1);
+});
+
+it("a bill change during a draft read queues a fresh read", async () => {
+  const stream = liveReadFixture();
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  await openTable(el);
+  stream.event("ready");
+  await flush(el);
+  const answer = await api.listDrafts!.mock.results.at(-1)!.value;
+  let release!: (value: typeof answer) => void;
+  api.listDrafts!.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const before = api.listDrafts!.mock.calls.length;
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el);
+  stream.event("change", '[{"type":"bill_edit_states"}]');
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(before + 1);
+  release(answer);
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(before + 2);
+});
+
+it("a change during a focus-started draft read queues a fresh read while connected", async () => {
+  const stream = liveReadFixture();
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  await openTable(el);
+  stream.event("ready");
+  await flush(el);
+  const answer = await api.listDrafts!.mock.results.at(-1)!.value;
+  let release!: (value: typeof answer) => void;
+  api.listDrafts!.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const before = api.listDrafts!.mock.calls.length;
+  window.dispatchEvent(new Event("focus"));
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(before + 1);
+  stream.event("change", '[{"type":"working_orders"}]');
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(before + 1);
+  release(answer);
+  await flush(el);
+  expect(api.listDrafts).toHaveBeenCalledTimes(before + 2);
+});
+
+it.each(["focus", "visibilitychange"])(
+  "%s refreshes bills after a hidden live change",
+  async (event) => {
+    const stream = liveReadFixture();
+    const { el } = await mountApp({ readLiveEvents: stream.read });
+    await openTable(el);
+    stream.event("ready");
+    await flush(el);
+    const bills = api.getPartyBills!.mock.calls.length;
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    try {
+      stream.event("change", '[{"type":"working_orders"}]');
+      await flush(el);
+      expect(api.getPartyBills).toHaveBeenCalledTimes(bills);
+      hidden.mockReturnValue(false);
+      (event === "focus" ? window : document).dispatchEvent(new Event(event));
+      await flush(el);
+      expect(api.getPartyBills).toHaveBeenCalledTimes(bills + 1);
+    } finally {
+      hidden.mockRestore();
+    }
+  },
+);
