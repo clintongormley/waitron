@@ -69,6 +69,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "records/previous",
     "unknown.txt",
     "spare-space",
+    "spare-space.released",
   ])
     await put(join(roots.stateDir, name));
   await put(join(roots.stateDir, "backup-room-note.json"));
@@ -90,6 +91,7 @@ it("sets aside registered venue state, keeps unrelated files and preserves first
     "records/previous",
     "unknown.txt",
     "spare-space",
+    "spare-space.released",
   ])
     expect(await fs.readFile(join(roots.stateDir, name), "utf8")).toBe(join(roots.stateDir, name));
   expect(await fs.readFile(join(roots.venueDir, "venue.lock"))).toEqual(lockBytes);
