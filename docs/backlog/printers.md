@@ -333,13 +333,6 @@ checked on the box).
   read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
   need an A4 page, or A4 printers stay out for them.
 
-## Deleting an A4 printer
-
-- **Deleting an A4 printer (left open by A405 point 6, #2661).** `page_printers` has no deletion
-  column and is referenced with `restrict` by `invoice_deliveries`, `devices` and
-  `device_profile_printers`, so a delete must be a soft delete, which needs a column. Until then A4
-  details have no Delete.
-
 ## A Used by link to a prep station opens the Stations tab, not the station
 
 - **A Used by link to a prep station opens the Stations tab, not the station (left open by A405).**
@@ -784,10 +777,6 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   [Detail](printers.md#loose-ends-left-by-a663-part-3b-1827)
 
 ## Decisions and deliberate limits
-
-- **Switching an A4 printer back on and changing its address stay in Add a printer (A405 point
-  6).** Both need a fresh discovery entry; the server refuses switching one back on with
-  `page_printer.rediscover` (`apps/server/src/page-printers-api.ts`).
 
 - **Add a printer lists a Bluetooth device its agent reports paired unless the agent says it is
   not a printer; one whose kind it cannot tell is listed (A404, 2026-11-05).** The owner asked that

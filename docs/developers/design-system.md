@@ -4301,7 +4301,7 @@ with the one bottom message, Cancel returns to the details, and Escape closes th
 list's Edit opens the details in edit mode with the name focused. Cancel discards edits without
 asking. Escape and leaving the page ask before discarding an edited form. An A4 printer opens the same modal with a Paper group and no
 Delete or Calibrate; Print test page and Edit sit in its footer only when the screen's `canManage`
-is set. Its Active switch, under Status, only switches off, and its Edit form holds the name alone.
+is set. Its Edit form holds the name alone.
 A disabled Bluetooth printer that no agent reports paired offers Pair again in its row's actions
 and under Connection in its details; it opens a compact window that looks for the printer, then
 opens the Pair dialog, or switches the printer back on when its agent already reports it paired. The Print Queue's Reprint opens `apps/dashboard/src/widgets/print-job-reprint-dialog.ts`,
