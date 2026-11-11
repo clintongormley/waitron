@@ -6,7 +6,6 @@ import type { DashboardApi, DiscoveredPrinter, Printer } from "../api/client.js"
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { PrintersScreen } from "./printers-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -453,12 +452,6 @@ describe("Pair again", () => {
     await expect.poll(() => q(screen, "wt-tabs")).not.toBeNull();
     q(screen, "wt-tabs")!.shadowRoot!.querySelector<HTMLElement>('[data-key="printers"]')!.click();
     await expect.poll(() => q(screen, '[data-test="printers-table"]')).not.toBeNull();
-    const filter = () =>
-      q(screen, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
-        '[name="status-filter"]',
-      );
-    await expect.poll(filter).not.toBeNull();
-    await chooseOption(filter()!, "");
     await expect.poll(() => q(screen, "[data-test=pair-again-p9]")).not.toBeNull();
     q(screen, "[data-test=pair-again-p9]")!.click();
     await expect.poll(() => modal(screen)).not.toBeNull();

@@ -18,10 +18,10 @@ import {
   MAX_DELIVERY_ATTEMPTS,
   centredForPrinter,
   createPrinter,
-  deactivatePrinter,
   enqueuePrintJob,
   esc,
   textGrid,
+  updatePrinter,
   type EscSetting,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
@@ -128,7 +128,7 @@ async function onDisabledPrinter(
 ) {
   const disabled = await printerAt(setting);
   await setJob(jobId, { printerId: disabled, status });
-  await inTx(venue, (tx) => deactivatePrinter(tx, disabled));
+  await inTx(venue, (tx) => updatePrinter(tx, disabled, { active: false }));
   return disabled;
 }
 
@@ -347,7 +347,7 @@ describe("reprintJobOn", () => {
     const { original } = await paidSale(at80);
     await setJob(original.id, exhausted);
     const disabled = await printerAt(at80);
-    await inTx(venue, (tx) => deactivatePrinter(tx, disabled));
+    await inTx(venue, (tx) => updatePrinter(tx, disabled, { active: false }));
     const deleted = await printerAt(at80);
     await inTx(venue, (tx) => deletePrinter(tx, deleted));
     for (const target of [disabled, deleted])
@@ -502,7 +502,7 @@ describe("the print queue's resend to another printer", () => {
     const wide = await printerAt(at80);
     const wider = await printerAt(at80fine);
     const disabled = await printerAt(at80fine);
-    await inTx(venue, (tx) => deactivatePrinter(tx, disabled));
+    await inTx(venue, (tx) => updatePrinter(tx, disabled, { active: false }));
 
     const response = await printApi().request("/management-api/print-jobs", {
       headers: { cookie: venue.adminDashboard },

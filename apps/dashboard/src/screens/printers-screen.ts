@@ -1829,7 +1829,7 @@ export class PrintersScreen extends LitElement {
   #addPaired(key: string, tracked: TrackedCommand): boolean {
     const device = this.#listedDevice(key) ?? tracked.device!;
     if (this.pairAgain !== null && device.printerId === this.pairAgain.printer.id) {
-      void this.#pairedAgain(this.pairAgain.printer);
+      void this.#pairedAgain(this.pairAgain.printer, device);
       return true;
     }
     if (this.namingPrinter !== null || this.pairingDevice !== null || !this.#canAdd(device))
@@ -2015,8 +2015,8 @@ export class PrintersScreen extends LitElement {
     void this.#scan();
   }
 
-  /** Once a scan lists the printer Pair again looks for, opens the Pair dialog, or switches the
-   * printer on if an agent already reports it paired. */
+  /** Once a scan lists the printer Pair again looks for, opens the Pair dialog, or brings the
+   * printer back if an agent already reports it paired. */
   #findPairAgain(): void {
     const pairAgain = this.pairAgain;
     if (pairAgain === null || pairAgain.found !== null) return;
@@ -2025,17 +2025,22 @@ export class PrintersScreen extends LitElement {
     );
     if (found === undefined) return;
     this.pairAgain = { ...pairAgain, found };
-    if (found.paired === true) void this.#pairedAgain(pairAgain.printer);
+    if (found.paired === true) void this.#pairedAgain(pairAgain.printer, found);
     else this.#openPair(found, this.#pairAgainScope?.id);
   }
 
-  /** Never the name form or calibration: the record, its name and settings are the same. */
-  async #pairedAgain(printer: Printer): Promise<void> {
+  /** Never the name form or calibration: adding the same Bluetooth key brings the disabled record
+   * back under its id, with its name and settings. */
+  async #pairedAgain(printer: Printer, device: DiscoveredPrinter): Promise<void> {
     const opening = this.#pairAgainOpening;
     this.pairAgainSwitching = true;
     try {
       if (this.printers.find(({ id }) => id === printer.id)?.active === false)
-        await this.api.updatePrinter(printer.id, { active: true });
+        await this.api.createPrinter({
+          name: printer.name,
+          transport: "bluetooth",
+          localKey: device.localKey,
+        });
     } catch (error) {
       if (opening === this.#pairAgainOpening) this.errorKey = codeOf(error);
       return;
@@ -2802,8 +2807,7 @@ export class PrintersScreen extends LitElement {
         @click=${() => void this.#printTestPage(p)}
         >${t("printers.print_test_page")}</wt-button
       >
-      ${unpair}
-      ${this.#pairAgainAction(p)}
+      ${unpair} ${this.#pairAgainAction(p)}
       <wt-button
         variant="danger"
         data-test=${`delete-printer-${p.id}`}

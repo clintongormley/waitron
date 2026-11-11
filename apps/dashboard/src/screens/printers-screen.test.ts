@@ -9447,6 +9447,7 @@ describe("printers-screen Bluetooth pairing", () => {
     const found: DiscoveredPrinter = { ...barPrinter, alreadyRegistered: true, printerId: "p9" };
     const looking = () => fill("printers.pair_again_looking", { printer: off.name });
     const missing = () => fill("printers.pair_again_missing", { printer: off.name });
+    const restore = { name: off.name, transport: "bluetooth", localKey: ADDRESS };
 
     /** Mounts with `off` listed; the scan's own reads answer `scan`, the status poll's `passive`. */
     async function mountOff(scan: DiscoveredPrinter[]) {
@@ -9457,7 +9458,6 @@ describe("printers-screen Bluetooth pairing", () => {
       });
       vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
       await selectTab(mounted.el, "printers");
-      await filterPrinters(mounted.el, "all");
       return { ...mounted, passive };
     }
 
@@ -9489,7 +9489,6 @@ describe("printers-screen Bluetooth pairing", () => {
           ]),
       });
       await selectTab(el, "printers");
-      await filterPrinters(el, "all");
       expect(text(el, sel("pair-again-p9"))).toBe(t("printers.pair_again"));
       expect(q(el, sel("pair-again-p8"))).toBeNull();
       expect(q(el, sel("pair-again-p5"))).toBeNull();
@@ -9514,15 +9513,15 @@ describe("printers-screen Bluetooth pairing", () => {
         ]);
         await typePin(el);
         expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS, PIN);
-        expect(api.updatePrinter).not.toHaveBeenCalled();
+        expect(api.createPrinter).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
         await flush(el);
         await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
-        expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
+        expect(api.createPrinter).toHaveBeenCalledExactlyOnceWith(restore);
+        expect(api.updatePrinter).not.toHaveBeenCalled();
         expect(text(el, sel("pair-again-done"))).toBe(
           fill("printers.pair_again_done", { printer: off.name }),
         );
-        expect(api.createPrinter).not.toHaveBeenCalled();
         expect(q(el, sel("pair-printer-modal"))).toBeNull();
         expect(q(el, sel("name-printer-modal"))).toBeNull();
         expect(q(el, sel("edit-printer-modal"))).toBeNull();
@@ -9582,6 +9581,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await vi.advanceTimersByTimeAsync(EXPIRES_MS + SCAN_POLL_MS);
       await flush(el);
       expect(reads()).toBe(before);
+      expect(api.createPrinter).not.toHaveBeenCalled();
       expect(api.updatePrinter).not.toHaveBeenCalled();
     });
 
@@ -9606,6 +9606,7 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(pinField(el).value).toBe("");
       await typePin(el);
       expect(api.pairBluetooth).toHaveBeenCalledTimes(2);
+      expect(api.createPrinter).not.toHaveBeenCalled();
       expect(api.updatePrinter).not.toHaveBeenCalled();
     });
 
@@ -9632,6 +9633,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
       await flush(el);
+      expect(api.createPrinter).not.toHaveBeenCalled();
       expect(api.updatePrinter).not.toHaveBeenCalled();
       expect(q(el, sel("pair-again-modal"))).not.toBeNull();
       expect(pinField(el).value).toBe("1234");
@@ -9640,7 +9642,7 @@ describe("printers-screen Bluetooth pairing", () => {
 
     it("switches on a printer the scan finds already paired, so Look again after a failed switch-on asks for no PIN", async () => {
       const { el, api, passive } = await mountOff([found]);
-      vi.mocked(api.updatePrinter).mockRejectedValueOnce({ code: "storage.disk_full" });
+      vi.mocked(api.createPrinter).mockRejectedValueOnce({ code: "storage.disk_full" });
       await pairAgain(el);
       passive.mockResolvedValue([
         { ...found, paired: true, bluetoothCommand: finishedCommand("pair", "succeeded") },
@@ -9657,8 +9659,9 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       expect(q(el, sel("pair-printer-modal"))).toBeNull();
       await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
-      expect(api.updatePrinter).toHaveBeenCalledTimes(2);
-      expect(api.updatePrinter).toHaveBeenLastCalledWith("p9", { active: true });
+      expect(api.createPrinter).toHaveBeenCalledTimes(2);
+      expect(api.createPrinter).toHaveBeenLastCalledWith(restore);
+      expect(api.updatePrinter).not.toHaveBeenCalled();
       expect(api.pairBluetooth).toHaveBeenCalledOnce();
       expect(text(el, sel("pair-again-done"))).toBe(
         fill("printers.pair_again_done", { printer: off.name }),
@@ -9668,16 +9671,16 @@ describe("printers-screen Bluetooth pairing", () => {
 
     it("says it is switching on a printer the scan finds already paired, and sends no second switch-on while it does", async () => {
       const { el, api } = await mountOff([found]);
-      let answer!: () => void;
-      vi.mocked(api.updatePrinter).mockImplementationOnce(
+      let answer!: (created: { id: string }) => void;
+      vi.mocked(api.createPrinter).mockImplementationOnce(
         () =>
-          new Promise<void>((resolve) => {
+          new Promise<{ id: string }>((resolve) => {
             answer = resolve;
           }),
       );
       vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([{ ...found, paired: true }]);
       await pairAgain(el);
-      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
+      expect(api.createPrinter).toHaveBeenCalledExactlyOnceWith(restore);
       expect(text(el, sel("pair-again-status"))).toBe(
         fill("printers.pair_again_switching_on", { printer: off.name }),
       );
@@ -9687,11 +9690,12 @@ describe("printers-screen Bluetooth pairing", () => {
       look.shadowRoot!.querySelector("button")!.click();
       look.click();
       await flush(el);
-      expect(api.updatePrinter).toHaveBeenCalledOnce();
+      expect(api.createPrinter).toHaveBeenCalledOnce();
       expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
-      answer();
+      answer({ id: "p9" });
       await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
-      expect(api.updatePrinter).toHaveBeenCalledOnce();
+      expect(api.createPrinter).toHaveBeenCalledOnce();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
       expect(text(el, sel("pair-again-done"))).toBe(
         fill("printers.pair_again_done", { printer: off.name }),
       );

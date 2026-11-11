@@ -1125,11 +1125,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
         .click();
       await flush(el);
-      const filter = q(el, '[data-test="printers-table"]')!.shadowRoot!.querySelector<HTMLElement>(
-        '[name="status-filter"]',
-      )!;
-      await pickOption(filter, "");
-      await flush(el);
       q(el, "[data-test=pair-again-p4]")!.click();
       await flush(el);
       expect(q(el, "[data-test=pair-again-status] wt-spinner")).not.toBeNull();
