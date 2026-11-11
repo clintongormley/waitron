@@ -157,7 +157,9 @@ it.each([
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
   );
   expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
-  expect(el.result?.invoiceNumber).toBe("F-0007");
+  expect(
+    el.shadowRoot!.querySelector("till-settlement-document-dialog")!.result.invoiceNumber,
+  ).toBe("F-0007");
 });
 
 it.each(["party.out_of_date", "bill.paid"])(
@@ -178,7 +180,9 @@ it.each(["party.out_of_date", "bill.paid"])(
       expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
     );
     expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
-    expect(el.result?.invoiceNumber).toBe("F-0007");
+    expect(
+      el.shadowRoot!.querySelector("till-settlement-document-dialog")!.result.invoiceNumber,
+    ).toBe("F-0007");
   },
 );
 
@@ -201,7 +205,7 @@ it.each(["open", "invoice read fails"])(
       patch: { quantity: "1" },
       revision: 0,
     });
-    await vi.waitFor(() => expect(el.errorKey).toBeDefined());
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector(".error")).not.toBeNull());
     expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
     if (state === "open") expect(api.getFiledTicket).not.toHaveBeenCalled();
     else expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");

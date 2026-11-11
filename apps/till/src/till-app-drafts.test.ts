@@ -11426,8 +11426,10 @@ it.each(["reducing", "adding"])(
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
       expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
-      expect(el.result?.invoiceNumber).toBe("F-0007");
-      expect(el.errorKey).toEqual({ code: "bill.paid" });
+      expect(
+        el.shadowRoot!.querySelector("till-settlement-document-dialog")!.result.invoiceNumber,
+      ).toBe("F-0007");
+      expect(banner(el)?.textContent).toContain(codeMessage("bill.paid"));
       expect(draft(el).editsLocked).toBe(true);
       el.shadowRoot!.querySelector("till-settlement-document-dialog")!
         .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!

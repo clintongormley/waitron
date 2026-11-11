@@ -3465,7 +3465,9 @@ describe("till-app logout while a request is waiting for the server", () => {
     );
     expect(api.getFiledTicket).toHaveBeenCalledWith(billId);
     expect(api.recordSale).not.toHaveBeenCalled();
-    expect(el.result?.invoiceNumber).toBe("F-0001");
+    expect(
+      el.shadowRoot!.querySelector("till-settlement-document-dialog")!.result.invoiceNumber,
+    ).toBe("F-0001");
   });
 
   it.each(["en-GB", "es-ES"])(
