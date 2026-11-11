@@ -143,7 +143,7 @@ describe("a closing party keeps its table names", () => {
   it("finds a closed party in the order list by an old table name and filters by it", async () => {
     const table = await v.table("Garden 7");
     const { partyId, tabId } = await seat(v, table);
-    await order(v, tabId, "Agua");
+    await order(v, tabId, "Water");
     await pay(v, tabId, "2.00");
     await finish(partyId);
     await inTx(v, (tx) =>
@@ -159,7 +159,7 @@ describe("a closing party keeps its table names", () => {
   it("still finds an open party by its live table name", async () => {
     const table = await v.table("Balcony 3");
     const { tabId } = await seat(v, table);
-    await order(v, tabId, "Agua");
+    await order(v, tabId, "Water");
     expect(await listed({ search: "Balcony" })).toContain(tabId);
     expect(await listed({ table: "Balcony 3" })).toContain(tabId);
   });

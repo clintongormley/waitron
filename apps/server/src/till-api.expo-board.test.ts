@@ -142,7 +142,7 @@ async function threeOrders(f: Fixture) {
       tx,
       f.v.cfg,
       counterId,
-      f.v.counter.toOfferLines([{ productId: f.v.productId("Agua"), quantity: "1" }]),
+      f.v.counter.toOfferLines([{ productId: f.v.productId("Water"), quantity: "1" }]),
       null,
       { zoneId: f.v.counter.zoneId },
     );

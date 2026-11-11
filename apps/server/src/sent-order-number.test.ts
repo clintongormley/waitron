@@ -113,12 +113,11 @@ async function send(
   );
 }
 
-/** A party at a fresh table with `count` bills, each made by splitting off an Agua. */
 async function party(label: string, count: number): Promise<{ partyId: string; bills: string[] }> {
   const { partyId, tabId } = await seat(v, await v.table(label));
   const bills = [tabId];
   for (let i = 1; i < count; i++) {
-    await send(partyId, tabId, [{ name: "Agua" }], "fire");
+    await send(partyId, tabId, [{ name: "Water" }], "fire");
     const command = await commandFor(v, partyId);
     const { billId } = await inTx(v, async (tx) => {
       const [{ lineNo }] = await tx.all<{ lineNo: number }>(
@@ -136,14 +135,14 @@ async function numberOf(billId: string): Promise<number> {
 }
 
 /**
- * Each kitchen item on the bill but the Aguas {@link party} splits off: its dish, the quantity it
+ * Each kitchen item on the bill but the water lines {@link party} splits off: its dish, the quantity it
  * asks for and its sent order number.
  */
 function kitchenItems(billId: string) {
   return v.db.all<{ name: string; quantity: number; sent: number | null }>(sql`
     select l.name as name, t.quantity as quantity, t.sent_order_number as sent
     from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
-    where t.working_order_id = ${billId} and l.name <> 'Agua'
+    where t.working_order_id = ${billId} and l.name <> 'Water'
     order by l.line_no`);
 }
 

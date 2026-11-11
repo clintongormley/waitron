@@ -1280,7 +1280,7 @@ describe("moveDishesToStation", () => {
   it("a move records who moved each dish, from where, to where", async () => {
     const tableId = await venue.table(`W-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
-    await orderForParty(venue, partyId, ["Burger", "Agua"], tabId);
+    await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
     const items = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
     );
@@ -1376,7 +1376,7 @@ describe("moveDishesToStation", () => {
   it("asks assertFrom once for two named dishes at the same station", async () => {
     const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
-    await orderForParty(venue, partyId, ["Burger", "Agua"], tabId);
+    await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
     const items = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
     );
@@ -1402,7 +1402,7 @@ describe("moveDishesToStation", () => {
   it("asks assertFrom about each distinct station of the named dishes", async () => {
     const tableId = await venue.table(`D-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
-    await orderForParty(venue, partyId, ["Burger", "Agua"], tabId);
+    await orderForParty(venue, partyId, ["Burger", "Water"], tabId);
     const lineIds = (
       await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),

@@ -383,7 +383,7 @@ describe("the floor's attention signals", () => {
     await setSteps(v, await departmentOf(v, v.tables.zoneId), [TAKE_ORDER]);
     const tableId = await v.table("Mesa 1");
     const { partyId } = await seat(v, tableId);
-    await orderForParty(v, partyId, ["Agua"]);
+    await orderForParty(v, partyId, ["Water"]);
 
     expect((await floorRow(v, tableId)).signals).toEqual([]);
   });
@@ -727,13 +727,13 @@ describe("the floor's attention signals", () => {
     const table2 = await v.table("Mesa 2");
     const { partyId, tabId } = await seat(v, table2);
     // A dish in a fired group that became unavailable is already committed work: no signal for it.
-    await orderForParty(v, partyId, ["Agua"], tabId);
+    await orderForParty(v, partyId, ["Water"], tabId);
     const mains = await holdGroup(v, partyId, "Burger", "Paella");
     const setAvailable = (name: string, available: boolean) =>
       inTx(v, (tx) => updateProduct(tx, v.productId(name), { available }));
 
     await setAvailable("Burger", false);
-    await setAvailable("Agua", false);
+    await setAvailable("Water", false);
 
     expect((await floorRow(v, table2)).signals).toEqual([
       { kind: "held", count: 2 },
@@ -902,7 +902,7 @@ describe("the floor's attention signals", () => {
         billId: tabId,
         draftId: null,
         revision: 0,
-        lines: [draftLine(v, "Agua")],
+        lines: [draftLine(v, "Water")],
       }),
     );
     expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 2 });
@@ -965,7 +965,7 @@ describe("the floor's attention signals", () => {
     await order(v, from.tabId, "Caña");
     await pay(v, from.tabId, "3.00");
     await makeReady(v, from.tabId, "Caña");
-    await order(v, into.tabId, "Agua");
+    await order(v, into.tabId, "Water");
     const joining = {
       ...(await commandFor(v, into.partyId)),
       otherPartyId: from.partyId,
@@ -999,7 +999,7 @@ describe("the floor's attention signals", () => {
     const v = await setupPartyVenue(suite.db);
     const table2 = await v.table("Mesa 2");
     const { tabId } = await seat(v, table2);
-    await order(v, tabId, "Caña", "Agua");
+    await order(v, tabId, "Caña", "Water");
     await makeReady(v, tabId, "Caña");
     await pay(v, tabId, "5.00");
 
@@ -1049,7 +1049,7 @@ describe("the floor's attention signals", () => {
           billId: tabId,
           draftId: null,
           revision: 0,
-          lines: [draftLine(v, "Agua")],
+          lines: [draftLine(v, "Water")],
         }),
       );
     };
@@ -1354,7 +1354,7 @@ describe("a bill request", () => {
     const table8 = await v.table("Mesa 8");
     const into = await seat(v, table2);
     const from = await seat(v, table8);
-    await order(v, into.tabId, "Burger", "Agua");
+    await order(v, into.tabId, "Burger", "Water");
     const stray = await split(v, into.partyId, into.tabId, [2]);
     await order(v, from.tabId, "Caña");
     await pay(v, from.tabId, "3.00");

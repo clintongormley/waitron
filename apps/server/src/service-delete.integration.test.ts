@@ -1019,7 +1019,7 @@ it.each(["zone", "department"] as const)(
         orderStart: "counter",
       }),
     );
-    const targetItem = await pricedInZone(venue, f.zoneId, "Agua", "2.00");
+    const targetItem = await pricedInZone(venue, f.zoneId, "Water", "2.00");
     const targetOrder = async () => {
       const id = randomUUID();
       await parkOrder({ db: venue.db }, venue.cfg, {
@@ -1148,7 +1148,7 @@ it.each(["zone", "department"] as const)(
     });
     const contributed = await targetOrder();
     await cashContribution(venue, contributed, "2.00");
-    const unaffected = await counterOrder(venue, "Agua");
+    const unaffected = await counterOrder(venue, "Water");
     await cashContribution(venue, unaffected, "2.00");
     const history = await run(retainedHistory);
     const rows = (name: string) => history[name] as Record<string, unknown>[];

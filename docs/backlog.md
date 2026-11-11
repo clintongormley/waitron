@@ -2283,8 +2283,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   location names should use `Main room`, as `setupVenue` does. The shared
   `setupVenue` uses Administrator, Drinks, Coffee and Water. BillVenue uses Steak,
   Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
-  and kitchen names stay. PartyVenue uses Red wine bottle as its wine staff key,
-  with customer Rioja crianza and kitchen TINTO unchanged.
+  and kitchen names stay. PartyVenue uses Red wine bottle and Water as staff keys,
+  with customer Rioja crianza / Agua mineral and kitchen TINTO / AGUA unchanged.
   Local party-suite table, party, course and printer samples use English. Shared dish samples
   remain in their helpers and consumers, including party bill-action, bill-move, arriving-dish
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing

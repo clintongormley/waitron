@@ -102,7 +102,7 @@ describe("A803 fixtures: a send with no bill", () => {
     const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 66"));
     const revisionBefore = await revisionOf(v, partyId);
 
-    const { tabId: landed, revision } = await orderForParty(v, partyId, ["Agua"]);
+    const { tabId: landed, revision } = await orderForParty(v, partyId, ["Water"]);
 
     expect(landed).toBe(tabId);
     expect(revision).toBe(revisionBefore);

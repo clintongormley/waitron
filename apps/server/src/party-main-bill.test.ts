@@ -111,7 +111,7 @@ describe("the bill a table opens on", () => {
     await placeByHand(v, tabId);
 
     expect((await floorRow(v, table6)).party!.openingBillId).toBe(tabId);
-    const { tabId: next } = await orderForParty(v, partyId, ["Agua"]);
+    const { tabId: next } = await orderForParty(v, partyId, ["Water"]);
 
     expect(next).not.toBe(tabId);
     expect(await numbersOf(v, partyId)).toEqual([
@@ -121,7 +121,7 @@ describe("the bill a table opens on", () => {
     expect((await billRow(v, next)).status).toBe("open");
     expect((await floorRow(v, table6)).party!.openingBillId).toBe(tabId);
     expect((await billRow(v, next)).partyId).toBe(partyId);
-    expect((await linesOf(v, next)).map((line) => line.name)).toEqual(["Agua"]);
+    expect((await linesOf(v, next)).map((line) => line.name)).toEqual(["Water"]);
     expect((await linesOf(v, tabId)).map((line) => line.name)).toEqual(["Paella"]);
     expect((await billRow(v, tabId)).status).toBe("placed");
   });
@@ -140,7 +140,7 @@ describe("the bill a table opens on", () => {
     const billsBefore = await billsOfParty(v, partyId);
     const revisionBefore = await revisionOf(v, partyId);
 
-    const error = await captureError(() => orderForParty(v, partyId, ["Agua"], target));
+    const error = await captureError(() => orderForParty(v, partyId, ["Water"], target));
 
     expect(error).toMatchObject({ code, params: { workingOrderId: target } });
     expect(await linesOf(v, target)).toEqual(linesBefore);
@@ -237,14 +237,14 @@ describe("an order sent to a named bill", () => {
     const checkId = await split(v, partyId, tabId, [2]);
     const revisionBefore = await revisionOf(v, partyId);
 
-    const { tabId: landed, revision } = await orderForParty(v, partyId, ["Agua"], checkId);
+    const { tabId: landed, revision } = await orderForParty(v, partyId, ["Water"], checkId);
 
     expect(landed).toBe(checkId);
     expect(revision).toBe(revisionBefore);
     expect(await revisionOf(v, partyId)).toBe(revisionBefore);
     expect((await linesOf(v, checkId)).map((line) => line.name)).toEqual([
       "Red wine bottle",
-      "Agua",
+      "Water",
     ]);
     expect((await floorRow(v, table9)).party!.openingBillId).toBe(tabId);
   });
@@ -273,7 +273,7 @@ describe("an order sent to a named bill", () => {
     const error = await captureError(() =>
       inTx(v, (tx) =>
         placeGroups(tx, v.cfg, partyId, {
-          groups: [{ lines: [{ menuItemId: v.item("Agua"), quantity: "1" }], release: "fire" }],
+          groups: [{ lines: [{ menuItemId: v.item("Water"), quantity: "1" }], release: "fire" }],
           operatorId: OPERATOR,
           billId: target,
         }),
@@ -419,7 +419,7 @@ describe("pay, then order dessert", () => {
     const revisionBefore = await revisionOf(v, partyId);
 
     for (const stale of [tabId, checkId]) {
-      expect(await captureError(() => orderForParty(v, partyId, ["Agua"], stale))).toMatchObject({
+      expect(await captureError(() => orderForParty(v, partyId, ["Water"], stale))).toMatchObject({
         code: "bill.paid",
         params: { workingOrderId: stale },
       });
@@ -542,7 +542,7 @@ describe("A803 no main bill:", () => {
     });
     const before = await rows();
 
-    const error = await captureError(() => orderForParty(v, partyId, ["Agua"], second));
+    const error = await captureError(() => orderForParty(v, partyId, ["Water"], second));
 
     expect(error).toMatchObject({ code: "bill.other_party", params: { workingOrderId: second } });
     expect(await rows()).toEqual(before);
@@ -555,12 +555,12 @@ describe("A803 no main bill:", () => {
     await order(v, tabId, "Burger", "Red wine bottle");
     const second = await split(v, partyId, tabId, [2]);
 
-    const { tabId: landed } = await orderForParty(v, partyId, ["Agua"], second);
+    const { tabId: landed } = await orderForParty(v, partyId, ["Water"], second);
 
     expect(landed).toBe(second);
     expect((await linesOf(v, second)).map((line) => line.name)).toEqual([
       "Red wine bottle",
-      "Agua",
+      "Water",
     ]);
     expect((await linesOf(v, tabId)).map((line) => line.name)).toEqual(["Burger"]);
     expect(await numbersOf(v, partyId)).toEqual([

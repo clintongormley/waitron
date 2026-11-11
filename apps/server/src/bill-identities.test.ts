@@ -80,7 +80,7 @@ async function everyPartyBillNumbered(): Promise<void> {
 describe("A803 bill numbers: created", () => {
   it("a seated table's first bill is Bill 1, and splitting gives Bill 2 then Bill 3", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N1"));
-    await order(v, tabId, "Burger", "Red wine bottle", "Agua");
+    await order(v, tabId, "Burger", "Red wine bottle", "Water");
     const second = await split(v, partyId, tabId, [1]);
     const third = await split(v, partyId, tabId, [2]);
 
@@ -99,7 +99,7 @@ describe("A803 bill numbers: created", () => {
 
   it("merging Bill 2 away leaves Bill 1 and Bill 3, and the next bill is Bill 4", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N2"));
-    await order(v, tabId, "Burger", "Red wine bottle", "Agua", "Flan");
+    await order(v, tabId, "Burger", "Red wine bottle", "Water", "Flan");
     const second = await split(v, partyId, tabId, [1]);
     const third = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
@@ -172,7 +172,7 @@ describe("A803 bill numbers: created", () => {
     await pay(v, tabId, "12.00");
     expect(await openingBillOfParty(v, partyId)).toBe(tabId);
 
-    const { tabId: next } = await orderForParty(v, partyId, ["Agua"]);
+    const { tabId: next } = await orderForParty(v, partyId, ["Water"]);
 
     expect(next).not.toBe(tabId);
     expect(await numbersOf(v, partyId)).toEqual([
@@ -185,7 +185,7 @@ describe("A803 bill numbers: created", () => {
   it("finishing the table and seating it again starts at Bill 1", async () => {
     const tableId = await v.table("N5");
     const first = await seat(v, tableId);
-    await order(v, first.tabId, "Burger", "Agua");
+    await order(v, first.tabId, "Burger", "Water");
     const second = await split(v, first.partyId, first.tabId, [1]);
     await pay(v, first.tabId, "2.00");
     await pay(v, second, "12.00");
@@ -199,7 +199,7 @@ describe("A803 bill numbers: created", () => {
   });
 
   it("a split from a counter order makes no row", async () => {
-    const orderId = await counterOrder(v, "Burger", "Agua");
+    const orderId = await counterOrder(v, "Burger", "Water");
     const before = await billNumberTables(v);
 
     const { billId } = await inTx(v, (tx) =>
@@ -235,7 +235,7 @@ describe("A803 bill numbers: created", () => {
 
   it("two splits prepared from the same read: the second is refused and adds no history row", async () => {
     const { partyId, tabId } = await seat(v, await v.table("N7"));
-    await order(v, tabId, "Burger", "Agua");
+    await order(v, tabId, "Burger", "Water");
     const command = await commandFor(v, partyId);
     const first = await inTx(v, (tx) => splitBill(tx, v.cfg, tabId, [{ lineNo: 1 }], command));
 
@@ -273,10 +273,9 @@ async function nameBill(billId: string, name: string): Promise<void> {
   await inTx(v, (tx) => VENUE_SERVICE.setBillName(tx, billId, name));
 }
 
-/** A seated table with Bills 1 to `count`, each holding one Agua. */
 async function tableWithBills(label: string, count: number) {
   const seated = await seat(v, await v.table(label));
-  await order(v, seated.tabId, ...Array.from({ length: count }, () => "Agua"));
+  await order(v, seated.tabId, ...Array.from({ length: count }, () => "Water"));
   const bills = [seated.tabId];
   for (let line = 1; line < count; line++)
     bills.push(await split(v, seated.partyId, seated.tabId, [line]));
@@ -315,7 +314,7 @@ describe("A803 bill numbers: move bill", () => {
   it("a bill moved to another party's table still arrives as its own bill with the next number, so the next new bill there is Bill 3, and its old table still never gives its old number again", async () => {
     const from = await tableWithBills("M3", 2);
     const to = await seat(v, await v.table("M3 to"));
-    await order(v, to.tabId, "Agua");
+    await order(v, to.tabId, "Water");
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
 
     const moved = await moveTo(from.bills[1]!, { tableId: toTable });
@@ -339,7 +338,7 @@ describe("A803 bill numbers: move bill", () => {
   it("a bill moved to a table whose Bill 1 is presented stays separate and takes that table's next number", async () => {
     const from = await tableWithBills("M3b", 2);
     const to = await seat(v, await v.table("M3b to"));
-    await order(v, to.tabId, "Agua");
+    await order(v, to.tabId, "Water");
     await placeByHand(v, to.tabId);
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
 
@@ -498,7 +497,7 @@ describe("A803 bill numbers: tables", () => {
     const t2 = await v.table("S1 b");
     const { partyId, tabId } = await seat(v, t1);
     await join(v, partyId, t2);
-    await order(v, tabId, "Agua", "Flan", "Caña");
+    await order(v, tabId, "Water", "Flan", "Caña");
     const second = await split(v, partyId, tabId, [1]);
     const third = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
@@ -519,7 +518,7 @@ describe("A803 bill numbers: tables", () => {
     const t2 = await v.table("S2 b");
     const { partyId, tabId } = await seat(v, t1);
     await join(v, partyId, t2);
-    await order(v, tabId, "Agua", "Flan");
+    await order(v, tabId, "Water", "Flan");
     const second = await split(v, partyId, tabId, [1]);
     const before = await numbersOf(v, partyId);
     const command = await commandFor(v, partyId);
@@ -560,7 +559,7 @@ describe("A803 bill numbers: tables", () => {
     const luisTable = await v.table("S4 luis");
     const luis = await seat(v, luisTable);
     await order(v, ana.tabId, "Burger", "Red wine bottle");
-    await order(v, luis.tabId, "Agua");
+    await order(v, luis.tabId, "Water");
     const second = await split(v, ana.partyId, ana.tabId, [2]);
     await pay(v, ana.tabId, "12.00");
     const options = await tableOptions(ana.partyId, luis.partyId);
@@ -598,7 +597,7 @@ describe("A803 bill numbers: tables", () => {
 
   it("joining another party: no bill merges, and every incoming bill takes the next numbers with no gap", async () => {
     const ours = await seat(v, await v.table("S6 ours"));
-    await order(v, ours.tabId, "Agua");
+    await order(v, ours.tabId, "Water");
     const theirs = await tableWithBills("S6 theirs", 2);
     const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
     const options = await tableOptions(ours.partyId, theirs.partyId);
@@ -637,7 +636,7 @@ describe("A803 bill numbers: tables", () => {
     const t2 = await v.table("S9 b");
     const { partyId, tabId } = await seat(v, t1);
     await join(v, partyId, t2);
-    await order(v, tabId, "Agua", "Flan", "Caña");
+    await order(v, tabId, "Water", "Flan", "Caña");
     const second = await split(v, partyId, tabId, [1]);
     const third = await split(v, partyId, tabId, [2]);
     await placeByHand(v, third);
@@ -667,8 +666,8 @@ describe("A803 bill numbers: tables", () => {
     const b = await seat(v, bTable);
     const c = await seat(v, cTable);
     await order(v, a.tabId, "Burger", "Red wine bottle");
-    await order(v, b.tabId, "Agua");
-    await order(v, c.tabId, "Agua");
+    await order(v, b.tabId, "Water");
+    await order(v, c.tabId, "Water");
     const open = await split(v, a.partyId, a.tabId, [2]);
     await pay(v, a.tabId, "12.00");
     const ontoB = await tableOptions(a.partyId, b.partyId);
@@ -777,10 +776,10 @@ describe("A803 bill list", () => {
 
   it("a bill that arrived shows its new number and is listed after the party's own Bill 1", async () => {
     const ana = await seat(v, await v.table("L3 ana"));
-    await order(v, ana.tabId, "Agua", "Flan");
+    await order(v, ana.tabId, "Water", "Flan");
     const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
     const luis = await seat(v, await v.table("L3 luis"));
-    await order(v, luis.tabId, "Agua");
+    await order(v, luis.tabId, "Water");
     const luisTable = (await activeTablesOf(v, luis.partyId))[0]!;
 
     await moveTo(anaSecond, { tableId: luisTable });
@@ -793,10 +792,10 @@ describe("A803 bill list", () => {
 
   it("the floor lists unsent orders in number order", async () => {
     const ana = await seat(v, await v.table("L4 ana"));
-    await order(v, ana.tabId, "Agua", "Flan");
+    await order(v, ana.tabId, "Water", "Flan");
     const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
     const luis = await seat(v, await v.table("L4 luis"));
-    await order(v, luis.tabId, "Agua");
+    await order(v, luis.tabId, "Water");
     const luisTable = (await activeTablesOf(v, luis.partyId))[0]!;
     await moveTo(anaSecond, { tableId: luisTable });
     await saveUnsent(luis.partyId, anaSecond, "Burger");
@@ -929,7 +928,7 @@ describe("A803 bill list", () => {
 
   it("a paid bill whose row has a null number is listed with no number and logged", async () => {
     const seated = await seat(v, await v.table("L9"));
-    await order(v, seated.tabId, "Burger", "Agua");
+    await order(v, seated.tabId, "Burger", "Water");
     const paid = await split(v, seated.partyId, seated.tabId, [2]);
     await pay(v, paid, "2.00");
     expect(await statusOf(v, paid)).toBe("settled");
@@ -1106,7 +1105,7 @@ describe("A803 rename", () => {
     const luisTable = await v.table("R10 luis");
     const luis = await seat(v, luisTable);
     await order(v, ana.tabId, "Burger", "Red wine bottle");
-    await order(v, luis.tabId, "Agua");
+    await order(v, luis.tabId, "Water");
     await split(v, ana.partyId, ana.tabId, [2]);
     await pay(v, ana.tabId, "12.00");
     const options = await tableOptions(ana.partyId, luis.partyId);
@@ -1127,7 +1126,7 @@ describe("A803 rename", () => {
 
   it("a bill of a finished table is party.not_open", async () => {
     const first = await seat(v, await v.table("R11"));
-    await order(v, first.tabId, "Agua");
+    await order(v, first.tabId, "Water");
     await pay(v, first.tabId, "2.00");
     const command = await commandFor(v, first.partyId);
     await inTx(v, (tx) => finishTable(tx, { partyId: first.partyId, ...command }));

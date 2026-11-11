@@ -171,7 +171,7 @@ async function openDraft(v: PartyVenue, partyId: string, billId: string): Promis
       billId,
       draftId: null,
       revision: 0,
-      lines: [draftLine(v, "Agua")],
+      lines: [draftLine(v, "Water")],
     }),
   );
 }
@@ -241,7 +241,7 @@ describe("readTableSteps", () => {
     ]);
     const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
-    const { tabId } = await orderForParty(v, partyId, ["Burger", "Paella", "Agua"]);
+    const { tabId } = await orderForParty(v, partyId, ["Burger", "Paella", "Water"]);
     await setCourse(v, mains.id, [
       await lineIdOf(v, tabId, "Burger"),
       await lineIdOf(v, tabId, "Paella"),
@@ -300,12 +300,12 @@ describe("readTableSteps", () => {
     ]);
     const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
-    const { tabId } = await orderForParty(v, partyId, ["Burger", "Agua"]);
+    const { tabId } = await orderForParty(v, partyId, ["Burger", "Water"]);
     const held = await holdGroup(v, partyId, "Flan");
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
 
     await serve(v, tabId, "Burger");
-    await serve(v, tabId, "Agua");
+    await serve(v, tabId, "Water");
     // The held dessert is still to serve.
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
 
@@ -330,7 +330,7 @@ describe("readTableSteps", () => {
     await setOpenedAt(v, partyId, OPENED);
     expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([setUp]);
 
-    await orderForParty(v, partyId, ["Agua"]);
+    await orderForParty(v, partyId, ["Water"]);
 
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
   });
@@ -523,8 +523,8 @@ describe("readTableSteps", () => {
     const a = await seat(v, firstTable);
     await setOpenedAt(v, a.partyId, OPENED);
     const b = await seat(v, secondTable);
-    const { tabId } = await orderForParty(v, b.partyId, ["Agua"]);
-    const servedAt = await serve(v, tabId, "Agua");
+    const { tabId } = await orderForParty(v, b.partyId, ["Water"]);
+    const servedAt = await serve(v, tabId, "Water");
     // A paid bill stays with the party merged away.
     await pay(v, tabId, "2.00");
     const ordered = await lastOrderAt(v, b.partyId);
@@ -615,7 +615,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     const { partyId, tabId } = await seat(v, await v.table(label));
     await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, partyId, {
-        groups: [{ lines: [{ menuItemId: v.item("Agua"), quantity: "1" }], release }],
+        groups: [{ lines: [{ menuItemId: v.item("Water"), quantity: "1" }], release }],
         operatorId: OPERATOR,
         billId: tabId,
       }),
@@ -707,7 +707,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       tableId,
       billId: from.billId,
       arrived: (await arrivalsOf(v, partyId))[0]!,
-      lineId: await lineIdOf(v, from.billId, "Agua"),
+      lineId: await lineIdOf(v, from.billId, "Water"),
     };
   }
 
@@ -767,7 +767,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
         const from = await partyWith(v, "Table 1", release);
         const { partyId, tableId } = await carryToFreeTable(v, how, from);
 
-        await orderForParty(v, partyId, ["Agua"]);
+        await orderForParty(v, partyId, ["Water"]);
 
         const ordered = await lastOrderAt(v, partyId);
         expect(await factsOf(v, partyId, tableId)).toMatchObject({
@@ -792,7 +792,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       const [, another] = await setSteps(v, await tablesDepartment(v), [TAKE_ORDER, ANOTHER]);
       const tableId = await v.table("Table 2");
       const { partyId } = await seat(v, tableId);
-      await orderForParty(v, partyId, ["Agua"]);
+      await orderForParty(v, partyId, ["Water"]);
       const ordered = await lastOrderAt(v, partyId);
       const from = await partyWith(v, "Table 1", release);
 
@@ -943,7 +943,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     it(`${release}: the only arrived dish cancelled off the bill stops counting`, async () => {
       const v = await setupPartyVenue(suite.db);
       const { takeOrder, partyId, tableId, billId } = await arrivedDish(v, release);
-      const lineNo = await lineNoOf(v, billId, "Agua");
+      const lineNo = await lineNoOf(v, billId, "Water");
 
       await inTx(v, (tx) => cancelLine(tx, v.cfg, billId, lineNo));
 
@@ -1120,7 +1120,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       await setSteps(v, await tablesDepartment(v), [TAKE_ORDER]);
       const tableId = await v.table("Table 2");
       const { partyId } = await seat(v, tableId);
-      if (own) await orderForParty(v, partyId, ["Agua"]);
+      if (own) await orderForParty(v, partyId, ["Water"]);
       const from = await partyWith(v, "Table 1", "hold");
       const arrivedAt = await carryToFreeTable(v, "move", from);
       const into = await commandFor(v, partyId);
@@ -1334,8 +1334,8 @@ describe("a party whose dishes arrived from another table or the counter", () =>
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
     ]);
     const from = await partyWith(v, "Table 1", "fire");
-    await setCourse(v, mains.id, [await lineIdOf(v, from.billId, "Agua")]);
-    const servedAt = await serve(v, from.billId, "Agua");
+    await setCourse(v, mains.id, [await lineIdOf(v, from.billId, "Water")]);
+    const servedAt = await serve(v, from.billId, "Water");
     const earlier = new Date(servedAt - 60 * MINUTE).toISOString();
     await inTx(v, (tx) =>
       tx
@@ -1346,7 +1346,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
     const { partyId, tableId } = await carryToFreeTable(v, "move", from);
     expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([dessert]);
 
-    await orderForParty(v, partyId, ["Agua"]);
+    await orderForParty(v, partyId, ["Water"]);
 
     expect(await factsOf(v, partyId, tableId)).toMatchObject({
       ordersArrived: false,
@@ -1362,7 +1362,7 @@ describe("a party whose dishes arrived from another table or the counter", () =>
         { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
       ]);
       const from = await partyWith(v, "Table 1", "fire");
-      const servedAt = await serve(v, from.billId, "Agua");
+      const servedAt = await serve(v, from.billId, "Water");
       // Served a while ago: the arrival is later than the step's due time as well as its trigger.
       const earlier = new Date(servedAt - 60 * MINUTE).toISOString();
       await inTx(v, (tx) =>
