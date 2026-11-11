@@ -1241,3 +1241,8 @@ an existing encrypted backup was qualified by this wording change.
 They do not exercise navigation through the unsaved-changes prompt. They read the downloaded
 key files, but check only that the Copy controls exist; clipboard contents were not exercised.
 Keep these limits separate from the open authenticated diagnosis and correction workflow.
+
+## Unusable Cloud reconnection request
+
+The Cloud services page has no way to set an unusable reconnection request aside and request
+again. Cloud reconnection after a restore is test-only.
