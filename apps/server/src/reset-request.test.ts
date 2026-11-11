@@ -351,6 +351,7 @@ describe("runStagedReset", () => {
     const others = ["ca.crt", "ca.key", "server.pem"].map((name) =>
       removed.indexOf(join(tls, name)),
     );
+    others.push(removed.indexOf(join(stateDir, "flows/tls-repair")));
     for (const at of [...others, removed.indexOf(join(stateDir, "secrets.env"))]) {
       expect(at).toBeGreaterThanOrEqual(0);
       expect(at).toBeLessThan(joinedAt);
