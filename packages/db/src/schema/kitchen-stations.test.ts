@@ -221,8 +221,6 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
     const probeLocation = "aaaaaaaa-0000-4000-8000-000000000003";
     await suite.db.insert(locations).values({
       id: probeLocation,
-
-      operationDescription: "Hostelería",
     });
     await seedStation(probeLocation, "Probe default", true);
     const [index] = suite.db.all<{ sql: string }>(

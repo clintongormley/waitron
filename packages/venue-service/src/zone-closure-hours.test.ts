@@ -6,7 +6,7 @@ import {
   floorZones,
   kitchenStations,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locations,
   withTransaction,
   type Database,
@@ -229,8 +229,7 @@ describe("assertSeasonClosuresInHours", () => {
       await tx
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-01-07",
         dayCutover: "03:00:00",
       });

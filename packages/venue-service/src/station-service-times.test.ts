@@ -11,7 +11,7 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   products,
   withTransaction,
   type Transaction,
@@ -525,8 +525,7 @@ it("clamps a station forecast to the following dated start", async () =>
       at,
       0,
     );
-    await db.insert(locationDayCutoverChanges).values({
-      locationId: f.cfg.locationId,
+    await db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-10-13",
       dayCutover: "03:00:00",
     });
@@ -557,8 +556,7 @@ it("sends nothing from a range that starts after the following dated start", asy
       at,
       0,
     );
-    await db.insert(locationDayCutoverChanges).values({
-      locationId: f.cfg.locationId,
+    await db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-10-13",
       dayCutover: "03:00:00",
     });

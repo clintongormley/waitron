@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // A spare whose venue.db is a real placed copy of the old box's database. Stand-ins: M1's stepdown
 // and the transfer of the copy (both real elsewhere); the copy, its signed indicator, its
 // acceptance and its placing are the real functions.
@@ -157,11 +157,13 @@ export function placedSpareFixture(boxes: {
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
     await mainBox.db.insert(locations).values({
       id: venueId,
-
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
     });
-    await seedVenueSettings(mainBox.db, { name: "Restaurant", invoiceLocales: ["en"] });
+    await seedVenueSettings(mainBox.db, {
+      name: "Restaurant",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    await seedBusinessDay(mainBox.db, { timeZone: "Europe/Madrid" });
     await mainBox.db.insert(nodes).values({
       id: primary.nodeId,
       locationId: venueId,
@@ -186,9 +188,6 @@ export function placedSpareFixture(boxes: {
       .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
     await spareBefore.db.insert(locations).values({
       id: venueId,
-
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
     });
     await seedVenueSettings(spareBefore.db, { name: "Restaurant" });
     await spareBefore.db.insert(nodes).values({

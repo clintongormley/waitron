@@ -10,7 +10,7 @@ import {
   stampDeployment,
   kitchenStations,
   floorZones,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locationBusinessDaySettings,
   venueLocationId,
   withTransaction,
@@ -655,12 +655,12 @@ it("refuses setup/configuration replacement of a venue with dated history withou
     request,
   );
   const venueId = await venueLocationId(db);
-  await db.insert(locationDayCutoverChanges).values([
-    { locationId: venueId, effectiveBusinessDay: "2000-01-01", dayCutover: "03:00:00" },
-    { locationId: venueId, effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" },
+  await db.insert(dayCutoverChanges).values([
+    { effectiveBusinessDay: "2000-01-01", dayCutover: "03:00:00" },
+    { effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" },
   ]);
   await db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 4 });
-  const rows = await db.select().from(locationDayCutoverChanges);
+  const rows = await db.select().from(dayCutoverChanges);
   const settings = await db.select().from(locationBusinessDaySettings);
   const fiscal = await fiscalCounts(db);
   let imported = false;
@@ -679,7 +679,7 @@ it("refuses setup/configuration replacement of a venue with dated history withou
     ),
   ).rejects.toMatchObject({ code: "setup.already_provisioned" });
   expect(imported).toBe(false);
-  expect(await db.select().from(locationDayCutoverChanges)).toEqual(rows);
+  expect(await db.select().from(dayCutoverChanges)).toEqual(rows);
   expect(await db.select().from(locationBusinessDaySettings)).toEqual(settings);
   expect(await fiscalCounts(db)).toEqual(fiscal);
 });

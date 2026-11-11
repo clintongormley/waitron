@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 /**
  * `appendOrderAmendment`'s per-order hash chain: the genesis shape, the link, the stored hash's
  * coverage, and that overlapping appends land as one gap-free chain.
@@ -65,10 +65,13 @@ describe("order_amendments append helper", () => {
     ({ deviceId: deviceA2 } = await seedDevice(admin));
     await admin.insert(locations).values({
       id: LOCATION_B,
-
+    });
+    await seedVenueSettings(admin, {
+      name: "Fixture Location B",
+      invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await seedVenueSettings(admin, { name: "Fixture Location B", invoiceLocales: ["es"] });
+    await seedBusinessDay(admin, {});
     nodeB = await seedNode(admin, LOCATION_B);
   });
 

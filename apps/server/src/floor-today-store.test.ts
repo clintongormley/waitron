@@ -19,7 +19,7 @@ import {
   floorTodayZones,
   floorZones,
   locations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   joinedTableApart,
   shortNameColumns,
   stillJoinedPart,
@@ -1211,8 +1211,7 @@ it.each(["03:00", "07:00"])(
         .update(locations)
         .set({ timeZone: "UTC", dayCutover: "05:00:00" })
         .where(eq(locations.id, v.cfg.locationId));
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: `${cutover}:00`,
       });
@@ -1235,8 +1234,8 @@ it.each(["03:00", "07:00"])(
     } finally {
       await inTx(v, async (tx) => {
         await tx
-          .delete(locationDayCutoverChanges)
-          .where(eq(locationDayCutoverChanges.locationId, v.cfg.locationId));
+          .delete(dayCutoverChanges)
+          .where(eq(dayCutoverChanges.locationId, v.cfg.locationId));
         await tx
           .update(locations)
           .set({ timeZone: clock!.timeZone, dayCutover: clock!.dayCutover })

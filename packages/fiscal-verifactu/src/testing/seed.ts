@@ -5,7 +5,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { deviceOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId } from "@waitron/shared";
-import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 
 import type { PendingRegistro } from "../chain.js";
@@ -71,13 +71,13 @@ async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
 async function insertLocation(tx: Transaction, label: string): Promise<string> {
   const existing = await tx.select({ id: locations.id }).from(locations).limit(2);
   if (existing.length === 1) return existing[0]!.id;
-  const [locationRow] = await tx
-    .insert(locations)
-    .values({
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  await seedVenueSettings(tx, { name: "Sala " + label, invoiceLocales: ["es"] });
+  const [locationRow] = await tx.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(tx, {
+    name: "Sala " + label,
+    invoiceLocales: ["es"],
+    operationDescription: "Venta en establecimiento",
+  });
+  await seedBusinessDay(tx, {});
   if (locationRow === undefined) throw new Error("seedNode: location insert returned no row");
   return locationRow.id;
 }

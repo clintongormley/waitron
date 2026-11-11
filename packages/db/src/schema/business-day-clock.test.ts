@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import {
@@ -17,10 +17,13 @@ const locationId = "a495-location";
 beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: locationId,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Clock",
+    invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  await seedVenueSettings(suite.db, { name: "Clock", invoiceLocales: ["es"] });
+  await seedBusinessDay(suite.db, {});
 });
 const change = (location: string, date: string, cutover: string) =>
   withTransaction(suite.db, async (tx) => {

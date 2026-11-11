@@ -41,7 +41,7 @@ import {
   kitchenStations,
   locations,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   sales,
   venueLocationId,
   withTransaction,
@@ -321,8 +321,7 @@ describe("new department service periods", () => {
     const id = await seedLocation(`Waiting ${randomUUID()}`);
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
     await db.insert(locationBusinessDaySettings).values({ locationId: id, revision: 1 });
-    await db.insert(locationDayCutoverChanges).values({
-      locationId: id,
+    await db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: `${dayCutover}:00`,
     });

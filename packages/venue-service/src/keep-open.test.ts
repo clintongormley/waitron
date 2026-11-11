@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { createCatalogue } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   floorZones,
   locations,
   specialDayDates,
@@ -608,8 +608,7 @@ describe("zone extensions use the actual following boundary", () => {
   ])("bounds a zone's choices before a %s start", async (cutover, lastChoice, refusedUntil) => {
     const f = await zoneFixture("06:00");
     await run((tx) =>
-      tx.insert(locationDayCutoverChanges).values({
-        locationId: f.cfg.locationId,
+      tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-11-04",
         dayCutover: `${cutover}:00`,
       }),

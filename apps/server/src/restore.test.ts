@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -109,10 +109,13 @@ beforeAll(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await db.insert(locations).values({
     id: T.locationId,
-
+  });
+  await seedVenueSettings(db, {
+    name: "Local",
+    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(db, { name: "Local", invoiceLocales: ["es"] });
+  await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await db
@@ -2148,8 +2151,6 @@ it("resolves an archive node's own location through the read-only source databas
   const otherNode = "c0000000-0000-4000-8000-000000000009";
   await suite.db.insert(locations).values({
     id: otherLocation,
-
-    operationDescription: "Hospitality",
   });
   await suite.db
     .insert(nodes)

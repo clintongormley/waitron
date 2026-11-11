@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -111,11 +111,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
   await suite.db.insert(locations).values({
     id: TENANT_A.locationId,
-
-    operationDescription: "Hospitality",
-    timeZone: "Europe/Madrid",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["en"] });
+  await seedVenueSettings(suite.db, {
+    name: "Restaurant",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,
@@ -1079,8 +1081,6 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Promotion SL" });
   await spare.db.insert(locations).values({
     id: TENANT_A.locationId,
-
-    operationDescription: "Hospitality",
   });
   await spare.db.insert(nodes).values({
     id: primary.nodeId,

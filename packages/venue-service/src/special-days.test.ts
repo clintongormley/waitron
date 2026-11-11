@@ -11,7 +11,7 @@ import {
   CORE_MIGRATIONS,
   departmentDays,
   floorZones,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locations,
   specialDayDates,
   specialDays,
@@ -828,8 +828,7 @@ describe("saveSpecialDay", () => {
     const AFTER = new Date("2031-02-01T10:00:00Z");
     const withChange = async () => {
       const v = await venue();
-      await db.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await db.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2031-01-01",
         dayCutover: "03:00:00",
       });

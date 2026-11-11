@@ -11,7 +11,7 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locations,
   specialDayDates,
   tenants,
@@ -623,8 +623,7 @@ describe("the Opening hours month read", () => {
 
   it("gives each day its own changeover and length across a pending changeover change, with the clock's status", async () => {
     const v = await venue();
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: v.cfg.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
@@ -863,8 +862,7 @@ describe("the season days read", () => {
 
   it("gives each date its own changeover across a pending changeover change", async () => {
     const v = await venue([]);
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: v.cfg.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
@@ -888,9 +886,9 @@ describe("a past day's range around a start change", () => {
       await tx
         .insert(locationBusinessDaySettings)
         .values({ locationId: cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values([
-        { locationId: cfg.locationId, effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
-        { locationId: cfg.locationId, effectiveBusinessDay: "2026-10-28", dayCutover: "05:00:00" },
+      await tx.insert(dayCutoverChanges).values([
+        { effectiveBusinessDay: "2026-10-21", dayCutover: "03:00:00" },
+        { effectiveBusinessDay: "2026-10-28", dayCutover: "05:00:00" },
       ]);
     });
     return run(async (tx) => {

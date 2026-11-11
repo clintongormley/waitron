@@ -51,7 +51,7 @@ import {
 } from "./restore.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
-import { seedDevice, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 
 const RECOVERY_KEY = "s3cr3t-recovery-key-for-fiscal-restore-e2e";
 const BASELINE_MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
@@ -79,10 +79,13 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" });
   await db.insert(locations).values({
     id: F.locationId,
-
+  });
+  await seedVenueSettings(db, {
+    name: "Local principal",
+    invoiceLocales: ["es"],
     operationDescription: "Venta en establecimiento",
   });
-  await seedVenueSettings(db, { name: "Local principal", invoiceLocales: ["es"] });
+  await seedBusinessDay(db, {});
   await seedDevice(db, { locationId: F.locationId });
   await db.insert(nodes).values({ id: F.nodeId, locationId: F.locationId, name: "Node 1" });
   await db

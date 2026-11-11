@@ -15,7 +15,7 @@ import {
   kitchenNotices,
   kitchenStations,
   locations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   withTransaction,
   workingLineContexts,
   workingOrderLines,
@@ -1392,8 +1392,7 @@ it.each(["03:00", "07:00"])(
       .update(locations)
       .set({ dayCutover: "05:00:00" })
       .where(eq(locations.id, v.locationId));
-    await db.insert(locationDayCutoverChanges).values({
-      locationId: v.locationId,
+    await db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: `${cutover}:00`,
     });

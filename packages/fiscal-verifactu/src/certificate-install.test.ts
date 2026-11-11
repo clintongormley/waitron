@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomBytes } from "node:crypto";
 import {
   credentialRevision,
@@ -629,8 +629,13 @@ describe("installCertificate's log", () => {
 describe("venueTimeZone", () => {
   it("refuses a second venue row", async () => {
     await seedTenantNodeSif(suite.db);
-    await suite.db.insert(locations).values({ operationDescription: "Restaurant" });
-    await seedVenueSettings(suite.db, { name: "Second venue", invoiceLocales: ["en"] });
+    await suite.db.insert(locations).values({});
+    await seedVenueSettings(suite.db, {
+      name: "Second venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
+    await seedBusinessDay(suite.db, {});
     const error = await captureError(() => withTransaction(suite.db, (tx) => venueTimeZone(tx)));
     expect(error).toMatchObject({ code: "provisioning.second_venue" });
   });

@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import {
   openVenueDatabase,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locationBusinessDaySettings,
   locations,
   withTransaction,
@@ -151,7 +151,7 @@ const proposal = (overrides: Record<string, unknown> = {}) => ({
 });
 async function clockRows() {
   return {
-    changes: await suite.db.select().from(locationDayCutoverChanges),
+    changes: await suite.db.select().from(dayCutoverChanges),
     settings: await suite.db.select().from(locationBusinessDaySettings),
   };
 }
@@ -711,7 +711,7 @@ it("reads pending and activated boundaries from a reopened complete database cop
         revision: 1,
         pending: null,
       });
-      expect(await reopened.venue.select().from(locationDayCutoverChanges)).toEqual(
+      expect(await reopened.venue.select().from(dayCutoverChanges)).toEqual(
         (await clockRows()).changes,
       );
     } finally {
@@ -822,8 +822,7 @@ describe("the preview chooses the changeover itself", () => {
   });
   it("leaves tonight's waiting change in place and takes the following changeover once the new start has passed today", async () => {
     await inTx((tx) =>
-      tx.insert(locationDayCutoverChanges).values({
-        locationId: venue.cfg.locationId,
+      tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-10-21",
         dayCutover: "21:00:00",
       }),
@@ -843,8 +842,7 @@ describe("the preview chooses the changeover itself", () => {
       at = new Date("2026-10-20T20:00:00Z");
       departmentId = (await authorRange("06:00", "20:00", { everySeason: true })).department.id;
       await inTx((tx) =>
-        tx.insert(locationDayCutoverChanges).values({
-          locationId: venue.cfg.locationId,
+        tx.insert(dayCutoverChanges).values({
           effectiveBusinessDay: "2026-10-21",
           dayCutover: "21:00:00",
         }),
@@ -921,8 +919,7 @@ describe("the preview chooses the changeover itself", () => {
 
 it("the general clock preview shows the dated start in force at the supplied instant", async () => {
   await inTx((tx) =>
-    tx.insert(locationDayCutoverChanges).values({
-      locationId: venue.cfg.locationId,
+    tx.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     }),
@@ -996,8 +993,7 @@ describe("a Save takes the next changeover", () => {
     });
   });
   it("replaces a far-off waiting row the old form saved", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: venue.cfg.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2027-06-01",
       dayCutover: "07:00:00",
     });

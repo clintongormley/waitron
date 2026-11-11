@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { readZoneKeepOpenState } from "./operations.js";
 import { replaceZoneClosedWeek } from "./zone-closed-times.js";
 import { saveSeasonWeeks } from "./season-weeks.js";
@@ -24,7 +24,7 @@ import {
   floorZones,
   locations,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   menuPeriods,
   seasons,
   specialDayDates,
@@ -117,12 +117,13 @@ async function fixture(
     const loc = randomUUID();
     await tx.insert(locations).values({
       id: loc,
-
-      operationDescription: "Restaurant",
-      timeZone: before.timeZone,
-      dayCutover: "05:00:00",
     });
-    await seedVenueSettings(tx, { name: "Clock venue", invoiceLocales: ["en"] });
+    await seedVenueSettings(tx, {
+      name: "Clock venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
+    await seedBusinessDay(tx, { timeZone: before.timeZone, dayCutover: "05:00:00" });
     const departmentId = randomUUID();
     const [otherDepartment] = await tx
       .select({ id: departments.id })
@@ -472,8 +473,8 @@ describe("schedule clock guard", () => {
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
       await tx
-        .insert(locationDayCutoverChanges)
-        .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
     const guard = (kind: "time" | "metadata", revision: number) =>
       withTransaction(suite.db, (tx) => assertBusinessDayScheduleWrite(tx, kind, revision));
@@ -484,9 +485,7 @@ describe("schedule clock guard", () => {
       params: {},
     });
     await withTransaction(suite.db, (tx) =>
-      tx
-        .delete(locationDayCutoverChanges)
-        .where(eq(locationDayCutoverChanges.locationId, v.cfg.locationId)),
+      tx.delete(dayCutoverChanges).where(eq(dayCutoverChanges.locationId, v.cfg.locationId)),
     );
     await expect(guard("time", 0)).rejects.toMatchObject({ code: "hours.clock_changed" });
     await expect(guard("time", 1)).resolves.toBeUndefined();
@@ -523,8 +522,8 @@ describe("every time writer stays open while a change waits", () => {
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
       await tx
-        .insert(locationDayCutoverChanges)
-        .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
   }
   it("accepts normal and special-day menu ranges and an equivalent week", async () => {
@@ -586,8 +585,7 @@ describe("a waiting change checks the hours written while it waits", () => {
       await tx
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: E,
         dayCutover: `${dayCutover}:00`,
       });
@@ -1317,14 +1315,12 @@ describe("undated hours are checked against the start in force", () => {
       await tx
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values([
+      await tx.insert(dayCutoverChanges).values([
         {
-          locationId: v.cfg.locationId,
           effectiveBusinessDay: "2026-10-21",
           dayCutover: "03:00:00",
         },
         {
-          locationId: v.cfg.locationId,
           effectiveBusinessDay: "2026-10-28",
           dayCutover: "05:00:00",
         },
@@ -1337,8 +1333,7 @@ describe("undated hours are checked against the start in force", () => {
       await tx
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2026-10-21",
         dayCutover: "03:00:00",
       });
@@ -1540,9 +1535,7 @@ it("hours models carry the baseline timeline, revision and pending status across
     await tx
       .insert(locationBusinessDaySettings)
       .values({ locationId: v.cfg.locationId, revision: 2 });
-    await tx
-      .insert(locationDayCutoverChanges)
-      .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+    await tx.insert(dayCutoverChanges).values({ effectiveBusinessDay: E, dayCutover: "07:00:00" });
   });
   const read = (time: string) =>
     withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, new Date(time)));
@@ -1573,8 +1566,8 @@ describe("schedule authoring retains date-specific starts", () => {
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
       await tx
-        .insert(locationDayCutoverChanges)
-        .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
   }
   const after = new Date("2026-11-05T12:00:00Z");
@@ -1647,8 +1640,8 @@ describe("dated calendar authoring after activation", () => {
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
       await tx
-        .insert(locationDayCutoverChanges)
-        .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: E, dayCutover: "07:00:00" });
     });
   }
   it("allows a one-off all-day range under its own start", async () => {
@@ -1682,8 +1675,7 @@ describe("dated calendar authoring after activation", () => {
 describe("dated runtime service across a moved changeover", () => {
   async function timeline(v: Awaited<ReturnType<typeof fixture>>, time: string) {
     await withTransaction(suite.db, async (tx) => {
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: E,
         dayCutover: `${time}:00`,
       });
@@ -1770,9 +1762,7 @@ it("rechecks a time writer queued before a clock change commits", async () => {
     await tx
       .insert(locationBusinessDaySettings)
       .values({ locationId: v.cfg.locationId, revision: 1 });
-    await tx
-      .insert(locationDayCutoverChanges)
-      .values({ locationId: v.cfg.locationId, effectiveBusinessDay: E, dayCutover: "07:00:00" });
+    await tx.insert(dayCutoverChanges).values({ effectiveBusinessDay: E, dayCutover: "07:00:00" });
   });
   await entered.promise;
   const realLock = suite.db.withWriteLock.bind(suite.db);
@@ -2140,10 +2130,6 @@ async function busyCalendar(count: number, run = 0) {
     const loc = randomUUID();
     await tx.insert(locations).values({
       id: loc,
-
-      operationDescription: "Restaurant",
-      timeZone: before.timeZone,
-      dayCutover: "05:00:00",
     });
     const seasonIds = ["03-01", "06-01", "09-01", "12-01"].map((startsOn, i) => ({
       id: fixed(1, i),

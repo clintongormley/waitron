@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -139,11 +139,14 @@ async function seedTillIdentity(db: Database, node: NodeDatabase): Promise<void>
     .insert(locations)
     .values({
       id: TILL_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
-  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["en"] });
+  await seedVenueSettings(db, {
+    name: "Barra",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(db, {});
   await db
     .insert(nodes)
     .values({
@@ -175,8 +178,6 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
     .insert(locations)
     .values({
       id: MIRROR_LOCATION_ID,
-
-      operationDescription: "Hospitality",
     })
     .onConflictDoNothing();
   await seedVenueSettings(db, { name: "Barra" });

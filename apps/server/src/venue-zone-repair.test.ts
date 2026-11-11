@@ -7,7 +7,7 @@ import {
   locations,
   incidents,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -87,9 +87,9 @@ describe("atomic unusable-zone confirmation", () => {
     },
   );
   it("commits only the canonical zone, revision one and one immediately handled warning", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
     ]);
     await seedWorkingOrder(suite.db, { source: "operator_script", orderNumber: 1 });
     const before = snapshot();

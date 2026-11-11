@@ -13,7 +13,7 @@ import {
   departmentDays,
   floorZones,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locations,
   seasons,
   withTransaction,
@@ -720,8 +720,7 @@ describe("saveSeasons", () => {
       await tx
         .insert(locationBusinessDaySettings)
         .values({ locationId: v.cfg.locationId, revision: 1 });
-      await tx.insert(locationDayCutoverChanges).values({
-        locationId: v.cfg.locationId,
+      await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: "2030-10-20",
         dayCutover: "03:00:00",
       });

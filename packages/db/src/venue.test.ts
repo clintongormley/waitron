@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { catalogues } from "./schema/catalogue.js";
-import { locationDayCutoverChanges } from "./schema/business-day-clock.js";
+import { dayCutoverChanges } from "./schema/business-day-clock.js";
 import { locations } from "./schema/tenants.js";
 import { withTransaction } from "./tenancy.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -93,9 +93,9 @@ describe("the venue accessor", () => {
       province: "Las Palmas",
       city: "Telde",
     });
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: id, effectiveBusinessDay: "2026-03-10", dayCutover: "05:00:00" },
-      { locationId: id, effectiveBusinessDay: "2026-02-01", dayCutover: "03:15:00" },
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-03-10", dayCutover: "05:00:00" },
+      { effectiveBusinessDay: "2026-02-01", dayCutover: "03:15:00" },
     ]);
     const clock = {
       timeZone: "Atlantic/Canary",
@@ -134,8 +134,8 @@ describe("the venue accessor", () => {
   it("reads the clock and place in one statement", async () => {
     const id = await insertVenue({ dayCutover: "05:00:00", province: "Madrid", city: "Getafe" });
     await suite.db
-      .insert(locationDayCutoverChanges)
-      .values({ locationId: id, effectiveBusinessDay: "2026-04-01", dayCutover: "06:00:00" });
+      .insert(dayCutoverChanges)
+      .values({ effectiveBusinessDay: "2026-04-01", dayCutover: "06:00:00" });
 
     const { result, statements } = await selectsDuring(readVenueClockAndPlace);
 
@@ -162,10 +162,10 @@ describe("the venue accessor", () => {
 
   it("reads a venue with several cutover changes as one venue, changes in date order", async () => {
     const id = await insertVenue();
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: id, effectiveBusinessDay: "2026-05-01", dayCutover: "07:00:00" },
-      { locationId: id, effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
-      { locationId: id, effectiveBusinessDay: "2026-03-01", dayCutover: "05:30:00" },
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-05-01", dayCutover: "07:00:00" },
+      { effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
+      { effectiveBusinessDay: "2026-03-01", dayCutover: "05:30:00" },
     ]);
 
     expect((await withTransaction(suite.db, readVenueClock)).cutoverChanges).toEqual([
@@ -178,9 +178,9 @@ describe("the venue accessor", () => {
   it("refuses two venues when one of them has cutover changes", async () => {
     const id = await insertVenue();
     await insertVenue({ name: "Second" });
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: id, effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
-      { locationId: id, effectiveBusinessDay: "2026-03-01", dayCutover: "05:30:00" },
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
+      { effectiveBusinessDay: "2026-03-01", dayCutover: "05:30:00" },
     ]);
 
     const error: unknown = await withTransaction(suite.db, readVenueClockAndPlace).catch(

@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { expect, it } from "vitest";
 import { locations, nodes, readVenue } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -27,15 +27,13 @@ it.each([
   { name: "seedTenantNodeSif", seed: seedTenantNodeSif },
   { name: "seedTenants", seed: seedTenants },
 ])("reuses an existing venue for fixed-id parents: $name", async ({ seed }) => {
-  const [venue] = await suite.db
-    .insert(locations)
-    .values({
-      timeZone: "Europe/Rome",
-
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
-  await seedVenueSettings(suite.db, { name: "Retained venue", invoiceLocales: ["es"] });
+  const [venue] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(suite.db, {
+    name: "Retained venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  await seedBusinessDay(suite.db, { timeZone: "Europe/Rome" });
   const before = await readVenue(suite.db);
   await seed(suite.db);
   expect(await readVenue(suite.db)).toEqual(before);

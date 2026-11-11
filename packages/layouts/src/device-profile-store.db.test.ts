@@ -13,7 +13,12 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedTenant,
+  seedVenue,
+  seedVenueSettings,
+  seedBusinessDay,
+} from "@waitron/db/testing/seed.js";
 import { persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
@@ -72,11 +77,13 @@ async function purgeProfiles(): Promise<void> {
 
 /** Through drizzle, for the `$defaultFn` reason `seedSession` states. */
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  await seedVenueSettings(suite.db, { name: "Loc", invoiceLocales: ["es"] });
+  const [location] = await suite.db.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(suite.db, {
+    name: "Loc",
+    invoiceLocales: ["es"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(suite.db, {});
   const [device] = await suite.db
     .insert(devices)
     .values({

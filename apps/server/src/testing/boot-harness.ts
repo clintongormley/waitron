@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp } from "node:fs/promises";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { createConnection, createServer } from "node:net";
@@ -57,10 +57,13 @@ export async function seedSharedVenue(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
   await db.insert(locations).values({
     id: TILL_LOCATION_ID,
-
+  });
+  await seedVenueSettings(db, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
-  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["es-ES"] });
+  await seedBusinessDay(db, {});
   // `startServer` reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it
   // against the enabled fiscal module.
   await db.insert(nodes).values({
@@ -333,8 +336,6 @@ export async function seedTradingVenue(db: Database): Promise<void> {
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });
   await db.insert(locations).values({
     id: TILL_LOCATION_ID,
-
-    operationDescription: "Venta en establecimiento",
   });
   await seedVenueSettings(db, { name: "Barra" });
   await db.insert(nodes).values({

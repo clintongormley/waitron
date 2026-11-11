@@ -1,5 +1,5 @@
 import { readVenue } from "@waitron/db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -59,10 +59,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Restaurant" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Restaurant",
+    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["es"] });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Restored node" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: NODE, code: "A", purpose: "standard" },
@@ -257,8 +260,6 @@ it("the admission check's folder holds the backup's node copy, not an empty node
 async function secondVenueRow(): Promise<void> {
   await suite.db.insert(locations).values({
     id: "d0000000-0000-4000-8000-000000000099",
-
-    operationDescription: "Venta",
   });
 }
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   type Transaction,
   venueLocationId,
   withTransaction,
@@ -62,8 +62,8 @@ describe("transactional attendance operation capture", () => {
       await capture(fact());
       const [before] = await suite.db.select().from(attendanceDayWork);
       await suite.db
-        .insert(locationDayCutoverChanges)
-        .values({ locationId, effectiveBusinessDay: "2026-01-06", dayCutover: "06:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-01-06", dayCutover: "06:00:00" });
       await expect(
         capture({ ...fact(), key: "after-cutover-setting", at: "2026-01-05T16:42:00Z" }),
       ).resolves.toBeUndefined();

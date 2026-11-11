@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   openVenueDatabase,
   stampDeployment,
   invoiceSeries,
@@ -36,14 +36,12 @@ const suite = useVenueDb({ migrations });
 describe("business-day timeline through cold restore and reset", () => {
   it("retains effective and pending rows, derives activation on reads and clears them only on a venue wipe", async () => {
     const venue = await setupVenue(suite.db);
-    await suite.db.insert(locationDayCutoverChanges).values([
+    await suite.db.insert(dayCutoverChanges).values([
       {
-        locationId: venue.cfg.locationId,
         effectiveBusinessDay: "2026-11-04",
         dayCutover: "03:00:00",
       },
       {
-        locationId: venue.cfg.locationId,
         effectiveBusinessDay: "2026-11-10",
         dayCutover: "07:00:00",
       },
@@ -51,7 +49,7 @@ describe("business-day timeline through cold restore and reset", () => {
     await suite.db
       .insert(locationBusinessDaySettings)
       .values({ locationId: venue.cfg.locationId, revision: 4 });
-    const changes = await suite.db.select().from(locationDayCutoverChanges);
+    const changes = await suite.db.select().from(dayCutoverChanges);
     const settings = await suite.db.select().from(locationBusinessDaySettings);
     const department = (
       await suite.db.execute<{ id: string }>(sql`select id from departments where is_default`)
@@ -153,7 +151,7 @@ describe("business-day timeline through cold restore and reset", () => {
             ),
           ).toEqual(serviceBefore[index]);
         }
-        expect(await restored.venue.select().from(locationDayCutoverChanges)).toEqual(changes);
+        expect(await restored.venue.select().from(dayCutoverChanges)).toEqual(changes);
         expect(await restored.venue.select().from(locationBusinessDaySettings)).toEqual(settings);
       } finally {
         await restored.close();
@@ -162,7 +160,7 @@ describe("business-day timeline through cold restore and reset", () => {
       await applyMigrations(venueDir, migrations);
       const reset = await openVenueDatabase(venueDir);
       try {
-        expect(await reset.venue.select().from(locationDayCutoverChanges)).toEqual([]);
+        expect(await reset.venue.select().from(dayCutoverChanges)).toEqual([]);
         expect(await reset.venue.select().from(locationBusinessDaySettings)).toEqual([]);
       } finally {
         await reset.close();

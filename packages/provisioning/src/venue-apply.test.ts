@@ -11,7 +11,7 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import {
   deviceProfiles,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   locationBusinessDaySettings,
   venueLocationId,
 } from "@waitron/db";
@@ -1131,9 +1131,9 @@ it("reuses the current dated start without clearing the location timeline", asyn
     modules: ALL_MODULES,
   });
   const venueId = await venueLocationId(suite.db);
-  await suite.db.insert(locationDayCutoverChanges).values([
-    { locationId: venueId, effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
-    { locationId: venueId, effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
+  await suite.db.insert(dayCutoverChanges).values([
+    { effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
+    { effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
   ]);
   await suite.db.insert(locationBusinessDaySettings).values({ locationId: venueId, revision: 3 });
   const current = request("B10000008");
@@ -1144,7 +1144,7 @@ it("reuses the current dated start without clearing the location timeline", asyn
       modules: ALL_MODULES,
     }),
   ).resolves.toMatchObject({ nodeId: first.nodeId });
-  expect(await suite.db.select().from(locationDayCutoverChanges)).toHaveLength(2);
+  expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(2);
   expect(await suite.db.select().from(locationBusinessDaySettings)).toEqual([
     { locationId: venueId, revision: 3 },
   ]);

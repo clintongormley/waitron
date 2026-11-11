@@ -5,7 +5,7 @@ import {
   CORE_MIGRATIONS,
   locations,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   venueLocationId,
   withTransaction,
 } from "@waitron/db";
@@ -150,9 +150,9 @@ describe("retained clock candidate validation", () => {
     await suite.db
       .insert(locationBusinessDaySettings)
       .values({ locationId: scope.locationId, revision: 7 });
-    await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
-      { locationId: scope.locationId, effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
+    await suite.db.insert(dayCutoverChanges).values([
+      { effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
+      { effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
     ]);
     const before = retained();
     expect(await preview()).toEqual({
@@ -179,8 +179,7 @@ describe("retained clock candidate validation", () => {
     expect(retained()).toEqual(before);
   });
   it("rejects an impossible retained date even though its stored shape passes", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: scope.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-02-30",
       dayCutover: "05:00:00",
     });
@@ -192,8 +191,7 @@ describe("retained clock candidate validation", () => {
     expect(retained()).toEqual(before);
   });
   it("rejects a non-increasing historical boundary away from the preview instant", async () => {
-    await suite.db.insert(locationDayCutoverChanges).values({
-      locationId: scope.locationId,
+    await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2011-12-30",
       dayCutover: "06:00:00",
     });

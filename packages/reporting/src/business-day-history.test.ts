@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, withTransaction, readVenueClock } from "@waitron/db";
@@ -20,12 +20,13 @@ const clock = {
 beforeEach(async () => {
   await suite.db.insert(locations).values({
     id: locationId,
-
-    operationDescription: "Restaurant",
-    timeZone: "Europe/Madrid",
-    dayCutover: "05:00:00",
   });
-  await seedVenueSettings(suite.db, { name: "Clock", invoiceLocales: ["es"] });
+  await seedVenueSettings(suite.db, {
+    name: "Clock",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "05:00:00" });
 });
 afterEach(() => vi.useRealTimers());
 describe("complete reporting clock", () => {

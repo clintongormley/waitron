@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
@@ -13,10 +13,13 @@ async function read(receiptLanguage: string, languages?: string[], country: stri
     await suite.db
       .insert(tenants)
       .values({ id: 1, country, taxId: "B12345678", legalName: "Venue SL" });
-  await suite.db.insert(locations).values({
+  await suite.db.insert(locations).values({});
+  await seedVenueSettings(suite.db, {
+    name: randomUUID(),
+    invoiceLocales: [receiptLanguage],
     operationDescription: "Bootstrap",
   });
-  await seedVenueSettings(suite.db, { name: randomUUID(), invoiceLocales: [receiptLanguage] });
+  await seedBusinessDay(suite.db, {});
   if (languages !== undefined) {
     await seedVenueSettings(suite.db, {
       defaultContentLanguage: languages[0]!,

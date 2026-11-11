@@ -1,5 +1,5 @@
 import { readVenue } from "@waitron/db";
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -98,10 +98,13 @@ beforeEach(async () => {
   await stampDeployment(suite.db, "preproduction");
   await suite.db.insert(locations).values({
     id: LOCATION,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Original",
+    invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await seedVenueSettings(suite.db, { name: "Original", invoiceLocales: ["es"] });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Restored" });
   await suite.db.insert(invoiceSeries).values([
     { nodeId: NODE, code: "A", purpose: "standard" },

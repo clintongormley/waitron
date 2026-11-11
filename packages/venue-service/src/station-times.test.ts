@@ -6,7 +6,7 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   locations,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   stationDayStates,
   tenants,
   type Database,
@@ -704,8 +704,7 @@ it("keeps today's station closure and actual expiry through the 26-hour tail", a
       .update(locations)
       .set({ dayCutover: "05:00:00" })
       .where(eq(locations.id, f.cfg.locationId));
-    await tx.insert(locationDayCutoverChanges).values({
-      locationId: f.cfg.locationId,
+    await tx.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     });

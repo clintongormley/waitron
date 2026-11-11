@@ -9,7 +9,12 @@ import type { AddressInfo } from "node:net";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { seedDevice, seedWorkingOrder, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedWorkingOrder,
+  seedVenueSettings,
+  seedBusinessDay,
+} from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   locations,
@@ -143,12 +148,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Zone Admission SL" });
   await suite.db.insert(locations).values({
     id: LOCATION,
-
-    operationDescription: "Restaurant service",
-    timeZone: "Europe/Madrid",
-    dayCutover: "06:00:00",
   });
-  await seedVenueSettings(suite.db, { name: "Counter", invoiceLocales: ["en-GB"] });
+  await seedVenueSettings(suite.db, {
+    name: "Counter",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+  });
+  await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
   await suite.db
     .insert(nodes)
     .values({ id: NODE, locationId: LOCATION, name: "Node", filingModule: "verifactu" });

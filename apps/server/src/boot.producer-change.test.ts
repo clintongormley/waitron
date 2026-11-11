@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, rm } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,10 +88,13 @@ beforeAll(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Producer Change SL" });
   await db.insert(locations).values({
     id: LOCATION_ID,
-
+  });
+  await seedVenueSettings(db, {
+    name: "Barra",
+    invoiceLocales: ["en"],
     operationDescription: "Hospitality",
   });
-  await seedVenueSettings(db, { name: "Barra", invoiceLocales: ["en"] });
+  await seedBusinessDay(db, {});
   await db.insert(nodes).values({ id: NODE_ID, locationId: LOCATION_ID, name: "Node" });
   await db.insert(invoiceSeries).values({ id: SERIES_ID, nodeId: NODE_ID, code: "A" });
   await establishNodeIdentity({ ownerDb: db, node, ring: RING }, NODE_ID);

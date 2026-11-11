@@ -10,7 +10,7 @@ import {
 import {
   CORE_MIGRATIONS,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   floorPlanSets,
   floorZones,
   kitchenStations,
@@ -865,8 +865,7 @@ it("accepts a fitting week, refuses a clashing one and a stale one while a chang
     await tx
       .insert(locationBusinessDaySettings)
       .values({ locationId: r.cfg.locationId, revision: 1 });
-    await tx.insert(locationDayCutoverChanges).values({
-      locationId: r.cfg.locationId,
+    await tx.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     });

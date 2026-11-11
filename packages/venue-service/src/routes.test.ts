@@ -25,7 +25,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
@@ -69,11 +69,13 @@ async function fixture(
   operationDescriptionDefault?: string,
 ): Promise<Fixture> {
   await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({ operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  await seedVenueSettings(db, { name: "Venue", invoiceLocales: ["en-GB"] });
+  const [location] = await db.insert(locations).values({}).returning({ id: locations.id });
+  await seedVenueSettings(db, {
+    name: "Venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(db, {});
   const scopedLocationId = location!.id;
   const [zone] = await db
     .insert(floorZones)

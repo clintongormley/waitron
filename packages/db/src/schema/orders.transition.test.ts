@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
@@ -130,10 +130,13 @@ describe("working_orders state machine (enforce_transition)", () => {
     ({ deviceId: deviceB } = await seedDevice(db));
     await db.insert(locations).values({
       id: LOCATION_B,
-
+    });
+    await seedVenueSettings(db, {
+      name: "Fixture Location B",
+      invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     });
-    await seedVenueSettings(db, { name: "Fixture Location B", invoiceLocales: ["es", "ca"] });
+    await seedBusinessDay(db, {});
     const [catalogue] = await db
       .insert(catalogues)
       .values({ name: "Deli" })

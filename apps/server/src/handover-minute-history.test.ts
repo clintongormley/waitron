@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 // Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
 // module-preparation-state.json? The cases asking this put the spare's clock on the minute of
 // M1's later name, where a reused name prints `selected` with that name and an avoided one prints
@@ -168,11 +168,13 @@ beforeEach(async () => {
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Handover SL" });
   await suite.db.insert(locations).values({
     id: TENANT_A.locationId,
-
-    operationDescription: "Hospitality",
-    timeZone: "Europe/Madrid",
   });
-  await seedVenueSettings(suite.db, { name: "Restaurant", invoiceLocales: ["en"] });
+  await seedVenueSettings(suite.db, {
+    name: "Restaurant",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
+  await seedBusinessDay(suite.db, { timeZone: "Europe/Madrid" });
   await suite.db.insert(nodes).values(
     [primary, standby].map((node) => ({
       id: node.nodeId,

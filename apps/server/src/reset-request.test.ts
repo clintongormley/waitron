@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -526,13 +526,13 @@ describe("runStagedReset", () => {
       async (box: { stateDir: string; venueDir: string; operationId: string }) => {
         const store = await openVenueDatabase(box.venueDir);
         try {
-          await store.venue.insert(locations).values({
-            operationDescription: "Venta en establecimiento",
-          });
+          await store.venue.insert(locations).values({});
           await seedVenueSettings(store.venue, {
             name: "Sala principal",
             invoiceLocales: ["es-ES"],
+            operationDescription: "Venta en establecimiento",
           });
+          await seedBusinessDay(store.venue, {});
         } finally {
           await store.close();
         }

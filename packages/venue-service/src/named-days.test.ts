@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -27,15 +27,13 @@ const run = <T>(body: Parameters<typeof withTransaction<T>>[1]) => withTransacti
 
 async function fixture() {
   return run(async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      })
-      .returning();
-    await seedVenueSettings(tx, { name: randomUUID(), invoiceLocales: ["en-GB"] });
+    const [location] = await tx.insert(locations).values({}).returning();
+    await seedVenueSettings(tx, {
+      name: randomUUID(),
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    await seedBusinessDay(tx, { timeZone: "Europe/Madrid", dayCutover: "06:00:00" });
     const cfg = { locationId: location!.id };
     const [department, other] = await tx
       .insert(departments)

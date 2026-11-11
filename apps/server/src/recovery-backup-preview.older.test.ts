@@ -1,4 +1,4 @@
-import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -65,10 +65,13 @@ it("previews a backup with an older venue schema by migrating only its private s
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await suite.db.insert(locations).values({
     id: locationId,
-
+  });
+  await seedVenueSettings(suite.db, {
+    name: "Earlier location",
+    invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant",
   });
-  await seedVenueSettings(suite.db, { name: "Earlier location", invoiceLocales: ["es-ES"] });
+  await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });
   const scratch = await mkdtemp(join(tmpdir(), "preview-old-archive-"));
   try {
@@ -145,8 +148,6 @@ it("binds a bucket copy with an older venue schema before private preview migrat
     values (1, 'ES', '89890001K', 'Earlier venue', ${nowIso()})`);
   await suite.db.insert(locations).values({
     id: locationId,
-
-    operationDescription: "Restaurant",
   });
   await seedVenueSettings(suite.db, { name: "Earlier location" });
   await suite.db.insert(nodes).values({ id: nodeId, locationId, name: "Earlier node" });

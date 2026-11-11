@@ -8,7 +8,7 @@ import {
   CORE_MIGRATIONS,
   locations,
   locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  dayCutoverChanges,
   newId,
   openVenueDatabase,
   type Transaction,
@@ -161,8 +161,8 @@ it.each(["zone", "cutover", "dated-cutover", "settings-revision"] as const)(
         .where(eq(locations.id, locationId));
     if (kind === "dated-cutover")
       await suite.db
-        .insert(locationDayCutoverChanges)
-        .values({ locationId, effectiveBusinessDay: "2026-01-05", dayCutover: "05:00:00" });
+        .insert(dayCutoverChanges)
+        .values({ effectiveBusinessDay: "2026-01-05", dayCutover: "05:00:00" });
     if (kind === "settings-revision")
       await suite.db.insert(locationBusinessDaySettings).values({ locationId, revision: 1 });
     expect(await revision()).not.toBe(before);
