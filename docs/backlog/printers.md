@@ -556,8 +556,14 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 ## Bundle: One session at the real box: printers, paper, tax QR, the drawer
 
-23 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+Hardware and inbox checks to complete in the owner session.
 
+- **A739 physical payment and delivery qualification.** On the real till, printer and reader,
+  check the payment window and final Receipt / Full invoice / None choice; original and copy
+  paper output; requested card slips after a confirmed capture and Print a copy before full
+  payment; and Receipt Email arriving in the intended inbox. No physical printer, reader or
+  inbox qualification was performed by the software cuts. The watcher moved these remaining
+  checks here on 11 November 2026 at 17:20; they add no prerequisite to A840/A842/A848.
 - **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write
   filesystems, or a `logs` volume on another disk. Left open by A1127.
   [Detail](setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
