@@ -1154,18 +1154,16 @@ A running-down quantity (“only 5 left”) stays parked.
 not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
 the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-split the remaining implementation into six follow-ups; five remain for the watcher to queue. No product change
+split the remaining implementation into six follow-ups; four remain for the watcher to queue. No product change
 is built by the proposal. It distinguishes the narrower measured cases from these original observations.
 
 1. **The till's allergen filter ignores the allergens of extras**, and the allergens of variants of a dish that has its own declaration; a dish shown because one variant passes still offers its other variants (found in A1517-1's review, 2026-11-11; A1517-2).
-2. **Paper kitchen tickets show no dish allergens** unless a guest at the table was flagged as
-   allergic. The kitchen screen shows them; a cook working from paper does not see them.
-3. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
+2. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
    retired), no printed menu (A670) and no online menu yet (A509). The data-protection guide tells
    venues to put a notice "on the menu or allergen sheet".
-4. **The screen for choosing extras shows no allergens.** They appear only once the extra is on
+3. **The screen for choosing extras shows no allergens.** They appear only once the extra is on
    the order.
-5. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
+4. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
    a later edit changes what staff see on an earlier order.
 
 ## Decisions and deliberate limits

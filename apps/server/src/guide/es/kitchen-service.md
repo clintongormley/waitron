@@ -38,12 +38,15 @@ ticket o la tarjeta de la pantalla lleva una marca de alergia. Un extra enviado 
 lleva las mismas instrucciones de la persona a su propia estación.
 
 Si el plato o un extra activo declara un alérgeno que la persona evita, el bloque también indica
-ese conflicto y que se ha enviado igualmente. La falta de información nutricional no establece
-que un plato sea apto. Consúltalo con quien atiende la mesa antes de prepararlo.
+ese conflicto y que se ha enviado igualmente. Un ticket impreso indica los alérgenos que declara
+cada plato en una línea Contiene debajo de él, y los de cada extra junto al extra. Que no haya
+línea Contiene, igual que la falta de información nutricional, no establece que un plato sea
+apto. Consúltalo con quien atiende la mesa antes de prepararlo.
 
-Cocina conserva las instrucciones que recibió primero. Los cambios posteriores de la persona o
-del catálogo no sustituyen silenciosamente el bloque original en la tarjeta del plato, el pase o
-una reimpresión.
+El bloque de la persona conserva las instrucciones que cocina recibió primero: los cambios
+posteriores de la persona o del catálogo no lo sustituyen silenciosamente en la tarjeta del
+plato, el pase o una reimpresión. La línea Contiene de un plato muestra lo que declara el plato
+en el momento de imprimirse, también en una reimpresión.
 
 ## Lee y confirma una corrección {#corrections}
 

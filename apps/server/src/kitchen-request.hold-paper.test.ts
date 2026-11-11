@@ -492,6 +492,8 @@ describe("A773 hold paper: extras off and moves", () => {
         "GROUP 1",
         "1 x CHIPS",
         "  > for BURG at Grill",
+        "  Contains: Cereals containing gluten",
+        "            (Wheat)",
         "",
       ];
       expect(added("grill")).toEqual([grill]);
@@ -966,8 +968,20 @@ describe("A773 hold paper: added work", () => {
         changed("Grill", "+1 x BURG", "  > with CHIPS from Fryer", "  > with RINGS from Fryer"),
       ];
       const fryer = [
-        changed("Fryer", "-1 x CHIPS", "  > for BURG at Grill"),
-        changed("Fryer", "+1 x CHIPS", "  > for BURG at Grill"),
+        changed(
+          "Fryer",
+          "-1 x CHIPS",
+          "  > for BURG at Grill",
+          "  Contains: Cereals containing gluten",
+          "            (Wheat)",
+        ),
+        changed(
+          "Fryer",
+          "+1 x CHIPS",
+          "  > for BURG at Grill",
+          "  Contains: Cereals containing gluten",
+          "            (Wheat)",
+        ),
         changed("Fryer", "+1 x RINGS", "  > for BURG at Grill"),
       ];
       expect(added("grill")).toEqual(grill);
@@ -1016,8 +1030,20 @@ describe("A773 hold paper: added work", () => {
       const after = await slips(tx, venue);
       const added = (name: string) => after[name]!.slice(before[name]!.length);
       const fryer = [
-        changed("Fryer", "-1 x CHIPS", "  > for BURG at Grill"),
-        changed("Fryer", "+1 x CHIPS", "  > for BURG at Grill"),
+        changed(
+          "Fryer",
+          "-1 x CHIPS",
+          "  > for BURG at Grill",
+          "  Contains: Cereals containing gluten",
+          "            (Wheat)",
+        ),
+        changed(
+          "Fryer",
+          "+1 x CHIPS",
+          "  > for BURG at Grill",
+          "  Contains: Cereals containing gluten",
+          "            (Wheat)",
+        ),
         changed("Fryer", "+1 x RINGS", "  > for BURG at Grill"),
       ];
       expect(added("fryer")).toEqual(fryer);
@@ -1104,7 +1130,13 @@ describe("A773 hold paper: added work", () => {
         ]);
         const after = await slips(tx, venue);
         const added = (name: string) => after[name]!.slice(before[name]!.length);
-        const addedChips = changed("Fryer", "+1 x CHIPS", "  > for H2O, no preparation");
+        const addedChips = changed(
+          "Fryer",
+          "+1 x CHIPS",
+          "  > for H2O, no preparation",
+          "  Contains: Cereals containing gluten",
+          "            (Wheat)",
+        );
         expect(added("fryer")).toEqual([addedChips]);
         expect(added("pass")).toEqual([addedChips]);
         for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
@@ -1360,6 +1392,8 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         "GROUP 1",
         "1 x CHIPS",
         "  > for BURG at Grill",
+        "  Contains: Cereals containing gluten",
+        "            (Wheat)",
         "",
       ];
       expect(added("grill")).toEqual([grill]);
@@ -1499,7 +1533,16 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         const word = writer === "draft recall" ? "*** RECALLED ***" : "*** VOID ***";
         const head = ["Split extras", "1", LATER_CLOCK];
         const grill = [word, "Grill", ...head, "1 x BURG", "  > with CHIPS from Fryer", ""];
-        const fryer = [word, "Fryer", ...head, "1 x CHIPS", "  > for BURG at Grill", ""];
+        const fryer = [
+          word,
+          "Fryer",
+          ...head,
+          "1 x CHIPS",
+          "  > for BURG at Grill",
+          "  Contains: Cereals containing gluten",
+          "            (Wheat)",
+          "",
+        ];
         expect(added("grill")).toEqual([grill]);
         expect(added("fryer")).toEqual([fryer]);
         expect(added("pass")).toEqual([grill, fryer]);
