@@ -59,7 +59,7 @@ async function prepare(action: Action) {
         billId: party.tabId,
         draftId: null,
         revision: 0,
-        lines: ["Ensalada", "Tarta"].map((name) => ({
+        lines: ["House salad", "Tarta"].map((name) => ({
           menuItemId: v.offerFor(name),
           variantId: null,
           menuVersionId: null,
@@ -86,7 +86,7 @@ async function prepare(action: Action) {
       submissionId: newId(),
       expectedPartyRevision: party.revision,
       operatorId: v.adminId,
-      groups: ["Ensalada", "Tarta"].map((name) => ({
+      groups: ["House salad", "Tarta"].map((name) => ({
         release: "hold" as const,
         lines: [{ menuItemId: v.offerFor(name), quantity: "1" }],
       })),
@@ -150,7 +150,7 @@ async function command(
     .filter((row) => action !== "remove-group" || row.lineNo !== 1)
     .map((row) => ({
       workingOrderLineId: row.id,
-      menuItemId: v.offerFor(row.lineNo === 1 ? "Ensalada" : "Tarta"),
+      menuItemId: v.offerFor(row.lineNo === 1 ? "House salad" : "Tarta"),
       quantity: "1",
     }));
   if (action === "add-group") lines.push({ menuItemId: v.offerFor("Pulpo"), quantity: "1" });

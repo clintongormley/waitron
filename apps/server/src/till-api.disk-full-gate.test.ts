@@ -203,7 +203,7 @@ describe("the full-disk gate on the till's routes", () => {
   });
 
   it("advances no ticket item while the stop holds", async () => {
-    const party = await seatedWith(venue, "Ensalada");
+    const party = await seatedWith(venue, "House salad");
     const [line] = await venue.db
       .select()
       .from(workingOrderLines)

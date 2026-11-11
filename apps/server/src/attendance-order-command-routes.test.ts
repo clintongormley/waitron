@@ -69,7 +69,7 @@ async function prepare(action: Action) {
     id,
     operatorId: v.adminId,
     zoneId: v.zoneId,
-    lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
+    lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }],
   });
   if (action === "cancel")
     await placeOrder(
@@ -209,7 +209,7 @@ describe("accepted till order command attendance", () => {
   it.each([false, true])(
     "the real unpaid-departure route captures its admitted placement atomically (recorder refused: %s)",
     async (refused) => {
-      const party = await seatedWith(v, "Ensalada"),
+      const party = await seatedWith(v, "House salad"),
         before = await state();
       const recorder: AttendanceRecorder = async (tx, fact) => {
         await recordAttendanceFact(tx, fact);

@@ -74,7 +74,7 @@ async function serveAll(party: { partyId: string; tabId: string }): Promise<void
 
 describe("closeBillByTransferTx, new work", () => {
   it("issues a table bill's new F1 once, reserves its delivery and settles it as one transfer", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
       revision: await inTx(t.venue, (tx) => readOrderRevision(tx, party.tabId)),
       invoiceType: "F1",
@@ -190,7 +190,7 @@ describe("closeBillByTransferTx, new work", () => {
   });
 
   it("freezes the receipt grouping of a presented party bill it issues", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const billId = await placedCounterBillMovedTo(t.venue, t.counterZone, party);
     const atIssuance = await inTx(t.venue, (tx) =>
       readReceiptOrder(tx, billId, { atIssuance: true }),
@@ -219,8 +219,8 @@ describe("closeBillByTransferTx, new work", () => {
 
   it("refuses party data on a Counter bill and a bill outside the named party's family", async () => {
     const counter = await t.counterOrder("open");
-    const party = await seatedWith(t.venue, "Ensalada");
-    const other = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
+    const other = await seatedWith(t.venue, "House salad");
     const before = await t.ledger();
 
     const onCounter = await refusal(
@@ -250,10 +250,10 @@ describe("closeBillByTransferTx, new work", () => {
   });
 
   it("finishes the party when its service is ready, and keeps it open on a revision blocker without expectations", async () => {
-    const ready = await seatedWith(t.venue, "Ensalada");
+    const ready = await seatedWith(t.venue, "House salad");
     await serveAll(ready);
     const finished = await t.close(await t.requestFor(ready.tabId, "12.00", ready.partyId));
-    const unexpected = await seatedWith(t.venue, "Ensalada");
+    const unexpected = await seatedWith(t.venue, "House salad");
     await serveAll(unexpected);
     const kept = await t.close(
       await t.requestFor(unexpected.tabId, "12.00", unexpected.partyId, { partyFinish: null }),
@@ -274,7 +274,7 @@ describe("closeBillByTransferTx, new work", () => {
   });
 
   it("keeps the party open when release admission refuses its family", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     await serveAll(party);
     const asked: string[][] = [];
 
@@ -323,7 +323,7 @@ describe("closeBillByTransferTx, new work", () => {
   });
 
   it("rolls back the invoice, its number, outbox, delivery reservation and settlement on a later failure", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
       revision: await inTx(t.venue, (tx) => readOrderRevision(tx, party.tabId)),
       invoiceType: "F1",

@@ -73,7 +73,7 @@ function api(attendance?: AttendanceRecorder) {
   return app;
 }
 async function prepare(action: Action) {
-  const source = await seatedWith(v, "Ensalada", "Tarta");
+  const source = await seatedWith(v, "House salad", "Tarta");
   const { id: free } = await run((tx) =>
     createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId }),
   );
@@ -152,7 +152,7 @@ async function factsAt() {
 }
 describe("attendance for dishes arriving in a party", () => {
   it("captures both held and fired arrivals at the supplied command instant", async () => {
-    const p = await seatedWith(v, "Ensalada", "Tarta");
+    const p = await seatedWith(v, "House salad", "Tarta");
     const lines = await suite.db
       .select()
       .from(workingOrderLines)

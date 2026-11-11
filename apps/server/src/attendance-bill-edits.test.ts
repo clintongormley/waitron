@@ -51,7 +51,7 @@ function api(attendance?: AttendanceRecorder) {
   return app;
 }
 async function prepare(action: Action) {
-  const party = await seatedWith(v, "Ensalada", "Tarta");
+  const party = await seatedWith(v, "House salad", "Tarta");
   let otherBillId: string | undefined;
   if (!opensBill(action)) {
     const answer = await send(

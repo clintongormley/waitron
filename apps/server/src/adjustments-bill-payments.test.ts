@@ -156,7 +156,7 @@ async function newTicket(before: Set<string>) {
 
 describe("a paid line (design §8 test 5)", () => {
   it("refuses a comp and a discount of an item already paid for, changing nothing", async () => {
-    const billId = await tabWith(venue, "Paella", "Chuletón", "Caña");
+    const billId = await tabWith(venue, "Paella", "Steak", "Caña");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -182,7 +182,7 @@ describe("a paid line (design §8 test 5)", () => {
 
 describe("a bill discount over a paid line", () => {
   it("refuses a discount of the whole bill that would lower an item already paid for", async () => {
-    const billId = await tabWith(venue, "Paella", "Chuletón");
+    const billId = await tabWith(venue, "Paella", "Steak");
     const paid = await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 2 }],
@@ -219,7 +219,7 @@ describe("a bill discount over a paid line", () => {
 
 describe("a reduction after contributions (design §8 test 11)", () => {
   it("refuses a €20.00 comp by the €10.00 excess; after a €10.00 refund the comp issues the €40.00 invoice", async () => {
-    const billId = await tabWith(venue, "Botella tinto", "Pulpo", "Croquetas");
+    const billId = await tabWith(venue, "Red wine bottle", "Pulpo", "Croquetas");
     const paymentId = await contribute(billId, "cash", "50.00");
     const before = { lines: await linesOf(billId), revision: await revisionOf(billId) };
 
@@ -267,7 +267,7 @@ describe("a reduction after contributions (design §8 test 11)", () => {
 
 describe("a discount that leaves a bill fully paid", () => {
   it("rolls back the adjustment and its cached result when issuance refuses", async () => {
-    const billId = await tabWith(venue, "Botella tinto", "Croquetas");
+    const billId = await tabWith(venue, "Red wine bottle", "Croquetas");
     await contribute(billId, "cash", "30.00");
     const commands = await venue.db.select().from(serviceCommands);
     const adjustmentsBefore = await recordedOn(billId);
@@ -291,7 +291,7 @@ describe("a discount that leaves a bill fully paid", () => {
   });
 
   it("rolls back the issued invoice when caching the completed adjustment refuses", async () => {
-    const billId = await tabWith(venue, "Botella tinto", "Croquetas");
+    const billId = await tabWith(venue, "Red wine bottle", "Croquetas");
     await contribute(billId, "cash", "30.00");
     const before = await recordedOn(billId);
     const commands = await venue.db.select().from(serviceCommands);
@@ -313,7 +313,7 @@ describe("a discount that leaves a bill fully paid", () => {
   });
 
   it("stores the party's count read when the discount issues the invoice", async () => {
-    const billId = await tabWith(venue, "Botella tinto", "Croquetas");
+    const billId = await tabWith(venue, "Red wine bottle", "Croquetas");
     venue.db.run(
       sql`update parties set guest_count = 3
           where id = (select party_id from working_orders where id = ${billId})`,
@@ -348,7 +348,7 @@ describe("a discount that leaves a bill fully paid", () => {
 
 describe("the invoice waits for the refund (design §8 test 23)", () => {
   it("refuses the comp that would issue it while a card refund is pending, then one cash payment issues it", async () => {
-    const billId = await tabWith(venue, "Botella tinto", "Pulpo", "Croquetas");
+    const billId = await tabWith(venue, "Red wine bottle", "Pulpo", "Croquetas");
     const card = await contribute(billId, "card", "30.00");
     await contribute(billId, "cash", "20.00");
     venue.card.scriptNextRefund({ made: "completed", answer: LOST });

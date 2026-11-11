@@ -232,10 +232,10 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
   });
 
   it("a stale bill edit, another person's draft, and the closer's own unsent dishes", async () => {
-    const stale = await seatedWith(t.venue, "Ensalada");
+    const stale = await seatedWith(t.venue, "House salad");
     const staleRequest = await t.requestFor(stale.tabId, "12.00", stale.partyId);
-    const taken = await seatedWith(t.venue, "Ensalada");
-    const ownUnsent = await seatedWith(t.venue, "Ensalada");
+    const taken = await seatedWith(t.venue, "House salad");
+    const ownUnsent = await seatedWith(t.venue, "House salad");
     for (const [party, personId] of [
       [taken, t.venue.adminId],
       [ownUnsent, t.venue.operatorId],
@@ -273,7 +273,7 @@ describe("closeBillByTransferTx refuses, before writing anything", () => {
   });
 
   it("a bill with any earlier payment, even a part", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const paid = await payPart(party, "5.00");
     expect(paid.status).toBe(200);
 
@@ -398,7 +398,7 @@ describe("closeBillByTransferTx refuses an issued invoice that is no longer whol
   });
 
   it("a request naming another recipient than an issued full invoice froze, serving the same one", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
       revision: await inTx(t.venue, (tx) => readOrderRevision(tx, party.tabId)),
       invoiceType: "F1",
@@ -467,7 +467,7 @@ describe("closeBillByTransferTx refuses an issued invoice that is no longer whol
 
 describe("closeBillByTransferTx compares the staged invoice choice", () => {
   async function stagedF1() {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
       revision: await inTx(t.venue, (tx) => readOrderRevision(tx, party.tabId)),
       invoiceType: "F1",

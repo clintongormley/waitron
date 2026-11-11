@@ -57,7 +57,7 @@ async function action(app: Hono, id: string, kind: Action) {
     at: "2026-01-06T22:00:00Z",
     offsetMinutes: -600,
   };
-  const lines = [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }];
+  const lines = [{ menuItemId: v.offerFor("House salad"), quantity: "1" }];
   if (kind === "park")
     return send(app, v.cookie, "POST", "/api/working-orders", {
       id,
@@ -95,7 +95,7 @@ async function prepare(kind: Action) {
   if (kind !== "park")
     await parkOrder({ db: suite.db }, v.cfg, {
       id,
-      lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
+      lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }],
       zoneId: v.zoneId,
       operatorId: v.adminId,
     });

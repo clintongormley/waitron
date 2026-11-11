@@ -69,7 +69,7 @@ function api(attendance?: AttendanceRecorder) {
 async function prepare(action: Action) {
   let id: string;
   if (action !== "make-at") {
-    id = (await seatedWith(v, "Ensalada")).tabId;
+    id = (await seatedWith(v, "House salad")).tabId;
     if (action !== "recall")
       await withTransaction(suite.db, (tx) => recallLines(tx, v.cfg, id, [1]));
   } else {
@@ -78,7 +78,7 @@ async function prepare(action: Action) {
       id,
       operatorId: v.adminId,
       zoneId: v.zoneId,
-      lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
+      lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }],
     });
   }
   const [line] = await suite.db

@@ -29,7 +29,7 @@ useVenueDb({
 });
 
 async function namedDebt(name: string) {
-  const party = await seatedWith(venue, "Botella tinto");
+  const party = await seatedWith(venue, "Red wine bottle");
   const named = await send(venue.app, venue.cookie, "PUT", `/api/parties/${party.partyId}/name`, {
     name,
     expectedPartyRevision: party.revision,
@@ -143,7 +143,7 @@ describe("till bill lookup", () => {
         lines: [
           {
             lineNo: 1,
-            name: "Botella tinto",
+            name: "Red wine bottle",
             descriptions: { [venue.cfg.locale]: "Rioja crianza" },
             quantity: "1",
             unitPrice: "24.79",
@@ -162,7 +162,7 @@ describe("till bill lookup", () => {
   });
 
   it("finds a placed counter debt but leaves out an open or paid bill", async () => {
-    const placed = await placedIssuedBill(venue, "Botella tinto");
+    const placed = await placedIssuedBill(venue, "Red wine bottle");
     const [invoice] = venue.db.all<{ number: number; code: string }>(
       sql`select s.invoice_number as number, i.code from sales s join invoice_series i on i.id = s.series_id where s.working_order_id = ${placed}`,
     );

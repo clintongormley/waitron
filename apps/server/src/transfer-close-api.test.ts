@@ -163,7 +163,7 @@ async function serveParty(partyId: string): Promise<void> {
 describe("POST /api/working-orders/:id/close-by-transfer, allowed", () => {
   it("closes a seated bill and a Counter bill, answering the closure", async () => {
     const allowed = await till();
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const seated = await t.requestFor(party.tabId, "12.00", party.partyId);
     const counter = await counterBill();
 
@@ -402,7 +402,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, revoked while queued",
 describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
   it("leaves the party open after its first bill and releases it with the second", async () => {
     const allowed = await till();
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const second = await placedCounterBillMovedTo(t.venue, t.counterZone, party);
     await serveParty(party.partyId);
 
@@ -426,7 +426,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
 
   it("closes the bill but keeps the party open for a device that does not take orders", async () => {
     const closesOnly = await till(["close-by-transfer"]);
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     await serveParty(party.partyId);
 
     const closed = await expectClosed(
@@ -445,7 +445,7 @@ describe("POST /api/working-orders/:id/close-by-transfer, the party", () => {
   it("closes the bill but keeps the party open when a sibling bill is outside the profile's zones", async () => {
     const unscoped = await till();
     const zoned = await till();
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const moving = await placedCounterBillMovedTo(t.venue, t.counterZone, party);
     await serveParty(party.partyId);
     await expectClosed(
@@ -510,7 +510,7 @@ describe("GET /api/working-orders/:id/transfer-closure", () => {
   it("answers what the close answered, to another device without the action, null while open and not found for no bill", async () => {
     const closer = await till();
     const reader = await till(BASIC_ACTIONS, t.venue.adminId);
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const closed = await expectClosed(
       closer.cookie,
       party.tabId,

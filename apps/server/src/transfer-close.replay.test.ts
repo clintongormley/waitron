@@ -66,7 +66,7 @@ async function closedCounterBill(deps = t.depsWith()) {
 
 /** A table bill staged as an F1 to be emailed, closed; with `twoBills`, its party holds another. */
 async function closedStagedF1(twoBills = false) {
-  const party = await seatedWith(t.venue, "Ensalada");
+  const party = await seatedWith(t.venue, "House salad");
   if (twoBills) await placedCounterBillMovedTo(t.venue, t.counterZone, party);
   await setOrderInvoiceChoice(t.venue.db, t.venue.backend, t.venue.cfg, party.tabId, {
     revision: await inTx(t.venue, (tx) => readOrderRevision(tx, party.tabId)),
@@ -241,7 +241,7 @@ describe("closeBillByTransferTx, replay", () => {
   });
 
   it("closes once when two different requests for one bill arrive at once, refusing the other", async () => {
-    const party = await seatedWith(t.venue, "Ensalada");
+    const party = await seatedWith(t.venue, "House salad");
     const billId = party.tabId;
     const request = await t.requestFor(billId, "12.00", party.partyId);
     // Either request alone would close the bill; only the replay can refuse the later one.

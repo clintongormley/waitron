@@ -30,7 +30,7 @@ describe("Counter payments through the bill window", () => {
       };
       await parkOrder(deps, venue.cfg, {
         id,
-        lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+        lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }],
         zoneId: venue.zoneId,
         operatorId: venue.operatorId,
       });
@@ -130,7 +130,7 @@ it("refuses preview and a first part payment after a placed Counter bill is invo
   };
   await parkOrder(deps, venue.cfg, {
     id,
-    lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+    lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }],
     zoneId: venue.zoneId,
     operatorId: venue.operatorId,
   });

@@ -567,7 +567,7 @@ describe("an unpaid departure", () => {
 
   it("refuses an unpaid departure of an open bill and writes nothing", async () => {
     const now = nowMs();
-    const party = await seatedWith(venueAt(now), "Botella tinto");
+    const party = await seatedWith(venueAt(now), "Red wine bottle");
     const behind = now - 10 * MINUTE;
 
     const answer = await depart(at(behind), party.partyId);
@@ -582,7 +582,7 @@ describe("an unpaid departure", () => {
 
   it("records the departure of an open bill a minute inside the last record", async () => {
     const now = nowMs();
-    const party = await seatedWith(venueAt(now), "Botella tinto");
+    const party = await seatedWith(venueAt(now), "Red wine bottle");
 
     const answer = await depart(at(now - INSIDE), party.partyId);
 
@@ -622,7 +622,7 @@ describe("an unpaid departure", () => {
 
   it("counts a wrong override PIN before refusing for the clock", async () => {
     const now = nowMs();
-    const party = await seatedWith(venueAt(now), "Botella tinto");
+    const party = await seatedWith(venueAt(now), "Red wine bottle");
     const behind = now - 10 * MINUTE;
     const app = new Hono();
     mountTillApi(

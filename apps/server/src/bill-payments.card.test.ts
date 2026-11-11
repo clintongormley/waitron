@@ -530,9 +530,9 @@ describe("a malformed payment body", () => {
 });
 
 describe("change versus tip (design §8 test 1)", () => {
-  // Chuletón €25.00 + Ensalada €12.00 + Caña €3.00 = €40.00, and a Tarta that stays unpaid.
+  // Steak €25.00 + House salad €12.00 + Caña €3.00 = €40.00, and a Tarta that stays unpaid.
   const items = [{ lineNo: 1 }, { lineNo: 2 }, { lineNo: 3 }];
-  const bill = () => tabWithDishes("Chuletón", "Ensalada", "Caña", "Tarta");
+  const bill = () => tabWithDishes("Steak", "House salad", "Caña", "Tarta");
 
   it("gives €10.00 change on €50.00 cash for €40.00 of items", async () => {
     const billId = await bill();
@@ -602,12 +602,18 @@ describe("change versus tip (design §8 test 1)", () => {
 });
 
 describe("the steak (design §8 test 3, §3.3)", () => {
-  // Paella 35 + Chuletón 25 + Botella 30 + Ensalada 12 + Tarta 18 = €120.00; the steak is line 2.
+  // Paella 35 + Steak 25 + Red wine bottle 30 + House salad 12 + Tarta 18 = €120.00; the steak is line 2.
   const steak = [{ lineNo: 2 }];
 
   /** €105.00 contributed, one payment of it carrying a €5.00 tip that must never count. */
   async function billWith105(): Promise<string> {
-    const billId = await tabWithDishes("Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
+    const billId = await tabWithDishes(
+      "Paella",
+      "Steak",
+      "Red wine bottle",
+      "House salad",
+      "Tarta",
+    );
     await cashContribution(billId, "100.00");
     const tipped = await pay(billId, {
       kind: "contribution",
@@ -727,7 +733,7 @@ describe("the steak (design §8 test 3, §3.3)", () => {
   });
 
   it("refuses an item payment naming the line a pending card pays for: bill.line_paid", async () => {
-    const billId = await tabWithDishes("Chuletón", "Tarta");
+    const billId = await tabWithDishes("Steak", "Tarta");
     venue.card.stallNextCollect();
     await pay(billId, {
       kind: "items",
@@ -904,8 +910,8 @@ describe("retries (design §8 test 10, §5.1)", () => {
 
 describe("several devices (design §8 test 12, §5.2), each race in both orders", () => {
   it("cash first, then a card for the same last €40.00: the cash issues the invoice, and the card is refused before any charge", async () => {
-    // Chuletón 25 + Ensalada 12 + Caña 3 = €40.00.
-    const billId = await tabWithDishes("Chuletón", "Ensalada", "Caña");
+    // Steak 25 + House salad 12 + Caña 3 = €40.00.
+    const billId = await tabWithDishes("Steak", "House salad", "Caña");
     const calls = venue.card.collectCalls.length;
 
     const cash = await cashContribution(billId, "40.00");
@@ -920,7 +926,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
 
   it("cash first while a third card is at the reader: the card for the same last €30.00 is refused order.payment_in_flight", async () => {
     // €58.00: the Tarta paid, a €10.00 card at the reader, then the last €30.00 twice.
-    const billId = await tabWithDishes("Chuletón", "Ensalada", "Caña", "Tarta");
+    const billId = await tabWithDishes("Steak", "House salad", "Caña", "Tarta");
     await pay(billId, {
       kind: "items",
       lines: [{ lineNo: 4 }],
@@ -945,7 +951,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   });
 
   it("a card first, then cash for the same last €40.00: the cash is refused, and the card's capture issues the invoice", async () => {
-    const billId = await tabWithDishes("Chuletón", "Ensalada", "Caña");
+    const billId = await tabWithDishes("Steak", "House salad", "Caña");
     const card = await heldCard(billId, "40.00");
 
     const cash = await cashContribution(billId, "40.00", { cookie: venue.cookie2 });
@@ -964,8 +970,8 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   ])(
     "two cards of €30.00 and €40.00 on €70.00, %s: only the second capture issues the invoice",
     async (_name, firstIndex) => {
-      // Botella 30 + Chuletón 25 + Ensalada 12 + Caña 3 = €70.00.
-      const billId = await tabWithDishes("Botella tinto", "Chuletón", "Ensalada", "Caña");
+      // Red wine bottle 30 + Steak 25 + House salad 12 + Caña 3 = €70.00.
+      const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Caña");
       const cards = [
         await heldCard(billId, "30.00"),
         await heldCard(billId, "40.00", { cookie: venue.cookie2 }),
@@ -996,7 +1002,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   );
 
   it("takes cash on another device while a card is at the reader, against what the card leaves", async () => {
-    const billId = await tabWithDishes("Botella tinto", "Chuletón", "Ensalada", "Caña");
+    const billId = await tabWithDishes("Red wine bottle", "Steak", "House salad", "Caña");
     const card = await heldCard(billId, "30.00");
 
     const cash = await cashContribution(billId, "40.00", { cookie: venue.cookie2 });

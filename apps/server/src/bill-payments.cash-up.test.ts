@@ -122,7 +122,14 @@ describe("the cash-up counts money on the day and device it moves (bill payments
   it("counts day 1's cash on its device, and day 2's card on its device, once each (test 24)", async () => {
     const deviceA = brandDeviceId(venue.deviceId);
     const deviceB = brandDeviceId(venue.device2Id);
-    const billId = await tabWith(venue, "Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
+    const billId = await tabWith(
+      venue,
+      "Paella",
+      "Steak",
+      "Red wine bottle",
+      "House salad",
+      "Tarta",
+    );
 
     expect((await cashContribution("2026-03-10", venue.cookie, billId, "50.00")).status).toBe(200);
     const day1 = await dailyClose("2026-03-10");
@@ -184,7 +191,14 @@ describe("the cash-up counts money on the day and device it moves (bill payments
   it("subtracts a refund given on another day on another device, and forces that device's count (test 25)", async () => {
     const deviceA = brandDeviceId(venue.deviceId);
     const deviceB = brandDeviceId(venue.device2Id);
-    const billId = await tabWith(venue, "Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
+    const billId = await tabWith(
+      venue,
+      "Paella",
+      "Steak",
+      "Red wine bottle",
+      "House salad",
+      "Tarta",
+    );
     const paymentId = paymentIdOf(
       await cashContribution("2026-03-12", venue.cookie, billId, "50.00"),
     );
@@ -252,7 +266,14 @@ describe("the cash-up counts money on the day and device it moves (bill payments
   });
 
   it("forces a count for a device whose cash nets to zero, but not for a card-only device (test 27)", async () => {
-    const billId = await tabWith(venue, "Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
+    const billId = await tabWith(
+      venue,
+      "Paella",
+      "Steak",
+      "Red wine bottle",
+      "House salad",
+      "Tarta",
+    );
     const paid = await cashContribution("2026-03-15", venue.cookieNoCard, billId, "50.00");
     const paymentId = paymentIdOf(paid);
     expect(

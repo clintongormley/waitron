@@ -419,7 +419,7 @@ describe("A803 move dishes route:", () => {
   ])(
     "a dish moved onto a bill whose Paella is paid by item in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
     async (_, tender) => {
-      const { partyId, tabId } = await seated("Paella", "Caña", "Chuletón", "Tarta");
+      const { partyId, tabId } = await seated("Paella", "Caña", "Steak", "Tarta");
       const { billId: destination } = await inTx(venue, (tx) =>
         splitBill(tx, venue.cfg, tabId, [{ lineNo: 1 }, { lineNo: 2 }], {
           expectedPartyRevision: revisionOf(partyId),
@@ -465,7 +465,7 @@ describe("A803 move dishes route:", () => {
   );
 
   it("a move that leaves the source paid in full files its invoice alone, and the part-paid destination stays open", async () => {
-    const { partyId, tabId } = await seated("Paella", "Caña", "Chuletón");
+    const { partyId, tabId } = await seated("Paella", "Caña", "Steak");
     const { billId: destination } = await inTx(venue, (tx) =>
       splitBill(tx, venue.cfg, tabId, [{ lineNo: 3 }], {
         expectedPartyRevision: revisionOf(partyId),

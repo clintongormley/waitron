@@ -83,7 +83,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           firstNames: "Test",
           lastNames: "Operator",
           pinHash: fixturePinHash("1234"),
@@ -101,11 +101,11 @@ export async function setupVenue(db: Database): Promise<Venue> {
 
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: `Delicatessen ${venueId}` });
-    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
-      name: "Café",
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -113,7 +113,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
     const water = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
-      name: "Agua",
+      name: "Water",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",

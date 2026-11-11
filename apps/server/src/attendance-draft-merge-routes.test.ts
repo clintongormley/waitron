@@ -78,7 +78,7 @@ async function prepare() {
         billId: party.tabId,
         draftId: null,
         revision: 0,
-        lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
+        lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }],
       }),
     );
   }
@@ -135,7 +135,7 @@ describe("draft-event attendance in table combines", () => {
         expectedPartyRevision: p.revision,
         operatorId: v.adminId,
         groups: [
-          { release: "hold", lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }] },
+          { release: "hold", lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }] },
         ],
       }),
     );

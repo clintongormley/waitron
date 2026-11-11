@@ -228,7 +228,7 @@ describe("the sale routes while the full-disk stop holds", () => {
       send(app, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
         tender: { method: "cash", amount: "12.00" },
       });
-    const id = await placedOrder("Ensalada");
+    const id = await placedOrder("House salad");
 
     const refused = await collect(venue.appWith({ disk: notedState() }), id);
     expect(refusal(refused)).toEqual(REFUSED);
@@ -406,7 +406,7 @@ describe("the sale routes while the full-disk stop holds", () => {
 
   it("collects a placed order again once the folder has 16 MiB free", async () => {
     const disk = notedState({ bytes: FULL_DISK_BYTES });
-    const id = await placedOrder("Ensalada");
+    const id = await placedOrder("House salad");
 
     const answer = await send(
       venue.appWith({ disk }),

@@ -66,9 +66,9 @@ const LOCALE = "es-ES";
 // Each product's staff, customer-facing and kitchen names differ (docs/developers/products.md).
 const MENU: { name: string; customer: string; kitchen: string; price: string }[] = [
   { name: "Paella", customer: "Paella valenciana", kitchen: "PAELLA", price: "35.00" },
-  { name: "Chuletón", customer: "Chuletón a la brasa", kitchen: "CHULETA", price: "25.00" },
-  { name: "Botella tinto", customer: "Rioja crianza", kitchen: "TINTO", price: "30.00" },
-  { name: "Ensalada", customer: "Ensalada de la casa", kitchen: "ENSAL", price: "12.00" },
+  { name: "Steak", customer: "Chuletón a la brasa", kitchen: "CHULETA", price: "25.00" },
+  { name: "Red wine bottle", customer: "Rioja crianza", kitchen: "TINTO", price: "30.00" },
+  { name: "House salad", customer: "Ensalada de la casa", kitchen: "ENSAL", price: "12.00" },
   { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "18.00" },
   { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
   { name: "Croquetas", customer: "Croquetas de jamón", kitchen: "CROQ", price: "10.00" },

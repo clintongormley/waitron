@@ -88,7 +88,7 @@ async function awaitingPrep() {
   expect(
     await send(v.app, v.cookie, "POST", "/api/sales", {
       workingOrderId: id,
-      lines: [{ menuItemId: v.offerFor("Ensalada"), quantity: "1" }],
+      lines: [{ menuItemId: v.offerFor("House salad"), quantity: "1" }],
       tender: { method: "cash", amount: "12.00" },
     }),
   ).toMatchObject({ status: 200 });
@@ -154,7 +154,7 @@ describe("remaining accepted order attendance", () => {
   it.each([false, true])(
     "unpaid departure from a previously placed bill captures the reporting worker (refused: %s)",
     async (refused) => {
-      const p = await seatedWith(v, "Ensalada");
+      const p = await seatedWith(v, "House salad");
       await placeOrder(
         { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
         v.cfg,

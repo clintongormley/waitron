@@ -29,9 +29,9 @@ useVenueDb({
   },
 });
 
-/** A party's bill with a sent Chuletón at line 1, its station printing to a printer of its own. */
+/** A party's bill with a sent Steak at line 1, its station printing to a printer of its own. */
 async function billWithSentDish() {
-  const billId = await tabWith(venue, "Chuletón");
+  const billId = await tabWith(venue, "Steak");
   await inTx(venue, (tx) => fireAll(tx, venue.cfg, billId));
   const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   const dish = await kitchenItemOf(billId, 1);

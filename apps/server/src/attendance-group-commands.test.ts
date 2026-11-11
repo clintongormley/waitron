@@ -72,7 +72,7 @@ async function prepare() {
   const party = await seatedWith(v);
   const result = await withTransaction(suite.db, async (tx) => {
     const placed = [];
-    for (const name of ["Ensalada", "Tarta"])
+    for (const name of ["House salad", "Tarta"])
       placed.push(
         await placeGroupedRound(
           tx,

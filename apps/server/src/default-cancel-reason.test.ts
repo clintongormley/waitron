@@ -88,7 +88,7 @@ describe("a newly set-up venue's till", () => {
     ]);
     const reasonId = (listed.json as unknown as { id: string }[])[0]!.id;
 
-    const billId = await tabWith(venue, "Ensalada", "Caña");
+    const billId = await tabWith(venue, "House salad", "Caña");
     const [order] = await inTx(venue, (tx) =>
       tx
         .select({ revision: workingOrders.revision })

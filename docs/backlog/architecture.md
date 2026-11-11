@@ -832,14 +832,17 @@ product failures.
 - **A976. Finish the server's English test-venue defaults.** `setupVenue` and
   `provisionVenueBody` use `Main room`, with the venue-details readbacks and eight local
   route/command seeds. Other suites' own venue seeds, the stream-loop/pause helpers and the boot
-  helper's raw `Barra` location seeds remain.
+  helper's raw `Barra` location seeds remain. The shared `setupVenue` uses Administrator,
+  Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle and House salad as
+  staff keys, with Spanish customer and kitchen names unchanged. Tarta, Caña, Croquetas,
+  Pulpo and its other labels remain outside this piece.
   Local party-suite table, party,
   course and printer samples use English. Shared dish samples remain in their helpers and
   consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,
   `party-arriving-dishes.test.ts` and `receipt-guests.test.ts`. Spanish display samples remain in
   `order-portions.filing.test.ts`,
   `till-api.move-bill.test.ts`, `till-api.groups.test.ts` and `till-api.fiscal-sale-paths.test.ts`;
-  shared helper samples and their consumers' dish selectors also remain. These belong to
+  other shared-helper samples and their consumers' dish selectors also remain. These belong to
   A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
   samples and `receipt-document.test.ts` fixture descriptions and test titles also need
   triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale

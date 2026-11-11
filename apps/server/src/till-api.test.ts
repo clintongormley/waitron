@@ -4980,7 +4980,7 @@ describe("settling edit answers", () => {
       const id = randomUUID();
       const menuItemId =
         kind === "held"
-          ? venue.offerFor("Botella tinto")
+          ? venue.offerFor("Red wine bottle")
           : await withTransaction(edits.db, async (tx) => {
               const catalogue = await createCatalogue(tx, { name: "Weighed dishes" });
               const category = await createCategory(tx, { name: "Fish dishes" });
