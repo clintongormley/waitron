@@ -251,7 +251,7 @@ ${section}<form method="post" action="/recovery-api/retry">
 </head>
 <body>
 <h1>${escapeHtml(heading)}</h1>
-${lead}<h2>${escapeHtml(page.forInstaller)}</h2>
+${lead}<h2>${escapeHtml(page.details)}</h2>
 <p>${escapeHtml(status)}</p>
 ${freeSpaceLine(freeBytes, locale)}${triggerLines(state, page)}<p>${escapeHtml(lastError)}</p>
 ${lastFailure}<h2>${escapeHtml(page.logTail)}</h2>

@@ -245,7 +245,7 @@ const ENGLISH_CHROME = [
   "<title>Waitron did not start</title>",
   "<h1>Waitron did not start</h1>",
   "Retry a normal boot",
-  "For whoever installed this box",
+  "Details",
   "Log tail",
   "Level: recovery. Failed 3 times.",
   "(no log yet)",
@@ -254,7 +254,7 @@ const SPANISH_CHROME = [
   "<title>Waitron no ha arrancado</title>",
   "<h1>Waitron no ha arrancado</h1>",
   "Reintentar un arranque normal",
-  "Para quien instaló este equipo",
+  "Detalles",
   "Final del registro",
   "Nivel: recovery. Intentos fallidos: 3.",
   "(aún no hay registro)",
@@ -445,20 +445,21 @@ describe("curated operator text", () => {
     }
   });
 
-  // The reader has no terminal and often no backup, so a restore action must name who can help.
-  it("points an operator with no backup at whoever installed the box", () => {
+  // The reader has no terminal and often no backup, so a restore action must say what reinstalling
+  // without one costs.
+  it("tells an operator with no backup what reinstalling loses", () => {
     const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
       /restore it from a backup, or reinstall/i.test(text["en-GB"].action),
     );
     expect(restoreActions.length).toBeGreaterThan(0);
     for (const [code, text] of restoreActions) {
-      expect(text["en-GB"].action, `${code} offers a restore with no fallback`).toMatch(
-        /ask whoever installed this box/i,
+      expect(text["en-GB"].action, `${code} offers a restore with no fallback`).toContain(
+        "If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
       );
     }
   });
 
-  it("points an operator with no backup at whoever installed the box, in Spanish", () => {
+  it("tells an operator with no backup what reinstalling loses, in Spanish", () => {
     const restoreActions = Object.entries(OPERATOR_TEXT).filter(([, text]) =>
       /restáurala desde una copia de seguridad, o reinstala/i.test(text["es-ES"].action),
     );
@@ -469,8 +470,8 @@ describe("curated operator text", () => {
         .sort(),
     );
     for (const [code, text] of restoreActions) {
-      expect(text["es-ES"].action, `${code} offers a restore with no fallback`).toMatch(
-        /quien instaló este equipo/i,
+      expect(text["es-ES"].action, `${code} offers a restore with no fallback`).toContain(
+        "Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
       );
     }
   });
@@ -525,14 +526,16 @@ describe("curated operator text", () => {
       "The list of machines in the restored copy is damaged or does not carry a valid signature, so it may have been changed after it was saved.",
     );
     expect(english).toContain(
-      "The box will not start from this copy. Ask whoever installed this box to look at it before anything else.",
+      escapeHtml(
+        "The box will not start from this copy. Unless it was changed after it was saved, this is a fault in Waitron or this box's disk.",
+      ),
     );
     const spanish = await pageFor("restore.membership_invalid", undefined, SPANISH);
     expect(spanish).toContain(
       "La lista de equipos de la copia restaurada está dañada o no tiene una firma válida, así que puede haberse cambiado después de guardarse.",
     );
     expect(spanish).toContain(
-      "El equipo no arrancará con esta copia. Antes de nada, pide a quien instaló este equipo que lo revise.",
+      "El equipo no arrancará con esta copia. Salvo que se cambiara después de guardarse, es un fallo de Waitron o del disco de este equipo.",
     );
   });
 
@@ -602,23 +605,33 @@ describe("curated operator text", () => {
     expect(english).toContain(
       escapeHtml("A safeguard on the box's permanent records was removed or changed."),
     );
-    expect(english).toContain("Ask whoever installed this box to look at it before anything else.");
+    expect(english).toContain(
+      escapeHtml(
+        "This is a fault in Waitron or this box's disk, or a program other than Waitron changed the box's database.",
+      ),
+    );
     const spanish = await pageFor("append_only.triggers_changed", undefined, SPANISH);
     expect(spanish).toContain(
       "Se ha quitado o cambiado una protección de los registros permanentes del equipo.",
     );
-    expect(spanish).toContain("Antes de nada, pide a quien instaló este equipo que lo revise.");
+    expect(spanish).toContain(
+      "Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron ha cambiado la base de datos del equipo.",
+    );
   });
 
   // A retry or restart can fix a volume that did not come up; nothing else at the box can.
-  it("offers a database_unreachable both a retry and the person a restart cannot replace", () => {
+  it("offers a database_unreachable both a retry and a restart, then names the fault", () => {
     const text = OPERATOR_TEXT["provisioning.database_unreachable"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/retry/i);
-    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toContain(
+      "If it still fails, this is a fault in this box's disk or in Waitron: the box's database is a file on its disk, and the software cannot read it.",
+    );
     expect(text!["es-ES"].action).toContain("«Reintentar un arranque normal»");
     expect(text!["es-ES"].action).toMatch(/reinicia el equipo/i);
-    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).toContain(
+      "Si sigue fallando, es un fallo del disco de este equipo o de Waitron: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
+    );
   });
 
   // The Spanish action names the button by the label the Spanish page gives it.
@@ -638,19 +651,19 @@ describe("curated operator text", () => {
     const text = OPERATOR_TEXT["migrations.incomplete"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).not.toMatch(/restore it from a backup, or reinstall/i);
-    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron\. /);
     expect(text!["es-ES"].action).not.toMatch(
       /restáurala desde una copia de seguridad, o reinstala/i,
     );
-    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).toMatch(/^Es un fallo de Waitron\. /);
   });
 
   // A failure reading or counting the recovery state is logged with its code alone.
   it("does not promise the generic failure's reason was written down anywhere", () => {
     expect(GENERIC_TEXT["en-GB"].action).not.toMatch(/read the reason/i);
-    expect(GENERIC_TEXT["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(GENERIC_TEXT["en-GB"].action).toMatch(/this is a fault in Waitron or this box/i);
     expect(GENERIC_TEXT["es-ES"].action).not.toMatch(/registro|motivo/i);
-    expect(GENERIC_TEXT["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(GENERIC_TEXT["es-ES"].action).toMatch(/es un fallo de Waitron o de este equipo/i);
   });
 
   it("renders the generic line for a code it does not know, without throwing", async () => {
@@ -824,12 +837,12 @@ describe("what brings a refused placing back", () => {
 });
 
 describe("a restore whose database could not be put in place, if it is the last failure", () => {
-  it("sends the operator to whoever installed the box, and to the failed start's details on this page", async () => {
+  it("names the fault, and sends the operator to the failed start's details on this page", async () => {
     const text = OPERATOR_TEXT["restore.placement_failed"];
     expect(text).toBeDefined();
-    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron or this box's disk\. /);
     expect(text!["en-GB"].action).toContain("Why the last start failed");
-    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).toMatch(/^Es un fallo de Waitron o del disco de este equipo\. /);
     expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.placement_failed");
     expect(body).toContain(escapeHtml(text!["en-GB"].action));
@@ -839,14 +852,14 @@ describe("a restore whose database could not be put in place, if it is the last 
 });
 
 describe("a start refused because the only copy of the database may be in a set-aside folder", () => {
-  it("says the database was moved aside by a restore and sends the operator to whoever installed the box", async () => {
+  it("says the database was moved aside by a restore and names the fault", async () => {
     const text = OPERATOR_TEXT["restore.database_set_aside"];
     expect(text).toBeDefined();
     expect(text!["en-GB"].title).toMatch(/moved aside/i);
-    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
+    expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron or this box's disk\. /);
     expect(text!["en-GB"].action).toContain("Why the last start failed");
     expect(text!["es-ES"].title).toMatch(/apartada/i);
-    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["es-ES"].action).toMatch(/^Es un fallo de Waitron o del disco de este equipo\. /);
     expect(text!["es-ES"].action).toContain("Por qué falló el último arranque");
     const body = await pageFor("restore.database_set_aside");
     expect(body).toContain(escapeHtml(text!["en-GB"].title));
@@ -980,13 +993,13 @@ describe("the last failed start's detail", () => {
 describe("a migration the engine refused", () => {
   const text = OPERATOR_TEXT["migrations.apply_failed"];
 
-  it("says the database could not be updated, and sends the operator to whoever installed the box", () => {
+  it("says the database could not be updated, and that this is a fault in Waitron", () => {
     expect(text).toBeDefined();
     expect(text!["en-GB"].title).toBe(
       "The box's database could not be updated for the installed version of Waitron.",
     );
-    expect(text!["en-GB"].action).toMatch(/ask whoever installed this box/i);
-    expect(text!["es-ES"].action).toMatch(/quien instaló este equipo/i);
+    expect(text!["en-GB"].action).toMatch(/^This is a fault in Waitron\. /);
+    expect(text!["es-ES"].action).toMatch(/^Es un fallo de Waitron\. /);
   });
 
   // A restore runs the same update, so it cannot be offered as the fix.

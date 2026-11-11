@@ -385,18 +385,20 @@ describe("a backup that stopped before reaching any destination", () => {
   it("says files every backup must include are missing", () => {
     const params = { errorCode: "recovery.state_incomplete" };
     expect(alertMessage("backup.run_stopped", params, "en")).toBe(
-      `${LEAD_EN} Some of the box's own files that every backup must include are missing. Contact support.`,
+      `${LEAD_EN} Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk.`,
     );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} Faltan algunos archivos propios del equipo que toda copia debe incluir. Contacta con soporte.`,
+      `${LEAD_ES} Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo.`,
     );
   });
 
-  it("sends any other cause to support, never showing the raw code", () => {
+  it("says any other cause is retried at the next backup and is otherwise a fault, never showing the raw code", () => {
     const params = { errorCode: "unknown" };
-    expect(alertMessage("backup.run_stopped", params, "en")).toBe(`${LEAD_EN} Contact support.`);
+    expect(alertMessage("backup.run_stopped", params, "en")).toBe(
+      `${LEAD_EN} Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron.`,
+    );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} Contacta con soporte.`,
+      `${LEAD_ES} Waitron lo vuelve a intentar en la próxima copia programada. Si este mensaje sigue, es un fallo de Waitron.`,
     );
   });
 });

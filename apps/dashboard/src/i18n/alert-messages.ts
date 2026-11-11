@@ -588,11 +588,14 @@ export const ALERT_WORDS: Readonly<
   backup_stop: {
     words: {
       "recovery.state_incomplete": {
-        en: "Some of the box's own files that every backup must include are missing. Contact support.",
-        es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Contacta con soporte.",
+        en: "Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk.",
+        es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo.",
       },
     },
-    otherwise: { en: "Contact support.", es: "Contacta con soporte." },
+    otherwise: {
+      en: "Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron.",
+      es: "Waitron lo vuelve a intentar en la próxima copia programada. Si este mensaje sigue, es un fallo de Waitron.",
+    },
   },
   sealed_state: {
     words: {

@@ -52,7 +52,7 @@ referrals, not completed recovery experiments.
 | [Fiscal environment](#fiscal-environment) | Offer safe host-configuration or evidence/recovery choices; never relabel records or promote test data. |
 | [Reconciliation](#fiscal-reconcile) | Establish the caller, then offer evidence and a decision path rather than sending the person to an administrator or adviser. |
 | [Payments](#payments) | Preserve confirmed-outcome requirements. Give a way to inspect provider evidence and resolve the held payment without depending on a conversation with provider staff. |
-| [Boot recovery](#boot-recovery) | Recheck the recovery page's installer referrals and expose applicable restart, space, backup or reinstall choices. The earlier observation that its instructions were distinct does not qualify them as self-service. |
+| [Boot recovery](#boot-recovery) | The installer referrals are gone (2026-11-11): each row says plainly what happened and, where nothing at the box can fix it, that it is a fault, with the restart, retry, restore or reinstall choice it already named. `deployment.environment_mismatch` is reworded separately (A1501, #2829). Still open: no row gains a way out beyond the ones it already names. |
 
 Take the four reworks in the order above, one small PR per area. Test the refusal and the available
 way out before calling it complete. Build a missing small action; record each substantial missing
@@ -428,8 +428,8 @@ Screen: Dashboard alerts bell (incident history where applicable). Fix: [backup-
 
 | Language | Current words |
 | --- | --- |
-| EN | Some of the box's own files that every backup must include are missing. Contact support. |
-| ES | Faltan algunos archivos propios del equipo que toda copia debe incluir. Contacta con soporte. |
+| EN | Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk. |
+| ES | Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:452` and `apps/dashboard/src/i18n/alert-messages.ts:453`.
 
@@ -437,20 +437,24 @@ State: A required backup state file is absent. A missing file is not proved to b
 
 Route: Missing: identify the safe recovery/reinstall procedure for the missing component. Do not manufacture replacement private keys and describe the resulting backup as equivalent.
 
+_2026-11-11, A1089 (owner: "the rest say plainly what happened and that it is a fault"): the words no longer say to contact support; they name the fault. The missing recovery route is still open._
+
 ### `otherwise`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [backup-preparation](#backup-preparation).
 
 | Language | Current words |
 | --- | --- |
-| EN | Contact support. |
-| ES | Contacta con soporte. |
+| EN | Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron. |
+| ES | Waitron lo vuelve a intentar en la próxima copia programada. Si este mensaje sigue, es un fallo de Waitron. |
 
 Wording: `apps/dashboard/src/i18n/alert-messages.ts:456` and `apps/dashboard/src/i18n/alert-messages.ts:456`.
 
 State: Any other backup-run preparation error is reduced to the substitution fallback. Its cause is unknown, so it cannot qualify for a bug-only exception. Receipt: `apps/server/src/alert-sources.ts:186`; `apps/server/src/backup-sweep.ts:318`.
 
 Route: Missing: retain a safe error category and a usable next step. An unknown cause must not become an unconditional support instruction.
+
+_2026-11-11, A1089: the words no longer say to contact support. They say Waitron tries again at the next scheduled backup (a failed run is logged and the loop goes on: `tick` and `runBackupSweep` in `apps/server/src/backup-sweep.ts`, case "logs backup.failed and keeps looping when the dump throws" in `backup-sweep.test.ts`), and that a message that stays is a fault in Waitron. A next step for a cause that persists is still open._
 
 ### `shell.first_setup.attempt_invalid`
 
@@ -1221,6 +1225,8 @@ _2026-11-11, A1089 slice 1: the held-database page (`holderStalledText`) now say
 
 
 _2026-11-11, A1501: the wrong-environment database row now offers Start again/Stop, with a read-only administrator password check over HTTPS before moving the installed files aside. The next first setup offers fresh setup or another backup; this does not relabel records or change restore admission._
+
+_2026-11-11, A1089 (owner, 10:14: "the rest say plainly what happened and that it is a fault"): no other row of `OPERATOR_TEXT` or `GENERIC_TEXT` in `apps/server/src/i18n/recovery-page.ts` sends the person to whoever installed the box, except `deployment.environment_mismatch`, which A1501 (#2829) rewords. Each now names the fault (in Waitron, its installation, or the box's disk) and keeps the restart, retry, restore or reinstall step it already offered; the restore rows say what reinstalling without a backup loses. The page's details heading is now "Details" / "Detalles". No action, route or button was added, so a way out beyond what each row names is still open. Guard: the "sends nobody to someone else on any row" case in `apps/server/src/i18n/recovery-page.test.ts`._
 
 ### Backup-key self-service rework, 2026-10-25
 
