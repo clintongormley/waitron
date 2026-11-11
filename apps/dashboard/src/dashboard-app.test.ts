@@ -2489,6 +2489,26 @@ describe("dashboard-app", () => {
     },
   );
 
+  it.each([
+    { permissions: ["report.view"], canExport: false },
+    { permissions: ["report.view", "report.export"], canExport: true },
+  ])(
+    "tells the sales screen whether the session may export reports ($permissions)",
+    async ({ permissions, canExport }) => {
+      history.replaceState(null, "", "/manage/sales");
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      const sales = el.shadowRoot!.querySelector("dashboard-sales-screen") as HTMLElement & {
+        canExport: boolean;
+      };
+      expect(sales.canExport).toBe(canExport);
+    },
+  );
+
   it("tells the open devices screen when a session re-read finds hardware.manage gone", async () => {
     const getMe = vi
       .fn()

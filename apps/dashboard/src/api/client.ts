@@ -4368,6 +4368,15 @@ export class DashboardApi {
     );
   }
 
+  downloadClosedByTransfer(range: { from: string; to: string }): Promise<Blob> {
+    return this.#request<Blob>(
+      `/management-api/reports/closed-by-transfer?from=${range.from}&to=${range.to}`,
+      "POST",
+      undefined,
+      { as: "blob" },
+    );
+  }
+
   getCategorySales(
     from: string,
     to: string,

@@ -2954,7 +2954,10 @@ export class DashboardApp extends LitElement {
           .myPersonId=${this.myPersonId}
         ></dashboard-my-schedule-screen>`;
       case "sales":
-        return html`<dashboard-sales-screen .api=${this.api}></dashboard-sales-screen>`;
+        return html`<dashboard-sales-screen
+          .api=${this.api}
+          .canExport=${this.#sessionPermissions.includes("report.export")}
+        ></dashboard-sales-screen>`;
       case "vat-return":
         return html`<dashboard-vat-return-screen .api=${this.api}></dashboard-vat-return-screen>`;
       case "orders":

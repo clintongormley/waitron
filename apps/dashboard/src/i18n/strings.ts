@@ -2565,6 +2565,7 @@ export const en = {
     "Gross total incomplete: 1 line recorded before classification began",
   "sales.printer": "Printer",
   "sales.print_categories": "Print category sales",
+  "sales.export_transfer": "Export deferred payments (CSV)",
   "sales.print_sent": "Category sales sent to {printer}.",
   "sales.no_printers": "No active printer at this venue. Ask a manager to add one under Printers.",
 
@@ -6449,6 +6450,7 @@ export const es: Record<StringKey, string> = {
     "Total bruto incompleto: 1 línea registrada antes de que empezara la clasificación",
   "sales.printer": "Impresora",
   "sales.print_categories": "Imprimir ventas por categoría",
+  "sales.export_transfer": "Exportar pagos aplazados (CSV)",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",
   "sales.no_printers":
     "No hay ninguna impresora activa en este local. Pide a un encargado que añada una en Impresoras.",
