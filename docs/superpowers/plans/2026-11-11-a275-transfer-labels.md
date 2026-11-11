@@ -157,7 +157,9 @@ splitting receipts (1–4) from lists (5–8) leaves each under 150 lines.
   (`table-bill-controls.ts:9–19`), and the cancel-item dialog's "This bill is paid", defaulting to
   Refund with an amount (`cancel-item-dialog.ts:199–216`, `:482–484`; server `line-cancel-api.ts:151–155`,
   `line-cancel.ts:378`) though no tender is refundable, with `finish-table-dialog.ts:275` offering the
-  same. Example: a €220 F2 closed by transfer while dessert is unserved shows **Paid** on the table
+  same, and the `bill.paid` refusal, chosen from a `settled` status by five server checks and three
+  till ones (listed in the master plan's Task 7).
+  Example: a €220 F2 closed by transfer while dessert is unserved shows **Paid** on the table
   card, and cancelling the dessert offers a refund that cannot be made. No venue can reach this until
   Task 7's button exists, and these sit in the table and pay screens A739 is reworking. The split and
   portion pickers' marks are not affected: they come from earlier part-payments
