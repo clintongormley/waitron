@@ -1,5 +1,6 @@
-import { REBUILD_MARKER } from "@waitron/store";
-import { access, readFile, rm } from "node:fs/promises";
+import { TRADING_ENV_FILE, TRADING_ENV_REPLACED_SUFFIX } from "@waitron/store";
+import { rm } from "node:fs/promises";
+import { syncFolderHolding } from "./fs-atomic.js";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { KeyRing } from "@waitron/credentials";
@@ -25,12 +26,9 @@ import type { Logger } from "./logger.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
 import { readStreamSettings } from "./stream-host.js";
 import { ownContactUrl } from "./box-name.js";
+import { endRestoreFlow, firstStartPending } from "./restore-flow.js";
 import "./errors.js";
 
-/** Left in the state folder by `writeValidated` (restore.ts) whenever a restore takes on the
- * archive's identity; holds `{ version: 1, source }`. */
-
-/** Which restore wrote the marker. Both get the same first start. */
 export type RebuildSource = "archive" | "stream";
 
 export interface RebuildDeps {
@@ -64,21 +62,16 @@ export async function assertRestoredMembershipValid(db: Database): Promise<void>
 }
 
 /**
- * Throws `restore.membership_invalid` with the reason `malformed` when a restore's marker is present
+ * Throws `restore.membership_invalid` with the reason `malformed` when a restore's first start is pending
  * and the held membership row's stored text is not JSON, or is not shaped as a document (the JSON
  * value `null` included). Boot runs it before its first read of the document. Passes when the row or
- * the table is absent, and does nothing when no restore left its marker.
+ * the table is absent, and does nothing when no restore has a pending first start.
  */
 export async function assertRestoredMembershipReadable(
   stateDir: string,
   db: Database,
 ): Promise<void> {
-  try {
-    await access(join(stateDir, REBUILD_MARKER));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
+  if ((await firstStartPending(stateDir)) === null) return;
   let row: { document: unknown } | null;
   try {
     row = await readNodeMembershipRow(db);
@@ -96,21 +89,15 @@ export async function assertRestoredMembershipReadable(
 /**
  * A restored box's first trading start: a check of the restored membership document, a certificate
  * naming this machine's addresses, then the membership document one term higher naming this
- * machine's contact address. Does nothing, and returns false, when no restore left its marker.
+ * machine's contact address. Does nothing, and returns false, when no restore has a pending first start.
  *
- * The marker is removed last, so a failure or a crash part-way re-runs every step at the next
+ * The flow is ended last, so a failure or a crash part-way re-runs every step at the next
  * start. Each re-run issues another leaf and, once the term has been stored, moves the term up
  * again.
  */
 export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
-  const marker = join(deps.stateDir, REBUILD_MARKER);
-  let body: string;
-  try {
-    body = await readFile(marker, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
-  }
+  const pending = await firstStartPending(deps.stateDir);
+  if (pending === null) return false;
   await assertRestoredMembershipValid(deps.db);
   await reissueBoxLeaf({
     stateDir: deps.stateDir,
@@ -139,19 +126,16 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
     },
   );
   await persistNodeMembershipIfNewer(deps.db, next);
-  deps.log("info", "restore.first_start_done", { term: next.body.term, source: sourceOf(body) });
-  await rm(marker, { force: true });
-  return true;
-}
-
-/** Only a restore writes the marker, so a body that cannot be read still means one happened. */
-function sourceOf(body: string): RebuildSource | "unknown" {
+  deps.log("info", "restore.first_start_done", { term: next.body.term, source: pending.source });
+  const replaced = join(deps.stateDir, `${TRADING_ENV_FILE}${TRADING_ENV_REPLACED_SUFFIX}`);
   try {
-    const source = (JSON.parse(body) as { source?: unknown }).source;
-    return source === "archive" || source === "stream" ? source : "unknown";
-  } catch {
-    return "unknown";
+    await rm(replaced);
+    await syncFolderHolding(replaced);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+  await endRestoreFlow(deps.stateDir);
+  return true;
 }
 
 /** What boot does after the first start: whether the bucket copy may start, and since when the
@@ -163,7 +147,7 @@ export interface FirstStart {
 
 /**
  * {@link completeRebuild}, for boot. A failure does not keep the box shut: it sells, does not
- * stream (its term may not have moved), and the marker stays so the next start tries again. The log
+ * stream (its term may not have moved), and the first-start record stays so the next start tries again. The log
  * carries the error's code only. The exception is `restore.membership_invalid`, which is thrown on,
  * so the start fails, and once starts have failed repeatedly the recovery page shows it.
  */
@@ -179,16 +163,13 @@ export async function runFirstStart(deps: RebuildDeps): Promise<FirstStart> {
 }
 
 /**
- * For a box that must not finish a restore now: nothing is re-issued or signed, the marker stays,
+ * For a box that must not finish a restore now: nothing is re-issued or signed, the first-start record stays,
  * and the bucket copy is held while it is there (or while its presence cannot be read).
  */
 export async function deferFirstStart(stateDir: string, log: Logger): Promise<FirstStart> {
   try {
-    await access(join(stateDir, REBUILD_MARKER));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { mayStream: true, failedSince: null };
-    }
+    if ((await firstStartPending(stateDir)) === null) return { mayStream: true, failedSince: null };
+  } catch {
     return { mayStream: false, failedSince: null };
   }
   log("warn", "restore.first_start_deferred", {});

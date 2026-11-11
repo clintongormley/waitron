@@ -71,3 +71,15 @@ export async function endRestoreFlow(stateDir: string): Promise<void> {
   await syncFolderHolding(flow);
   await rm(discarded, { recursive: true, force: true });
 }
+
+export async function firstStartPending(
+  stateDir: string,
+): Promise<{ source: RebuildSource | "unknown" } | null> {
+  const phase = await readRestoreFlowPhase(stateDir);
+  if (phase === "unreadable") return { source: "unknown" };
+  if (phase !== "first-start") return null;
+  const record = await readRestoreFlow(stateDir);
+  if (record?.firstStart === undefined) return null;
+  const source = record.firstStart.source;
+  return { source: source === "archive" || source === "stream" ? source : "unknown" };
+}

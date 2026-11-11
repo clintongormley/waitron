@@ -7,6 +7,7 @@ import {
   attachmentPath,
   dropAttachments,
   endRestoreFlow,
+  firstStartPending,
   publishRestoreFlow,
   readRestoreFlow,
   updateRestoreFlow,
@@ -123,4 +124,22 @@ it("syncs the published folder and both renamed parents before removing the ende
     { folder: "flows", children: [] },
   ]);
   expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
+});
+
+it("waits for placement to finish before reporting the first start", async () => {
+  await publishRestoreFlow(
+    stateDir,
+    { ...staged, firstStart: { source: "archive" } },
+    async () => {},
+  );
+  expect(await firstStartPending(stateDir)).toBeNull();
+  await updateRestoreFlow(stateDir, firstStart);
+  expect(await firstStartPending(stateDir)).toEqual({ source: "archive" });
+});
+
+it("treats an unreadable flow as an unknown pending first start", async () => {
+  expect(await firstStartPending(stateDir)).toBeNull();
+  await publishRestoreFlow(stateDir, firstStart, async () => {});
+  await writeFile(join(stateDir, "flows", "restore", "record.json"), "{ torn");
+  expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
 });
