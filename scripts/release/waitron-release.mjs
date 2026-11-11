@@ -1,0 +1,171 @@
+import { execFileSync } from "node:child_process";
+import { createInterface } from "node:readline";
+import { parseArgs } from "node:util";
+import { isMainScript } from "../is-main-script.mjs";
+
+const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const TAG = /^refs\/tags\/v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/;
+const USAGE = "usage: pnpm release prepare <version> --place <place>\n";
+// The push runs the pre-push hook, which typechecks; that can take minutes.
+const COMMAND_TIMEOUT_MS = 20 * 60_000;
+
+export function parseVersion(text) {
+  const match = VERSION.exec(text);
+  if (!match) throw new Error(`${JSON.stringify(text)} is not a version like 1.2.3`);
+  return match.slice(1).map(Number);
+}
+
+function compareVersions(a, b) {
+  const [left, right] = [parseVersion(a), parseVersion(b)];
+  return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
+}
+
+export function releasedVersions(lsRemoteOutput) {
+  return lsRemoteOutput
+    .split("\n")
+    .map((line) => TAG.exec(line.split("\t")[1] ?? "")?.[1])
+    .filter((version) => version !== undefined)
+    .sort(compareVersions);
+}
+
+export function madridDate(now) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Madrid",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(now)
+      .map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+const declaration = (subcommand, version, place, date) => [
+  "--filter",
+  "@waitron/fiscal-verifactu",
+  "declaration",
+  subcommand,
+  "--version",
+  version,
+  "--place",
+  place,
+  "--date",
+  date,
+];
+
+export async function prepareRelease({ version, place, run, ask, now, print }) {
+  parseVersion(version);
+  const branch = `release/${version}`;
+  const git = (...args) => run("git", args).trim();
+
+  if (git("rev-parse", "--abbrev-ref", "HEAD") !== branch) {
+    throw new Error(`run this on the branch ${branch}`);
+  }
+  if (git("status", "--porcelain") !== "") throw new Error("the worktree has uncommitted changes");
+  git("fetch", "origin", "main");
+  if (git("rev-parse", "HEAD") !== git("rev-parse", "origin/main")) {
+    throw new Error(`${branch} must point at origin/main`);
+  }
+
+  const released = releasedVersions(run("git", ["ls-remote", "--tags", "origin", "refs/tags/v*"]));
+  if (released.includes(version)) throw new Error(`${version} is already released`);
+  const highest = released.at(-1);
+  if (highest !== undefined && compareVersions(version, highest) <= 0) {
+    throw new Error(`${version} is not above ${highest}, the highest released version`);
+  }
+
+  const date = madridDate(now);
+  print(run("pnpm", declaration("show", version, place, date)));
+  const answer = await ask(`Type yes to sign the declaration for Waitron ${version}: `);
+  if (answer.trim() !== "yes")
+    throw new Error("the declaration was not signed; nothing was written");
+
+  const file = `packages/fiscal-verifactu/declarations/v${version}.md`;
+  run("pnpm", declaration("write", version, place, date));
+  run("git", ["add", file]);
+  run("git", ["commit", "-s", "-m", `Release ${version}`]);
+  run("git", ["push", "-u", "origin", branch]);
+  run("gh", [
+    "pr",
+    "create",
+    "--base",
+    "main",
+    "--title",
+    `Release ${version}`,
+    "--body",
+    `Adds ${file}, the declaration for Waitron ${version}, ` +
+      "which the producer read and signed with `pnpm release prepare`.",
+  ]);
+}
+
+// Standard error is inherited so a refusal's own words reach the signer; the error thrown here never
+// carries the command's output, which can hold the producer's settings.
+export function nodeRun(file, args) {
+  try {
+    return execFileSync(file, args, {
+      encoding: "utf8",
+      timeout: COMMAND_TIMEOUT_MS,
+      maxBuffer: 16 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+  } catch (error) {
+    // eslint-disable-next-line preserve-caught-error -- the caught error holds the command's output.
+    throw new Error(`${file} ${args[0]} exited with status ${error.status ?? error.signal}`);
+  }
+}
+
+export function nodeAsk(prompt, input = process.stdin, output = process.stdout) {
+  output.write(prompt);
+  const lines = createInterface({ input, terminal: false });
+  return new Promise((resolve) => {
+    let answer = "";
+    lines.once("line", (line) => {
+      answer = line;
+      lines.close();
+    });
+    lines.once("close", () => resolve(answer));
+  });
+}
+
+const NODE_DEPS = {
+  run: nodeRun,
+  ask: nodeAsk,
+  now: Date.now,
+  print: process.stdout.write.bind(process.stdout),
+  printError: process.stderr.write.bind(process.stderr),
+};
+
+function parse(argv) {
+  const [command, ...rest] = argv;
+  if (command !== "prepare") return null;
+  try {
+    const { values, positionals } = parseArgs({
+      args: rest,
+      allowPositionals: true,
+      options: { place: { type: "string" } },
+    });
+    if (positionals.length !== 1 || values.place === undefined) return null;
+    return { version: positionals[0], place: values.place };
+  } catch {
+    return null;
+  }
+}
+
+export async function main(argv, deps = NODE_DEPS) {
+  const args = parse(argv);
+  if (args === null) {
+    deps.printError(USAGE);
+    return 1;
+  }
+  try {
+    await prepareRelease({ ...args, ...deps, now: deps.now() });
+    return 0;
+  } catch (error) {
+    deps.printError(`release: ${error.message}\n`);
+    return 1;
+  }
+}
+
+if (isMainScript(import.meta.url)) process.exitCode = await main(process.argv.slice(2));

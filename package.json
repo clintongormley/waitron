@@ -25,7 +25,8 @@
     "format:check": "prettier --check .",
     "reap": "node scripts/reap-testcontainers.mjs",
     "setup:litestream": "node scripts/setup-litestream.mjs",
-    "setup:s3-test-server": "node scripts/setup-s3-test-server.mjs"
+    "setup:s3-test-server": "node scripts/setup-s3-test-server.mjs",
+    "release": "node scripts/release/waitron-release.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
