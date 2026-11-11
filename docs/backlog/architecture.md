@@ -1072,6 +1072,8 @@ product failures.
   while connected and receives pairing, discovery, practice-inbox and backup state changes.
   Reads that depend on time, memory or external services keep their timers.
   Tills use the device stream for menu, equipment, floor, transfer and table-allergy refreshes;
+  transfers retain their access timer to notice ended sessions, and payment-owned equipment changes
+  retain their timed refresh so the connection also works with payments disabled;
   the remaining screen reads belong to jr14. Handhelds and kitchen displays keep timed reads under
   jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
   jr13's SIGSTOP probe is a stand-in only. 111 product

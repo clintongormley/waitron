@@ -4757,7 +4757,12 @@ export class TillApp extends LitElement {
           this.#live = new TillLiveConnection({
             read: (types, onEvent, signal) => api.readLiveEvents(types, onEvent, { signal }),
           });
-          this.#live.addInterests("device", ["devices", "device_profiles"]);
+          this.#live.addInterests(
+            "device",
+            Object.entries(TILL_LIVE_TYPES)
+              .filter(([name]) => name !== "transfers")
+              .flatMap(([, types]) => types),
+          );
           this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
           this.#live.start();
         }

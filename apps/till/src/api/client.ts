@@ -2620,8 +2620,6 @@ export class TillApi {
   #personSource?: () => SessionPerson | null;
   #personRefused?: (person: SessionPerson) => void;
 
-  /** Every request but the sign-in names `source()`'s person; a request the server refuses for
-   * naming someone not signed in calls `onRefused` with the person it named, whatever the status. */
   namePersonFrom(
     source: () => SessionPerson | null,
     onRefused: (person: SessionPerson) => void,
@@ -2631,7 +2629,6 @@ export class TillApi {
   }
 
   /**
-   * The one place a request gets its `fetch`: it names `person` on every call when there is one.
    * `fetchImpl` is read into a local so it is invoked as a free function, not as a method of `this`
    * (which would rebind a native `fetch`).
    */
@@ -4936,16 +4933,6 @@ export class TillApi {
     return this.#request<{ absenceId: string }>("/api/schedule/absences", "POST", req);
   }
 
-  /**
-   * The request path every method but the transfer stream takes; both get their `fetch` from
-   * `#fetchFor`. A non-2xx becomes a rejected
-   * `{ ...params, code, status }` read from the server's `{ error: { code, params } }` envelope, falling
-   * back to `server.internal` when the body names no code, so callers branch on a stable domain code;
-   * `status` is the answered HTTP status.
-   *
-   * A 2xx with an EMPTY body resolves to `undefined`, where `res.json()` would throw; a method
-   * whose route answers one types `T` as `void`.
-   */
   async #request<T>(
     path: string,
     method: string,

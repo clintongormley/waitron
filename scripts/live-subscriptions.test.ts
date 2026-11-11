@@ -9,8 +9,16 @@ import { QUERY_DEPENDENCIES } from "../apps/dashboard/src/api/live-queries.js";
 import { liveResourceTypesForModules } from "../apps/server/src/live-resources.js";
 import { TILL_LIVE_TYPES } from "../apps/till/src/api/live-connection.js";
 
-it.each([{}, { bookings: false }])("every till interest names a resource the device stream accepts with %j", (overrides) => {
-  const modules = enabledModules(ALL_MODULES, parseModuleConfig({ modules: overrides }, ALL_MODULES));
+it.each([
+  {},
+  ...ALL_MODULES.filter((module) => module.tier !== "mandatory").map((module) => ({
+    [module.name]: false,
+  })),
+])("every till interest names a resource the device stream accepts with %j", (overrides) => {
+  const modules = enabledModules(
+    ALL_MODULES,
+    parseModuleConfig({ modules: overrides }, ALL_MODULES),
+  );
   const allowed = new Set(liveResourceTypesForModules(modules));
   expect(
     Object.entries(TILL_LIVE_TYPES).flatMap(([reader, types]) =>

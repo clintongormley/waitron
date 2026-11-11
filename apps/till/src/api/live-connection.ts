@@ -4,7 +4,6 @@ interface Options {
     onEvent: (event: string, data: string) => void,
     signal: AbortSignal,
   ): Promise<void>;
-  now?: () => number;
 }
 
 const DEVICE_TYPES = [
@@ -12,6 +11,8 @@ const DEVICE_TYPES = [
   "device_profiles",
   "device_profile_service_access",
   "device_profile_zones",
+  "device_profile_admission_roles",
+  "device_profile_admission_persons",
 ];
 const ORDER_TYPES = [
   "working_orders",
@@ -65,20 +66,8 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "kitchen_courses",
     "custom_themes",
     "media_images",
-    "card_readers",
-    "device_profile_card_readers",
   ],
-  equipment: [
-    ...DEVICE_TYPES,
-    "printers",
-    "printer_holders",
-    "device_profile_printers",
-    "card_readers",
-    "card_reader_holders",
-    "device_profile_card_readers",
-    "payments",
-    "persons",
-  ],
+  equipment: [...DEVICE_TYPES, "printers", "printer_holders", "device_profile_printers", "persons"],
   floor: [
     ...DEVICE_TYPES,
     ...ORDER_TYPES,
@@ -116,6 +105,8 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "units",
   ],
   allergy: [
+    ...DEVICE_TYPES,
+    "persons",
     ...ORDER_TYPES,
     ...MENU_TYPES,
     "party_allergy",
@@ -127,18 +118,6 @@ export const TILL_LIVE_TYPES: Readonly<Record<string, readonly string[]>> = {
     "menu_periods",
     "menu_period_staff_menus",
     "zone_service_policies",
-  ],
-  kitchenNotice: [
-    ...DEVICE_TYPES,
-    "device_kitchen_screens",
-    "device_kitchen_screen_stations",
-    "device_kitchen_screen_zones",
-    "device_kitchen_screen_removals",
-    "device_profile_kitchen_screens",
-    "device_profile_kitchen_screen_stations",
-    "device_profile_kitchen_screen_zones",
-    "kitchen_stations",
-    "floor_zones",
   ],
 };
 
@@ -174,7 +153,8 @@ export class TillLiveConnection extends EventTarget {
   }
   stop(): void {
     this.#active = false;
-    this.#close();
+    this.#close(false);
+    this.#up = false;
     this.#key = "";
   }
   #setUp(up: boolean): void {
@@ -182,20 +162,20 @@ export class TillLiveConnection extends EventTarget {
     this.#up = up;
     this.dispatchEvent(new Event(up ? "up" : "down"));
   }
-  #close(): void {
+  #close(down = true): void {
     const read = this.#read;
     this.#read = undefined;
     clearTimeout(this.#silence);
     clearTimeout(this.#retry);
     read?.abort();
-    this.#setUp(false);
+    if (down) this.#setUp(false);
   }
   #sync(): void {
     if (!this.#active) return;
     const types = [...new Set([...this.#interests.values()].flat())].sort();
     const key = JSON.stringify(types);
     if (key === this.#key) return;
-    this.#close();
+    this.#close(types.length === 0);
     this.#key = key;
     if (types.length > 0) this.#connect(types);
   }

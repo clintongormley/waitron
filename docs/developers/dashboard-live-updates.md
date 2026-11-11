@@ -8,8 +8,10 @@ events carry resource types only and need no person signed in. Keepalives remain
 Tills open the device connection after reading their identity and keep it across sign-out. Transfer
 interests follow the signed-in person; transfer reads still check that person's access. Menu,
 equipment and floor reads refresh on changes and retain their timers because their answers depend
-on time or server memory. Transfer and table-allergy timers stay quiet while connected and resume
-when thirty seconds of silence counts the connection down. Handhelds and kitchen displays retain
+on time or server memory. Transfers keep their timer to detect ended person sessions; table-allergy
+timed reads stay quiet while connected and resume when thirty seconds of silence counts the
+connection down. Payment-owned equipment changes use the equipment timer, so disabling payments
+does not leave a rejected subscription. Handhelds and kitchen displays retain
 timed reads under jr11's measured tills-only fallback. The remaining screen reads belong to jr14.
 
 The dashboard treats thirty seconds without an event as a lost connection, re-reads its watched

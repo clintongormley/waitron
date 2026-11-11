@@ -109,6 +109,16 @@ it("reopens only when the union of interests changes and keeps other owners", ()
   expect(connection.up).toBe(false);
 });
 
+it("keeps logical up during a requested reopen but marks a failed replacement down", async () => {
+  const { connection, reads } = setup();
+  reads[0]!.event("ready", "{}");
+  connection.addInterests("transfers", ["department_transfer_requests"]);
+  expect(connection.up).toBe(true);
+  reads[1]!.end();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(connection.up).toBe(false);
+});
+
 it("reads the shared stream with the device proof and no signed-in person, forwarding keepalives", async () => {
   const fetchImpl = vi
     .fn<typeof fetch>()

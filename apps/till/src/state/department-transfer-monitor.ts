@@ -84,7 +84,7 @@ export class DepartmentTransferMonitor {
       types: TILL_LIVE_TYPES.transfers!,
       intervalMs: 15_000,
       run: () => this.refresh(),
-      quietWhileConnected: true,
+      quietWhileConnected: false,
     });
   }
 

@@ -123,7 +123,21 @@ function consumedResponse(body: unknown) {
 }
 
 describe("DepartmentTransferMonitor", () => {
-  it("quiets its fifteen-second durable reads while the shared connection is up", async () => {
+  it.each(["device_profile_admission_roles", "device_profile_admission_persons"])(
+    "rechecks transfer access when %s changes while connected",
+    async (type) => {
+      const source = desk();
+      source.monitor.start();
+      source.signal("ready");
+      await expect.poll(() => source.connection.up).toBe(true);
+      source.refuse("device_profile.not_admitted", 403);
+      source.signal("change", JSON.stringify([{ type }]));
+      await expect.poll(() => source.monitor.running).toBe(false);
+      expect(source.monitor.snapshot.incoming).toEqual([]);
+      expect(source.invalid).toEqual(["device_profile.not_admitted"]);
+    },
+  );
+  it("keeps its fifteen-second access check while the shared connection is up", async () => {
     const live = liveConnectionFixture();
     const source = desk(live.connection);
     try {
@@ -134,7 +148,7 @@ describe("DepartmentTransferMonitor", () => {
       await expect.poll(() => source.reads.length).toBe(2);
       const before = source.reads.length;
       await vi.advanceTimersByTimeAsync(15_000);
-      expect(source.reads).toHaveLength(before);
+      expect(source.reads).toHaveLength(before + 1);
     } finally {
       source.monitor.stop();
       live.connection.stop();
