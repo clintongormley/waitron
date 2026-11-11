@@ -6,7 +6,7 @@
 
 **Finish proposed:** inspect/accept an exact payment clash through the current main’s authenticated API; switch the stopped box off and on to retry. Confirm only held or individually accepted facts. Later AEAT rejection remains correctable. Lane L owns visible fiscal case UI.
 
-**Observed source, not runtime verification** (`d1fbaab9531c`; no suites run): receiver authenticates/binds batches, imports and signs receipts without retaining envelopes (`apps/server/src/return-records-api.ts:39`, `:78`, `:92`). Sender checks nonce/inventory/digest and exits on clash (`apps/server/src/return-records.ts:97`, `:133`); boot starts it again (`apps/server/src/boot.ts:1802`). Payment savepoints roll back named clashes; final comparisons withhold completeness (`packages/fiscal-verifactu/src/handover-return.ts:233`, `:268`, `:356`); record collisions block the dependent suffix (`:149`). Cases are unique per original (`packages/fiscal-verifactu/src/schema/filing-cases.ts:43`).
+**Reuse:** PR1’s signed batches/receipts and module seam, pinned trust, existing `FISCAL_REMEDY`/fresh-sign-in checks and node events. Source-only findings and file:line receipts: Lane J `receipts/firing-20261111-1633/plan-review-report.md`; no PR2 runtime proof.
 
 **Proposed record/store/check.** Reuse `node_handover_events`, which permits operation-free decisions and envelopes (`packages/node-db/src/schema/node-handover.ts:70`), through `appendHandoverEventTx` (`packages/node-db/src/handover.ts:121`). Scope reads to receiving node and null operation. Takeover activations have different semantics; activity history cannot decide admission. No new table/store/schema.
 
