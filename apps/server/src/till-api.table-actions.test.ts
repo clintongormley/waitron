@@ -1050,7 +1050,7 @@ describe("Join tables' guest counts", () => {
 });
 
 describe("A803 split: the route", () => {
-  /** Ana at two tables: her first bill holds the dishes named, and a second bill holds a Octopus. */
+  /** Ana at two tables: her first bill holds the dishes named, and a second bill holds an Octopus. */
   async function anaWith(...names: string[]) {
     const ana = await seatedWith(venue, ...names, "Octopus");
     const second = await freeTable();
