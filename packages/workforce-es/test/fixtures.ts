@@ -9,10 +9,9 @@ export { seedEmployment, seedLocation, seedPerson } from "@waitron/workforce/tes
 export async function seedConvenioConfig(
   db: Database | Transaction,
   params: {
-    locationId: string;
     workingDaysPerWeek?: number;
     overtimeModel?: "daily_accrual" | "period_net";
-  },
+  } = {},
 ): Promise<void> {
   await db.insert(convenioConfig).values({
     id: 1,

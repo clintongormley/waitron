@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -59,11 +59,10 @@ async function clockDay(
 describe("workSummary driven by a resolved convenio_config ruleset", () => {
   it("reproduces today's numbers exactly from a DEFAULT convenio_config row", async () => {
     // Five 9h days against a 40h week: 2700 worked, 300 overtime, each day 60 over its 480 target.
-    const locationId = await venueLocationId(suite.db);
     const nodeId = await seedNode(suite.db);
     const personId = await seedPerson(suite.db, "es-default");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
-    await seedConvenioConfig(suite.db, { locationId });
+    await seedConvenioConfig(suite.db);
     for (const day of ["2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", "2026-01-09"]) {
       await clockDay(personId, nodeId, day, "08:00", "17:00");
     }
@@ -98,7 +97,6 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
     // Same worked data, two convenio_config rows differing ONLY in overtime_model, read one after
     // the other. A 9h day then a 7h day is 60 daily-accrual but 0 period-net against a full-week
     // baseline.
-    const locationId = await venueLocationId(suite.db);
     const dailyNode = await seedNode(suite.db);
     const personId = await seedPerson(suite.db, "es-model");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
@@ -109,10 +107,10 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
       personId,
       period: { start: "2026-01-05", end: "2026-01-12" },
     } as const;
-    await seedConvenioConfig(suite.db, { locationId, overtimeModel: "daily_accrual" });
+    await seedConvenioConfig(suite.db, { overtimeModel: "daily_accrual" });
     const dailyRuleset = await run((tx) => resolveWorkTimeRuleset(tx));
     await suite.db.execute(sql`delete from convenio_config`);
-    await seedConvenioConfig(suite.db, { locationId, overtimeModel: "period_net" });
+    await seedConvenioConfig(suite.db, { overtimeModel: "period_net" });
     const periodRuleset = await run((tx) => resolveWorkTimeRuleset(tx));
     const daily = await run((tx) => backend.workSummary(tx, query, dailyRuleset));
     const period = await run((tx) => backend.workSummary(tx, query, periodRuleset));
