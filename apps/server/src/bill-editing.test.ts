@@ -199,7 +199,8 @@ describe("validating a bill's editor", () => {
   it("refuses an expectation for another bill as an invalid field", async () => {
     const { bill, other, anna, expected } = await ownedBill();
     await refusedWith(
-      () => inTx((tx) => requireBillEditor(tx, bill.id, anna.id, { ...expected, billId: other.id })),
+      () =>
+        inTx((tx) => requireBillEditor(tx, bill.id, anna.id, { ...expected, billId: other.id })),
       "management.request_invalid",
       { field: "expectedEdit.billId" },
     );

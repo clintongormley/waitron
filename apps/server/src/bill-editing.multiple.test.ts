@@ -375,7 +375,11 @@ describe("validating bill relocation without changing the common editor", () => 
       const { anna, lewis, sam, states, expected } = await fixture(["Anna", "Lewis", null]);
       const person = actor === "Anna" ? anna : actor === "Lewis" ? lewis : sam;
       const conflicts =
-        actor === "Anna" ? [states[1]!] : actor === "Lewis" ? [states[0]!] : [states[0]!, states[1]!];
+        actor === "Anna"
+          ? [states[1]!]
+          : actor === "Lewis"
+            ? [states[0]!]
+            : [states[0]!, states[1]!];
       await refused(
         () =>
           inTx((tx) =>
