@@ -443,7 +443,7 @@ advance() {
   selected=$n
 }
 case "$endpoint" in
-  repos/o/r/actions/runs/1234/attempts/1/jobs\\?per_page=30\\&page=*)
+  repos/o/r/actions/runs/1234/attempts/*/jobs\\?per_page=30\\&page=*)
     page=\${endpoint##*page=}
     if [ "$page" = 1 ]; then advance jobs; echo "$selected" > "$STUB_DIR/poll"; fi
     if [ "$page" = 1 ]; then read -r clock < "$STUB_DIR/clock"; echo "$((clock + PAGE_ONE_SECONDS))" > "$STUB_DIR/clock"; fi
@@ -521,7 +521,14 @@ exit "$status"
     };
     writeFileSync(join(dir, "jobs.max"), `${fixture.polls.length}\n`);
     fixture.polls.forEach((poll, index) =>
-      poll.forEach((page, at) => answer(`jobs.${index + 1}.${at + 1}`, { out: page })),
+      poll.forEach((page, at) =>
+        answer(
+          `jobs.${index + 1}.${at + 1}`,
+          page.status !== undefined || page.out !== undefined || page.error !== undefined
+            ? page
+            : { out: page },
+        ),
+      ),
     );
     if (fixture.jobsError) answer("jobs-error", { status: 1, error: "HTTP 503" });
     for (const kind of ["runs", "cancel"]) {
@@ -889,10 +896,74 @@ exit "$status"
     for (const jobsError of [false, true]) {
       const result = runWatch({ jobsError });
       expect(result.status, result.output).toBe(jobsError ? 1 : 0);
+      if (jobsError) expect(result.output).toContain("HTTP 503");
       expect(recoveryDispatches(result)).toHaveLength(1);
     }
   });
-  it("makes no more than ten inventory polls even when the clock does not advance", () => {
+  it.each(["assigned", "waiting"])(
+    "retries a failed final inventory and serves a %s result",
+    (state) => {
+      const rows = inventory((entries) => {
+        if (state === "assigned")
+          Object.assign(entries[0], { status: "in_progress", runner_id: 9 });
+      });
+      const result = runWatch({
+        polls: [[{ status: 1, error: "HTTP 502 final jobs read" }], pages(rows)],
+      });
+      expect(result.status, result.output).toBe(0);
+      expect(result.output).toContain("HTTP 502 final jobs read");
+      expect(
+        result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?"))),
+      ).toHaveLength(2);
+      expect(recoveryDispatches(result)).toHaveLength(state === "assigned" ? 0 : 1);
+    },
+  );
+  it.each([
+    ["completed", 1, true],
+    ["queued", 1, false],
+    ["in_progress", 1, false],
+    ["completed", 3, false],
+  ])("checks retained label attempt %s/%i", (status, labelAttempt, accepted) => {
+    const rows = inventory((entries) => {
+      entries.forEach((entry) => {
+        entry.run_attempt = 2;
+      });
+      Object.assign(entries[0], {
+        status,
+        runner_id: status === "queued" ? 0 : 9,
+        labels: ["self-hosted", "dt-42-1234-" + labelAttempt + "-test-server-1"],
+      });
+    });
+    const result = runWatch(
+      { polls: [pages(rows)], runs: [{ out: { ...identity, run_attempt: 2 } }] },
+      { RUN_ATTEMPT: "2" },
+    );
+    expect(result.status, result.output).toBe(accepted ? 0 : 1);
+    expect(recoveryDispatches(result)).toHaveLength(accepted ? 0 : 1);
+  });
+  it("names a request timeout with no stderr before refusing the final inventory", () => {
+    const result = runWatch({ polls: [[{ status: 124 }]] });
+    expect(result.status).toBe(1);
+    expect(result.output).toMatch(/124/);
+    expect(result.output).toContain("page=1");
+  });
+  it("reports an exhausted page deadline without stale request stderr", () => {
+    const rows = inventory((entries) => {
+      entries.push(
+        ...Array.from({ length: 10 }, (_, at) => ({ id: 100 + at, name: "other-" + at })),
+      );
+    });
+    const listing = pages(rows);
+    const result = runWatch(
+      { polls: [[{ out: listing[0], error: "stale stderr marker" }, listing[1]]] },
+      { PAGE_ONE_SECONDS: "10" },
+    );
+    expect(result.status).toBe(1);
+    expect(result.output).toMatch(/[Dd]eadline/);
+    expect(result.output).toContain("page=2");
+    expect(result.output).not.toContain("stale stderr marker");
+  });
+  it("makes no more than ten ordinary inventory polls even when the clock does not advance", () => {
     const result = runWatch({}, { FREEZE_CLOCK: "true" });
     expect(result.status, result.output).toBe(0);
     expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(

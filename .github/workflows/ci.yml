@@ -3897,8 +3897,9 @@ jobs:
           request() {
             local deadline=$1
             shift
+            : > "$scratch/error"
             local remaining=$((deadline - $(date +%s)))
-            [ "$remaining" -gt 0 ] || return 1
+            if [ "$remaining" -le 0 ]; then echo "Deadline reached before $*" > "$scratch/error"; return 1; fi
             if [ "$calls" -ge 200 ]; then echo 'API call limit reached (200)' >&2; exit 1; fi
             calls=$((calls + 1))
             if [ "$remaining" -gt 10 ]; then remaining=10; fi
@@ -3906,23 +3907,35 @@ jobs:
           }
           polls=0
           valid_inventory=false
-          while [ "$polls" -lt 10 ] && [ "$(date +%s)" -lt "$queue_end" ]; do
+          final=false
+          while :; do
+            if [ "$polls" -ge 10 ] || [ "$(date +%s)" -ge "$queue_end" ]; then
+              if [ "$valid_inventory" = true ] || [ "$final" = true ]; then break; fi
+              final=true
+            fi
             polls=$((polls + 1))
             valid_inventory=false
             poll_end=$(($(date +%s) + 10))
-            if [ "$poll_end" -gt "$queue_end" ]; then poll_end=$queue_end; fi
+            if [ "$final" != true ] && [ "$poll_end" -gt "$queue_end" ]; then poll_end=$queue_end; fi
+            if [ "$poll_end" -gt "$end" ]; then poll_end=$end; fi
             pages=''
             count=0
             total=-1
             page=1
             complete=true
             while :; do
-              if ! request "$poll_end" "repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=30&page=$page"; then complete=false; break; fi
-              if ! next_total=$(jq -er 'select(type == "object" and (.jobs | type) == "array" and (.total_count | type) == "number" and .total_count > 0 and (.total_count | floor) == .total_count) | .total_count' "$scratch/response"); then complete=false; break; fi
+              endpoint="repos/$REPO/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=30&page=$page"
+              if request "$poll_end" "$endpoint"; then :; else
+                status=$?
+                echo "Inventory poll $polls page $page request failed (exit $status): $endpoint" >&2
+                cat "$scratch/error" >&2
+                complete=false; break
+              fi
+              if ! next_total=$(jq -er 'select(type == "object" and (.jobs | type) == "array" and (.total_count | type) == "number" and .total_count > 0 and (.total_count | floor) == .total_count) | .total_count' "$scratch/response"); then echo "Inventory poll $polls page $page: invalid response shape" >&2; complete=false; break; fi
               if [ "$total" -eq -1 ]; then total=$next_total; fi
-              if [ "$next_total" -ne "$total" ]; then complete=false; break; fi
+              if [ "$next_total" -ne "$total" ]; then echo "Inventory poll $polls page $page: total changed from $total to $next_total" >&2; complete=false; break; fi
               size=$(jq '.jobs | length' "$scratch/response")
-              if [ "$size" -eq 0 ] || [ "$size" -gt 30 ]; then complete=false; break; fi
+              if [ "$size" -eq 0 ] || [ "$size" -gt 30 ]; then echo "Inventory poll $polls page $page: invalid page size $size" >&2; complete=false; break; fi
               pages="$pages$(cat "$scratch/response")"$'\n'
               count=$((count + size))
               if [ "$count" -ge "$total" ]; then break; fi
@@ -3950,10 +3963,13 @@ jobs:
                    then error("missing or foreign " + $family.id + " job") else . end
                  | [$members[] | select(.labels | index("self-hosted"))] as $routed
                  | if any($routed[]; . as $job |
-                     ($ENV.LABEL_PREFIX + "-" + $ENV.REPO_ID + "-" + $ENV.RUN_ID + "-" + $ENV.RUN_ATTEMPT +
+                     ([($ENV.RUN_ATTEMPT | tonumber)] + (if $job.status == "completed" then
+                       [range(1; ($ENV.RUN_ATTEMPT | tonumber))] else [] end)) as $attempts |
+                     all($attempts[]; . as $attempt |
+                     ($ENV.LABEL_PREFIX + "-" + $ENV.REPO_ID + "-" + $ENV.RUN_ID + "-" + ($attempt | tostring) +
                       "-" + $family.id + "-" + (if $family.matrix then
-                        (.name | capture("\\((?<n>[0-9]+)\\)$").n) else "1" end)) as $label |
-                     ($job.labels | index($label)) == null)
+                        ($job.name | capture("\\((?<n>[0-9]+)\\)$").n) else "1" end)) as $label |
+                     ($job.labels | index($label)) == null))
                    then error("unexpected " + $family.id + " routing label") else . end
                  | {id: $family.id, state: (if ($routed | length) == 0 then "empty"
                      elif all($routed[]; .status == "completed" or
@@ -3969,6 +3985,7 @@ jobs:
               valid_inventory=true
               waiting=${state#waiting:}
             fi
+            if [ "$final" = true ]; then break; fi
             remaining=$((queue_end - $(date +%s)))
             if [ "$remaining" -gt 30 ]; then remaining=30; fi
             if [ "$remaining" -gt 0 ]; then sleep "$remaining"; fi
