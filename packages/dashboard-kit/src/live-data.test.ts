@@ -280,4 +280,65 @@ describe("observed resources", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(read).toHaveBeenCalledTimes(2);
   });
+
+  it("quiets only the timer of an opted-in query while connected and resumes it while down", async () => {
+    vi.useFakeTimers();
+    const data = new LiveData();
+    let value = 1;
+    const observed = data.observe(
+      {
+        key: "printers",
+        dependencies: [{ type: "printers" }],
+        refreshMs: 1000,
+        quietWhileConnected: true,
+        read: async () => value++,
+      },
+      () => {},
+    );
+    try {
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(observed.snapshot.value).toBe(2);
+      data.setConnected(true);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(observed.snapshot.value).toBe(2);
+      data.invalidate([{ type: "printers" }]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(observed.snapshot.value).toBe(3);
+      data.setConnected(false);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(observed.snapshot.value).toBe(4);
+    } finally {
+      observed.unsubscribe();
+    }
+  });
+
+  it.each([undefined, false])(
+    "keeps an unmarked timer running when connected (%s)",
+    async (mark) => {
+      vi.useFakeTimers();
+      const data = new LiveData();
+      let value = 1;
+      const observed = data.observe(
+        {
+          key: "overdue",
+          dependencies: [{ type: "orders" }],
+          refreshMs: 1000,
+          ...(mark === undefined ? {} : { quietWhileConnected: mark }),
+          read: async () => value++,
+        },
+        () => {},
+      );
+      try {
+        await vi.advanceTimersByTimeAsync(0);
+        data.setConnected(true);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(observed.snapshot.value).toBe(2);
+        data.setConnected(false);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(observed.snapshot.value).toBe(3);
+      } finally {
+        observed.unsubscribe();
+      }
+    },
+  );
 });

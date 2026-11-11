@@ -178,7 +178,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   pairingMode: ["pairing"],
   // A device's ask; `dependenciesOf` narrows a print agent's.
-  joinRequests: ["join_requests", "devices", "device_profiles"],
+  joinRequests: ["join_requests", "devices", "device_profiles", "pairing"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],
   getSalesOverview: [
     "sales",
@@ -287,6 +287,7 @@ export const QUERY_DEPENDENCIES = {
     "printers",
     "invoice_deliveries",
     "invoice_pdf_downloads",
+    "outgoing_mail",
     "page_printers",
     "location_business_day_settings",
     "location_day_cutover_changes",
@@ -565,6 +566,76 @@ export const QUERY_DEPENDENCIES = {
 } as const;
 
 export type DashboardQueryName = keyof typeof QUERY_DEPENDENCIES;
+
+export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
+  "getCatalogueSettings",
+  "listCatalogues",
+  "getMenuStructure",
+  "getMenuPrices",
+  "getMenuHome",
+  "listCategories",
+  "getCategory",
+  "listLibraryProducts",
+  "listProducts",
+  "listUnits",
+  "listOptionLists",
+  "getOptionList",
+  "listExtraLists",
+  "getExtraList",
+  "listMadeAt",
+  "getVenueTheme",
+  "listThemes",
+  "listPrinters",
+  "listPrinterProfiles",
+  "listPrinterStationNames",
+  "listPagePrinters",
+  "listPrinterStations",
+  "getPrinterDeleteImpact",
+  "listReaders",
+  "listReaderHolders",
+  "getProfileReaders",
+  "listHeldPayments",
+  "getDailyClose",
+  "getSalesPeriod",
+  "getCategorySales",
+  "getReportPrinters",
+  "getOrderPrinters",
+  "listOrderStaff",
+  "listStaff",
+  "getStaffRoster",
+  "getProfile",
+  "listPendingAbsences",
+  "listPendingSwaps",
+  "getRoster",
+  "listMySwaps",
+  "listMyAbsences",
+  "listDeviceProfiles",
+  "getDeviceProfile",
+  "listProfileKitchenScreens",
+  "getProfileScopeChoices",
+  "listDevices",
+  "listStations",
+  "listCourses",
+  "listZones",
+  "getFloorPlan",
+  "getStationDeleteImpact",
+  "getCourseDeleteImpact",
+  "getReceiptLanguage",
+  "getVenueDefaults",
+  "getVenuePrivacy",
+  "listPurchaseInvoices",
+  "clockMisdated",
+  "clockMisdatedHandled",
+  "getContentLanguages",
+  "getContentTranslationGaps",
+  "getContentTranslationTargets",
+  "getContentTranslationCells",
+  "getGoogleConfig",
+  "getLocales",
+  "getDepartmentReceipt",
+  "pairingMode",
+]);
+
 type Arguments<N extends DashboardQueryName> = Parameters<DashboardApi[N]>;
 type Result<N extends DashboardQueryName> = Awaited<ReturnType<DashboardApi[N]>>;
 
@@ -589,9 +660,7 @@ function dependenciesOf<N extends DashboardQueryName>(
     const current: readonly string[] = CURRENT_CLASSIFICATION_READS;
     return QUERY_DEPENDENCIES.getCategorySales.filter((type) => !current.includes(type));
   }
-  // Only a device's ask reads a `devices` row (a returning device's own) and its profile, and a
-  // stored battery report rewrites a `devices` row (`PUT /api/device/battery`,
-  // apps/server/src/device-api.ts).
+  // Print-agent requests omit returning-device details and pairing claims.
   if (name === "joinRequests" && (args as readonly unknown[])[0] === "print_agent") {
     return QUERY_DEPENDENCIES.joinRequests.filter((type) => type === "join_requests");
   }
@@ -607,6 +676,7 @@ export function dashboardQuery<N extends DashboardQueryName>(
   return {
     key: JSON.stringify([name, args]),
     dependencies: dependenciesOf(name, args).map((type) => ({ type })),
+    quietWhileConnected: QUIET_WHILE_CONNECTED.has(name),
     read: () => {
       const client = initial ? api : (api.background ?? api);
       initial = false;

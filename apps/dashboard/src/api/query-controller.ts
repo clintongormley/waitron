@@ -43,6 +43,7 @@ export class DashboardQueries {
         dependencies: queries.flatMap((query) => query.dependencies),
         read: () => Promise.all(queries.map((query) => query.read())),
         refreshMs: 60_000,
+        quietWhileConnected: queries.every((query) => query.quietWhileConnected),
       },
       apply,
     );

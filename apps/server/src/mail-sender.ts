@@ -1,3 +1,4 @@
+import { publishState } from "./live-publish.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
@@ -68,6 +69,7 @@ export type MailTransport = (
   message: Omit<SendMailOptions, "from">,
 ) => Promise<SmtpSendOutcome>;
 export interface MailSenderDeps {
+  bus?: LiveEvents;
   db: Database;
   owners: readonly MailKindOwner[];
   now: () => Date;
@@ -356,6 +358,8 @@ export async function runMailPass(deps: MailSenderDeps): Promise<MailPassResult>
           : { status: "unknown", failureCode: sent.reason };
   }
   const settled = outcome!;
+  if (settled.status === "sent" && delivery.mode === "local_capture" && deps.bus)
+    publishState(deps.bus, "email_inbox", deps.log);
   await withTransaction(deps.db, async (tx) => {
     const now = deps.now();
     const [saved] = await tx

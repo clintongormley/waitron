@@ -3,7 +3,28 @@ import type { DeleteImpact } from "@waitron/shared";
 import { expect, it, vi } from "vitest";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { DashboardApi } from "./client.js";
-import { QUERY_DEPENDENCIES, dashboardQuery } from "./live-queries.js";
+import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./live-queries.js";
+
+it("quiets only the audited database queries while connected", () => {
+  const expected = `getCatalogueSettings listCatalogues getMenuStructure getMenuPrices getMenuHome
+    listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
+    listExtraLists getExtraList listMadeAt getVenueTheme listThemes listPrinters listPrinterProfiles
+    listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
+    listReaderHolders getProfileReaders listHeldPayments getDailyClose getSalesPeriod getCategorySales
+    getReportPrinters getOrderPrinters listOrderStaff listStaff getStaffRoster getProfile
+    listPendingAbsences listPendingSwaps getRoster listMySwaps listMyAbsences listDeviceProfiles
+    getDeviceProfile listProfileKitchenScreens getProfileScopeChoices listDevices listStations
+    listCourses listZones getFloorPlan getStationDeleteImpact getCourseDeleteImpact getReceiptLanguage
+    getVenueDefaults getVenuePrivacy listPurchaseInvoices clockMisdated clockMisdatedHandled
+    getContentLanguages getContentTranslationGaps getContentTranslationTargets getContentTranslationCells
+    getGoogleConfig getLocales getDepartmentReceipt pairingMode`.split(/\s+/);
+  const api = new DashboardApi();
+  const quiet = (Object.keys(QUERY_DEPENDENCIES) as DashboardQueryName[]).filter((name) => {
+    const args = name === "getMenuRead" ? ["menu-1", ["status"]] : [];
+    return dashboardQuery(api, name, args as never).quietWhileConnected;
+  });
+  expect(quiet.sort()).toEqual(expected.sort());
+});
 
 it("counts the initial screen read as activity and subsequent refreshes as passive", async () => {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
@@ -446,11 +467,9 @@ it.each([
     ],
   ],
   ["getReportPrinters", [], ["printers"]],
-  // A device's ask also carries a returning device's own row and whether its profile was retired
-  // (`returningDevicesOf`, apps/server/src/join-requests.ts).
-  ["joinRequests", ["device"], ["join_requests", "devices", "device_profiles"]],
-  // A print agent's ask reads no `devices` or `device_profiles` row; a stored battery report
-  // rewrites a `devices` row.
+  // Device requests include returning-device details and in-memory pairing claims.
+  ["joinRequests", ["device"], ["join_requests", "devices", "device_profiles", "pairing"]],
+  // Print-agent requests omit both.
   ["joinRequests", ["print_agent"], ["join_requests"]],
   // The server works the rules out once at boot, so no table change moves them.
   ["getContentLanguageRules", [], []],
@@ -472,13 +491,10 @@ it.each([
       "units",
     ],
   ],
-] as const)(
-  "subscribes %s %j to exactly the tables its read selects from",
-  async (name, args, types) => {
-    const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
-    expect(query.dependencies).toEqual(types.map((type) => ({ type })));
-  },
-);
+] as const)("subscribes %s %j to its live sources", async (name, args, types) => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
+  expect(query.dependencies).toEqual(types.map((type) => ({ type })));
+});
 
 it("refreshes the bucket copy's settings every ten seconds, and depends on `backup_status` alone", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getStreamSettings", []);
@@ -1348,5 +1364,42 @@ it("refreshes print queue visibility after fifteen seconds without table changes
   } finally {
     observed.unsubscribe();
     vi.useRealTimers();
+  }
+});
+
+it("refreshes device join claims passively when pairing changes", async () => {
+  let pairingBy: string | null = "Alex";
+  const request = {
+    id: "request-1",
+    kind: "device",
+    label: "Bar till",
+    createdAt: "2026-11-11T12:00:00Z",
+    returning: null,
+  };
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () =>
+      new Response(
+        JSON.stringify([
+          { ...request, pairingBy: pairingBy === null ? null : { name: pairingBy, mine: false } },
+        ]),
+      ),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const observed = api.liveData.observe(dashboardQuery(api, "joinRequests", ["device"]), () => {});
+  try {
+    await vi.waitFor(() =>
+      expect(observed.snapshot.value?.[0]?.pairingBy).toEqual({ name: "Alex", mine: false }),
+    );
+    pairingBy = "Sam";
+    api.liveData.invalidate([{ type: "pairing" }]);
+    await vi.waitFor(() =>
+      expect(observed.snapshot.value?.[0]?.pairingBy).toEqual({ name: "Sam", mine: false }),
+    );
+    expect(new Headers(fetchImpl.mock.calls[1]![1]?.headers).get("x-waitron-live")).toBe("1");
+    pairingBy = null;
+    api.liveData.invalidate([{ type: "pairing" }]);
+    await vi.waitFor(() => expect(observed.snapshot.value?.[0]?.pairingBy).toBeNull());
+  } finally {
+    observed.unsubscribe();
   }
 });

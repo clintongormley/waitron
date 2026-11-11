@@ -353,7 +353,9 @@ describe("live connection events", () => {
       open.mock.results[0]!.value.dispatchEvent(new Event("error"));
       await vi.advanceTimersByTimeAsync(0);
       expect(read).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(15_000);
+      open.mock.results[0]!.value.send("keepalive", []);
+      await vi.advanceTimersByTimeAsync(15_000);
       expect(open).toHaveBeenCalledOnce();
       expect(open.mock.results[0]!.value.close).not.toHaveBeenCalled();
     } finally {

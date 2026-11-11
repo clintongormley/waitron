@@ -32,18 +32,37 @@ export interface PairingMode {
 }
 
 export function createPairingMode(
-  opts: { now?: () => number; holdMs?: number; newId?: () => string } = {},
+  opts: { now?: () => number; holdMs?: number; newId?: () => string; changed?: () => void } = {},
 ): PairingMode {
-  const { now = Date.now, holdMs = PAIRING_HOLD_MS, newId = randomUUID } = opts;
+  const { now = Date.now, holdMs = PAIRING_HOLD_MS, newId = randomUUID, changed } = opts;
   const holds = new Map<string, number>();
   const claims = new Map<string, PairingClaim>();
   let openSinceMs: number | null = null;
+  let lapse: ReturnType<typeof setTimeout> | undefined;
+
+  const arm = (): void => {
+    clearTimeout(lapse);
+    if (changed === undefined || holds.size === 0) return;
+    lapse = setTimeout(
+      () => {
+        prune();
+        arm();
+      },
+      Math.max(0, Math.min(...holds.values()) - now()),
+    );
+    lapse.unref();
+  };
 
   const prune = (): void => {
     const t = now();
+    const before = holds.size;
     // A hold further ahead than its length was stamped before the clock stepped back: it has lapsed.
     for (const [id, until] of holds) if (until <= t || until - t > holdMs) holds.delete(id);
     if (holds.size === 0) openSinceMs = null;
+    if (holds.size !== before) {
+      arm();
+      changed?.();
+    }
   };
   const live = (holdId: string): boolean => {
     prune();
@@ -58,17 +77,25 @@ export function createPairingMode(
       if (openSinceMs === null) openSinceMs = t;
       const holdId = newId();
       holds.set(holdId, t + holdMs);
+      arm();
+      changed?.();
       return { holdId, openUntil: iso(t + holdMs) };
     },
     renew(holdId) {
       if (!live(holdId)) return null;
       const until = now() + holdMs;
       holds.set(holdId, until);
+      arm();
+      changed?.();
       return { openUntil: iso(until) };
     },
     release(holdId) {
-      holds.delete(holdId);
+      const removed = holds.delete(holdId);
       prune();
+      if (removed) {
+        arm();
+        changed?.();
+      }
     },
     hasHold: live,
     isOpen() {
@@ -85,6 +112,7 @@ export function createPairingMode(
     },
     claim(requestId, claim) {
       claims.set(requestId, claim);
+      changed?.();
     },
     claimOf(requestId) {
       const claim = claims.get(requestId);
@@ -95,7 +123,7 @@ export function createPairingMode(
       return [...claims].filter(([, c]) => !holds.has(c.holdId)).map(([id]) => id);
     },
     dropClaim(requestId) {
-      claims.delete(requestId);
+      if (claims.delete(requestId)) changed?.();
     },
   };
 }

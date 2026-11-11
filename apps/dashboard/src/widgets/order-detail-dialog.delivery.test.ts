@@ -938,6 +938,21 @@ describe("sending the invoice by email", () => {
 });
 
 describe("re-reading while an attempt is on its way", () => {
+  it.each(["invoice_deliveries", "print_jobs", "outgoing_mail"])(
+    "shows a delivery update immediately on %s without waiting for its timer",
+    async (type) => {
+      setLocale("en-GB");
+      const api = stubApi(f1(deliveries(attempt({ medium: "email" }))));
+      const el = await open(api);
+      api.background.getOrder.mockResolvedValue(
+        f1(deliveries(attempt({ medium: "email", status: "sent" }))),
+      );
+      api.liveData.invalidate([{ type }]);
+      await vi.waitFor(() => expect(text(el, "delivery-status")).toBe("Sent by email."));
+      expect(api.background.getOrder).toHaveBeenCalledOnce();
+    },
+  );
+
   it("reads the bill again every 5 s through the passive client while an attempt waits or sends, and stops once it ends", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     setLocale("en-GB");

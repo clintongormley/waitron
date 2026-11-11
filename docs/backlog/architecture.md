@@ -1067,7 +1067,10 @@ product failures.
   alert per job after ten minutes and three failures; the manager’s box-status read includes the
   complete job views. The remaining jobs still need moving onto the runner.
   Management and device events share one loop with read-only wake checks; device events carry types
-  only. Browser adoption of the device stream remains for jr13/jr14. 111 product
+  only. The dashboard detects a silent connection, quiets audited database-only re-read timers
+  while connected and receives pairing, discovery, practice-inbox and backup state changes.
+  Reads that depend on time, memory or external services keep their timers.
+  Browser adoption of the device stream remains for jr13/jr14. 111 product
   environment variables become 51. There is one state-folder layout. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity

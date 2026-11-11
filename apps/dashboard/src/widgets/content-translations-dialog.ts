@@ -285,6 +285,7 @@ export class ContentTranslationsDialog extends LitElement {
         key: JSON.stringify(["translation-editor", generation]),
         dependencies: QUERY_DEPENDENCIES.getContentTranslationTargets.map((type) => ({ type })),
         refreshMs: 60_000,
+        quietWhileConnected: true,
         read: async () => {
           if (first) {
             first = false;

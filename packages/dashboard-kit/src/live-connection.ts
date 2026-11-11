@@ -11,6 +11,8 @@ interface Options {
   sessionGeneration?: () => number;
 }
 
+const LIVE_SILENCE_MS = 30_000;
+
 export class LiveConnection {
   #active = false;
   #suspended = false;
@@ -23,6 +25,7 @@ export class LiveConnection {
   #retry?: ReturnType<typeof setTimeout>;
   #retryMs = 1000;
   #generation?: number;
+  #silenceCheck?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly data: LiveData,
@@ -89,6 +92,9 @@ export class LiveConnection {
   }
 
   #close(): void {
+    this.data.setConnected(false);
+    clearInterval(this.#silenceCheck);
+    this.#silenceCheck = undefined;
     clearTimeout(this.#errorRefresh);
     this.#errorRefresh = undefined;
     clearTimeout(this.#retry);
@@ -117,6 +123,7 @@ export class LiveConnection {
       const generation = this.#generation;
       let refreshed = false;
       let closed = false;
+      let lastHeardAt = Date.now();
       const current = (allowStale = false): boolean =>
         this.#active &&
         !this.#suspended &&
@@ -124,9 +131,27 @@ export class LiveConnection {
         (allowStale || generation === this.options.sessionGeneration?.());
       const listen = (name: string, action: (event: Event) => void, allowStale = false): void => {
         stream.addEventListener(name, (event) => {
-          if (current(allowStale)) action(event);
+          if (current(allowStale)) {
+            lastHeardAt = Date.now();
+            action(event);
+          }
         });
       };
+      const reconnect = (): void => {
+        this.#close();
+        this.#retry = setTimeout(() => {
+          this.#retry = undefined;
+          this.#schedule();
+        }, this.#retryMs);
+        this.#retryMs = Math.min(this.#retryMs * 2, 30_000);
+      };
+      this.#silenceCheck = setInterval(() => {
+        if (!current() || Date.now() - lastHeardAt < LIVE_SILENCE_MS) return;
+        this.data.refresh();
+        reconnect();
+      }, 5000);
+      listen("ready", () => this.data.setConnected(true));
+      listen("keepalive", () => {});
       listen("open", () => {
         this.#retryMs = 1000;
         refreshed = false;
@@ -134,6 +159,7 @@ export class LiveConnection {
         this.data.refresh();
       });
       listen("error", () => {
+        this.data.setConnected(false);
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
         // Chromium fires `error` on every one of its own retries, so only this stream's first error,
         // or its first since it last opened, re-reads everything.
@@ -147,12 +173,7 @@ export class LiveConnection {
           if (!current()) return;
           this.data.refresh();
           if (!closed) return;
-          this.#close();
-          this.#retry = setTimeout(() => {
-            this.#retry = undefined;
-            this.#schedule();
-          }, this.#retryMs);
-          this.#retryMs = Math.min(this.#retryMs * 2, 30_000);
+          reconnect();
         }, 0);
       });
       listen("reset", () => this.data.refresh());
