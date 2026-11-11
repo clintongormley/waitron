@@ -14,7 +14,6 @@ import {
   departmentDayRanges,
   departmentDays,
   kitchenStations,
-  locations,
   menuPeriods,
   routingCellPeriods,
   routingCells,

@@ -13,7 +13,6 @@ import {
   departmentDays,
   floorZones,
   dayCutoverChanges,
-  locations,
   specialDayDates,
   specialDays,
   withTransaction,

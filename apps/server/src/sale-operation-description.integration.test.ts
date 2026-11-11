@@ -5,7 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import {
   departmentReceipts,
   zoneServicePolicies,

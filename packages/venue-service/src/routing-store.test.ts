@@ -25,7 +25,6 @@ import {
   departments,
   floorZones,
   kitchenStations,
-  locations,
   products,
   routingCellPeriods,
   routingCells,

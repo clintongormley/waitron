@@ -1,3 +1,5 @@
+import { locations, readVenue } from "@waitron/db";
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -10,7 +12,6 @@ import {
   deviceProfiles,
   devices,
   joinRequests,
-  locations,
   nowIso,
   printAgents,
   printJobs,
@@ -185,18 +186,7 @@ async function send(
 
 it("refuses the retired venue-wide receipt mode write without changing the location", async () => {
   const app = mountApp();
-  const before = await Promise.resolve(
-    suite.db.all<{
-      id: string;
-      bumpMode: string;
-      fireControl: string;
-      catalogueId: string | null;
-      timeZone: string;
-      dayCutover: string;
-    }>(
-      sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-    ),
-  );
+  const before = await Promise.all([suite.db.select().from(locations), readVenue(suite.db)]);
 
   const response = await send(
     app,
@@ -206,20 +196,9 @@ it("refuses the retired venue-wide receipt mode write without changing the locat
   );
 
   expect(response.status).toBe(404);
-  expect(
-    await Promise.resolve(
-      suite.db.all<{
-        id: string;
-        bumpMode: string;
-        fireControl: string;
-        catalogueId: string | null;
-        timeZone: string;
-        dayCutover: string;
-      }>(
-        sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-      ),
-    ),
-  ).toEqual(before);
+  expect(await Promise.all([suite.db.select().from(locations), readVenue(suite.db)])).toEqual(
+    before,
+  );
 });
 
 /** Accepts through the verb; the accept route is `join-api.ts`'s. */
@@ -2461,11 +2440,7 @@ describe("mountPrintApi — management: print-test-page", () => {
   const NOW = new Date("2026-10-01T13:05:00.000Z");
 
   async function withVenueTimeZone<T>(timeZone: string, fn: () => Promise<T>): Promise<T> {
-    const [before] = await Promise.resolve(
-      suite.db.all<{ timeZone: string }>(
-        sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-      ),
-    );
+    const [before] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
     );

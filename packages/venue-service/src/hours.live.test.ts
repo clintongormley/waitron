@@ -10,7 +10,6 @@ import {
   installChangeFeed,
   kitchenNotices,
   kitchenStations,
-  locations,
   subscribeToChanges,
   tenants,
   withTransaction,
@@ -54,7 +53,7 @@ const reaches = (types: Set<string>, query: readonly string[]) =>
 
 it("refreshes Calendar and routing from special days, clock and daily station status", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
-  const { cfg, departmentId, bar, kitchen } = await withTransaction(db, async (tx) => {
+  const { departmentId, bar, kitchen } = await withTransaction(db, async (tx) => {
     await seedVenue(tx, {
       name: `Venue ${randomUUID()}`,
       invoiceLocales: ["en-GB"],

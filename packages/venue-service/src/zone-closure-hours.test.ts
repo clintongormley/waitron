@@ -8,7 +8,6 @@ import {
   kitchenStations,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
-  locations,
   withTransaction,
   type Database,
   venueLocationId,

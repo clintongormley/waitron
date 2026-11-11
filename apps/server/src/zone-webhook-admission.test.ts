@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import Stripe from "stripe";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, venueLocationId, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";

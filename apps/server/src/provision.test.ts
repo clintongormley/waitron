@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { clearProvisionFixture } from "./testing/clear-provision-fixture.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -654,11 +655,11 @@ it("refuses setup/configuration replacement of a venue with dated history withou
     { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
     request,
   );
-  const venueId = await venueLocationId(db);
-  await db.insert(dayCutoverChanges).values([
-    { effectiveBusinessDay: "2000-01-01", dayCutover: "03:00:00" },
-    { effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" },
-  ]);
+  await venueLocationId(db);
+  await seedBusinessDay(db, { dayCutover: "03:00:00" });
+  await db
+    .insert(dayCutoverChanges)
+    .values([{ effectiveBusinessDay: "2099-01-01", dayCutover: "07:00:00" }]);
   await db
     .update(businessDaySettingsTable)
     .set({ revision: 5 })

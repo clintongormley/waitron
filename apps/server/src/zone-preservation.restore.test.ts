@@ -10,7 +10,7 @@ import {
 } from "../test/hour-recovery-host.js";
 import { eq, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { invoiceSeries, locations, nodes, openVenueDatabase, withTransaction } from "@waitron/db";
+import { invoiceSeries, nodes, openVenueDatabase, withTransaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { recordDailyClose } from "@waitron/reporting";
 import { recordSale } from "@waitron/core";

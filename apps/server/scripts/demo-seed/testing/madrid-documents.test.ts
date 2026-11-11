@@ -108,3 +108,76 @@ it("merges captured table rows into the existing venue document and empties the 
     holidayArea: null,
   });
 });
+
+it("moves a captured clock and its dated starts without changing the frozen input", () => {
+  const captured = structuredClone(original);
+  captured.tables.locations!.rows.place!.day_cutover = "05:00:00";
+  captured.tables.locations!.columns.push({
+    name: "day_cutover",
+    type: "TEXT",
+    notnull: 1,
+    pk: 0,
+    dflt_value: null,
+  });
+  captured.tables.location_business_day_settings = {
+    columns: [],
+    foreignKeys: [],
+    rows: { revision: { location_id: "place", revision: 2 } },
+  };
+  captured.tables.location_day_cutover_changes = {
+    columns: ["location_id", "effective_business_day", "day_cutover"].map((name, i) => ({
+      name,
+      type: "TEXT",
+      notnull: 1,
+      pk: i < 2 ? i + 1 : 0,
+      dflt_value: null,
+    })),
+    foreignKeys: [],
+    rows: {
+      later: {
+        location_id: "place",
+        effective_business_day: "2026-12-01",
+        day_cutover: "07:00:00",
+      },
+    },
+  };
+  const before = structuredClone(captured);
+  const result = madridWithDocument(
+    captured,
+    "locations",
+    { time_zone: "timeZone" },
+    { ...metadata, module: "business_day", mode: "business-day" },
+  );
+  expect(Object.values(result.tables.settings!.rows)).toEqual([
+    {
+      module: "business_day",
+      version: 1,
+      revision: 3,
+      doc: { timeZone: "Europe/Madrid" },
+      updated_at: metadata.updatedAt,
+      updated_by: null,
+    },
+  ]);
+  expect(Object.values(result.tables.day_cutover_changes?.rows ?? {})).toEqual([
+    { effective_business_day: "2000-01-01", day_cutover: "05:00:00" },
+    { effective_business_day: "2026-12-01", day_cutover: "07:00:00" },
+  ]);
+  expect(result.tables.locations!.rows.place).toEqual({
+    id: "place",
+    name: "Deli",
+    city: "Madrid",
+  });
+  expect(result.tables.locations!.columns.map((column) => column.name)).toEqual([
+    "id",
+    "name",
+    "city",
+  ]);
+  expect(result.tables.day_cutover_changes!.columns.map(({ name, pk }) => [name, pk])).toEqual([
+    ["effective_business_day", 1],
+    ["day_cutover", 0],
+  ]);
+  expect(result.tables.day_cutover_changes!.foreignKeys).toEqual([]);
+  expect(result.tables.location_business_day_settings).toBeUndefined();
+  expect(result.tables.location_day_cutover_changes).toBeUndefined();
+  expect(captured).toEqual(before);
+});

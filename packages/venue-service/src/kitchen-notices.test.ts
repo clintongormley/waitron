@@ -15,7 +15,6 @@ import {
   CORE_MIGRATIONS,
   kitchenNotices,
   kitchenStations,
-  locations,
   dayCutoverChanges,
   withTransaction,
   workingLineContexts,

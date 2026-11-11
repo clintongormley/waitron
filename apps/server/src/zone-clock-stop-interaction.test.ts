@@ -1,14 +1,10 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import Stripe from "stripe";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, expect, it } from "vitest";
-import {
-  incidents,
-  locations,
-  settings as businessDaySettingsTable,
-  withTransaction,
-} from "@waitron/db";
+import { incidents, settings as businessDaySettingsTable, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { authorizeManager, persons, startManagementSession } from "@waitron/identity";
@@ -183,20 +179,7 @@ it("an actual clock confirmation leaves the invalid-zone stop and all invoice fa
   expect(await clockStop()).toBeNull();
   expect(v.deps.admission.snapshot()).toEqual({ state: "invalid" });
   expect(
-    (
-      await Promise.resolve(
-        suite.db.all<{
-          id: string;
-          bumpMode: string;
-          fireControl: string;
-          catalogueId: string | null;
-          timeZone: string;
-          dayCutover: string;
-        }>(
-          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      )
-    )[0]!.timeZone,
+    (await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]))[0]!.timeZone,
   ).toBe("Invalid/Zone");
   const before = v.snapshot();
   const pay = await newPayment();

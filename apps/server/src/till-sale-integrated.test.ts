@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, getTableColumns, sql } from "drizzle-orm";
-import { locations, sales, withTransaction } from "@waitron/db";
+import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCategory, createProduct } from "@waitron/catalogue";
@@ -328,7 +328,7 @@ describe("saved-zone payment transactions", () => {
         const deps = zoneDeps(source.clock);
         const req = zoneRequest();
         const original = zoneDb.db.all<{ time_zone: string }>(
-          sql`select time_zone from locations where id = ${zoneVenue.cfg.locationId}`,
+          sql`select json_extract(doc, '$.timeZone') as time_zone from settings where module = 'business_day'`,
         )[0]!.time_zone;
         if (fault === "name")
           await zoneDb.db.run(

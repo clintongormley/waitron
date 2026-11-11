@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  locations,
   ticketItems,
   venueLocationId,
   withTransaction,

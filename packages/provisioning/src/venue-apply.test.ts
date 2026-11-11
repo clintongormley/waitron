@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { applyVenue as realApplyVenue } from "./venue-apply.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fixture.js";
@@ -385,7 +386,7 @@ describe("applyVenue: the one taxpayer row", () => {
       seriesIds: first.seriesIds,
     });
     const rows = await suite.db.execute<{ day_cutover: string }>(
-      sql`select day_cutover from locations`,
+      sql`select day_cutover from day_cutover_changes where effective_business_day = '2000-01-01'`,
     );
     expect(rows.rows).toEqual([{ day_cutover: "06:00:00" }]);
   });
@@ -395,8 +396,16 @@ describe("applyVenue: the one taxpayer row", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
-    await suite.db.execute(sql`update locations set day_cutover = '06:00' where id = ${venueId}`);
+    await venueLocationId(suite.db);
+    await suite.db.run(sql`PRAGMA ignore_check_constraints = on`);
+    try {
+      await suite.db.run(
+        sql`delete from day_cutover_changes where effective_business_day = '2000-01-01'`,
+      );
+      await suite.db.run(sql`insert into day_cutover_changes values ('2000-01-01', '06:00')`);
+    } finally {
+      await suite.db.run(sql`PRAGMA ignore_check_constraints = off`);
+    }
 
     await expect(
       applyVenue(planVenue(request("B10000006"), ALL_MODULES), {
@@ -768,8 +777,8 @@ describe("applyVenue", () => {
         modules: ALL_MODULES,
       });
       await suite.db.execute(sql`
-        insert into locations (id, operation_description)
-        values ('00000000-0000-4000-8000-0000000000ff', 'venta')`);
+        insert into locations (id)
+        values ('00000000-0000-4000-8000-0000000000ff')`);
 
       await expect(
         applyVenue(planVenue(request("B13131313"), ALL_MODULES), {
@@ -1134,11 +1143,11 @@ it("reuses the current dated start without clearing the location timeline", asyn
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const venueId = await venueLocationId(suite.db);
-  await suite.db.insert(dayCutoverChanges).values([
-    { effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
-    { effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" },
-  ]);
+  await venueLocationId(suite.db);
+  await seedBusinessDay(suite.db, { dayCutover: "07:00:00" });
+  await suite.db
+    .insert(dayCutoverChanges)
+    .values([{ effectiveBusinessDay: "2099-01-01", dayCutover: "03:00:00" }]);
   await suite.db
     .update(businessDaySettingsTable)
     .set({ revision: 4 })

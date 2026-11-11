@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { readVenue } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { IssueScope } from "@waitron/fiscal";

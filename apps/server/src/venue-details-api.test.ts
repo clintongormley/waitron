@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -301,9 +302,7 @@ describe("venue clock preview", () => {
     expect(await initial()).toEqual(before);
   });
   it("shows the actual reporting cutover on the next fold and gap days", async () => {
-    await suite.db.execute(
-      sql`update locations set day_cutover = '02:30:00' where id = ${venue.cfg.locationId}`,
-    );
+    await seedBusinessDay(suite.db, { dayCutover: "02:30:00" });
     const response = await app.request(path, { headers: { cookie: venue.managerCookie } });
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -448,9 +447,12 @@ it("returns exactly the declared saved clock fields, without venue address field
   });
 });
 it("does not preview a malformed saved cutover as a valid current clock", async () => {
-  await suite.db.execute(
-    sql`update locations set day_cutover = '06:00garbage' where id = ${venue.cfg.locationId}`,
-  );
+  await suite.db.run(sql`PRAGMA ignore_check_constraints = on`);
+  try {
+    await seedBusinessDay(suite.db, { dayCutover: "06:00garbage" });
+  } finally {
+    await suite.db.run(sql`PRAGMA ignore_check_constraints = off`);
+  }
   const response = await app.request(
     "/management-api/venue-details/clock-preview?timeZone=UTC&dayCutover=00%3A00",
     { headers: { cookie: venue.managerCookie } },

@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { build } from "esbuild";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { locations, sales } from "@waitron/db";
+import { sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decodeRegistroRow } from "@waitron/fiscal-verifactu/src/registro-row.js";

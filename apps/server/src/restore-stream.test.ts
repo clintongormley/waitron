@@ -672,7 +672,7 @@ describe("prepareStreamRestore", () => {
   it.each([
     [
       "two venue rows",
-      "insert into locations (id, operation_description) values ('c0000000-0000-4000-8000-0000000000aa', 'Venta')",
+      "insert into locations (id) values ('c0000000-0000-4000-8000-0000000000aa')",
     ],
     ["no venue row", "delete from invoice_series; delete from nodes; delete from locations"],
   ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {

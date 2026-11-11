@@ -366,8 +366,6 @@ it("delivers a write made outside withTransaction on the next transaction the pr
   try {
     await reader.read();
     await suite.db.insert(locations).values({});
-    await seedVenueSettings(suite.db, { operationDescription: "probe" });
-    await seedBusinessDay(suite.db, {});
     await suite.db
       .insert(diningTables)
       .values({ locationId: location!.id, zoneId: zone!.id, label: "T9" });

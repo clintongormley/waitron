@@ -13,7 +13,6 @@ import {
   departmentDayRanges,
   departmentDays as departmentDayRows,
   floorZones,
-  locations,
   seasons,
   specialDayDates,
   specialDays,

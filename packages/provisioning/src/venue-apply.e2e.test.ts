@@ -1,10 +1,11 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
-import { locations, nodes, tenants, venueLocationId, withTransaction } from "@waitron/db";
+import { nodes, tenants, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
@@ -268,20 +269,9 @@ describe("direct action country zone preflight", () => {
         [module.name, { eventId: "zone-test", sourceId: "zone-test", input: {} }],
       ]),
     }).catch((error: unknown) => error);
-    expect(
-      await Promise.resolve(
-        suite.db.all<{
-          id: string;
-          bumpMode: string;
-          fireControl: string;
-          catalogueId: string | null;
-          timeZone: string;
-          dayCutover: string;
-        }>(
-          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      ),
-    ).toEqual([]);
+    expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual(
+      [],
+    );
     expect(await suite.db.select().from(tenants)).toEqual([]);
     expect(await suite.db.select().from(nodes)).toEqual([]);
     expect({ preparations, seeds }).toEqual({ preparations: 0, seeds: 0 });
@@ -308,20 +298,9 @@ describe("direct action country zone preflight", () => {
       (error: unknown) => error,
     );
     expect(seeds).toBe(0);
-    expect(
-      await Promise.resolve(
-        suite.db.all<{
-          id: string;
-          bumpMode: string;
-          fireControl: string;
-          catalogueId: string | null;
-          timeZone: string;
-          dayCutover: string;
-        }>(
-          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      ),
-    ).toEqual([]);
+    expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual(
+      [],
+    );
     expect(refusal).toMatchObject({
       code: "venue.time_zone_invalid",
       params: { reason: "country" },
@@ -333,7 +312,7 @@ describe("direct action country zone preflight", () => {
     async (timeZone) => {
       const actions = planVenue(request(), []);
       await applyDirectVenue(actions, { db: suite.db, modules: [] });
-      const venueId = await venueLocationId(suite.db);
+      await venueLocationId(suite.db);
       await withTransaction(suite.db, async (tx) => {
         await tx.execute(
           sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
@@ -356,13 +335,9 @@ describe("direct action country zone preflight", () => {
     const action = actions.find((action) => action.kind === "create-venue")!;
     action.timeZone = " Europe/Madrid ";
     await applyDirectVenue(actions, { db: suite.db, modules: [] });
-    expect(
-      await Promise.resolve(
-        suite.db.all<{ timeZone: string }>(
-          sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      ),
-    ).toEqual([{ timeZone: "Europe/Madrid" }]);
+    expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual([
+      { timeZone: "Europe/Madrid" },
+    ]);
     expect(action.timeZone).toBe(" Europe/Madrid ");
   });
 });
@@ -378,7 +353,7 @@ it("rechecks saved zone inside the transaction after outside preparation", async
           db: suite.db,
           modules: [],
         });
-        const venueId = await venueLocationId(suite.db);
+        await venueLocationId(suite.db);
         await withTransaction(suite.db, async (tx) => {
           await tx.execute(
             sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
@@ -407,13 +382,9 @@ it("rechecks saved zone inside the transaction after outside preparation", async
     }),
   ).rejects.toMatchObject({ code: "venue.time_zone_invalid", params: { reason: "invalid" } });
   expect({ preparations, seeds }).toEqual({ preparations: 1, seeds: 0 });
-  expect(
-    await Promise.resolve(
-      suite.db.all<{ timeZone: string }>(
-        sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-      ),
-    ),
-  ).toEqual([{ timeZone: "Invalid/Zone" }]);
+  expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual([
+    { timeZone: "Invalid/Zone" },
+  ]);
 });
 
 it.each(["Europe/London", "US/Eastern"])(
@@ -421,7 +392,7 @@ it.each(["Europe/London", "US/Eastern"])(
   async (timeZone) => {
     const actions = planVenue(request(), []);
     await applyDirectVenue(actions, { db: suite.db, modules: [] });
-    const venueId = await venueLocationId(suite.db);
+    await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
@@ -430,12 +401,8 @@ it.each(["Europe/London", "US/Eastern"])(
     await expect(applyDirectVenue(actions, { db: suite.db, modules: [] })).rejects.toMatchObject({
       code: "provisioning.second_venue",
     });
-    expect(
-      await Promise.resolve(
-        suite.db.all<{ timeZone: string }>(
-          sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      ),
-    ).toEqual([{ timeZone }]);
+    expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual([
+      { timeZone },
+    ]);
   },
 );

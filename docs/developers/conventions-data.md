@@ -1350,10 +1350,10 @@ in the sweep below are retired. The booking writer remains; the account below re
   period, `CLOCK_TIME` in `packages/venue-service/src/hours-rules.ts`). The interval tables
   `station_hours` and `department_hours` this line named until 2026-10-06 are dropped by
   venue-service `0022_retire_legacy_hours`.
-- **`locations.day_cutover`** keeps the initial business-day start, written by
-  `normalizeDayCutover` during provisioning. Dated starts live in `location_day_cutover_changes`;
-  `readVenueClock` (`packages/db/src/venue.ts`) returns both, and the shared resolver selects each
-  date's boundary. The general venue-details PATCH refuses a changed start. Since 2026-10-18 (A788)
+- **`day_cutover_changes`** keeps the initial business-day start in its earliest row, dated
+  `FIRST_DAY_START` (`2000-01-01`), and later dated starts in the rows after it. Provisioning writes
+  the first row with `normalizeDayCutover`. `readVenueClock` (`packages/db/src/venue.ts`) returns
+  the same clock shape, and the shared resolver selects each date's boundary. The general venue-details PATCH refuses a changed start. Since 2026-10-18 (A788)
   a new start is not scheduled for a chosen date: `writeBusinessDayStart`
   (`apps/server/src/business-day-start.ts`) takes it from the next changeover, or from the one
   after when the new time has already passed today (`planBusinessDayStart`,
@@ -6335,6 +6335,15 @@ into its clock query. The fields still travel in a configuration bundle's `venue
 older exports after the core reset.
 
 **2026-11-10, A1308 slice 5c:** receipt languages, content languages and holiday area share this document. Format 16 carries `contentLanguages` and `holidayArea` at the bundle’s top level; receipt languages remain in `venue.invoiceLocales`.
+
+**2026-11-11, A1308 slice 5d:** fiscal territory and the temporary operation description also live in
+`settings.venue`; vb6 removes the description. Read the saved time zone verbatim from
+`settings.business_day`, including an invalid or empty string so the zone repair can see it.
+Its revision is the clock revision: setup starts at 1, and a time-zone edit, dated-start edit or
+repair saves that document through `saveSettings`. New input is checked by those writers.
+`readVenueClockAndPlace` reads both documents and the dated starts in one statement. Day-start
+rows reject updates; a daily close covering the preceding business day also prevents deletion.
+The editor retains the time-dependent history check that the database cannot make without a zone.
 
 Declare a document with `defineSettingsDocument`, read it with `readSettings`, and save it through
 `saveSettings`, the only writer (`packages/db/src/settings.ts`). The checker returns the normalised

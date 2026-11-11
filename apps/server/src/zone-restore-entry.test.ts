@@ -1,17 +1,17 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import {
   archiveHost,
   bucketCommand,
-  node,
   recordedRecoveryRows,
   recoveryInvoices,
   suite,
 } from "../test/hour-recovery-host.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+
 import { expect, it } from "vitest";
-import { invoiceSeries, locations, openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, openVenueDatabase } from "@waitron/db";
 import { restoreFromArtifact } from "./restore.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { packArchive } from "./backup-archive.js";
@@ -51,18 +51,9 @@ it.each(["", "Not/A_Zone", "+02:00", "UTC"])(
     });
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
-      const [location] = await Promise.resolve(
-        placed.venue.all<{
-          id: string;
-          bumpMode: string;
-          fireControl: string;
-          catalogueId: string | null;
-          timeZone: string;
-          dayCutover: string;
-        }>(
-          sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      );
+      const [location] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
+        doc,
+      ]);
       expect(location!.timeZone).toBe(timeZone);
       expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
       const after = await placed.venue.select().from(invoiceSeries);
@@ -102,18 +93,9 @@ it("retains an invalid zone through signed-pointer bucket preview, preparation a
   expect(entry.failures).toEqual([]);
   const placed = await openVenueDatabase(entry.f.roots.venueDir);
   try {
-    const [location] = await Promise.resolve(
-      placed.venue.all<{
-        id: string;
-        bumpMode: string;
-        fireControl: string;
-        catalogueId: string | null;
-        timeZone: string;
-        dayCutover: string;
-      }>(
-        sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-      ),
-    );
+    const [location] = await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [
+      doc,
+    ]);
     expect(location!.timeZone).toBe("Not/A_Zone");
     expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
     expect(

@@ -624,7 +624,7 @@ describe("the Opening hours month read", () => {
   });
 
   it("gives each day its own changeover and length across a pending changeover change, with the clock's status", async () => {
-    const v = await venue();
+    await venue();
     await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
@@ -872,7 +872,7 @@ describe("the season days read", () => {
   });
 
   it("gives each date its own changeover across a pending changeover change", async () => {
-    const v = await venue([]);
+    await venue([]);
     await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",

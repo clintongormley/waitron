@@ -40,7 +40,7 @@ const COLLEAGUE = {
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
 const logger = vi.fn();
-let locationId: string, martaId: string, colleagueId: string;
+let martaId: string, colleagueId: string;
 let martaToken: string, colleagueToken: string;
 let order: string[];
 let subjects: PersonalDataSubject[];
@@ -114,7 +114,7 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  locationId = await venueLocationId(suite.db);
+  await venueLocationId(suite.db);
   await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)

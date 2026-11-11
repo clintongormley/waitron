@@ -1,3 +1,4 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -7,7 +8,7 @@ import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { diningTables, saleLines, sales, locations, withTransaction } from "@waitron/db";
+import { diningTables, saleLines, sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -549,11 +550,7 @@ describe("the day is the invoice's own, read once", () => {
     const east = randomUUID();
     const utc = randomUUID();
 
-    const [location] = await Promise.resolve(
-      suite.db.all<{ timeZone: string }>(
-        sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-      ),
-    );
+    const [location] = await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
     try {
       await suite.db.run(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${"Etc/GMT-2"}) where module = 'business_day'`,

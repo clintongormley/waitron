@@ -16,7 +16,6 @@ import {
   floorTodayZones,
   floorZones,
   joinedTableApart,
-  locations,
   withTransaction,
   workingOrders,
 } from "@waitron/db";

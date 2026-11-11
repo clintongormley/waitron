@@ -72,7 +72,6 @@ import {
   floorZones,
   kitchenStations,
   kitchenCourses,
-  locations,
   dayCutoverChanges,
   settings as businessDaySettingsTable,
   printAgents,
@@ -5353,7 +5352,7 @@ describe("venue detail edits and configuration boundaries", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
+    await venueLocationId(suite.db);
     await seedBusinessDay(suite.db, { dayCutover: "04:30:00" });
     const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     const saved = await withTransaction(suite.db, (tx) =>
@@ -6560,7 +6559,9 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     modules: ALL_MODULES,
   });
   const sourceVenueId = await venueLocationId(suite.db);
-  const scope = { locationId: sourceVenueId };
+  {
+    locationId: sourceVenueId;
+  }
   const original = await withTransaction(suite.db, async (tx) => {
     await seedBusinessDay(tx, { dayCutover: "04:30:00" });
     const department = await createDepartment(tx, {
@@ -7553,7 +7554,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
+    await venueLocationId(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Clock service",
@@ -7610,7 +7611,7 @@ describe("dated business-day configuration transfer", () => {
     );
     expect(model.businessDayClock).toEqual({
       clock: { timeZone: "Europe/Madrid", dayCutover: "07:00", cutoverChanges: [] },
-      revision: 0,
+      revision: 1,
       currentBusinessDay: "2026-11-10",
       pending: null,
     });
@@ -7634,14 +7635,16 @@ describe("dated business-day configuration transfer", () => {
         endsAt: "17:00:00",
       })),
     );
-    expect(await targetSuite.db.select().from(dayCutoverChanges)).toEqual([]);
+    expect(await targetSuite.db.select().from(dayCutoverChanges)).toEqual([
+      { effectiveBusinessDay: "2000-01-01", dayCutover: "07:00:00" },
+    ]);
     expect(
       await targetSuite.db
         .select({ revision: businessDaySettingsTable.revision })
         .from(businessDaySettingsTable)
         .where(eq(businessDaySettingsTable.module, "business_day")),
-    ).toEqual([]);
-    expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(2);
+    ).toEqual([{ revision: 1 }]);
+    expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(3);
     expect(
       await suite.db
         .select({ revision: businessDaySettingsTable.revision })
@@ -7655,7 +7658,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
+    await venueLocationId(suite.db);
     await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "03:00:00",
@@ -7690,7 +7693,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const venueId = await venueLocationId(suite.db);
+    await venueLocationId(suite.db);
     await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
@@ -7707,7 +7710,7 @@ describe("dated business-day configuration transfer", () => {
         params: { field: "businessDayStart" },
       });
     }
-    expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(1);
+    expect(await suite.db.select().from(dayCutoverChanges)).toHaveLength(2);
   });
 });
 

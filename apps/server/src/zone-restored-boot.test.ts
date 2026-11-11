@@ -1,3 +1,4 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import {
   agreeInternet,
@@ -191,20 +192,8 @@ it.each(["archive", "bucket"] as const)(
       try {
         expect(await recordedRecoveryRows(placed.venue)).toEqual(before);
         expect(
-          (
-            await Promise.resolve(
-              placed.venue.all<{
-                id: string;
-                bumpMode: string;
-                fireControl: string;
-                catalogueId: string | null;
-                timeZone: string;
-                dayCutover: string;
-              }>(
-                sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-              ),
-            )
-          )[0]!.timeZone,
+          (await readSettings(placed.venue, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]))[0]!
+            .timeZone,
         ).toBe("Europe/Madrid");
         expect(
           await placed.venue

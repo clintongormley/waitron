@@ -20,7 +20,6 @@ import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { sealNodeState, writeSealedStateRow } from "./sealed-state.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { eq } from "drizzle-orm";
 
 const moduleNames = ["core", "fiscal-verifactu", "fiscal-none"];
 const modules = ALL_MODULES.filter((module) => moduleNames.includes(module.name));

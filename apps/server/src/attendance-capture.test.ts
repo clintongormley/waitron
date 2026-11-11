@@ -21,7 +21,7 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
-let personId: string, other: string, locationId: string;
+let personId: string, other: string;
 const fact = () => ({
   source: "whole-payment" as const,
   key: "attempt:one",
@@ -43,7 +43,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
+  await venueLocationId(suite.db);
   const people = await suite.db
     .insert(persons)
     .values([

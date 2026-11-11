@@ -7,7 +7,6 @@ import {
   BUSINESS_DAY_SETTINGS,
   readSettings,
   CORE_MIGRATIONS,
-  locations,
   incidents,
   settings as businessDaySettingsTable,
   dayCutoverChanges,

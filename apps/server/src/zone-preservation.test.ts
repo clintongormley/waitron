@@ -1,8 +1,8 @@
 import { decimal } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeEach, expect, it, vi } from "vitest";
-import { invoiceSeries, locations, printers, withTransaction } from "@waitron/db";
+import { invoiceSeries, printers, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";

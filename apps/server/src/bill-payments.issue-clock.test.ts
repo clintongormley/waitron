@@ -1,3 +1,4 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { setImmediate as yieldTurn } from "node:timers/promises";
@@ -5,13 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  billPayments,
-  locations,
-  withTransaction,
-  workingOrders,
-  venueLocationId,
-} from "@waitron/db";
+import { billPayments, withTransaction, workingOrders, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToVenue,
@@ -280,18 +275,7 @@ describe("the invoice at full payment", () => {
         ),
       );
       const [location] = await inTx((tx) =>
-        Promise.resolve(
-          tx.all<{
-            id: string;
-            bumpMode: string;
-            fireControl: string;
-            catalogueId: string | null;
-            timeZone: string;
-            dayCutover: string;
-          }>(
-            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-          ),
-        ),
+        readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]),
       );
       try {
         await inTx(async (tx) =>
@@ -356,18 +340,7 @@ describe("the invoice at full payment", () => {
         ),
       );
       const [location] = await inTx((tx) =>
-        Promise.resolve(
-          tx.all<{
-            id: string;
-            bumpMode: string;
-            fireControl: string;
-            catalogueId: string | null;
-            timeZone: string;
-            dayCutover: string;
-          }>(
-            sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-          ),
-        ),
+        readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]),
       );
       try {
         await inTx(async (tx) =>
@@ -399,18 +372,7 @@ async function withSavedIssueZone<T>(
   issue: () => Promise<T>,
 ): Promise<T> {
   const zones: Record<number, string> = { 60: "Etc/GMT-1", 0: "Etc/UTC", [-480]: "Etc/GMT+8" };
-  const [location] = await Promise.resolve(
-    tx.all<{
-      id: string;
-      bumpMode: string;
-      fireControl: string;
-      catalogueId: string | null;
-      timeZone: string;
-      dayCutover: string;
-    }>(
-      sql`select l.id, l.bump_mode as bumpMode, l.fire_control as fireControl, l.catalogue_id as catalogueId, json_extract(b.doc, '$.timeZone') as timeZone, c.day_cutover as dayCutover from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-    ),
-  );
+  const [location] = await readSettings(tx, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]);
   await tx.run(
     sql`update settings set doc = json_set(doc, '$.timeZone', ${zones[offsetMinutes]}) where module = 'business_day'`,
   );

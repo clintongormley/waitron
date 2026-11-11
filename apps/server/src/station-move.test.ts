@@ -11,7 +11,6 @@ import {
   deviceProfiles,
   kitchenStations,
   incidents,
-  locations,
   orderGroupHoldStations,
   orderGroups,
   printJobs,
@@ -1261,10 +1260,10 @@ describe("release", () => {
         stationStates.mockRestore();
         await inTx(venue, async (tx) => {
           await setStationToday(tx, bar, null, at);
-          await tx
-            .update(locations)
-            .set(clockBefore!)
-            .where(eq(locations.id, venue.cfg.locationId));
+          await tx.run(
+            sql`update settings set doc = json_set(doc, '$.timeZone', ${clockBefore!.timeZone}) where module = 'business_day'`,
+          );
+          await seedBusinessDay(tx, { dayCutover: clockBefore!.dayCutover });
           await tx
             .update(kitchenStations)
             .set({ isDefault: false })

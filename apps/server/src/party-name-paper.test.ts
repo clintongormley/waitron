@@ -10,7 +10,6 @@ import {
   kitchenStations,
   orderGroups,
   parties,
-  locations,
   printJobs,
   printers,
   ticketItems,

@@ -4,14 +4,7 @@ import jsQR from "jsqr";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  locations,
-  printers,
-  printJobs,
-  sales,
-  withTransaction,
-} from "@waitron/db";
+import { deviceProfiles, printers, printJobs, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordSale } from "@waitron/core";

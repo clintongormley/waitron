@@ -7,7 +7,6 @@ import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  locations,
   settings as businessDaySettingsTable,
   dayCutoverChanges,
   newId,

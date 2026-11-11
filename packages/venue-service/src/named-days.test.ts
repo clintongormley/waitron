@@ -289,7 +289,7 @@ describe("special-days Calendar model", () => {
 });
 
 it("returns the country's area options and the chosen venue area without inventing a geography", async () => {
-  const f = await fixture();
+  await fixture();
   await run(async (tx) => {
     await tx
       .insert(tenants)

@@ -7,7 +7,6 @@ import {
   deviceProfiles,
   devices,
   floorZones,
-  locations,
   sales,
   workingOrders,
   workingOrderLines,

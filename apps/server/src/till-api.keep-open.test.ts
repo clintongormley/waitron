@@ -4,13 +4,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  deviceProfiles,
-  floorZones,
-  locations,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { deviceProfiles, floorZones, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCatalogue, addProductToMenu } from "@waitron/catalogue";

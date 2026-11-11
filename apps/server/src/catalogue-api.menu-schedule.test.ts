@@ -23,7 +23,6 @@ const DAY_AFTER_AT = "2026-10-09T06:00:00.000Z";
 const AFTERNOON = { date: "2026-10-07", time: "16:00" };
 const AFTERNOON_AT = "2026-10-07T14:00:00.000Z";
 
-let locationId: string;
 let managerId: string;
 let managerCookie: string;
 let staffCookie: string;
@@ -43,7 +42,7 @@ const suite = useVenueDb({
       operationDescription: "Venta",
       timeZone: "Europe/Madrid",
     });
-    locationId = await venueLocationId(db);
+    await venueLocationId(db);
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await tx
         .insert(persons)

@@ -2369,7 +2369,7 @@ describe("department service periods", () => {
   });
 
   it("gives the opening-hours editor the venue clock for special-date notes", async () => {
-    const v = await serviceVenue();
+    await serviceVenue();
     const model = await scoped((tx) => readOpeningHoursModel(tx, AT));
     expect(model).toMatchObject({ timeZone: "Europe/Madrid", clockReadable: true });
     await db.run(

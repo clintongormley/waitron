@@ -1,8 +1,9 @@
+import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, newId, type Transaction, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, newId, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
@@ -136,13 +137,8 @@ it("returns an empty own inbox and one compatible subject revision for day and i
     revision: await run((tx) => readAttendanceRevision(tx, personId)),
     prompts: [],
     items: [],
-    timeZone: (
-      await Promise.resolve(
-        suite.db.all<{ timeZone: string }>(
-          sql`select json_extract(b.doc, '$.timeZone') as timeZone from locations l join settings b on b.module = 'business_day' join day_cutover_changes c on c.effective_business_day = '2000-01-01'`,
-        ),
-      )
-    )[0]!.timeZone,
+    timeZone: (await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc]))[0]!
+      .timeZone,
   });
   expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);

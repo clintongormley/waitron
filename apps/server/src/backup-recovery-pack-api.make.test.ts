@@ -13,12 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   insertRecoveryPack,
-  locations,
   readRecoveryPacks,
   setNodePublicKey,
   stampDeployment,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

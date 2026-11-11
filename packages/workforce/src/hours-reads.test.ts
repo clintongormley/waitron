@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { locations, newId } from "@waitron/db";
+import { newId } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { type BusinessDayClock } from "@waitron/shared";

@@ -2,7 +2,7 @@ import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, startManagementSession } from "@waitron/identity";

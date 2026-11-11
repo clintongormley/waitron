@@ -1,13 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  invoiceSeries,
-  locations,
-  sales,
-  tenants,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { invoiceSeries, sales, tenants, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

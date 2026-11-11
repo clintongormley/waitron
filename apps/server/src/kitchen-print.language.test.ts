@@ -17,7 +17,6 @@ import {
   workingOrders,
   workingOrderLines,
   products,
-  locations,
   tenants,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

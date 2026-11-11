@@ -2,14 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  dailyCloseChain,
-  dailyCloses,
-  locations,
-  sales,
-  withTransaction,
-  readVenueClock,
-} from "@waitron/db";
+import { dailyCloseChain, dailyCloses, sales, withTransaction, readVenueClock } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addDecimal, decimal, saleId as brandSaleId } from "@waitron/shared";

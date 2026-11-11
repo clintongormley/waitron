@@ -10,7 +10,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   invoiceSeries,
-  locations,
   parties,
   printJobs,
   sales,

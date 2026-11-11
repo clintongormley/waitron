@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   floorZones,
-  locations,
   seasons,
   withTransaction,
   type Transaction,

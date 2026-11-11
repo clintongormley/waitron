@@ -1129,11 +1129,11 @@ product failures.
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: 5d–5h of A1308's slice 5; the backup screen's folder wording goes with
+  slices. Still open: 5e–5h of A1308's slice 5; the backup screen's folder wording goes with
   the venue-id work.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
-  `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings` and `seedWorkingOrder`.
+  `@waitron/db/testing/seed.js` has `seedVenue`, `seedVenueSettings`, `seedBusinessDay` and `seedWorkingOrder`.
   S18 is planned in six sub-slices
   ([S18 plan](../superpowers/plans/2026-11-04-a1301-s18-contract-cleanup.md)). S18c (#2443),
   S18a (#2447), S18b (#2450), S18d (#2451, #2453) and S18f (#2467) have landed. The owner decided on 2026-11-02 what the venue id sent to Cloud and naming the backup

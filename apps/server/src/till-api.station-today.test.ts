@@ -12,7 +12,6 @@ import {
   ticketItemMoves,
   workingOrderLines,
   workingOrders,
-  locations,
   devices,
   deviceProfiles,
   withTransaction,

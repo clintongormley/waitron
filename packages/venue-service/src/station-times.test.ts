@@ -7,7 +7,6 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  locations,
   dayCutoverChanges,
   stationDayStates,
   tenants,

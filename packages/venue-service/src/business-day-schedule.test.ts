@@ -464,7 +464,7 @@ describe("business-day schedule compatibility", () => {
 });
 describe("schedule clock guard", () => {
   it("allows time writes while a change waits, allows metadata, and retains revision after cancellation", async () => {
-    const v = await fixture([]);
+    await fixture([]);
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -514,7 +514,7 @@ describe("service boundaries remain chronological", () => {
 });
 
 describe("every time writer stays open while a change waits", () => {
-  async function pending(v: Awaited<ReturnType<typeof fixture>>) {
+  async function pending(_v: Awaited<ReturnType<typeof fixture>>) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -579,7 +579,7 @@ describe("every time writer stays open while a change waits", () => {
 });
 
 describe("a waiting change checks the hours written while it waits", () => {
-  async function waiting(v: Awaited<ReturnType<typeof fixture>>, dayCutover = "03:00") {
+  async function waiting(_v: Awaited<ReturnType<typeof fixture>>, dayCutover = "03:00") {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1310,7 +1310,7 @@ describe("inForceClock", () => {
 
 describe("undated hours are checked against the start in force", () => {
   /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28. */
-  async function hoursBack(v: { cfg: { locationId: string } }) {
+  async function hoursBack(_v: { cfg: { locationId: string } }) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1329,7 +1329,7 @@ describe("undated hours are checked against the start in force", () => {
     });
   }
   /** 05:00, then 03:00 from 2026-10-21. */
-  async function startMovedBack(v: { cfg: { locationId: string } }) {
+  async function startMovedBack(_v: { cfg: { locationId: string } }) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1532,7 +1532,7 @@ describe("undated hours are checked against the start in force", () => {
 });
 
 it("hours models carry the baseline timeline, revision and pending status across activation", async () => {
-  const v = await fixture([]);
+  await fixture([]);
   await withTransaction(suite.db, async (tx) => {
     await tx
       .update(businessDaySettingsTable)
@@ -1563,7 +1563,7 @@ it("hours models carry the baseline timeline, revision and pending status across
 });
 
 describe("schedule authoring retains date-specific starts", () => {
-  async function activated(v: Awaited<ReturnType<typeof fixture>>) {
+  async function activated(_v: Awaited<ReturnType<typeof fixture>>) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1638,7 +1638,7 @@ describe("schedule authoring retains date-specific starts", () => {
 
 describe("dated calendar authoring after activation", () => {
   const after = new Date("2026-11-05T12:00:00Z");
-  async function activated(v: Awaited<ReturnType<typeof fixture>>) {
+  async function activated(_v: Awaited<ReturnType<typeof fixture>>) {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1673,7 +1673,7 @@ describe("dated calendar authoring after activation", () => {
 });
 
 describe("dated runtime service across a moved changeover", () => {
-  async function timeline(v: Awaited<ReturnType<typeof fixture>>, time: string) {
+  async function timeline(_v: Awaited<ReturnType<typeof fixture>>, time: string) {
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(dayCutoverChanges).values({
         effectiveBusinessDay: E,

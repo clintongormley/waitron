@@ -19,7 +19,6 @@ import {
   floorTodayTables,
   floorTodayZones,
   floorZones,
-  locations,
   dayCutoverChanges,
   joinedTableApart,
   shortNameColumns,

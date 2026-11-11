@@ -3,7 +3,7 @@ import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -30,7 +30,7 @@ const suite = useVenueDb({
 });
 it("an admitted future cutover change does not block activity on its already discovered preceding day", async () => {
   const venue = await setupVenue(suite.db);
-  const locationId = venue.cfg.locationId;
+  venue.cfg.locationId;
   await (async () => {
     await seedBusinessDay(suite.db, { dayCutover: "04:00:00" });
     await suite.db.run(
@@ -120,7 +120,7 @@ it("an admitted future cutover change does not block activity on its already dis
 
 it("a Save that moves today's end makes attendance evaluate today up to the new end", async () => {
   const venue = await setupVenue(suite.db);
-  const locationId = venue.cfg.locationId;
+  venue.cfg.locationId;
   await (async () => {
     await seedBusinessDay(suite.db, { dayCutover: "04:00:00" });
     await suite.db.run(

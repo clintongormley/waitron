@@ -455,7 +455,7 @@ describe("reading Hours", () => {
   });
 
   it("limits the Calendar to its requested range", async () => {
-    const fx = await fixture();
+    await fixture();
     /** Sunday 6 October 2030, 12:00 in Madrid. */
     const at = new Date("2030-10-06T10:00:00Z");
     const days: Record<string, string> = {};
