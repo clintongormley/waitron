@@ -63,3 +63,51 @@ it("lists a bundled package only once when several modules use it", () => {
   const content = notices.bundledNpmNotices([lit, lit]);
   expect(content.match(/===== lit 3\.3\.3 — LICENSE =====/g)).toHaveLength(1);
 });
+
+it("walks past a manifest that only sets the module type to the package's own manifest", () => {
+  const dir = mkdtempSync(join(tmpdir(), "waitron-notice-typed-"));
+  try {
+    const pkg = join(dir, "node_modules/typed-package");
+    mkdirSync(join(pkg, "cjs"), { recursive: true });
+    writeFileSync(join(pkg, "package.json"), '{"name":"typed-package","version":"4.5.6"}');
+    writeFileSync(join(pkg, "LICENSE"), "Typed package licence text\n");
+    writeFileSync(join(pkg, "cjs/package.json"), '{"type":"commonjs"}');
+    writeFileSync(join(pkg, "cjs/index.js"), "exports.value = 1;\n");
+    const content = notices.bundledNpmNotices([join(pkg, "cjs/index.js")]);
+    expect(content).toContain("===== typed-package 4.5.6 — LICENSE =====");
+    expect(content).toContain("Typed package licence text\n");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  ["stripe 23.1.0", "stripe", ["cjs/stripe.cjs.node.js", "esm/stripe.esm.node.js"]],
+  ["nodemailer 10.3.1", "nodemailer", ["dist/cjs/nodemailer.js", "dist/esm/nodemailer.js"]],
+])("emits %s's licence for its CommonJS and ESM entries", (label, name, entries) => {
+  const pkg = realpathSync(join(ROOT, "apps/server/node_modules", name));
+  for (const entry of entries) {
+    const content = notices.bundledNpmNotices([join(pkg, entry)]);
+    expect(
+      content.match(new RegExp(`===== ${label.replaceAll(".", "\\.")} — LICENSE =====`, "g")),
+    ).toHaveLength(1);
+    expect(content).toContain(readFileSync(join(pkg, "LICENSE"), "utf8"));
+  }
+});
+
+it("still leaves out a workspace source below a manifest that only sets the module type", () => {
+  const dir = mkdtempSync(join(tmpdir(), "waitron-notice-workspace-typed-"));
+  try {
+    const pkg = join(dir, "node_modules/x");
+    mkdirSync(join(pkg, "src"), { recursive: true });
+    writeFileSync(join(pkg, "package.json"), '{"name":"@waitron/x","version":"0.0.0"}');
+    writeFileSync(join(pkg, "LICENSE"), "Workspace licence text\n");
+    writeFileSync(join(pkg, "src/package.json"), '{"type":"module"}');
+    writeFileSync(join(pkg, "src/index.js"), "export const value = 1;\n");
+    const content = notices.bundledNpmNotices([join(pkg, "src/index.js")]);
+    expect(content).toContain("No bundled npm packages.");
+    expect(content).not.toContain("@waitron/x");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -745,6 +745,8 @@ still block Start again on this path.
 
 _2026-11-11, A1089 slice 1: the resetting message now names pressing Reset this server again instead of support; a reset that never takes effect is still open._
 
+_2026-11-11, A1089 B3 dropped: a probe on main 3c064196a1 stopped the real join (`/setup-api/adopt`) at each of its five writes, then ran the staged reset. The reset was dropped only when stopped just after `trading.env` was written; that file sets `WAITRON_NODE_ID` (`apps/server/src/trading-config.ts:34`), and setup mode needs it unset (`apps/server/src/node-config.ts:36`, `apps/server/src/boot.ts:1345`). The probe did not try damaged files. Its steps are in the A1494 pull request._
+
 ### setup-readiness
 
 **Setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.

@@ -9,8 +9,10 @@ function packageForModule(id) {
   let directory = dirname(realpathSync(resolve(id.split("?")[0])));
   while (true) {
     const manifest = join(directory, "package.json");
-    if (existsSync(manifest)) {
-      const { name, version } = JSON.parse(readFileSync(manifest, "utf8"));
+    const { name, version } = existsSync(manifest)
+      ? JSON.parse(readFileSync(manifest, "utf8"))
+      : {};
+    if (name !== undefined || version !== undefined) {
       if (name?.startsWith("@waitron/")) return null;
       if (directory.includes("node_modules") && name && version)
         return { directory, name, version };
