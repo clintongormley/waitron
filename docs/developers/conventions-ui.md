@@ -1472,7 +1472,8 @@ the unchanged Start again guesses file under a fixed recovery UUID. Switching re
 resets that counter; retries and restarts within this recovery keep it.
 
 The entry/restart test runs three real refused boots before using the recovery page, then opens
-first setup over HTTPS with the retained CA. The preservation and interrupted-Move tests use
+first setup over HTTPS with the retained CA and previews an encrypted backup after rejecting the
+wrong environment. The unfinished-Move page also offers a read-only Stop answer. The preservation and interrupted-Move tests use
 filesystem fault injection, not a physical power cut.
 
 ## Printed documents take the printer's own layout settings

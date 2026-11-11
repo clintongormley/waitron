@@ -239,12 +239,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "Start again has not finished.",
       action:
-        "Some files may already be set aside. Retry a normal boot to finish moving them before first setup starts.",
+        "Some files may already be set aside. Retry a normal boot to try finishing the recorded move before first setup starts, or Stop and keep the files.",
     },
     "es-ES": {
       title: "Empezar de nuevo no ha terminado.",
       action:
-        "Puede que algunos archivos ya estén apartados. Reintenta un arranque normal para terminar de moverlos antes de empezar la configuración inicial.",
+        "Puede que algunos archivos ya estén apartados. Reintenta un arranque normal para intentar terminar el traslado antes de empezar la configuración inicial, o para y conserva los archivos.",
     },
   },
   "deployment.environment_mismatch": {
@@ -252,7 +252,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       title:
         "This box and its database do not belong to the same system: one is set up for real sales, the other for testing.",
       action:
-        "If the host settings are wrong, Stop and correct them, then retry. Otherwise, choose Start again over the secure connection to move this database aside and start fresh or choose another backup.",
+        "If the host settings are wrong, leave these files as they are, correct the settings and retry. Otherwise, choose Start again over the secure connection to move this database aside and start fresh or choose another backup.",
     },
     "es-ES": {
       title:
@@ -558,5 +558,42 @@ export const GENERIC_TEXT: OperatorText = {
   "es-ES": {
     title: "Waitron no ha podido arrancar.",
     action: "Pide a quien instaló este equipo que lo revise.",
+  },
+};
+
+export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
+  Record<
+    SupportedLocale,
+    {
+      move: string;
+      stop: string;
+      stopped: string;
+      unfinishedStopped: string;
+      detail: string;
+      wrong: string;
+    }
+  >
+> = {
+  "en-GB": {
+    move: "Start again",
+    stop: "Stop",
+    stopped: "Nothing was changed. You can correct the host settings and retry.",
+    unfinishedStopped:
+      "Waitron is still stopped. No further files were moved. Keep the set-aside files and the remaining files on this box.",
+    detail:
+      "Move this venue's files aside, unchanged. The box then starts first setup, where you can start fresh or choose another backup.",
+    wrong:
+      "The administrator password could not be verified. Nothing was moved. Check it and try again.",
+  },
+  "es-ES": {
+    move: "Empezar de nuevo",
+    stop: "Parar",
+    stopped: "No se ha cambiado nada. Puedes corregir la configuración del equipo y reintentar.",
+    unfinishedStopped:
+      "Waitron sigue parado. No se han movido más archivos. Conserva los archivos apartados y los que quedan en este equipo.",
+    detail:
+      "Apartar los archivos de este local, sin cambios. El equipo empieza la configuración inicial, donde puedes empezar de cero o elegir otra copia de seguridad.",
+    wrong:
+      "No se ha podido verificar la contraseña de administrador. No se ha movido nada. Revísala y vuelve a intentarlo.",
   },
 };

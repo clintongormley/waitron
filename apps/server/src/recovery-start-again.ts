@@ -1,3 +1,4 @@
+import { ENVIRONMENT_RECOVERY_TEXT } from "./i18n/recovery-page.js";
 import type { ServerResponse } from "node:http";
 import { TLSSocket } from "node:tls";
 import type { Context, Hono } from "hono";
@@ -545,24 +546,7 @@ export function renderEnvironmentSection(input: {
 }): string {
   const { locale, secure, message } = input;
   const shared = START_AGAIN_PAGE_TEXT[locale];
-  const text =
-    locale === "en-GB"
-      ? {
-          move: "Start again",
-          stop: "Stop",
-          detail:
-            "Move this venue's files aside, unchanged. The box then starts first setup, where you can start fresh or choose another backup.",
-          wrong:
-            "The administrator password could not be verified. Nothing was moved. Check it and try again.",
-        }
-      : {
-          move: "Empezar de nuevo",
-          stop: "Parar",
-          detail:
-            "Apartar los archivos de este local, sin cambios. El equipo empieza la configuración inicial, donde puedes empezar de cero o elegir otra copia de seguridad.",
-          wrong:
-            "No se ha podido verificar la contraseña de administrador. No se ha movido nada. Revísala y vuelve a intentarlo.",
-        };
+  const text = ENVIRONMENT_RECOVERY_TEXT[locale];
   if (message?.kind === "moved") return `<p>${escapeHtml(shared.moved(message.folder))}</p>`;
   const passwordError =
     message?.kind === "wrongPassword"

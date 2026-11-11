@@ -1,3 +1,5 @@
+import type { Logger } from "./logger.js";
+import { errnoOf } from "./errno.js";
 import type { ServerResponse } from "node:http";
 import type { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -164,7 +166,15 @@ export function mountEnvironmentChoice(
   app: Hono,
   deps: EnvironmentRecoveryDeps,
   render: (view: EnvironmentView) => Promise<string>,
+  log?: Logger,
 ) {
+  const record = (level: "info" | "warn", event: string, fields: Record<string, unknown>) => {
+    try {
+      log?.(level, event, fields);
+    } catch {
+      /* The completed choice must still be answered. */
+    }
+  };
   let completed = false;
   let unfinished = false;
   app.post("/recovery-api/environment/start-again", async (c) => {
@@ -205,6 +215,7 @@ export function mountEnvironmentChoice(
       const folder = await chooseEnvironmentMove(deps, password);
       completed = true;
       const result = await answer(200, { kind: "moved", folder });
+      record("info", "recovery.environment_moved", { folder });
       const outgoing = (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
       afterResponse(outgoing, () => void deps.onFinished());
       return result;
@@ -220,6 +231,13 @@ export function mountEnvironmentChoice(
         return answer(403, { kind: "wrongPassword" });
       if (isAppError(error) && hasCode(error, "setup.not_ready"))
         return answer(409, { kind: "notOffered" });
+      record("warn", "recovery.environment_move_failed", {
+        errorCode: isAppError(error) ? error.code : null,
+        errno: errnoOf(error) ?? null,
+        reason: isAppError(error) ? (error.reason ?? null) : null,
+      });
+      if (isAppError(error) && hasCode(error, "setup.start_again_set_aside_unavailable"))
+        return answer(409, { kind: "moveUnavailable" });
       if (isAppError(error) && hasCode(error, "setup.environment_move_unfinished"))
         unfinished = true;
       return answer(409, { kind: "notFinished" });

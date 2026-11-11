@@ -16,13 +16,22 @@ import {
   stampDeployment,
   lockVenueDatabase,
   persons,
+  tenants,
+  locations,
+  nodes,
   type Database,
   type DeploymentEnvironment,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
+import { seedNonproductionHistory } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { beginEnvironmentMove } from "@waitron/provisioning";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
+import { seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { encryptArtifact } from "./artifact-cipher.js";
+import { packArchive } from "./backup-archive.js";
+import { nodeDumpEntry } from "./testing/node-copy.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { ENVIRONMENT_RECOVERY_TEXT } from "./i18n/recovery-page.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { BOX_LEAF_HOSTNAMES } from "./box-name.js";
 import { hashPassword } from "@waitron/identity";
@@ -31,7 +40,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 
-const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
@@ -48,7 +57,7 @@ it.each([
   const html = await (await surface.request("/")).text();
   expect(html).toContain("deployment.environment_mismatch");
   expect(html).toContain("Start again");
-  expect(html).toContain("Stop");
+  expect(html).toContain("secure connection");
   expect((await readRecoveryState(f.stateDir)).failures).toBe(3);
 });
 
@@ -72,6 +81,7 @@ async function recoveryFixture(
   await database.archiveTo(join(venueDir, "venue.db"));
   let original = await readFile(join(venueDir, "venue.db"));
   const exit = vi.fn();
+  const log = vi.fn();
   const startServer = vi.fn(async () => ({ close: async () => {} }));
   const baseEnv: NodeJS.ProcessEnv = {
     WAITRON_ENV: "production",
@@ -101,7 +111,7 @@ async function recoveryFixture(
       },
       scheduleStayedUp: () => {},
       installShutdownHandlers: () => {},
-      log: () => {},
+      log,
     };
     if (
       !(await stat(join(stateDir, "recovery.json")).then(
@@ -127,6 +137,7 @@ async function recoveryFixture(
     boot,
     exit,
     startServer,
+    log,
     baseEnv,
   };
 }
@@ -169,6 +180,9 @@ it("moves the installed database unchanged and requests a restart", async () => 
   expect(response.status).toBe(200);
   expect(await response.text()).toContain("Start again has finished");
   expect(f.exit).toHaveBeenCalledWith(0);
+  expect(f.log).toHaveBeenCalledWith("info", "recovery.environment_moved", {
+    folder: expect.stringContaining("state/records/set-aside/"),
+  });
   expect(f.startServer).not.toHaveBeenCalled();
   await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
   const [stem] = await readdir(join(f.stateDir, "records/set-aside"));
@@ -279,7 +293,7 @@ it("offers the password and safe Stop in English and Spanish only over HTTPS", a
 describe("unstamped non-production history", () => {
   const history = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
   it("uses the fiscal contribution before offering the installed venue Move", async () => {
-    await seedPendingEnvios(history.db, { count: 1, entorno: "preproduction" });
+    await seedNonproductionHistory(history.db);
     const f = await recoveryFixture("admin", "active", history.db, false);
     const app = await f.boot();
     expect(await (await app.request("/")).text()).toContain("deployment.environment_mismatch");
@@ -291,7 +305,7 @@ describe("unstamped non-production history", () => {
   });
 });
 
-it("boots real HTTPS first setup after Move, with fresh setup and the backup picker available", async () => {
+it("boots real HTTPS first setup after Move and previews another backup", async () => {
   const f = await recoveryFixture();
   // Here the saved file selects production; after Move the real process has no environment override.
   delete f.baseEnv.WAITRON_ENV;
@@ -305,6 +319,46 @@ it("boots real HTTPS first setup after Move, with fresh setup and the backup pic
   await writeFile(join(f.stateDir, "trading.env"), "WAITRON_ENV=production\n");
   const app = await f.boot();
   expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(200);
+  const sourceNode = "ca278f55-6259-4658-a90c-faf628c0441b";
+  const sourceLocation = "5a1f0110-2d83-4db4-86d5-89a166d60799";
+  await suite.db
+    .insert(tenants)
+    .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Selected business" });
+  await suite.db
+    .insert(locations)
+    .values({ id: sourceLocation, operationDescription: "Restaurant" });
+  await seedVenueSettings(suite.db, { name: "Selected venue", invoiceLocales: ["en-GB"] });
+  await suite.db
+    .insert(nodes)
+    .values({ id: sourceNode, locationId: sourceLocation, name: "Selected box" });
+  const sourceCopy = join(f.stateDir, "selected.db");
+  await suite.db.archiveTo(sourceCopy);
+  const archiveKey = "synthetic-archive-key";
+  const artifact = encryptArtifact(
+    packArchive([
+      {
+        name: "manifest.json",
+        bytes: Buffer.from(
+          JSON.stringify({
+            manifestVersion: 1,
+            createdAt: new Date().toISOString(),
+            environment: "preproduction",
+            modules: { core: 0, node: 0 },
+          }),
+        ),
+      },
+      { name: "db.dump", bytes: await readFile(sourceCopy) },
+      await nodeDumpEntry(suite.node, f.stateDir),
+      { name: "secrets/trading.env", bytes: Buffer.from(`WAITRON_NODE_ID=${sourceNode}\n`) },
+      { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
+      { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
+      {
+        name: "secrets/credentials.key",
+        bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
+      },
+    ]),
+    archiveKey,
+  );
   const migrations = join(f.stateDir, "test-migrations");
   await copyMigrationsRoot(migrations);
   const held = await retainHttpListener();
@@ -355,17 +409,27 @@ it("boots real HTTPS first setup after Move, with fresh setup and the backup pic
     });
     const claim = await request("/setup-api/first-setup/status");
     expect(await claim.json()).toMatchObject({ claimed: false });
-    const preview = await request("/setup-api/restore/preview", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "x-waitron-recovery-key": "synthetic-key",
-        "x-waitron-restore-environment": "preproduction",
-      },
-      body: new Uint8Array([1, 2, 3]),
+    const preview = (environment: string) =>
+      request("/setup-api/restore/preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "x-waitron-recovery-key": archiveKey,
+          "x-waitron-restore-environment": environment,
+        },
+        body: new Uint8Array(artifact),
+      });
+    const wrong = await preview("production");
+    expect(wrong.status).toBe(409);
+    expect(await wrong.json()).toMatchObject({ error: { code: "restore.environment_mismatch" } });
+    const selected = await preview("preproduction");
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toMatchObject({
+      nodeId: sourceNode,
+      environment: "preproduction",
+      taxpayer: { legalName: "Selected business", taxId: "89890001K" },
+      venueName: "Selected venue",
     });
-    expect(preview.status).toBe(422);
-    expect(await preview.json()).toMatchObject({ error: { code: "backup.artifact_invalid" } });
     expect(await readFile(join(f.stateDir, "tls/ca.crt"))).toEqual(ca);
   } finally {
     adoption.restore();
@@ -408,4 +472,53 @@ it("resumes a recorded Move before inspecting the old setup claim", async () => 
       "utf8",
     ),
   ).toBe("old claim");
+});
+
+it("explains and logs an unavailable Move without moving the database", async () => {
+  const f = await recoveryFixture();
+  const app = await f.boot();
+  await writeFile(join(f.stateDir, "records"), "retained non-folder");
+  const response = await post(app, { choice: "move", password: PASSWORD });
+  expect(response.status).toBe(409);
+  expect(await response.text()).toContain("cannot be moved aside");
+  expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
+  expect(f.log).toHaveBeenCalledWith(
+    "warn",
+    "recovery.environment_move_failed",
+    expect.objectContaining({ errorCode: "setup.start_again_set_aside_unavailable" }),
+  );
+  expect(JSON.stringify(f.log.mock.calls)).not.toContain(PASSWORD);
+});
+
+it("rechecks a corrected saved environment before moving the installed database", async () => {
+  const f = await recoveryFixture();
+  delete f.baseEnv.WAITRON_ENV;
+  await writeFile(join(f.stateDir, "trading.env"), "WAITRON_ENV=production\n");
+  const app = await f.boot();
+  await writeFile(join(f.stateDir, "trading.env"), "WAITRON_ENV=preproduction\n");
+  const response = await post(app, { choice: "move", password: PASSWORD });
+  expect(response.status).toBe(409);
+  expect(await response.text()).toContain("no longer offered");
+  expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
+  expect(f.exit).not.toHaveBeenCalled();
+  await expect(
+    stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("Stop on an unfinished Move draws a stopped answer without changing its files", async () => {
+  const f = await recoveryFixture();
+  await f.boot();
+  await writeFile(join(f.stateDir, "environment-recovery-move.json"), "{}");
+  const app = await f.boot();
+  const page = await (await app.request("/")).text();
+  expect(page).toContain('name="stop" value="1"');
+  const before = (await readdir(f.stateDir)).sort();
+  const answer = await (await app.request("/?stop=1")).text();
+  expect(answer).toContain(ENVIRONMENT_RECOVERY_TEXT["en-GB"].unfinishedStopped);
+  expect(answer).not.toContain('action="/recovery-api/retry"');
+  expect(await readFile(join(f.stateDir, "environment-recovery-move.json"), "utf8")).toBe("{}");
+  expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
+  expect((await readdir(f.stateDir)).sort()).toEqual(before);
+  expect(f.startServer).not.toHaveBeenCalled();
 });

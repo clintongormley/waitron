@@ -9,6 +9,7 @@ import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provi
 import type { Statfs } from "./free-bytes.js";
 import {
   GENERIC_TEXT,
+  ENVIRONMENT_RECOVERY_TEXT,
   HOLDER_STALLED,
   OPERATOR_TEXT,
   RECOVERY_PAGE_WORDS,
@@ -206,6 +207,10 @@ function renderPage(
 ): string {
   const page = RECOVERY_PAGE_WORDS[locale];
   const text = operatorText(state)[locale];
+  const stop =
+    state.lastErrorCode === "setup.environment_move_unfinished"
+      ? `<form method="get" action="/"><button type="submit" name="stop" value="1">${escapeHtml(ENVIRONMENT_RECOVERY_TEXT[locale].stop)}</button></form>\n`
+      : "";
   const refused = state.refused === true;
   const heading = refused ? page.stoppedHeading : page.heading;
   const status = refused
@@ -238,7 +243,7 @@ function renderPage(
 ${section}<form method="post" action="/recovery-api/retry">
 <button type="submit">${escapeHtml(page.retry)}</button>
 </form>
-`;
+${stop}`;
   return `<!doctype html>
 <html lang="${locale}">
 <head>
@@ -331,9 +336,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
         view.locale,
         freeBytes,
         deps.state,
-        view.locale === "en-GB"
-          ? "<p>Nothing was changed. You can correct the host settings and retry.</p>"
-          : "<p>No se ha cambiado nada. Puedes corregir la configuración del equipo y reintentar.</p>",
+        `<p>${escapeHtml(ENVIRONMENT_RECOVERY_TEXT[view.locale].stopped)}</p>`,
       );
     return renderPage(deps, log, view.locale, freeBytes, deps.state, section, environmentAnswer);
   };
@@ -343,6 +346,23 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
+    if (
+      c.req.query("stop") === "1" &&
+      (environmentUnfinished || deps.state.lastErrorCode === "setup.environment_move_unfinished")
+    ) {
+      const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+      return c.html(
+        renderPage(
+          deps,
+          log,
+          locale,
+          freeBytes,
+          deps.state,
+          "",
+          `<p>${escapeHtml(ENVIRONMENT_RECOVERY_TEXT[locale].unfinishedStopped)}</p>`,
+        ),
+      );
+    }
     return c.html(await draw({ locale, secure: isSecure(c) }));
   });
 
@@ -352,7 +372,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     });
 
   if (deps.environment !== undefined)
-    mountEnvironmentChoice(app, deps.environment, drawEnvironment);
+    mountEnvironmentChoice(app, deps.environment, drawEnvironment, deps.log);
 
   // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {
