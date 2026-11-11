@@ -162,8 +162,22 @@ async function correct(saleId: SaleId, gross: string) {
   ];
 }
 
-/** Fixes the refused version `registroId` through the real remedy route to 10%, base €11.00. */
-async function fixAt10(registroId: string) {
+const AT_10 = {
+  breakdown: [
+    {
+      ClaveRegimen: "01",
+      CalificacionOperacion: "S1",
+      TipoImpositivo: "10.00",
+      BaseImponibleOimporteNoSujeto: "11.00",
+      CuotaRepercutida: "1.10",
+    },
+  ],
+  taxTotal: "1.10",
+  total: "12.10",
+};
+
+/** Fixes the refused version `registroId` through the real remedy route, by default to 10%. */
+async function fixAt10(registroId: string, facts: object = AT_10) {
   vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
   vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
   vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
@@ -211,19 +225,7 @@ async function fixAt10(registroId: string) {
       registroId,
       actionKey: "fix-at-10",
       reason: "Filed at the wrong VAT rate",
-      facts: {
-        breakdown: [
-          {
-            ClaveRegimen: "01",
-            CalificacionOperacion: "S1",
-            TipoImpositivo: "10.00",
-            BaseImponibleOimporteNoSujeto: "11.00",
-            CuotaRepercutida: "1.10",
-          },
-        ],
-        taxTotal: "1.10",
-        total: "12.10",
-      },
+      facts,
     }),
   });
   expect(fixed.status).toBe(200);
@@ -340,11 +342,10 @@ it("refunds the fixed dish in two halves at 10%", async () => {
   expect(await agencyRates(saleId)).toEqual({ "10.00": [0, 0] });
 });
 
-it("cancels a dish whose fix at 10% the agency accepted by filing that split, leaving every rate at zero", async () => {
-  const saleId = await soldThenFixedAt10();
+/** Files the whole-invoice credit `creditWholeInvoice` (apps/server) files: the lines reversed one for one. */
+async function cancel(saleId: SaleId) {
   const [line] = await suite.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
 
-  // The whole-invoice credit `creditWholeInvoice` (apps/server) files: the lines reversed one for one.
   const { saleId: creditId } = await withTransaction(suite.db, (tx) =>
     recordCorrection(tx, backend, {
       origin: deviceOrigin(deviceId),
@@ -367,9 +368,8 @@ it("cancels a dish whose fix at 10% the agency accepted by filing that split, le
     }),
   );
   const after = await snapshot(creditId);
-
   expect(validate(fromRegistroRow(after.registro), { now: steadyClock.now().instant })).toEqual([]);
-  expect([
+  return [
     after.sale.vatBreakdown.map(({ rate, base, tax }) => [rate, base, tax]),
     after.lines.map((row) => [row.vatRate, row.lineTotal, row.lineGross]),
     after.registro.desglose?.map((group) => [
@@ -377,10 +377,41 @@ it("cancels a dish whose fix at 10% the agency accepted by filing that split, le
       group.BaseImponibleOimporteNoSujeto,
       group.CuotaRepercutida,
     ]),
-  ]).toEqual([
+  ];
+}
+
+it("cancels a dish whose fix at 10% the agency accepted by filing that split, leaving every rate at zero", async () => {
+  const saleId = await soldThenFixedAt10();
+
+  expect(await cancel(saleId)).toEqual([
     [["10.00", "-11.00", "-1.10"]],
     [[2100, -1000, -1210]],
     [["10.00", "-11.00", "-1.10"]],
   ]);
   expect(await agencyRates(saleId)).toEqual({ "10.00": [0, 0] });
+});
+
+it("cancels at the stored split when the agency refused a fix whose split Waitron does not read", async () => {
+  const { saleId, before } = await sell("12.10");
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: "1161" })
+    .where(eq(envios.registroId, before.registro.id));
+  await fixAt10(before.registro.id, {
+    breakdown: [
+      { ClaveRegimen: "01", OperacionExenta: "E1", BaseImponibleOimporteNoSujeto: "12.10" },
+    ],
+    taxTotal: "0.00",
+    total: "12.10",
+  });
+  await suite.db
+    .update(envios)
+    .set({ estado: "rechazado", codigoError: "1161" })
+    .where(ne(envios.registroId, before.registro.id));
+
+  expect(await cancel(saleId)).toEqual([
+    [["21.00", "-10.00", "-2.10"]],
+    [[2100, -1000, -1210]],
+    [["21.00", "-10.00", "-2.10"]],
+  ]);
 });

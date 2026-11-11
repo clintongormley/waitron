@@ -71,7 +71,8 @@ export interface FiledVersionFigures {
  * accepted (null when none has been). `newestAwaitingAnswer` is false once the authority has
  * accepted or refused the newest version. Unreadable when the versions are not one line of fixes,
  * or a version's split is not one the regime itself files for an ordinary taxed sale (one base and
- * VAT per rate, nothing else), or does not sum to its totals.
+ * VAT per rate, nothing else), or does not sum to its totals; a refused version with such a split
+ * is read as if it were absent.
  */
 export type FiledFigures =
   | {

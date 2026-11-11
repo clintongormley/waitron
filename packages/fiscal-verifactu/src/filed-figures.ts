@@ -75,7 +75,13 @@ function figuresOf(versions: readonly Version[]): FiledFigures {
   while (answered !== undefined && !ANSWERED.has(answered.estado ?? "")) {
     answered = byId.get(answered.corrects_registro_id ?? "");
   }
-  const newest = versionFigures(latest[0]!);
+  // A refused version's figures are read as if it were absent: AEAT holds none of them.
+  let shown: Version | undefined = latest[0];
+  let newest = versionFigures(shown!);
+  while (newest === undefined && shown?.estado === "rechazado") {
+    shown = byId.get(shown.corrects_registro_id ?? "");
+    newest = shown === undefined ? undefined : versionFigures(shown);
+  }
   const newestAnswered = answered === undefined ? null : versionFigures(answered);
   if (newest === undefined || newestAnswered === undefined) return { readable: false };
   return {
