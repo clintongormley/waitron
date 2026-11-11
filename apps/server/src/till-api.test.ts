@@ -199,8 +199,8 @@ const suite = useVenueDb({
     const { water, beer, zoneId, offerId, hiddenOfferId, staffMenuId } = await withTransaction(
       db,
       async (tx) => {
-        const cat = await createCatalogue(tx, { name: "Carta" });
-        const drinksCategory = await createCategory(tx, { name: "Bebidas" });
+        const cat = await createCatalogue(tx, { name: "Daily menu" });
+        const drinksCategory = await createCategory(tx, { name: "Drinks" });
         const p = await createProduct(tx, {
           catalogueId: cat.id,
           categoryId: drinksCategory.id,
@@ -2296,7 +2296,7 @@ describe("zone-offer catalogue routes", () => {
     expect(body).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
       defaultMenuId: waterProduct.catalogueId,
-      menus: [{ id: waterProduct.catalogueId, name: "Carta", isDefault: true }],
+      menus: [{ id: waterProduct.catalogueId, name: "Daily menu", isDefault: true }],
       offers: [{ id: waterOfferId, productId: waterProduct.id, grossPrice: "1.75" }],
     });
   });
@@ -2383,7 +2383,7 @@ describe("zone-offer catalogue routes", () => {
     }));
     expect(catalogue).toEqual({
       menus: [
-        { id: waterProduct.catalogueId, name: "Carta", isDefault: true },
+        { id: waterProduct.catalogueId, name: "Daily menu", isDefault: true },
         { id: beerProduct.catalogueId, name: "Happy Hour", isDefault: false },
         { id: hiddenMenuId, name: "Staff", isDefault: false },
       ],
@@ -2396,7 +2396,7 @@ describe("zone-offer catalogue routes", () => {
           unit: eachUnit,
           unitPrice: "1.50",
           vatClass: "general",
-          category: "Bebidas",
+          category: "Drinks",
           allergens: { sulphites: {} },
           // No override: vegan/vegetarian "unknown" — an unreviewed plate asserts no
           // positive diet claim.
@@ -2405,7 +2405,7 @@ describe("zone-offer catalogue routes", () => {
           dietaryDeclarations: [],
           courseId: null,
           catalogueId: waterProduct.catalogueId,
-          catalogueName: "Carta",
+          catalogueName: "Daily menu",
           // `offeredModifiers` is the extras-and-options walk the till draws from
           // (`readOfferedModifiers`), empty here because these seeded products attach nothing.
           offeredModifiers: [],
@@ -2418,7 +2418,7 @@ describe("zone-offer catalogue routes", () => {
           unit: eachUnit,
           unitPrice: "2.50",
           vatClass: "general",
-          category: "Bebidas",
+          category: "Drinks",
           allergens: null,
           // No override → the cautious "unknown" profile (see Agua mineral above).
           diet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
