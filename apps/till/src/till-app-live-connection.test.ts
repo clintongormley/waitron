@@ -15,6 +15,7 @@ import {
   till,
 } from "../test/allergy-app-fixture.js";
 import { liveReadFixture } from "../test/live-connection.js";
+import { ServerRouter } from "./api/server-router.js";
 
 const locale = currentLocale();
 beforeEach(() => {
@@ -25,6 +26,70 @@ afterEach(() => {
   vi.useRealTimers();
   cleanupWidgets();
   setLocale(locale);
+});
+
+it("the till quiets one-box probes on ready and resumes them when its device connection stops", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const stream = liveReadFixture();
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(JSON.stringify({ acceptingSales: true, term: 1, nodeId: "box" })),
+    );
+  const router = new ServerRouter({
+    origin: location.origin,
+    fetchImpl: async (...args) => (await fetchImpl(...args)).clone(),
+    storage: { getItem: () => null, setItem: () => {} },
+  });
+  const probes = vi.spyOn(router, "probeNow");
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  try {
+    el.router = router;
+    await flush(el);
+    router.start();
+    await router.probeNow();
+    stream.event("ready");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    window.dispatchEvent(new Event("pagehide"));
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await probes.mock.results.at(-1)!.value;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    await probes.mock.results.at(-1)!.value;
+    window.dispatchEvent(new Event("pageshow"));
+    stream.event("ready");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    el.remove();
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+  } finally {
+    router.stop();
+  }
+});
+
+it("a stream ending resumes one-box probes immediately", async () => {
+  const stream = liveReadFixture();
+  const router = new ServerRouter({
+    origin: location.origin,
+    fetchImpl: async () => new Response(JSON.stringify({ acceptingSales: true, term: 1 })),
+    storage: { getItem: () => null, setItem: () => {} },
+  });
+  const probes = vi.spyOn(router, "probeNow");
+  const { el } = await mountApp({ readLiveEvents: stream.read });
+  try {
+    el.router = router;
+    await flush(el);
+    router.start();
+    await router.probeNow();
+    stream.event("ready");
+    probes.mockClear();
+    stream.reads.at(-1)!.end();
+    await vi.waitFor(() => expect(probes).toHaveBeenCalled());
+    expect(router.waiting).toBe(false);
+  } finally {
+    router.stop();
+  }
 });
 
 it("a normal table visit adds no streams or unrelated menu reads", async () => {

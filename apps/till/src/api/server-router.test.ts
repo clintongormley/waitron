@@ -339,6 +339,124 @@ describe("ServerRouter — polling, refusals and stored state", () => {
     vi.useRealTimers();
   });
 
+  it.each([
+    { name: "one box", servers: [{ url: BOX }], calls: 1 },
+    { name: "two boxes", servers: [{ url: BOX }, { url: CLOUD }], calls: 6 },
+    { name: "one box with its own hostname", servers: [{ nodeId: "b", url: CLOUD }], calls: 2 },
+  ])("$name: connected probing keeps only the required timer", async ({ servers, calls }) => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({
+      [BOX]: { acceptingSales: true, term: 1, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.setServers(servers);
+    r.start();
+    await r.probeNow();
+    r.setLive(true);
+    r.start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(calls);
+    await withServerTarget(fetchImpl, r)("/api/node");
+    expect(fetchImpl).toHaveBeenCalledTimes(calls + 1);
+    r.stop();
+  });
+
+  it("a lost one-box connection probes at once and every five seconds until ready again", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({ [BOX]: { acceptingSales: true, term: 1, nodeId: "b" } });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    const probes = vi.spyOn(r, "probeNow");
+    r.start();
+    await r.probeNow();
+    r.setLive(true);
+    r.setLive(false);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await probes.mock.results.at(-1)!.value;
+    r.setLive(false);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    await probes.mock.results.at(-1)!.value;
+    r.setLive(true);
+    r.stop();
+    r.setLive(false);
+    r.setServers([{ url: CLOUD }]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it("growing a connected list to two boxes probes at once; shrinking it quiets the timer", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({
+      [BOX]: { acceptingSales: true, term: 1, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 1, nodeId: "c" },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.start();
+    await r.probeNow();
+    r.setLive(true);
+    r.setServers([{ url: CLOUD }]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    r.setServers([{ url: BOX }]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    r.stop();
+  });
+
+  it("a one-box restart recovers waiting even when the stream reconnects before the next probe", async () => {
+    vi.useFakeTimers();
+    const table: Record<string, Answer> = { [BOX]: { acceptingSales: true, term: 1 } };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    const probes = vi.spyOn(r, "probeNow");
+    try {
+      r.start();
+      await r.probeNow();
+      r.setLive(true);
+      table[BOX] = "down";
+      r.setLive(false);
+      await probes.mock.results.at(-1)!.value;
+      expect(r.waiting).toBe(true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      table[BOX] = { acceptingSales: true, term: 1 };
+      r.setLive(true);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.waitFor(() => expect(r.waiting).toBe(false));
+      expect(r.statuses()[0]?.state).toBe("primary");
+      probes.mockClear();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(probes).not.toHaveBeenCalled();
+    } finally {
+      r.stop();
+    }
+  });
+
+  it("a multi-box connection dropping keeps the existing probe schedule", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({
+      [BOX]: { acceptingSales: true, term: 1 },
+      [CLOUD]: { acceptingSales: false, term: 1 },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    try {
+      r.setServers([{ url: CLOUD }]);
+      r.start();
+      await r.probeNow();
+      r.setLive(true);
+      r.setLive(false);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+    } finally {
+      r.stop();
+    }
+  });
+
   it("start() probes at once and then every interval; a second start() adds no second poller", async () => {
     vi.useFakeTimers();
     const fetchImpl = probeFetch({ [BOX]: { acceptingSales: true, term: 1, nodeId: "b" } });
@@ -482,6 +600,32 @@ describe("ServerRouter — handing on the held chart", () => {
     }) as unknown as typeof fetch;
     return { fetchImpl, posts };
   }
+
+  it("two connected boxes still receive a newer chart on the next timed probe", async () => {
+    vi.useFakeTimers();
+    const { fetchImpl, posts } = chartFetch({
+      [BOX]: { acceptingSales: true, term: 5, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 4, nodeId: "c" },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    try {
+      r.setServers([{ url: CLOUD }]);
+      r.start();
+      await r.probeNow();
+      r.setLive(true);
+      r.offerChart(chart(5));
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.waitFor(() =>
+        expect(posts).toEqual([
+          { url: `${CLOUD}/api/node/membership`, body: { document: chart(5) } },
+        ]),
+      );
+      expect(r.current).toBe(BOX);
+    } finally {
+      r.stop();
+      vi.useRealTimers();
+    }
+  });
 
   it("posts the held chart to a server answering a lower term, once", async () => {
     const { fetchImpl, posts } = chartFetch({

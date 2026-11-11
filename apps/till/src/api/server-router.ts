@@ -41,12 +41,7 @@ interface Tracked {
   term: number | null;
 }
 
-/**
- * The one place the till knows more than one server exists. `current` points at whichever server
- * answered `acceptingSales: true`, the highest `term` if several; if none did, it stays put and the
- * till keeps probing, with no failure count (owner decision, 2026-09-05). The page's own origin is
- * always listed, so a stale or empty cache still reaches the box.
- */
+/** No failure count ends probing (owner decision, 2026-09-05). */
 export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
@@ -64,6 +59,8 @@ export class ServerRouter extends EventTarget {
   #inFlight = 0;
   #round: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
+  #started = false;
+  #live = false;
   readonly #origin: string;
   readonly #fetch: typeof fetch;
   readonly #storage: Pick<Storage, "getItem" | "setItem"> | undefined;
@@ -100,7 +97,14 @@ export class ServerRouter extends EventTarget {
   setServers(list: ServerEntry[]): void {
     this.#servers = this.#merge(list);
     this.#save(list);
+    this.#syncTimer();
     this.#emitStateChanged();
+  }
+
+  setLive(up: boolean): void {
+    if (this.#live === up) return;
+    this.#live = up;
+    this.#syncTimer();
   }
 
   /** Keeps the newer of this chart and the one held, to hand to a server that answers an older term
@@ -111,14 +115,23 @@ export class ServerRouter extends EventTarget {
   }
 
   start(): void {
-    if (this.#timer !== undefined) return;
-    this.#timer = setInterval(() => void this.probeNow(), this.#intervalMs);
-    void this.probeNow();
+    this.#started = true;
+    this.#syncTimer();
   }
 
   stop(): void {
-    if (this.#timer !== undefined) clearInterval(this.#timer);
-    this.#timer = undefined;
+    this.#started = false;
+    this.#syncTimer();
+  }
+
+  #syncTimer(): void {
+    if (!this.#started || (this.#live && !this.#waiting && this.#shown().length === 1)) {
+      clearInterval(this.#timer);
+      this.#timer = undefined;
+    } else if (this.#timer === undefined) {
+      this.#timer = setInterval(() => void this.probeNow(), this.#intervalMs);
+      void this.probeNow();
+    }
   }
 
   beginRequest(): void {
@@ -162,6 +175,7 @@ export class ServerRouter extends EventTarget {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
       if (best.url !== this.#current) this.#move(best.url);
     }
+    this.#syncTimer();
     this.#emitStateChanged();
   }
 

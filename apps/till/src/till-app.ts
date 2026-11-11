@@ -2251,7 +2251,11 @@ export class TillApp extends LitElement {
 
   #live?: TillLiveConnection;
   #liveApi?: TillApi;
-  readonly #pauseLive = () => this.#live?.stop();
+  readonly #routerLive = () => this.router?.setLive(this.#live?.up ?? false);
+  readonly #pauseLive = () => {
+    this.#live?.stop();
+    this.#routerLive();
+  };
   readonly #resumeLive = () => this.#live?.start();
 
   #departmentTransfers?: DepartmentTransferMonitor;
@@ -2611,7 +2615,7 @@ export class TillApp extends LitElement {
     window.removeEventListener(BUILD_CHANGED_EVENT, this.#onBuildChanged);
     window.removeEventListener("pagehide", this.#pauseLive);
     window.removeEventListener("pageshow", this.#resumeLive);
-    this.#live?.stop();
+    this.#pauseLive();
     this.#live = undefined;
     this.removeEventListener("hold-reload", this.#onHoldReload);
     void this.sessionActivity.stop();
@@ -4751,7 +4755,7 @@ export class TillApp extends LitElement {
           previousDeviceId !== identity.deviceId ||
           this.#liveApi !== this.api
         ) {
-          this.#live?.stop();
+          this.#pauseLive();
           const api = this.api;
           this.#liveApi = api;
           this.#live = new TillLiveConnection({
@@ -4765,11 +4769,13 @@ export class TillApp extends LitElement {
               .filter(([name]) => name !== "transfers")
               .flatMap(([, types]) => types),
           );
+          this.#live.addEventListener("up", this.#routerLive);
+          this.#live.addEventListener("down", this.#routerLive);
           this.#live.addEventListener("unauthorized", () => void this.#onDeviceUnauthorized());
           this.#live.start();
         }
       } else {
-        this.#live?.stop();
+        this.#pauseLive();
         this.#live = undefined;
       }
       if (kind === "handheld") {
@@ -9047,7 +9053,7 @@ export class TillApp extends LitElement {
    * device forgets it and gets the picker, unless the device list fails to load).
    */
   async #onDeviceUnauthorized(): Promise<void> {
-    this.#live?.stop();
+    this.#pauseLive();
     this.#live = undefined;
     this.makeNow = [];
     await this.#boot();
