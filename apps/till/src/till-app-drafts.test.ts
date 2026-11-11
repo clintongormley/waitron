@@ -896,15 +896,6 @@ it.each(["light", "dark"] as const)(
 );
 
 describe("dead-end questions with no timely answer", () => {
-  afterEach(() => vi.useRealTimers());
-
-  async function settleTimers(el: TillApp): Promise<void> {
-    for (let i = 0; i < 3; i++) {
-      await vi.advanceTimersByTimeAsync(0);
-      await el.updateComplete;
-    }
-  }
-
   it("shows the original edit refusal after a stalled station question", async () => {
     const { el } = await mountApp({
       updateOrderLine: vi.fn().mockRejectedValue({ code: "station.no_replacement" }),
@@ -919,13 +910,13 @@ describe("dead-end questions with no timely answer", () => {
       revision: 0,
       saleLine: { menuItemId: "offer-beer", quantity: "2" },
     });
-    await settleTimers(el);
+    await flush(el);
     expect(api.askSaleDeadEnds).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(2_999);
-    await settleTimers(el);
+    await flush(el);
     expect(banner(el)).toBeNull();
     await vi.advanceTimersByTimeAsync(1);
-    await settleTimers(el);
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
     expect(banner(el)!.textContent).toContain(t("table.error"));
   });
@@ -937,11 +928,11 @@ describe("dead-end questions with no timely answer", () => {
     await openTable(el);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     press(el, "Beer");
-    await settleTimers(el);
+    await flush(el);
     await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
-    await settleTimers(el);
+    await flush(el);
     await vi.advanceTimersByTimeAsync(400);
-    await settleTimers(el);
+    await flush(el);
     expect(askDraftDeadEnds).toHaveBeenCalledOnce();
     const savedId = server.drafts[0]!.lines[0]!.id;
     const screen = tableOrder(el)!;
@@ -951,10 +942,10 @@ describe("dead-end questions with no timely answer", () => {
       )!;
     expect(send().disabled).toBe(false);
     await vi.advanceTimersByTimeAsync(2_999);
-    await settleTimers(el);
+    await flush(el);
     expect(send().disabled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
-    await settleTimers(el);
+    await flush(el);
     expect(send().disabled).toBe(false);
     answer({
       sends: true,
@@ -970,7 +961,7 @@ describe("dead-end questions with no timely answer", () => {
       ],
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
-    await settleTimers(el);
+    await flush(el);
     expect(screen.shadowRoot!.querySelector("till-dead-ends-section")).toBeNull();
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(rows(el)).toEqual(["Beer ×1"]);
@@ -1149,8 +1140,8 @@ beforeEach(() => {
   server = draftServer();
 });
 afterEach(() => {
-  cleanupWidgets();
   vi.useRealTimers();
+  cleanupWidgets();
 });
 
 describe("till-app: a table's draft is kept on the server", () => {
@@ -3332,8 +3323,6 @@ describe("till-app: signing out while a save is out", () => {
   });
 
   describe("and the save gets no answer", () => {
-    afterEach(() => vi.useRealTimers());
-
     async function settleTimers(el: TillApp, ms: number): Promise<void> {
       await vi.advanceTimersByTimeAsync(ms);
       for (let i = 0; i < 3; i++) {
@@ -3390,8 +3379,6 @@ describe("till-app: signing out while a save is out", () => {
 });
 
 describe("till-app: a Send the session outlives", () => {
-  afterEach(() => vi.useRealTimers());
-
   it("sends nothing as the next person when Send was waiting on a save at sign-out", async () => {
     const sentBy: string[] = [];
     const { el } = await mountApp({ submitDraft: submitRecordingWho(sentBy) });
@@ -3785,8 +3772,6 @@ describe("till-app: how long a send may take", () => {
       .click();
     await settle(el);
   }
-
-  afterEach(() => vi.useRealTimers());
 
   it("cuts a send with no answer off at 150 seconds, not before, and does not send it again", async () => {
     const { el } = await mountApp({ submitDraft: vi.fn(noAnswer) });
@@ -5449,10 +5434,6 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   async function poll(el: TillApp): Promise<void> {
     vi.advanceTimersByTime(15_000);
     await flush(el, 6);
@@ -6708,10 +6689,6 @@ describe("till-app: a draft line that cannot be sold now", () => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     });
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
     it("names it and sends it as saved, asking nothing, when the menu is back under the version it was saved at", async () => {
       savedBeer({ quantity: "2", note: "no ice", courseId: "mains" });
       const el = await menuComesBack(catalogue("v1"), "v1");
