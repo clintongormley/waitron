@@ -150,13 +150,14 @@ it.each(["missing", "corrupt", "partial", "symlink"] as const)(
   },
 );
 it.each([
-  "restore-request.json",
+  "flows/restore/record.json",
   "reset-request.json",
   "setup-operation.json",
   "first-setup-node-key.json",
   "module-operation-public.json",
 ])("does not call %s evidence empty", async (name) => {
   const f = await fixture();
+  await mkdir(join(f.stateDir, name, ".."), { recursive: true });
   await writeFile(join(f.stateDir, name), "{incomplete");
   const inspected = await f.service.inspectFirstSetupResolution();
   expect(inspected.artifacts).toContainEqual(expect.objectContaining({ name, status: "invalid" }));
