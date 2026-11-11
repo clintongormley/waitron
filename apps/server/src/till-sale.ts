@@ -1278,8 +1278,12 @@ async function payIntegrated(
           },
           () => deps.clock.now().instant,
         );
-        return { kind: "settle" as const, outstanding, attendanceKey,
-          slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId) };
+        return {
+          kind: "settle" as const,
+          outstanding,
+          attendanceKey,
+          slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
+        };
       }
 
       // After the recovery above, so a till pressing Pay again to file a captured payment is never
@@ -1468,7 +1472,10 @@ async function payIntegrated(
         )
       : null;
   if (short !== null)
-    return { ...short, ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, undefined, deps.log)) };
+    return {
+      ...short,
+      ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, undefined, deps.log)),
+    };
   if (prepared.kind === "settle") {
     const { outstanding, attendanceKey } = prepared;
     const answer: IntegratedPayOutcome = {
