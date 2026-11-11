@@ -157,7 +157,7 @@ any code changes; Task 3 kills the new code at each step of the flow.
    phase; the dated amendment above preserves the Cloud-notice retry). `completeRebuild`'s last step (`:143`) becomes: `removeAndSync(trading.env.replaced)`
    ignoring `ENOENT`, then clear `firstStart` if a staged/placing request remains, otherwise
    `endRestoreFlow`. `rejoin-command.ts:136`, which today removes only the
-   rebuild marker, ends the flow only when its phase is `first-start`; a `staged` or `placing` flow
+   rebuild marker, ends a `first-start` or unreadable flow (Q2); a `staged` or `placing` flow
    is left as it is.
 6. Other readers re-pointed (phase `staged` or `placing` = "a restore is waiting"):
    `start-backup-room.ts:116`, `cloud-recovery.ts:184-196`,
