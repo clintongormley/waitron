@@ -2675,6 +2675,35 @@ when that workflow is one of this repository's `.github/workflows/` files.
 
 ### Every apt wait is bounded
 
+Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
+package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
+through `scripts/image-apt-cache.sh`, using saved signed indexes and debs, the runner's
+installed-package status and `apt-get --no-download` inside a network namespace with
+no external connection. The log names the saved set and prints the installed versions.
+The three named packages already supplied by the runner stay at their installed versions
+(`--no-upgrade`); the cache supplies missing packages without downgrading a newer runner baseline.
+The workflow's text guards cannot inspect the helper; its real Linux offline probe
+is retained with A1509's review evidence.
+
+`image-apt-cache.yml` refreshes the set daily on main, or when you dispatch it. Its
+empty package-status file makes apt download the dependency closure, including packages
+already installed on that runner, so a later runner image can supply its own missing
+dependencies. A failed refresh saves nothing and leaves the previous set available.
+An absent set uses the bounded download loop below. A failed offline install warns
+with the failed set's date, finishes any interrupted package configuration under a
+90-second bound, and uses that loop. A cache-restore failure also falls back to downloads.
+A green smoke alone therefore does
+not prove a cache hit: check that **Install the saved Ubuntu packages offline** succeeded.
+These sets share the repository's cache budget with `node-cache-*`, `playwright-*`
+and `lint-results-*`; there is no extra storage allocation or cache deletion.
+
+Cold installation and daily refresh each give the hosted runner's native Ubuntu lookup
+five seconds. If it fails, they warn, point that runner's resolver at `1.1.1.1` once,
+and flush its DNS cache, with five-second bounds on both commands. The Ubuntu hosts
+and signature checks stay the same. This check never runs on a successful offline hit.
+In A1509 diagnostic run `43061661754`, flushing alone left lookup timed out; switching
+the runner's resolver let the unchanged HTTP-source acquisition save its set.
+
 Every `apt-get update` and `apt-get install` in a workflow, in `deploy/Dockerfile`, in
 `deploy/waitron.sh` and in the bench's CA probe image (`bench/sqlite-failover/src/probes/linux-binaries.ts`)
 runs under an outer `timeout`, and runs again when it stalls or exits non-zero (in the workflow, the
@@ -2711,10 +2740,12 @@ longest 24 s.
 
 The limits chosen:
 
-- In `image-smoke.yml` the apt calls have a step of their own with `timeout-minutes: 8` (the job's
+- In `image-smoke.yml` the cold-download apt calls have a step of their own with `timeout-minutes: 8` (the job's
   limit is 15). Each attempt is `timeout 60` for the update and `timeout 90` for the install, with
   `Acquire::Retries=3` and `Acquire::http::Timeout=30` / `Acquire::https::Timeout=30`, up to three
   attempts: at most 3 × (60 + 90) = 450 s, under the step's 480 s.
+  Cached installation has a separate 90-second outer bound and a two-minute step;
+  the daily refresh keeps the same three-attempt 60/90-second bounds.
 - In `deploy/Dockerfile` each apt-get goes through a `bounded()` wrapper: `timeout 300` per attempt,
   three attempts, with the same apt settings written to `/etc/apt/apt.conf.d/99bounded-waits` and
   removed again in the same `RUN`, so the image ships no apt setting. 300 s rather than CI's 60-90 s,

@@ -1,0 +1,71 @@
+name: image-apt-cache
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Name the Ubuntu package set
+        id: apt-key
+        run: |
+          . /etc/os-release
+          echo "key=image-apt-$VERSION_CODENAME-$(dpkg --print-architecture)-$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Download a complete Ubuntu package set
+        id: acquire
+        timeout-minutes: 8
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          . /etc/os-release
+          cache="$RUNNER_TEMP/image-apt"
+          mkdir -p "$cache/lists/partial" "$cache/archives/partial" "$cache/source-parts"
+          : > "$cache/status"
+          for suite in "$VERSION_CODENAME" "$VERSION_CODENAME-updates" "$VERSION_CODENAME-security"; do
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] http://archive.ubuntu.com/ubuntu $suite main"
+          done > "$cache/sources.list"
+          options=(
+            -o "Dir::Etc::sourcelist=$cache/sources.list"
+            -o "Dir::Etc::sourceparts=$cache/source-parts"
+            -o "Dir::State::lists=$cache/lists"
+            -o "Dir::Cache::archives=$cache/archives"
+            -o "Dir::State::status=$cache/status"
+            -o Acquire::Languages=none
+            -o Acquire::IndexTargets::deb::DEP-11::DefaultEnabled=false
+            -o Acquire::IndexTargets::deb::CNF::DefaultEnabled=false
+            -o APT::Update::Error-Mode=any
+          )
+          if ! timeout 5 getent ahostsv4 archive.ubuntu.com > /dev/null; then
+            echo "::warning::Ubuntu lookup failed; using 1.1.1.1 for this hosted runner's DNS."
+            mirror_interface=$(ip -4 route show default | awk '{print $5; exit}')
+            sudo timeout 5 resolvectl dns "$mirror_interface" 1.1.1.1
+            sudo timeout 5 resolvectl flush-caches
+          fi
+          for attempt in 1 2 3; do
+            if sudo timeout 60 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "${options[@]}" update &&
+              sudo timeout 90 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "${options[@]}" install -y --download-only --no-install-recommends bluez python3-dbus python3-gi; then
+              sudo rm "$cache/status"
+              sudo chown -R "$(id -u):$(id -g)" "$cache"
+              du -sh "$cache"
+              exit 0
+            fi
+          done
+          echo "Ubuntu package refresh failed; keeping the last saved set."
+          exit 1
+
+      - name: Save the refreshed Ubuntu package set
+        if: steps.acquire.outcome == 'success'
+        uses: actions/cache/save@v6
+        timeout-minutes: 1
+        with:
+          path: ${{ runner.temp }}/image-apt
+          key: ${{ steps.apt-key.outputs.key }}

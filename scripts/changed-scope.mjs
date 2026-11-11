@@ -142,6 +142,7 @@ export function isRootScopePath(path) {
  * is left to image-nightly.yml.
  */
 const IMAGE_SMOKE_FILES = [
+  "scripts/image-apt-cache.sh",
   "scripts/tunnel-container-smoke.sh",
   "scripts/bundle-node.mjs",
   "scripts/generate-hour-release.mjs",
