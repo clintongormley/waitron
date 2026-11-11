@@ -196,10 +196,8 @@ async function lineIdsOfSale(saleId: string) {
 async function original(saleId: string) {
   const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
   const lines = await venue.db.select().from(saleLines).where(eq(saleLines.saleId, saleId));
-  const registros = venue.db.all(
-    sql`select * from registros_facturacion where sale_id = ${saleId}`,
-  );
-  return { sale, lines, registros };
+  const records = venue.db.all(sql`select * from registros_facturacion where sale_id = ${saleId}`);
+  return { sale, lines, records };
 }
 
 function counts() {
