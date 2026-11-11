@@ -1654,6 +1654,13 @@ describe("whole-order kitchen note", () => {
     store.clear();
     expect(store.kitchenNote).toBeNull();
     expect(store.kitchenNoteScopeKey).toBe(`order:${store.id}`);
+    store.loadFrom("order-b", [], undefined, 1, {
+      note: null,
+      revision: 0,
+      scopeKey: "party:b",
+    });
+    store.clear();
+    expect(store.kitchenNoteScopeKey).toBe(`order:${store.id}`);
   });
 });
 
