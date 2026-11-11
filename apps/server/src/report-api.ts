@@ -16,6 +16,7 @@ import {
   printers,
   readHistoryNodes,
   readTenant,
+  recordActivity,
   withTransaction,
   type Database,
   type Transaction,
@@ -46,22 +47,27 @@ import { readJsonBody, requireBodyUuid, requireEnum } from "@waitron/server-kit"
 import { requireManagementSession } from "@waitron/server-kit";
 import { requirePeriod, requireRange } from "@waitron/server-kit";
 import { formatCategorySalesPage } from "./category-sales-page.js";
+import { toLanguage } from "./personal-data-export-api.js";
+import { listTransferClosedInvoices, renderTransferClosedCsv } from "./transfer-closed-export.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import type { Logger } from "./logger.js";
 
 /**
  * On a mirror the data node is the ORIGIN recorded in node.db's `node_mirror_link`, not the
- * mirror's own id. Per-node reports use it; the overview and modelo 303 aggregate every node.
+ * mirror's own id. Per-node reports use it; the overview, modelo 303 and the deferred-payments
+ * file read every node.
  */
 export interface ReportApiDeps {
   db: Database;
   cfg: { nodeId: string };
-  /** The printed page's language when neither the person nor the browser names one. */
+  /** The printed page's language when neither the person nor the browser names one, and always the
+   * deferred-payments file's. */
   venueLocale: SupportedLocale;
 }
 
-/** Two distinct seams: viewing the takings dashboard is not exporting the fiscal file (a supervisor
- * holds `report.view` but not `report.export`). */
+/** Two distinct seams: viewing the takings dashboard is not exporting the accountant's files (modelo
+ * 303 and the deferred-payments file); a supervisor holds `report.view` but not
+ * `report.export`. */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
 const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
@@ -162,7 +168,8 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
 
 /**
  * Mount reporting routes through the shared authorization gate. report.view
- * permits operational reports; report.export permits the modelo 303 export.
+ * permits operational reports; report.export permits the modelo 303 export and the
+ * deferred-payments file.
  * The overview aggregates all tenant nodes; per-node reports read cfg.nodeId and the boxes it took
  * over from.
  * The modelo 303 file remains a candidate requiring uploader validation and asesor
@@ -345,6 +352,35 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         return { from, to, vat, topSellers };
       });
       return c.json(result);
+    }),
+  );
+
+  // The accountant's file of invoices whose bills were closed as deferred payments on a business
+  // day in an inclusive range, venue-wide. A POST because each download writes its activity entry.
+  app.post("/management-api/reports/closed-by-transfer", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
+      const rows = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: REPORT_EXPORT_PERMISSION,
+        });
+        const invoices = await listTransferClosedInvoices(tx, { from, to });
+        await recordActivity(tx, {
+          kind: "transfer_export.downloaded",
+          subjectId: "closed-by-transfer",
+          personId: authorizedBy,
+          data: { from, to, rows: invoices.length },
+        });
+        return invoices;
+      });
+      return c.body(renderTransferClosedCsv(rows, toLanguage(deps.venueLocale)), 200, {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="deferred-payments-${from}-${to}.csv"`,
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+      });
     }),
   );
 

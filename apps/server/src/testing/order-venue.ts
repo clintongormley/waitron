@@ -173,20 +173,20 @@ export function collect(venue: OrderVenue, billId: string, amount: string): Prom
   });
 }
 
-async function invoiceOf(venue: OrderVenue, billId: string): Promise<string> {
+async function invoiceOf(venue: BillVenue, billId: string): Promise<string> {
   const [sale] = await inTx(venue, (tx) =>
     tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
   );
   return sale!.id;
 }
 
-function adminSession(venue: OrderVenue, tx: Transaction) {
+function adminSession(venue: BillVenue, tx: Transaction) {
   return loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" });
 }
 
 /** A credit note of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
 export async function credit(
-  venue: OrderVenue,
+  venue: BillVenue,
   billId: string,
   base: string,
   total: string,

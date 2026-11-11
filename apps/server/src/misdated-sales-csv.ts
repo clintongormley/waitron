@@ -43,7 +43,7 @@ function time(iso: string, offsetMinutes: number): string {
 
 /** Written without the shared cell's formula guard, so a negative amount stays a number in a
  * spreadsheet; the text is digits, a sign and a decimal mark, so it needs no escaping. */
-function amountCell(value: Decimal, language: Language): string {
+export function amountCell(value: Decimal, language: Language): string {
   const text = toScale(value, 2);
   return `"${language === "es" ? text.replace(".", ",") : text}"`;
 }

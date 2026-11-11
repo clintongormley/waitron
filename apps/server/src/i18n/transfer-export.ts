@@ -1,0 +1,29 @@
+/** The column headings of the file of deferred payments, in the venue's language. */
+export const TRANSFER_EXPORT_WORDS = {
+  en: {
+    invoiceNumber: "Invoice number",
+    invoiceType: "Type",
+    issueDate: "Issue date",
+    closedOn: "Closed on",
+    recipientName: "Customer",
+    recipientTaxId: "Customer tax number",
+    base: "Base (EUR)",
+    vat: "VAT (EUR)",
+    total: "Total (EUR)",
+    correctedBy: "Corrected by",
+    correctionsTotal: "Corrections total (EUR)",
+  },
+  es: {
+    invoiceNumber: "Número de factura",
+    invoiceType: "Tipo",
+    issueDate: "Fecha de expedición",
+    closedOn: "Cerrada el",
+    recipientName: "Cliente",
+    recipientTaxId: "NIF del cliente",
+    base: "Base imponible (EUR)",
+    vat: "IVA (EUR)",
+    total: "Total (EUR)",
+    correctedBy: "Rectificada por",
+    correctionsTotal: "Total rectificado (EUR)",
+  },
+} as const;

@@ -172,6 +172,8 @@ Add `closureSummary: {count:number; total:string; transferTotal:string}` to live
 
 ## Task 6: accountant export with stable facts and remedy links
 
+_2026-11-11: as built (6a), `POST /management-api/reports/closed-by-transfer?from=&to=` answers the CSV under `report.export`, venue-wide, with no JSON view or location scope; columns and reasons in the [Task 6 plan](2026-11-11-a275-transfer-export.md)._
+
 **Files:** Create `packages/reporting/src/transfer-closed-invoices.ts`, `transfer-closed-invoices.test.ts`; export from `packages/reporting/src/index.ts`. Create `apps/server/src/transfer-closed-csv.ts`, `transfer-closed-csv.test.ts`, `report-api.transfer-closed.test.ts`; modify `report-api.ts`. Add Reports → Closed by transfer UI in `apps/dashboard/src/screens/dashboard-sales-screen.ts`, its API client/tests and EN/ES strings, using the existing Reports/Sales navigation rather than inventing another permission.
 
 **Proposed interfaces:** `listTransferClosedInvoices(tx: Transaction,input: {nodeId: NodeId; locationId: LocationId; fromBusinessDay:string; toBusinessDay:string}): Promise<TransferClosedInvoiceRow[]>`; `renderTransferClosedCsv(rows: readonly TransferClosedInvoiceRow[]): Uint8Array`; `GET /management-api/reports/closed-by-transfer?from=YYYY-MM-DD&to=YYYY-MM-DD` for `report.view` JSON and the same path plus `/export` for `report.export` CSV. Derive node/location from authenticated server context as existing per-node reports do; reject caller scope overrides. Viewing Orders/history retains its existing gates, not export authority.

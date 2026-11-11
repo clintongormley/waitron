@@ -87,6 +87,13 @@ function typeCases(tx: Transaction) {
     // @ts-expect-error term is numeric
     data: { term: "3" },
   });
+  void recordActivity(tx, {
+    kind: "transfer_export.downloaded",
+    subjectId: "closed-by-transfer",
+    personId: null,
+    // @ts-expect-error the download names no customer from the file
+    data: { from: "2026-11-01", to: "2026-11-02", rows: 1, customerTaxId: "x" },
+  });
   // @ts-expect-error the actor must be stated
   void recordActivity(tx, {
     kind: "membership.node_cleared",

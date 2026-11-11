@@ -346,7 +346,9 @@ questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains 
 Tasks 0–3 are built: the `transfer_closures` table, the party readiness read, the close command
 ([2026-11-09 plans](../superpowers/plans/2026-11-09-a275-transfer-close-command.md)), and its till
 route, recovery read and device-profile action, off by default
-([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)); not
+([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)), and the
+accountant's file's server route (Task 6a,
+[plan](../superpowers/plans/2026-11-11-a275-transfer-export.md); no button until 6b); not
 usable until Task 7 adds the button, after A739 Cut B. A275 stays open pending the rest of the
 build and acceptance. The reviewed plan includes an explicit recovery read,
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
