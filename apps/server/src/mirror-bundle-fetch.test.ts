@@ -18,9 +18,10 @@ import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { X509Certificate } from "node:crypto";
+import { createHash, X509Certificate } from "node:crypto";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
 import type { AdoptCredential } from "./adopt.js";
 import { lookupBoxName, type BoxAddresses, type MdnsQuerySocket } from "./box-lookup.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -1454,6 +1455,91 @@ describe("a box named on the venue's network is found by asking it", () => {
       // The remembered address drops each connection; the network then claims it again, then ::1.
       await failureOf(call(port, checked, () => Promise.resolve(fresh("127.0.0.1", "::1"))));
       expect(tried).toBe(1);
+    });
+
+    describe("kept in the state folder", () => {
+      let stateDir: string;
+      beforeEach(async () => {
+        stateDir = await mkdtemp(join(tmpdir(), "waitron-checked-"));
+        closers.push(() => rm(stateDir, { recursive: true, force: true }));
+      });
+      const loaded = async (onWriteFailed: (error: unknown) => void = () => {}) => {
+        const checked = new CheckedAddresses();
+        await checked.rememberIn(stateDir, onWriteFailed);
+        return checked;
+      };
+      const stored = () => join(stateDir, CHECKED_ADDRESSES_FILE);
+
+      it("is recalled after a restart, and a call to it that reaches nothing says so", async () => {
+        const box = await serve(named);
+        const before = await loaded();
+        await call(box, before, () => Promise.resolve(fresh("127.0.0.1")));
+        await before.written();
+        const port = portOf(box);
+        await switchOff(box);
+
+        const failure = await failureOf(call(port, await loaded(), refused));
+        expect(failure).toBeInstanceOf(CheckedAddressUnreached);
+      });
+
+      it("holds no authority's certificate", async () => {
+        const box = await serve(named);
+        const checked = await loaded();
+        await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+        await checked.written();
+
+        const text = await readFile(stored(), "utf8");
+        expect(text).toContain("127.0.0.1");
+        expect(text).not.toContain("BEGIN CERTIFICATE");
+      });
+
+      it("is written again only when the address changes", async () => {
+        const checked = await loaded();
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        const first = (await stat(stored())).ino;
+
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        expect((await stat(stored())).ino).toBe(first);
+
+        checked.keep("box", "::1");
+        await checked.written();
+        expect((await stat(stored())).ino).not.toBe(first);
+        expect((await loaded()).recall("box")).toBe("::1");
+      });
+
+      it("keeps the latest of two quick changes", async () => {
+        const checked = await loaded();
+        checked.keep("box", "127.0.0.1");
+        checked.keep("box", "::1");
+        await checked.written();
+
+        expect((await loaded()).recall("box")).toBe("::1");
+      });
+
+      const digest = createHash("sha256").update("box").digest("hex");
+      it.each([
+        ["not JSON", "{not json"],
+        ["a non-text address", JSON.stringify({ [digest]: 5 })],
+      ])("loads as empty from a file that is %s", async (_label, text) => {
+        await writeFile(stored(), text);
+        const checked = await loaded();
+
+        expect(checked.recall("box")).toBeUndefined();
+      });
+
+      it("a failed write is reported and the address still holds in memory", async () => {
+        const gone = join(stateDir, "gone");
+        const failures: unknown[] = [];
+        const checked = new CheckedAddresses();
+        await checked.rememberIn(gone, (error) => failures.push(error));
+
+        checked.keep("box", "127.0.0.1");
+        await checked.written();
+        expect(failures).toHaveLength(1);
+        expect(checked.recall("box")).toBe("127.0.0.1");
+      });
     });
   });
 

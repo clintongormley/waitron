@@ -1,14 +1,16 @@
 // `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
 // by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
-import { X509Certificate } from "node:crypto";
-import { open, rename, rm } from "node:fs/promises";
+import { createHash, X509Certificate } from "node:crypto";
+import { open, readFile, rename, rm } from "node:fs/promises";
 import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
 import { isIP } from "node:net";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { AppError } from "@waitron/shared";
+import { CHECKED_ADDRESSES_FILE } from "@waitron/store";
 import type { AdoptCredential } from "./adopt.js";
 import { checkBackupSettings } from "./backup-env-writer.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
 import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -174,22 +176,72 @@ const askVenueNetwork: BoxLookup = (hostname, { fresh }) =>
 
 /**
  * The address at which a connection to a box's name last finished its handshake under the
- * authority pinned for it. Process memory only: after a restart nothing counts as reached until a
- * call reaches the box again.
+ * authority pinned for it. Once given a state folder it is read from there and every change is
+ * written back, so it survives a restart; without one it lasts as long as the process.
  */
 export class CheckedAddresses {
-  private readonly reached = new Map<string, string>();
+  private reached = new Map<string, string>();
+  private stored: { path: string; onWriteFailed: (error: unknown) => void } | undefined;
+  private writes: Promise<void> = Promise.resolve();
 
-  recall(key: string): string | undefined {
-    return this.reached.get(key);
+  /** Loads what `stateDir` holds; a missing, unreadable or malformed file loads as nothing. */
+  async rememberIn(stateDir: string, onWriteFailed: (error: unknown) => void): Promise<void> {
+    const path = join(stateDir, CHECKED_ADDRESSES_FILE);
+    this.reached = await readReached(path);
+    this.stored = { path, onWriteFailed };
   }
 
+  recall(key: string): string | undefined {
+    return this.reached.get(digestOf(key));
+  }
+
+  /** Never throws: a failed write goes to `onWriteFailed`, and the address still holds here. */
   keep(key: string, address: string): void {
-    this.reached.set(key, address);
+    const digest = digestOf(key);
+    if (this.reached.get(digest) === address) return;
+    this.reached.set(digest, address);
+    const stored = this.stored;
+    if (stored === undefined) return;
+    this.writes = this.writes.then(() =>
+      writeFileDurable(stored.path, JSON.stringify(Object.fromEntries(this.reached)), 0o600).catch(
+        stored.onWriteFailed,
+      ),
+    );
+  }
+
+  /** Settles once every write asked for so far has finished or failed. */
+  written(): Promise<void> {
+    return this.writes;
+  }
+}
+
+// The key holds the authority's certificate, which the file does not need to.
+function digestOf(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+async function readReached(path: string): Promise<Map<string, string>> {
+  try {
+    const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (typeof parsed !== "object" || parsed === null) return new Map();
+    const entries = Object.entries(parsed);
+    return entries.every(([, value]) => typeof value === "string")
+      ? new Map(entries as [string, string][])
+      : new Map();
+  } catch {
+    return new Map();
   }
 }
 
 const checkedByDefault = new CheckedAddresses();
+
+/** Gives every call using the default lookup the addresses kept in `stateDir`. */
+export function rememberCheckedAddressesIn(
+  stateDir: string,
+  onWriteFailed: (error: unknown) => void,
+): Promise<void> {
+  return checkedByDefault.rememberIn(stateDir, onWriteFailed);
+}
 
 /**
  * A failed call that tried the address `CheckedAddresses` remembered for the name first and

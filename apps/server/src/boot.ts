@@ -345,7 +345,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
 import type { BillPaymentsPass } from "./bill-payments-loop.js";
 import { adoptFromPrimary } from "./adopt.js";
-import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
+import { fetchMirrorBundle, rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { writeTradingEnv, type OnboardingIntent, type TradingConfig } from "./trading-config.js";
@@ -1208,6 +1208,10 @@ async function bootServer(
     // Only once this process holds the venue folder: a second process must not delete a running
     // process's restore working folders.
     await emptyScratch(config.stateDir, log);
+    // In every mode: a mirror skips the start's peer check but still asks the main box later.
+    await rememberCheckedAddressesIn(config.stateDir, (error) =>
+      log("warn", "mirror.checked_address_unsaved", { errorCode: codeOf(error) }),
+    );
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,
