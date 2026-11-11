@@ -149,7 +149,7 @@ clock_set() {
 }
 
 main() {
-  local instance line rc arrived rest target requester reply
+  local instance line rc arrived rest target requester reply read_limit=701
   if [ "${1:-}" = --restore ]; then
     instance="${2:-}"
     [[ $instance =~ $UNIT_NAME ]] || exit 2
@@ -158,7 +158,8 @@ main() {
   fi
   instance="${1:-}"
   [[ $instance =~ $UNIT_NAME ]] || exit 2
-  IFS= read -r -t "$READ_SECONDS" -n 4097 line
+  [ -f "$TAG_HOST" ] && read_limit=4097
+  IFS= read -r -t "$READ_SECONDS" -n "$read_limit" line
   rc=$?
   arrived="$(uptime_ms)"
   if [ "$rc" -gt 128 ] || { [ "$rc" -ne 0 ] && [ -z "$line" ]; } || [ ${#line} -gt 4096 ]; then

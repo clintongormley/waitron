@@ -902,6 +902,8 @@ nothing yet: one typed method for each of PR 7's seven requests.
   `boxHostRequests()` only; the clock client still answers `lost` there. Tests with a stand-in
   connection and with the real shell handler cover it; on Linux the handler answers a line over 700
   characters and then resets the connection (measured in Docker, the plan's re-map finding 9).
+**11 November update:** the development shell uses the longer 4096-character read only when its tag adapter is installed; clock requests still have the 700-character limit. A clock-only installation retains its original short read and Linux reset. The unchanged real-shell client assertions cover that legacy path; the forwarding test covers a complete long tag. [Console cut](../superpowers/plans/2026-11-11-b3-18a-name-notice.md).
+
 - The two reads wait 5 seconds, the five other requests 20; `readMs` and `changeMs` override them,
   and the tests run both defaults on fake timers.
 - Both clients, the clock one included, now treat an empty socket path as no path and ask
