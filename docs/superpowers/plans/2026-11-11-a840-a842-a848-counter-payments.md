@@ -5,11 +5,12 @@ Codex plan. Request: `docs/backlog.md` A840/A842/A848 and Lane F queue, watcher
 “yes” at 17:50 to R3 proposal 3: a sent dish leaves only through Cancel item;
 whole-order cancellation is Cancel item per dish plus the order's reason.
 Claude's first plan read took 482s; its corrections are incorporated. The second
-read and watcher clearance are pending. No owner design approval is claimed.
+Claude read took 461s. Watcher 18:32 cleared the smaller server-refusal approach
+below; no owner approval of this plan is claimed.
 
 **Finish line:** remove obsolete Cancel and credit at Counter; show the pressed
 payment action coloured with a spinner; word empty-order refusals in EN/ES;
-cancel an ordinary counter order under A758's per-dish rules and tell the kitchen.
+refuse whole-order cancellation until sent dishes use Cancel item.
 Reuse current widgets, refusal mappers, cancellation context/operation and
 `wt-button.loading`. No table, migration, protected fiscal writer or hardware gate.
 
@@ -36,30 +37,26 @@ Reuse current widgets, refusal mappers, cancellation context/operation and
    bill (empty bills may move), and Move dishes (empty selection sends nothing).
    Word a reachable send/move server refusal through its existing mapper; never
    enable a control or add server checks just to manufacture a refusal.
-4. **R3 Important 2:** reproduce M's `reports/r3/2.patch`. Reuse Cancel item for
-   each sent dish before whole cancellation: fired asks if preparation started;
-   started/served asks still charge / don't charge, with existing reasons and
-   permissions. Extend its party-only context/operation to an explicitly checked
-   counter bill, retaining the table wrapper. Reuse its dialog, and offer plain
-   Cancel order for non-invoiced waiting orders, replacing no fiscal action.
-   Keep the order reason. Never abandon a retained charge: still-charge leaves
-   the bill payable; close only when remaining charges are removed or paid.
-   Check `abandonHeldOrder` too: unsent-only discard stays simple; sent dishes
-   use those same choices. Server tests own decisions and kitchen notice/slip/
-   report effects; one app journey owns choices and retained-charge display.
-   R3-owner later reuses this Counter support for basket ✕ and retires Recall.
+4. **R3 Important 2, watcher 18:32 correction:** keep `cancelPlaced` and its
+   route; refuse with a named code while any sent dish remains on the order.
+   Each dish must go through Cancel item first, which already owns the kitchen
+   VOID notice/slip tests. Adapt M's `reports/r3/2.patch` route proof to assert
+   the named refusal and still-placed order, preserving those assertions.
+   No new Cancel order button, counter Cancel item extension, retained-charge
+   rule or client sequence. `abandonHeldOrder`'s sent-dish handling and counter
+   cancellation support belong to the separately queued R3-owner item.
 
 **Files:** till `till-app.ts`, `api/client.ts`, `i18n/{codes,strings}.ts`,
 `widgets/{tender-pay,counter-waiting,cancel-credit-dialog,cancel-item-dialog}.ts`
 and their focused siblings; counter cancellation suite retires, duration entry
-goes, existing table/move tests remain. Server `working-order.ts`,
-`line-cancel{,-context,-api}.ts`, route/operation tests and existing fixtures.
+goes, existing table/move tests remain. Server `working-order.ts`, `till-api.ts`, `errors.ts`, the one new
+route proof and any affected existing cancellation tests.
 Preserve issued-invoice behaviour; ask if protected fiscal writers must change.
 
 **Checks/delivery:** failing test before each fix; run every changed test file.
 Inspect EN/ES, light/dark, phone/desktop; use existing accessibility helpers.
 Update affected guide twins/backlog and C126's dated retirement pointer. A739
 physical checks stay in the real-box session. Hook, Claude run-it reviews, one
-fix-read, current-head CI, authorised landing. Forecast production +350/-170,
-tests +550/-850, support +0/-1, docs +40/-30; stop above 1.5 times that or a new
-behaviour. The reread must challenge the new UI/API scope and shared operation.
+fix-read, current-head CI, authorised landing. Forecast production +80/-150,
+tests +180/-850, support +0/-1, docs +40/-30; stop above 1.5 times that or a new
+behaviour. Empty Send stays disabled; verify its visible empty-basket wording.
