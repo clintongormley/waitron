@@ -1,4 +1,3 @@
-import { replaceBackupSettings } from "./backup-env-writer.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -20,6 +19,7 @@ import { AppError } from "@waitron/shared";
 import { loadKeyRing } from "@waitron/credentials";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { adoptFromPrimary, type AdoptHooks, type AdoptRequest } from "./adopt.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
 import { markJoined } from "./box-tls-install.js";
 import { mintBreakGlassSecret } from "./break-glass.js";

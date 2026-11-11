@@ -180,6 +180,15 @@ describe("replaceBackupSettings", () => {
     expect((await stat(join(dir, "backup.env"))).mode & 0o777).toBe(0o600);
   });
 
+  it("syncs backup.env before renaming it into place, and the folder after", async () => {
+    const dir = tempDir();
+    const path = join(dir, "backup.env");
+    const events = await syncsAndRenames(() =>
+      replaceBackupSettings(dir, { WAITRON_BACKUP_DIR: "/srv/new" }),
+    );
+    expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
+  });
+
   it("null removes the file, and removing a missing file is not an error", async () => {
     const dir = tempDir();
     await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_DIR=/srv\n");

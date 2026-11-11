@@ -138,8 +138,9 @@ export async function runStagedReset(
     }
     await wipeVenueDatabases(deps.venueDir, deps.stateDir);
     // The other venue's authority and key ring may be here, so the box's own go with them and the
-    // next setup start mints a fresh set; `backup.env` may hold the other venue's recovery key. Before the operation record, whose removal makes a re-run
-    // discard; the joined record goes last of them, so a re-run still finds this box joined.
+    // next setup start mints a fresh set; `backup.env` may hold the other venue's recovery key.
+    // Before the operation record, whose removal makes a re-run discard; the joined record goes
+    // last of them, so a re-run still finds this box joined.
     if (await joinedAnotherBox(deps.stateDir)) {
       await rm(join(deps.stateDir, TLS_REPAIR_FLOW_DIR), { recursive: true, force: true });
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
