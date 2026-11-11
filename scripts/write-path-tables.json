@@ -5,6 +5,7 @@
   "node_handover_restriction": ["packages/node-db/src/handover.ts"],
   "node_mirror_link": ["packages/node-db/src/mirror-link.ts"],
   "node_mode": ["packages/node-db/src/mode.ts"],
+  "node_pair_link": ["packages/credentials/src/node-pair-link.ts"],
   "node_primary_key": ["packages/node-db/src/primary-key.ts"],
   "node_recovery_key": ["packages/node-db/src/recovery-key.ts"],
   "node_signing_key": ["packages/credentials/src/node-signing-key.ts"],

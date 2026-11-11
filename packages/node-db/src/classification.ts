@@ -11,6 +11,7 @@ export const NODE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("node_recovery_key", "local", LOCAL),
   classify("node_signing_key", "local", LOCAL),
   classify("node_primary_key", "local", LOCAL),
+  classify("node_pair_link", "local", LOCAL),
   classify("node_handover_operations", "local", HANDOVER),
   classify("node_handover_events", "local", HANDOVER),
   classify("node_handover_restriction", "local", HANDOVER),

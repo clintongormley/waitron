@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2d94a206-98ec-4dc4-8b11-a6776af55fdb",
+  "id": "78847760-6e9c-4309-aa3a-7695e4665cd5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "node_handover_events": {
@@ -346,6 +346,142 @@
         "node_mode_role_valid_ck": {
           "name": "node_mode_role_valid_ck",
           "value": "not (\"node_mode\".\"mode\" = 'mirror' and \"node_mode\".\"singleton_role\" = 'primary')"
+        }
+      }
+    },
+    "node_pair_link": {
+      "name": "node_pair_link",
+      "columns": {
+        "node_id": {
+          "name": "node_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "peer_node_id": {
+          "name": "peer_node_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "peer_public_key": {
+          "name": "peer_public_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "store_url": {
+          "name": "store_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "venue_id": {
+          "name": "venue_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "access_key_id": {
+          "name": "access_key_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "secret_ciphertext": {
+          "name": "secret_ciphertext",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "secret_iv": {
+          "name": "secret_iv",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "secret_auth_tag": {
+          "name": "secret_auth_tag",
+          "type": "blob",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ring_version": {
+          "name": "ring_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "node_pair_link_role_ck": {
+          "name": "node_pair_link_role_ck",
+          "value": "\"node_pair_link\".\"role\" in ('streams', 'serves')"
+        },
+        "node_pair_link_state_ck": {
+          "name": "node_pair_link_state_ck",
+          "value": "(\"node_pair_link\".\"role\" = 'streams' and \"node_pair_link\".\"state\" in ('pending', 'streaming')) or (\"node_pair_link\".\"role\" = 'serves' and \"node_pair_link\".\"state\" in ('awaiting_copy', 'copied'))"
+        },
+        "node_pair_link_key_version_ck": {
+          "name": "node_pair_link_key_version_ck",
+          "value": "\"node_pair_link\".\"key_version\" >= 1"
+        },
+        "node_pair_link_secret_iv_len_ck": {
+          "name": "node_pair_link_secret_iv_len_ck",
+          "value": "octet_length(\"node_pair_link\".\"secret_iv\") = 12"
+        },
+        "node_pair_link_secret_auth_tag_len_ck": {
+          "name": "node_pair_link_secret_auth_tag_len_ck",
+          "value": "octet_length(\"node_pair_link\".\"secret_auth_tag\") = 16"
         }
       }
     },

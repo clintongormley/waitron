@@ -203,6 +203,7 @@ describe("no source writes a listed table outside the files the JSON names", () 
       "node_handover_restriction",
       "node_mirror_link",
       "node_mode",
+      "node_pair_link",
       "node_primary_key",
       "node_recovery_key",
       "node_signing_key",
