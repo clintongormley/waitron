@@ -6788,11 +6788,7 @@ export class TillTableOrderScreen extends LitElement {
           ? []
           : [
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
-              // The server refuses both on a presented or paid bill, and Merge bills on a bill
-              // holding a payment.
-              ...(shown.status !== "open"
-                ? []
-                : [moveDishes, ...(shown.hasPayments ? [] : [merge])]),
+              ...(shown.status !== "open" ? [] : [moveDishes, merge]),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               ...this.#billDocumentItems(shown),

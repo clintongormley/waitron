@@ -408,9 +408,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
     });
 
-    // mergeBills refuses `bill.payments_received` when either bill holds a payment
-    // (requireUntouchedPair); moveDishes takes dishes off a partly paid bill.
-    it("an open bill holding a payment offers no Merge bills, and still offers Move dishes…", async () => {
+    it("an open bill holding a payment offers Merge bills and Move dishes…", async () => {
       const el = await mountScreen({
         bills: [
           partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true }),
@@ -418,7 +416,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         ],
       });
 
-      expect(billItem(el, '[data-action="merge"]')).toBeNull();
+      expect(billItem(el, '[data-action="merge"]')).not.toBeNull();
       expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
     });
 
