@@ -54,19 +54,20 @@ import type { Logger } from "./logger.js";
 
 /**
  * On a mirror the data node is the ORIGIN recorded in node.db's `node_mirror_link`, not the
- * mirror's own id. Per-node reports use it; the overview, modelo 303 and the transfer file read
- * every node.
+ * mirror's own id. Per-node reports use it; the overview, modelo 303 and the deferred-payments
+ * file read every node.
  */
 export interface ReportApiDeps {
   db: Database;
   cfg: { nodeId: string };
   /** The printed page's language when neither the person nor the browser names one, and always the
-   * transfer file's. */
+   * deferred-payments file's. */
   venueLocale: SupportedLocale;
 }
 
 /** Two distinct seams: viewing the takings dashboard is not exporting the accountant's files (modelo
- * 303 and the transfer file); a supervisor holds `report.view` but not `report.export`. */
+ * 303 and the deferred-payments file); a supervisor holds `report.view` but not
+ * `report.export`. */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
 const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
@@ -167,7 +168,8 @@ async function countOpenTables(tx: Transaction): Promise<{ open: number; total: 
 
 /**
  * Mount reporting routes through the shared authorization gate. report.view
- * permits operational reports; report.export permits the modelo 303 export and the transfer file.
+ * permits operational reports; report.export permits the modelo 303 export and the
+ * deferred-payments file.
  * The overview aggregates all tenant nodes; per-node reports read cfg.nodeId and the boxes it took
  * over from.
  * The modelo 303 file remains a candidate requiring uploader validation and asesor
@@ -353,8 +355,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The accountant's file of invoices whose bills were closed by transfer on a business day in an
-  // inclusive range, venue-wide. A POST because each download writes its activity entry.
+  // The accountant's file of invoices whose bills were closed as deferred payments on a business
+  // day in an inclusive range, venue-wide. A POST because each download writes its activity entry.
   app.post("/management-api/reports/closed-by-transfer", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -375,7 +377,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
       });
       return c.body(renderTransferClosedCsv(rows, toLanguage(deps.venueLocale)), 200, {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="closed-by-transfer-${from}-${to}.csv"`,
+        "Content-Disposition": `attachment; filename="deferred-payments-${from}-${to}.csv"`,
         "Cache-Control": "no-store",
         "X-Content-Type-Options": "nosniff",
       });

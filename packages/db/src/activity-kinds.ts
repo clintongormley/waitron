@@ -16,7 +16,7 @@ export interface ActivityKindData {
   readonly "membership.node_removed": { readonly contactUrl: string; readonly term: number };
   /** Who cleared a removed machine from the chart, freeing its place, at which term. */
   readonly "membership.node_cleared": { readonly term: number };
-  /** Who downloaded the file of bills closed by transfer, for which business days, and its row
+  /** Who downloaded the file of deferred payments, for which business days, and its row
    * count; never a customer named in the file. */
   readonly "transfer_export.downloaded": {
     readonly from: string;

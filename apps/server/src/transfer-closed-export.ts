@@ -25,7 +25,8 @@ function moneySum(values: readonly string[]): Decimal {
   return toScale(sumDecimals(values.map(decimal)), 2);
 }
 
-/** Every invoice whose bill was closed by transfer on a business day in the range, venue-wide. */
+/** Every invoice whose bill was closed as a deferred payment on a business day in the range,
+ * venue-wide. */
 export async function listTransferClosedInvoices(
   tx: Transaction,
   range: { from: string; to: string },

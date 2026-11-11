@@ -2180,7 +2180,7 @@ the venue's language, and writes a Spanish amount with a decimal comma inside a 
 2026-10-25). A spreadsheet set to expect `;` may open it in one column;
 Excel is not installed on the machine that checked, so Excel in Spain is untested. The working-time
 export (`apps/server/src/attendance-export-csv.ts`) also joins with `,` in every language. The accountant's
-file of bills closed by transfer (`apps/server/src/transfer-closed-export.ts`, A275) is written the
+file of deferred payments (`apps/server/src/transfer-closed-export.ts`, A275) is written the
 same way, through the same `csvCell` and `amountCell`. Whether the `es` file should use `;` is the
 owner's decision.
 

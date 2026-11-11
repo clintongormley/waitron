@@ -1,5 +1,7 @@
 # A275 Task 6: the accountant's file of bills closed "to be paid by transfer"
 
+_2026-11-11 (owner, 13:49): the words people see are now "Deferred payment" / «Pago aplazado», not "To be paid by transfer"; the file and button names follow. Code names keep `transfer` until a follow-up rename._
+
 **Cleared by the watcher 2026-11-11 10:24 with two changes (below, marked "watcher 10:24"); owner
 question 1 answered "B" 2026-11-11 10:25 (each download recorded).** Earlier status: proposed
 2026-11-11, revised the same day after a fresh reader's review; for the watcher;

@@ -88,7 +88,7 @@ by the answers):
     `order_draft_events` (`actor_id`, `from_person`, `to_person`); `order_group_events.actor_id`;
     `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
     line counts as; `bill_edit_states.editor_id`, who is editing a bill; `parties` (`opened_by`,
-    `closed_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves and downloads of the file of bills closed by transfer); and `recovery_packs.made_by`, who made a recovery pack. Core's
+    `closed_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `activity_log` (`person_id`; membership changes, settings saves and downloads of the file of deferred payments); and `recovery_packs.made_by`, who made a recovery pack. Core's
     `line_service_cancellations.actor_id` is also not yet in the download: automatic departure
     stops can name an actor without an adjustment. The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss

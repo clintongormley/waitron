@@ -266,7 +266,7 @@ describe("POST /management-api/reports/closed-by-transfer", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/csv; charset=utf-8");
     expect(res.headers.get("content-disposition")).toBe(
-      `attachment; filename="closed-by-transfer-${day}-${day}.csv"`,
+      `attachment; filename="deferred-payments-${day}-${day}.csv"`,
     );
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
