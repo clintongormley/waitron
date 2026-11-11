@@ -26,6 +26,7 @@ const REPLACES: readonly string[] = [
   "apps/server/src/db-wipe.ts",
   "apps/server/src/handover-place-copy.ts",
   "apps/server/src/restore.ts",
+  "packages/provisioning/src/environment-recovery-move.ts",
   "packages/provisioning/src/first-setup-start-again-deletion.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
 ];

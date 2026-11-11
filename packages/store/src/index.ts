@@ -24,6 +24,7 @@ export {
 export type { AppendOnlyTrigger, CatalogueTarget, StatementTarget } from "./append-only.js";
 export { archiveTo } from "./archive.js";
 export type { CommitListener, DiskFullListener } from "./connections.js";
+export { connectionPair } from "./connections.js";
 export { drizzleNodeSqlite } from "./node-sqlite-adapter.js";
 export type { NodeSqliteDatabase, RawResult } from "./node-sqlite-adapter.js";
 export { openLock } from "./migration-lock.js";

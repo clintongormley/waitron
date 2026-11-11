@@ -24,8 +24,15 @@ import {
   isSecure,
   mountStartAgainChoice,
   renderStartAgainSection,
+  renderEnvironmentSection,
   type StartAgainView,
 } from "./recovery-start-again.js";
+
+import {
+  mountEnvironmentChoice,
+  type EnvironmentRecoveryDeps,
+  type EnvironmentView,
+} from "./recovery-environment.js";
 
 export {
   BOOT_INCOMPLETE,
@@ -49,6 +56,7 @@ export interface RecoveryDeps {
   /** This start was refused before it began, so `failures` does not count it. */
   refusedAtStart?: true;
   log?: Logger;
+  environment?: EnvironmentRecoveryDeps;
   /** Present when the start found files a cut-off Start again did not create. */
   startAgain?: {
     roots: { stateDir: string; venueDir: string };
@@ -303,10 +311,35 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   const { startAgain } = deps;
   // Kept in-process only: the next start reads the recorded Keep from disk and refuses with it.
   let kept = false;
-  const draw = startAgainDraw(deps, () => kept);
+  const startAgainPage = startAgainDraw(deps, () => kept);
+  let environmentAnswer: string | undefined;
+  let environmentUnfinished = false;
+  const drawEnvironment = async (view: EnvironmentView) => {
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+    if (view.unfinished) environmentUnfinished = true;
+    if (environmentUnfinished)
+      return renderPage(deps, log, view.locale, freeBytes, {
+        ...deps.state,
+        lastErrorCode: "setup.environment_move_unfinished",
+      });
+    const section = renderEnvironmentSection(view);
+    if (view.message?.kind === "moved") environmentAnswer = section;
+    if (view.stopped)
+      return renderPage(
+        deps,
+        log,
+        view.locale,
+        freeBytes,
+        deps.state,
+        view.locale === "en-GB"
+          ? "<p>Nothing was changed. You can correct the host settings and retry.</p>"
+          : "<p>No se ha cambiado nada. Puedes corregir la configuración del equipo y reintentar.</p>",
+      );
+    return renderPage(deps, log, view.locale, freeBytes, deps.state, section, environmentAnswer);
+  };
+  const draw = deps.environment === undefined ? startAgainPage : drawEnvironment;
 
   app.get("/", async (c) => {
-    // No venue locale: that is read from the venue database, which the recovery path never opens.
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
@@ -317,6 +350,9 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     mountStartAgainChoice(app, startAgain, draw, deps.log, () => {
       kept = true;
     });
+
+  if (deps.environment !== undefined)
+    mountEnvironmentChoice(app, deps.environment, drawEnvironment);
 
   // Named one by one, to leave out the clear count and the trigger names.
   app.get("/recovery-api/status", (c) => {

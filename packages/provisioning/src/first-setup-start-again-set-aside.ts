@@ -292,9 +292,9 @@ function chain(top: string, bottom: string): string[] {
 }
 
 /** The record's destination folders, made if absent, each synced from its root down. */
-async function makeDestinationFolders(
+export async function makeDestinationFolders(
   roots: Roots,
-  record: StartAgainChoiceRecord & { setAside: Destinations },
+  record: { listed: { units: readonly Pick<StartAgainUnit, "root">[] }; setAside: Destinations },
   io: SetAsideIo,
 ): Promise<Record<Root, string>> {
   const folders = setAsideFolderPaths(roots, record.setAside);
@@ -335,7 +335,7 @@ async function refuseUnrealParents(
 }
 
 /** Renames one piece into its folder, never over anything, and syncs both parents. */
-async function movePiece(
+export async function movePiece(
   roots: Roots,
   folders: Record<Root, string>,
   unit: StartAgainUnit,

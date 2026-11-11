@@ -235,18 +235,30 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Pide a quien instaló este equipo que lo revise. Restaurar una copia de seguridad puede no servir: una restauración ejecuta la misma actualización, y puede detenerse en el mismo punto.",
     },
   },
+  "setup.environment_move_unfinished": {
+    "en-GB": {
+      title: "Start again has not finished.",
+      action:
+        "Some files may already be set aside. Retry a normal boot to finish moving them before first setup starts.",
+    },
+    "es-ES": {
+      title: "Empezar de nuevo no ha terminado.",
+      action:
+        "Puede que algunos archivos ya estén apartados. Reintenta un arranque normal para terminar de moverlos antes de empezar la configuración inicial.",
+    },
+  },
   "deployment.environment_mismatch": {
-    // No restore and no reinstall: neither changes which database this box points at. The
-    // environments must never share an invoice series (CLAUDE.md §5).
     "en-GB": {
       title:
         "This box and its database do not belong to the same system: one is set up for real sales, the other for testing.",
-      action: "Ask whoever installed this box to check its settings.",
+      action:
+        "If the host settings are wrong, Stop and correct them, then retry. Otherwise, choose Start again over the secure connection to move this database aside and start fresh or choose another backup.",
     },
     "es-ES": {
       title:
         "Este equipo y su base de datos no pertenecen al mismo sistema: uno está configurado para ventas reales y el otro para pruebas.",
-      action: "Pide a quien instaló este equipo que revise su configuración.",
+      action:
+        "Si la configuración del equipo es incorrecta, para y corrígela, y reintenta. Si no, elige Empezar de nuevo con la conexión segura para apartar esta base de datos y empezar de cero o elegir otra copia de seguridad.",
     },
   },
   "sif.producer_unset": {

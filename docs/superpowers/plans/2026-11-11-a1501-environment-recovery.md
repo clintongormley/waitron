@@ -23,3 +23,5 @@ Remove the backup-room note through its required writer before database movement
 - Run every changed test file with its package's `pnpm exec vitest run <file>`, normal hook/current-head CI and two Claude run-it angles. LOOK at real EN/ES pages, both themes, phone/desktop; screenshots stay uncommitted.
 
 **Estimate/limits.** Production +650/−60, tests +550/−0, support +40/−0, docs +100/−15: 1,415 changed lines; watcher checkpoint above 2,122. One usable cut, three hours to PR excluding external waits. No fiscal writer/chain/numbering, stamp/admission change, relabelling, compatibility or general recovery redesign. The permitted re-read is complete; apply its corrections without another read, then watcher clearance before build.
+
+**Build record, 11 November 2026.** The watcher cleared plan 815e200b4a at 11:05 and released its #2804 dependency at 12:03 in Lane F questions.md: “A1501: yes, build now (status set to in-progress)”. The implementation retains the ordinary three-failure recovery entry and uses the existing failed-start page. The watcher also authorised the root recovery-page sentence update at 11:05. No owner design approval is claimed.

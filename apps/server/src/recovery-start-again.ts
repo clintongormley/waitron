@@ -211,6 +211,10 @@ function bottomText(message: StartAgainMessage, text: StartAgainPageText): strin
  * The password box is the page's one native text field: the page loads no script, so no field
  * primitive can run on it (A1098 Q1).
  */
+function passwordInput(passwordInvalid: string): string {
+  return `<input type="password" id="start-again-password" name="password" autocomplete="current-password" required${passwordInvalid}>`;
+}
+
 export function renderStartAgainSection(input: {
   survey: Choice;
   locale: SupportedLocale;
@@ -248,7 +252,7 @@ export function renderStartAgainSection(input: {
 
   return `${list}<form method="post" action="/recovery-api/start-again">
 <p><label for="start-again-password">${escapeHtml(text.password)} *</label></p>
-<p><input type="password" id="start-again-password" name="password" autocomplete="current-password" required${passwordInvalid}></p>
+<p>${passwordInput(passwordInvalid)}</p>
 ${fieldError("start-again-password-error", passwordError)}<fieldset${choiceInvalid}>
 <legend>${escapeHtml(text.choiceLegend)}</legend>
 <p><label><input type="radio" name="choice" value="keep" required${checked("keep")}> <strong>${escapeHtml(text.keepTitle)}</strong></label></p>
@@ -299,7 +303,7 @@ export function isSecure(c: Context): boolean {
   return socket instanceof TLSSocket && socket.encrypted;
 }
 
-async function formBody(c: Context): Promise<string> {
+export async function formBody(c: Context): Promise<string> {
   const type = c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase();
   if (type !== "application/x-www-form-urlencoded") invalid("body");
   const reader = c.req.raw.body?.getReader();
@@ -401,7 +405,7 @@ function logChoiceFailed(error: unknown, deps: StartAgainDeps, log?: Logger): vo
 }
 
 /** Each root's folder named as the found-files list names it: `state/...` or `venue/...`. */
-function movedFolder(setAside: { state: string; venue: string }): string {
+export function movedFolder(setAside: { state: string; venue: string }): string {
   const parent = setAside.state.slice(0, setAside.state.lastIndexOf("/"));
   if (setAside.venue === `${parent}/venue`) return `state/${parent}`;
   return `state/${setAside.state}, venue/${setAside.venue}`;
@@ -416,7 +420,7 @@ function outgoingOf(c: Context): ServerResponse | undefined {
  * browser that disconnects mid-answer closes the response without `'finish'`, and the finished
  * Move must still restart.
  */
-function afterResponse(outgoing: ServerResponse | undefined, then: () => void): void {
+export function afterResponse(outgoing: ServerResponse | undefined, then: () => void): void {
   if (
     outgoing === undefined ||
     outgoing.writableFinished ||
@@ -532,4 +536,50 @@ export function mountStartAgainChoice(
     logChoice();
     return answer;
   });
+}
+
+export function renderEnvironmentSection(input: {
+  locale: SupportedLocale;
+  secure: boolean;
+  message?: StartAgainMessage;
+}): string {
+  const { locale, secure, message } = input;
+  const shared = START_AGAIN_PAGE_TEXT[locale];
+  const text =
+    locale === "en-GB"
+      ? {
+          move: "Start again",
+          stop: "Stop",
+          detail:
+            "Move this venue's files aside, unchanged. The box then starts first setup, where you can start fresh or choose another backup.",
+          wrong:
+            "The administrator password could not be verified. Nothing was moved. Check it and try again.",
+        }
+      : {
+          move: "Empezar de nuevo",
+          stop: "Parar",
+          detail:
+            "Apartar los archivos de este local, sin cambios. El equipo empieza la configuración inicial, donde puedes empezar de cero o elegir otra copia de seguridad.",
+          wrong:
+            "No se ha podido verificar la contraseña de administrador. No se ha movido nada. Revísala y vuelve a intentarlo.",
+        };
+  if (message?.kind === "moved") return `<p>${escapeHtml(shared.moved(message.folder))}</p>`;
+  const passwordError =
+    message?.kind === "wrongPassword"
+      ? text.wrong
+      : message?.kind === "passwordMissing"
+        ? shared.passwordMissing
+        : "";
+  const error = message === undefined ? "" : passwordError || bottomText(message, shared);
+  const explanation = `<p>${escapeHtml(text.detail)}</p><p>${escapeHtml(shared.moveUnsent)}</p>`;
+  if (!secure)
+    return `${explanation}<p>${escapeHtml(shared.insecureForm)}</p>${error === "" ? "" : `<p>${escapeHtml(error)}</p>`}`;
+  return `${explanation}<form method="post" action="/recovery-api/environment/start-again">
+<p><label for="start-again-password">${escapeHtml(shared.password)} *</label></p>
+<p>${passwordInput(passwordError === "" ? "" : ' aria-invalid="true" aria-describedby="environment-password-error"')}</p>
+${passwordError === "" ? "" : `<p id="environment-password-error">${escapeHtml(passwordError)}</p>`}
+${error === "" ? "" : `<p>${escapeHtml(passwordError === "" ? error : shared.fixFields)}</p>`}
+<p><button type="submit" name="choice" value="move">${escapeHtml(text.move)}</button>
+<button type="submit" name="choice" value="keep" formnovalidate>${escapeHtml(text.stop)}</button></p>
+</form>`;
 }
