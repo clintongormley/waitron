@@ -9,6 +9,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import {
+  type Database,
   tenders,
   tenderRefunds,
   sales,
@@ -28,7 +29,12 @@ import { endorseKey, signDocumentBody } from "@waitron/membership";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
-import { altaFor, seedNode, seedSale } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import {
+  altaFor,
+  seedNode,
+  seedSale,
+  type SeededNode,
+} from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { appendToChain } from "@waitron/fiscal-verifactu/src/chain.js";
 import { drain, DEFAULT_SKIP_RETRY_MS } from "@waitron/fiscal-verifactu/src/drain.js";
 import {
@@ -40,7 +46,7 @@ import {
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { computeDailyClose, computeVatReturn, mapModelo303 } from "@waitron/reporting";
-import { decimal, saleId as brandSaleId } from "@waitron/shared";
+import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { formerMainForReturn, runReturnRecordsPass } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
@@ -344,12 +350,7 @@ it("counts returned VAT and settled payments without changing the new main's own
     counts: { sales: 1, corrections: 0, voids: 0 },
     vat: { grossTotal: "123.45" },
   });
-  const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif,numero_instalacion from registro_sif where id=${source.sifId}`,
-  );
-  const pending = altaFor(source, brandSaleId(sale!.id), 1, 1);
-  pending.input.IDEmisorFactura = identity!.nif;
-  pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+  const pending = await originalFor(old.db, source, brandSaleId(sale!.id));
   await withTransaction(old.db, async (tx) => {
     await appendToChain(tx, source.nodeId, pending);
     await tx.insert(tenders).values({
@@ -446,6 +447,16 @@ it("counts returned VAT and settled payments without changing the new main's own
   );
 });
 
+async function originalFor(db: Database, source: SeededNode, saleId: SaleId) {
+  const [identity] = db.all<{ nif: string; numero_instalacion: string }>(
+    sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+  );
+  const pending = altaFor(source, saleId, 1, 1);
+  pending.input.IDEmisorFactura = identity!.nif;
+  pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+  return pending;
+}
+
 async function pendingCardOriginal() {
   const source = await seedNode(old.db, "Source");
   const receiver = await seedNode(old.db, "Receiver");
@@ -456,12 +467,7 @@ async function pendingCardOriginal() {
     settledAt: "2026-07-20T17:21:00.000Z",
   });
   const saleId = await seedSale(old.db, source, 1);
-  const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
-    sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
-  );
-  const pending = altaFor(source, saleId, 1, 1);
-  pending.input.IDEmisorFactura = identity!.nif;
-  pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+  const pending = await originalFor(old.db, source, saleId);
   await withTransaction(old.db, (tx) => appendToChain(tx, source.nodeId, pending));
   await old.db.insert(tenders).values({
     id: "pending-card-tender",
