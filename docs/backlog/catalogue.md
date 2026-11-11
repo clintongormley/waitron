@@ -1139,7 +1139,7 @@ What the design has to settle:
 
 ## A1516. Mark a dish sold out from the till
 
-**Go-live (owner, 2026-11-11). Not designed; not started.** The "sold out for now" switch (the
+**Go-live (owner, 2026-11-11). [Proposal awaiting owner answers](../superpowers/plans/2026-11-11-a1516-till-sold-out.md); not built.** The "sold out for now" switch (the
 product's `available` flag, separate from archiving) is set only in the dashboard's product editor,
 by someone with `catalogue.manage`. When it is set, every till greys the dish out within about 15
 seconds and the server refuses to sell it. Floor staff cannot set it during service. The design

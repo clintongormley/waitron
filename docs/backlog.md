@@ -487,6 +487,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1516. Mark a dish sold out from the till (owner, 2026-11-11): go-live.** Only a manager in the
   dashboard can do it today, so floor staff cannot during service. The design also decides who may
   use the button and whether "sold out" switches back by itself the next day; today it never does.
+  [Proposal awaiting owner answers](superpowers/plans/2026-11-11-a1516-till-sold-out.md).
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
