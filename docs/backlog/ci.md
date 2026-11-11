@@ -519,7 +519,7 @@ A1424's live qualification was added on 7 November 2026.
   drills. Keep the corrected v41 controller; the existing routing job uses the hosted
   approximation above (watcher, 2026-11-09 10:01). A1454 keeps six slots per host (owner,
   2026-11-11; see Decisions and deliberate limits); A1461 reduces run sizes. Per-job
-  overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
+  overflow, the remaining workflows and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
   [Procedure and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
