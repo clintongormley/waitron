@@ -6,6 +6,7 @@ import { setTimeout as deadline } from "node:timers/promises";
 import { describe, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import nodemailer from "nodemailer";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import {
   createInvoiceEmailSender,
   createRoutedInvoiceEmailSender,
@@ -164,6 +165,41 @@ function textPart(message: string) {
 }
 
 describe("invoice SMTP transport", () => {
+  it.each([
+    { locale: "en-GB", duplicate: false, total: "19.69" },
+    { locale: "es-ES", duplicate: true, total: "19,69" },
+  ])(
+    "emails a simplified receipt in $locale with duplicate=$duplicate",
+    async ({ locale, duplicate, total }) => {
+      const rig = await smtpRig("accepted");
+      try {
+        const document = structuredClone(fixture);
+        document.invoiceLocale = locale;
+        document.duplicate = duplicate;
+        document.result.invoiceType = "F2";
+        document.result.invoiceNumber = "S/1";
+        delete document.result.recipient;
+        const labels = receiptLabelsFor(locale);
+        const caption = `${labels.simplifiedInvoice} S/1`;
+        expect(
+          await createInvoiceEmailSender(rig.config)({ recipient: "guest@example.test", document }),
+        ).toEqual({ status: "sent" });
+        expect(rig.messages).toHaveLength(1);
+        const message = rig.messages[0]!;
+        expect(message).toContain(`Subject: ${caption}`);
+        expect(textPart(message)).toBe(duplicate ? `${caption} — ${labels.duplicate}` : caption);
+        expect(message).toContain("filename=receipt.pdf");
+        const pdf = (await attachmentText(message)).replace(/\s+/g, " ");
+        expect(pdf).toContain(`${labels.simplifiedInvoice} S/1`);
+        expect(pdf).toContain(total);
+        expect(pdf.includes(labels.duplicate)).toBe(duplicate);
+        expect(pdf).not.toContain(fixture.result.recipient!.taxId);
+      } finally {
+        await rig.close();
+      }
+    },
+  );
+
   it("A965 labels sends English subject, body and PDF from the document language", async () => {
     const rig = await smtpRig("accepted");
     try {

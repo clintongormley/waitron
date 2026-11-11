@@ -74,7 +74,8 @@ export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSe
   return async ({ recipient, document, privacy }) => {
     const pdf = await renderInvoicePdf(document);
     const labels = receiptLabelsFor(document.invoiceLocale);
-    const caption = `${labels.invoice} ${document.result.invoiceNumber}`;
+    const simplified = document.result.invoiceType !== "F1";
+    const caption = `${simplified ? labels.simplifiedInvoice : labels.invoice} ${document.result.invoiceNumber}`;
     const notice = privacyNotice(document, privacy);
     const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;
     const text = notice === undefined ? marked : `${marked}\n\n${notice}`;
@@ -95,7 +96,13 @@ export function createInvoiceEmailSender(config: SmtpConnection): InvoiceEmailSe
         to: recipient,
         subject: caption,
         text,
-        attachments: [{ filename: "invoice.pdf", contentType: "application/pdf", content: pdf }],
+        attachments: [
+          {
+            filename: simplified ? "receipt.pdf" : "invoice.pdf",
+            contentType: "application/pdf",
+            content: pdf,
+          },
+        ],
       })
       .then<InvoiceDeliveryOutcome, InvoiceDeliveryOutcome>(
         () => ({ status: "sent" }),
