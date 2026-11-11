@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { request as httpsRequest } from "node:https";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -28,6 +28,7 @@ import { writeTlsSet } from "./testing/box-tls.js";
 import { writePendingAdoption } from "./finish-adoption.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { resetObserver } from "./testing/connection-reset.js";
+import { beginHandover } from "./handover-store.js";
 
 const served = vi.hoisted(() => [] as { port: number; server: import("node:net").Server }[]);
 const fetchWrap = vi.hoisted(() => ({
@@ -111,6 +112,10 @@ async function boot(
     now: new Date(),
   });
   await writeTlsSet(stateDir, own);
+  const setupApp = join(stateDir, "setup");
+  await mkdir(join(setupApp, "assets"), { recursive: true });
+  await writeFile(join(setupApp, "index.html"), "<main>Handover fixture</main>");
+  await writeFile(join(setupApp, "assets", "app.js"), "");
   await withNodeTransaction(suite.node, (tx) =>
     sealNodeSigningKeyTx(tx, loadKeyRing(KEY_ENV), NODE, generateNodeKeyPair().privateKey),
   );
@@ -184,6 +189,7 @@ async function boot(
       WAITRON_NODE_ID: NODE,
       ...KEY_ENV,
       WAITRON_ENV: "preproduction",
+      WAITRON_SETUP_APP_DIR: setupApp,
     },
     {},
     seams,
@@ -211,7 +217,7 @@ function walkTargets(app: Hono): { method: string; path: string }[] {
       add("OPTIONS", path);
     }
   }
-  for (const path of ["/", "/manage", "/manage/staff"]) add("GET", path);
+  for (const path of ["/", "/manage", "/manage/staff", "/handover/assets/app.js"]) add("GET", path);
   return [...targets.values()].sort((a, b) =>
     a.path === b.path ? a.method.localeCompare(b.method) : a.path.localeCompare(b.path),
   );
@@ -255,6 +261,8 @@ const OPEN_READS: Record<string, Answer> = {
   "/setup/connection": { status: 200 },
   "/ca.crt": { status: 200 },
   "/setup-api/ca.crt": { status: 200 },
+  "/handover/x": { status: 404 },
+  "/handover/assets/app.js": { status: 200 },
 };
 
 const MIRROR_WRITES: Record<string, Answer> = {
@@ -273,7 +281,9 @@ const MIRROR_WRITES: Record<string, Answer> = {
 };
 
 const GATE_PASSES = (path: string) =>
-  path === "/api/node" || /^\/api\/node\/handover\/[^/]+$/.test(path);
+  path === "/api/node" ||
+  /^\/api\/node\/handover\/[^/]+$/.test(path) ||
+  /^\/handover\/[^/]+$/.test(path);
 
 function mirrorExpected(method: string, path: string): Answer {
   if (SAFE.has(method)) {
@@ -365,6 +375,33 @@ describe("a spare's network surface", () => {
         await readFile(join(stateDir, "tls", "ca.crt"), "utf8"),
       );
       expect(await (await app.request("/help/en/products")).text()).toContain("<h1>");
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a mirror serves the network the handover page of its own destination operation", async () => {
+    const { server, app, stateDir } = await boot("mirror", { fromBox: { current: false } });
+    try {
+      const operationId = "b8000000-0000-4000-8000-000000000005";
+      await beginHandover(
+        { node: suite.node, nodeId: NODE },
+        {
+          operationId,
+          scenario: "controlled",
+          venue: { country: "ES", taxId: "90222222J", environment: "preproduction" },
+          sourceNodeId: ORIGIN,
+          destinationNodeId: NODE,
+          membership: { term: 1, digest: "0".repeat(64) },
+        },
+        "destination",
+      );
+      const page = await app.request(`/handover/${operationId}`, {
+        headers: { accept: "text/html" },
+      });
+      expect(page.status).toBe(200);
+      expect(await page.text()).toContain("Handover fixture");
     } finally {
       await server.close();
       await rm(stateDir, { recursive: true, force: true });
