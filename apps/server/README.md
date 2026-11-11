@@ -667,6 +667,7 @@ trading is not admitted yet, the box has stepped down and started restricted
 Use `jobs` to see the runner's recurring work. Scheduled menu activation runs there,
 with retries after a failure starting at five seconds and doubling up to five minutes.
 The sealed-key copy runs as `backups.sealed_state`, woken by node database commits.
+Closing refreshes that copy once more before closing the node database.
 Services appear in the same map with `kind: "service"`. The bucket copy is `stream`:
 `running` means its host has started a copy, `waiting` means it applies but cannot run
 (the reason is in `detail`), and `not_applicable` means it is inactive on this box.
