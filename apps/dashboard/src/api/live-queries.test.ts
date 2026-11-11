@@ -795,7 +795,7 @@ it("subscribes catalogue defaults to their stored settings", async () => {
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
 
-it("subscribes the venue defaults to the venue documents, venue document and catalogue settings", () => {
+it("subscribes the venue defaults to the clock document, venue document and catalogue settings", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "settings.business_day" },

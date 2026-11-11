@@ -28,7 +28,7 @@
 
 The rest of the sweep (5e) can then be landed by the lane.
 
-**Pull request's first line:** "Every venue is reset: core; backups from before this cannot be restored." Configuration exports remain version 17 with the same venue fields and older exports still import (watcher, 2026-11-11 08:57, Lane H questions.md). Second line: "Owner: this changes five set-up lines of the fiscal
+**Pull request's first line:** "Every venue is reset: core; backups from before this cannot be restored." Configuration exports remain version 17 with the same venue fields and existing version 17 exports still import (watcher, 2026-11-11 08:57, Lane H questions.md). Second line: "Owner: this changes five set-up lines of the fiscal
 pair's `write-path.e2e.test.ts` (line 32 and lines 552–555); no assertion changes."
 
 **Needs before it:** 5c.
@@ -428,3 +428,9 @@ Split point for a fresh implementer.
   working-time note "`attendance-responses.ts`'s `locationBusinessDaySettings` (S23)" is done.
 - [ ] **Step 3:** Protection list: compare, paste, mark.
 - [ ] **Step 4:** `pnpm format:check`; commit; `/finish-branch`. The owner lands it.
+
+
+## WATCHER 2026-11-11 09:19 — 5d: keep the planned move; the review fixes may pass 3,000; next stop 3,400
+- **Simpler alternative ("change nothing until locations is removed"):** it does not stand. 5d is a slice of the owner-approved A1308 build order (docs/superpowers/plans/2026-11-08-a1308-build-order.md, owner 2026-11-09: "build all of it as planned"). Keeping operationDescription readable until vb6 is part of that plan, and moving it now avoids changing fiscal readiness inside 5d. Answer review B in the PR with this.
+- **Review fixes:** approved. Repoint the 9 raw-SQL fixtures, keeping their original values in the existing documents; snapshot the full business_day row beside the no-repair assertion; remove the duplicate dependency, the stale prose and the unused reads. Run those exact files, including payments (54/54 red now), plus the protected fiscal pair. Next stop about 3,400 authored additions; the target is zero failing cases.
+
