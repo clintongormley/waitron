@@ -51,34 +51,35 @@ Files: `apps/till/src/widgets/modifier-picker.ts`, `modifier-picker.test.ts`,
   \`pick-${list.id}-${item.productId}-allergens\`, \`pick-${list.id}-${item.productId}-diet\`)`
   inside the row, after the name, so on the tick-box row it sits inside the `<label>` (tapping it
   ticks the box, and the checkbox's accessible name includes the allergen).
-- Styles: export `extraNutritionStyles` from `diet-badges.ts` (beside `dietBadgeStyles`) holding
-  the chip and row look (`.allergen-chip`, `.extra-nutrition`, `.extra-allergens`) with tokens only
-  (no `em` or `999px` fallbacks), and use it in the picker. The basket, station queue and pass
-  board keep their own copies (no restyle in this change). Keep `.option-name` holding only the
-  name (style tests read it, `modifier-picker.test.ts:867-935`); put the name and the chips in a
-  new wrapper (`.option-label`, a flex column taking `flex: 1`) so price and stepper stay on the
-  right.
+- Styles (watcher 00:11, change 1): the chip and row rules (`.allergen-chip`, `.extra-nutrition`,
+  `.extra-allergens`) go in the extras window's own `static styles`, design tokens only (no `em`
+  or `999px` fallbacks); no shared export, and the basket, station queue and pass board are
+  untouched. Keep `.option-name` holding only the name (style tests read it,
+  `modifier-picker.test.ts:867-935`); put the name and the chips in a new wrapper
+  (`.option-label`, a flex column taking `flex: 1`) so price and stepper stay on the right.
 - Tests, failing first (`modifier-picker.test.ts`):
   1. a tick-box extra declaring `{ milk: {} }` shows one chip reading "Milk" inside its label,
      before it is ticked, and the checkbox's accessible name contains "Milk";
   2. a stepper extra declaring `{ nuts: {}, milk: {} }` shows both chips (sorted, as
      `extraNutrition` sorts);
-  3. an extra with `addAllergens: null` and one with `{}` show no chip and no text beyond today's
-     (assert the row's text is exactly its name and price) — the no-warning rule;
-  4. in Spanish (`es`), the milk chip reads "Leche" (the case restores the screen language after
-     itself, CLAUDE.md §4);
-  5. an extra declaring `{ milk: {} }` with `suitableFor: ["vegan"]` shows the Milk chip and no
-     "Vegan" badge.
-  Deletion controls: remove the call from `#renderPick` (cases 1 and 4 fail) and, separately, from
+  3. an extra with `addAllergens: null` shows nothing new: one check that the row's text is
+     exactly its name and price (watcher 00:11, change 2) — the no-warning rule;
+  4. an extra declaring `{ milk: {} }` with `suitableFor: ["vegan"]` shows the Milk chip and no
+     "Vegan" badge;
+  5. width (watcher 00:11, change 4): its own case, not a state in the A738 note loop — an extra
+     declaring sulphites, in Spanish (longest name, "Dióxido de azufre y sulfitos"), at 390 px, in
+     light and dark, with the same edge checks the A738 case in
+     `modifier-picker.note.test.ts:98-128` uses; it restores the screen language after itself
+     (CLAUDE.md §4).
+  Spanish wording is owned by `allergen-names.test.ts`, so no picker case checks "Leche"
+  (change 2). `diet-badges.test.ts` gains an `addAllergens: {}` case drawing nothing, if it has
+  none. No label check in `basket.line-details.test.ts` (change 3: it repeats case 2).
+  Deletion controls: remove the call from `#renderPick` (case 1 fails) and, separately, from
   `#renderStepper` (case 2 fails); restore each.
-- Reuse the existing tests that already fit: `basket.line-details.test.ts:77` (a milk-declaring
-  cheese on a stepper in the line-details window) gains a chip assertion; the A738 overflow check
-  in `modifier-picker.note.test.ts:98-128` (390 and 1280 px, English and Spanish) gains a state
-  whose extra declares sulphites, the longest Spanish name ("Dióxido de azufre y sulfitos").
 - `modifier-picker.a11y.test.ts`: add a state where both extras declare allergens, checked by
   axe in light and dark, as the file's other states are.
 - Run: `pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker` (all its files),
-  `src/widgets/diet-badges.test.ts` and `src/widgets/basket.line-details.test.ts`. Look at the
+  and `src/widgets/diet-badges.test.ts`. Look at the
   window in both themes at phone width (CLAUDE.md §4): `till-counter-cleanup.look.test.ts:349-350`
   already captures it with a milk extra.
 
