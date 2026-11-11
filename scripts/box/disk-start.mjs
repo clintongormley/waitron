@@ -205,6 +205,7 @@ export async function startDisk({
       key.fill(0);
     }
     report({ action: "restart", diskUuid });
+    // The disk gate precedes the usable system bus, so address the boot manager directly.
     await checked("systemctl", [
       "start",
       "reboot.target",

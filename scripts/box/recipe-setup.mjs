@@ -12,7 +12,13 @@ export function bootstrapSucceeded(serial) {
 }
 
 export function dockerStarted(serial) {
-  return /(?:Starting|Started|Listening on)[^\r\n]*docker\.(?:service|socket)\b/.test(
+  return /(?:Starting|Started|Listening on)(?:\s+Docker\b|[^\r\n]*docker\.(?:service|socket)\b)/.test(
+    stripVTControlCharacters(serial),
+  );
+}
+
+export function bootHasOrderingCycle(serial) {
+  return /Found ordering cycle|to break ordering cycle|Ordering cycle found/.test(
     stripVTControlCharacters(serial),
   );
 }

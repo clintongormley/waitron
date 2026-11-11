@@ -20,6 +20,7 @@ import {
   installSucceeded,
   bootstrapSucceeded,
   dockerStarted,
+  bootHasOrderingCycle,
 } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
@@ -127,7 +128,7 @@ const args = [
 ];
 for (const name of ["waitron-disk-start", "waitron-disk-ready"]) {
   const bypass = Buffer.from(
-    "[Service]\nType=oneshot\nExecStart=/usr/bin/true\nRemainAfterExit=yes\n",
+    "[Unit]\nDefaultDependencies=no\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/true\nRemainAfterExit=yes\n",
   ).toString("base64");
   args.push(
     "-smbios",
@@ -156,6 +157,10 @@ const ready = new Promise((resolveReady, reject) => {
     stream.on("data", (chunk) => {
       serial += chunk.toString();
       appendFileSync(join(runDir, "serial.log"), chunk);
+      if (bootHasOrderingCycle(serial)) {
+        error = new Error("recipe boot has an ordering cycle");
+        reject(error);
+      }
       if (hasMarker()) resolveReady();
     });
   child.on("error", reject);
@@ -521,8 +526,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
           stream.on("data", (bytes) => {
             serial += bytes.toString();
             appendFileSync(join(runDir, `${name}-serial.log`), bytes);
-            if (/Found ordering cycle|to break ordering cycle/.test(serial))
-              reject(new Error(`${name} has an ordering cycle`));
+            if (bootHasOrderingCycle(serial)) reject(new Error(`${name} has an ordering cycle`));
             if (name === "bootstrap" && dockerStarted(serial))
               reject(new Error("bootstrap started Docker before the key was ready"));
             if (rigLine(serial, marker) !== undefined) done();

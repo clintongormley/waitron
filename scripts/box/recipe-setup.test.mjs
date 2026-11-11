@@ -30,12 +30,15 @@ it.each([
   ['B3_DISK_START:{"action":"ready"}\n', false],
   ['B3_INSTALLED:{}\nB3_DISK_START:{"action":"restart"}\n', false],
   [
-    'B3_DISK_START:{"action":"restart"}\nB3_DISK_START:{"command":"systemctl","operation":"reboot","status":1}\n',
+    'B3_DISK_START:{"action":"restart"}\nB3_DISK_START:{"command":"systemctl","operation":"start","status":1}\n',
     false,
   ],
   ['B3_DISK_START:{"action":"restart"}\ndisk_start.refused {}\n', false],
   ...[
     "Starting docker.service - Docker Application Container Engine...",
+    "Starting Docker Application Container Engine...",
+    "Started Docker Application Container Engine.",
+    "Listening on Docker Socket for the API.",
     "Started docker.service - Docker Application Container Engine.",
     "Starting docker.socket - Docker Socket for the API...",
     "Listening on docker.socket - Docker Socket for the API.",
@@ -44,6 +47,16 @@ it.each([
 ])("checks the bootstrap restart without Docker (%j)", async (serial, expected) => {
   const { bootstrapSucceeded } = await import("./recipe-setup.mjs");
   expect(bootstrapSucceeded(serial)).toBe(expected);
+});
+
+it.each([
+  ["basic.target: Found ordering cycle on docker.socket/start", true],
+  ["Job sockets.target/start deleted to break ordering cycle", true],
+  ["Ordering cycle found, skipping Docker Socket for the API", true],
+  ["Started docker.service - Docker Application Container Engine.", false],
+])("reports a boot ordering cycle (%s)", async (serial, expected) => {
+  const { bootHasOrderingCycle } = await import("./recipe-setup.mjs");
+  expect(bootHasOrderingCycle(serial)).toBe(expected);
 });
 
 describe("recipe boot evidence", () => {
@@ -117,6 +130,7 @@ describe("recipe boot evidence", () => {
         )?.[1];
         expect(encoded).toBeTruthy();
         expect(Buffer.from(encoded, "base64").toString()).toContain("ExecStart=/usr/bin/true");
+        expect(Buffer.from(encoded, "base64").toString()).toContain("DefaultDependencies=no");
       }
     } finally {
       rmSync(root, { recursive: true, force: true });
