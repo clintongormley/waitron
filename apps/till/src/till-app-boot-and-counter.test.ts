@@ -1690,7 +1690,6 @@ describe("till-app receipt issuance", () => {
   it("keeps the original receipt on offer and says why when printing it fails", async () => {
     const printReceipt = vi.fn().mockRejectedValue({ code: "printing.no_printer" });
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
       getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
       listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),

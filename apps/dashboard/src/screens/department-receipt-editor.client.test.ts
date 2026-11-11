@@ -69,7 +69,7 @@ it("a live policy and receipt read preserves the host-supplied editor's authored
   changeModel({
     ...receiptModel,
     receipt: { operationDescription: "New elsewhere" },
-    policy: { receiptPrintMode: "on_request", printTradingName: false },
+    policy: { printTradingName: false },
   });
   liveData.invalidate([{ type: "department_sale_policies" }]);
   await expect

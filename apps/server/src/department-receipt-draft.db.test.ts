@@ -18,7 +18,7 @@ const suite = useVenueDb({
 });
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
   .venueFields!;
-const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+const policy = { printTradingName: true } as const;
 
 async function fixture(role: "manager" | "staff" = "manager") {
   await suite.db
@@ -121,10 +121,7 @@ describe("checked department receipt write", () => {
     });
     expect((await suite.db.select().from(departmentSalePolicies))[0]).toMatchObject(policy);
   });
-  it.each([
-    { receiptPrintMode: "on_request", printTradingName: true },
-    { receiptPrintMode: "auto", printTradingName: false },
-  ] as const)(
+  it.each([{ printTradingName: true }, { printTradingName: false }] as const)(
     "refuses changed policy %j without its permission and leaves both rows unchanged",
     async (changed) => {
       const f = await fixture("staff");

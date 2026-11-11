@@ -9,7 +9,6 @@ export interface ServiceSettingsValue {
   orderStart: "table" | "counter" | null;
   paidWhen: "prepay" | "ticket_then_pay" | null;
   collectionNumber: "none" | "numbered" | null;
-  receiptPrintMode: "auto" | "on_request" | null;
 }
 type Field = keyof ServiceSettingsValue;
 
@@ -33,7 +32,6 @@ export class ServiceSettingsFields extends LitElement {
     orderStart: "table",
     paidWhen: "prepay",
     collectionNumber: "none",
-    receiptPrintMode: "auto",
   };
   @property({ attribute: false }) follows?: ServiceSettingsValue;
   @property({ attribute: false }) errors: Partial<Record<Field, string>> = {};

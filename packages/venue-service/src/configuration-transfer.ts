@@ -564,17 +564,6 @@ function validateServiceHierarchy(tables: Tables): void {
     if (!zones.has(row.zone_id)) refuse("zone_sale_policies.zone_id");
 }
 
-function validateReceiptModes(tables: Tables): void {
-  for (const table of ["department_sale_policies", "zone_sale_policies"] as const) {
-    for (const row of tables[table] ?? []) {
-      const value = row.receipt_print_mode;
-      if (value === undefined || (table === "zone_sale_policies" && value === null)) continue;
-      if (typeof value !== "string" || (value !== "auto" && value !== "on_request"))
-        refuse(`${table}.receipt_print_mode`);
-    }
-  }
-}
-
 function validateServicePolicyCompleteness(tables: Tables): void {
   for (const [parents, policies, key] of [
     ["departments", "department_sale_policies", "department_id"],
@@ -672,7 +661,6 @@ function validateVenueServiceConfiguration(
     readonly holidayArea?: Readonly<Record<string, unknown>> | null;
   },
 ): void {
-  validateReceiptModes(tables);
   validateOrderStarts(tables);
   validateServiceHierarchy(tables);
   validateServiceSteps(tables);

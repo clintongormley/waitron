@@ -796,7 +796,7 @@ describe("DashboardApi", () => {
   it("getDepartmentReceipt GETs the department receipt with credentials", async () => {
     const payload = {
       receipt: { headerSubtitle: { "es-ES": "C/ Mayor 1" }, footerMessage: { "es-ES": "Gracias" } },
-      policy: { receiptPrintMode: "auto", printTradingName: true },
+      policy: { printTradingName: true },
       receiptLanguage: "es-ES",
       operationDescriptionRequired: true,
       languages: ["es-ES"],
@@ -824,7 +824,7 @@ describe("DashboardApi", () => {
         headerSubtitle: { "es-ES": "C/ Mayor 1" },
         footerMessage: { "es-ES": "Gracias por su visita" },
       },
-      policy: { receiptPrintMode: "auto", printTradingName: true },
+      policy: { printTradingName: true },
     };
     await expect(api.putDepartmentReceipt("bar", receipt)).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith(
@@ -846,7 +846,7 @@ describe("DashboardApi", () => {
     await expect(
       api.putDepartmentReceipt("bar", {
         receipt: { footerMessage: { "es-ES": "x" } },
-        policy: { receiptPrintMode: "auto", printTradingName: true },
+        policy: { printTradingName: true },
       }),
     ).rejects.toMatchObject({
       code: "receipt.invalid",
@@ -2938,7 +2938,7 @@ describe("department receipt client contracts", () => {
   it("reads authored department fields with independent policy and no global defaults", async () => {
     const payload = {
       receipt: { headerSubtitle: { "es-ES": "Sala" } },
-      policy: { receiptPrintMode: "auto", printTradingName: true },
+      policy: { printTradingName: true },
       operationDescriptionRequired: true,
       receiptLanguage: "es-ES",
       languages: ["es-ES"],
@@ -2958,7 +2958,7 @@ describe("department receipt client contracts", () => {
     const api = new DashboardApi("", fetchImpl);
     await api.putDepartmentReceipt("dept", {
       receipt: { footerMessage: { "ca-ES": "Gràcies" } },
-      policy: { receiptPrintMode: "auto", printTradingName: true },
+      policy: { printTradingName: true },
     });
     expect(fetchImpl.mock.calls[0]).toEqual([
       "/management-api/venue-service/departments/dept/receipt",
@@ -2968,7 +2968,7 @@ describe("department receipt client contracts", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           receipt: { footerMessage: { "ca-ES": "Gràcies" } },
-          policy: { receiptPrintMode: "auto", printTradingName: true },
+          policy: { printTradingName: true },
         }),
       },
     ]);
@@ -2976,7 +2976,7 @@ describe("department receipt client contracts", () => {
   it("reads and writes the department address and receipt policies together", async () => {
     const model = {
       receipt: { printAddress: false },
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
       receiptLanguage: "es-ES",
       operationDescriptionRequired: true,
       languages: ["es-ES"],

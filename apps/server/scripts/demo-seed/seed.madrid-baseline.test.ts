@@ -27,6 +27,8 @@ import {
 } from "./testing/madrid-renamed-columns.js";
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
+  department_sale_policies: ["receipt_print_mode"],
+  zone_sale_policies: ["receipt_print_mode"],
   departments: ["location_id"],
   order_service_contexts: ["location_id"],
   zone_service_policies: ["location_id"],

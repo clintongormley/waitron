@@ -10,13 +10,11 @@ const department: ServiceSettingsValue = {
   orderStart: "table",
   paidWhen: "prepay",
   collectionNumber: "numbered",
-  receiptPrintMode: "auto",
 };
 const inherited: ServiceSettingsValue = {
   orderStart: null,
   paidWhen: null,
   collectionNumber: null,
-  receiptPrintMode: null,
 };
 const fields = ["orderStart", "paidWhen", "collectionNumber"] as const;
 beforeEach(() => setLocale("en"));
@@ -165,7 +163,6 @@ describe.each([
       orderStart: "counter",
       paidWhen: "ticket_then_pay",
       collectionNumber: "none",
-      receiptPrintMode: "on_request",
     });
     const want =
       locale === "en"
@@ -270,7 +267,6 @@ it.each([false, true])(
       orderStart: "Choose how orders start.",
       paidWhen: "Choose when payment happens.",
       collectionNumber: "Choose whether to print a ticket.",
-      receiptPrintMode: "Choose when to print receipts.",
     };
     await settle(el);
     for (const field of fields) {

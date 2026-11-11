@@ -8973,7 +8973,7 @@ describe("mounted public department dialogs", () => {
         ),
         getDepartmentReceipt: vi.fn(async () => ({
           receipt: { operationDescription: "Dining service" },
-          policy: { receiptPrintMode: "auto", printTradingName: true },
+          policy: { printTradingName: true },
           receiptLanguage: "es-ES",
           operationDescriptionRequired: true,
           languages: ["es-ES"],

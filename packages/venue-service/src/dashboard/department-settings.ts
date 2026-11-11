@@ -850,7 +850,7 @@ export class DepartmentSettings extends LitElement {
           <section aria-label=${t("venue.orders_and_payment")}>
             <h3>${t("venue.orders_and_payment")}</h3>
             <dashboard-service-settings-fields
-              .value=${{ ...draft, receiptPrintMode: this.model!.salePolicies.departments.find((p) => p.departmentId === row.id)?.receiptPrintMode ?? "auto" }}
+              .value=${draft}
               .errors=${serviceErrors}
               ?disabled=${disabled}
               @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {

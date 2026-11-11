@@ -31,10 +31,9 @@ describe.each(["light", "dark"] as const)("service fields accessibility (%s)", (
       orderStart: "table",
       paidWhen: "prepay",
       collectionNumber: "numbered",
-      receiptPrintMode: "auto",
     } as const;
     el.value = state.includes("zone")
-      ? { orderStart: null, paidWhen: null, collectionNumber: null, receiptPrintMode: null }
+      ? { orderStart: null, paidWhen: null, collectionNumber: null }
       : department;
     if (state.includes("zone")) el.follows = department;
     el.disabled = state.includes("disabled");
@@ -43,7 +42,6 @@ describe.each(["light", "dark"] as const)("service fields accessibility (%s)", (
         orderStart: "Choose how orders start.",
         paidWhen: "Choose when payment happens.",
         collectionNumber: "Choose whether to print a ticket.",
-        receiptPrintMode: "Choose when to print receipts.",
       };
     await el.updateComplete;
     await Promise.all(

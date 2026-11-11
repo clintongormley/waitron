@@ -230,7 +230,6 @@ const zoneSettings = {
   orderStart: "counter",
   paidWhen: "ticket_then_pay",
   collectionNumber: "numbered",
-  receiptPrintMode: "on_request",
 } as const;
 
 async function settingsFixture() {
@@ -242,7 +241,7 @@ async function settingsFixture() {
     });
     await tx
       .update(departmentSalePolicies)
-      .set({ printTradingName: true, receiptPrintMode: "on_request" })
+      .set({ printTradingName: true })
       .where(eq(departmentSalePolicies.departmentId, department.id));
     await configureZone(tx, {
       zoneId: fx.zoneId,
@@ -340,7 +339,6 @@ describe("whole service settings saves", () => {
       orderStart: "counter",
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
-      receiptPrintMode: "on_request",
       printTradingName: true,
     });
     expect(transfers).toEqual({
@@ -369,8 +367,8 @@ describe("whole service settings saves", () => {
     expect(
       read.model.salePolicies.departments.find(
         (row: { departmentId: string }) => row.departmentId === fx.departmentId,
-      ).receiptPrintMode,
-    ).toBe("on_request");
+      ).printTradingName,
+    ).toBe(true);
     expect(
       (await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, departmentSettings)).status,
     ).toBe(200);
@@ -441,8 +439,7 @@ describe("whole service settings saves", () => {
   it.each([
     { patch: { name: "  " }, field: "name" },
     { patch: { unexpected: true }, field: "unexpected" },
-    { patch: { receiptPrintMode: "never" }, field: "receiptPrintMode" },
-    { patch: { receiptPrintMode: null }, field: "receiptPrintMode" },
+    { patch: { receiptPrintMode: "auto" }, field: "receiptPrintMode" },
     { patch: { orderStart: null }, field: "orderStart" },
     { patch: { paidWhen: ["prepay"] }, field: "paidWhen" },
     { patch: { collectionNumber: ["none"] }, field: "collectionNumber" },
@@ -517,24 +514,21 @@ describe("whole service settings saves", () => {
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
         },
         "table_tab",
         {
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
         },
       ],
       [
-        { orderStart: null, paidWhen: null, collectionNumber: null, receiptPrintMode: null },
+        { orderStart: null, paidWhen: null, collectionNumber: null },
         null,
         {
           orderStart: "table",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
         },
       ],
     ] as const) {
@@ -560,7 +554,7 @@ describe("whole service settings saves", () => {
   });
 
   it.each([
-    { receiptPrintMode: "never" },
+    { receiptPrintMode: "auto" },
     { unexpected: true },
     { paidWhen: ["prepay"] },
     { orderStart: "table_tab" },
@@ -1151,7 +1145,7 @@ describe("venue service management routes", () => {
         const target = await createDepartment(tx, { name: "Target", orderStart: "table" });
         await configureZone(tx, { zoneId: fx.zoneId, departmentId: source.id, orderStart });
         await tx.run(
-          sql`update zone_sale_policies set paid_when = 'ticket_then_pay', collection_number = 'numbered', receipt_print_mode = 'on_request' where zone_id = ${fx.zoneId}`,
+          sql`update zone_sale_policies set paid_when = 'ticket_then_pay', collection_number = 'numbered' where zone_id = ${fx.zoneId}`,
         );
         return [source, target];
       });
@@ -1599,11 +1593,10 @@ describe("venue service management routes", () => {
       ).status,
     ).toBe(204);
 
-    const departmentPath = `/management-api/venue-service/departments/${department.id}/sale-policy/receiptPrintMode`;
+    const departmentPath = `/management-api/venue-service/departments/${department.id}/sale-policy/collectionNumber`;
     const zonePath = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy/paidWhen`;
     expect(
-      (await send(fx.app, "PATCH", departmentPath, fx.managerCookie, { value: "on_request" }))
-        .status,
+      (await send(fx.app, "PATCH", departmentPath, fx.managerCookie, { value: "numbered" })).status,
     ).toBe(204);
     expect(
       (await send(fx.app, "PATCH", zonePath, fx.managerCookie, { value: "ticket_then_pay" }))
@@ -1615,22 +1608,22 @@ describe("venue service management routes", () => {
           await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
         ).json()) as {
           salePolicies: {
-            departments: { departmentId: string; receiptPrintMode: string }[];
+            departments: { departmentId: string; collectionNumber: string }[];
             zones: {
               zoneId: string;
               paidWhen: string | null;
-              effective: { paidWhen: string; receiptPrintMode: string };
+              effective: { paidWhen: string };
             }[];
           };
         }
       ).salePolicies;
     expect(await read()).toMatchObject({
-      departments: [{ departmentId: department.id, receiptPrintMode: "on_request" }],
+      departments: [{ departmentId: department.id, collectionNumber: "numbered" }],
       zones: [
         {
           zoneId: fx.zoneId,
           paidWhen: "ticket_then_pay",
-          effective: { paidWhen: "ticket_then_pay", receiptPrintMode: "on_request" },
+          effective: { paidWhen: "ticket_then_pay" },
         },
       ],
     });
@@ -1774,7 +1767,7 @@ describe("venue service management routes", () => {
   });
 
   it.each(["department", "zone"] as const)(
-    "refuses Never and malformed %s receipt modes without changing rows",
+    "refuses retired %s receipt policy writes without changing rows",
     async (kind) => {
       const fx = await fixture();
       const department = await withTransaction(db, async (tx) => {
@@ -1798,18 +1791,8 @@ describe("venue service management routes", () => {
             ? sql`select * from department_sale_policies where department_id = ${department.id}`
             : sql`select * from zone_sale_policies where zone_id = ${fx.zoneId}`,
         );
-      for (const value of ["auto", "on_request", ...(kind === "zone" ? [null] : [])]) {
-        expect((await send(fx.app, "PATCH", path, fx.managerCookie, { value })).status).toBe(204);
-        expect(rows()[0]).toMatchObject({ receipt_print_mode: value });
-      }
       const before = rows();
-      for (const value of [
-        "never",
-        "unknown",
-        ["auto"],
-        1,
-        ...(kind === "department" ? [null] : []),
-      ]) {
+      for (const value of ["auto", "on_request", null]) {
         const response = await send(fx.app, "PATCH", path, fx.managerCookie, { value });
         expect(response.status).toBe(400);
         expect(await response.json()).toEqual({
@@ -1820,7 +1803,7 @@ describe("venue service management routes", () => {
     },
   );
 
-  it("refuses an unknown zone policy field without clearing the receipt override", async () => {
+  it("refuses an unknown zone policy field without clearing the payment override", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, async (tx) => {
       const row = await createDepartment(tx, {
@@ -1837,8 +1820,8 @@ describe("venue service management routes", () => {
     const base = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy`;
     expect(
       (
-        await send(fx.app, "PATCH", `${base}/receiptPrintMode`, fx.managerCookie, {
-          value: "on_request",
+        await send(fx.app, "PATCH", `${base}/paidWhen`, fx.managerCookie, {
+          value: "ticket_then_pay",
         })
       ).status,
     ).toBe(204);
@@ -1849,9 +1832,9 @@ describe("venue service management routes", () => {
     expect(await unknown.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "nonsense" } },
     });
-    const saved = await db.execute<{ receipt_print_mode: string | null }>(sql`
-      select receipt_print_mode from zone_sale_policies where zone_id = ${fx.zoneId}`);
-    expect(saved.rows).toEqual([{ receipt_print_mode: "on_request" }]);
+    const saved = await db.execute<{ paid_when: string }>(sql`
+      select paid_when from zone_sale_policies where zone_id = ${fx.zoneId}`);
+    expect(saved.rows).toEqual([{ paid_when: "ticket_then_pay" }]);
   });
 
   it("serves no interval-list hours writes and no department hours in the venue read", async () => {
@@ -3560,7 +3543,6 @@ describe("atomic zone editor save", () => {
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     ]) {
       expect((await send(fx.app, "PUT", path(fx.zoneId), fx.managerCookie, input)).status).toBe(
@@ -3581,7 +3563,6 @@ describe("atomic zone editor save", () => {
         orderStart: input.orderStart,
         paidWhen: input.paidWhen,
         collectionNumber: input.collectionNumber,
-        receiptPrintMode: input.receiptPrintMode,
       });
     }
   });
@@ -3715,7 +3696,7 @@ describe("department editor owns service settings separately from receipt policy
     const fx = await settingsFixture();
     await db
       .update(departmentSalePolicies)
-      .set({ receiptPrintMode: "on_request", printTradingName: false })
+      .set({ printTradingName: false })
       .where(eq(departmentSalePolicies.departmentId, fx.departmentId));
     const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
       name: "Service edit",
@@ -3735,7 +3716,6 @@ describe("department editor owns service settings separately from receipt policy
       orderStart: "counter",
       paidWhen: "ticket_then_pay",
       collectionNumber: "numbered",
-      receiptPrintMode: "on_request",
       printTradingName: false,
     });
     expect(
@@ -3773,7 +3753,7 @@ it("repairing an absent department policy preserves the previously read receipt 
   expect(
     before.model.salePolicies.zones.find((row: { zoneId: string }) => row.zoneId === fx.zoneId)
       .effective,
-  ).toMatchObject({ receiptPrintMode: "auto", printTradingName: false });
+  ).toMatchObject({ printTradingName: false });
   const response = await send(fx.app, "PUT", fx.departmentPath, fx.managerCookie, {
     name: "Repaired",
     tradingName: "Repair",
@@ -3792,7 +3772,6 @@ it("repairing an absent department policy preserves the previously read receipt 
     orderStart: "counter",
     paidWhen: "ticket_then_pay",
     collectionNumber: "numbered",
-    receiptPrintMode: "auto",
     printTradingName: false,
   });
 });

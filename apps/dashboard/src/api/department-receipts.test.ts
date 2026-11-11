@@ -10,7 +10,7 @@ const input: DepartmentReceiptWrite = {
     footerMessage: { "ca-ES": "Gràcies", "eu-ES": "Retained" },
     printAddress: false,
   },
-  policy: { receiptPrintMode: "on_request", printTradingName: false },
+  policy: { printTradingName: false },
 };
 function fixture(answer: unknown = receiptModel, status = 200) {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(async () =>

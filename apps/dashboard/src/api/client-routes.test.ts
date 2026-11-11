@@ -336,7 +336,7 @@ describe("DashboardApi routes", () => {
   it("reads and saves the department's operation description with its receipt policy", async () => {
     const settings = {
       receipt: { operationDescription: "Restaurant service" },
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
       receiptLanguage: "es-ES",
       operationDescriptionRequired: true,
       languages: ["es-ES"],
@@ -377,7 +377,7 @@ describe("DashboardApi routes", () => {
     const draft = {
       departmentId: "dept",
       receipt: { headerSubtitle: { "es-ES": "Calle Mayor 1" } },
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
     };
     await expect(api.previewReceiptDraft(draft)).resolves.toEqual(answer);
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
@@ -391,7 +391,7 @@ describe("DashboardApi routes", () => {
     const draft = {
       departmentId: "dept",
       receipt: { footerMessage: { "es-ES": "Gracias" } },
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
       paperWidth: "58mm" as const,
     };
     await api.previewReceiptDraft(draft);
@@ -406,13 +406,13 @@ describe("DashboardApi routes", () => {
     const first = {
       departmentId: "dept",
       receipt: {},
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
       language: "gl-ES",
     };
     const second = {
       departmentId: "dept",
       receipt: {},
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
       paperWidth: "58mm" as const,
       language: "eu-ES",
     };
@@ -430,7 +430,7 @@ describe("DashboardApi routes", () => {
     const draft = {
       departmentId: "aa000000-0000-4000-8000-000000000001",
       receipt: {},
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
     };
     await api.previewReceiptDraft(draft);
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
@@ -584,7 +584,7 @@ describe("DashboardApi routes", () => {
     const draft = {
       departmentId: "dept",
       receipt: { footerMessage: { "es-ES": "Gracias" } },
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
     };
     await api.previewReceiptDraft(draft);
     await api.background.previewReceiptDraft(draft);
@@ -1625,7 +1625,7 @@ describe("department draft preview request", () => {
     const draft = {
       departmentId: "dept",
       receipt: { headerSubtitle: { "ca-ES": "Unsaved" } },
-      policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+      policy: { printTradingName: true },
       language: "ca-ES",
       paperWidth: "58mm" as const,
     };
@@ -1641,7 +1641,7 @@ it("makes only explicitly passive draft previews passive, including on the backg
   const draft = {
     departmentId: "dept",
     receipt: {},
-    policy: { receiptPrintMode: "auto" as const, printTradingName: true },
+    policy: { printTradingName: true },
   };
   await expect(api.previewReceiptDraft(draft, { passive: true })).resolves.toEqual(answer);
   await expect(api.background.previewReceiptDraft(draft)).resolves.toEqual(answer);

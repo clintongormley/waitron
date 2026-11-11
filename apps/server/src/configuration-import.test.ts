@@ -45,7 +45,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 17,
+  version: 18,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -212,7 +212,8 @@ describe("staged configuration import", () => {
       { version: 16, tables: { ...bundle.tables, payment_policy: [] } },
     ],
     ["pre-payment-policy-retirement export without it", { version: 16 }],
-    ["future version", { version: 18 }],
+    ["pre-receipt-policy-retirement export", { version: 17 }],
+    ["future version", { version: 19 }],
     ["pre-venue-fields export", { version: 9, venue: formatNineVenue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
@@ -297,63 +298,6 @@ describe("staged configuration import", () => {
     });
     expect(await readdir(stateDir)).toEqual(["configuration-import.json"]);
   });
-
-  it.each(["department_sale_policies", "zone_sale_policies"])(
-    "refuses Never in current-version %s before replacing staged files",
-    async (table) => {
-      const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
-      dirs.push(stateDir);
-      const names = [
-        "configuration-import.artifact",
-        "configuration-import.key",
-        "configuration-import.json",
-      ];
-      for (const name of names) await writeFile(join(stateDir, name), `retained ${name}`);
-      const serviceModule = {
-        ...modules[0],
-        name: "venue-service",
-        configurationTransfer: VENUE_SERVICE_CONFIGURATION_TRANSFER,
-      } satisfies WaitronModule;
-      const candidate: ConfigurationBundle = {
-        ...bundle,
-        modules: { "venue-service": 1 },
-        tables: Object.fromEntries(
-          VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map(({ name }) => [
-            name,
-            name === table ? [{ receipt_print_mode: "never" }] : [],
-          ]),
-        ),
-      };
-      const app = new Hono();
-      mountSetup(
-        app,
-        {
-          environment: "preproduction",
-          stageConfiguration: (artifact, passphrase) =>
-            stageConfigurationImport(stateDir, ring, artifact, passphrase, async (decoded) => {
-              validateConfigurationBundle(decoded, [serviceModule], { "venue-service": 1 });
-            }),
-        },
-        () => {},
-      );
-      const artifact = encodeConfigurationBundle(candidate, "a strong passphrase");
-      const response = await app.request("/setup-api/configuration", {
-        method: "POST",
-        headers: {
-          "content-type": "application/octet-stream",
-          "x-waitron-export-passphrase": "a strong passphrase",
-        },
-        body: new Uint8Array(artifact).buffer,
-      });
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({
-        error: { code: "setup.request_invalid", params: { field: `${table}.receipt_print_mode` } },
-      });
-      expect((await readdir(stateDir)).sort()).toEqual([...names].sort());
-      for (const name of names)
-        expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
-    },
-  );
 
   it.each([
     ["department_sale_policies", "tab"],

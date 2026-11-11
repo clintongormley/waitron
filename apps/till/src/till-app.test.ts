@@ -241,7 +241,6 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  receiptPrintMode: "auto" as const,
   fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
@@ -409,7 +408,6 @@ function fixtureOffers(
       zoneId: "zone-counter",
       departmentId: "department-default",
       serviceMode: "prepay",
-      receiptPrintMode: "auto",
       ...zonePolicy,
     },
     defaultMenuId,
@@ -2290,7 +2288,6 @@ describe("till-app", () => {
       const { el } = await mountApp({
         zonePolicy: {
           serviceMode: tillOverrides.orderFlow ?? "prepay",
-          receiptPrintMode: tillOverrides.receiptPrintMode ?? "auto",
         },
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "till", ...tillOverrides }),
         getDeviceIdentity: vi.fn().mockResolvedValue({ deviceId: "d1", formFactor: "till" }),
@@ -5860,36 +5857,33 @@ describe("till-app", () => {
     });
   });
 
-  it.each(["on_request"] as const)(
-    "%s offers an original at completion and switches to duplicate reprint after it succeeds",
-    async (receiptPrintMode) => {
-      const printReceipt = vi.fn().mockResolvedValue(undefined);
-      const { el } = await mountApp({
-        getReceiptPrintStatus: vi
-          .fn()
-          .mockResolvedValueOnce({ status: "not_queued" })
-          .mockResolvedValue({ status: "done" }),
-        zonePolicy: { receiptPrintMode: receiptPrintMode },
-        getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode }),
-        printReceipt,
-      });
-      const c = await toCounter(el);
-      c.store.addProduct(coffee, "2");
-      const workingOrderId = c.store.id;
-      emit(c, "confirm-payment", { method: "cash", amount: "5" });
-      await flush(el);
+  it("offers an original at completion and switches to duplicate reprint after it succeeds", async () => {
+    const printReceipt = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "not_queued" })
+        .mockResolvedValue({ status: "done" }),
+      zonePolicy: {},
+      getTill: vi.fn().mockResolvedValue(till),
+      printReceipt,
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(coffee, "2");
+    const workingOrderId = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
 
-      await showTicketDocument(el, "receipt");
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+    await showTicketDocument(el, "receipt");
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
 
-      emit(ticket(el)!, "print-receipt");
-      await flush(el);
-      expect(printReceipt).toHaveBeenCalledWith(workingOrderId);
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
-    },
-  );
+    emit(ticket(el)!, "print-receipt");
+    await flush(el);
+    expect(printReceipt).toHaveBeenCalledWith(workingOrderId);
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
+  });
 
   it("collection offers the original receipt after payment, then a duplicate after printing", async () => {
     const { el } = await mountApp({
@@ -5897,11 +5891,10 @@ describe("till-app", () => {
         .fn()
         .mockResolvedValueOnce({ status: "not_queued" })
         .mockResolvedValue({ status: "done" }),
-      zonePolicy: { serviceMode: "ticket_then_pay", receiptPrintMode: "on_request" },
+      zonePolicy: { serviceMode: "ticket_then_pay" },
       getTill: vi.fn().mockResolvedValue({
         ...till,
         orderFlow: "ticket_then_pay",
-        receiptPrintMode: "on_request",
       }),
     });
     const c = await toCounter(el);
@@ -12202,11 +12195,10 @@ describe("till-app", () => {
 
     it("Pay by an integrated card at the order stage of an ticket_then_pay zone issues the invoice now, so the original receipt is offered", async () => {
       const { el } = await mountApp({
-        zonePolicy: { serviceMode: "ticket_then_pay", receiptPrintMode: "on_request" },
+        zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({
           ...till,
           orderFlow: "ticket_then_pay",
-          receiptPrintMode: "on_request",
         }),
       });
       const c = await toCounter(el);
@@ -12844,8 +12836,8 @@ describe("till-app", () => {
         );
         const { el } = await mountApp({
           getFindBill: lookup,
-          zonePolicy: { receiptPrintMode: "on_request" },
-          getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+          zonePolicy: {},
+          getTill: vi.fn().mockResolvedValue({ ...till }),
         });
         await toCounter(el);
         el.shadowRoot!.querySelector<HTMLElement>("till-shell")!
@@ -18578,10 +18570,8 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     "a %s order collected on a till whose zone is %s, by %s, offers the receipt issued by payment",
     async (orderMode, tillMode, method, original) => {
       const { el } = await counterWaiting({
-        zonePolicy: { serviceMode: tillMode, receiptPrintMode: "on_request" },
-        getTill: vi
-          .fn()
-          .mockResolvedValue({ ...till, orderFlow: tillMode, receiptPrintMode: "on_request" }),
+        zonePolicy: { serviceMode: tillMode },
+        getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: tillMode }),
         listCounterWaiting: vi.fn().mockResolvedValue([{ ...sentOrder, serviceMode: orderMode }]),
         retrievePlacedOrder: vi.fn().mockResolvedValue(placedRead("wo-sent")),
       });

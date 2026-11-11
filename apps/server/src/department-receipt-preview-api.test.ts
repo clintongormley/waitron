@@ -15,7 +15,7 @@ const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undef
   .venueFields!;
 let venue: Venue;
 let departmentId: string;
-const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+const policy = { printTradingName: true } as const;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
   const [department] = await suite.db.select().from(departments);
@@ -103,7 +103,7 @@ describe("replacement department receipt preview", () => {
         footerMessage: { "eu-ES": "Hidden Basque", "ca-ES": "Gràcies" },
         printAddress: true,
       },
-      policy: { receiptPrintMode: "on_request", printTradingName: false },
+      policy: { printTradingName: false },
       language: "ca-ES",
     });
     const printed = lines(answer).join("\n");

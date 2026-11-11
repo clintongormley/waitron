@@ -414,7 +414,6 @@ export interface ZoneOfferCatalogue {
     departmentId: string;
     departmentName: string;
     serviceMode: "table_tab" | "prepay" | "ticket_then_pay";
-    receiptPrintMode?: "auto" | "on_request";
   };
   defaultMenuId: string | null;
   menus: TillZoneMenu[];

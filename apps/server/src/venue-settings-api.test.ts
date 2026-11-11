@@ -33,7 +33,7 @@ const suite = useVenueDb({
 let venue: Venue;
 let offers: ZoneOffers;
 let departmentId: string;
-const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+const policy = { printTradingName: true } as const;
 const departmentPath = () => `/management-api/venue-service/departments/${departmentId}/receipt`;
 const resetDescription = () =>
   suite.db

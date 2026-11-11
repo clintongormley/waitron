@@ -165,7 +165,7 @@ describe("VenueServiceApi", () => {
   it("writes one department field and clears one zone override", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await api.setDepartmentSalePolicyField("d1", "receiptPrintMode", "on_request");
+    await api.setDepartmentSalePolicyField("d1", "collectionNumber", "numbered");
     await api.setZoneSalePolicyOverride("z1", "paidWhen", null);
     expect(
       fetchImpl.mock.calls.map(([path, init]) => [
@@ -175,9 +175,9 @@ describe("VenueServiceApi", () => {
       ]),
     ).toEqual([
       [
-        "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode",
+        "/management-api/venue-service/departments/d1/sale-policy/collectionNumber",
         "PATCH",
-        { value: "on_request" },
+        { value: "numbered" },
       ],
       ["/management-api/venue-service/zones/z1/sale-policy/paidWhen", "PATCH", { value: null }],
     ]);
@@ -358,7 +358,6 @@ describe("combined settings requests", () => {
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       }),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
     expect(
@@ -375,7 +374,6 @@ describe("combined settings requests", () => {
           orderStart: null,
           paidWhen: null,
           collectionNumber: null,
-          receiptPrintMode: null,
         },
       ],
     ]);
@@ -570,7 +568,6 @@ it("saves a zone editor with its name and raw nullable overrides in one request"
     orderStart: null,
     paidWhen: "prepay",
     collectionNumber: null,
-    receiptPrintMode: "on_request",
   });
   expect(
     fetchImpl.mock.calls.map(([path, init]) => [
@@ -587,7 +584,6 @@ it("saves a zone editor with its name and raw nullable overrides in one request"
         orderStart: null,
         paidWhen: "prepay",
         collectionNumber: null,
-        receiptPrintMode: "on_request",
       },
     ],
   ]);

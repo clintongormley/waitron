@@ -34,7 +34,7 @@ const suite = useVenueDb({
 let venue: Venue;
 let taxId: string;
 let departmentId: string;
-const policy = { receiptPrintMode: "auto", printTradingName: false } as const;
+const policy = { printTradingName: false } as const;
 beforeAll(async () => {
   venue = await setupVenue(suite.db);
   const [department] = await suite.db.select().from(departments);
@@ -183,7 +183,7 @@ describe("POST /management-api/receipt-preview", () => {
       JSON.stringify({
         departmentId: id,
         receipt: { headerSubtitle: { "es-ES": "Authored department" }, printAddress: true },
-        policy: { receiptPrintMode: "on_request", printTradingName: false },
+        policy: { printTradingName: false },
       }),
     );
     expect(response.status).toBe(200);

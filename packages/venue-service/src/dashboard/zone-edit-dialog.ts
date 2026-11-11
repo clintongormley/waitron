@@ -25,10 +25,9 @@ const equal = (a: ZoneEditInput, b: ZoneEditInput) =>
   a.name.trim() === b.name.trim() &&
   a.orderStart === b.orderStart &&
   a.paidWhen === b.paidWhen &&
-  a.collectionNumber === b.collectionNumber &&
-  a.receiptPrintMode === b.receiptPrintMode;
+  a.collectionNumber === b.collectionNumber;
 type Field = keyof ZoneEditInput;
-const policyFields = ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"] as const;
+const policyFields = ["orderStart", "paidWhen", "collectionNumber"] as const;
 
 @customElement("zone-edit-dialog")
 export class ZoneEditDialog extends LitElement {
@@ -116,7 +115,6 @@ export class ZoneEditDialog extends LitElement {
       orderStart: policy?.orderStart ?? null,
       paidWhen: policy?.paidWhen ?? null,
       collectionNumber: policy?.collectionNumber ?? null,
-      receiptPrintMode: policy?.receiptPrintMode ?? null,
     };
     if (this.opened !== row.id) {
       this.scope?.dispose();
@@ -255,7 +253,6 @@ export class ZoneEditDialog extends LitElement {
       orderStart: department?.orderStart ?? "counter",
       paidWhen: department?.paidWhen ?? "prepay",
       collectionNumber: department?.collectionNumber ?? "none",
-      receiptPrintMode: department?.receiptPrintMode ?? "auto",
     };
     const errors = { ...(this.attempted ? this.errors : {}), ...this.refused },
       action = saveActionState(this.scope);

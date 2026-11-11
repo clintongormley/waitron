@@ -11,7 +11,6 @@ export interface DepartmentReceiptConfig {
 }
 
 export interface DepartmentReceiptPolicy {
-  receiptPrintMode: "auto" | "on_request";
   printTradingName: boolean;
 }
 

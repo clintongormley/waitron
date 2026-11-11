@@ -13,7 +13,7 @@ const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undef
   .venueFields!;
 let venue: Venue;
 let id: string;
-const policy = { receiptPrintMode: "on_request", printTradingName: false } as const;
+const policy = { printTradingName: false } as const;
 beforeEach(async () => {
   venue = await setupVenue(suite.db);
   const [row] = await suite.db.select().from(departments);
@@ -69,7 +69,7 @@ it("management mounts the department receipt and policy without global defaults"
 it("management saves the department receipt and policy through the replacement mount", async () => {
   const input = {
     receipt: { operationDescription: "Counter meals", printAddress: false },
-    policy: { receiptPrintMode: "auto", printTradingName: true },
+    policy: { printTradingName: true },
   };
   expect((await request("PUT", path(), input)).status).toBe(204);
   expect((await (await request("GET", path())).json()).receipt).toEqual(input.receipt);

@@ -129,12 +129,10 @@ it("the real differing-zone link keeps the edited department until Discard accep
       orderStart: "table",
       paidWhen: null,
       collectionNumber: null,
-      receiptPrintMode: null,
       effective: {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
         printTradingName: false,
       },
     },
@@ -214,7 +212,6 @@ it("leaving a dirty zone editor for another page waits for the draft decision be
     orderStart: "counter" as const,
     paidWhen: null,
     collectionNumber: null,
-    receiptPrintMode: "on_request" as const,
   };
   fields.dispatchEvent(
     new CustomEvent("service-settings-change", {
@@ -238,7 +235,6 @@ it("leaving a dirty zone editor for another page waits for the draft decision be
     orderStart: null,
     paidWhen: null,
     collectionNumber: null,
-    receiptPrintMode: null,
   });
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
@@ -331,12 +327,10 @@ it("keeping a requested zone switch retains the department editor's originating 
       orderStart: "table",
       paidWhen: null,
       collectionNumber: null,
-      receiptPrintMode: null,
       effective: {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
         printTradingName: false,
       },
     },

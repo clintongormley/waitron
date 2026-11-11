@@ -33,7 +33,6 @@ import {
   selectDeviceReader,
   setProfileReaderList,
 } from "@waitron/payments";
-import { departmentSalePolicies, departments } from "@waitron/venue-service";
 import { deviceOrigin } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { approveDeviceProfiles, switchActiveProfile } from "./device.js";
@@ -198,13 +197,6 @@ async function signIn(deviceId: string, displayName = "Lucía") {
 
 async function cashSale(venue: Venue, deviceId: string): Promise<string> {
   const id = randomUUID();
-  const departmentIds = (await suite.db.select({ id: departments.id }).from(departments)).map(
-    (row) => row.id,
-  );
-  await suite.db
-    .update(departmentSalePolicies)
-    .set({ receiptPrintMode: "auto" })
-    .where(inArray(departmentSalePolicies.departmentId, departmentIds));
   const cfg = { ...venue.cfg, origin: deviceOrigin(deviceId) };
   const offers = await inTx((tx) => offerProducts(tx, cfg));
   await recordTillSale(

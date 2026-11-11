@@ -1218,7 +1218,7 @@ async function getReceiptOverHttp(
   return (await res.json()) as { receipt: unknown; venueAddress: string[] };
 }
 
-const RECEIPT_POLICY = { receiptPrintMode: "auto", printTradingName: true } as const;
+const RECEIPT_POLICY = { printTradingName: true } as const;
 async function receiptDepartment() {
   const [department] = await suite.db.select().from(departments);
   return department!.id;

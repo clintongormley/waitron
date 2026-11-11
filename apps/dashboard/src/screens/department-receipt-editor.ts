@@ -114,7 +114,7 @@ export class DepartmentReceiptEditor extends LitElement {
   @state() private model?: DepartmentReceiptModel;
   @state() private draft: DepartmentReceiptWrite = {
     receipt: {},
-    policy: { receiptPrintMode: "auto", printTradingName: true },
+    policy: { printTradingName: true },
   };
   @state() private busy = false;
   @state() private attempted = false;
@@ -347,7 +347,7 @@ export class DepartmentReceiptEditor extends LitElement {
       if (Object.keys(clean).length) saved.receipt[field] = clean;
       else delete saved.receipt[field];
     }
-    for (const field of ["receiptPrintMode", "printTradingName"] as const) {
+    for (const field of ["printTradingName"] as const) {
       if (!sameValue(current.policy[field], baseline.policy[field])) continue;
       Object.assign(draft.policy, { [field]: model.policy[field] });
       Object.assign(saved.policy, { [field]: model.policy[field] });

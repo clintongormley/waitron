@@ -8,7 +8,7 @@ const languages = {
   languages: ["gl-ES", "es-ES", "ca-ES"],
   storageLanguages: ["gl-ES", "es-ES", "ca-ES", "eu-ES"],
 };
-const policy = { receiptPrintMode: "on_request", printTradingName: false };
+const policy = { printTradingName: false };
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
   .venueFields!;
 const validate = (receipt: unknown, current: DepartmentReceiptConfig = {}) =>
@@ -20,6 +20,15 @@ const validate = (receipt: unknown, current: DepartmentReceiptConfig = {}) =>
   );
 
 describe("department receipt write", () => {
+  it("saves the trading-name choice without an automatic-print policy", () => {
+    expect(
+      validateDepartmentReceiptWrite(
+        { receipt: {}, policy: { printTradingName: false } },
+        {},
+        languages,
+      ),
+    ).toEqual({ receipt: {}, policy: { printTradingName: false } });
+  });
   it("keeps authored fields and the separate policy without adding defaults", () => {
     expect(
       validate({
@@ -180,13 +189,9 @@ describe("department receipt write", () => {
       null,
       [],
       {},
-      { receiptPrintMode: "auto" },
-      { printTradingName: true },
-      { receiptPrintMode: null, printTradingName: true },
-      { receiptPrintMode: ["auto"], printTradingName: true },
-      { receiptPrintMode: "never", printTradingName: true },
-      { receiptPrintMode: "auto", printTradingName: "false" },
-      { receiptPrintMode: "auto", printTradingName: true, collectionNumber: "always" },
+      { printTradingName: "false" },
+      { printTradingName: true, collectionNumber: "always" },
+      { printTradingName: true, receiptPrintMode: "auto" },
     ].map((input) => [input]),
   )("refuses a malformed policy (%j)", (input) => {
     expect(() =>

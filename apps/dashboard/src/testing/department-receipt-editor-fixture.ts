@@ -19,7 +19,7 @@ export const receiptModel: DepartmentReceiptModel = {
     operationDescription: "Dining service",
     headerSubtitle: { "es-ES": "Bar", "eu-ES": "Retained" },
   },
-  policy: { receiptPrintMode: "auto", printTradingName: true },
+  policy: { printTradingName: true },
   receiptLanguage: "es-ES",
   operationDescriptionRequired: true,
   languages: ["es-ES", "ca-ES"],

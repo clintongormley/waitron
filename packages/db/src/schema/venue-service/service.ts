@@ -74,7 +74,6 @@ export const zoneServicePolicies = table(
 const orderStart = enumType(["table", "counter"]);
 const paidWhen = enumType(["prepay", "ticket_then_pay"]);
 const collectionNumber = enumType(["none", "numbered"]);
-const receiptMode = enumType(["auto", "on_request"]);
 
 export const departmentSalePolicies = table(
   "department_sale_policies",
@@ -83,7 +82,6 @@ export const departmentSalePolicies = table(
     orderStart: orderStart("order_start").notNull().default("counter"),
     paidWhen: paidWhen("paid_when").notNull().default("prepay"),
     collectionNumber: collectionNumber("collection_number").notNull().default("none"),
-    receiptPrintMode: receiptMode("receipt_print_mode").notNull().default("auto"),
     printTradingName: flag("print_trading_name").notNull().default(true),
   },
   (t) => [
@@ -95,7 +93,6 @@ export const departmentSalePolicies = table(
     check("department_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("department_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("department_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
-    check("department_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
   ],
 );
 
@@ -106,7 +103,6 @@ export const zoneSalePolicies = table(
     orderStart: orderStart("order_start"),
     paidWhen: paidWhen("paid_when"),
     collectionNumber: collectionNumber("collection_number"),
-    receiptPrintMode: receiptMode("receipt_print_mode"),
   },
   (t) => [
     foreignKey({
@@ -117,7 +113,6 @@ export const zoneSalePolicies = table(
     check("zone_sale_policies_order_start_ck", enumCheck(t.orderStart)),
     check("zone_sale_policies_paid_when_ck", enumCheck(t.paidWhen)),
     check("zone_sale_policies_collection_number_ck", enumCheck(t.collectionNumber)),
-    check("zone_sale_policies_receipt_mode_ck", enumCheck(t.receiptPrintMode)),
   ],
 );
 

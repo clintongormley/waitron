@@ -85,7 +85,6 @@ it("saves trimmed name and nullable policies in one request and closes before no
         orderStart: "counter",
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     ],
   ]);
@@ -173,7 +172,6 @@ it("an explicit value equal to the department remains explicit and choosing inhe
         orderStart: "table",
         paidWhen: null,
         collectionNumber: "none",
-        receiptPrintMode: "auto",
       },
     ],
   ]);
@@ -255,14 +253,13 @@ it("a clean live snapshot adopts the zone name and raw policies, without a save"
   const view = structuredClone(el.model);
   view.zones[0]!.name = "Live terrace";
   view.salePolicies.zones[0]!.orderStart = null;
-  view.salePolicies.zones[0]!.receiptPrintMode = "on_request";
   el.model = view;
   await el.updateComplete;
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!.value,
   ).toBe("Live terrace");
   const fields = await zoneFields(el);
-  expect(fields.value).toMatchObject({ orderStart: null, receiptPrintMode: "on_request" });
+  expect(fields.value).toMatchObject({ orderStart: null });
   expect(zoneSave(el).disabled).toBe(true);
   expect(writes).toEqual([]);
 });
@@ -303,7 +300,6 @@ it("changed policy events stay inside the editor and an explicit policy saves wi
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     ],
   ]);

@@ -1893,6 +1893,8 @@ a format-11 export is refused as outdated.
 **2026-11-10, A1308 slice 4b:** format 17 removes `payment_policy`; the payments module
 transfers no configuration tables. A format-16 export is refused as `setup.configuration_outdated`.
 
+**2026-11-11, A739 cut 7(c):** format 18 removes `receipt_print_mode` from department and zone sale policies; format-17 exports are refused as `setup.configuration_outdated`.
+
 **2026-11-10, A1308 slice 5a:** format 12 removes `location_id` from the service, calendar,
 staff and booking tables and makes `convenio_config` a singleton with integer id 1.
 The format-11 refusal is exercised by `apps/server/src/configuration-import.test.ts`.

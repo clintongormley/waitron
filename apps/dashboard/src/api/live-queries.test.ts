@@ -947,7 +947,7 @@ it("department receipt, policy, content and address refresh through the departme
       new Response(
         JSON.stringify({
           receipt: {},
-          policy: { receiptPrintMode: "auto", printTradingName: true },
+          policy: { printTradingName: true },
           operationDescriptionRequired: false,
           receiptLanguage: "es-ES",
           languages: ["es-ES"],

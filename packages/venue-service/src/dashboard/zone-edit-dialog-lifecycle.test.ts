@@ -44,7 +44,6 @@ async function edit(el: HTMLElementTagNameMap["zone-edit-dialog"]) {
           orderStart: "counter",
           paidWhen: null,
           collectionNumber: null,
-          receiptPrintMode: "on_request",
         },
       },
       bubbles: true,

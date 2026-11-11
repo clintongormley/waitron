@@ -60,18 +60,17 @@ async function sold(invoiceType = "F1", overrides: Record<string, unknown> = {})
   const api = stubApi({
     listDefaultZoneOffers: vi.fn().mockResolvedValue({
       ...offers,
-      context: { ...offers.context, receiptPrintMode: "on_request" },
+      context: { ...offers.context },
     }),
     listZoneOffers: vi.fn().mockResolvedValue({
       ...offers,
-      context: { ...offers.context, receiptPrintMode: "on_request" },
+      context: { ...offers.context },
     }),
     printReceipt: vi.fn().mockResolvedValue(undefined),
     getTill: vi.fn().mockResolvedValue({
       ...till,
       deviceId: "dev-1",
       receiptLanguages: ["en-GB"],
-      receiptPrintMode: "on_request",
       capabilities: ["take-orders", "take-cash", "print-receipt"],
     }),
     recordSale: vi.fn().mockResolvedValue({ ...invoiceOf("12.00"), invoiceType }),
