@@ -521,7 +521,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const clock = `const fs=require("node:fs"),net=require("node:net"); const p="/run/waitron-box/box.sock"; const s=fs.statSync(p); if(s.uid!==0||s.gid!==10001||(s.mode&511)!==432)throw Error("socket permissions"); const c=net.connect(p); let text=""; c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>c.write("clock.status\\n"));c.on("data",b=>text+=b);c.on("end",()=>{if(JSON.parse(text).ok!==true)throw Error(text);console.log("B3_CLOCK:"+text.trim())});c.on("error",e=>{throw e})`;
       const deny = `const net=require("node:net");const c=net.connect("/run/waitron-box/box.sock");c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>{c.destroy();process.exitCode=1});c.on("error",e=>{if(e.code!=="EACCES")throw e;console.log("B3_SOCKET_DENIED:EACCES")})`;
       const probe = (code, denied = false) =>
-        `printf %s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
+        `printf %%s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
       const checks = caseName === "existing-stick" ? `; ${probe(clock)}; ${probe(deny, true)}` : "";
       args.push(
         "-smbios",
@@ -652,6 +652,16 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const guest = await boot(name, false, "B3_INSTALLED:", 300000);
       try {
         const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
+        if (caseName === "existing-stick") {
+          const until = Date.now() + 20_000;
+          while (
+            !rigLine(guest.serial, "B3_CLOCK:") ||
+            !guest.serial.includes("B3_SOCKET_DENIED:EACCES")
+          ) {
+            if (Date.now() >= until) throw new Error("clock/socket probe did not finish");
+            await new Promise((done) => setTimeout(done, 100));
+          }
+        }
         const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
         try {
           const context = await browser.newContext({ ignoreHTTPSErrors: true });
