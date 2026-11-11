@@ -153,6 +153,12 @@ beforeAll(async () => {
           ring: RING_A,
           stateDir: aState,
           relayUrl: "https://relay.test",
+          primaryUrl: "https://box.deli.test",
+          store: {
+            accessKeyId: "waitron0123456789abcdef",
+            secretAccessKey: "ab".repeat(32),
+            venueId: "pair-venue",
+          },
           boxHostname: "waitron.local",
           accountKey: "test-account-key",
           designated: { nodeId: aId },

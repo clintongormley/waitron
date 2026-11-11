@@ -433,7 +433,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
   }, 60_000);
 
-  it("refuses standby adoption at the real primary without using retired relay settings", async () => {
+  it("a real primary with the retired relay settings set takes a join past where the relay refusal stood", async () => {
     beforeServerStarts();
     const personId = "88888888-8888-4888-8888-888888888888";
     await withTransaction(db.primary, async (tx) => {
@@ -461,12 +461,16 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
           password: "Standby fixture password",
           standbyNodeId: "99999999-9999-4999-8999-999999999999",
           standbyPublicKey: "standby-fixture-key",
-          standbyContactUrl: "",
+          standbyContactUrl: "https://spare.deli.test",
+          standbyStoreUrl: "https://spare.deli.test:7443",
           standbyAt: Date.now(),
         }),
       });
+      // The relay was checked before the main box's own key is read; this fixture box holds no key.
       expect(reply.status).toBe(400);
-      expect(await reply.json()).toEqual({ error: { code: "mirror.no_relay", params: {} } });
+      expect(await reply.json()).toEqual({
+        error: { code: "credentials.missing", params: { purpose: "membership.node_key" } },
+      });
     } finally {
       await server.close();
     }

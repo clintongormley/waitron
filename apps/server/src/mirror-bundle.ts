@@ -45,10 +45,18 @@ export interface ReservedIdentity {
   endorsement: Endorsement;
 }
 
+/** The access key the main box will use to stream into the spare's store. */
+export interface PairStoreKey {
+  accessKeyId: string;
+  secretAccessKey: string;
+  venueId: string;
+}
+
 /**
- * Three secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
- * `credentialsRing` (the key ring every sealed row on the main box opens with) and `boxCaKeyPem`
- * (the private key of the main box's certificate authority).
+ * Four secrets travel in this bundle, which is sent only to an authenticated admin: `accountKey`,
+ * `credentialsRing` (the key ring every sealed row on the main box opens with), `boxCaKeyPem`
+ * (the private key of the main box's certificate authority) and `store.secretAccessKey` (the pair's
+ * key to the spare's store).
  */
 export interface MirrorBundle {
   designated: AdoptResult;
@@ -59,7 +67,11 @@ export interface MirrorBundle {
   environment: "production" | "preproduction";
   boxHostname: string;
   boxCaPem: string;
-  relayUrl: string;
+  /** Carried only when a tunnel is configured. */
+  relayUrl?: string;
+  /** The main box's own contact URL. */
+  primaryUrl: string;
+  store: PairStoreKey;
   /** Venue-wide key for encrypted account factors; transferred only inside this authenticated bundle. */
   accountKey: string;
   reservedIdentity: ReservedIdentity;
@@ -93,7 +105,9 @@ export interface AssembleDeps {
   node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
-  relayUrl: string;
+  relayUrl?: string;
+  primaryUrl: string;
+  store: PairStoreKey;
   boxHostname: string;
   designated: AdoptResult;
   standby: { nodeId: string; publicKey: string };
@@ -218,7 +232,9 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     environment,
     boxHostname: deps.boxHostname,
     boxCaPem,
-    relayUrl: deps.relayUrl,
+    ...(deps.relayUrl === undefined ? {} : { relayUrl: deps.relayUrl }),
+    primaryUrl: deps.primaryUrl,
+    store: deps.store,
     accountKey: deps.accountKey,
     reservedIdentity: { ...reserved, endorsement },
     moduleOverrides: serializeModuleConfig(moduleConfig),

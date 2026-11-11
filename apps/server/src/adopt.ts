@@ -71,7 +71,13 @@ export interface AdoptDeps {
   fetchBundle: (
     primaryUrl: string,
     credential: AdoptCredential,
-    standby: { nodeId: string; publicKey: string; contactUrl: string; at: number },
+    standby: {
+      nodeId: string;
+      publicKey: string;
+      contactUrl: string;
+      storeUrl: string;
+      at: number;
+    },
     confirmedCaPem?: string,
   ) => Promise<MirrorBundle>;
   /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
@@ -113,6 +119,8 @@ export async function adoptFromPrimary(
       nodeId: standby.nodeId,
       publicKey: standby.publicKey,
       contactUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
+      // Task 5.5 sends the spare's store address (its own name and store port, D15) here.
+      storeUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
       at: deps.now().getTime(),
     },
     req.confirmedCaPem,
@@ -192,7 +200,7 @@ export async function adoptFromPrimary(
     await setNodeModeTx(tx, standby.nodeId, "mirror");
     await sealNodeSigningKeyTx(tx, ring, standby.nodeId, standby.privateKey);
     await writeMirrorLinkTx(tx, standby.nodeId, {
-      relayUrl: bundle.relayUrl,
+      relayUrl: bundle.relayUrl ?? bundle.primaryUrl,
       boxHostname: bundle.boxHostname,
       boxCaPem: bundle.boxCaPem,
       // The PRIMARY's id, which the venue's rows carry, not the standby's own.

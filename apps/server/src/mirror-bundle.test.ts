@@ -111,6 +111,12 @@ async function setupVenue(): Promise<AdoptResult> {
   return designated;
 }
 
+const PAIR_STORE = {
+  accessKeyId: "waitron0123456789abcdef",
+  secretAccessKey: "ab".repeat(32),
+  venueId: "pair-venue",
+};
+
 function baseDeps() {
   return {
     appDb: db,
@@ -118,6 +124,8 @@ function baseDeps() {
     ring: RING,
     stateDir,
     relayUrl: "https://relay.test:9000/",
+    primaryUrl: "https://box.deli.test",
+    store: PAIR_STORE,
     boxHostname: "waitron.local",
     accountKey: Buffer.alloc(32, 9).toString("base64"),
   };
@@ -260,6 +268,16 @@ describe("assembleMirrorBundle (primary side)", () => {
       publicKey: STANDBY_PUB,
     });
     expect(bundle.moduleOverrides).toEqual({});
+  });
+
+  it("carries the main box's own address and the pair's key, and a relay only when one is given", async () => {
+    const { bundle } = await allocatedBundle(
+      { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
+      { relayUrl: undefined },
+    );
+    expect(bundle.primaryUrl).toBe("https://box.deli.test");
+    expect(bundle.store).toEqual(PAIR_STORE);
+    expect("relayUrl" in bundle).toBe(false);
   });
 
   it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {

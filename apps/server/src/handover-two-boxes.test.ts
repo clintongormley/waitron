@@ -174,6 +174,7 @@ async function joined() {
             standbyNodeId: sent.nodeId,
             standbyPublicKey: sent.publicKey,
             standbyContactUrl: sent.contactUrl,
+            standbyStoreUrl: sent.storeUrl,
             standbyAt: sent.at,
           }),
         });

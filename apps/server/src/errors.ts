@@ -1296,11 +1296,11 @@ declare module "@waitron/shared" {
      * environment and `actual` the primary's.
      */
     "mirror.environment_mismatch": { expected: string; actual: string };
-    "mirror.no_relay": Record<string, never>;
     /**
      * A mirror-bundle request carried a malformed STANDBY identity: `standbyNodeId` absent or not a
-     * UUID, `standbyPublicKey` absent or empty, or `standbyContactUrl` absent, not a string, or a
-     * non-empty value that is not a bare http(s) origin (`""` is accepted). Not
+     * UUID, `standbyPublicKey` absent or empty, `standbyContactUrl` absent, not a string, or a
+     * non-empty value that is not a bare http(s) origin, or `standbyStoreUrl` not an `https` bare
+     * origin at the contact URL's host (so an empty contact URL is refused). Not
      * `password.invalid`: a bad identity is not a bad credential. The standby's key is not echoed.
      */
     "mirror.standby_invalid": Record<string, never>;

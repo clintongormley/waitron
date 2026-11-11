@@ -218,6 +218,7 @@ function bundleBody() {
     standbyNodeId: TARGET,
     standbyPublicKey: generateNodeKeyPair().publicKey,
     standbyContactUrl: "https://spare.test",
+    standbyStoreUrl: "https://spare.test:7443",
     standbyAt: Date.now(),
     moduleOperation: { binding: scope("reserve"), input },
   };

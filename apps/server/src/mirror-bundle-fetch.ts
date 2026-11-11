@@ -44,11 +44,14 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
     !hasStrings(value, [
       "boxHostname",
       "boxCaPem",
-      "relayUrl",
+      "primaryUrl",
       "accountKey",
       "primaryPublicKey",
       "boxCaKeyPem",
     ]) ||
+    (value.relayUrl !== undefined && typeof value.relayUrl !== "string") ||
+    !isRecord(value.store) ||
+    !hasStrings(value.store, ["accessKeyId", "secretAccessKey", "venueId"]) ||
     !isEncodedKeyRing(value.credentialsRing) ||
     (value.environment !== "production" && value.environment !== "preproduction") ||
     (wireguardPublicKey !== undefined && typeof wireguardPublicKey !== "string") ||
@@ -540,7 +543,8 @@ function sameAuthority(bundleCaPem: string, confirmedCaPem: string): boolean {
 
 /**
  * Only the PUBLIC half of the standby's key travels; the private key never leaves the mirror.
- * `standby.contactUrl` may be `""`: a standby that advertises nothing is still a member.
+ * `standby.storeUrl` is where the spare's store listens; the main box refuses one whose host is not
+ * `standby.contactUrl`'s.
  *
  * A network error, a non-2xx response `refusalFrom` does not relay, unparseable JSON, or a
  * malformed bundle is `mirror.bundle_fetch_failed`; no refusal carries upstream detail that could
@@ -549,7 +553,7 @@ function sameAuthority(bundleCaPem: string, confirmedCaPem: string): boolean {
 export async function fetchMirrorBundle(
   primaryUrl: string,
   credential: AdoptCredential,
-  standby: { nodeId: string; publicKey: string; contactUrl: string; at: number },
+  standby: { nodeId: string; publicKey: string; contactUrl: string; storeUrl: string; at: number },
   confirmedCaPem?: string,
   { timeoutMs = BUNDLE_REQUEST_LIMIT_MS }: RequestLimit = {},
 ): Promise<MirrorBundle> {
@@ -569,6 +573,7 @@ export async function fetchMirrorBundle(
     standbyNodeId: standby.nodeId,
     standbyPublicKey: standby.publicKey,
     standbyContactUrl: standby.contactUrl,
+    standbyStoreUrl: standby.storeUrl,
     standbyAt: standby.at,
   });
 

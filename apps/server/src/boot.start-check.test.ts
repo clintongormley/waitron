@@ -279,6 +279,7 @@ async function boot(
           standbyNodeId: SPARE.nodeId,
           standbyPublicKey: SPARE.publicKey,
           standbyContactUrl: options.spareUrl,
+          standbyStoreUrl: `https://${new URL(options.spareUrl).hostname}:7443`,
           standbyAt: Date.now(),
           moduleOperation: { binding: held.binding, input: held.input },
         }),

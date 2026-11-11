@@ -100,6 +100,12 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
     relayUrl: "https://relay.test:9000/",
+    primaryUrl: "https://box.deli.test",
+    store: {
+      accessKeyId: "waitron0123456789abcdef",
+      secretAccessKey: "ab".repeat(32),
+      venueId: "pair-venue",
+    },
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
     moduleOverrides: {},

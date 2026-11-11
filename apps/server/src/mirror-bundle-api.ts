@@ -1,12 +1,14 @@
 // `POST /management-api/mirror-bundle`, on the singleton primary. The mirror calls it server-side, so
 // the admin credential rides in the body and is authenticated by person id, not email.
 import "./errors.js";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import {
   persistNodeMembershipIfNewer,
   readNodeMembership,
+  withNodeTransaction,
   withTransaction,
   type Database,
   type NodeDatabase,
@@ -24,10 +26,15 @@ import {
   loginManagerById,
   type TotpKeyRing,
 } from "@waitron/identity";
-import type { KeyRing } from "@waitron/credentials";
+import { writePairLinkTx, type KeyRing } from "@waitron/credentials";
 import { readPairLink } from "@waitron/node-db";
 import type { AdoptResult } from "@waitron/provisioning";
-import { assembleMirrorBundle, refuseFullChart, refuseRemovedStandby } from "./mirror-bundle.js";
+import {
+  assembleMirrorBundle,
+  refuseFullChart,
+  refuseRemovedStandby,
+  type PairStoreKey,
+} from "./mirror-bundle.js";
 import {
   CHART_MINT_REFUSALS,
   MAX_CHART_WRITE_ROUNDS,
@@ -54,12 +61,12 @@ import type { Logger } from "./logger.js";
 import { ownContactUrl, sameBoxName } from "./box-name.js";
 import { readStreamSettings } from "./stream-host.js";
 
-// A missing standby relay refuses `mirror.no_relay`; the staff tunnel carries dashboard requests only.
 export interface MirrorBundleApiDeps {
   appDb: Database;
   node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
+  /** Carried in the bundle only when a tunnel is configured; joining does not need one. */
   relayUrl: string | undefined;
   boxHostname: string;
   /** This box's `advertisedOrigin`; its own chart row carries `ownContactUrl` of it. */
@@ -80,7 +87,6 @@ const MAX_CLOCK_GAP_MS = 10 * 60_000;
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
   "authorization.not_permitted": 403,
-  "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
@@ -110,6 +116,7 @@ export function mountMirrorBundleApi(
         standbyNodeId?: string;
         standbyPublicKey?: string;
         standbyContactUrl?: unknown;
+        standbyStoreUrl?: unknown;
         standbyAt?: unknown;
         moduleOperation?: unknown;
       }>(c);
@@ -133,16 +140,17 @@ export function mountMirrorBundleApi(
         typeof body.standbyContactUrl !== "string" ||
         (body.standbyContactUrl !== "" && !isBareOrigin(body.standbyContactUrl)) ||
         typeof body.standbyAt !== "number" ||
-        Number.isNaN(new Date(body.standbyAt).getTime())
+        Number.isNaN(new Date(body.standbyAt).getTime()) ||
+        !isStoreUrlOf(body.standbyStoreUrl, body.standbyContactUrl)
       ) {
         throw new AppError("mirror.standby_invalid", {});
       }
       const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
       const standbyContactUrl = body.standbyContactUrl;
+      const standbyStoreUrl = body.standbyStoreUrl as string;
       const standbyAt = body.standbyAt;
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
-        if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
         // Before assembly, so a chart too broken to read, or one no stored key vouches for, spends no
         // reservation. Each mint round below checks the chart it re-reads again.
         const held = await readNodeMembership(deps.appDb);
@@ -160,12 +168,15 @@ export function mountMirrorBundleApi(
           return c.json({ error: { code: veriFactu.code, params: veriFactu.params } }, 409);
         }
 
+        const store = mintPairStoreKey();
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
           node: deps.node,
           ring: deps.ring,
           stateDir: deps.stateDir,
           relayUrl: deps.relayUrl,
+          primaryUrl: ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId),
+          store,
           boxHostname: deps.boxHostname,
           designated: deps.designated,
           standby,
@@ -183,6 +194,21 @@ export function mountMirrorBundleApi(
           standbyContactUrl,
           bundle.reservedIdentity.endorsement,
         );
+        // venue.db first, node.db after: a crash between leaves a chart entry and no link, which a
+        // second join replaces.
+        await withNodeTransaction(deps.node, async (tx) => {
+          // The first check ran before the reservation; another spare's link may be streaming now.
+          if ((await readPairLink(tx, deps.designated.nodeId))?.state === "streaming")
+            throw new AppError("mirror.spare_already_joined", {});
+          await writePairLinkTx(tx, deps.ring, deps.designated.nodeId, {
+            role: "streams",
+            state: "pending",
+            peerNodeId: standby.nodeId,
+            peerPublicKey: standby.publicKey,
+            storeUrl: standbyStoreUrl,
+            ...store,
+          });
+        });
 
         return c.json(bundle);
       };
@@ -224,6 +250,22 @@ export function mountMirrorBundleApi(
       return assemble();
     }),
   );
+}
+
+/** An `https` bare origin at the contact URL's host, so the pair's key goes to no other machine. */
+function isStoreUrlOf(storeUrl: unknown, contactUrl: string): boolean {
+  if (typeof storeUrl !== "string" || contactUrl === "" || !isBareOrigin(storeUrl)) return false;
+  const store = new URL(storeUrl);
+  return store.protocol === "https:" && store.hostname === new URL(contactUrl).hostname;
+}
+
+/** A fresh key for each join; the access key id has the store's own shape. */
+function mintPairStoreKey(): PairStoreKey {
+  return {
+    accessKeyId: `waitron${randomBytes(8).toString("hex")}`,
+    secretAccessKey: randomBytes(32).toString("hex"),
+    venueId: randomUUID(),
+  };
 }
 
 /** The refusals a join gets before anything is reserved or listed. */

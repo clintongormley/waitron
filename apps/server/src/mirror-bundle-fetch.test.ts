@@ -55,6 +55,12 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
   relayUrl: "https://relay.example/abc",
+  primaryUrl: "https://box-4444.waitron.local",
+  store: {
+    accessKeyId: "waitron0123456789abcdef",
+    secretAccessKey: "ab".repeat(32),
+    venueId: "pair-venue",
+  },
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {
@@ -83,6 +89,7 @@ const STANDBY = {
   nodeId: "55555555-5555-5555-5555-555555555555",
   publicKey: "STANDBY_PUB",
   contactUrl: "https://cloud.deli.test",
+  storeUrl: "https://cloud.deli.test:7443",
   at: 1_800_000_000_000,
 };
 
@@ -153,9 +160,20 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         standbyNodeId: STANDBY.nodeId,
         standbyPublicKey: STANDBY.publicKey,
         standbyContactUrl: STANDBY.contactUrl,
+        standbyStoreUrl: STANDBY.storeUrl,
         standbyAt: STANDBY.at,
       }),
     });
+  });
+
+  it("accepts a bundle carrying no relay address", async () => {
+    const noRelay: MirrorBundle = { ...SAMPLE_BUNDLE };
+    delete noRelay.relayUrl;
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.json(noRelay));
+    const base = await startServer(app);
+
+    expect(await fetchMirrorBundle(base, CREDENTIAL, STANDBY)).toEqual(noRelay);
   });
 
   it("tolerates a primaryUrl with a trailing slash (no double-slash path)", async () => {
@@ -337,6 +355,22 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ],
     ["null module overrides", { ...SAMPLE_BUNDLE, moduleOverrides: null }],
     ["no main box public key", { ...SAMPLE_BUNDLE, primaryPublicKey: undefined }],
+    ["no main box address", { ...SAMPLE_BUNDLE, primaryUrl: undefined }],
+    ["a numeric relay address", { ...SAMPLE_BUNDLE, relayUrl: 42 }],
+    ["no pair key", { ...SAMPLE_BUNDLE, store: undefined }],
+    ["a null pair key", { ...SAMPLE_BUNDLE, store: null }],
+    [
+      "a pair key with no secret",
+      { ...SAMPLE_BUNDLE, store: { ...SAMPLE_BUNDLE.store, secretAccessKey: undefined } },
+    ],
+    [
+      "a pair key with a numeric access key id",
+      { ...SAMPLE_BUNDLE, store: { ...SAMPLE_BUNDLE.store, accessKeyId: 42 } },
+    ],
+    [
+      "a pair key with no venue id",
+      { ...SAMPLE_BUNDLE, store: { ...SAMPLE_BUNDLE.store, venueId: undefined } },
+    ],
     ["no authority key", { ...SAMPLE_BUNDLE, boxCaKeyPem: undefined }],
     ["no key ring", { ...SAMPLE_BUNDLE, credentialsRing: undefined }],
     ["an array key ring", { ...SAMPLE_BUNDLE, credentialsRing: [] }],

@@ -221,6 +221,7 @@ async function reserve(standby = generateStandbyIdentity()) {
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
       standbyContactUrl: "https://spare.test",
+      standbyStoreUrl: "https://spare.test:7443",
       standbyAt: Date.now(),
       moduleOperation: { binding: held.binding, input: held.input },
     }),

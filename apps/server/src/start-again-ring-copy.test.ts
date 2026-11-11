@@ -59,6 +59,12 @@ const BUNDLE: Omit<MirrorBundle, "reservedIdentity"> = {
   boxHostname: "waitron.local",
   boxCaPem: MAIN_AUTHORITY.caCertPem,
   relayUrl: "https://relay.example/",
+  primaryUrl: "https://box.deli.test",
+  store: {
+    accessKeyId: "waitron0123456789abcdef",
+    secretAccessKey: "ab".repeat(32),
+    venueId: "pair-venue",
+  },
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   moduleOverrides: {},
   primaryPublicKey: PRIMARY_KEYS.publicKey,

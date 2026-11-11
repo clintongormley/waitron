@@ -60,6 +60,12 @@ function bundle(): MirrorBundle {
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
     relayUrl: "https://relay.test/",
+    primaryUrl: "https://box.deli.test",
+    store: {
+      accessKeyId: "waitron0123456789abcdef",
+      secretAccessKey: "ab".repeat(32),
+      venueId: "pair-venue",
+    },
     accountKey: Buffer.alloc(32, 3).toString("base64"),
     reservedIdentity: {
       modules: { "fiscal-verifactu": { version: 1, evidence: {} } },

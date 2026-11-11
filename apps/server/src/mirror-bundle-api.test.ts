@@ -19,6 +19,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   loadKeyRing,
   putCredential,
+  readPairSecret,
   setPairLinkStateTx,
   writePairLinkTx,
   type KeyRing,
@@ -39,6 +40,7 @@ import {
   type NodeKeyPair,
   type SignedMembershipDocument,
 } from "@waitron/membership";
+import { readPairLink } from "@waitron/node-db";
 import { planVenue, type AdoptResult } from "@waitron/provisioning";
 import { applyAllocatedTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { fiscalReservations } from "@waitron/fiscal-verifactu/src/schema/reservations.js";
@@ -239,12 +241,14 @@ function validStandby(): {
   standbyNodeId: string;
   standbyPublicKey: string;
   standbyContactUrl: string;
+  standbyStoreUrl: string;
   standbyAt: number;
 } {
   return {
     standbyNodeId: crypto.randomUUID(),
     standbyPublicKey: STANDBY_PUB,
     standbyContactUrl: "https://cloud.deli.test",
+    standbyStoreUrl: "https://cloud.deli.test:7443",
     standbyAt: Date.now(),
   };
 }
@@ -452,6 +456,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         standbyNodeId,
         standbyPublicKey: STANDBY_PUB,
         standbyContactUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:8443`,
+        standbyStoreUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:7443`,
         standbyAt: Date.now(),
       });
       expect(res.status).toBe(200);
@@ -502,6 +507,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test",
+      standbyStoreUrl: "https://cloud.deli.test:7443",
       standbyAt: Date.now(),
     });
     expect(res.status).toBe(200);
@@ -537,6 +543,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud2.deli.test",
+      standbyStoreUrl: "https://cloud2.deli.test:7443",
       standbyAt: Date.now(),
     });
     expect(res2.status).toBe(200);
@@ -815,7 +822,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(await allocationSnapshot()).toEqual(counterBefore);
   });
 
-  it("refuses mirror.no_relay (400) when no relay is configured, AFTER authorizing", async () => {
+  it("hands out a bundle with no relay configured, naming the main box's own address", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, undefined);
 
@@ -824,8 +831,148 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       password: ADMIN_PASSWORD,
       ...validStandby(),
     });
-    expect(res.status).toBe(400);
-    expect((await res.json()).error.code).toBe("mirror.no_relay");
+    expect(res.status).toBe(200);
+    const bundle = (await res.json()) as Record<string, unknown>;
+    expect(bundle.primaryUrl).toBe("https://box.deli.test");
+    expect("relayUrl" in bundle).toBe(false);
+  });
+
+  describe("the pair's store and its key", () => {
+    it("hands out a bundle with no relay, carrying the main box's address and the pair's key", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, undefined);
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+      const bundle = (await res.json()) as {
+        primaryUrl: string;
+        relayUrl?: string;
+        store: { accessKeyId: string; secretAccessKey: string; venueId: string };
+      };
+      expect(bundle.primaryUrl).toBe("https://box.deli.test");
+      expect(bundle.relayUrl).toBeUndefined();
+      expect(bundle.store.accessKeyId).toMatch(/^waitron[0-9a-f]{16}$/);
+      expect(bundle.store.secretAccessKey).toMatch(/^[0-9a-f]{64}$/);
+      expect(bundle.store.venueId).not.toBe("");
+      const link = await readPairLink(suite.node, designated.nodeId);
+      expect(link).toMatchObject({
+        accessKeyId: bundle.store.accessKeyId,
+        venueId: bundle.store.venueId,
+      });
+      expect(await readPairSecret(suite.node, RING, designated.nodeId)).toBe(
+        bundle.store.secretAccessKey,
+      );
+    });
+
+    it("a second join mints a new key", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, undefined);
+      const keys: string[] = [];
+      for (let i = 0; i < 2; i += 1) {
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+        });
+        expect(res.status).toBe(200);
+        const { store } = (await res.json()) as {
+          store: { accessKeyId: string; secretAccessKey: string };
+        };
+        keys.push(store.accessKeyId, store.secretAccessKey);
+      }
+      expect(new Set(keys).size).toBe(4);
+    });
+
+    it("writes a pending pair link naming the store address the spare sent", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, undefined);
+      const standby = validStandby();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...standby,
+      });
+
+      expect(res.status).toBe(200);
+      expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+        role: "streams",
+        state: "pending",
+        peerNodeId: standby.standbyNodeId,
+        peerPublicKey: standby.standbyPublicKey,
+        storeUrl: "https://cloud.deli.test:7443",
+      });
+    });
+
+    it.each([
+      ["at another host than the spare's contact address", "https://other.deli.test:7443"],
+      ["over plain http", "http://cloud.deli.test:7443"],
+      ["with a path", "https://cloud.deli.test:7443/"],
+      ["missing", undefined],
+      ["not a string", 7443],
+    ])("refuses a store address %s as mirror.standby_invalid", async (_kind, standbyStoreUrl) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, undefined);
+      const before = await allocationSnapshot();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyStoreUrl,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
+      expect(await allocationSnapshot()).toEqual(before);
+      expect(await readPairLink(suite.node, designated.nodeId)).toBeNull();
+    });
+
+    it("does not replace a link that became streaming after the first check", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, undefined);
+      const joined = {
+        role: "streams" as const,
+        state: "pending" as const,
+        peerNodeId: crypto.randomUUID(),
+        peerPublicKey: STANDBY_PUB,
+        storeUrl: "https://box-0000.waitron.local:7443",
+        venueId: "joined-venue",
+        accessKeyId: "waitron0000000000000000",
+        secretAccessKey: "joined-secret",
+      };
+      // After the first check and the reservation, before the chart is appended: another spare's
+      // join finishes and its link is marked streaming.
+      pause.beforeChartMint = async () => {
+        await withNodeTransaction(suite.node, async (tx) => {
+          await writePairLinkTx(tx, RING, designated.nodeId, joined);
+          await setPairLinkStateTx(tx, designated.nodeId, "streaming");
+        });
+      };
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.spare_already_joined", params: {} },
+      });
+      expect(await readPairLink(suite.node, designated.nodeId)).toMatchObject({
+        state: "streaming",
+        peerNodeId: joined.peerNodeId,
+        storeUrl: joined.storeUrl,
+        accessKeyId: joined.accessKeyId,
+      });
+      expect(await readPairSecret(suite.node, RING, designated.nodeId)).toBe("joined-secret");
+    });
   });
 
   it("returns a signed dormant allocation and a valid endorsement, activating every purpose at takeover", async () => {
@@ -839,6 +986,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
       standbyContactUrl: "https://cloud.deli.test",
+      standbyStoreUrl: "https://cloud.deli.test:7443",
       standbyAt: Date.now(),
     });
     expect(res.status).toBe(200);
@@ -947,27 +1095,20 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect((await script.json()).error.code).toBe("mirror.standby_invalid");
   });
 
-  it("ACCEPTS an empty standbyContactUrl and records the member address-less", async () => {
+  it("refuses an empty standbyContactUrl, which leaves the store address no host to match", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const app = mountApp(designated, "https://relay.example:9000/");
-    const standbyNodeId = crypto.randomUUID();
+    const before = await readNodeMembership(db);
 
-    // Every other `""` row here fails for a different field; this is the accept path.
     const res = await post(app, {
       personId: adminPersonId,
       password: ADMIN_PASSWORD,
-      standbyNodeId,
-      standbyPublicKey: STANDBY_PUB,
+      ...validStandby(),
       standbyContactUrl: "",
-      standbyAt: Date.now(),
     });
-    expect(res.status).toBe(200);
-    const after = await readNodeMembership(db);
-    expect(after?.body.nodes).toContainEqual({
-      nodeId: standbyNodeId,
-      contactUrl: "",
-      standing: "serving-secondary",
-    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
+    expect(await readNodeMembership(db)).toEqual(before);
   });
 
   it("refuses a standby id the held chart lists as evicted with 409 mirror.standby_removed, before reserving anything", async () => {

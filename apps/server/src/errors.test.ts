@@ -172,12 +172,6 @@ describe("the mirror error codes carry no params", () => {
     expect(error.params).toEqual({});
   });
 
-  it("constructs mirror.no_relay with no params (the refusal names no row)", () => {
-    const error = new AppError("mirror.no_relay", {});
-    expect(error.code).toBe("mirror.no_relay");
-    expect(error.params).toEqual({});
-  });
-
   it("constructs mirror.bundle_fetch_failed with no params (the refusal names no row)", () => {
     const error = new AppError("mirror.bundle_fetch_failed", {});
     expect(error.code).toBe("mirror.bundle_fetch_failed");
