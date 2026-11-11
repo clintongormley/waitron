@@ -1,10 +1,11 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
+
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
-  recallLines,
   sendLines,
   setLineCourse,
   updateHeldOrder,
@@ -1710,7 +1711,7 @@ describe("getHeldOrder", () => {
 
     const revision = await revisionOf(id);
     await withTransaction(db, (tx) =>
-      updateOrderLine(tx, cfg, id, 1, { note: "No salt" }, revision),
+      updateOrderLine(tx, cfg, id, 1, { portionLineNos: [], note: "No salt" }, revision),
     );
     const after = await db.execute<{
       quantity: number;
@@ -3281,6 +3282,7 @@ async function insertContextlessLines(
   tx: Transaction,
   orderId: string,
   productIds: string[],
+  quantity = 1000,
 ): Promise<void> {
   await tx.insert(workingOrderLines).values(
     productIds.map((productId, index) => ({
@@ -3289,10 +3291,10 @@ async function insertContextlessLines(
       productId,
       name: "Line",
       descriptions: { [LOCALE]: "Line" },
-      quantity: 1000,
+      quantity,
       unitPriceGross: 150,
       vatClass: "general",
-      lineTotal: 150,
+      lineTotal: (quantity * 150) / 1000,
     })),
   );
 }
@@ -4074,7 +4076,7 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { note: "No ice" }, revision!);
+        await updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], note: "No ice" }, revision!);
         const [item] = await ticketItemsFor(tx, tabId);
         expect(item!.stationId).toBe(upstairs.id);
         expect(
@@ -4097,7 +4099,15 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, nextRevision!, OPERATOR);
+        await updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { portionLineNos: [], quantity: "2" },
+          nextRevision!,
+          OPERATOR,
+        );
         const lines = await tx
           .select({ id: workingOrderLines.id, makeAtStationId: workingOrderLines.makeAtStationId })
           .from(workingOrderLines)
@@ -4115,7 +4125,14 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { note: "No lemon" }, lastRevision!);
+        await updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { portionLineNos: [], note: "No lemon" },
+          lastRevision!,
+        );
         expect(
           await tx
             .select({ stationId: ticketItems.stationId, note: ticketItems.note })
@@ -4161,7 +4178,15 @@ describe("opening hours", () => {
           .select({ revision: workingOrders.revision })
           .from(workingOrders)
           .where(eq(workingOrders.id, tabId));
-        await updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, revision!, OPERATOR);
+        await updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { portionLineNos: [], quantity: "2" },
+          revision!,
+          OPERATOR,
+        );
 
         const lines = await tx
           .select({ id: workingOrderLines.id, makeAtStationId: workingOrderLines.makeAtStationId })
@@ -5541,16 +5566,6 @@ describe("waiter line release / hold-and-fire", () => {
   });
 });
 
-// Coursing editing — `setLineCourse` moves a held tab line into another active course (or
-// clears it to null), updating BOTH the open-tab line's `course_id` and its held ticket item's snapshot.
-// It refuses a line whose ticket item, or an extra's, has been fired or is waiting for the pass
-// (`ticket.already_fired`) rather than moving it silently, validates a non-null target with the same
-// `requireLiveCourse` the config/fire verbs use (`course.not_found` for an absent / foreign / retired course), and throws
-// `tab.line_not_found` for a `line_no` not on the tab. Non-fiscal: it touches only `working_order_lines`
-// (open tab) and `ticket_items` (kitchen), never a filed record. This suite proves the update + the
-// guards; the serialisation of a concurrent send/recall/fire is
-// working-order.pay-and-dispatch.test.ts's.
-// ---------------------------------------------------------------------------------------------------
 describe("setLineCourse (A1: move a held line to another course)", () => {
   it("moves a HELD line to another course, updating both course_id snapshots", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -5878,139 +5893,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
   });
 });
 
-// recallLines clears fired_at only while a ticket is queued. Started items refuse recall;
-// already-held items are unchanged. These cases exercise those state transitions.
-describe("recallLines (A4: un-send a not-started line — fired → held)", () => {
-  it("un-fires a fired-not-started line back to held (fired_at → null, state stays queued)", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Kitchen", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const starter = await makeProduct(tx, catalogueId, {});
-      await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-
-      // A lone earliest-course line auto-fires at round-send — fired but not yet started (state queued).
-      await addRound(tx, cfg, tabId, [line(starter)]);
-      const before = byLine(await courseItemsFor(tx, tabId), starter);
-      expect(before.firedAt).not.toBeNull();
-      expect(before.state).toBe("queued");
-
-      await recallLines(tx, cfg, tabId, [1]);
-
-      const after = byLine(await courseItemsFor(tx, tabId), starter);
-      expect(after.firedAt).toBeNull(); // greyed back to held
-      expect(after.state).toBe("queued"); // recall does not move the kitchen state
-    });
-  });
-
-  it("refuses a STARTED (preparing/ready) line with ticket.already_started, naming its item id", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Kitchen", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const starter = await makeProduct(tx, catalogueId, {});
-      await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addRound(tx, cfg, tabId, [line(starter)]);
-
-      // The kitchen begins the (fired) line — advance it to `preparing` via the real bump verb.
-      const item = byLine(await courseItemsFor(tx, tabId), starter);
-      await advanceTicketItem(tx, cfg, item.id, "preparing");
-
-      // Recall is refused once cooking has begun — a started line is corrected via cancel, not recall.
-      await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
-        code: "ticket.already_started",
-        params: { ticketItemId: item.id },
-      });
-      // The line is untouched — still fired, still preparing (the refusal ran before any update).
-      const after = byLine(await courseItemsFor(tx, tabId), starter);
-      expect(after.firedAt).not.toBeNull();
-      expect(after.state).toBe("preparing");
-    });
-  });
-
-  it("refuses a ready line with ticket.already_started, naming its item id", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Kitchen", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const starter = await makeProduct(tx, catalogueId, {});
-      await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addRound(tx, cfg, tabId, [line(starter)]);
-
-      const item = byLine(await courseItemsFor(tx, tabId), starter);
-      await advanceTicketItem(tx, cfg, item.id, "preparing");
-      await advanceTicketItem(tx, cfg, item.id, "ready");
-      const away = byLine(await courseItemsFor(tx, tabId), starter);
-      expect(away.state).toBe("ready");
-
-      await expect(recallLines(tx, cfg, tabId, [1])).rejects.toMatchObject({
-        code: "ticket.already_started",
-        params: { ticketItemId: item.id },
-      });
-    });
-  });
-
-  it("is a no-op on an already-HELD line (its fired_at stays null)", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Kitchen", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
-      const starter = await makeProduct(tx, catalogueId, {});
-      const main = await makeProduct(tx, catalogueId, {});
-      await setProductCourse(tx, starter, starterCourse.id);
-      await setProductCourse(tx, main, mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-
-      // starter (line 1) auto-fires; main (line 2, Mains) is HELD — fired_at already null.
-      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
-      expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
-
-      // Recalling an already-held line resolves and changes nothing.
-      await recallLines(tx, cfg, tabId, [2]);
-      const after = byLine(await courseItemsFor(tx, tabId), main);
-      expect(after.firedAt).toBeNull();
-      expect(after.state).toBe("queued");
-    });
-  });
-
-  it("throws tab.line_not_found for a line_no not on the tab", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await createStation(tx, { name: "Kitchen", isDefault: true });
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const starter = await makeProduct(tx, catalogueId, {});
-      await setProductCourse(tx, starter, starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addRound(tx, cfg, tabId, [line(starter)]);
-
-      await expect(recallLines(tx, cfg, tabId, [999])).rejects.toMatchObject({
-        code: "tab.line_not_found",
-        params: { tabId, lineNo: 999 },
-      });
-    });
-  });
-});
-
-// Coursing editing — a recall or void of a PREVIOUSLY-FIRED (printed) line tells the paper kitchen
-// what changed via a correction slip (`enqueueCorrectionSlips` → `formatCorrectionSlip`). The held
-// lines in these cases belong to no order group, so no HOLD ticket carries them, and only a line
-// whose ticket item had a NON-null `fired_at` produced paper: recalling or voiding a HELD line
-// enqueues nothing. `recallLines` emits RECALLED for the items it actually un-fires
-// (fired-and-queued before the update); a cancel (`removeFromLine`) emits VOID for a fired line,
-// reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
-// `ticket_items`/`working_order_lines`/`print_jobs`. These cases prove the enqueue count + payload
-// in both directions.
-// ---------------------------------------------------------------------------------------------------
-describe("correction slips on recall & void (A6)", () => {
+describe("correction slips on line changes and cancellations (A6)", () => {
   /** Create a sellable product with a KNOWN name (so the slip payload can be asserted for it), routed to
    *  an optional course. Station routing is left to the venue default. */
   async function namedProduct(
@@ -6039,60 +5922,6 @@ describe("correction slips on recall & void (A6)", () => {
       .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })
       .from(printJobs);
   }
-
-  it("(a) recalling a FIRED line enqueues ONE RECALLED slip at that station's printer", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      const { printerId: kitchenPrinterId } = await attachedPrinter(
-        tx,
-        { name: "Kitchen", isDefault: true },
-        "P-Kitchen",
-      );
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const starter = await namedProduct(tx, catalogueId, "Croquettes", starterCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-
-      // A lone earliest-course line auto-fires at round-send — it prints (fire ticket) at Kitchen.
-      await addRound(tx, cfg, tabId, [line(starter)]);
-      expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
-      const before = await jobRows(tx);
-
-      await recallLines(tx, cfg, tabId, [1]);
-
-      const after = await jobRows(tx);
-      const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
-      expect(fresh).toHaveLength(1);
-      expect(fresh[0]!.printerId).toBe(kitchenPrinterId);
-      const text = decodeTicket(fresh[0]!.payload);
-      expect(text).toContain("RECALLED");
-      expect(text).toContain("Croquettes");
-    });
-  });
-
-  it("(b) recalling a HELD line no HOLD ticket carries enqueues NO slip", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    await withTransaction(db, async (tx) => {
-      await attachedPrinter(tx, { name: "Kitchen", isDefault: true }, "P-Kitchen");
-      const starterCourse = await createCourse(tx, { name: "Starters", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, { name: "Mains", displayOrder: 1 });
-      const starter = await namedProduct(tx, catalogueId, "Croquettes", starterCourse.id);
-      const main = await namedProduct(tx, catalogueId, "Chuleton", mainCourse.id);
-      const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-
-      // starter (line 1) auto-fires; main (line 2, Mains) is HELD — never printed.
-      await addRound(tx, cfg, tabId, [line(starter), line(main)]);
-      expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
-      const before = await jobRows(tx);
-
-      await recallLines(tx, cfg, tabId, [2]);
-
-      const after = await jobRows(tx);
-      const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
-      expect(fresh).toHaveLength(0);
-    });
-  });
 
   it("(c) voiding a FIRED line enqueues ONE VOID slip at that station's printer", async () => {
     const { cfg, catalogueId } = await setupVenue();
@@ -6141,7 +5970,7 @@ describe("correction slips on recall & void (A6)", () => {
         .where(eq(workingOrders.id, tabId));
       const before = await jobRows(tx);
 
-      await updateOrderLine(tx, cfg, tabId, 1, { note: "No onion" }, revision!);
+      await updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], note: "No onion" }, revision!);
 
       const fresh = (await jobRows(tx)).filter((j) => !before.some((b) => b.id === j.id));
       expect(fresh.map((job) => job.printerId)).toEqual([printerId, printerId]);
@@ -6703,7 +6532,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId));
       const beforeJobs = await tx.select({ id: printJobs.id }).from(printJobs);
-      await updateOrderLine(tx, cfg, tabId, 1, { quantity: "3" }, revision!);
+      await updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], quantity: "3" }, revision!);
       const changedJobs = (
         await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
       )
@@ -6728,7 +6557,14 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, tabId));
       const beforeNoteJobs = await tx.select({ id: printJobs.id }).from(printJobs);
-      await updateOrderLine(tx, cfg, tabId, 1, { note: "No salt" }, nextRevision!);
+      await updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], note: "No salt" },
+        nextRevision!,
+      );
       const noteJobs = (
         await tx.select({ id: printJobs.id, payload: printJobs.payload }).from(printJobs)
       )
@@ -6816,11 +6652,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
           extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 1 }] }],
         },
       ]);
-      const [{ revision: reducedRevision }] = await tx
-        .select({ revision: workingOrders.revision })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, reducedTabId));
-      await updateOrderLine(tx, cfg, reducedTabId, 1, { quantity: "1" }, reducedRevision!);
+      await cancelItemForTest(tx, cfg, reducedTabId, 1, "1");
       const reducedNotices = await tx.execute<{ quantity: number }>(sql`
         select quantity from kitchen_notices
         where working_order_id = ${reducedTabId} and kind = 'void'
@@ -7660,7 +7492,9 @@ describe("frozen answers through a fractional quantity edit", () => {
       .orderBy(workingOrderLines.lineNo);
     expect(before[1]).toMatchObject({ quantity: 300, priceQuantity: 50, lineTotal: 6 });
 
-    await withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, { quantity: "3" }, 0));
+    await withTransaction(db, (tx) =>
+      updateOrderLine(tx, cfg, id, 1, { portionLineNos: [], quantity: "3" }, 0),
+    );
 
     const after = await db
       .select()
@@ -8095,7 +7929,7 @@ describe("order path — extras and options", () => {
         seeded.cfg,
         tabId,
         1,
-        { quantity: "2", extras },
+        { portionLineNos: [], quantity: "2", extras },
         revision!,
         OPERATOR,
       );
@@ -8173,7 +8007,7 @@ describe("order path — extras and options", () => {
         cfg,
         tabId,
         1,
-        { options: [{ listId: list.id, labelId: list.labels[1]!.id }] },
+        { portionLineNos: [], options: [{ listId: list.id, labelId: list.labels[1]!.id }] },
         revision!,
         OPERATOR,
       );
@@ -9070,7 +8904,10 @@ describe("editing a saved order prices only what the edit adds", () => {
         cfg,
         id,
         1,
-        { options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[1]! }] },
+        {
+          portionLineNos: [],
+          options: [{ listId: cookingOptions.listId, labelId: cookingOptions.labelIds[1]! }],
+        },
         0,
       ),
     );
@@ -9090,14 +8927,18 @@ describe("editing a saved order prices only what the edit adds", () => {
     const id = randomUUID();
     await withTransaction(db, async (tx) => {
       await createOpenOrder(tx, cfg, id, [], null);
-      await insertContextlessLines(tx, id, [coffeeId]);
+      await insertContextlessLines(tx, id, [coffeeId], 2000);
     });
 
-    // The line records no unit, so any quantity the thousandths hold is taken.
-    await withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, { quantity: "0.5" }, 0));
-    expect((await storedRows(id)).map((row) => [row.quantity, row.lineTotal])).toEqual([[500, 75]]);
+    await withTransaction(db, (tx) => cancelItemForTest(tx, cfg, id, 1, "1"));
+    expect((await storedRows(id)).map((row) => [row.quantity, row.lineTotal])).toEqual([
+      [1000, 150],
+    ]);
     // A raise is checked against the offer, and so is an extras answer; the line names none.
-    for (const patch of [{ quantity: "2" }, { extras: [] }]) {
+    for (const patch of [
+      { quantity: "2", portionLineNos: [] },
+      { extras: [], portionLineNos: [] },
+    ]) {
       await expect(
         withTransaction(db, (tx) => updateOrderLine(tx, cfg, id, 1, patch, 1)),
       ).rejects.toMatchObject({

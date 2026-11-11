@@ -129,6 +129,18 @@ async function command(
         recorder,
       ),
     );
+  if (action === "remove-group")
+    return run((tx) =>
+      cancelItemForTest(
+        tx,
+        v.cfg,
+        p.tabId,
+        1,
+        undefined,
+        v.operatorId,
+        recorder === undefined ? undefined : { recorder, clock: v.clock },
+      ),
+    );
   const rows = await suite.db
     .select()
     .from(workingOrderLines)
@@ -141,14 +153,12 @@ async function command(
         v.cfg,
         p.tabId,
         1,
-        { quantity: "2" },
+        { portionLineNos: [], quantity: "2" },
         p.revision,
         v.operatorId,
         attendance,
       ),
     );
-  if (action === "remove-group")
-    return run((tx) => cancelItemForTest(tx, v.cfg, p.tabId, 1, "1", v.operatorId, attendance));
   const lines: UpdateHeldOrderRequest["lines"] = rows.map((row) => ({
     workingOrderLineId: row.id,
     menuItemId: v.offerFor(row.lineNo === 1 ? "House salad" : "Tarta"),

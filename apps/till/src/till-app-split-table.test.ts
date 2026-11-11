@@ -2155,45 +2155,6 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     );
   });
 
-  it("a dish recalled on a bill not on screen is not offered, and cannot be sent", async () => {
-    server.drafts.push({
-      ...savedDraft("b2", "p1", "Ana"),
-      lines: [
-        { id: "back", sourceLineId: "steak", source: null } as unknown as Draft["lines"][number],
-      ],
-    });
-    const el = await panelWith({
-      getSplitSources: vi.fn().mockResolvedValue({
-        partyRevision: 3,
-        bills: [
-          answered().bills[0],
-          {
-            billId: "b2",
-            lines: [dish("steak", 1), dish("chips", 2)],
-            balance: balance("b2", "20.00"),
-          },
-        ],
-      }),
-    });
-    const rows = () =>
-      [...dishRows(el, "b2").querySelectorAll<HTMLElement>("[data-pick-row]")].map(
-        (row) => row.dataset.pickRow,
-      );
-
-    expect(rows()).toEqual(["chips"]);
-    expect(dishRows(el, "b2").querySelector('[data-pick="steak"]')).toBeNull();
-
-    await pickDish(el, "b2", "chips");
-    await pressSplit(el);
-
-    expect(api.splitTable).toHaveBeenCalledOnce();
-    const selection = api.splitTable!.mock.calls[0]![2];
-    expect(selection).toEqual({
-      wholeBillIds: [],
-      loose: [{ billId: "b2", lineIds: ["chips"] }],
-    });
-  });
-
   describe("the comparison beyond one ticked bill, and around the question", () => {
     const threeBills = () => [...bills(), partyBill("b3", 3, "5.00")];
     const threeRead = (): SplitSources => ({

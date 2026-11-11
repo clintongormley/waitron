@@ -33,7 +33,6 @@ import { createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { joinTables } from "./testing/table-action-fixture.js";
-import { recallToDraft } from "./draft-recall.js";
 import { submitGroups } from "./order-groups.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -458,25 +457,6 @@ describe("A669 notices", () => {
       expect(jobs).toHaveLength(2);
     },
   );
-  it("a recalled source receives no allergy correction or printer job", async () => {
-    await printer();
-    const p = await sent();
-    for (const line of await dishLines(p)) {
-      const revision = await revisionOf(v, p.partyId);
-      await inTx(v, async (tx) =>
-        recallToDraft(tx, v.cfg, p.partyId, line.id, {
-          submissionId: randomUUID(),
-          expectedPartyRevision: revision,
-          operatorId: OPERATOR,
-          expectedEdit: await readBillEditState(tx, p.tabId),
-        }),
-      );
-    }
-    const jobs = await v.db.select().from(printJobs);
-    await edit(p, patch(p, { note: "Fresh tools" }));
-    expect((await notices()).filter((row) => row.kind.startsWith("allergy_"))).toEqual([]);
-    expect(await v.db.select().from(printJobs)).toEqual(jobs);
-  });
   it("deleting one guest corrects only that guest's dish", async () => {
     const p = await sent();
     const revision = await revisionOf(v, p.partyId);

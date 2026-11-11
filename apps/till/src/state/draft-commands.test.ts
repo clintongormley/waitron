@@ -4,11 +4,10 @@ import type {
   BillDraftSnapshot,
   Draft,
   DraftLine,
-  RecalledDraftLine,
+  FreshDraftLine,
   TillProduct,
 } from "../api/client.js";
 import { partyDraftSnapshot, draftServer } from "../widgets/test-helpers.js";
-import { fromDraftLine } from "./draft-lines.js";
 import { DraftSync, DRAFT_SAVE_DELAY_MS } from "./draft-sync.js";
 import { lineGross } from "./order-line.js";
 
@@ -22,9 +21,15 @@ const beer: TillProduct = {
   category: null,
   allergens: null,
 };
-const source = (): RecalledDraftLine => ({
-  id: "reference-7",
-  sourceLineId: "recorded-7",
+const source = (): FreshDraftLine => ({
+  id: "fresh-7",
+  sourceLineId: null,
+  source: null,
+  menuItemId: "offer-beer",
+  variantId: null,
+  menuVersionId: null,
+  options: [],
+  extras: [],
   quantity: "2.000",
   note: "no salt",
   courseId: "mains",
@@ -34,35 +39,6 @@ const source = (): RecalledDraftLine => ({
   slot: 0,
   joinGroupId: "held-3",
   afterGroupId: null,
-  source: {
-    line: {
-      changesAfterSending: null,
-      id: "recorded-7",
-      lineNo: 7,
-      parentLineNo: null,
-      productId: "retired-variant",
-      parentProductId: "retired-product",
-      menuItemId: null,
-      name: "Recorded steak",
-      quantity: "2.000",
-      priceQuantity: "1.000",
-      unitPrecision: 0,
-      unitPriceGross: "7.50",
-      listUnitPriceGross: "10.00",
-      servedAt: null,
-      courseId: "mains",
-      sentAt: "2026-10-16T18:00:00.000Z",
-      firedAt: null,
-      state: null,
-      stationId: "grill",
-      movable: true,
-      groupId: "held-3",
-      note: "no salt",
-      listId: null,
-    },
-    extras: [],
-    netAmount: "13.50",
-  },
 });
 const own = (lines: DraftLine[], revision = 1): Draft => ({
   id: "draft-1",
@@ -91,11 +67,14 @@ function setup(initial?: Draft) {
     billId: "bill-1",
     personId: "p1",
     rebuild: (lines) =>
-      lines.map((line) =>
-        line.sourceLineId == null
-          ? { product: beer, quantity: line.quantity.replace(/\.0+$/, "") }
-          : fromDraftLine(line, new Map()),
-      ),
+      lines.map((line) => ({
+        product: { ...beer, unitPrice: "6.75" },
+        draftLineId: line.id,
+        quantity: line.quantity.replace(/\.0+$/, ""),
+        ...(line.joinGroupId === null
+          ? {}
+          : { place: { kind: "join" as const, groupId: line.joinGroupId } }),
+      })),
     onRefused: refused,
     requestLimitMs: 5_000,
   });
@@ -107,8 +86,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("draft source commands", () => {
-  it("finishes pending saves before a source command and reloads its recorded family", async () => {
+describe("draft draft commands", () => {
+  it("finishes pending saves before a draft command and reloads its fresh draft rows", async () => {
     const { server, sync } = setup();
     await sync.load();
     sync.store.addProduct(beer, "1");
@@ -146,10 +125,10 @@ describe("draft source commands", () => {
     expect(sync.revision).toBe(2);
     expect(sync.store.lines.map((line) => [line.draftLineId, line.quantity])).toEqual([
       [server.drafts[0]!.lines[0]!.id, "1"],
-      ["reference-7", "2"],
+      ["fresh-7", "2"],
     ]);
     const recalled = sync.store.lines[1]!;
-    expect(recalled.workingOrderLineId).toBe("recorded-7");
+    expect(recalled.draftLineId).toBe("fresh-7");
     expect(recalled.place).toEqual({ kind: "join", groupId: "held-3" });
     expect(lineGross(recalled)).toBe("13.50");
     expect(sync.store.sending).toBe(false);
@@ -158,7 +137,7 @@ describe("draft source commands", () => {
     sync.drop();
   });
 
-  it("does not send a source command over an unsaved refusal", async () => {
+  it("does not send a draft command over an unsaved refusal", async () => {
     const { server, sync, refused } = setup();
     await sync.load();
     sync.store.addProduct(beer, "1");
@@ -254,18 +233,8 @@ describe("draft source commands", () => {
         server.drafts = [
           own(
             [
-              { ...source(), quantity: "1.000", source: { ...source().source, netAmount: "6.75" } },
-              {
-                ...source(),
-                id: "reference-8",
-                sourceLineId: "recorded-8",
-                quantity: "1.000",
-                source: {
-                  line: { ...source().source.line, id: "recorded-8", lineNo: 8 },
-                  extras: [],
-                  netAmount: "6.75",
-                },
-              },
+              { ...source(), quantity: "1.000" },
+              { ...source(), id: "fresh-8", quantity: "1.000" },
             ],
             2,
           ),
@@ -275,11 +244,9 @@ describe("draft source commands", () => {
     ).toBe("failed");
     expect(calls).toEqual(["split"]);
     expect(sync.revision).toBe(2);
-    expect(
-      sync.store.lines.map((line) => [line.draftLineId, line.workingOrderLineId, lineGross(line)]),
-    ).toEqual([
-      ["reference-7", "recorded-7", "6.75"],
-      ["reference-8", "recorded-8", "6.75"],
+    expect(sync.store.lines.map((line) => [line.draftLineId, lineGross(line)])).toEqual([
+      ["fresh-7", "6.75"],
+      ["fresh-8", "6.75"],
     ]);
     expect(sync.store.sending).toBe(false);
     expect(sync.store.editsLocked).toBe(false);
@@ -308,7 +275,7 @@ describe("draft source commands", () => {
     sync.drop();
   });
 
-  it("reconciles a save refused as taken over before declining the source command", async () => {
+  it("reconciles a save refused as taken over before declining the draft command", async () => {
     const { server, sync } = setup(own([source()]));
     await sync.load();
     sync.store.setLineQuantity(0, "3");
@@ -322,7 +289,7 @@ describe("draft source commands", () => {
     ).toBe("unsaved");
     expect(calls).toEqual([]);
     expect(sync.draftId).toBe("draft-1");
-    expect(sync.store.lines.map((line) => line.workingOrderLineId)).toEqual(["recorded-7"]);
+    expect(sync.store.lines.map((line) => line.draftLineId)).toEqual(["fresh-7"]);
     expect(sync.candidate?.lines[0]?.quantity).toBe("3");
     expect(sync.others.map((draft) => draft.ownerName)).toEqual(["Sam"]);
     sync.drop();
@@ -407,7 +374,7 @@ describe("draft source commands", () => {
         throw { code: "draft.taken_over", ownerName: "Sam" };
       }),
     ).toEqual({ refused: "draft.taken_over", ownerName: "Sam" });
-    expect(sync.store.lines.map((line) => line.workingOrderLineId)).toEqual(["recorded-7"]);
+    expect(sync.store.lines.map((line) => line.draftLineId)).toEqual(["fresh-7"]);
     expect(sync.others.map((draft) => draft.ownerName)).toEqual(["Sam"]);
     expect(sync.store.editsLocked).toBe(true);
     sync.drop();
@@ -456,7 +423,7 @@ describe("draft source commands", () => {
       expect(await command).toBe("failed");
       expect(sync.draftId).toBe("draft-1");
       expect(sync.revision).toBe(1);
-      expect(sync.store.lines.map((line) => line.workingOrderLineId)).toEqual(["recorded-7"]);
+      expect(sync.store.lines.map((line) => line.draftLineId)).toEqual(["fresh-7"]);
     },
   );
 

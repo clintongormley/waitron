@@ -118,9 +118,8 @@ lista eliminada, junto con su cargo, y descarta cualquier respuesta a una lista 
 
 Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
 **Cambiar plato**. Solo se guarda ese plato, y la cocina recibe el cambio. Una fila de platos iguales
-cambia entera; para cambiar solo uno, usa **Retirar** y cámbialo en **Nuevo pedido**. Cuando la
-cocina ya ha empezado un plato, o ya se ha servido parte de él, no se puede cambiar: usa
-**Cancelar…** para quitarlo de la cuenta.
+cambia entera. Para quitar uno o varios platos enviados de la cuenta, usa **Cancelar…**.
+Cuando la cocina ya ha empezado un plato, o ya se ha servido parte de él, no se puede cambiar.
 El plato conserva el precio al que se vendió.
 
 Para que la caja deje de pedir una lista sin eliminarla, desactiva su interruptor **Activa**, o

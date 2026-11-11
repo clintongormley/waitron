@@ -20,7 +20,7 @@ export interface LateSendIndex {
  * sold separately does not count, and a variant counts only where the offer lists it.
  */
 export function endedPeriodOf(line: OrderLine, index: LateSendIndex): EndedPeriod | undefined {
-  if (line.workingOrderLineId !== undefined || line.source !== undefined) return undefined;
+  if (line.workingOrderLineId !== undefined) return undefined;
   const offer = index.byId.get(line.product.menuItemId ?? "");
   if (offer === undefined || index.selectable.has(offer.menuId)) return undefined;
   const periodName = index.ended.get(offer.menuId);
@@ -66,7 +66,7 @@ export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
 }
 
 /**
- * The request's new lines the refusal names. A stored or recalled line is left out: the server lists
+ * The request's new lines the refusal names. A stored line is left out: the server lists
  * only new dishes (`priceOrderLines`, `apps/server/src/working-order.ts`), and one can share an
  * offer id with a fresh late dish.
  */
@@ -76,10 +76,7 @@ export function refusedLines<T extends OrderLine>(
 ): T[] {
   const ids = new Set<string | undefined>(refusal.menuItemIds);
   return lines.filter(
-    (line) =>
-      line.workingOrderLineId === undefined &&
-      line.source === undefined &&
-      ids.has(line.product.menuItemId),
+    (line) => line.workingOrderLineId === undefined && ids.has(line.product.menuItemId),
   );
 }
 

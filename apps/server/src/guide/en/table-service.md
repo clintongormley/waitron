@@ -257,7 +257,8 @@ row parts as soon as one dish differs, for example once one burger is served or 
 row in **Sent** marks all of it served; **Mark served** in the row's details asks how many.
 [**Move dishes…**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
-**Change dish**, in the row's details, changes every dish of the row.
+**Change dish**, in the row's details, changes every dish of the row and lets you increase its
+count. To reduce the count, use **Void…**, which opens **Cancel item**.
 
 A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
 twice gives two lines rather than one of double the weight, and a weighed dish moves to another bill
@@ -413,8 +414,7 @@ with its extras under its name, and a weighed dish with its weight, such as **Ib
 Tick a dish to move it; its extras go with it. Identical dishes share one row, such as **Caña** with a
 **4** beside it: ticking the row takes all of them, or as many as the bill's payments allow, and **−** and **+** then set how many, shown as
 **2 of 4**, with the amount of those moving. A
-weighed dish has a tick only, because it moves whole. A dish someone is changing in an unsent order
-is not listed.
+weighed dish has a tick only, because it moves whole.
 
 Some ticks are grey, with the reason under the dish:
 

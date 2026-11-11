@@ -14,8 +14,7 @@ import {
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireBillEditor, requireBillEditors } from "./bill-editing.js";
-import type { BillEditExpected, BillEditState } from "./order-drafts.js";
-import { isRecalledDish } from "./draft-source.js";
+import type { BillEditExpected } from "./order-drafts.js";
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
@@ -46,39 +45,6 @@ export interface BillCommand {
 }
 
 type Transfers = { lineNo: number; quantity?: string }[];
-
-// Reserved sources change only through their owning draft's revision-checked commands.
-async function requireUnreservedTransfers(
-  tx: Transaction,
-  billId: string,
-  transfers: Transfers,
-  edit: BillEditState,
-): Promise<void> {
-  const [reserved] = await tx
-    .select({ id: workingOrderLines.id })
-    .from(workingOrderLines)
-    .where(
-      and(
-        eq(workingOrderLines.workingOrderId, billId),
-        inArray(
-          workingOrderLines.lineNo,
-          transfers.map((line) => line.lineNo),
-        ),
-        isRecalledDish(tx),
-      ),
-    )
-    .limit(1);
-  if (reserved !== undefined) throw reservedRefusal(billId, edit);
-}
-
-export function reservedRefusal(billId: string, edit: BillEditState): AppError {
-  return new AppError("draft.out_of_date", {
-    billId,
-    draftId: edit.draftId,
-    revision: edit.draftRevision,
-    edit,
-  });
-}
 
 type BillStatus = (typeof workingOrders.$inferSelect)["status"];
 
@@ -173,8 +139,7 @@ export async function splitBill(
   assertDistinctTransferLines(billId, transfers);
   const path = await guardPathParty(tx, billId, command);
   refuseClosedBill(billId, path.status);
-  const edit = await requireBillEditor(tx, billId, command.operatorId, command.expectedEdit);
-  await requireUnreservedTransfers(tx, billId, transfers, edit);
+  await requireBillEditor(tx, billId, command.operatorId, command.expectedEdit);
 
   const newBillId = randomUUID();
   await createOpenOrder(tx, cfg, newBillId, [], await orderTableLabel(tx, billId), {
@@ -293,18 +258,7 @@ export async function transferItems(
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
   await assertServiceModesMatch(tx, fromBillId, toBillId);
-  const edits = await requireBillEditors(
-    tx,
-    [fromBillId, toBillId],
-    command.operatorId,
-    command.expectedEdits,
-  );
-  await requireUnreservedTransfers(
-    tx,
-    fromBillId,
-    transfers,
-    edits.find((e) => e.billId === fromBillId)!,
-  );
+  await requireBillEditors(tx, [fromBillId, toBillId], command.operatorId, command.expectedEdits);
 
   const before = await readSentWork(tx, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
@@ -324,13 +278,12 @@ export async function resolveMoveLines(
   tx: Transaction,
   billId: string,
   lineIds: readonly string[],
-): Promise<{ transfers: { lineNo: number }[]; recalled: boolean }> {
+): Promise<{ transfers: { lineNo: number }[] }> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
-      recalled: isRecalledDish(tx).mapWith(Boolean),
     })
     .from(workingOrderLines)
     .where(
@@ -352,7 +305,7 @@ export async function resolveMoveLines(
     return { lineNo: row.lineNo };
   });
   assertDistinctTransferLines(billId, transfers);
-  return { transfers, recalled: rows.some((row) => row.recalled) };
+  return { transfers };
 }
 
 /**
@@ -380,19 +333,13 @@ export async function moveDishes(
     await requireBillOfParty(tx, path.partyId, toBillId);
     await assertServiceModesMatch(tx, fromBillId, toBillId);
   }
-  const { transfers, recalled } = await resolveMoveLines(tx, fromBillId, lineIds);
-  const edits = await requireBillEditors(
+  const { transfers } = await resolveMoveLines(tx, fromBillId, lineIds);
+  await requireBillEditors(
     tx,
     toBillId === null ? [fromBillId] : [fromBillId, toBillId],
     command.operatorId,
     command.expectedEdits,
   );
-  if (recalled) {
-    throw reservedRefusal(
-      fromBillId,
-      edits.find((edit) => edit.billId === fromBillId)!,
-    );
-  }
 
   let destinationId = toBillId;
   if (destinationId === null) {

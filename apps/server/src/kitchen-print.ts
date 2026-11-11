@@ -1256,12 +1256,6 @@ async function withoutMadeHere<T extends { workingOrderLineId: string }>(
 }
 
 /**
- * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link removeFromLine})
- * of a line that had already fired, then enqueue a correction slip per item for its station;
- * callers pass only fired lines. The notice is recorded whether or not a printer exists, so a
- * station screen sees every correction. Each slip prints the item through
- * {@link buildTicketItems}, at the item's quantity. The header's never-block argument applies unchanged.
- *
  * A void must call this before deleting the line: the delete cascades its ticket item away, and both
  * the notice and the slip re-read the line from `working_order_lines`.
  */

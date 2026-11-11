@@ -272,42 +272,7 @@ describe("table panel amount (A773)", () => {
       quantity: "2",
       extras: [{ listId: "extras", productId: "sauce", name: "Sauce", quantity: 1, price: "0.25" }],
     });
-    const source: NonNullable<OrderLine["source"]> = {
-      line: {
-        changesAfterSending: null,
-        id: "source",
-        lineNo: 1,
-        name: "already charged",
-        productId: "dish",
-        parentLineNo: null,
-        quantity: "1.000",
-        priceQuantity: "1.000",
-        unitPrecision: 0,
-        unitPriceGross: "7.25",
-        servedAt: null,
-        courseId: null,
-        sentAt: null,
-        firedAt: null,
-        state: null,
-        stationId: null,
-        movable: false,
-        groupId: null,
-        note: null,
-        listId: null,
-        menuItemId: null,
-        parentProductId: null,
-      },
-      extras: [],
-      netAmount: "7.25",
-    };
-    const recalled = line(
-      "live price must not be added",
-      { kind: "join", groupId: "held" },
-      undefined,
-      { source, product: { ...fresh.product, unitPrice: "999.00" } },
-    );
-    expect(panelTotal("20.00", [fresh, recalled])).toBe("22.50");
-    expect(panelTotal("20.00", [recalled])).toBe("20.00");
+    expect(panelTotal("20.00", [fresh])).toBe("22.50");
     expect(panelTotal("20.00", [])).toBe("20.00");
   });
 });

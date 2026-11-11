@@ -22,19 +22,13 @@ const fresh = {
   quantity: "2",
   extras: [{ listId: "extras", productId: "sauce", name: "Sauce", quantity: 1, price: "0.25" }],
 };
-const recalled = {
-  product: { ...beer, unitPrice: "999.00" },
-  quantity: "2.000",
-  noMerge: true as const,
-  source: { line: storedDish, extras: [storedExtra], netAmount: "8.00" },
-};
 
 it.each(["en", "es"] as const)(
-  "shows the stored amount plus fresh unsent dishes and extras, counting recalled food once (%s)",
+  "shows the stored amount plus fresh unsent dishes and extras (%s)",
   async (locale) => {
     setLocale(locale);
     const draft = new DraftStore();
-    draft.appendLines([fresh, recalled]);
+    draft.appendLines([fresh]);
     const { el } = await mount({ lines: stored, draftStore: draft });
     el.style.width = "1280px";
     await resized(el);
@@ -51,14 +45,14 @@ it.each(["en", "es"] as const)(
   },
 );
 
-it("includes a colleague's saved fresh food and counts their recalled food once", async () => {
+it("includes a colleague's saved fresh food including extras", async () => {
   const draft = new DraftStore();
   draft.lockEdits();
   const { el } = await mount({
     lines: stored,
     draftStore: draft,
     otherDrafts: [
-      { id: "other", revision: 2, ownerName: "Ana", takenFromYou: false, lines: [fresh, recalled] },
+      { id: "other", revision: 2, ownerName: "Ana", takenFromYou: false, lines: [fresh] },
     ],
   });
   const total = el.shadowRoot!.querySelector("[data-order-total]");

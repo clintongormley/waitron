@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -5,7 +6,6 @@ import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine as updateOrderLineCommand } from "./working-order.js";
 import { updateHeldOrder } from "./working-order.js";
 import {
-  recallLines,
   sendLines,
   setLineCourse,
   updateHeldOrder as updateHeldOrderForTest,
@@ -98,7 +98,6 @@ import {
   type GroupRelease,
 } from "./testing/group-composition-fixture.js";
 import "./errors.js";
-import { recallToDraft } from "./draft-recall.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
@@ -1537,7 +1536,14 @@ describe("editing held groups", () => {
       .where(eq(workingOrders.id, s.tabId));
 
     await inTx((tx) =>
-      updateOrderLine(tx, v.cfg, s.tabId, steak!.lineNo, { quantity: "3" }, bill!.revision),
+      updateOrderLine(
+        tx,
+        v.cfg,
+        s.tabId,
+        steak!.lineNo,
+        { portionLineNos: [], quantity: "3" },
+        bill!.revision,
+      ),
     );
 
     const [edited] = await linesIn(s.partyId, s.mains);
@@ -2867,81 +2873,6 @@ describe("sending lines on their own", () => {
       { code: "group.line_held", params: { tabId: s.tabId, lineNo: steak!.lineNo } },
     );
   });
-
-  it("sends a recalled line of a fired group again", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const [croquettes] = await linesIn(s.partyId, s.cold);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [croquettes!.lineNo]));
-    expect(await firedTicketLineIds(s.partyId)).not.toContain(croquettes!.id);
-    const jobsBefore = (await printed(v)).length;
-
-    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [croquettes!.lineNo]));
-
-    expect(await firedTicketLineIds(s.partyId)).toContain(croquettes!.id);
-    expect((await printed(v)).slice(jobsBefore).join("\n")).toContain(DISHES.cold.kitchen);
-  });
-
-  it("sends every recalled line and no held-group line when no line is named", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const [croquettes] = await linesIn(s.partyId, s.cold);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [croquettes!.lineNo]));
-    const held = [
-      ...(await linesIn(s.partyId, s.warm)),
-      ...(await linesIn(s.partyId, s.mains)),
-      ...(await linesIn(s.partyId, s.desserts)),
-    ];
-
-    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, []));
-
-    const fired = await firedTicketLineIds(s.partyId);
-    expect(fired).toContain(croquettes!.id);
-    for (const row of held) expect(fired).not.toContain(row.id);
-    const after = await linesOf(s.partyId);
-    expect(
-      after.filter((row) => held.some((h) => h.id === row.id)).map((row) => row.sentAt),
-    ).toEqual(held.map(() => null));
-    expect((await groupsOf(s.partyId)).groups.map((group) => group.state)).toEqual([
-      "fired",
-      "fired",
-      "held",
-      "held",
-      "held",
-    ]);
-  });
-
-  it("sends a recalled line that is in no group", async () => {
-    const v = await setupVenue();
-    const other = await seated(v);
-    // A round, not a group submission, leaves the fired line in no group.
-    await inTx((tx) => addTabRound(tx, v.cfg, other.tabId, [line(v, "steak")]));
-    const [moved] = await linesOfBill(other.tabId);
-    await inTx((tx) => recallLines(tx, v.cfg, other.tabId, [moved!.lineNo]));
-    expect(await firedTicketLineIds(other.partyId)).toEqual([]);
-
-    await inTx((tx) => sendLines(tx, v.cfg, other.tabId, [moved!.lineNo]));
-
-    expect(moved).toMatchObject({ groupId: null });
-    expect(await firedTicketLineIds(other.partyId)).toEqual([moved!.id]);
-  });
-
-  it("leaves a held group's no-route line held when a recalled line of the same course is sent", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "beer")] }]);
-    const { groups } = await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "water")] }]);
-    const [water] = await linesIn(s.partyId, groups[0]!.id);
-    // The Beer is line 1; recalling it leaves no held Drinks ticket once it is sent again.
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [1]));
-
-    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [1]));
-
-    expect((await linesIn(s.partyId, groups[0]!.id))[0]).toMatchObject({
-      id: water!.id,
-      sentAt: null,
-    });
-  });
 });
 
 describe("a device as the firer", () => {
@@ -3079,45 +3010,6 @@ describe("waiter group and recalled-line release", () => {
     expect((await groupsOf(s.partyId)).groups.find((g) => g.id === laterGroup)!.state).toBe(
       "fired",
     );
-  });
-
-  it("fires a selected held group and separately sends a recalled line of the same course", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    const first = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
-    const held = await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]);
-    const [steak] = await linesIn(s.partyId, first.groups[0]!.id);
-    const [fish] = await linesIn(s.partyId, held.groups[0]!.id);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
-    expect(await firedTicketLineIds(s.partyId)).not.toContain(steak!.id);
-    const jobsBefore = (await printed(v)).length;
-
-    await fire(v, s.partyId, held.groups[0]!.id, { operatorId: ALEX });
-    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
-
-    expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id, fish!.id].sort());
-    expect((await groupsOf(s.partyId)).groups.map((group) => group.state)).toEqual([
-      "fired",
-      "fired",
-    ]);
-    const slips = (await printed(v)).slice(jobsBefore).join("\n");
-    expect(slips).toContain(DISHES.steak.kitchen);
-    expect(slips).toContain(DISHES.fish.kitchen);
-  });
-
-  it("sends a recalled line again without a held group", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    const first = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
-    const [steak] = await linesIn(s.partyId, first.groups[0]!.id);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
-    expect(await firedTicketLineIds(s.partyId)).toEqual([]);
-    const jobsBefore = (await printed(v)).length;
-
-    await inTx((tx) => sendLines(tx, v.cfg, s.tabId, [steak!.lineNo]));
-
-    expect(await firedTicketLineIds(s.partyId)).toEqual([steak!.id]);
-    expect((await printed(v)).slice(jobsBefore).join("\n")).toContain(DISHES.steak.kitchen);
   });
 
   it("refuses a held group holding a sold-out Steak (product.unavailable), firing none of it", async () => {
@@ -3292,7 +3184,7 @@ describe("edits inside groups (D19)", () => {
     const revision = await revisionOf(s.partyId);
 
     // Beer ×2 is two portions; raising the first by one adds one beer, as 2 → 3 did.
-    await changeLine(v, s.tabId, beer!.lineNo, { quantity: "2" }, MIA);
+    await changeLine(v, s.tabId, beer!.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
 
     const { groups } = await groupsOf(s.partyId);
     expect(groups.map((group) => [group.position, group.state])).toEqual([
@@ -3340,7 +3232,7 @@ describe("edits inside groups (D19)", () => {
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
-      () => changeLine(v, s.tabId, beer!.lineNo, { quantity: "3" }, MIA),
+      () => changeLine(v, s.tabId, beer!.lineNo, { portionLineNos: [], quantity: "3" }, MIA),
       { code: "product.not_sold_separately", params: { productId: v.productId.beer } },
     );
   });
@@ -3352,7 +3244,7 @@ describe("edits inside groups (D19)", () => {
     const revision = await revisionOf(s.partyId);
     const events = (await eventsOf(s.partyId)).length;
 
-    await changeLine(v, s.tabId, steak!.lineNo, { quantity: "3" }, MIA);
+    await changeLine(v, s.tabId, steak!.lineNo, { portionLineNos: [], quantity: "3" }, MIA);
 
     expect((await linesIn(s.partyId, s.mains))[0]).toMatchObject({
       id: steak!.id,
@@ -3377,7 +3269,7 @@ describe("edits inside groups (D19)", () => {
     const revision = await revisionOf(s.partyId);
 
     // Steak ×2 is two portions of one each.
-    await changeLine(v, s.tabId, steak!.lineNo, { quantity: "1" }, MIA);
+    await changeLine(v, s.tabId, steak!.lineNo, { portionLineNos: [], quantity: "1" }, MIA);
 
     expect(await revisionOf(s.partyId)).toBe(revision);
   });
@@ -3394,6 +3286,7 @@ describe("edits inside groups (D19)", () => {
       s.tabId,
       steak!.lineNo,
       {
+        portionLineNos: [],
         extras: [
           { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
         ],
@@ -3422,6 +3315,7 @@ describe("edits inside groups (D19)", () => {
       s.tabId,
       steak!.lineNo,
       {
+        portionLineNos: [],
         extras: [
           { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
         ],
@@ -3528,7 +3422,7 @@ describe("edits inside groups (D19)", () => {
     );
     expect(await linesOfBill(tabId)).toMatchObject([{ sentAt: expect.any(String) }]);
 
-    await changeLine(v, tabId, 1, { quantity: "2" });
+    await changeLine(v, tabId, 1, { portionLineNos: [], quantity: "2" });
     await saveWhole(v, tabId, [...(await keptLines(v, tabId)), line(v, "flan")], undefined);
 
     expect(
@@ -3561,7 +3455,7 @@ describe("edits inside groups (D19)", () => {
             v.cfg,
             s.tabId,
             beer!.lineNo,
-            { quantity: "3" },
+            { portionLineNos: [], quantity: "3" },
             await billRevisionOf(s.tabId),
             {
               admission: testTradingAdmission(),
@@ -3595,7 +3489,7 @@ describe("the bill a group's first event names", () => {
     );
     const [onCheck] = await linesOfBill(checkId);
 
-    await changeLine(v, checkId, onCheck!.lineNo, { quantity: "2" }, MIA);
+    await changeLine(v, checkId, onCheck!.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
 
     const added = (await groupsOf(s.partyId)).groups.at(-1)!.id;
     expect(
@@ -4544,7 +4438,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     const fish = await lineOf(s, s.mains, "fish", v);
 
     await move(v, s.partyId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.desserts });
-    await changeLine(v, s.tabId, fish.lineNo, { quantity: "2" }, MIA);
+    await changeLine(v, s.tabId, fish.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
     expect(await printed(v)).toHaveLength(2);
     expect(await noticesAt(v)).toEqual([]);
 
@@ -4591,7 +4485,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       const steak = await lineOf(s, s.mains, "steak", v);
       const fish = await lineOf(s, s.mains, "fish", v);
       // Steak ×2 is two portions of one: raise the first.
-      await changeLine(v, s.tabId, steak.lineNo, { quantity: "2" }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
       const changed = (await secondPaper()).slice(before);
       expect(changed).toHaveLength(1);
       expect(changed[0]).toContain("HOLD CHANGED");
@@ -4836,22 +4730,6 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(await noticesAt(v)).toEqual([]);
     });
 
-    // A fired group keeps the time its HOLD ticket was queued; its work is corrected as fired work.
-    it("prints no HOLD correction for a line recalled from a fired group whose HOLD ticket was queued", async () => {
-      const v = await setupVenue();
-      await printHeldWork(true);
-      const s = await specExample(v);
-      await fire(v, s.partyId, s.mains);
-      const fish = await lineOf(s, s.mains, "fish", v);
-      await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [fish.lineNo]));
-      expect((await printedSince(v, 6)).map((job) => job[0])).toEqual(["*** RECALLED ***"]);
-
-      await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
-
-      expect(await printedSince(v, 7)).toEqual([]);
-      expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["recalled"]);
-    });
-
     // An edit that is not a quantity alone takes the dish away as it read and gives it back as
     // it now reads.
     it("prints a changed note as -N of the dish as it read, then +N as it now reads", async () => {
@@ -4860,7 +4738,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       const { s, steak } = await rareSteaks(v);
       const header = await head(v, s);
 
-      await changeLine(v, s.tabId, steak.lineNo, { note: "no pepper" }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { portionLineNos: [], note: "no pepper" }, MIA);
 
       expect(await printedSince(v, 1)).toEqual([
         [
@@ -4890,7 +4768,13 @@ describe("advance HOLD tickets (Task 6)", () => {
       const { s, steak } = await rareSteaks(v);
       const header = await head(v, s);
 
-      await changeLine(v, s.tabId, steak.lineNo, { quantity: "1", note: "well done" }, MIA);
+      await changeLine(
+        v,
+        s.tabId,
+        steak.lineNo,
+        { portionLineNos: [], quantity: "1", note: "well done" },
+        MIA,
+      );
 
       expect(await printedSince(v, 1)).toEqual([
         [
@@ -4920,7 +4804,13 @@ describe("advance HOLD tickets (Task 6)", () => {
       const { s, steak } = await rareSteaks(v);
       const header = await head(v, s);
 
-      await changeLine(v, s.tabId, steak.lineNo, { quantity: "2", note: "well done" }, MIA);
+      await changeLine(
+        v,
+        s.tabId,
+        steak.lineNo,
+        { portionLineNos: [], quantity: "2", note: "well done" },
+        MIA,
+      );
 
       const given = [
         "*** HOLD CHANGED ***",
@@ -4956,7 +4846,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
       ];
 
-      await changeLine(v, s.tabId, steak.lineNo, { extras: sauce }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { portionLineNos: [], extras: sauce }, MIA);
 
       expect(await printedSince(v, 1)).toEqual([
         [
@@ -4997,7 +4887,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       const [dish] = await linesIn(s.partyId, group!.id);
       const header = await head(v, s);
 
-      await changeLine(v, s.tabId, dish!.lineNo, { options: [tuna.well] }, MIA);
+      await changeLine(v, s.tabId, dish!.lineNo, { portionLineNos: [], options: [tuna.well] }, MIA);
 
       expect(await printedSince(v, 1)).toEqual([
         ["*** HOLD CHANGED ***", ...header, "GROUP 1", "-1 x K-TUNA", "  + K-DONE: K-RARE"],
@@ -5024,46 +4914,53 @@ describe("advance HOLD tickets (Task 6)", () => {
       const [dish] = await linesIn(s.partyId, group!.id);
       await printHeldWork(true);
 
-      await changeLine(v, s.tabId, steak.lineNo, { note: "no pepper" }, MIA);
-      await changeLine(v, s.tabId, steak.lineNo, { quantity: "1", note: "well done" }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { portionLineNos: [], note: "no pepper" }, MIA);
+      await changeLine(
+        v,
+        s.tabId,
+        steak.lineNo,
+        { portionLineNos: [], quantity: "1", note: "well done" },
+        MIA,
+      );
       await changeLine(
         v,
         s.tabId,
         steak.lineNo,
         {
+          portionLineNos: [],
           extras: [
             { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
           ],
         },
         MIA,
       );
-      await changeLine(v, s.tabId, dish!.lineNo, { options: [tuna.well] }, MIA);
+      await changeLine(v, s.tabId, dish!.lineNo, { portionLineNos: [], options: [tuna.well] }, MIA);
 
       expect(await printed(v)).toEqual([]);
       expect(await noticesWithNotes(v)).toEqual([]);
     });
 
-    it("prints +1 and -1 for a held Steak's quantity raised and lowered by an edit", async () => {
+    it("prints an addition and a cancellation for a held Steak's quantity raised by Change dish and lowered by Cancel item", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v, "grouped");
       const header = await head(v, s);
       const steak = await lineOf(s, s.mains, "steak", v);
 
-      await changeLine(v, s.tabId, steak.lineNo, { quantity: "3" }, MIA);
-      await changeLine(v, s.tabId, steak.lineNo, { quantity: "1" }, MIA);
+      await changeLine(v, s.tabId, steak.lineNo, { portionLineNos: [], quantity: "3" }, MIA);
+      await inTx((tx) => cancelItemForTest(tx, v.cfg, s.tabId, steak.lineNo, "2", MIA));
 
       expect(await printedSince(v, 5)).toEqual([
         ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `+1 x ${DISHES.steak.kitchen}`],
-        ["*** HOLD CHANGED ***", ...header, "GROUP 4 · MAINS", `-2 x ${DISHES.steak.kitchen}`],
+        ["*** HOLD CANCELLED ***", ...header, "GROUP 4 · MAINS", `2 x ${DISHES.steak.kitchen}`],
       ]);
       expect(await noticesAt(v)).toEqual([
         { kind: "changed", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: "added" },
         {
-          kind: "changed",
+          kind: "void",
           lineName: DISHES.steak.kitchen,
           quantity: "2.000",
-          direction: "removed",
+          direction: null,
         },
       ]);
     });
@@ -5154,7 +5051,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       );
 
       await move(v, s.partyId, [{ lineId: steak!.id, quantity: "1" }], { groupId: s.desserts });
-      await changeLine(v, s.tabId, left!.lineNo, { quantity: "2" }, MIA);
+      await changeLine(v, s.tabId, left!.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
       await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }], {
         joinGroupId: s.mains,
       });
@@ -5487,8 +5384,8 @@ describe("advance HOLD tickets (Task 6)", () => {
         const steak = await lineOf(s, group, "steak", v);
         const fish = await lineOf(s, group, "fish", v);
 
-        await changeLine(v, s.tabId, fish.lineNo, { quantity: "2" }, MIA);
-        await changeLine(v, s.tabId, steak.lineNo, { quantity: "2" }, MIA);
+        await changeLine(v, s.tabId, fish.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
+        await changeLine(v, s.tabId, steak.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
 
         expect(await printedSince(v, 1)).toEqual([
           [
@@ -6003,32 +5900,6 @@ describe("Fire now on one held dish", () => {
     expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);
   });
 
-  it("refuses a recalled dish without changing its outbox or its held companions", async () => {
-    const { v, s, steak } = await fixture(false);
-    await inTx(async (tx) =>
-      recallToDraft(tx, v.cfg, s.partyId, steak.id, {
-        ...(await args(s.partyId)),
-        expectedEdit: await readBillEditState(tx, steak.workingOrderId),
-      }),
-    );
-    const command = await args(s.partyId);
-    const edit = await inTx((tx) => readBillEditState(tx, steak.workingOrderId));
-    await expectRefusedWithNothingWritten(
-      v,
-      s.partyId,
-      () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
-      {
-        code: "draft.out_of_date",
-        params: {
-          billId: steak.workingOrderId,
-          draftId: edit.draftId,
-          revision: edit.draftRevision,
-          edit,
-        },
-      },
-    );
-  });
-
   it("refuses a wholly cancelled held dish", async () => {
     const { v, s, steak } = await fixture(false);
     await db.insert(lineServiceCancellations).values({
@@ -6196,7 +6067,7 @@ describe("A773 request kind of an edit's and an inserted group", () => {
     const first = (await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "cold")] }]))
       .groups[0]!.id;
     const [cold] = await linesIn(s.partyId, first);
-    await changeLine(v, s.tabId, cold!.lineNo, { quantity: "2" }, MIA);
+    await changeLine(v, s.tabId, cold!.lineNo, { portionLineNos: [], quantity: "2" }, MIA);
     const { groups } = await groupsOf(s.partyId);
     const added = groups.at(-1)!.id;
     expect(added).not.toBe(first);

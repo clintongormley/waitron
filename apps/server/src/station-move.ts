@@ -13,7 +13,6 @@ import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
 import { invalid } from "./bill-allocation.js";
-import { refuseRecalledWrite } from "./draft-source.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { raiseReleasedAtClosedStation } from "./closed-station-alert.js";
 import { enqueueKitchenTickets, enqueueStationMoved, firedQuantity } from "./kitchen-print.js";
@@ -352,15 +351,6 @@ export async function moveDishesToStation(
           operatorId: mover.personId ?? undefined,
           expectedEdit,
         });
-      if (lineIds.length > 0)
-        await refuseRecalledWrite(
-          tx,
-          and(
-            eq(workingOrderLines.workingOrderId, orderId),
-            inArray(workingOrderLines.id, lineIds),
-          )!,
-        );
-
       const stations = await VENUE_SERVICE.stationStates(tx, at);
       const destination = stations.get(request.stationId);
       if (destination === undefined)

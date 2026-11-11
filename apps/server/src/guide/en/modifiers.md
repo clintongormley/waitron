@@ -106,9 +106,8 @@ list, and its charge with it, and drops any answer to a deleted options list.
 
 To change a dish already sent at a table, open its details in **Sent**, change it and press
 **Change dish**. Only that dish is saved, and the kitchen gets the change. A row of identical dishes
-changes together; to change only one, **Recall** it and change it in **New order**. Once the kitchen
-has started a dish, or any of it has been served, it can no longer be changed: use **Void…** to take
-it off the bill.
+changes together. To take one or more sent dishes off the bill, use **Void…**, which opens
+**Cancel item**. Once the kitchen has started a dish, or any of it has been served, it can no longer be changed.
 The dish keeps the price it was sold at.
 
 To stop a list being asked without deleting it, turn its **Active** switch off, or remove it from

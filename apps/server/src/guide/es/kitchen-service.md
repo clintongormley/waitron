@@ -101,8 +101,7 @@ imprime su parte sin marca cuando se envía el grupo a preparar, también si com
 solo las secciones que ya recibieron lo impreso en espera llevan la marca MARCHAR.
 
 Enviar a preparar el trabajo en espera en la misma estación no duplica una corrección de alergia
-existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
-ese borrador crea una copia nueva con las instrucciones que confirmas para ese envío.
+existente.
 
 ## Lee el encabezado de un grupo en el papel de cocina {#group-headings}
 
@@ -166,14 +165,13 @@ editarla en **Estaciones de preparación**. En un móvil o una tableta, la barra
 ámbar cuando un plato listo ha esperado ese tiempo: consulta
 [Ver qué mesas tienen comida lista](table-service.md#ready-bar). Cada estación de
 preparación fija también cómo se imprimen los platos iguales en sus comandas, si imprime por
-adelantado los grupos en espera y si un plato ya enviado a ella se puede retirar o cambiar, en
+adelantado los grupos en espera y si un plato ya enviado a ella se puede cambiar, en
 **Platos iguales en una comanda de cocina**, **Imprimir por adelantado los grupos en espera** y
 **Cambios tras el envío**: **No permitidos**, **Solo en
 espera** o **En espera o sin empezar**. También fija si sus platos esperan a que el pase los marche,
 en **Espera al pase**: consulta [Haz que una estación espere al pase](kitchen-service.md#station-waits).
-Un plato que la cocina ha empezado nunca se retira ni se cambia. Un plato
-que no fue a ninguna estación, sin ningún extra que fuera a una estación propia, se puede retirar
-o cambiar sea cual sea el ajuste de las estaciones.
+Un plato que la cocina ha empezado no se puede cambiar. Un plato que no fue a ninguna estación,
+sin ningún extra que fuera a una estación propia, se puede cambiar sea cual sea el ajuste de las estaciones.
 
 ## Trabaja con la pantalla de cocina {#kitchen-screen}
 

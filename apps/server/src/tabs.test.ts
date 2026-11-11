@@ -2,13 +2,7 @@ import { cancelItemForTest } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import {
-  recallLines,
-  sendLines,
-  setLineCourse,
-  updateHeldOrder,
-  updateOrderLine,
-} from "./testing/order-writer-fixture.js";
+import { sendLines, updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { createZone } from "./testing/service-zone.js";
@@ -77,13 +71,10 @@ import {
   unmarkServed,
   type OrderLinePatch,
 } from "./working-order.js";
-import { recallToDraft } from "./draft-recall.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { readBillEditState } from "./bill-editing.js";
-import { finishTable, seatTable, partyRevisionOfOrder } from "./testing/party-close-fixture.js";
+import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import "./errors.js";
-import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { fireGroup } from "./order-groups.js";
 import { readScopedPassBoard } from "./pass-board.js";
 import { boardItems, EVERY } from "./testing/pass-board-probe.js";
@@ -990,7 +981,7 @@ describe("readTabLines", () => {
     expect(line!.note).toBeNull();
   });
 
-  it("stamps sentAt on a line that was sent, which a recall keeps while firedAt clears; a held line never sent reads null", async () => {
+  it("stamps sentAt on a sent line; a held line never sent reads null", async () => {
     const { cfg, tableId, coffeeOffer, waterOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -1002,12 +993,10 @@ describe("readTabLines", () => {
     const before = await asApp(cfg, (tx) => readTabLines(tx, tabId));
     expect(before[0]).toMatchObject({ sentAt: expect.any(String), firedAt: expect.any(String) });
 
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
-
-    const [recalled, held] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
-    expect(recalled).toMatchObject({
+    const [sent, held] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
+    expect(sent).toMatchObject({
       lineNo: 1,
-      firedAt: null,
+      firedAt: expect.any(String),
       state: "queued",
       sentAt: expect.any(String),
     });
@@ -1541,22 +1530,6 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     expect(await sentState(tabId)).toEqual(before);
   });
 
-  it("keeps a recalled line's sent_at", async () => {
-    const { cfg, tableId, coffeeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
-    );
-    const [sent] = await sentState(tabId);
-    expect(sent!.sentAt).not.toBeNull();
-
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
-
-    const [recalled] = await sentState(tabId);
-    expect(recalled!.ticket!.firedAt).toBeNull();
-    expect(recalled!.sentAt).toBe(sent!.sentAt);
-  });
-
   it("reports the ticket's fired quantity on the station queue and the pass board, and the line's for an older ticket with none", async () => {
     const { cfg, tableId, coffeeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
@@ -1770,24 +1743,6 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     });
     expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([2000, 2000]);
   });
-
-  it("a recall records a RECALLED notice for the fired line only", async () => {
-    const { cfg, tableId, coffeeOffer, waterOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [
-        { menuItemId: coffeeOffer, quantity: "2" },
-        { menuItemId: waterOffer, quantity: "1", hold: true },
-      ]),
-    );
-    const ticket = await ticketOfLine(tabId, 1);
-
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1, 2]));
-
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([
-      { kind: "recalled", lineName: "ES coffee", quantity: "2.000", wasStarted: false },
-    ]);
-  });
 });
 
 /** A held coffee on a new tab, with a held split-off extra at a station of its own. */
@@ -1830,84 +1785,6 @@ async function heldDishWithExtraApart() {
 }
 
 describe("when a station does not allow changes after sending", () => {
-  it("refuses to recall a line that was sent to a station, and changes nothing", async () => {
-    const { cfg, tableId, coffeeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
-    );
-    const ticket = await ticketOfLine(tabId, 1);
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never", [ticket.stationId]));
-
-    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
-      code: "ticket.already_fired",
-      params: { workingOrderId: tabId },
-    });
-    const [state] = await sentState(tabId);
-    expect(state!.ticket!.firedAt).not.toBeNull();
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
-  });
-
-  it("a While held station still lets a held line be recalled", async () => {
-    const { cfg, tableId, coffeeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "held"));
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1", hold: true }]),
-    );
-
-    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
-  });
-
-  it("a Not allowed station refuses a held line's recall, changing nothing", async () => {
-    const { cfg, tableId, coffeeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1", hold: true }]),
-    );
-    const before = await sentState(tabId);
-    const ticket = await ticketOfLine(tabId, 1);
-
-    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
-      code: "ticket.already_fired",
-      params: { workingOrderId: tabId },
-    });
-    expect(await sentState(tabId)).toEqual(before);
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
-  });
-
-  it("refuses a started line's recall as started, whatever its station allows", async () => {
-    const { cfg, tabId, ticket } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
-    for (const value of ["held", "never"] as const) {
-      await asApp(cfg, (tx) => setChangesAfterSending(tx, value));
-      const before = await sentState(tabId);
-
-      await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
-        code: "ticket.already_started",
-        params: { ticketItemId: ticket.id },
-      });
-      expect(await sentState(tabId)).toEqual(before);
-    }
-  });
-
-  it("a split-off extra's station can refuse its dish's recall", async () => {
-    const { cfg, tabId, sideId, dishStationId } = await heldDishWithExtraApart();
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "held-or-waiting", [dishStationId]));
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never", [sideId]));
-    const before = await sentState(tabId);
-
-    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
-      code: "ticket.already_fired",
-      params: { workingOrderId: tabId },
-    });
-    expect(await sentState(tabId)).toEqual(before);
-
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "held-or-waiting", [sideId]));
-    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
-  });
-
   it("a split-off extra's station can refuse a change to its dish", async () => {
     const { cfg, tabId, sideId, dishStationId } = await heldDishWithExtraApart();
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "held-or-waiting", [dishStationId]));
@@ -1923,7 +1800,15 @@ describe("when a station does not allow changes after sending", () => {
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 1, { note: "no sugar" }, await revisionOf(tabId), OPERATOR),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { portionLineNos: [], note: "no sugar" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
     expect(await linesOf(tabId)).toEqual(before);
@@ -1931,7 +1816,15 @@ describe("when a station does not allow changes after sending", () => {
 
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "held-or-waiting", [sideId]));
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "no sugar" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], note: "no sugar" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
     expect((await notes())[0]).toEqual({ note: "no sugar" });
   });
@@ -1952,59 +1845,9 @@ describe("when a station does not allow changes after sending", () => {
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
   });
-
-  it("recalls a sent line once its station allows it again", async () => {
-    const { cfg, tableId, coffeeOffer } = await setupVenue();
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
-    );
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
-
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
-
-    const [state] = await sentState(tabId);
-    expect(state!.ticket!.firedAt).toBeNull();
-  });
-
-  it("still changes a no-preparation line that was released, which has no ticket item", async () => {
-    const { cfg, tableId, waterId, waterOffer } = await setupVenue();
-    await routeToNoPreparation(waterId);
-    await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: waterOffer, quantity: "1" }]),
-    );
-
-    await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "sin hielo" }, await revisionOf(tabId)),
-    );
-    await expect(asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]))).resolves.toBeUndefined();
-
-    const [line] = await asApp(cfg, (tx) => readTabLines(tx, tabId));
-    expect(line).toMatchObject({ sentAt: expect.any(String), state: null, note: "sin hielo" });
-  });
 });
 
 describe("a line with no fired ticket whose product sold out cannot be sent", () => {
-  it("refuses to send a recalled line again once its product is unavailable, changing nothing", async () => {
-    const { cfg, tableId, coffeeId, coffeeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    await asApp(cfg, (tx) =>
-      addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
-    );
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
-    await db.execute(sql`update products set available = 0 where id = ${coffeeId}`);
-
-    await expect(asApp(cfg, (tx) => sendLines(tx, cfg, tabId, [1]))).rejects.toMatchObject({
-      code: "product.unavailable",
-      params: { productId: coffeeId },
-    });
-    const [state] = await sentState(tabId);
-    expect(state!.ticket!.firedAt).toBeNull();
-  });
-
   it("refuses selected held line release when its extra sold out", async () => {
     const { cfg, tableId, coffeeId, waterId, coffeeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
@@ -2090,7 +1933,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const before = await linesOf(tabId);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], note: "no onions" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
@@ -2128,7 +1979,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], quantity: "2" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
 
     // The first café at the 1.50 it was sold at; the second at today's 1.75.
@@ -2143,12 +2002,10 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("a quantity drop is a void of the difference: a VOID notice, and the ticket's quantity follows", async () => {
+  it("Cancel item removes the difference: a VOID notice, and the ticket's quantity follows", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
 
-    await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "1" }, await revisionOf(tabId), OPERATOR),
-    );
+    await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, tabId, 1, "1", OPERATOR));
 
     expect(await linesOf(tabId)).toEqual([
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
@@ -2234,7 +2091,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], quantity: "2" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
 
     expect(await linesOf(tabId)).toEqual([
@@ -2256,7 +2121,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { portionLineNos: [], quantity: "2" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
 
@@ -2265,20 +2138,34 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("refuses raising a started line with a note, and dropping it, changing nothing", async () => {
+  it("refuses raising a started line with a note and lowering its count through Change dish", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
     const before = await linesOf(tabId);
 
-    for (const patch of [{ quantity: "3", note: "no onions" }, { quantity: "1" }]) {
+    for (const [patch, refusal] of [
+      [
+        { quantity: "3", note: "no onions", portionLineNos: [] },
+        { code: "ticket.already_started", params: { ticketItemId: ticket.id } },
+      ],
+      [
+        { quantity: "1", portionLineNos: [] },
+        { code: "management.request_invalid", params: { field: "quantity" } },
+      ],
+    ] as const) {
       await expect(
         asApp(cfg, async (tx) =>
-          updateOrderLine(tx, cfg, tabId, 1, patch, await revisionOf(tabId), OPERATOR),
+          updateOrderLine(
+            tx,
+            cfg,
+            tabId,
+            1,
+            { ...patch, portionLineNos: [] },
+            await revisionOf(tabId),
+            OPERATOR,
+          ),
         ),
-      ).rejects.toMatchObject({
-        code: "ticket.already_started",
-        params: { ticketItemId: ticket.id },
-      });
+      ).rejects.toMatchObject(refusal);
     }
 
     expect(await linesOf(tabId)).toEqual(before);
@@ -2302,7 +2189,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
           cfg,
           tabId,
           1,
-          { note: "no onions" },
+          { portionLineNos: [], note: "no onions" },
           await revisionOf(tabId),
           OPERATOR,
         ),
@@ -2336,7 +2223,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
           cfg,
           tabId,
           1,
-          { note: "no onions" },
+          { portionLineNos: [], note: "no onions" },
           await revisionOf(tabId),
           OPERATOR,
         ),
@@ -2369,7 +2256,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
             cfg,
             tabId,
             1,
-            { note: "no onions" },
+            { portionLineNos: [], note: "no onions" },
             await revisionOf(tabId),
             OPERATOR,
           ),
@@ -2499,13 +2386,11 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("a quantity drop of a waiting dish at a Not allowed station goes through as a void of the difference", async () => {
+  it("Cancel item removes part of a waiting dish at a Not allowed station", async () => {
     const { cfg, tabId, ticket } = await tabWithFiredCoffee("2");
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
 
-    await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "1" }, await revisionOf(tabId), OPERATOR),
-    );
+    await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, tabId, 1, "1", OPERATOR));
 
     expect(await linesOf(tabId)).toEqual([
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
@@ -2514,35 +2399,6 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
       { kind: "void", lineName: "ES coffee", quantity: "1.000", wasStarted: false },
     ]);
-  });
-
-  it("edits a recalled line freely: no notice, and its held item carries the change when sent again", async () => {
-    const { cfg, tabId, ticket } = await tabWithFiredCoffee();
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [1]));
-    const recallNotices = await noticesAt(cfg, ticket.stationId);
-
-    await asApp(cfg, async (tx) =>
-      updateOrderLine(
-        tx,
-        cfg,
-        tabId,
-        1,
-        { note: "no onions", quantity: "3" },
-        await revisionOf(tabId),
-        OPERATOR,
-      ),
-    );
-
-    expect(await noticesAt(cfg, ticket.stationId)).toEqual(recallNotices);
-    expect(await linesOf(tabId)).toEqual([
-      expect.objectContaining({ lineNo: 1, quantity: 3000, lineTotal: 450 }),
-    ]);
-    expect(await ticketRow(tabId, 1)).toMatchObject({
-      id: ticket.id,
-      firedAt: null,
-      note: "no onions",
-      quantity: 3000,
-    });
   });
 
   it("edits a held-course line and a no-route line freely, with no notice", async () => {
@@ -2558,10 +2414,26 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const held = await ticketOfLine(tabId, 1);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "later" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], note: "later" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 2, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        2,
+        { portionLineNos: [], quantity: "2" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
 
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: held.id, firedAt: null, note: "later" });
@@ -2575,12 +2447,22 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const copy = await revisionOf(tabId);
 
     await asApp(cfg, (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "3", note: "a" }, copy, OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], quantity: "3", note: "a" },
+        copy,
+        OPERATOR,
+      ),
     );
     const landed = await linesOf(tabId);
 
     await expect(
-      asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, copy, OPERATOR)),
+      asApp(cfg, (tx) =>
+        updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], quantity: "2" }, copy, OPERATOR),
+      ),
     ).rejects.toMatchObject({
       code: "working_order.out_of_date",
       params: { workingOrderId: tabId },
@@ -2599,7 +2481,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
           cfg,
           tabId,
           1,
-          { note: "no onions" },
+          { portionLineNos: [], note: "no onions" },
           await revisionOf(tabId),
           OPERATOR,
         ),
@@ -2609,19 +2491,17 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("refuses a quantity the line's unit cannot take, and one that is not positive", async () => {
+  it("Cancel item refuses a fractional whole-unit quantity and a non-positive quantity", async () => {
     const { cfg, tabId } = await tabWithFiredCoffee();
     const before = await linesOf(tabId);
 
-    for (const [quantity, reason] of [
-      ["1.5", "precision"],
-      ["0", "positive"],
-    ]) {
+    for (const quantity of ["0.5", "0"]) {
       await expect(
-        asApp(cfg, async (tx) =>
-          updateOrderLine(tx, cfg, tabId, 1, { quantity }, await revisionOf(tabId), OPERATOR),
-        ),
-      ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason } });
+        asApp(cfg, (tx) => cancelItemForTest(tx, cfg, tabId, 1, quantity, OPERATOR)),
+      ).rejects.toMatchObject({
+        code: "adjustment.quantity_invalid",
+        params: { workingOrderId: tabId, lineNo: 1, quantity },
+      });
     }
     expect(await linesOf(tabId)).toEqual(before);
   });
@@ -2650,7 +2530,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         cfg,
         tabId,
         1,
-        { extras: [{ listId, picks: [{ productId: waterId, quantity: 2 }] }] },
+        { portionLineNos: [], extras: [{ listId, picks: [{ productId: waterId, quantity: 2 }] }] },
         await revisionOf(tabId),
         OPERATOR,
       ),
@@ -2714,7 +2594,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         cfg,
         tabId,
         1,
-        { note: "tibio", quantity: "2" },
+        { portionLineNos: [], note: "tibio", quantity: "2" },
         await revisionOf(tabId),
         OPERATOR,
       ),
@@ -2752,7 +2632,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "solo" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], note: "solo" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
     expect(await linesOf(tabId)).toEqual([
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
@@ -2760,7 +2648,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     ]);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { portionLineNos: [], quantity: "2" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
     // The stored café and its extra as sold; the second café new, its extra at today's 0.80.
     expect(await linesOf(tabId)).toEqual([
@@ -2793,7 +2689,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { portionLineNos: [], quantity: "2" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "listId" } });
     expect(await linesOf(tabId)).toEqual(before);
@@ -2804,26 +2708,33 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, coffeeId, waterId));
     const withWater = [{ listId, picks: [{ productId: waterId, quantity: 1 }] }];
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
-    // Dishes at lines 1 (held), 3 (two, fired) and 5 (fired, then recalled), each followed by its
+    // Dishes at lines 1 (held), 3 (two, fired) and 5 (held), each followed by its
     // extra.
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: coffeeOffer, quantity: "1", extras: withWater, hold: true },
         { menuItemId: coffeeOffer, quantity: "2", extras: withWater },
-        { menuItemId: coffeeOffer, quantity: "1", extras: withWater },
+        { menuItemId: coffeeOffer, quantity: "1", extras: withWater, hold: true },
       ]),
     );
-    await asApp(cfg, (tx) => recallLines(tx, cfg, tabId, [5]));
     await db.execute(sql`update products set available = 0 where id = ${waterId}`);
     const edit = (lineNo: number, patch: { note?: string; quantity?: string }) =>
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, lineNo, patch, await revisionOf(tabId), OPERATOR),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          lineNo,
+          { ...patch, portionLineNos: [] },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       );
 
     await edit(1, { note: "later" });
     await edit(5, { note: "later" });
     // A drop sends nothing again: it is a void of the difference.
-    await edit(3, { quantity: "1" });
+    await asApp(cfg, (tx) => cancelItemForTest(tx, cfg, tabId, 3, "1", OPERATOR));
     expect(
       (await linesOf(tabId)).map((line) => [
         line.lineNo,
@@ -2867,12 +2778,28 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 9, { note: "x" }, await revisionOf(tabId), OPERATOR),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          9,
+          { portionLineNos: [], note: "x" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "tab.line_not_found", params: { tabId, lineNo: 9 } });
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId), OPERATOR),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          2,
+          { portionLineNos: [], note: "x" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineNo" } });
   });
@@ -3082,40 +3009,6 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
       expect((await ticketRow(tabId, 2))!.id).not.toBe(tickets[1]!.id);
     });
 
-    it("refuses a row whose other dish is recalled into a draft, changing nothing", async () => {
-      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
-      const [order] = await db
-        .select({ partyId: workingOrders.partyId })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, tabId));
-      const [party] = await db.select().from(parties).where(eq(parties.id, order!.partyId!));
-      const [second] = await db
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
-      await asApp(cfg, async (tx) =>
-        recallToDraft(tx, cfg, party!.id, second!.id, {
-          expectedPartyRevision: party!.revision,
-          operatorId: OPERATOR,
-          submissionId: randomUUID(),
-          expectedEdit: await readBillEditState(tx, tabId),
-        }),
-      );
-      const before = await linesOf(tabId);
-      const notices = await noticesAt(cfg, tickets[0]!.stationId);
-
-      await expect(
-        editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
-      ).rejects.toMatchObject({ code: "draft.out_of_date" });
-
-      expect(await linesOf(tabId)).toEqual(before);
-      expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
-      expect(await noticesAt(cfg, tickets[0]!.stationId)).toEqual(notices);
-      // The same edit of the first dish alone goes through: the refusal was the recalled one's.
-      await editRow(cfg, tabId, { note: "no onions" });
-      expect(await ticketRow(tabId, 1)).toMatchObject({ note: "no onions" });
-    });
-
     it("refuses a row whose other dish is paid for, changing nothing", async () => {
       const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
       const [second] = await db
@@ -3275,7 +3168,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
         cfg,
         tabId,
         2,
-        { note: "tibio", quantity: "2" },
+        { portionLineNos: [], note: "tibio", quantity: "2" },
         await revisionOf(tabId),
         OPERATOR,
       ),
@@ -3405,59 +3298,73 @@ async function partyTab() {
 }
 
 describe("every write to an open order's lines counts on its revision, a served mark aside (plan D10)", () => {
-  it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
-    [
-      "a round",
-      (tx, t) => addTabRound(tx, t.cfg, t.tabId, [{ menuItemId: t.coffeeOffer, quantity: "1" }]),
-      ["tab"],
-    ],
-    ["a void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
-    ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
-    ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["selected held lines fired", (tx, t) => fireTabLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
-    [
-      "a transfer",
-      async (tx, t) =>
-        transferItems(
-          tx,
-          t.cfg,
-          t.tabId,
-          t.otherId,
-          [{ lineNo: 1, quantity: "1" }],
-          await sentOn(tx, t.tabId),
-        ),
-      ["tab", "other"],
-    ],
-    [
-      "a split",
-      async (tx, t) =>
-        splitBill(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }], await sentOn(tx, t.tabId)),
-      ["tab"],
-    ],
-    [
-      "a merge",
-      async (tx, t) => mergeBills(tx, t.cfg, t.tabId, t.otherId, await sentOn(tx, t.tabId)),
-      ["tab"],
-    ],
-    [
-      "a line edit",
-      async (tx, t) =>
-        updateOrderLine(tx, t.cfg, t.tabId, 1, { note: "x" }, await revisionOf(t.tabId)),
-      ["tab"],
-    ],
-  ])("%s", async (_name, write, counted) => {
-    const tabs = await twoTabs();
-    const before = { tab: await revisionOf(tabs.tabId), other: await revisionOf(tabs.otherId) };
+  it("adding a dish through whole-order save and cancelling the old held dish keeps the new dish held until its group fires", async () => {
+    const { cfg, tabId, partyId, lineId, coffeeOffer, waterId, waterOffer } =
+      await tabWithHeldCoffee();
 
-    await asApp(tabs.cfg, (tx) => write(tx, tabs));
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, tabId, {
+      operatorId: OPERATOR,
+      lines: [{ workingOrderLineId: lineId, menuItemId: waterOffer, quantity: "1" }],
+      revision: await revisionOf(tabId),
+    });
+    expect(await firedByLine(tabId)).toEqual([[2, false]]);
 
-    for (const which of counted) {
-      const id = which === "tab" ? tabs.tabId : tabs.otherId;
-      expect(await revisionOf(id)).toBe(before[which] + 1);
-    }
+    await fireGroupOfLine(cfg, partyId, tabId, 2);
+    expect(await sentState(tabId)).toEqual([
+      expect.objectContaining({
+        lineNo: 2,
+        productId: waterId,
+        ticket: expect.objectContaining({ firedAt: expect.any(String) }),
+      }),
+    ]);
   });
+});
 
+/** Two open bills of one party: `tabId` with a café line of 3 and a held one in a course,
+ * `otherId` with one café line. */
+async function twoTabs() {
+  const venue = await setupVenue();
+  const { cfg, tableId, coffeeOffer } = venue;
+  const course = await asApp(cfg, (tx) => createCourse(tx, { name: "Postres", displayOrder: 3 }));
+  const { tabId, partyId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+  const otherId: string = randomUUID();
+  await asApp(cfg, async (tx) => {
+    await createOpenOrder(tx, cfg, otherId, [], null, {
+      partyId,
+      existingService: true,
+      copyServiceContextFrom: tabId,
+    });
+  });
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, tabId, [
+      { menuItemId: coffeeOffer, quantity: "3" },
+      { menuItemId: coffeeOffer, quantity: "1", courseId: course.id, hold: true },
+    ]),
+  );
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, otherId, [{ menuItemId: coffeeOffer, quantity: "1" }]),
+  );
+  return { ...venue, tabId, otherId, courseId: course.id };
+}
+type Tabs = Awaited<ReturnType<typeof twoTabs>>;
+
+/** A party's tab at a table of its own, with a café line of 3 fired. */
+async function partyTab() {
+  const venue = await setupVenue();
+  const { cfg, tableId, coffeeOffer } = venue;
+  const { tabId, partyId } = await asApp(cfg, (tx) =>
+    seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR }),
+  );
+  await asApp(cfg, (tx) =>
+    writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, OPERATOR),
+  );
+  await asApp(cfg, (tx) =>
+    addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, quantity: "3" }]),
+  );
+  return { ...venue, tabId };
+}
+
+describe("every write to an open order's lines counts on its revision, a served mark aside (plan D10)", () => {
   // Serving is a command on a party. It moves the party's revision (`served.test.ts`), not the
   // bill's.
   it("except a served mark, and a served mark cleared", async () => {
@@ -3474,16 +3381,22 @@ describe("every write to an open order's lines counts on its revision, a served 
   it("does not count a write refused as out of date, nor one that changes nothing", async () => {
     const { cfg, tabId, coffeeOffer } = await twoTabs();
     const copy = await revisionOf(tabId);
-    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "a" }, copy));
+    await asApp(cfg, (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], note: "a" }, copy),
+    );
 
     await expect(
-      asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "b" }, copy)),
+      asApp(cfg, (tx) =>
+        updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], note: "b" }, copy),
+      ),
     ).rejects.toMatchObject({ code: "working_order.out_of_date", params: { revision: copy + 1 } });
     expect(await revisionOf(tabId)).toBe(copy + 1);
 
     // An empty patch, a note the line already carries, and the whole order saved as it stands.
-    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, {}, copy + 1));
-    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { note: "a" }, copy + 1));
+    await asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [] }, copy + 1));
+    await asApp(cfg, (tx) =>
+      updateOrderLine(tx, cfg, tabId, 1, { portionLineNos: [], note: "a" }, copy + 1),
+    );
     const lines = await db
       .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
@@ -3566,65 +3479,6 @@ describe("a line write on an order whose card payment is in flight is refused, a
     return { lines, orders };
   }
 
-  // Each write, and every order it writes lines on: a mark on any of them refuses it.
-  it.each<[string, (tx: Transaction, tabs: Tabs) => Promise<unknown>, ("tab" | "other")[]]>([
-    [
-      "a round",
-      (tx, t) => addTabRound(tx, t.cfg, t.tabId, [{ menuItemId: t.coffeeOffer, quantity: "1" }]),
-      ["tab"],
-    ],
-    ["a void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1), ["tab"]],
-    ["a part void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
-    ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
-    ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["selected held lines fired", (tx, t) => fireTabLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
-    ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
-    [
-      "a transfer",
-      async (tx, t) =>
-        transferItems(
-          tx,
-          t.cfg,
-          t.tabId,
-          t.otherId,
-          [{ lineNo: 1, quantity: "1" }],
-          await sentOn(tx, t.tabId),
-        ),
-      ["tab", "other"],
-    ],
-    [
-      "a split",
-      async (tx, t) =>
-        splitBill(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }], await sentOn(tx, t.tabId)),
-      ["tab"],
-    ],
-    [
-      "a merge",
-      async (tx, t) => mergeBills(tx, t.cfg, t.tabId, t.otherId, await sentOn(tx, t.tabId)),
-      ["tab", "other"],
-    ],
-    [
-      "a line edit",
-      async (tx, t) =>
-        updateOrderLine(tx, t.cfg, t.tabId, 1, { note: "x" }, await revisionOf(t.tabId)),
-      ["tab"],
-    ],
-  ])("%s", async (_name, write, touched) => {
-    const tabs = await twoTabs();
-    for (const which of touched) {
-      const paying = which === "tab" ? tabs.tabId : tabs.otherId;
-      await markPaying(paying, MARK);
-      const before = await snapshot(tabs);
-
-      await expect(asApp(tabs.cfg, (tx) => write(tx, tabs))).rejects.toMatchObject({
-        code: "order.payment_in_flight",
-        params: { workingOrderId: paying },
-      });
-      expect(await snapshot(tabs)).toEqual(before);
-      await markPaying(paying, null);
-    }
-  });
-
   it("takes a served mark, changing none of the compared fields but the line's served ones", async () => {
     const tab = await partyTab();
     const tabs = { tabId: tab.tabId, otherId: tab.tabId };
@@ -3656,7 +3510,9 @@ describe("a line write on an order whose card payment is in flight is refused, a
     const revision = await revisionOf(tabs.tabId);
 
     await expect(
-      asApp(tabs.cfg, (tx) => updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, {}, revision)),
+      asApp(tabs.cfg, (tx) =>
+        updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, { portionLineNos: [] }, revision),
+      ),
     ).rejects.toMatchObject({ code: "order.payment_in_flight" });
     await expect(
       updateHeldOrder({ admission: testTradingAdmission(), db }, tabs.cfg, tabs.tabId, {
@@ -3679,7 +3535,14 @@ describe("a line write on an order whose card payment is in flight is refused, a
     );
     await asApp(tabs.cfg, (tx) => cancelLine(tx, tabs.cfg, tabs.tabId, 1, "1"));
     await asApp(tabs.cfg, async (tx) =>
-      updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, { note: "x" }, await revisionOf(tabs.tabId)),
+      updateOrderLine(
+        tx,
+        tabs.cfg,
+        tabs.tabId,
+        1,
+        { portionLineNos: [], note: "x" },
+        await revisionOf(tabs.tabId),
+      ),
     );
 
     expect(await revisionOf(tabs.tabId)).toBe(before + 3);

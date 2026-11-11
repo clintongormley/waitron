@@ -18,8 +18,6 @@ import {
   diningTables,
   kitchenStations,
   lineServiceCancellations,
-  orderDraftRecalledLines,
-  orderDrafts,
   orderGroups,
   parties,
   partyTables,
@@ -889,39 +887,6 @@ describe("the floor's attention signals", () => {
     expect((await floorRow(v, table2)).signals).not.toContainEqual(
       expect.objectContaining({ kind: "held" }),
     );
-  });
-
-  it("does not count a held dish that was recalled", async () => {
-    const v = await setupPartyVenue(suite.db);
-    const table2 = await v.table("Mesa 2");
-    const { partyId, tabId } = await seat(v, table2);
-    const mains = await holdGroup(v, partyId, "Burger", "Paella");
-    const lucia = await person(v, "Lucy");
-    await inTx(v, (tx) =>
-      saveDraft(tx, v.cfg, partyId, lucia, {
-        billId: tabId,
-        draftId: null,
-        revision: 0,
-        lines: [draftLine(v, "Water")],
-      }),
-    );
-    expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 2 });
-
-    await inTx(v, async (tx) => {
-      const [draft] = await tx
-        .select({ id: orderDrafts.id })
-        .from(orderDrafts)
-        .where(eq(orderDrafts.partyId, partyId));
-      const [burger] = await tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(and(eq(workingOrderLines.groupId, mains), eq(workingOrderLines.name, "Burger")));
-      await tx
-        .insert(orderDraftRecalledLines)
-        .values({ draftId: draft!.id, sourceLineId: burger!.id, position: 1 });
-    });
-
-    expect((await floorRow(v, table2)).signals).toContainEqual({ kind: "held", count: 1 });
   });
 
   it("readHeldCounts counts nothing for a party that is no longer open", async () => {

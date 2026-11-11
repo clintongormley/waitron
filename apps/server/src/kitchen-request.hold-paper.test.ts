@@ -35,16 +35,11 @@ import {
 } from "./testing/adjustment-venue.js";
 import { readBillEditState } from "./bill-editing.js";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { recallToDraft } from "./draft-recall.js";
 import { correctJoin, fireGroup } from "./order-groups.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
 import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
-import {
-  moveDishesToStation,
-  recallLines,
-  updateOrderLine,
-} from "./testing/order-writer-fixture.js";
+import { moveDishesToStation, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { setMadeHereStations } from "./made-here.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -163,79 +158,7 @@ const cancelledBurger = [
   "",
 ];
 
-describe("A773 hold paper: recall and cancel", () => {
-  describe("draft recall", () => {
-    const suite = useVenueDb({
-      migrations: migrationOptionsFor(manifestSets(), null),
-      timeoutMs: 60_000,
-    });
-    let db: Database;
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    async function recall(tx: Transaction, venue: Venue, lineId: string) {
-      await recallToDraft(tx, venue.cfg, venue.party.partyId, lineId, {
-        ...(await partyArgs(tx, venue)),
-        expectedEdit: await readBillEditState(tx, venue.party.tabId),
-      });
-    }
-
-    it("recalling a Requested burger cancels it on the HOLD paper at each printer that printed it", async () => {
-      vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
-      db = suite.db;
-      useSplitExtrasDb(db);
-      const venue = await setupSplitExtrasVenue();
-      await withTransaction(db, async (tx) => {
-        const line = await firedFromHold(tx, venue, false);
-        const before = await slips(tx, venue);
-        vi.setSystemTime(new Date(LATER));
-
-        await recall(tx, venue, line.id);
-
-        const after = await slips(tx, venue);
-        const added = (name: string) => after[name]!.slice(before[name]!.length);
-        expect(added("grill")).toEqual([cancelledBurger]);
-        expect(added("pass")).toEqual([cancelledBurger]);
-        for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
-        expect(await noticesAt(tx, venue.stations.grill)).toEqual([
-          { kind: "void", quantity: 1000 },
-        ]);
-      });
-    });
-
-    it("recalling a Requested burger with chips cancels only the burger, where its HOLD paper is", async () => {
-      vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
-      db = suite.db;
-      useSplitExtrasDb(db);
-      const venue = await setupSplitExtrasVenue();
-      await withTransaction(db, async (tx) => {
-        const line = await firedFromHold(tx, venue, true);
-        const before = await slips(tx, venue);
-        vi.setSystemTime(new Date(LATER));
-
-        await recall(tx, venue, line.id);
-
-        expect(
-          await tx
-            .select({ id: ticketItems.id })
-            .from(ticketItems)
-            .where(eq(ticketItems.workingOrderId, venue.party.tabId)),
-        ).toEqual([]);
-        const after = await slips(tx, venue);
-        const added = (name: string) => after[name]!.slice(before[name]!.length);
-        const withChips = [...cancelledBurger.slice(0, -1), "  > with CHIPS from Fryer", ""];
-        expect(added("grill")).toEqual([withChips]);
-        expect(added("pass")).toEqual([withChips]);
-        for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
-        expect(await noticesAt(tx, venue.stations.grill)).toEqual([
-          { kind: "void", quantity: 1000 },
-        ]);
-        expect(await noticesAt(tx, venue.stations.fryer)).toEqual([]);
-      });
-    });
-  });
-
+describe("A773 hold paper: cancel", () => {
   describe("the cancel that removes the charge", () => {
     let venue: AdjustmentVenue;
     useVenueDb({
@@ -702,35 +625,6 @@ describe("A773 hold paper: extras off and moves", () => {
       });
     },
   );
-
-  it("a fired group's Requested burger moved to Kitchen with a burger recalled from it is the only one on Kitchen's HOLD ticket", async () => {
-    const venue = await fresh();
-    await withTransaction(db, async (tx) => {
-      const [recalled, requested] = await twoBurgers(tx, venue, "fired");
-      vi.setSystemTime(new Date(LATER));
-      await recallLines(tx, venue.cfg, venue.party.tabId, [recalled!.lineNo]);
-      expect(await itemOf(tx, recalled!.id)).toMatchObject({ requestedAt: null, firedAt: null });
-      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
-
-      const moved = await printedBy(tx, venue, () =>
-        moveDishesToStation(
-          tx,
-          venue.cfg,
-          venue.party.tabId,
-          {
-            submissionId: randomUUID(),
-            lineIds: [recalled!.id, requested!.id],
-            stationId: venue.stations.kitchen,
-          },
-          mover(venue),
-        ),
-      );
-      expect(moved("grill")).toEqual([cancelledBurger]);
-      expect(moved("pass")).toEqual([cancelledBurger]);
-      expect(moved("kitchen")).toEqual([holdSlip("Kitchen", "Grill")]);
-      for (const name of ["fryer", "bar"]) expect(moved(name)).toEqual([]);
-    });
-  });
 });
 
 describe("A773 hold paper: edits", () => {
@@ -750,14 +644,6 @@ describe("A773 hold paper: edits", () => {
     return setupSplitExtrasVenue();
   }
 
-  const revisionOf = async (tx: Transaction, venue: Venue) => {
-    const [order] = await tx
-      .select({ revision: workingOrders.revision })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, venue.party.tabId));
-    return order!.revision;
-  };
-
   it("cutting a line of two Requested burgers to one takes one off the HOLD paper where it printed", async () => {
     const venue = await fresh();
     await withTransaction(db, async (tx) => {
@@ -766,26 +652,18 @@ describe("A773 hold paper: edits", () => {
       const before = await slips(tx, venue);
       vi.setSystemTime(new Date(LATER));
 
-      await updateOrderLine(
-        tx,
-        venue.cfg,
-        venue.party.tabId,
-        line.lineNo,
-        { quantity: "1" },
-        await revisionOf(tx, venue),
-        OPERATOR,
-      );
+      await cancelItemForTest(tx, venue.cfg, venue.party.tabId, line.lineNo, "1", OPERATOR);
 
       const after = await slips(tx, venue);
       const added = (name: string) => after[name]!.slice(before[name]!.length);
       const cut = [
-        "*** HOLD CHANGED ***",
+        "*** HOLD CANCELLED ***",
         "Grill",
         "Split extras",
         "1",
         LATER_CLOCK,
         "GROUP 1",
-        "-1 x BURG",
+        "1 x BURG",
         "",
       ];
       expect(added("grill")).toEqual([cut]);
@@ -794,7 +672,7 @@ describe("A773 hold paper: edits", () => {
     });
   });
 
-  it("Cancel item removing a Requested burger's line cancels it on the HOLD paper where it printed", async () => {
+  it("removing a Requested burger's line in an edit cancels it on the HOLD paper where it printed", async () => {
     const venue = await fresh();
     const { removedId, expected } = await withTransaction(db, async (tx) => {
       await firedFromHold(tx, venue, false, [burger(venue, false), burger(venue, false)]);
@@ -940,6 +818,7 @@ describe("A773 hold paper: added work", () => {
       vi.setSystemTime(new Date(LATER));
 
       await edit(tx, venue, 1, {
+        portionLineNos: [],
         extras: [
           {
             listId: venue.lists.burger,
@@ -1006,6 +885,7 @@ describe("A773 hold paper: added work", () => {
       vi.setSystemTime(new Date(LATER));
 
       await edit(tx, venue, 1, {
+        portionLineNos: [],
         extras: [
           {
             listId: venue.lists.burger,
@@ -1101,7 +981,7 @@ describe("A773 hold paper: added work", () => {
         const before = await slips(tx, venue);
         vi.setSystemTime(new Date(LATER));
 
-        await edit(tx, venue, 1, { quantity: "2" });
+        await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
 
         const chips = await tx
           .select({
@@ -1141,7 +1021,7 @@ describe("A773 hold paper: added work", () => {
       const before = await slips(tx, venue);
       vi.setSystemTime(new Date(LATER));
 
-      await edit(tx, venue, line.lineNo, { quantity: "2" });
+      await edit(tx, venue, line.lineNo, { portionLineNos: [], quantity: "2" });
 
       const burgers = await tx
         .select({
@@ -1178,7 +1058,7 @@ describe("A773 hold paper: added work", () => {
       const before = await slips(tx, venue);
       vi.setSystemTime(new Date(LATER));
 
-      await edit(tx, venue, line.lineNo, { quantity: "2" });
+      await edit(tx, venue, line.lineNo, { portionLineNos: [], quantity: "2" });
 
       const burgers = await tx
         .select({
@@ -1238,7 +1118,7 @@ describe("A773 hold paper: added work", () => {
       });
       const selects = vi.spyOn(tx, "select");
       try {
-        await edit(tx, venue, 1, { quantity: "2" });
+        await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
         expect(readsOf(selects, joinedItemsRead)).toBe(0);
       } finally {
         selects.mockRestore();
@@ -1503,7 +1383,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
     return line;
   }
 
-  for (const writer of ["draft recall", "the cancel that removes the charge"] as const)
+  for (const writer of ["the cancel that removes the charge"] as const)
     it(`${writer} of a released burger with chips in a fired group whose HOLD printed prints its slip and no HOLD CANCELLED`, async () => {
       const venue = await fresh();
       await withTransaction(db, async (tx) => {
@@ -1511,16 +1391,11 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         const before = await slips(tx, venue);
         vi.setSystemTime(new Date(LATER));
 
-        if (writer === "draft recall")
-          await recallToDraft(tx, venue.cfg, venue.party.partyId, line.id, {
-            ...(await partyArgs(tx, venue)),
-            expectedEdit: await readBillEditState(tx, venue.party.tabId),
-          });
-        else await cancelBurger(tx, venue, line.id, "remove_charge");
+        await cancelBurger(tx, venue, line.id, "remove_charge");
 
         const after = await slips(tx, venue);
         const added = (name: string) => after[name]!.slice(before[name]!.length);
-        const word = writer === "draft recall" ? "*** RECALLED ***" : "*** VOID ***";
+        const word = "*** VOID ***";
         const head = ["Split extras", "1", LATER_CLOCK];
         const grill = [word, "Grill", ...head, "1 x BURG", "  > with CHIPS from Fryer", ""];
         const fryer = [

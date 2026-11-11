@@ -7,7 +7,6 @@ import {
   deviceProfiles,
   lineServiceCancellations,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDrafts,
   orderGroupEvents,
   orderGroupHoldStations,
@@ -39,7 +38,6 @@ import * as groupWrites from "./order-groups.js";
 import { saveDraft } from "./order-drafts.js";
 import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { readBillLines, readOrderRevision } from "./working-order.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -54,10 +52,6 @@ import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixture.js";
-import {
-  readChangesAfterSending,
-  setChangesAfterSending,
-} from "./testing/changes-after-sending.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
@@ -254,9 +248,6 @@ function kitchenItemOf(lineId: string) {
     .where(eq(ticketItems.workingOrderLineId, lineId))
     .then((rows) => rows[0]!);
 }
-
-const adminId = () =>
-  v.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id;
 
 describe("A803 waiting copy: copyHeldGroups", () => {
   it("A803 waiting mark: the bill's lines, which the split panel reads, give a held dish its course and group and no fired time", async () => {
@@ -712,33 +703,14 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     ]);
   });
 
-  it("A803 waiting copy: copyHeldGroups ignores a recalled dish, a dish of a fired group, an extras line and a dish of another party's held group it is given", async () => {
+  it("A803 waiting copy: copyHeldGroups ignores a dish of a fired group, an extras line and a dish of another party's held group it is given", async () => {
     const a = await seatWith([
       { names: ["Burger"], release: "fire" },
       { names: ["Tarta", "Paella"], release: "hold" },
     ]);
     const burger = await lineOf(a.billId, "Burger");
     const cake = await lineOf(a.billId, "Tarta");
-    const rice = await lineOf(a.billId, "Paella");
     const extra = await addExtra(a.billId, cake.id);
-    const settings = await inTx(v, (tx) => readChangesAfterSending(tx));
-    const recallCommand = await commandFor(v, a.partyId);
-    try {
-      await inTx(v, async (tx) => {
-        await setChangesAfterSending(tx, "held-or-waiting");
-        return recallToDraft(tx, v.cfg, a.partyId, rice.id, {
-          ...recallCommand,
-          operatorId: adminId(),
-          expectedEdit: await readBillEditState(tx, a.billId),
-          submissionId: randomUUID(),
-        });
-      });
-    } finally {
-      await inTx(v, async (tx) => {
-        for (const [stationId, value] of settings)
-          await setChangesAfterSending(tx, value, [stationId]);
-      });
-    }
     const c = await seatWith([{ names: ["Tarta"], release: "hold" }]);
     const otherCake = await lineOf(c.billId, "Tarta");
     const b = await otherParty();
@@ -747,7 +719,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const cLinesBefore = await linesOf(c.billId);
     const cGroupsBefore = await groupsOf(c.partyId);
 
-    const copies = await copy(a.billId, a.partyId, b, [burger.id, rice.id, extra, otherCake.id]);
+    const copies = await copy(a.billId, a.partyId, b, [burger.id, extra, otherCake.id]);
 
     expect([...copies]).toEqual([]);
     expect(await linesOf(a.billId)).toEqual(linesBefore);
@@ -966,29 +938,6 @@ describe("A1327 waiting copy: copyWaitingGroups", () => {
   });
 });
 
-/** Recalls the dish into its bill's open draft with the real `recallToDraft`; returns the draft. */
-async function recall(partyId: string, billId: string, lineId: string): Promise<string> {
-  const settings = await inTx(v, (tx) => readChangesAfterSending(tx));
-  const command = await commandFor(v, partyId);
-  try {
-    const recalled = await inTx(v, async (tx) => {
-      await setChangesAfterSending(tx, "held-or-waiting");
-      return recallToDraft(tx, v.cfg, partyId, lineId, {
-        ...command,
-        operatorId: adminId(),
-        expectedEdit: await readBillEditState(tx, billId),
-        submissionId: randomUUID(),
-      });
-    });
-    return recalled.draft.id;
-  } finally {
-    await inTx(v, async (tx) => {
-      for (const [stationId, value] of settings)
-        await setChangesAfterSending(tx, value, [stationId]);
-    });
-  }
-}
-
 /** An open draft on the bill, made by hand. */
 async function openDraft(partyId: string, billId: string): Promise<string> {
   const [draft] = await inTx(v, (tx) =>
@@ -1032,14 +981,6 @@ function draftLineRows(draftId: string) {
     .orderBy(asc(orderDraftLines.position));
 }
 
-function recalledRows(draftId: string) {
-  return v.db
-    .select()
-    .from(orderDraftRecalledLines)
-    .where(eq(orderDraftRecalledLines.draftId, draftId))
-    .orderBy(asc(orderDraftRecalledLines.position));
-}
-
 /** Replaces `from` by `to` in the row's two group references. */
 function pointedAt<T extends { joinGroupId: string | null; afterGroupId: string | null }>(
   row: T,
@@ -1057,35 +998,13 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
   it("A803 waiting copy: copyHeldGroups points the moving bill's draft at the copy", async () => {
     const a = await seatWith([{ names: ["Tarta", "Flan", "Paella"], release: "hold" }]);
     const cake = await lineOf(a.billId, "Tarta");
-    const flan = await lineOf(a.billId, "Flan");
-    const rice = await lineOf(a.billId, "Paella");
     const g = cake.groupId!;
-    const draftId = await recall(a.partyId, a.billId, flan.id);
-    const [recalledFlan] = await recalledRows(draftId);
-    expect(recalledFlan).toMatchObject({ sourceLineId: flan.id, joinGroupId: g, slot: 0 });
-    const next =
-      Math.max(
-        recalledFlan!.position,
-        ...(await draftLineRows(draftId)).map((row) => row.position),
-      ) + 1;
-    await draftLine(draftId, next, { slot: 0, joinGroupId: g });
-    await draftLine(draftId, next + 1, { slot: 2, afterGroupId: g });
-    await inTx(v, (tx) =>
-      tx.insert(orderDraftRecalledLines).values({
-        draftId,
-        sourceLineId: rice.id,
-        position: next + 2,
-        slot: 2,
-        afterGroupId: g,
-      }),
-    );
+    const draftId = await openDraft(a.partyId, a.billId);
+    await draftLine(draftId, 1, { slot: 0, joinGroupId: g });
+    await draftLine(draftId, 2, { slot: 2, afterGroupId: g });
     const linesBefore = await draftLineRows(draftId);
-    const recalledBefore = await recalledRows(draftId);
     expect(
       linesBefore.filter((row) => row.joinGroupId === g || row.afterGroupId === g),
-    ).toHaveLength(2);
-    expect(
-      recalledBefore.filter((row) => row.joinGroupId === g || row.afterGroupId === g),
     ).toHaveLength(2);
     const b = await otherParty();
 
@@ -1095,9 +1014,6 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     expect((await groupRow(g)).state).toBe("held");
     expect(await draftLineRows(draftId)).toEqual(
       linesBefore.map((row) => pointedAt(row, g, copyId)),
-    );
-    expect(await recalledRows(draftId)).toEqual(
-      recalledBefore.map((row) => pointedAt(row, g, copyId)),
     );
   });
 
@@ -1276,11 +1192,6 @@ async function rowsOf(partyIds: string[], billIds: string[]) {
       .from(orderDraftLines)
       .where(inArray(orderDraftLines.draftId, draftIds))
       .orderBy(asc(orderDraftLines.id)),
-    recalledLines: await v.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .where(inArray(orderDraftRecalledLines.draftId, draftIds))
-      .orderBy(asc(orderDraftRecalledLines.id)),
     parties: await v.db
       .select()
       .from(parties)
@@ -3099,152 +3010,6 @@ describe("A803 waiting copy: races", () => {
       expect(await groupsOf(a.partyId)).toEqual(
         expect.not.arrayContaining([expect.objectContaining({ state: "held" })]),
       );
-    });
-  }
-
-  /** Runs `body` with every station allowing a held dish to be changed, restoring them after. */
-  async function whileChangesAllowed<T>(body: () => Promise<T>): Promise<T> {
-    const settings = await inTx(v, (tx) => readChangesAfterSending(tx));
-    await inTx(v, (tx) => setChangesAfterSending(tx, "held-or-waiting"));
-    try {
-      return await body();
-    } finally {
-      await inTx(v, async (tx) => {
-        for (const [stationId, value] of settings)
-          await setChangesAfterSending(tx, value, [stationId]);
-      });
-    }
-  }
-
-  /** The dish's recall into its bill's draft, carrying the revision and edit state read now. */
-  async function recallOf(billId: string, partyId: string, lineId: string) {
-    const options = {
-      ...(await commandFor(v, partyId)),
-      operatorId: adminId(),
-      expectedEdit: await inTx(v, (tx) => readBillEditState(tx, billId)),
-      submissionId: randomUUID(),
-    };
-    return (tx: Transaction) => recallToDraft(tx, v.cfg, partyId, lineId, options);
-  }
-
-  function recalledLinesOf(lineId: string) {
-    return v.db
-      .select({
-        sourceLineId: orderDraftRecalledLines.sourceLineId,
-        joinGroupId: orderDraftRecalledLines.joinGroupId,
-      })
-      .from(orderDraftRecalledLines)
-      .where(eq(orderDraftRecalledLines.sourceLineId, lineId));
-  }
-
-  /** What a winning recall leaves: the dish in the draft, its group held where it was. */
-  async function expectRecallWon(partyId: string, billId: string, dishId: string, group: string) {
-    expect(await recalledLinesOf(dishId)).toEqual([{ sourceLineId: dishId, joinGroupId: group }]);
-    expect((await lineOf(billId, "Tarta")).groupId).toBe(group);
-    expect(await groupRow(group)).toMatchObject({ partyId, state: "held" });
-    expect((await holderOfBill(billId)).partyId).toBe(partyId);
-  }
-
-  /** What a winning move or split leaves: both dishes in a copy at `won`, none recalled. */
-  async function expectCarryWon(won: string, billId: string, dishId: string, source: string) {
-    expect(won).not.toBeNull();
-    expect(await recalledLinesOf(dishId)).toEqual([]);
-    const copy = (await lineOf(billId, "Tarta")).groupId!;
-    expect(copy).not.toBe(source);
-    expect((await lineOf(billId, "Flan")).groupId).toBe(copy);
-    expect(await groupRow(copy)).toMatchObject({ partyId: won, state: "held" });
-    expect((await groupRow(source)).state).toBe("removed");
-    expect((await holderOfBill(billId)).partyId).toBe(won);
-  }
-
-  function holderOfBill(billId: string) {
-    return v.db
-      .select({ partyId: workingOrders.partyId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, billId))
-      .then((rows) => rows[0]!);
-  }
-
-  for (const order of [
-    ["move", "recall"],
-    ["recall", "move"],
-  ] as const) {
-    it(`A803 waiting copy: a move and a recall from the same held group: one commits, the other is refused (${order[0]} asked first)`, async ({
-      task,
-    }) => {
-      const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
-      const cake = await lineOf(a.billId, "Tarta");
-      const source = cake.groupId!;
-      const tableId = await v.table(`Copy ${++tableNumber}`);
-
-      await whileChangesAllowed(async () => {
-        const commands = {
-          move: await moveOf(a.billId, a.partyId, tableId),
-          recall: await recallOf(a.billId, a.partyId, cake.id),
-        };
-
-        const { outcomes, trace } = await race({
-          [order[0]]: commands[order[0]],
-          [order[1]]: commands[order[1]],
-        });
-
-        const { winner } = judge(task, outcomes, trace);
-        expect(winner).toBe(order[0]);
-      });
-
-      if (order[0] === "move") {
-        await expectCarryWon((await holderNow(tableId))!, a.billId, cake.id, source);
-      } else {
-        expect(await holderNow(tableId)).toBeNull();
-        await expectRecallWon(a.partyId, a.billId, cake.id, source);
-      }
-    });
-  }
-
-  for (const order of [
-    ["split", "recall"],
-    ["recall", "split"],
-  ] as const) {
-    it(`A803 waiting copy: Split a table and a recall from the same held group: one commits, the other is refused (${order[0]} asked first)`, async ({
-      task,
-    }) => {
-      const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
-      const cake = await lineOf(a.billId, "Tarta");
-      const source = cake.groupId!;
-      const joined = await v.table(`Copy ${++tableNumber}`);
-      const joining = {
-        operatorId: OPERATOR,
-        expectedPartyRevision: await revisionOf(v, a.partyId),
-      };
-      await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, joined, joining));
-
-      await whileChangesAllowed(async () => {
-        const splitting = {
-          ...(await commandFor(v, a.partyId)),
-          expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, a.billId))],
-        };
-        const commands = {
-          split: (tx: Transaction) => splitTable(tx, v.cfg, a.partyId, joined, a.billId, splitting),
-          recall: await recallOf(a.billId, a.partyId, cake.id),
-        };
-
-        const { outcomes, trace } = await race({
-          [order[0]]: commands[order[0]],
-          [order[1]]: commands[order[1]],
-        });
-
-        const { winner } = judge(task, outcomes, trace);
-        expect(winner).toBe(order[0]);
-      });
-
-      if (order[0] === "split") {
-        const won = (await holderNow(joined))!;
-        expect(won).not.toBe(a.partyId);
-        await expectCarryWon(won, a.billId, cake.id, source);
-      } else {
-        expect(await holderNow(joined)).toBe(a.partyId);
-        await expectRecallWon(a.partyId, a.billId, cake.id, source);
-      }
     });
   }
 });

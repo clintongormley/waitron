@@ -1,19 +1,23 @@
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, setLocale } from "../i18n/t.js";
+import { toDraftLineInput } from "../state/draft-lines.js";
+import type { TillBasket } from "../widgets/basket.js";
 import {
   current,
   currentGroup,
   row as currentRow,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { grossOf } from "@waitron/shared";
 import { DraftStore } from "../state/draft-sync.js";
 import {
   openDraftLine,
+  mount as mountOrder,
   resized,
   showView,
   shownView,
 } from "./till-table-order-screen.test-helpers.js";
 import { sentPanelFor } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -317,19 +321,14 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in the recalled New order editor", async () => {
+    it("has no violations in the fresh New order editor", async () => {
       const dish: TillProduct = { ...products[0]!, offeredModifiers: [cookedList, extrasList] };
       const { el, host } = await mountDrawer([sentLine], [dish]);
       const draft = new DraftStore();
-      draft.loadFrom("recalled", [
+      draft.loadFrom("fresh", [
         {
           draftLineId: "source-reference",
           workingOrderLineId: sentLine.id,
-          source: {
-            line: sentLine,
-            extras: [],
-            netAmount: grossOf(sentLine.unitPriceGross, sentLine.quantity),
-          },
           product: {
             ...dish,
             name: sentLine.name!,
@@ -606,19 +605,14 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations in New order Move with a recalled source", async () => {
+    it("has no violations in New order Move with a fresh source", async () => {
       const { el, host } = await withGroups();
       const draft = new DraftStore();
-      draft.loadFrom("recalled", [
+      draft.loadFrom("fresh", [
         {
           product: products[0]!,
           quantity: "2.000",
           place: { kind: "fire" },
-          source: {
-            line: groupLines[0]!,
-            extras: [],
-            netAmount: "3.00",
-          },
         },
       ]);
       el.draftStore = draft;
@@ -1118,3 +1112,90 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+describe("saved extra layout on the table screen", () => {
+  for (const locale of ["en", "es"] as const)
+    for (const theme of ["light", "dark"] as const)
+      for (const locked of [false, true])
+        it.each([360, 390, 1280])(
+          `keeps a retired extra's full name, warning and money inside New order (locked=${locked}, ${locale}, ${theme}, %s px)`,
+          async (width) => {
+            const priorLocale = currentLocale();
+            const priorSize = { width: window.innerWidth, height: window.innerHeight };
+            setLocale(locale);
+            await page.viewport(width, 900);
+            try {
+              const draft = new DraftStore();
+              draft.loadFrom("saved", [
+                {
+                  draftLineId: "saved-dish",
+                  product: { ...products[0]!, unitPrice: "3.25" },
+                  quantity: "2",
+                  notOfferedExtras: [
+                    {
+                      productId: "retired-extra",
+                      name: "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
+                      price: "0.75",
+                      quantity: 1,
+                    },
+                  ],
+                },
+              ]);
+              draft.ownershipLocked = locked;
+              const before = toDraftLineInput(draft.lines[0]!);
+              const { el, host } = await mountOrder({
+                draftStore: draft,
+                products: [],
+                lines: [],
+              });
+              host.setAttribute("data-theme", theme);
+              host.style.width = "100%";
+              el.style.width = "100%";
+              await resized(el);
+              await showView(el, "order", { ifShown: true });
+              const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find(
+                (each) => each.lineIndexes?.includes(0),
+              )!;
+              await basket.updateComplete;
+              await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+              const extra = [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".option")].find(
+                (row) =>
+                  row.textContent?.includes(
+                    "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
+                  ),
+              )!;
+              const name = extra.querySelector<HTMLElement>(".name")!;
+              const money = extra.querySelector<HTMLElement>(".option-total")!;
+              const warning = extra.querySelector<HTMLElement>(".not-offered")!;
+              expect(extra.checkVisibility()).toBe(true);
+              expect(name.textContent).toContain(
+                "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
+              );
+              expect(warning.checkVisibility()).toBe(true);
+              expect(money.textContent).toContain(formatMoney("1.50", currentLocale()));
+              await page.screenshot({
+                path: `__screenshots__/r3-saved-extra-layout-${locale}-${theme}-${width}-${locked}.png`,
+              });
+              expect(window.innerWidth).toBe(width);
+              const container = basket.getBoundingClientRect();
+              const price = money.getBoundingClientRect();
+              const label = name.getBoundingClientRect();
+              expect(price.left).toBeGreaterThanOrEqual(container.left);
+              expect(price.right).toBeLessThanOrEqual(Math.min(container.right, width));
+              expect(label.right).toBeLessThanOrEqual(price.left);
+              expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+              expect(warning.getBoundingClientRect().right).toBeLessThanOrEqual(price.left);
+              expect(toDraftLineInput(draft.lines[0]!)).toEqual(before);
+              expect(draft.total).toBe("8.00");
+              expect(el.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain(
+                formatMoney("8.00", currentLocale()),
+              );
+              await expectNoA11yViolations(host);
+            } finally {
+              cleanupWidgets();
+              setLocale(priorLocale);
+              await page.viewport(priorSize.width, priorSize.height);
+            }
+          },
+        );
+});

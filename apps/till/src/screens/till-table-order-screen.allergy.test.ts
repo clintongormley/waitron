@@ -9,7 +9,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { current, row } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
+import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 
 const originalLocale = currentLocale();
 beforeEach(() => setLocale("en"));
@@ -55,7 +55,7 @@ const allergy = (answer: null | "none" | "allergies" = "allergies"): PartyAllerg
   dishes: [],
 });
 
-it("marks a recalled dish by its source assignment without borrowing its new draft id", async () => {
+it("marks a fresh draft dish by its saved draft assignment rather than a sent dish assignment", async () => {
   await page.viewport(1280, 900);
   const draftStore = new DraftStore();
   draftStore.appendLines([
@@ -71,7 +71,6 @@ it("marks a recalled dish by its source assignment without borrowing its new dra
       quantity: "2.000",
       draftLineId: "same-id",
       noMerge: true,
-      source: { line: storedDish, extras: [storedExtra], netAmount: "8.00" },
     },
   ]);
   const view = allergy();
@@ -97,7 +96,7 @@ it("marks a recalled dish by its source assignment without borrowing its new dra
   await resized(el);
   expect(
     el.shadowRoot!.querySelector('[data-draft-select="0"] [data-allergy-tag]')?.textContent,
-  ).toBe("Red hat");
+  ).toBe("Blue shirt");
 });
 
 it.each([null, "none", "allergies"] as const)(

@@ -753,9 +753,7 @@ The table round's line insert, `insertTabRound` (`apps/server/src/working-order.
 statement: placing one round of waters through `placeGroups` passed at 11 lines of 99 (1,089
 dishes) and was refused "too many SQL variables" in `insertTabRound` at 12 lines of 99 (1,188
 dishes), 20 and 30, under the official Node v26.13.0 and Homebrew's v26.11.1 alike (2026-10-30). It uses `.returning`, so splitting it means gathering the
-returned rows from every part, as `fireLines` now does. `copyRecalledPortion`
-(`apps/server/src/draft-recall.ts`) also writes its lines in one statement; it copies one recalled
-dish, so its size is bounded by that dish's quantity (read, not run). The 99 limit
+returned rows from every part, as `fireLines` now does. The 99 limit
 (`tab.portions_too_many`) is per dish, so it does not bound a round.
 
 Separately, drizzle's session and the store's adapter (`packages/store/src/node-sqlite-adapter.ts`)

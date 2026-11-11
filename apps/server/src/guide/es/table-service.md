@@ -270,7 +270,8 @@ o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera co
 servido** en los detalles de la fila pregunta cuántos. [**Mover platos…**](table-service.md#move-dishes) te deja
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
 **Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
-detalles de la fila, cambia todos los platos de la fila.
+detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
+Para reducirla, usa **Cancelar…**.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
 plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra
@@ -437,8 +438,7 @@ El panel, con la cuenta como título, por ejemplo **Mover platos de Cuenta 1**, 
 de la cuenta, cada uno con sus extras bajo el nombre, y un plato al peso con su peso, por ejemplo
 **Jamón ibérico ×0,32**. Marca un plato para moverlo; sus extras van con él. Los platos iguales comparten una
 fila, por ejemplo **Caña** con un **4** al lado: al marcar la fila se toman todos, o tantos como permitan los pagos de la cuenta, y **−** y **+**
-fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. Un plato al peso solo tiene la casilla, porque pasa entero. Un plato que
-alguien está cambiando en un pedido sin enviar no aparece.
+fijan después cuántos, como **2 de 4**, con el importe de los que se mueven. Un plato al peso solo tiene la casilla, porque pasa entero.
 
 Algunas casillas salen en gris, con el motivo debajo del plato:
 

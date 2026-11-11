@@ -228,7 +228,6 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/working-orders/${id}/lines/1`),
   ordering("PATCH", `/api/working-orders/${id}/lines/1/course`),
   ordering("POST", `/api/working-orders/${id}/lines/send`),
-  ordering("POST", `/api/working-orders/${id}/lines/recall`),
   [
     "POST",
     `/api/working-orders/${id}/adjustments`,
@@ -359,7 +358,6 @@ const ROUTES: readonly Row[] = [
   ordering("PUT", `/api/parties/${id}/drafts`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/take-over`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/submit`),
-  ordering("POST", `/api/parties/${id}/lines/${id}/recall`),
   ordering("POST", `/api/parties/${id}/drafts/${id}/discard`),
   ordering("POST", `/api/parties/${id}/unpaid-departure`),
   ordering("POST", `/api/bills/${id}/split`),

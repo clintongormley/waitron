@@ -1,11 +1,7 @@
+import { partyRevision } from "./parties.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
-import {
-  recallLines,
-  sendLines,
-  setLineCourse,
-  placeOrder,
-} from "./testing/order-writer-fixture.js";
+import { setLineCourse, placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -29,11 +25,12 @@ import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce"
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
-import { bumpGroupReady } from "./order-groups.js";
+import { bumpGroupReady, fireGroup } from "./order-groups.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { advanceTicketItem, bumpCourseReady, markServed } from "./working-order.js";
 import {
   provisionBillVenue,
+  seatedHeldWith,
   seatedWith,
   send as rawSend,
   type BillVenue,
@@ -98,13 +95,12 @@ function api(attendance?: AttendanceRecorder) {
   return app;
 }
 async function prepare(action: Action) {
-  const party = await seatedWith(v, "House salad");
+  const party = await seatedHeldWith(v, "House salad");
   const [line] = await suite.db
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, party.tabId));
   await withTransaction(suite.db, async (tx) => {
-    await recallLines(tx, v.cfg, party.tabId, [1]);
     await setLineCourse(tx, v.cfg, party.tabId, 1, courseId);
     if (action === "group-fire")
       await tx
@@ -112,12 +108,16 @@ async function prepare(action: Action) {
         .set({ state: "held", firedAt: null })
         .where(eq(orderGroups.id, line!.groupId!));
     if (action !== "course-fire" && action !== "group-fire")
-      await sendLines(tx, v.cfg, party.tabId, [1]);
+      await fireGroup(tx, v.cfg, party.partyId, line!.groupId!, {
+        submissionId: newId(),
+        expectedPartyRevision: await partyRevision(tx, party.partyId),
+        operatorId: v.operatorId,
+      });
     if (action.endsWith("-away")) await bumpCourseReady(tx, v.cfg, party.tabId, courseId);
     if (action === "unserved")
       await markServed(tx, v.cfg, party.partyId, [{ lineId: line!.id, quantity: "1" }], {
         submissionId: newId(),
-        expectedPartyRevision: party.revision,
+        expectedPartyRevision: await partyRevision(tx, party.partyId),
         operatorId: v.adminId,
       });
   });

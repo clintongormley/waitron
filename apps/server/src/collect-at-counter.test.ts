@@ -4,8 +4,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  orderDraftRecalledLines,
-  orderDrafts,
   orderGroupEvents,
   orderGroups,
   parties,
@@ -215,37 +213,6 @@ describe("releaseHeldWorkOf", () => {
     // Each portion is its own line (A803).
     expect((await topLines([p.billId])).map((line) => line.groupId)).toEqual([null, null]);
     expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["removed"]);
-  });
-
-  it("keeps a held group, and its line on another bill, that still holds a recalled dish", async () => {
-    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "hold" });
-    const split = await inTx(venue, async (tx) =>
-      splitBill(tx, venue.cfg, p.billId, [{ lineNo: 1, quantity: "1" }], {
-        admission: testTradingAdmission(),
-        operatorId: venue.staffId,
-        partyId: p.partyId,
-        expectedPartyRevision: await partyRevision(p.partyId),
-        expectedEdit: await readBillEditState(tx, p.billId),
-      }),
-    );
-    await pay(p.billId, "12.00");
-    await cancelKeepingCharge(p.partyId, p.billId);
-    const [recalled] = await topLines([split.billId]);
-    const [draft] = await venue.db
-      .insert(orderDrafts)
-      .values({ partyId: p.partyId, billId: split.billId, ownerId: venue.staffId, revision: 1 })
-      .returning();
-    await venue.db
-      .insert(orderDraftRecalledLines)
-      .values({ draftId: draft!.id, sourceLineId: recalled!.id, position: 1 });
-
-    await release(p.partyId, [p.billId]);
-
-    expect((await topLines([p.billId])).map((line) => line.groupId)).toEqual([null]);
-    expect((await topLines([split.billId])).map((line) => line.groupId)).toEqual([
-      recalled!.groupId,
-    ]);
-    expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["held"]);
   });
 
   it("leaves a fired group alone", async () => {

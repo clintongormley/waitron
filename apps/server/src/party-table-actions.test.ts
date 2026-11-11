@@ -24,17 +24,12 @@ import type { Transaction } from "@waitron/db";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { decimal, decimalToCents } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { readBillBalance } from "./bill-payments.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createCourse } from "./kitchen.js";
 import { insertPartyBill } from "./parties.js";
 import { splitTable as splitSelection, type SplitSelection } from "./table-actions.js";
-import {
-  readChangesAfterSending,
-  setChangesAfterSending,
-} from "./testing/changes-after-sending.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -2702,7 +2697,6 @@ describe("A803 split", () => {
       "order_group_events",
       "order_drafts",
       "order_draft_lines",
-      "order_draft_recalled_lines",
       "party_allergy",
       "party_allergy_guests",
       "allergy_line_ticks",
@@ -3134,39 +3128,6 @@ describe("A803 split", () => {
       await act((tx) => fireGroup(tx, v.cfg, ana.partyId, source, firingSource));
 
       expect(await firedAt(b1, cake.id)).toEqual(expect.any(String));
-    });
-
-    it("a dish recalled into a draft refuses draft.out_of_date, naming the source", async () => {
-      const [m4, m5] = await tables("A803 Recovered", 4, 5);
-      const ana = await seat(v, m4);
-      await joinFree(ana.partyId, m5);
-      await sendGroups(ana.partyId, [{ names: ["Paella", "Flan"], release: "hold" }], ana.tabId);
-      const paella = await lineOn(ana.tabId, "Paella");
-      const flan = await lineOn(ana.tabId, "Flan");
-      const recalling = await cmd(ana.partyId);
-      await act(async (tx) => {
-        const stations = await readChangesAfterSending(tx);
-        await setChangesAfterSending(tx, "held-or-waiting");
-        await recallToDraft(tx, v.cfg, ana.partyId, paella.id, {
-          ...recalling,
-          expectedEdit: await readBillEditState(tx, ana.tabId),
-          submissionId: randomUUID(),
-        });
-        for (const [stationId, value] of stations)
-          await setChangesAfterSending(tx, value, [stationId]);
-      });
-
-      const error = await refusedWithNoRowChanged(() =>
-        splitSelected(ana.partyId, m5, {
-          wholeBillIds: [],
-          loose: [loose(ana.tabId, flan.id, paella.id)],
-        }),
-      );
-
-      expect(error).toMatchObject({
-        code: "draft.out_of_date",
-        params: { billId: ana.tabId },
-      });
     });
 
     describe("a presented source", () => {

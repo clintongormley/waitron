@@ -34,7 +34,6 @@ import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { refuseRecalledWrite } from "./draft-source.js";
 import { holdPaperFor } from "./order-groups.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
@@ -184,7 +183,6 @@ export async function cancelItem(
         });
       await requireOrderBillEditor(tx, bill!.id, { operatorId, expectedEdit });
       const members = ask.lineIds === undefined ? null : dishIds;
-      await refuseRecalledWrite(tx, inArray(workingOrderLines.id, dishIds));
       const dishes =
         members === null
           ? [line!]

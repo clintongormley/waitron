@@ -1,7 +1,8 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { recallLines, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { setRoutingCell } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
@@ -488,20 +489,6 @@ describe("served by quantity (§12 item 5)", () => {
     });
   });
 
-  it("takes back what was served on a dish since recalled from the kitchen", async () => {
-    const v = await setupVenue();
-    const s = await croquetas(v);
-    await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }]);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [s.croq.lineNo]));
-
-    await unserve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
-
-    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({
-      servedQuantity: 1000,
-      servedAt: null,
-    });
-  });
-
   it("serves several lines in one command", async () => {
     const v = await setupVenue();
     const s = await seated(v);
@@ -797,30 +784,6 @@ describe("refusals, each writing nothing", () => {
       s.partyId,
       () => serve(v, s.partyId, [{ lineId: croq.id, quantity: "1" }]),
       { code: "group.line_held", params: { tabId: s.tabId, lineNo: croq.lineNo } },
-    );
-  });
-
-  it("refuses a line of a fired group that was recalled from the kitchen, one by one or the whole group (group.line_held)", async () => {
-    const v = await setupVenue();
-    const s = await croquetas(v);
-    await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [s.croq.lineNo]));
-    const [ticket] = await suite.db
-      .select({ firedAt: ticketItems.firedAt, sentAt: workingOrderLines.sentAt })
-      .from(ticketItems)
-      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-      .where(eq(ticketItems.workingOrderLineId, s.croq.id));
-    expect(ticket).toEqual({ firedAt: null, sentAt: expect.any(String) });
-
-    const refusal = { code: "group.line_held", params: { tabId: s.tabId, lineNo: s.croq.lineNo } };
-    await expectRefusedWithNothingWritten(
-      s.partyId,
-      () => serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]),
-      refusal,
-    );
-    await expectRefusedWithNothingWritten(
-      s.partyId,
-      () => serveGroup(v, s.partyId, s.groupId),
-      refusal,
     );
   });
 
@@ -1308,41 +1271,21 @@ describe("a partly served line split or cut", () => {
     });
   });
 
-  it("follows a line edit: a cut clamps and marks it served, a raise clears served_at", async () => {
+  it("follows Cancel item and Change dish: a cut clamps serving and a raise clears served_at", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     await groupedGroup(v, s, "fire", [line(v, "water", "3")]);
     const water = await lineNamed(s.partyId, "water");
     await serve(v, s.partyId, [{ lineId: water.id, quantity: "2" }]);
 
-    await inTx(async (tx) =>
-      updateOrderLine(
-        tx,
-        v.cfg,
-        s.tabId,
-        water.lineNo,
-        { quantity: "2" },
-        await billRevision(s.tabId),
-        ALEX,
-      ),
-    );
+    await inTx(async (tx) => cancelItemForTest(tx, v.cfg, s.tabId, water.lineNo, "1", ALEX));
     expect(await lineById(s.partyId, water.id)).toMatchObject({
       quantity: 2000,
       servedQuantity: 2000,
       servedAt: expect.any(String),
     });
 
-    await inTx(async (tx) =>
-      updateOrderLine(
-        tx,
-        v.cfg,
-        s.tabId,
-        water.lineNo,
-        { quantity: "1" },
-        await billRevision(s.tabId),
-        ALEX,
-      ),
-    );
+    await inTx(async (tx) => cancelItemForTest(tx, v.cfg, s.tabId, water.lineNo, "1", ALEX));
     expect(await lineById(s.partyId, water.id)).toMatchObject({
       quantity: 1000,
       servedQuantity: 1000,
@@ -1355,7 +1298,7 @@ describe("a partly served line split or cut", () => {
         v.cfg,
         s.tabId,
         water.lineNo,
-        { quantity: "3" },
+        { portionLineNos: [], quantity: "3" },
         await billRevision(s.tabId),
         ALEX,
       ),

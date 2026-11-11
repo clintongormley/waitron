@@ -185,7 +185,15 @@ async function transfer(
 async function editNote(billId: string, name: string, note: string, cfg = v.cfg) {
   const { revision } = await billRow(v, billId);
   await inTx(v, (tx) =>
-    updateOrderLine(tx, cfg, billId, lineOf(billId, name), { note }, revision, OPERATOR),
+    updateOrderLine(
+      tx,
+      cfg,
+      billId,
+      lineOf(billId, name),
+      { portionLineNos: [], note },
+      revision,
+      OPERATOR,
+    ),
   );
 }
 

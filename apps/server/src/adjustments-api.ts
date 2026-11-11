@@ -80,7 +80,6 @@ function parseAsk(
   return {
     orderId,
     expectedEdit: body.expectedEdit as AdjustmentAsk["expectedEdit"],
-    ...(body.sourceDraftId === undefined ? {} : { sourceDraftId: body.sourceDraftId as string }),
     expectedRevision,
     lineId: lineId === null ? null : lineId.toLowerCase(),
     ...(lineIds === undefined ? {} : { lineIds }),
@@ -162,64 +161,32 @@ export function mountAdjustmentsApi(
       const revision = requireRevision(body.revision);
       const expectedRevision = requireRevision(body.expectedRevision, "expectedRevision");
       const submissionId = submissionIdOf(body);
-      const reasonId =
-        body.reasonId === undefined
-          ? undefined
-          : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
-      const { note } = body;
-      if (
-        note !== undefined &&
-        note !== null &&
-        (typeof note !== "string" || note.length > NOTE_LIMIT)
-      )
-        throw invalid("note");
-      const parsedApprover = parseDrawerOverride(
-        body.approver as { personId?: unknown; pin?: unknown } | undefined,
-      );
-      const attempts = overridePinAttempts(pinThrottle, session.deviceId);
-      const answer = await withPinCheckAhead(deps.db, parsedApprover, attempts, (checked) =>
-        withIssuanceTransaction(
-          deps.db,
-          async (tx) => {
-            await requireEconomicWrite(tx, deps.cfg, deps.admission);
-            await checkZones(tx, session, [{ partyId }]);
-            const applied = await discardDraft(
-              tx,
-              cfg,
-              partyId,
-              draftId,
-              session.personId,
-              {
-                admission: deps.admission,
-                submissionId,
-                revision,
-                expectedRevision,
-                expectedEdit,
-                ...(reasonId === undefined ? {} : { reasonId }),
-                note: typeof note === "string" ? note : null,
-                approver: withCheck(parsedApprover, checked),
-              },
-              deps.venueLocale,
-              attempts,
-              deps.attendance === undefined
-                ? undefined
-                : { recorder: deps.attendance, clock: deps.clock },
-              (billId) =>
-                issueIfFullyPaid(
-                  tx,
-                  fiscal,
-                  sendingCfg(cfg, c, session.device),
-                  billId,
-                  session.personId,
-                ),
-            );
-            if (applied.adjustmentIds.length > 0) {
-              await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, applied.billId);
-            }
-            return applied;
-          },
-          log,
-        ),
+      const answer = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await requireEconomicWrite(tx, deps.cfg, deps.admission);
+          await checkZones(tx, session, [{ partyId }]);
+          return discardDraft(
+            tx,
+            cfg,
+            partyId,
+            draftId,
+            session.personId,
+            { admission: deps.admission, submissionId, revision, expectedRevision, expectedEdit },
+            deps.attendance === undefined
+              ? undefined
+              : { recorder: deps.attendance, clock: deps.clock },
+            (billId) =>
+              issueIfFullyPaid(
+                tx,
+                fiscal,
+                sendingCfg(cfg, c, session.device),
+                billId,
+                session.personId,
+              ),
+          );
+        },
+        log,
       );
       return c.json(answer);
     }),
@@ -232,6 +199,7 @@ export function mountAdjustmentsApi(
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
+      if (body.action === "cancel") throw invalid("action");
       const ask = parseAsk(id, personId, body);
       const submissionId = submissionIdOf(body);
       const parsedApprover = parseDrawerOverride(

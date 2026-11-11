@@ -268,7 +268,7 @@ describe("A773 requested lifecycle: bill move", () => {
         venue.cfg,
         venue.party.tabId,
         burger!.lineNo,
-        { quantity: "2" },
+        { portionLineNos: [], quantity: "2" },
         bill!.revision,
         OPERATOR,
       );

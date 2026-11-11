@@ -83,9 +83,7 @@ import {
   subtractDecimal,
   compareDecimal,
   decimal,
-  divideDecimal,
   formatMoney,
-  multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
   toScale,
@@ -192,7 +190,6 @@ import type {
   ServeGroupDetail,
   ServeLinesDetail,
   SnoozeGroupDetail,
-  SplitDraftSourceDetail,
   SplitGroupLineDetail,
   SubmitDraftDetail,
   TakeOverDraftDetail,
@@ -1266,13 +1263,6 @@ interface Adjusting {
   preview: AdjustmentPreview | null;
   refusal: string | null;
   busy: boolean;
-  source?: {
-    sync: DraftSync;
-    lineId: string;
-    quantity: string;
-    discard?: string[];
-    unlock: () => void;
-  };
 }
 
 /** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
@@ -12230,9 +12220,6 @@ export class TillApp extends LitElement {
         ),
       });
     };
-    sync.store.cancelSource = (line, quantity) => {
-      void this.#openSourceCancellation(sync, line, quantity);
-    };
     this.#draftSync = sync;
     this.#syncDraftBillStatus();
     // Subscribed before any screen, so a line's mark is set before the draft is drawn.
@@ -12423,7 +12410,6 @@ export class TillApp extends LitElement {
 
   #dropDraft(): void {
     clearTimeout(this.#billDraftTimer);
-    if (this.adjusting?.source !== undefined) this.#closeAdjust();
     this.#draftSync?.drop();
     this.#draftSync = undefined;
     this.#draftReady = false;
@@ -12984,7 +12970,7 @@ export class TillApp extends LitElement {
     const tableId = this.activeTableId;
     let party = this.orderParty;
     if (tabId === undefined || store?.sending === true) return;
-    if (sent?.some((line) => line.source === undefined && line.blocked === "period_ended")) {
+    if (sent?.some((line) => line.blocked === "period_ended")) {
       this.errorKey = "menu.last_orders_ended";
       return;
     }
@@ -13008,7 +12994,7 @@ export class TillApp extends LitElement {
     if (store.sending) return;
     if (
       this.#openLateSendFromMarks(
-        sent.filter((line) => line.source === undefined),
+        sent,
         lateSend,
         "send",
         (confirmed) => this.#sendDraft(detail, confirmed),
@@ -13689,61 +13675,6 @@ export class TillApp extends LitElement {
     );
   }
 
-  async #onSplitDraftSource(event: Event): Promise<void> {
-    const { store, line } = (event as CustomEvent<SplitDraftSourceDetail>).detail;
-    const sync = this.#draftSync;
-    if (
-      sync === undefined ||
-      store !== this.#tableDraft() ||
-      store !== sync.store ||
-      !store.lines.includes(line) ||
-      line.source === undefined ||
-      this.groupCommandBusy ||
-      store.sending ||
-      store.editsLocked
-    )
-      return;
-    const sourceLineId = line.source.line.id;
-    const session = this.#operatorSession;
-    const visit = this.#orderVisit;
-    const live = () =>
-      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
-    this.errorKey = undefined;
-    this.groupCommandBusy = true;
-    store.busyAction = "split";
-    try {
-      const outcome = await sync.runCommand(async (state, options) => {
-        const party = this.orderParty;
-        if (
-          !live() ||
-          party?.id !== sync.partyId ||
-          !store.lines.some((row) => row.source?.line.id === sourceLineId)
-        )
-          throw { code: "draft.out_of_date" };
-        return this.api.splitHeldLineIntoUnits(
-          party.id,
-          sourceLineId,
-          {
-            submissionId: crypto.randomUUID(),
-            expectedPartyRevision: party.revision,
-            expectedEdit: state.expectedEdit,
-          },
-          options,
-        );
-      });
-      if (!live()) return;
-      if (typeof outcome === "object" && "applied" in outcome) {
-        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
-        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
-      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
-      else this.errorKey = outcome === "failed" ? "table.error" : draftRefusalError(outcome);
-      await this.#loadTabLines();
-    } finally {
-      delete store.busyAction;
-      this.groupCommandBusy = false;
-    }
-  }
-
   async #onDiscardDraft(): Promise<void> {
     const sync = this.#draftSync;
     if (
@@ -13757,11 +13688,6 @@ export class TillApp extends LitElement {
       this.#adjustOpening
     )
       return;
-    const source = sync.store.lines.find((line) => line.source !== undefined);
-    if (source !== undefined) {
-      await this.#openSourceCancellation(sync, source, source.quantity, true);
-      return;
-    }
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
     const live = () =>
@@ -14036,68 +13962,6 @@ export class TillApp extends LitElement {
       return;
     }
     if (live()) await this.#loadTabLines();
-  }
-
-  /** Recall names one line, so a grouped row's members go one request each, by line number; the
-   * first that does not apply, or applies but is not read back, stops the rest and says why. */
-  async #onRecallLines(event: Event): Promise<void> {
-    const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
-    const sync = this.#draftSync;
-    const lines = lineNos.map((lineNo) => this.tabLines.find((row) => row.lineNo === lineNo));
-    if (
-      sync === undefined ||
-      this.#tableDraft() !== sync.store ||
-      this.activeTabId !== sync.billId ||
-      lines.length === 0 ||
-      new Set(lineNos).size !== lineNos.length ||
-      lines.some((line) => line === undefined || line.parentLineNo != null) ||
-      this.groupCommandBusy ||
-      sync.store.sending ||
-      sync.store.editsLocked
-    )
-      return;
-    const session = this.#operatorSession;
-    const visit = this.#orderVisit;
-    const live = () =>
-      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
-    this.groupCommandBusy = true;
-    sync.store.busyAction = "recall";
-    this.errorKey = undefined;
-    try {
-      if (!(await this.#flushPartyKitchenNote()) || !live()) return;
-      for (const line of lines.sort((a, b) => a!.lineNo - b!.lineNo)) {
-        const outcome = await sync.runCommand(async (state, options) => {
-          const party = this.orderParty;
-          if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
-          return this.api.recallToDraft(
-            party.id,
-            line!.id,
-            {
-              submissionId: crypto.randomUUID(),
-              expectedPartyRevision: party.revision,
-              expectedEdit: state.expectedEdit,
-            },
-            options,
-          );
-        });
-        if (!live()) return;
-        if (typeof outcome === "object" && "applied" in outcome) {
-          this.#notePartyRevision(sync.partyId, outcome.applied.revision);
-          if (outcome.reloaded) continue;
-          this.errorKey = "table.draft_read_failed";
-        } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
-        else if (outcome === "failed") this.errorKey = "table.error";
-        else
-          this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
-            ? draftRefusalError(outcome)
-            : lineWriteError({ code: outcome.refused });
-        break;
-      }
-      await this.#loadTabLines();
-    } finally {
-      delete sync.store.busyAction;
-      this.groupCommandBusy = false;
-    }
   }
 
   async #onMoveStation(event: Event): Promise<void> {
@@ -15088,97 +14952,6 @@ export class TillApp extends LitElement {
     };
   }
 
-  async #openSourceCancellation(
-    sync: DraftSync,
-    line: OrderLine,
-    quantity: string,
-    discard = false,
-  ): Promise<void> {
-    const store = sync.store;
-    if (
-      sync !== this.#draftSync ||
-      !store.lines.includes(line) ||
-      line.source === undefined ||
-      this.groupCommandBusy ||
-      this.adjusting !== null ||
-      this.#adjustOpening ||
-      store.sending ||
-      store.editsLocked
-    )
-      return;
-    const visit = this.#orderVisit;
-    const session = this.#operatorSession;
-    const sourceId = line.source.line.id;
-    const live = () =>
-      session === this.#operatorSession && visit === this.#orderVisit && sync === this.#draftSync;
-    this.#adjustOpening = true;
-    this.groupCommandBusy = true;
-    store.busyAction = "cancel";
-    store.sending = true;
-    this.errorKey = undefined;
-    let unlock: (() => void) | undefined;
-    try {
-      if ((await sync.flush()) !== "saved") {
-        if (live()) this.errorKey ??= "table.draft_save_failed";
-        return;
-      }
-      if (!live()) return;
-      const bill = this.#billComposition([sync.billId]);
-      if (bill === null) return;
-      await this.#loadTabLines();
-      if (!live() || !this.#billCompositionUnchanged(bill)) return;
-      const source = store.lines.find((row) => row.source?.line.id === sourceId)?.source;
-      if (source === undefined) return;
-      const sources = store.lines.flatMap((row) => (row.source === undefined ? [] : [row.source]));
-      const reasons = await bill.api.listAdjustmentReasons();
-      if (!live() || !this.#billCompositionUnchanged(bill)) return;
-      unlock = store.lockEdits();
-      this.adjusting = {
-        id: ++this.#adjustments,
-        bill,
-        surface: "table",
-        orderId: sync.billId,
-        revision: this.tabRevision,
-        visit,
-        kind: "cancel",
-        target: {
-          lineId: discard ? null : sourceId,
-          name: discard ? t("table.draft_title") : (source.line.name ?? ""),
-          quantity: discard ? null : quantity,
-          total: discard
-            ? sumDecimals(sources.map((row) => decimal(row.netAmount)))
-            : divideDecimal(
-                multiplyDecimal(decimal(source.netAmount), decimal(quantity)),
-                decimal(source.line.quantity),
-                MONEY_SCALE,
-              ),
-          unitTotal: null,
-        },
-        reasons,
-        choice: null,
-        preview: null,
-        refusal: null,
-        busy: false,
-        source: {
-          sync,
-          lineId: sourceId,
-          quantity,
-          unlock,
-          ...(discard ? { discard: sources.map((row) => row.line.id) } : {}),
-        },
-      };
-      unlock = undefined;
-    } catch {
-      if (live()) this.errorKey = "adjust.reasons_error";
-    } finally {
-      unlock?.();
-      delete store.busyAction;
-      store.sending = false;
-      this.#adjustOpening = false;
-      this.groupCommandBusy = false;
-    }
-  }
-
   /** The counter's basket still holds the stored order it held when `open` was opened, at the same
    * revision, and still as the basket requires to offer an adjustment: unchanged, and with no pay,
    * place or hold of it out. */
@@ -15224,14 +14997,6 @@ export class TillApp extends LitElement {
       expectedRevision: open.revision,
       lineId: open.target.lineId,
       ...choice,
-      ...(open.source === undefined
-        ? {}
-        : {
-            action: "cancel",
-            quantity: open.source.quantity,
-            expectedEdit: open.source.sync.expectedEdit!,
-            sourceDraftId: open.source.sync.expectedEdit!.draftId!,
-          }),
     };
   }
 
@@ -15269,34 +15034,10 @@ export class TillApp extends LitElement {
     if (open === null || open.busy || !this.#adjustmentReady(open)) return;
     this.adjusting = { ...open, choice, refusal: null, busy: true };
     try {
-      let preview: AdjustmentPreview;
-      if (open.source?.discard === undefined) {
-        preview = await (open.bill?.api ?? this.api).previewAdjustment(
-          open.orderId,
-          this.#adjustAsk(open, choice),
-        );
-      } else {
-        const previews: AdjustmentPreview[] = [];
-        for (const lineId of open.source.discard) {
-          previews.push(
-            await this.api.previewAdjustment(open.orderId, {
-              ...choice,
-              action: "cancel",
-              lineId,
-              expectedRevision: open.revision,
-              expectedEdit: open.source.sync.expectedEdit!,
-              sourceDraftId: open.source.sync.expectedEdit!.draftId!,
-            }),
-          );
-          if (!this.#adjustmentReady(open)) return;
-        }
-        preview = {
-          reduction: sumDecimals(previews.map((row) => decimal(row.reduction))),
-          nominalValue: sumDecimals(previews.map((row) => decimal(row.nominalValue))),
-          needsApproval: previews.find((row) => row.needsApproval !== null)?.needsApproval ?? null,
-          lines: previews.flatMap((row) => row.lines),
-        };
-      }
+      const preview = await (open.bill?.api ?? this.api).previewAdjustment(
+        open.orderId,
+        this.#adjustAsk(open, choice),
+      );
       const now = this.#adjustingNow(open.id);
       if (now !== null) this.adjusting = { ...now, preview, busy: false };
     } catch (error) {
@@ -15343,10 +15084,6 @@ export class TillApp extends LitElement {
     open: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
-    if (open.source !== undefined) {
-      await this.#applySourceCancellation(open, approver);
-      return;
-    }
     if (!this.#adjustmentReady(open)) return;
     if (open.surface === "counter" && !this.#counterStillAdjustable(open)) {
       this.#closeAdjust();
@@ -15400,117 +15137,6 @@ export class TillApp extends LitElement {
     } finally {
       limit.done();
       if (open.bill !== undefined && live()) await this.#refreshBillDraft();
-    }
-  }
-
-  async #applySourceCancellation(
-    open: Adjusting,
-    approver?: { personId: string; pin: string },
-  ): Promise<void> {
-    const source = open.source!;
-    const { sync } = source;
-    const live = () => sync === this.#draftSync && !this.#hasLeftAdjusted(open);
-    if (!live() || this.groupCommandBusy) return;
-    const command: AdjustmentCommand = {
-      ...this.#adjustAsk(open, open.choice!),
-      submissionId: crypto.randomUUID(),
-      ...(approver === undefined ? {} : { approver }),
-    };
-    this.adjusting = { ...open, busy: true, refusal: null };
-    this.groupCommandBusy = true;
-    source.unlock();
-    sync.store.busyAction = "cancel";
-    let refusal: unknown;
-    try {
-      const outcome = await sync.runCommand(async (state, options) => {
-        if (
-          !live() ||
-          !this.#billCompositionUnchanged(open.bill!) ||
-          !sync.store.lines.some((line) => line.source?.line.id === source.lineId)
-        )
-          throw { code: "draft.out_of_date" };
-        try {
-          if (source.discard !== undefined) {
-            if (state.draftId === null) throw { code: "draft.not_found" };
-            return await this.api.discardDraft(
-              sync.partyId,
-              state.draftId,
-              {
-                submissionId: command.submissionId,
-                revision: state.revision,
-                expectedRevision: open.revision,
-                expectedEdit: state.expectedEdit,
-                reasonId: open.choice!.reasonId,
-                note: open.choice!.note,
-                ...(approver === undefined ? {} : { approver }),
-              },
-              options,
-            );
-          }
-          return await this.api.applyAdjustment(
-            open.orderId,
-            {
-              ...command,
-              expectedEdit: state.expectedEdit,
-              sourceDraftId: state.draftId!,
-            },
-            options,
-          );
-        } catch (error) {
-          refusal = error;
-          throw error;
-        }
-      });
-      if (!live()) return;
-      if (typeof outcome === "object" && "applied" in outcome) {
-        this.#noteBillParty(outcome.applied.party);
-        if (outcome.applied.invoice !== undefined) {
-          this.result = outcome.applied.invoice;
-          this.#showTicket(sync.billId, true, { surface: "table", cashChange: null });
-        }
-        this.shadowRoot!.querySelector<HTMLElementTagNameMap["till-adjustment-dialog"]>(
-          "till-adjustment-dialog",
-        )?.closeSaved();
-        this.#closeAdjust();
-        await this.#loadTabLines();
-        if (live() && !outcome.reloaded) this.errorKey = "table.draft_read_failed";
-      } else if (outcome === "unsaved") {
-        this.#closeAdjust();
-        this.errorKey ??= "table.draft_save_failed";
-      } else if (typeof outcome === "object" && DRAFT_REFUSALS.has(outcome.refused)) {
-        this.#closeAdjust();
-        this.errorKey = draftRefusalError(outcome);
-        await this.#loadTabLines();
-      } else if (sync.store.editsLocked) {
-        this.#closeAdjust();
-        this.errorKey = "table.draft_read_failed";
-      } else {
-        if (this.#adjustingNow(open.id) === null) return;
-        await this.#onAdjustRefused(
-          refusal ??
-            (typeof outcome === "object" ? { code: outcome.refused } : new Error("No answer")),
-          approver === undefined ? "apply" : "approved",
-        );
-        const required = refusal as { code?: string; params?: { approval?: unknown } } | undefined;
-        const now = this.#adjustingNow(open.id);
-        if (
-          source.discard !== undefined &&
-          required?.code === "adjustment.approval_required" &&
-          required.params?.approval === "refund" &&
-          now?.preview !== undefined &&
-          now.preview !== null
-        )
-          this.adjusting = {
-            ...now,
-            preview: { ...now.preview, needsApproval: { by: "refund" } },
-            refusal: null,
-          };
-        if (this.#adjustingNow(open.id) !== null && !sync.store.editsLocked)
-          source.unlock = sync.store.lockEdits();
-      }
-    } finally {
-      delete sync.store.busyAction;
-      this.groupCommandBusy = false;
     }
   }
 
@@ -15608,7 +15234,6 @@ export class TillApp extends LitElement {
   }
 
   #closeAdjust(): void {
-    this.adjusting?.source?.unlock();
     this.adjusting = null;
     this.#closeApprovers();
   }
@@ -21490,7 +21115,6 @@ export class TillApp extends LitElement {
         @reorder-groups=${(event: Event) => void this.#onReorderGroups(event)}
         @move-group-line=${(event: Event) => void this.#onMoveGroupLine(event)}
         @split-group-line=${(event: Event) => void this.#onSplitGroupLine(event)}
-        @split-draft-source=${(event: Event) => void this.#onSplitDraftSource(event)}
         @discard-draft=${() => void this.#onDiscardDraft()}
         @serve-lines=${(event: Event) => void this.#onServeLines(event)}
         @unserve-lines=${(event: Event) => void this.#onUnserveLines(event)}
@@ -21499,7 +21123,6 @@ export class TillApp extends LitElement {
         @unsnooze-group=${(event: Event) => void this.#onUnsnoozeGroup(event)}
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
-        @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
         @move-station=${(event: Event) => void this.#onMoveStation(event)}
         @open-make-at=${(event: Event) => void this.#onOpenMakeAt(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}

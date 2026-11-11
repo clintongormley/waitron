@@ -1018,60 +1018,6 @@ describe("Split a table's panel", () => {
       expect(splitPicker(el)!.sources).not.toBe(before);
     });
 
-    it("a dish recalled on a bill not on screen is in no row", async () => {
-      const el = await mountScreen({
-        partyDrafts: [
-          {
-            id: "draft",
-            partyId: garcia.id,
-            billId: "b2",
-            ownerId: "ana",
-            ownerName: "Ana",
-            revision: 1,
-            lines: [],
-            takenOverFrom: null,
-          },
-          {
-            id: "draft-3",
-            partyId: garcia.id,
-            billId: "b3",
-            ownerId: "me",
-            ownerName: "Me",
-            revision: 1,
-            lines: [{ sourceLineId: "fish" } as Draft["lines"][number]],
-            takenOverFrom: null,
-          },
-        ],
-      });
-      await toPanel(el);
-
-      expect(rowIds(el, "b1")).toEqual(["soup", "salad", "bread", "steak"]);
-      expect(rowIds(el, "b3")).toEqual([]);
-    });
-
-    it("a dish recalled on screen, which no draft read has yet, is in no row", async () => {
-      const el = await mountScreen({
-        otherDrafts: [
-          {
-            id: "other",
-            revision: 1,
-            ownerName: "Ana",
-            takenFromYou: false,
-            lines: [
-              {
-                product: { id: "soup", name: "soup" },
-                quantity: "1",
-                source: { line: { id: "soup" }, extras: [], netAmount: "10.00" },
-              },
-            ],
-          },
-        ] as unknown as TillTableOrderScreen["otherDrafts"],
-      });
-      await toPanel(el);
-
-      expect(rowIds(el, "b1")).toEqual(["salad", "bread", "steak"]);
-    });
-
     it("two portions of one dish draw as one row without marks, and as two with different allergy marks", async () => {
       const beer = (id: string, lineNo: number) =>
         dish(id, lineNo, "5.00", {

@@ -3962,8 +3962,8 @@ reuses that object's headers for another person's request still names the first 
 are a module's map, reset with the module graph for every test file.
 
 A test of a request naming someone else sets the header itself, and the harness keeps it, as the
-person-refusal cases in `till-api.drafts.test.ts`, `draft-recall.test.ts`,
-`till-api.groups.test.ts` and `draft-discard.test.ts` do. A test of a request naming nobody calls
+person-refusal cases in `till-api.drafts.test.ts`, `till-api.groups.test.ts`
+and `draft-discard.test.ts` do. A test of a request naming nobody calls
 `leaveSessionAlone(token)` from `testing/tab-person.ts`: that session's requests then carry only the
 header the test gives them, or none. `till-session.person.test.ts`,
 `till-api.session-person.test.ts`, `till-api.test.ts` and `device-api.test.ts` do. A test that gives a session a token or a person in the database

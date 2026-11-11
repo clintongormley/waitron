@@ -1,3 +1,5 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
+import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -10,7 +12,6 @@ import {
   sales,
   tenders,
   orderDraftLines,
-  orderDraftRecalledLines,
   orderDraftEvents,
   orderDrafts,
   parties,
@@ -27,14 +28,8 @@ import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-v
 import { createTable } from "./testing/live-table.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
-import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { splitDraft, takeOverDraft } from "./order-drafts.js";
-import {
-  readPartyAllergy,
-  savePartyAllergy,
-  setAllergyLineTicks,
-  writePartyAllergy,
-} from "@waitron/venue-service";
+import { writePartyAllergy } from "@waitron/venue-service";
 import { createExtraList, writeProductModifiers } from "@waitron/catalogue";
 import type { ExtraSelection } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
@@ -43,13 +38,12 @@ import { saveDraft } from "./order-drafts.js";
 import { republishMenus } from "./testing/publish-menu.js";
 
 let venue: BillVenue;
-let extras: ExtraSelection[];
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    extras = await inTx(venue, async (tx) => {
+    await inTx(venue, async (tx) => {
       const { offers } = await VENUE_SERVICE.listZoneOffers(tx, venue.zoneId);
       const mainOffer = offers.find((offer) => offer.id === venue.offerFor("Paella"))!;
       const sideOffer = offers.find((offer) => offer.id === venue.offerFor("Croquettes"))!;
@@ -119,7 +113,7 @@ async function setup() {
   return { partyId, billId, snapshot, body, path };
 }
 
-async function withSource(
+async function withSentFood(
   p: Awaited<ReturnType<typeof setup>>,
   keepSent = false,
   selections: ExtraSelection[] = [],
@@ -157,21 +151,18 @@ async function withSource(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, p.billId))
     .orderBy(workingOrderLines.lineNo);
-  const [party] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
-  const recallPath = `/api/parties/${p.partyId}/lines/${source!.id}/recall`;
-  const recalled = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    recallPath,
-    await observedDraftCommandBody(venue.db, "POST", recallPath, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: party!.revision,
-    }),
-  );
-  expect(recalled.status).toBe(200);
-  const snapshot = recalled.json as unknown as BillDraftSnapshot & { revision: number };
-  return { source: source!, snapshot };
+  if (keepSent) {
+    const cancelled = await cancelItemHttp(
+      venue.db,
+      venue.app,
+      venue.cookie,
+      p.billId,
+      source!.lineNo,
+    );
+    expect(cancelled.status, JSON.stringify(cancelled.json)).toBe(200);
+  }
+  const [current] = await venue.db.select().from(parties).where(eq(parties.id, p.partyId));
+  return { source: source!, snapshot: { ...p.snapshot, revision: current!.revision } };
 }
 
 async function frozen() {
@@ -181,10 +172,6 @@ async function frozen() {
     states: await venue.db.select().from(billEditStates).orderBy(billEditStates.billId),
     drafts: await venue.db.select().from(orderDrafts).orderBy(orderDrafts.id),
     fresh: await venue.db.select().from(orderDraftLines).orderBy(orderDraftLines.id),
-    sources: await venue.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .orderBy(orderDraftRecalledLines.id),
     lines: await venue.db.select().from(workingOrderLines).orderBy(workingOrderLines.id),
     parties: await venue.db.select().from(parties).orderBy(parties.id),
     events: await venue.db.select().from(orderDraftEvents).orderBy(orderDraftEvents.id),
@@ -324,63 +311,6 @@ describe("splitting a saved outbox to a new bill", () => {
     expect(await frozen()).toEqual(acquiredBefore);
   });
 
-  it("moves a recalled charge and its exclusive reservation without losing either allergy tick", async () => {
-    const p = await setup();
-    const { source, snapshot } = await withSource(p);
-    const allergic = await inTx(venue, (tx) =>
-      savePartyAllergy(
-        tx,
-        p.partyId,
-        snapshot.revision,
-        {
-          answer: "allergies",
-          guests: [{ who: "Ana", allergens: { milk: {} } }],
-        },
-        venue.operatorId,
-      ),
-    );
-    await inTx(venue, (tx) =>
-      setAllergyLineTicks(tx, p.partyId, [
-        { workingLineId: source!.id, guestId: allergic.guests[0]!.id },
-        { draftLineId: p.snapshot.draft!.lines[1]!.id, guestId: allergic.guests[0]!.id },
-      ]),
-    );
-    const allergyBefore = await inTx(venue, (tx) => readPartyAllergy(tx, p.partyId));
-    const selected = snapshot.draft!.lines.filter(
-      (line) => line.sourceLineId !== null || line.id === p.snapshot.draft!.lines[1]!.id,
-    );
-    const { billId, editorVersion, draftId, draftRevision } = snapshot.edit;
-    const result = await send(venue.app, venue.cookie, "POST", p.path, {
-      ...p.body,
-      expectedPartyRevision: allergic.revision,
-      expectedEdit: { billId, editorVersion, draftId, draftRevision },
-      lineIds: selected.map((line) => line.id),
-    });
-    expect(result.status).toBe(200);
-    const answer = result.json as unknown as {
-      billId: string;
-      source: BillDraftSnapshot;
-      destination: BillDraftSnapshot;
-    };
-    expect(answer.destination.draft!.lines.map((line) => line.id)).toEqual(
-      selected.map((line) => line.id),
-    );
-    const [moved] = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, source!.id));
-    expect(moved).toEqual({ ...source, workingOrderId: answer.billId, lineNo: 1 });
-    const [reservation] = await venue.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .where(eq(orderDraftRecalledLines.sourceLineId, source!.id));
-    expect(reservation!.draftId).toBe(answer.destination.draft!.id);
-    expect(await inTx(venue, (tx) => readPartyAllergy(tx, p.partyId))).toEqual({
-      ...allergyBefore,
-      revision: allergyBefore.revision + 1,
-    });
-  });
-
   it.each([
     ["missing observation", { expectedEdit: undefined }, "expectedEdit"],
     ["missing selection", { lineIds: undefined }, "lineIds"],
@@ -401,7 +331,7 @@ describe("splitting a saved outbox to a new bill", () => {
     async (kind) => {
       const p = await setup();
       // Grouped, as an order stored before portions.
-      const { source, snapshot } = await withSource(p, false, [], "grouped");
+      const { source, snapshot } = await withSentFood(p, false, [], "grouped");
       const paymentId = randomUUID();
       await inTx(venue, async (tx) => {
         await tx.insert(billPayments).values({
@@ -428,14 +358,18 @@ describe("splitting a saved outbox to a new bill", () => {
           });
       });
       const before = await frozen();
-      const result = await send(venue.app, venue.cookie, "POST", p.path, {
-        ...p.body,
-        expectedPartyRevision: snapshot.revision,
-        expectedEdit: snapshot.edit,
-        lineIds: snapshot
-          .draft!.lines.filter((line) => line.sourceLineId !== null)
-          .map((line) => line.id),
-      });
+      const path = `/api/bills/${p.billId}/split`;
+      const result = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        path,
+        await observedBillActionBody(venue.db, path, {
+          expectedEdit: snapshot.edit,
+          expectedPartyRevision: snapshot.revision,
+          transfers: [{ lineNo: source.lineNo }],
+        }),
+      );
       expect(result.status).toBe(409);
       expect(result.json).toMatchObject({
         code: kind === "items" ? "bill.line_paid" : "bill.received_exceeds_total",
@@ -470,7 +404,7 @@ describe("splitting a saved outbox to a new bill", () => {
   it("uses the existing issuance path when the remaining sent food is fully paid after the split", async () => {
     const p = await setup();
     // Grouped, as an order stored before portions.
-    const { snapshot } = await withSource(p, true, [], "grouped");
+    const { snapshot } = await withSentFood(p, true, [], "grouped");
     await venue.db.insert(billPayments).values({
       workingOrderId: p.billId,
       submissionId: randomUUID(),
@@ -504,43 +438,6 @@ describe("splitting a saved outbox to a new bill", () => {
     const frozenAfter = await frozen();
     expect(await send(venue.app, venue.cookie, "POST", p.path, body)).toEqual(result);
     expect(await frozen()).toEqual(frozenAfter);
-  });
-
-  it("moves every extra with its recalled parent, retaining the recorded amounts and single reservation", async () => {
-    const p = await setup();
-    // Grouped, as an order stored before portions.
-    const { source, snapshot } = await withSource(p, false, extras, "grouped");
-    const before = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, p.billId))
-      .orderBy(workingOrderLines.lineNo);
-    expect(before).toHaveLength(2);
-    const recalled = snapshot.draft!.lines.find((line) => line.sourceLineId === source.id)!;
-    expect(recalled.source!.extras).toHaveLength(1);
-    const result = await send(venue.app, venue.cookie, "POST", p.path, {
-      ...p.body,
-      expectedPartyRevision: snapshot.revision,
-      expectedEdit: snapshot.edit,
-      lineIds: [recalled.id],
-    });
-    expect(result.status).toBe(200);
-    const answer = result.json as unknown as { billId: string; destination: BillDraftSnapshot };
-    const moved = await venue.db
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, answer.billId))
-      .orderBy(workingOrderLines.lineNo);
-    expect(moved).toEqual(
-      before.map((line, index) => ({ ...line, workingOrderId: answer.billId, lineNo: index + 1 })),
-    );
-    const reservations = await venue.db
-      .select()
-      .from(orderDraftRecalledLines)
-      .where(eq(orderDraftRecalledLines.sourceLineId, source.id));
-    expect(reservations).toHaveLength(1);
-    expect(reservations[0]!.draftId).toBe(answer.destination.draft!.id);
-    expect(answer.destination.draft!.lines[0]!.source!.extras[0]!.id).toBe(before[1]!.id);
   });
 
   it("leaves an unrelated bill's different editor and unsent rows unchanged", async () => {

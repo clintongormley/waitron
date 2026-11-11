@@ -15,8 +15,6 @@ import type {
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillPortionPicker } from "../widgets/portion-picker.js";
 import { DraftStore } from "../state/draft-sync.js";
-import type { OrderLine } from "../state/working-order.js";
-import { beer } from "./till-table-order-screen.test-helpers.js";
 
 function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine {
   return {
@@ -559,27 +557,6 @@ describe("A803 move dishes panel", () => {
   });
 });
 
-/** A draft line that recalls `dish` from the bill. */
-function recall(dish: TabLine): OrderLine {
-  return {
-    product: beer,
-    quantity: "1.000",
-    draftLineId: `recalled-${dish.id}`,
-    noMerge: true,
-    source: { line: dish, extras: [], netAmount: dish.unitPriceGross },
-  };
-}
-
-function otherDraft(...dishes: TabLine[]): OtherDraft {
-  return {
-    id: "other",
-    revision: 2,
-    ownerName: "Ana",
-    takenFromYou: false,
-    lines: dishes.map(recall),
-  };
-}
-
 describe("A803 move dishes refresh:", () => {
   async function moveTo(el: TillTableOrderScreen) {
     const sent = capture(el, "move-dishes");
@@ -633,31 +610,6 @@ describe("A803 move dishes refresh:", () => {
     ]);
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
     expect(await moveTo(el)).toEqual([{ lineIds: ["c1", "c2"], toBillId: null }]);
-  });
-
-  it("a dish recalled into this person's draft, and one recalled into another person's, are in no row, and 2 of 3 never takes them", async () => {
-    const draft = new DraftStore();
-    draft.appendLines([recall(BEERS[0]!)]);
-    const el = await mountScreen({ draftStore: draft, otherDrafts: [otherDraft(HAM)] });
-    await openMoveDishes(el);
-    expect(picker(el).rows.map((row) => row.members.map((member) => member.id))).toEqual([
-      ["c2", "c3", "c4"],
-    ]);
-    await tick(el, "c2");
-    await step(el, "dec", "c2");
-    expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
-    expect(await moveTo(el)).toEqual([{ lineIds: ["c2", "c3"], toBillId: null }]);
-  });
-
-  it("a picked dish recalled into another person's draft before a refresh drops out of the picks", async () => {
-    const el = await mountScreen();
-    await openMoveDishes(el);
-    await tick(el, "h1");
-    el.otherDrafts = [otherDraft(HAM)];
-    await el.updateComplete;
-    await picker(el).updateComplete;
-    expect(picker(el).picks).toEqual(new Set());
-    expect(confirm(el).disabled).toBe(true);
   });
 
   it("an update that changes nothing the rows are drawn from does not group the bill's dishes again", async () => {
@@ -744,20 +696,6 @@ describe("A803 move dishes refresh:", () => {
     await el.updateComplete;
     expect(picker(el).picks).toEqual(new Set());
     expect(reads.count).toBe(unchanged);
-  });
-
-  it("a picked Caña recalled into this person's draft leaves the row's count taken from the Cañas left", async () => {
-    const draft = new DraftStore();
-    const el = await mountScreen({ draftStore: draft });
-    await openMoveDishes(el);
-    await tick(el, "c1");
-    await step(el, "dec", "c1");
-    await step(el, "dec", "c1");
-    draft.appendLines([recall(BEERS[0]!)]);
-    await el.updateComplete;
-    await picker(el).updateComplete;
-    expect(picker(el).picks).toEqual(new Set(["c2", "c3"]));
-    expect(await moveTo(el)).toEqual([{ lineIds: ["c2", "c3"], toBillId: null }]);
   });
 });
 

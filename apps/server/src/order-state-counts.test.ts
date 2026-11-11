@@ -36,8 +36,6 @@ import {
   parkOrder,
 } from "./working-order.js";
 import { createStation } from "./kitchen.js";
-import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { seatTable } from "./parties.js";
 import { readHeldCounts } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -235,7 +233,6 @@ function dish(overrides: Partial<CountedLine> = {}): CountedLine {
     servedAt: null,
     unitPrecision: 0,
     unit: null,
-    recalled: false,
     sentAt: nowIso(),
     groupState: null,
     ticket: { madeHere: false, requestedAt: nowIso(), firedAt: nowIso(), state: "queued" },
@@ -254,14 +251,6 @@ const readyHere = {
 describe("dishCounts", () => {
   it("counts a dish with no kitchen item, group or send as unsent", () => {
     expect(dishCounts(dish({ sentAt: null, ticket: null }), [], false)).toEqual({
-      ...zero,
-      ordered: 1,
-      unsent: 1,
-    });
-  });
-
-  it("counts a recalled dish as unsent though it was sent", () => {
-    expect(dishCounts(dish({ recalled: true }), [], false)).toEqual({
       ...zero,
       ordered: 1,
       unsent: 1,
@@ -881,20 +870,6 @@ describe("readOrderStateCounts on a party's bill", () => {
     await sendRound(billId, [plain("Caña")]);
 
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, ready: 1 });
-  });
-
-  it("counts a held dish recalled into a draft as unsent", async () => {
-    const { partyId, billId } = await seatParty();
-    await holdGroup(partyId, [plain("Tarta")]);
-    const [line] = await dishLines(billId);
-    await inTx(venue, async (tx) =>
-      recallToDraft(tx, venue.cfg, partyId, line!.id, {
-        ...(await command(tx, partyId)),
-        expectedEdit: await readBillEditState(tx, billId),
-      }),
-    );
-
-    expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, unsent: 1 });
   });
 
   it("counts a bill's saved draft dishes as ordered and unsent, apart from its total, until discarded", async () => {

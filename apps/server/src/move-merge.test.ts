@@ -2284,9 +2284,7 @@ describe("A803 split: what the kitchen is told", () => {
         expectedEdit: await inTx(v, (tx) => readBillEditState(tx, tabId)),
         note: null,
       };
-      await inTx(v, (tx) =>
-        discardDraft(tx, v.cfg, partyId, draft.id, OPERATOR, discarding, LOCALE),
-      );
+      await inTx(v, (tx) => discardDraft(tx, v.cfg, partyId, draft.id, OPERATOR, discarding));
       const closing = await commandFor(v, partyId);
       await inTx(v, (tx) => finishTable(tx, { partyId, ...closing }));
 

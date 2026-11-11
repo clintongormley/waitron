@@ -4,7 +4,6 @@ import { withTransaction, workingOrders, type Transaction, type Database } from 
 import { readBillEditState } from "../bill-editing.js";
 import {
   sendLines as send,
-  recallLines as recall,
   setLineCourse as course,
   updateOrderLine as line,
   updateHeldOrder as whole,
@@ -40,15 +39,6 @@ export async function sendLines(
 ) {
   return send(tx, cfg, id, lineNos, await authority(tx, id, attendance?.personId), attendance);
 }
-export async function recallLines(
-  tx: Transaction,
-  cfg: Parameters<typeof recall>[1],
-  id: string,
-  lineNos: number[],
-  attendance?: OrderAttendance & { personId: string },
-) {
-  return recall(tx, cfg, id, lineNos, await authority(tx, id, attendance?.personId), attendance);
-}
 export async function setLineCourse(
   tx: Transaction,
   cfg: Parameters<typeof course>[1],
@@ -72,7 +62,7 @@ export async function updateOrderLine(
   cfg: Parameters<typeof line>[1],
   id: string,
   lineNo: number,
-  patch: Parameters<typeof line>[4],
+  patch: Omit<Parameters<typeof line>[4], "portionLineNos"> & { portionLineNos?: number[] },
   revision: number,
   operatorId?: string,
   attendance?: OrderAttendance,
@@ -82,7 +72,7 @@ export async function updateOrderLine(
     cfg,
     id,
     lineNo,
-    patch,
+    { portionLineNos: [], ...patch },
     revision,
     { ...(await authority(tx, id, operatorId)), admission: testTradingAdmission() },
     attendance,

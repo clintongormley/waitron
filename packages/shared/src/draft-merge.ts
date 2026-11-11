@@ -5,7 +5,6 @@ import { QUANTITY_SCALE, stringToThousandths } from "./scales.js";
 
 /** What the draft merge rule (plan D10) reads of a draft line; the server and the till each carry more. */
 export interface MergeableDraftLine {
-  sourceLineId?: null;
   menuItemId: string;
   variantId: string | null;
   menuVersionId: string | null;
@@ -24,12 +23,6 @@ export interface MergeableDraftLine {
   measured?: boolean;
 }
 
-interface SourceDraftLine {
-  sourceLineId: string;
-  quantity: string;
-  noMerge: boolean;
-}
-
 /**
  * Two lines merge exactly when their keys are equal and not null; null for a line that never merges.
  * A fractional or measured quantity never merges: 0.5 kg and 0.3 kg of fish, or two 200 ml glasses,
@@ -37,8 +30,7 @@ interface SourceDraftLine {
  * multiset, never by order.
  */
 
-export function draftLineMergeKey(line: MergeableDraftLine | SourceDraftLine): string | null {
-  if (line.sourceLineId != null) return null;
+export function draftLineMergeKey(line: MergeableDraftLine): string | null {
   if (line.noMerge || stringToThousandths(line.quantity) % 1000 !== 0) return null;
   if (line.measured === true) return null;
   const options = [
@@ -71,9 +63,7 @@ export function draftLineMergeKey(line: MergeableDraftLine | SourceDraftLine): s
  * Adds each line into the first earlier line that orders the same thing, which keeps its id and
  * position; a merged quantity is written at the quantity scale.
  */
-export function normaliseDraftLines<T extends MergeableDraftLine | SourceDraftLine>(
-  lines: readonly T[],
-): T[] {
+export function normaliseDraftLines<T extends MergeableDraftLine>(lines: readonly T[]): T[] {
   const merged: T[] = [];
   const byKey = new Map<string, number>();
   for (const line of lines) {

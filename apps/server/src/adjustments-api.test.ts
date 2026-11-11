@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -7,7 +8,14 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { deviceProfiles, printJobs, products, withTransaction, workingOrders } from "@waitron/db";
+import {
+  deviceProfiles,
+  printJobs,
+  products,
+  withTransaction,
+  workingOrders,
+  workingOrderLines,
+} from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
@@ -96,6 +104,36 @@ async function post(
   );
 }
 
+async function postCancel(
+  billId: string,
+  body: Record<string, unknown>,
+  opts: { cookie?: string; path?: "" | "/preview" } = {},
+) {
+  if (opts.path === "/preview") return post(billId, body, opts);
+  const [line] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.id, body.lineId as string));
+  return cancelItemHttp(
+    venue.db,
+    venue.app,
+    opts.cookie ?? venue.cookie.supervisor,
+    billId,
+    line!.lineNo,
+    body.quantity as string | undefined,
+    {
+      reasonId: (body.reasonId as string | undefined) ?? venue.reasonId.houseVoid,
+      ...(body.lineIds === undefined ? {} : { lineIds: body.lineIds as string[] }),
+      ...(body.approver === undefined
+        ? {}
+        : { approver: body.approver as { personId: string; pin: string } }),
+      ...(body.preparationStarted === undefined
+        ? {}
+        : { preparationStarted: body.preparationStarted as boolean }),
+    },
+  );
+}
+
 function recordedOn(billId: string) {
   return inTx(venue, (tx) =>
     tx
@@ -106,8 +144,21 @@ function recordedOn(billId: string) {
   );
 }
 
+it("keeps Cancel item preview but refuses a public adjustment cancel save", async () => {
+  const { billId } = await billWith(venue, [{ name: "Burger" }]);
+  const ask = { action: "cancel", lineId: await lineIdOf(venue, billId, 1), quantity: "1" };
+  expect((await post(billId, ask, { path: "/preview" })).status).toBe(200);
+  const save = await post(billId, ask);
+  expect(save.status).toBe(400);
+  expect(save.json).toMatchObject({
+    code: "management.request_invalid",
+    params: { field: "action" },
+  });
+  expect(await recordedOn(billId)).toEqual([]);
+});
+
 describe("corrections through order actions on a station's printers", () => {
-  it("sends HOLD CHANGED through a line edit and HOLD CANCELLED through Cancel item", async () => {
+  it("sends HOLD CHANGED and HOLD CANCELLED through the order edit routes", async () => {
     const printerId = await inTx(venue, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
       const printer = await createPrinter(tx, {
@@ -122,9 +173,8 @@ describe("corrections through order actions on a station's printers", () => {
       return printer.id;
     });
     try {
-      const { billId, partyId } = await billWith(venue, [{ name: "Steak" }, { name: "Burger" }], {
+      const { billId } = await billWith(venue, [{ name: "Steak" }, { name: "Burger" }], {
         release: "hold",
-        shape: "grouped",
       });
       const papers = () =>
         inTx(venue, async (tx) =>
@@ -142,6 +192,7 @@ describe("corrections through order actions on a station's printers", () => {
         "PUT",
         `/api/working-orders/${billId}/lines/1`,
         {
+          portionLineNos: [],
           revision: await revisionOf(billId),
           expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
           quantity: "2",
@@ -152,29 +203,12 @@ describe("corrections through order actions on a station's printers", () => {
         expect.stringContaining(kitchenTicketWords("es").holdChanged),
       ]);
       expect((await papers())[1]).toContain("RIBEYE");
-      const lineId = await lineIdOf(venue, billId, 1);
-      const context = await send(
-        venue.app,
-        venue.cookie.staff,
-        "GET",
-        `/api/parties/${partyId}/lines/${lineId}/cancellation`,
-      );
-      expect(context.status).toBe(200);
-      const removed = await send(
-        venue.app,
-        venue.cookie.staff,
-        "POST",
-        `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
-        {
-          submissionId: randomUUID(),
-          expectedPartyRevision: context.json.revision,
-          expectedBillRevision: await revisionOf(billId),
-          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-          expectedContext: context.json.context,
-          quantity: "2",
-          outcome: "remove_charge",
-        },
-      );
+      const steaks = (await rowsOf(venue, billId)).filter((row) => row.name === "Steak");
+      const removed = await postCancel(billId, {
+        lineId: steaks[0]!.id,
+        lineIds: steaks.map((row) => row.id),
+        quantity: "2",
+      });
       expect(removed.status, JSON.stringify(removed.json)).toBe(200);
       expect((await papers()).slice(2)).toEqual([
         expect.stringContaining(kitchenTicketWords("es").holdCancelled),
@@ -236,7 +270,7 @@ describe("corrections through order actions on a station's printers", () => {
       expect(before[1]).toHaveLength(1);
       expect(printedLines(before[1]![0]!.payload).join(" ")).toContain("RIBEYE");
       expect(printedLines(before[1]![0]!.payload).join(" ")).not.toContain("BEER");
-      const beerVoid = await post(billId, {
+      const beerVoid = await postCancel(billId, {
         action: "cancel",
         ...(await todayLine(venue, billId, 2)),
       });
@@ -251,7 +285,7 @@ describe("corrections through order actions on a station's printers", () => {
         kitchenTicketWords("es").void,
       );
       expect(beerSlips[1]).toHaveLength(0);
-      const steakVoid = await post(billId, {
+      const steakVoid = await postCancel(billId, {
         action: "cancel",
         ...(await todayLine(venue, billId, 1)),
       });
@@ -754,14 +788,15 @@ describe("approval through the route (plan D6)", () => {
 });
 
 describe("a cancel's approval through the route (A758 D12, D13)", () => {
-  const cancel = async (billId: string) => ({
+  const cancel = async (billId: string, preparationStarted = true) => ({
+    preparationStarted,
     ...(await todayLine(venue, billId, 1)),
     action: "cancel",
   });
 
   it("says in the preview that a fired dish's cancel needs someone who can give refunds", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
-    const preview = await post(billId, await cancel(billId), {
+    const preview = await postCancel(billId, await cancel(billId), {
       cookie: venue.cookie.staff,
       path: "/preview",
     });
@@ -773,7 +808,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
   it("refuses a staff member's cancel of a fired dish, then applies it with a manager's PIN", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
 
-    const refused = await post(billId, await cancel(billId), { cookie: venue.cookie.staff });
+    const refused = await postCancel(billId, await cancel(billId), { cookie: venue.cookie.staff });
     expect(refused.status).toBe(403);
     expect(refused.json).toEqual({
       code: "adjustment.approval_required",
@@ -781,7 +816,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
     });
     expect(await recordedOn(billId)).toEqual([]);
 
-    const applied = await post(
+    const applied = await postCancel(
       billId,
       { ...(await cancel(billId)), approver: { personId: venue.managerId, pin: PINS.manager } },
       { cookie: venue.cookie.staff },
@@ -795,17 +830,17 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
 
   it("applies a staff member's cancel of a held dish with no PIN", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }], { release: "hold" });
-    const preview = await post(billId, await cancel(billId), {
+    const preview = await postCancel(billId, await cancel(billId, false), {
       cookie: venue.cookie.staff,
       path: "/preview",
     });
     expect(preview.json).toMatchObject({ needsApproval: null });
 
-    const applied = await post(billId, await cancel(billId), { cookie: venue.cookie.staff });
+    const applied = await postCancel(billId, await cancel(billId, false), {
+      cookie: venue.cookie.staff,
+    });
     expect(applied.status).toBe(200);
-    expect(await recordedOn(billId)).toMatchObject([
-      { action: "cancel", requestedBy: venue.staffId, approvedBy: null },
-    ]);
+    expect(await recordedOn(billId)).toEqual([]);
     expect(await rowsOf(venue, billId)).toEqual([]);
   });
 
@@ -818,12 +853,12 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
       operatorId: venue.staffId,
     });
 
-    const applied = await post(billId, await cancel(billId), { cookie: venue.cookie.staff });
+    const applied = await postCancel(billId, await cancel(billId, false), {
+      cookie: venue.cookie.staff,
+    });
 
     expect(applied.status).toBe(200);
-    expect(await recordedOn(billId)).toMatchObject([
-      { action: "cancel", stage: "unsent", requestedBy: venue.staffId, approvedBy: null },
-    ]);
+    expect(await recordedOn(billId)).toEqual([]);
     expect(await rowsOf(venue, billId)).toEqual([]);
   });
 
@@ -837,7 +872,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
         .returning({ id: persons.id }),
     );
 
-    const refused = await post(
+    const refused = await postCancel(
       billId,
       { ...(await cancel(billId)), approver: { personId: colleague!.id, pin } },
       { cookie: venue.cookie.staff },
@@ -855,7 +890,7 @@ describe("a cancel's approval through the route (A758 D12, D13)", () => {
   it("applies a staff member's cancel of a fired dish with a supervisor's PIN", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
 
-    const applied = await post(
+    const applied = await postCancel(
       billId,
       {
         ...(await cancel(billId)),
@@ -981,7 +1016,12 @@ describe("a cancel's preview", () => {
       { ...pizza, action: "cancel", quantity: "1" },
       { path: "/preview" },
     );
-    const applied = await post(billId, { ...pizza, action: "cancel", quantity: "1" });
+    const applied = await postCancel(billId, {
+      ...pizza,
+      action: "cancel",
+      quantity: "1",
+      preparationStarted: true,
+    });
 
     expect(applied.status).toBe(200);
     expect(
@@ -1061,13 +1101,13 @@ describe("the route's own rules", () => {
       ],
       [
         { lineId: bottle, action: "cancel", reasonId: venue.reasonId.complaint },
-        409,
-        "adjustment.action_not_allowed",
+        400,
+        "management.request_invalid",
       ],
       [
         { lineId: bottle, action: "cancel", reasonId: venue.reasonId.mistake },
         400,
-        "adjustment.note_required",
+        "management.request_invalid",
       ],
       [{ lineId: bottle, action: "comp", quantity: "2" }, 400, "adjustment.quantity_invalid"],
       [

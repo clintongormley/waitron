@@ -289,7 +289,7 @@ or staff abbreviation under the default key, while its line context holds the fu
 The server prepares these through `prepareUnitSnapshot` and `newCustomerText`; the till uses
 the same preparation for previews. Changing a unit requires publication before new orders use
 it. Retained lines and reprints keep their recorded maps. The parent, added-extra, retained-pick
-and recalled-carrier cases in `apps/server/src/working-order.test.ts`, and the complete stored-row
+cases in `apps/server/src/working-order.test.ts`, and the complete stored-row
 comparison in `apps/server/src/till-api.receipt.test.ts`, exercise these boundaries.
 
 ## The translation gap report
@@ -652,10 +652,6 @@ now sold only as an extra is marked "Only sold as an extra" (`lineBlock`,
 a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
 is removed.
 
-Recalled table dishes follow their recorded bill rows instead of these fresh-line
-availability checks; [the modifier contract](modifiers.md#ordering-and-stored-facts) describes
-which recorded choices you can keep and how new extras are checked.
-
 A line already stored on a held order or tab is not marked, and still sends and pays,
 because it was already ordered. The server refuses a new standalone line for such a dish with
 `product.not_sold_separately`, by the same published setting. A diet filter that staff turn on
@@ -911,7 +907,7 @@ product cannot currently be sold is refused `product.unavailable`
 
 That stored-line check is separate from a table bill's **New order**. Before starting a new
 payment, the payment paths check the bill's editor observation, then refuse `bill.unsent_dishes`
-if its saved outbox holds fresh dishes or recalled bill rows (`assertBillHasNoUnsent`,
+if its saved outbox holds fresh dishes (`assertBillHasNoUnsent`,
 `apps/server/src/bill-unsent.ts`). Send or remove those dishes before paying. Another bill's outbox
 does not block this bill. Completed payment replays and reconciliation of an already captured card
 payment keep their existing result or reservation; they do not start another payment. Run the
@@ -923,10 +919,6 @@ pnpm --filter @waitron/server exec vitest run src/bill-unsent.test.ts \
   src/working-order.test.ts
 ```
 
-When you edit a recalled dish, the dish and any extra you keep retain their recorded prices and
-names. An added extra uses the current offered list and price; an unavailable dish or variant does
-not block that choice (`prepareRecalledModifiers`, `apps/server/src/working-order.ts`). A dish
-without recorded choice metadata keeps its modifiers and refuses explicit replacement selections.
 `listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is
 listed only under its parent's offer, only while Active, and as available only while Available; a
 menu cannot hide one (_Active and Available_, under _Variants_).

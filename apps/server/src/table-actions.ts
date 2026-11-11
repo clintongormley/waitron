@@ -2,7 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
-import { moveCheckedDishes, reservedRefusal, resolveMoveLines } from "./bill-actions.js";
+import { moveCheckedDishes, resolveMoveLines } from "./bill-actions.js";
 import {
   readPartyBillIds,
   relocateBillEditor,
@@ -340,25 +340,14 @@ export async function splitTable(
   const named = [...wholeBillIds, ...looseIds];
   if (new Set(named).size !== named.length || loose.some((entry) => entry.lineIds.length === 0))
     throw new AppError("management.request_invalid", { field: "selection" });
-  const edits = await requireSplitEditors(
-    tx,
-    wholeBillIds,
-    looseIds,
-    options.operatorId,
-    options.expectedEdits,
-  );
+  await requireSplitEditors(tx, wholeBillIds, looseIds, options.operatorId, options.expectedEdits);
   for (const billId of wholeBillIds) await refuseUnsplittableBill(tx, partyId, billId);
   const looseSourceIds = await inNumberOrder(tx, looseIds);
   const looseMoves: { billId: string; transfers: { lineNo: number }[] }[] = [];
   for (const billId of looseSourceIds) {
     await requireBillOfParty(tx, partyId, billId);
     const { lineIds } = loose.find((entry) => entry.billId === billId)!;
-    const { transfers, recalled } = await resolveMoveLines(tx, billId, lineIds);
-    if (recalled)
-      throw reservedRefusal(
-        billId,
-        edits.find((edit) => edit.billId === billId)!,
-      );
+    const { transfers } = await resolveMoveLines(tx, billId, lineIds);
     looseMoves.push({ billId, transfers });
   }
   const leaving: { billId: string; firers: ReadonlyMap<string, Firer> }[] = [];

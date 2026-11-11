@@ -29,7 +29,7 @@ import type { WithVenueRowId } from "./testing/venue-row-id.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
-import { cancelBody } from "./testing/cancel-line.js";
+import { cancelItemRequest } from "./testing/cancel-line.js";
 import { createTable } from "./testing/live-table.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
@@ -217,12 +217,13 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   });
 }
 
-/** Cancels `quantity` of line `lineNo`, all of it when absent, through the adjustment route, as Sara. */
+/** Cancels `quantity` of line `lineNo`, all of it when absent, through Cancel item, as Sara. */
 async function cancel(tabId: string, lineNo: number, quantity?: string): Promise<Response> {
-  return request(`/api/working-orders/${tabId}/adjustments`, {
+  const { path, body } = await cancelItemRequest(suite.db, tabId, lineNo, quantity);
+  return request(path, {
     method: "POST",
     headers: { cookie: supervisorCookie },
-    body: JSON.stringify(await cancelBody(suite.db, tabId, lineNo, quantity)),
+    body: JSON.stringify(body),
   });
 }
 
@@ -351,7 +352,7 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("POST /api/parties/:id/groups appends; a cancel through .../adjustments voids; GET /api/tables/state reflects it", async () => {
+  it("POST /api/parties/:id/groups appends; Cancel item voids; GET /api/tables/state reflects it", async () => {
     const { id } = await withTransaction(suite.db, (tx) =>
       createTable(tx, cfg, { label: "5", zoneId: tablesZoneId }),
     );
@@ -382,11 +383,7 @@ describe("table + tab routes", () => {
     const before = await partyRevision(partyId);
     const voided = await cancel(tabId, 1);
     expect(voided.status).toBe(200);
-    // The void moves the party on, so the answer says where to, for its next command.
-    expect(((await voided.json()) as { party: unknown }).party).toEqual({
-      id: partyId,
-      revision: before + 1,
-    });
+    expect((await voided.json()) as { revision: number }).toMatchObject({ revision: before + 1 });
     expect(await partyRevision(partyId)).toBe(before + 1);
 
     const state = (await (await request("/api/tables/state")).json()) as {
@@ -433,35 +430,6 @@ describe("table + tab routes", () => {
       lines: { quantity: string }[];
     };
     expect(lines.map((line) => line.quantity)).toEqual(["2.000"]);
-  });
-
-  it("POST .../lines/send answers 409 product.unavailable for a recalled line whose product sold out", async () => {
-    const { id } = await withTransaction(suite.db, (tx) =>
-      createTable(tx, cfg, {
-        label: `S-${floorLabelSuffix().padStart(6, "0")}`,
-        zoneId: tablesZoneId,
-      }),
-    );
-    const { tabId, partyId } = await seat(id);
-    await sendRound(partyId, [{ menuItemId, quantity: "1" }]);
-    await request(`/api/working-orders/${tabId}/lines/recall`, {
-      method: "POST",
-      body: JSON.stringify({ lineNos: [1] }),
-    });
-    await suite.db.execute(sql`update products set available = 0 where id = ${productId}`);
-    try {
-      const sent = await request(`/api/working-orders/${tabId}/lines/send`, {
-        method: "POST",
-        body: JSON.stringify({ lineNos: [1] }),
-      });
-      expect(sent.status).toBe(409);
-      expect(await sent.json()).toMatchObject({
-        error: { code: "product.unavailable", params: { productId } },
-      });
-    } finally {
-      // The suite shares one product across its cases.
-      await suite.db.execute(sql`update products set available = 1 where id = ${productId}`);
-    }
   });
 
   it("GET /api/working-orders/:id/lines reads an open tab's lines with locked price + served state", async () => {
@@ -639,7 +607,7 @@ describe("table + tab routes", () => {
     const edit = (body: object) =>
       request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, portionLineNos: [] }),
       });
 
     const landed = await edit({ note: "sin gas", revision });
@@ -664,7 +632,7 @@ describe("table + tab routes", () => {
       const { tabId } = await firedTab();
       const res = await request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
-        body: JSON.stringify({ note: "x", ...revision }),
+        body: JSON.stringify({ portionLineNos: [], note: "x", ...revision }),
       });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
@@ -677,7 +645,7 @@ describe("table + tab routes", () => {
     const { tabId, revision } = await firedTab();
     await request(`/api/working-orders/${tabId}/lines/1`, {
       method: "PUT",
-      body: JSON.stringify({ note: "first", revision }),
+      body: JSON.stringify({ portionLineNos: [], note: "first", revision }),
     });
 
     const res = await request(`/api/working-orders/${tabId}`, {
@@ -704,7 +672,7 @@ describe("table + tab routes", () => {
     const lineEdit = (body: object) =>
       request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, portionLineNos: [] }),
       });
     const party = await partyRevision(partyId);
 
@@ -756,7 +724,7 @@ describe("table + tab routes", () => {
       await sendRound(partyId, [{ menuItemId, quantity: "1" }]),
       await request(`/api/working-orders/${tabId}/lines/1`, {
         method: "PUT",
-        body: JSON.stringify({ note: "x", revision }),
+        body: JSON.stringify({ portionLineNos: [], note: "x", revision }),
       }),
       await cancel(tabId, 1),
     ];
@@ -792,7 +760,7 @@ describe("table + tab routes", () => {
       noAuth.request(`/api/working-orders/${id}/lines/1`, {
         method: "PUT",
         headers: json,
-        body: JSON.stringify({ note: "x", revision: 0 }),
+        body: JSON.stringify({ portionLineNos: [], note: "x", revision: 0 }),
       }),
     ];
     for (const res of await Promise.all(cases)) {

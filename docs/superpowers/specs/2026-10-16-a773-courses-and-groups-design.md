@@ -1,5 +1,8 @@
 # A773. Courses, groups and the pass — design
 
+**2026-11-11:** Recall and its saved source rows are retired by
+[R3-owner](../plans/2026-11-11-r3-owner-retire-recall.md). The Recall paths below describe the earlier design.
+
 Status: written 2026-10-16 from an owner brainstorm; **revised 2026-10-17** from a second owner
 brainstorm on the table screen's order panel. Every decision in the revision is the owner's unless it
 is marked "builder's call". **Ownership amendment, 2026-10-17:** the owner's final answer, after

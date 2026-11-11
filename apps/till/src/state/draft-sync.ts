@@ -1,7 +1,4 @@
-import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
-import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
-import { productUnit } from "../widgets/product-name.js";
-import { trimQuantity } from "../widgets/dish-format.js";
+import { compareDecimal, decimal } from "@waitron/shared";
 import {
   SESSION_PERSON_REFUSAL,
   isNetworkFailure,
@@ -60,48 +57,6 @@ export class DraftStore extends WorkingOrderStore {
   }
 
   declare placer?: (courseId: string | null, exceptIndex?: number) => ReturnType<typeof placeFor>;
-  cancelSource?: (line: OrderLine, quantity: string) => void;
-
-  override removeLine(index: number): void {
-    const line = this.lines[index];
-    if (line?.source === undefined) {
-      super.removeLine(index);
-      return;
-    }
-    if (!this.sending && !this.editsLocked) this.cancelSource?.(line, line.quantity);
-  }
-
-  override setLineQuantity(index: number, quantity: string): void {
-    const line = this.lines[index];
-    if (
-      line?.source === undefined ||
-      compareDecimal(decimal(quantity), decimal(line.quantity)) >= 0
-    ) {
-      super.setLineQuantity(index, quantity);
-      return;
-    }
-    if (this.sending || this.editsLocked) return;
-    assertQuantityPrecision(quantity, productUnit(line.product).precision, { positive: true });
-    this.cancelSource?.(
-      line,
-      trimQuantity(subtractDecimal(decimal(line.quantity), decimal(quantity))),
-    );
-  }
-
-  override setLineDetails(
-    index: number,
-    update: Parameters<WorkingOrderStore["setLineDetails"]>[1],
-  ): boolean {
-    const line = this.lines[index];
-    if (
-      line?.source !== undefined &&
-      compareDecimal(decimal(update.quantity), decimal(line.quantity)) < 0
-    ) {
-      this.setLineQuantity(index, update.quantity);
-      return false;
-    }
-    return super.setLineDetails(index, update);
-  }
 
   override addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
     this.addMerging(product, quantity, selection);
@@ -404,15 +359,6 @@ export class DraftSync {
         (this.#edit!.editorId !== null && this.#edit!.editorId !== this.personId)
       )
         return;
-      const sources = new Map(this.#authoritative?.lines.map((line) => [line.id, line]) ?? []);
-      for (const line of reviewedLines) {
-        if (line.source === undefined) continue;
-        const source = line.draftLineId === undefined ? undefined : sources.get(line.draftLineId);
-        if (source?.sourceLineId !== line.source.line.id) {
-          this.#options.onRefused("draft.out_of_date");
-          return;
-        }
-      }
     }
     this.#candidates.delete(this.#candidateKey);
     if (reviewedLines === null && (this.#recoveryRequired || this.#unsaved))
@@ -951,7 +897,6 @@ export class DraftSync {
     const expectedEdit = this.expectedEdit!;
     const pending = [...this.store.lines];
     const lines = pending.map((line) => toDraftLineInput(line));
-    const selections = pending.map((line) => line.sourceSelection);
     this.#unsaved = false;
     const limit = limited(this.#options.requestLimitMs, signal);
     let snapshot: BillDraftSnapshot;
@@ -989,7 +934,7 @@ export class DraftSync {
       this.#show(null);
     } else if (this.#unsaved) {
       this.#take(saved);
-      this.#attachSavedIds(saved, pending, lines, selections);
+      this.#attachSavedIds(saved, pending, lines);
     } else if (sameLines(lines, saved.lines)) this.#keep(saved);
     else this.#show(saved);
     this.#lockAuthority();
@@ -1051,7 +996,6 @@ export class DraftSync {
     draft: Draft,
     pending: readonly OrderLine[],
     inputs: readonly DraftLineInput[],
-    selections: readonly OrderLine["sourceSelection"][],
   ): void {
     const retained = new Set(inputs.flatMap((line) => (line.id === undefined ? [] : [line.id])));
     const available = new Map(draft.lines.map((line) => [line.id, line]));
@@ -1063,14 +1007,12 @@ export class DraftSync {
               (candidate) => !retained.has(candidate.id) && lineKey(input) === lineKey(candidate),
             )
           : available.get(input.id);
-      const saved =
-        (candidate?.sourceLineId ?? null) === (input.sourceLineId ?? null) ? candidate : undefined;
+      const saved = candidate;
       if (saved !== undefined) available.delete(saved.id);
       if (!this.store.lines.includes(line)) continue;
       if (saved === undefined) delete line.draftLineId;
       else {
         line.draftLineId = saved.id;
-        this.#refreshSource(line, saved, selections[index]);
       }
     }
   }
@@ -1080,22 +1022,10 @@ export class DraftSync {
     this.#take(draft);
     this.store.lines.forEach((line, index) => {
       line.draftLineId = draft.lines[index]!.id;
-      this.#refreshSource(line, draft.lines[index]!, line.sourceSelection);
     });
     this.#quietly(() =>
       this.store.setUnavailableOnServer(draft.lines.map((line) => line.unavailable)),
     );
-  }
-
-  #refreshSource(
-    line: OrderLine,
-    saved: DraftLine,
-    selection?: OrderLine["sourceSelection"],
-  ): void {
-    if (saved.sourceLineId == null) return;
-    const rebuilt = this.#options.rebuild([saved])[0];
-    if (rebuilt !== undefined)
-      this.#quietly(() => this.store.refreshRecalledLine(line, rebuilt, selection));
   }
 
   /** The server's draft replaces what the store holds. */

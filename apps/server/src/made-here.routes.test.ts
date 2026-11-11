@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedRelocationSender } from "./testing/table-action-fixture.js";
@@ -773,7 +774,7 @@ describe("made-here route wiring", () => {
     );
     expect(items.find((item) => item.id === made!.id)).toMatchObject({ state: "ready" });
   });
-  it("adds another of an already-made drink as a new line, and refuses recalling it", async () => {
+  it("adds another of an already-made drink as a new line", async () => {
     const party = await seatedWith(venue);
     const sent = await send(
       venue.app,
@@ -835,14 +836,6 @@ describe("made-here route wiring", () => {
         { lineId: lines[1]!.id, madeHere: true, state: "ready" },
       ]),
     );
-    const recalled = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/lines/recall`,
-      { lineNos: [line!.lineNo] },
-    );
-    expect(recalled.json.code).toBe("ticket.already_started");
   });
   async function sendGroupedDrinks(party: { partyId: string; tabId: string }, quantity: number) {
     const deviceId = venue.cookie.match(/waitron_device=([0-9a-f-]+)\./)![1]!;
@@ -886,23 +879,20 @@ describe("made-here route wiring", () => {
         tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
       );
       const noticesBefore = venue.db.all(sql`select id from kitchen_notices`);
-      const [order] = await inTx(venue, (tx) =>
-        tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
+      const [line] = await inTx(venue, (tx) =>
+        tx
+          .select({ lineNo: workingOrderLines.lineNo })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, item!.workingOrderLineId)),
       );
-      const cancelled = await send(
+      const cancelled = await cancelItemHttp(
+        venue.db,
         venue.app,
         supervisorCookie,
-        "POST",
-        `/api/working-orders/${party.tabId}/adjustments`,
-        {
-          submissionId: randomUUID(),
-          expectedRevision: order!.revision,
-          lineId: item!.workingOrderLineId,
-          action: "cancel",
-          quantity: "1",
-          reasonId: cancelReasonId,
-          note: null,
-        },
+        party.tabId,
+        line!.lineNo,
+        "1",
+        { reasonId: cancelReasonId },
       );
       expect(cancelled.status).toBe(200);
       expect(
@@ -1063,7 +1053,7 @@ describe("made-here route wiring", () => {
       }),
     ]);
   });
-  it("cancels an extra from a made-here drink without Bar paper or notice", async () => {
+  it("cancels a made-here drink with its extra without Bar paper or notice", async () => {
     const party = await seatedWith(venue);
     const sent = await send(
       venue.app,
@@ -1103,22 +1093,15 @@ describe("made-here route wiring", () => {
       tx.select().from(printJobs).where(eq(printJobs.printerId, barPrinterId)),
     );
     const noticesBefore = venue.db.all(sql`select id from kitchen_notices`);
-    const [order] = await inTx(venue, (tx) =>
-      tx.select().from(workingOrders).where(eq(workingOrders.id, party.tabId)),
-    );
-    const cancelled = await send(
+    const parent = lines.find((line) => line.id === extra.parentLineId)!;
+    const cancelled = await cancelItemHttp(
+      venue.db,
       venue.app,
       supervisorCookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/adjustments`,
-      {
-        submissionId: randomUUID(),
-        expectedRevision: order!.revision,
-        lineId: extra.id,
-        action: "cancel",
-        reasonId: cancelReasonId,
-        note: null,
-      },
+      party.tabId,
+      parent.lineNo,
+      undefined,
+      { reasonId: cancelReasonId },
     );
     expect(cancelled.status).toBe(200);
     expect(
@@ -1744,20 +1727,21 @@ describe("made-here route wiring", () => {
           })
         ).id,
     );
+    const payment = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "2.00",
+      method: "cash",
+      tendered: "2.00",
+      applied: "2.00",
+      tip: "0.00",
+    };
     const part = await send(
       venue.app,
       venue.cookie,
       "POST",
       `/api/working-orders/${orderId}/payments`,
-      {
-        submissionId: randomUUID(),
-        kind: "contribution",
-        amount: "2.00",
-        method: "cash",
-        tendered: "2.00",
-        applied: "2.00",
-        tip: "0.00",
-      },
+      payment,
     );
     expect(part.status).toBe(200);
     expect(part.json).not.toHaveProperty("madeHere");
@@ -1793,6 +1777,15 @@ describe("made-here route wiring", () => {
       body,
     );
     expect(replay.json.madeHere).toEqual(first.json.madeHere);
+    const paymentReplay = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${orderId}/payments`,
+      payment,
+    );
+    expect(paymentReplay.status).toBe(200);
+    expect(paymentReplay.json.madeHere).toEqual(first.json.madeHere);
   });
 
   it("the background payment loop has no device and prints the drink", async () => {

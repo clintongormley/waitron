@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -694,10 +695,7 @@ describe("an edit that grows an order", () => {
       venue.cookie,
       "PUT",
       `/api/working-orders/${tabId}/lines/1`,
-      {
-        quantity: "2",
-        revision: orderRow(tabId)!.revision,
-      },
+      { portionLineNos: [], quantity: "2", revision: orderRow(tabId)!.revision },
     );
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);
@@ -880,10 +878,7 @@ describe("growing a bill with a saved full-invoice choice", () => {
       venue.cookie,
       "PUT",
       `/api/working-orders/${tabId}/lines/1`,
-      {
-        quantity: "2",
-        revision: orderRow(tabId)!.revision,
-      },
+      { portionLineNos: [], quantity: "2", revision: orderRow(tabId)!.revision },
     );
 
     expect(updated.json.code).toBeUndefined();
@@ -1051,15 +1046,9 @@ describe("an edit that does not raise an order already over the limit", () => {
     expect(orderRow(id)!.revision).toBe(revision);
   });
 
-  it("a quantity lowered on one line is saved while the bill stays over", async () => {
+  it("a partial Cancel item is saved while the bill stays over", async () => {
     const { tabId } = await seated(venue.app, { Mitad: 3 });
-    const answer = await send(
-      limited,
-      venue.cookie,
-      "PUT",
-      `/api/working-orders/${tabId}/lines/1`,
-      { quantity: "2", revision: orderRow(tabId)!.revision },
-    );
+    const answer = await cancelItemHttp(venue.db, limited, venue.cookie, tabId, 1, "1");
     expect(answer.status).toBe(200);
     expect(storedLines(tabId)).toEqual(["1:2000"]);
   });
@@ -1071,7 +1060,7 @@ describe("an edit that does not raise an order already over the limit", () => {
       venue.cookie,
       "PUT",
       `/api/working-orders/${tabId}/lines/1`,
-      { quantity: "3", revision: orderRow(tabId)!.revision },
+      { portionLineNos: [], quantity: "3", revision: orderRow(tabId)!.revision },
     );
     expect(answer.status).toBe(409);
     expect(answer.json.code).toBe(REFUSED.code);

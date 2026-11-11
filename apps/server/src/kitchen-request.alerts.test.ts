@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -229,7 +230,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       });
       const before = await allSlips(tx, venue);
       vi.setSystemTime(new Date(LATER));
-      await editLine(tx, venue, burger.lineId, { quantity: "1" });
+      await cancelItemForTest(tx, venue.cfg, venue.party.tabId, 1, "1", OPERATOR);
       const after = await allSlips(tx, venue);
       expect(newSince(before, after, "grill")).toEqual([]);
       const fryer = newSince(before, after, "fryer");
@@ -268,7 +269,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       expect(burger).toMatchObject({ requestedAt: AT, firedAt: null });
       const before = await allSlips(tx, venue);
       vi.setSystemTime(new Date(LATER));
-      await editLine(tx, venue, burger!.lineId, { note: "No salt" });
+      await editLine(tx, venue, burger!.lineId, { portionLineNos: [], note: "No salt" });
       const after = await allSlips(tx, venue);
       const head = ["*** HOLD CHANGED ***", "Grill", "Split extras", "1", LATER_CLOCK, "GROUP 1"];
       const pair = [

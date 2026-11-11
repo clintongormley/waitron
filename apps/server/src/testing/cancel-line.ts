@@ -239,8 +239,46 @@ export async function cancelItemForTest(
     cfg,
     target,
     lineId,
-    { ...body, admission: testTradingAdmission() },
+    { ...body, reasonId: await cancelReasonId(tx), admission: testTradingAdmission() },
     await ensureOperator(tx, operatorId ?? OPERATOR),
     attendance,
   );
+}
+
+export async function cancelItemRequest(
+  db: Database,
+  orderId: string,
+  lineNo: number,
+  quantity?: string,
+  overrides: Partial<CancelItemAsk> = {},
+) {
+  const observed = await withTransaction(db, async (tx) => {
+    const current = await observedCancelItem(tx, orderId, lineNo, quantity);
+    if (overrides.lineIds !== undefined)
+      current.body.expectedContext = await readCancellationContext(
+        tx,
+        current.target,
+        current.lineId,
+        overrides.lineIds,
+      );
+    return current;
+  });
+  const path =
+    typeof observed.target === "string"
+      ? `/api/parties/${observed.target}/lines/${observed.lineId}/cancel-item`
+      : `/api/working-orders/${orderId}/lines/${observed.lineId}/cancel-item`;
+  return { path, body: { ...observed.body, ...overrides } };
+}
+
+export async function cancelItemHttp(
+  db: Database,
+  app: Parameters<typeof send>[0],
+  cookie: string,
+  orderId: string,
+  lineNo: number,
+  quantity?: string,
+  overrides: Partial<CancelItemAsk> = {},
+) {
+  const { path, body } = await cancelItemRequest(db, orderId, lineNo, quantity, overrides);
+  return send(app, cookie, "POST", path, body);
 }

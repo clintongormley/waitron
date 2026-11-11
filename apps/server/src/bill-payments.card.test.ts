@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
@@ -28,7 +29,6 @@ import {
 
 import { revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
-import { cancelBody } from "./testing/cancel-line.js";
 
 // A card on a reader against a bill (bill payments design §5, §8 tests 1, 3, 10 and 12): three
 // phases, the reservation a pending card holds, retries, and two devices in both orders. Every
@@ -1034,13 +1034,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     const otherBill = split.json.billId as string;
     const card = await heldCard(billId, "10.00");
 
-    const voided = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(venue.db, billId, 2),
-    );
+    const voided = await cancelItemHttp(venue.db, venue.app, venue.cookie, billId, 2);
     // The round is the function a group submission calls.
     const round = await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, billId, [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }]),
@@ -1064,6 +1058,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       "PUT",
       `/api/working-orders/${otherBill}/lines/1`,
       {
+        portionLineNos: [],
         revision: otherLines.json.revision,
         note: "no foam",
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, otherBill)),

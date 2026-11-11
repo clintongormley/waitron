@@ -1,8 +1,6 @@
-import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
-  recallLines,
   sendLines,
   setLineCourse,
   setOrderReceiptLanguage,
@@ -70,7 +68,6 @@ import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   collectOrderOrchestration as collectOrder,
@@ -3073,99 +3070,6 @@ async function tabSnapshot(tabId: string): Promise<
   }));
 }
 
-/** Every `print_jobs` id — the before-set the race diffs against to find slips enqueued by the two
- *  racing verbs. */
-async function printJobIds(): Promise<Set<string>> {
-  const { rows } = await suite.db.execute<{ id: string }>(sql`select id from print_jobs `);
-  return new Set(rows.map((r) => r.id));
-}
-
-async function recalledSlipsSince(before: Set<string>): Promise<number> {
-  // `payload` is a BLOB, which this engine's driver hands back as a plain `Uint8Array`
-  // (`packages/db/src/schema/columns.ts`'s `bytes` custom type records the same measurement);
-  // `decodeTicket` takes either that or a `Buffer`.
-  const { rows } = await suite.db.execute<{ id: string; payload: Uint8Array }>(
-    sql`select id, payload from print_jobs `,
-  );
-  return rows.filter(
-    (r) => !before.has(r.id) && decodeTicket(r.payload).includes(kitchenTicketWords("es").recalled),
-  ).length;
-}
-
-describe("coursing editing verbs — sendLines racing recallLines (Task B1, two concurrent callers)", () => {
-  it("concurrent sendLines + recallLines on the same held line serialise — one clean winner, no lost update", async () => {
-    const { cfg, coffee } = await setupVenue();
-
-    // A printer on the venue's default station, so a fire enqueues a kitchen ticket and a recall of a
-    // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
-    const station = await defaultStationId(cfg);
-    await withTransaction(suite.db, async (tx) => {
-      const { id: printerId } = await createPrinter(tx, {
-        name: "P-Cocina",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      });
-      await attachPrinterToStation(tx, {
-        stationId: station,
-        printerId,
-      });
-    });
-
-    // Open a tab whose ONE line is HELD (`hold: true`) — fired_at null, state queued, routed to the
-    // default station. Nothing has printed yet.
-    const tabId = await withTransaction(suite.db, async (tx) => {
-      const tables = await offerProducts(tx, cfg, { zone: "tables" });
-      const tableId = await addTable(tx, cfg, tables.zoneId);
-      const { tabId } = await openPartyTab(tx, cfg, { tableId });
-      await addTabRound(
-        tx,
-        cfg,
-        tabId,
-        tables.toOfferLines([{ productId: coffee.id, quantity: "1", hold: true }]),
-      );
-      return tabId;
-    });
-    expect(await tabSnapshot(tabId)).toEqual([
-      { lineNo: 1, lineCourse: null, itemCourse: null, fired: false, state: "queued" },
-    ]);
-    const jobsBefore = await printJobIds();
-
-    // The INVERSE verbs on the SAME held line, both transactions started before either has finished.
-    // `sendLines` fires the held line; `recallLines` un-fires a fired-and-queued line. They cannot
-    // interleave: the write queue runs whichever it admitted first to completion and commits it, then
-    // runs the other against that committed result. Both verbs are legal on this line in either
-    // order, so BOTH succeed. The queue takes them in the order handed to it, so only ONE of the
-    // invariant's two outcomes is reached here (`sendLines` first: the line ends HELD with one
-    // RECALLED slip); the invariant below is written both ways because it is what must hold.
-    const results = await Promise.allSettled([
-      withTransaction(suite.db, async (tx) => {
-        await sendLines(tx, cfg, tabId, [1]);
-      }),
-      withTransaction(suite.db, async (tx) => {
-        await recallLines(tx, cfg, tabId, [1]);
-      }),
-    ]);
-    expect(results.map((r) => r.status)).toEqual(["fulfilled", "fulfilled"]);
-
-    // The outcome is ONE clean serial result, never a torn interleave: still exactly one ticket item,
-    // still state queued (neither verb moves the kitchen state).
-    const after = await tabSnapshot(tabId);
-    expect(after).toHaveLength(1);
-    expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" });
-
-    // NO-LOST-UPDATE INVARIANT, order-independent (holds whichever verb goes first):
-    //  • send goes last  → line FIRED (fired true), send enqueued a kitchen ticket, recall found the
-    //    line still held and enqueued NO recalled slip.
-    //  • recall goes last → line HELD (fired false); because recall read the fired line after the send
-    //    had committed, it MUST have enqueued a RECALLED slip.
-    // So `fired === false` ⟺ `≥1 RECALLED slip`. A held-line-with-no-slip pairing is exactly the lost
-    // update serialisation prevents (recall un-firing off a stale pre-send read, the paper kitchen
-    // never told to pull the printed line) — this assertion fails on that torn state.
-    const recalledSlips = await recalledSlipsSince(jobsBefore);
-    expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
-  });
-});
-
 describe("coursing editing verbs — setLineCourse racing selected line release", () => {
   it.each(["edit first", "fire first"] as const)(
     "%s never changes a course after its dish fires",
@@ -3219,57 +3123,6 @@ describe("coursing editing verbs — setLineCourse racing selected line release"
         expect(after[0]!.itemCourse).toBe(other.id);
         expect(sc!.status).toBe("fulfilled");
       }
-    },
-  );
-});
-
-describe("coursing editing verbs — recallLines racing selected line release", () => {
-  it.each(["recall first", "fire first"] as const)(
-    "%s never un-fires a printed dish without a RECALLED slip",
-    async (sequence) => {
-      const { cfg, coffee } = await setupVenue();
-      const station = await defaultStationId(cfg);
-      await withTransaction(suite.db, async (tx) => {
-        const { id: printerId } = await createPrinter(tx, {
-          name: "Kitchen printer",
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        });
-        await attachPrinterToStation(tx, {
-          stationId: station,
-          printerId,
-        });
-      });
-      const { course, tabId } = await withTransaction(suite.db, async (tx) => {
-        const course = await createCourse(tx, { name: "Desserts", displayOrder: 9 });
-        await setProductCourse(tx, coffee.id, course.id);
-        const tables = await offerProducts(tx, cfg, { zone: "tables" });
-        const tableId = await addTable(tx, cfg, tables.zoneId);
-        const { tabId } = await openPartyTab(tx, cfg, { tableId });
-        await addTabRound(
-          tx,
-          cfg,
-          tabId,
-          tables.toOfferLines([{ productId: coffee.id, quantity: "1", hold: true }]),
-        );
-        return { course, tabId };
-      });
-      expect(await tabSnapshot(tabId)).toEqual([
-        { lineNo: 1, lineCourse: course.id, itemCourse: course.id, fired: false, state: "queued" },
-      ]);
-      const jobsBefore = await printJobIds();
-      const recall = () => withTransaction(suite.db, (tx) => recallLines(tx, cfg, tabId, [1]));
-      const fire = () => withTransaction(suite.db, (tx) => sendLines(tx, cfg, tabId, [1]));
-      const operations = sequence === "recall first" ? [recall, fire] : [fire, recall];
-      const results = await Promise.allSettled(operations.map((operation) => operation()));
-      expect(results.map((result) => result.status)).toEqual(["fulfilled", "fulfilled"]);
-      const after = await tabSnapshot(tabId);
-      expect(after).toHaveLength(1);
-      expect(after[0]).toMatchObject({ lineNo: 1, state: "queued" });
-      const recalledSlips = await recalledSlipsSince(jobsBefore);
-      expect(after[0]!.fired === false).toBe(recalledSlips >= 1);
-      expect(after[0]!.fired).toBe(sequence === "recall first");
-      expect(recalledSlips).toBe(sequence === "fire first" ? 1 : 0);
     },
   );
 });

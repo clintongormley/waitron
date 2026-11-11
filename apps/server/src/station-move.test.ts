@@ -1,7 +1,7 @@
 import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { writeContentLanguages } from "@waitron/catalogue";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { updateOrderLine, recallLines, sendLines } from "./testing/order-writer-fixture.js";
+import { updateOrderLine } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
@@ -647,51 +647,6 @@ describe("release", () => {
           .set({ isDefault: true })
           .where(eq(kitchenStations.id, bar));
         await setProductCourse(tx, venue.productId("Burger"), null);
-      });
-    }
-  });
-
-  it("sends a recalled dish from the rules' current station without another old-station notice", async () => {
-    const { tabId, item } = await burger();
-    const [line] = await inTx(venue, (tx) =>
-      tx
-        .select({ lineNo: workingOrderLines.lineNo })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.id, item.workingOrderLineId)),
-    );
-    await inTx(venue, (tx) => recallLines(tx, venue.cfg, tabId, [line!.lineNo]));
-    const at = new Date("2026-10-02T18:45:00.000Z");
-    await inTx(venue, async (tx) => {
-      await tx.update(kitchenStations).set({ isDefault: false }).where(eq(kitchenStations.id, bar));
-      await tx
-        .update(kitchenStations)
-        .set({ isDefault: true })
-        .where(eq(kitchenStations.id, grill));
-      await setStationToday(tx, bar, "closed", at);
-    });
-    const barJobs = (await jobs(barPrinter)).length;
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(at);
-    try {
-      const barNotices = (await inTx(venue, (tx) => listStationNotices(tx, bar))).length;
-      await inTx(venue, (tx) => sendLines(tx, venue.cfg, tabId, [line!.lineNo]));
-      const [after] = await inTx(venue, (tx) =>
-        tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
-      );
-      expect(after).toMatchObject({ stationId: grill, firedAt: at.toISOString() });
-      expect((await jobs(barPrinter)).length).toBe(barJobs);
-      expect((await inTx(venue, (tx) => listStationNotices(tx, bar))).length).toBe(barNotices);
-    } finally {
-      vi.useRealTimers();
-      await inTx(venue, async (tx) => {
-        await tx
-          .update(kitchenStations)
-          .set({ isDefault: false })
-          .where(eq(kitchenStations.id, grill));
-        await tx
-          .update(kitchenStations)
-          .set({ isDefault: true })
-          .where(eq(kitchenStations.id, bar));
       });
     }
   });
@@ -1481,23 +1436,6 @@ describe("moveDishesToStation", () => {
     ).rejects.toMatchObject({ code: "ticket.already_started" });
     expect(assertFrom).not.toHaveBeenCalled();
   });
-
-  it("prints RECALLED through the order action on a printer on the dish's station", async () => {
-    const printerId = await inTx(venue, (tx) =>
-      stationPrinter(tx, `Bar recall ${randomUUID()}`, [bar]),
-    );
-    try {
-      const { tabId } = await burger();
-      const before = (await jobs(printerId)).length;
-      await inTx(venue, (tx) => recallLines(tx, venue.cfg, tabId, [1]));
-      const added = (await jobs(printerId)).slice(before);
-      expect(added).toHaveLength(1);
-      expect(decodeTicket(added[0]!.payload)).toContain("RECALLED");
-      expect(decodeTicket(added[0]!.payload)).toContain("BURG");
-    } finally {
-      await detachStationPrinters([[printerId, [bar]]]);
-    }
-  });
   it("releases a rerouted HOLD dish on each station printer with the right correction or heading", async () => {
     await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
     const downstairs = await inTx(venue, (tx) =>
@@ -2063,7 +2001,7 @@ describe("moveDishesToStation", () => {
         venue.cfg,
         tabId,
         1,
-        { quantity: "2", makeAt: null },
+        { portionLineNos: [], quantity: "2", makeAt: null },
         moved.revision,
         OPERATOR,
       ),
@@ -2107,7 +2045,7 @@ describe("moveDishesToStation", () => {
         venue.cfg,
         tabId,
         1,
-        { quantity: "2", makeAt: bar },
+        { portionLineNos: [], quantity: "2", makeAt: bar },
         moved.revision,
         OPERATOR,
       ),
@@ -2495,7 +2433,7 @@ describe("moveDishesToStation", () => {
           venue.cfg,
           tabId,
           1,
-          { makeAt: choice === null ? null : bar },
+          { portionLineNos: [], makeAt: choice === null ? null : bar },
           moved.revision,
           OPERATOR,
         ),

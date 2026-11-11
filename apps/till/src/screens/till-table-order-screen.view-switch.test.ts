@@ -1,3 +1,4 @@
+import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { DraftStore } from "../state/draft-sync.js";
@@ -21,7 +22,6 @@ import {
   shownView,
   tap,
 } from "./till-table-order-screen.test-helpers.js";
-import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -67,7 +67,7 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
     );
   });
 
-  it("the Order count takes whole, weighed and recalled lines as items", async () => {
+  it("the Order count takes whole, weighed and saved fresh lines as items", async () => {
     const draft = new DraftStore();
     draft.appendLines([
       { product: beer, quantity: "2" },
@@ -80,10 +80,10 @@ describe("till-table-order-screen: browsing and the order by the screen's width"
       },
       { product: ham, quantity: "0.375" },
       {
-        product: { ...beer, id: "retired", name: "Recorded dish" },
+        product: { ...beer, id: "saved-fresh", name: "Saved dish" },
         quantity: "2.000",
         noMerge: true,
-        source: { line: storedDish, extras: [storedExtra], netAmount: "8.00" },
+        draftLineId: "fresh-saved",
       },
     ]);
     const { el, host } = await mount({ draftStore: draft, lines: [storedDish, storedExtra] });

@@ -2396,8 +2396,7 @@ describe("ordering extras and options — parent + child lines", () => {
       ).total,
     ).toBe("4.50");
 
-    // A table round, then a change of the sent line that answers the extras lists with nothing and
-    // raises its quantity: 1.5 × 9.00.
+    // A table round, a modifier edit with no picks, and another measured portion: 1.5 × 9.00.
     const tabId = await tabWith(v, { menuItemId: burger, quantity: "0.5" });
     await withTransaction(suite.db, async (tx) =>
       updateOrderLine(
@@ -2405,10 +2404,13 @@ describe("ordering extras and options — parent + child lines", () => {
         v.cfg,
         tabId,
         1,
-        { quantity: "1.5", extras: [] },
+        { portionLineNos: [], extras: [] },
         await revisionOf(tabId),
         "cccccccc-0000-4000-8000-00000000000b",
       ),
+    );
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(tx, v.cfg, tabId, [{ menuItemId: burger, quantity: "1", extras: [] }]),
     );
     expect(
       (
@@ -2461,7 +2463,14 @@ describe("ordering extras and options — parent + child lines", () => {
     });
     await expect(
       withTransaction(suite.db, async (tx) =>
-        updateOrderLine(tx, v.cfg, tabId, 1, { extras: [] }, await revisionOf(tabId)),
+        updateOrderLine(
+          tx,
+          v.cfg,
+          tabId,
+          1,
+          { portionLineNos: [], extras: [] },
+          await revisionOf(tabId),
+        ),
       ),
     ).rejects.toMatchObject(refused);
   });
@@ -2510,7 +2519,14 @@ describe("ordering extras and options — parent + child lines", () => {
     const tabId = await tabWith(v, { menuItemId: burger, quantity: "250" });
     await expect(
       withTransaction(suite.db, async (tx) =>
-        updateOrderLine(tx, v.cfg, tabId, 1, { extras: breadExtras }, await revisionOf(tabId)),
+        updateOrderLine(
+          tx,
+          v.cfg,
+          tabId,
+          1,
+          { portionLineNos: [], extras: breadExtras },
+          await revisionOf(tabId),
+        ),
       ),
     ).rejects.toMatchObject(refused);
     await withTransaction(suite.db, async (tx) =>
@@ -2519,7 +2535,7 @@ describe("ordering extras and options — parent + child lines", () => {
         v.cfg,
         tabId,
         1,
-        { quantity: "300", extras: [] },
+        { portionLineNos: [], quantity: "300", extras: [] },
         await revisionOf(tabId),
         "cccccccc-0000-4000-8000-00000000000c",
       ),

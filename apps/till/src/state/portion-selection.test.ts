@@ -82,9 +82,8 @@ function rowsOf(
   lines: readonly TabLine[],
   paid: BillBalance | null = null,
   picks: Picks = new Set(),
-  recalled: ReadonlySet<string> = new Set(),
 ): PickRow[] {
-  return pickRows(pickGroups(lines, keyFor(lines, paid), paid, recalled), picks);
+  return pickRows(pickGroups(lines, keyFor(lines, paid), paid), picks);
 }
 
 /** `tidyPicks` over the rows drawn before and the re-read bill. */
@@ -93,9 +92,8 @@ function tidy(
   lines: readonly TabLine[],
   paid: BillBalance | null,
   picks: Picks,
-  recalled: ReadonlySet<string> = new Set(),
 ): Picks {
-  return tidyPicks(before, pickGroups(lines, keyFor(lines, paid), paid, recalled), picks);
+  return tidyPicks(before, pickGroups(lines, keyFor(lines, paid), paid), picks);
 }
 
 const ids = (row: PickRow) => row.members.map((member) => member.id);
@@ -243,14 +241,6 @@ describe("A803 selection:", () => {
     expect(sorted(toggleRow(rows[0]!, new Set()))).toEqual(["c"]);
   });
 
-  it("a Caña recalled into a draft is in no row: of 4 Cañas with the first recalled, the row reads 3 and count 2 picks the second and third", () => {
-    const [row, ...rest] = rowsOf(fourBeers(), null, new Set(), new Set(["c1"]));
-
-    expect(rest).toEqual([]);
-    expect(ids(row!)).toEqual(["c2", "c3", "c4"]);
-    expect(sorted(setCount(row!, 2, new Set()))).toEqual(["c2", "c3"]);
-  });
-
   it("an extra is in no row of its own, and its dish's row takes its price", () => {
     const burger = dish("b", 1, "Burger", "10.00");
     const cheese = line("x", 2, {
@@ -276,16 +266,6 @@ describe("A803 selection:", () => {
     const paid = balance("20.00", "5.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }]);
 
     const tidied = tidy(before, lines, paid, picks);
-
-    expect(sorted(tidied)).toEqual(["c2", "c3"]);
-  });
-
-  it("tidyPicks after a re-read in which a picked member was recalled drops it and keeps the row's count from its first remaining members", () => {
-    const lines = fourBeers();
-    const before = rowsOf(lines);
-    const picks = setCount(before[0]!, 2, new Set());
-
-    const tidied = tidy(before, lines, null, picks, new Set(["c1"]));
 
     expect(sorted(tidied)).toEqual(["c2", "c3"]);
   });

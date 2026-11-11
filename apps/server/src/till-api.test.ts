@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { venueMenus } from "./testing/venue-menus.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -3162,7 +3163,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const edited = await app.request(`/api/working-orders/${id}/lines/1`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ note: "para llevar", revision: 0 }),
+      body: JSON.stringify({ portionLineNos: [], note: "para llevar", revision: 0 }),
     });
 
     expect(edited.status).toBe(200);
@@ -4970,7 +4971,7 @@ describe("settling edit answers", () => {
   });
 
   it.each(["held", "line"] as const)(
-    "returns the invoice from a settling %s edit",
+    "returns the invoice from a settling %s change",
     async (kind) => {
       const venue = await provisionBillVenue(edits.db);
       const id = randomUUID();
@@ -4984,7 +4985,7 @@ describe("settling edit answers", () => {
                 catalogueId: catalogue.id,
                 categoryId: category.id,
                 name: "Fish",
-                pricingUnit: "weight",
+                pricingUnit: "each",
                 unitPrice: "30.00",
                 vatClass: "general",
               });
@@ -5024,19 +5025,14 @@ describe("settling edit answers", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, id));
       const [order] = await edits.db.select().from(workingOrders).where(eq(workingOrders.id, id));
-      const answer = await sendBillRequest(
-        venue.app,
-        venue.cookie,
-        "PUT",
-        `/api/working-orders/${id}${kind === "line" ? `/lines/${line!.lineNo}` : ""}`,
-        {
-          revision: order!.revision,
-          expectedEdit,
-          ...(kind === "line"
-            ? { quantity: "1" }
-            : { lines: [{ workingOrderLineId: line!.id, menuItemId, quantity: "1" }] }),
-        },
-      );
+      const answer =
+        kind === "line"
+          ? await cancelItemHttp(edits.db, venue.app, venue.cookie, id, line!.lineNo, "1")
+          : await sendBillRequest(venue.app, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+              revision: order!.revision,
+              expectedEdit,
+              lines: [{ workingOrderLineId: line!.id, menuItemId, quantity: "1" }],
+            });
       expect(answer.status, JSON.stringify(answer.json)).toBe(200);
       expect(answer.json).toMatchObject({
         revision: order!.revision + 1,

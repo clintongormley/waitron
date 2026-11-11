@@ -15,7 +15,6 @@ import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { addTabRound, updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { testTradingAdmission } from "./testing/trading-admission.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
@@ -131,7 +130,7 @@ async function raisedBurger(tx: Transaction, venue: Venue) {
   const [before] = await items(tx, venue.party.tabId);
   const printedBefore = await allSlips(tx, venue);
   vi.setSystemTime(new Date(LATER));
-  await edit(tx, venue, await lineNoOf(tx, before!.lineId), { quantity: "2" });
+  await edit(tx, venue, await lineNoOf(tx, before!.lineId), { portionLineNos: [], quantity: "2" });
   const after = await items(tx, venue.party.tabId);
   return {
     before: before!,
@@ -148,12 +147,15 @@ describe("A773 requested lifecycle: edit", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ release: "fire", lines: [line(venue, "burger")] }],
+      });
       const [before] = await items(tx, id);
       expect(before).toMatchObject({ requestedAt: AT, firedAt: AT });
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
       vi.setSystemTime(new Date(LATER));
-      await edit(tx, venue, 1, { note: "No salt" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       const after = await items(tx, id);
       expect(after).toHaveLength(1);
       expect(after[0]!.id).not.toBe(before!.id);
@@ -187,7 +189,7 @@ describe("A773 requested lifecycle: edit", () => {
       const grillBefore = (await slips(tx, venue.printers.grill)).length;
       const passBefore = (await slips(tx, venue.printers.pass)).length;
       vi.setSystemTime(new Date(LATER));
-      await edit(tx, venue, 1, { note: "No salt" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       const after = await items(tx, id);
       const burger = after.find((row) => row.productId === venue.products.burger)!;
       const chips = after.find((row) => row.productId === venue.products.chips)!;
@@ -220,11 +222,14 @@ describe("A773 requested lifecycle: edit", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.grill]);
-      await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ release: "fire", lines: [line(venue, "burger")] }],
+      });
       const [before] = await items(tx, id);
       expect(before).toMatchObject({ requestedAt: AT, firedAt: null });
       vi.setSystemTime(new Date(LATER));
-      await edit(tx, venue, 1, { note: "No salt" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       expect(await items(tx, id)).toEqual([
         { ...before, note: "No salt", requestedAt: AT, firedAt: null },
       ]);
@@ -338,7 +343,10 @@ describe("A773 requested lifecycle: edit", () => {
       expect(before).toMatchObject({ requestedAt: AT, firedAt: null });
       const grillBefore = (await slips(tx, venue.printers.grill)).length;
       vi.setSystemTime(new Date(LATER));
-      await edit(tx, venue, await lineNoOf(tx, before!.lineId), { quantity: "2" });
+      await edit(tx, venue, await lineNoOf(tx, before!.lineId), {
+        portionLineNos: [],
+        quantity: "2",
+      });
       const after = await items(tx, venue.party.tabId);
       expect(after.find((row) => row.id === before!.id)).toEqual(before);
       expect(after.filter((row) => row.id !== before!.id)).toEqual([
@@ -360,12 +368,16 @@ describe("A773 requested lifecycle: edit", () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ release: "fire", lines: [line(venue, "burger")] }],
+      });
       const [burgerBefore] = await items(tx, id);
       expect(burgerBefore).toMatchObject({ requestedAt: AT, firedAt: AT });
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
       vi.setSystemTime(new Date(LATER));
       await edit(tx, venue, 1, {
+        portionLineNos: [],
         extras: [
           {
             listId: venue.lists.burger,

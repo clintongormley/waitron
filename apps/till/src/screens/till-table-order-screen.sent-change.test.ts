@@ -231,24 +231,6 @@ it("offers no Change dish on a row of a presented bill, nor one whose line is no
   expect(await offeredFor({ lines: [line({ id: "l-other" })] })).toBe(false);
 });
 
-/** A draft that has recalled the Flan. */
-function recalled(): DraftStore {
-  const draft = new DraftStore();
-  draft.loadFrom("draft", [
-    {
-      product: flan,
-      quantity: "2",
-      place: { kind: "fire" },
-      source: { line: line(), extras: [], netAmount: "6.00" },
-    },
-  ]);
-  return draft;
-}
-
-it("offers no Change dish on a row someone has recalled", async () => {
-  expect(await offeredFor({ lines: [line()], draftStore: recalled() })).toBe(false);
-});
-
 it("offers no Change dish when the row's line is an extra", async () => {
   expect(await offeredFor({ lines: [line({ parentLineNo: 3 })] })).toBe(false);
 });
@@ -1033,14 +1015,6 @@ it.each<[string, Partial<TillTableOrderScreen>]>([
     "a payment for it lands",
     { billBalance: balance([{ lineId: "l-flan", lineNo: 1, paidQuantity: "1.000" }]) },
   ],
-  [
-    "another person recalls it",
-    {
-      otherDrafts: [
-        { id: "d-2", revision: 1, ownerName: "Ana", takenFromYou: false, lines: recalled().lines },
-      ],
-    },
-  ],
 ])(
   "drops a staged change when %s while the window is open, and opens fresh once it can change again",
   async (_, readOnly) => {
@@ -1068,25 +1042,6 @@ it.each<[string, Partial<TillTableOrderScreen>]>([
     expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
   },
 );
-
-it("drops a staged change when the waiter's own draft recalls the dish, and opens fresh once that draft is cleared", async () => {
-  const draft = new DraftStore();
-  const el = await openRow({ lines: [line()], draftStore: draft });
-  await setQuantity(el, "3");
-  expect(titleCount(el)).toBeNull();
-  draft.loadFrom(draft.id, [...recalled().lines]);
-  await el.updateComplete;
-  expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
-  expect(offered(el)).toBe(false);
-  expect(titleCount(el)).toBe("×2");
-  draft.clear();
-  await el.updateComplete;
-  expect(offered(el)).toBe(true);
-  await q<TillModifierPicker>(el, "till-modifier-picker")!.updateComplete;
-  await el.updateComplete;
-  expect(titleCount(el)).toBe("×2");
-  expect(q(el, "[data-sent-change]")!.hasAttribute("disabled")).toBe(true);
-});
 
 /** A live update in which another device changed the Flan: its bill line as `over` says, at revision 10. */
 async function changedElsewhere(el: TillTableOrderScreen, lines: TabLine[]) {

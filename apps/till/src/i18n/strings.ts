@@ -1206,8 +1206,6 @@ export const en = {
     "{dish} has already gone to the kitchen and can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_served_void":
     "{dish} has already been served and can no longer be changed. Use Void… to take it off the bill.",
-  "table.recall_line": "Recall",
-  "table.recall_n": "Recall {n}",
   "table.void_line": "Void…",
   "table.cancel_line": "Cancel",
   "table.cancel_started": "The kitchen has started this — cancel and bin it?",
@@ -3170,8 +3168,6 @@ export const es: Record<StringKey, string> = {
     "{dish} ya ha ido a cocina y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_served_void":
     "{dish} ya se ha servido y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
-  "table.recall_line": "Retirar",
-  "table.recall_n": "Retirar {n}",
   "table.void_line": "Cancelar…",
   "table.cancel_line": "Cancelar",
   "table.cancel_started": "La cocina ya lo ha empezado — ¿cancelar y tirarlo?",

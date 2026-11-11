@@ -567,7 +567,6 @@ export interface CurrentOrderKitchen {
   stationId: string | null;
   movable: boolean;
   phase: KitchenPhase;
-  /** Null while the item is held, or since it was recalled. */
   requestedAt: string | null;
 }
 
@@ -713,52 +712,12 @@ export interface FreshDraftLine {
   unavailable: boolean;
 }
 
-export interface RecalledDraftLine {
-  id: string;
-  sourceLineId: string;
-  source: { line: TabLine; extras: TabLine[]; netAmount: string };
-  quantity: string;
-  note: string | null;
-  courseId: string | null;
-  course?: TillCourse;
-  makeAt: string | null;
-  noMerge: true;
-  slot: number;
-  joinGroupId: string | null;
-  afterGroupId: string | null;
-  unavailable: false;
-  menuItemId?: never;
-  variantId?: never;
-  menuVersionId?: never;
-  options?: never;
-  extras?: never;
-}
-
-export type DraftLine = FreshDraftLine | RecalledDraftLine;
+export type DraftLine = FreshDraftLine;
 export type FreshDraftLineInput = Omit<
   FreshDraftLine,
   "id" | "unavailable" | "course" | "source" | "sourceLineId"
 > & { id?: string; sourceLineId?: null };
-export type RecalledDraftLineInput = Pick<
-  RecalledDraftLine,
-  | "id"
-  | "sourceLineId"
-  | "quantity"
-  | "note"
-  | "courseId"
-  | "makeAt"
-  | "slot"
-  | "joinGroupId"
-  | "afterGroupId"
-> & {
-  options?: OptionSelection[];
-  extras?: ExtraSelection[];
-  menuItemId?: never;
-  variantId?: never;
-  menuVersionId?: never;
-  noMerge?: true;
-};
-export type DraftLineInput = FreshDraftLineInput | RecalledDraftLineInput;
+export type DraftLineInput = FreshDraftLineInput;
 
 export interface DeadEndAnswer {
   sends: boolean;
@@ -924,7 +883,6 @@ export type AdjustmentApproval =
  * taken only whole. */
 export interface AdjustmentAsk {
   expectedEdit: BillEditExpected | null;
-  sourceDraftId?: string;
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
   lineId: string | null;
@@ -2344,9 +2302,9 @@ export interface OrderLinePatch {
   options?: OptionSelection[];
   extras?: ExtraSelection[];
   makeAt?: string | null;
-  /** The other line numbers of the same Sent row, changed in the same save. With it, `quantity` is
-   * the row's total, a whole number no lower than it is now; a weighed dish leaves `quantity` out. */
-  portionLineNos?: number[];
+  /** The other line numbers of the same Sent row, changed in the same save. `quantity` is the
+   * row's total, a whole number no lower than it is now; a weighed dish leaves `quantity` out. */
+  portionLineNos: number[];
 }
 
 /** `GET /api/working-orders/:id/lines` — an open tab's lines and the revision they were read at. */
@@ -2409,7 +2367,7 @@ export interface TabLine {
   courseId: string | null;
   course?: TillCourse;
   /** When the line was first released: fired, or for a no-preparation line, when it would have
-   * fired; null if it never was. A recall clears `firedAt` and keeps this. */
+   * fired; null if it never was. */
   sentAt: string | null;
   /** When the line's kitchen ticket item FIRED, or null while its course is still HELD or it has no
    * ticket item. A following extra has none; a split-off extra has its own. */
@@ -3343,8 +3301,8 @@ export class TillApi {
 
   /**
    * Edit ONE dish line of an open order → `PUT /api/working-orders/:orderId/lines/:lineNo`, from the
-   * copy read at `revision`. An absent field keeps the line's own; with `portionLineNos` the change
-   * goes to every dish of the line's Sent row. Resolves the revision the order is at after the edit,
+   * copy read at `revision`. An absent optional field keeps the line's own; the change goes to
+   * every dish of the observed Sent row. Resolves the revision the order is at after the edit,
    * and its party's.
    */
   updateOrderLine(
@@ -4419,17 +4377,6 @@ export class TillApi {
     );
   }
 
-  async recallLines(
-    orderId: string,
-    lineNos: number[],
-    expectedEdit: BillEditExpected | null,
-  ): Promise<void> {
-    await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", {
-      lineNos,
-      expectedEdit,
-    });
-  }
-
   /** With `lineIds`, the read covers every portion of the row the till shows as one. */
   getCancellation(
     target: string | { billId: string },
@@ -4456,20 +4403,6 @@ export class TillApi {
   ): Promise<CancelItemAnswer & { invoice?: TillSaleResult }> {
     return this.#request(
       `/api/${typeof target === "string" ? `parties/${target}` : `working-orders/${target.billId}`}/lines/${lineId}/cancel-item`,
-      "POST",
-      command,
-      options.signal,
-    );
-  }
-
-  recallToDraft(
-    partyId: string,
-    lineId: string,
-    command: GroupCommand & { expectedEdit: BillEditExpected },
-    options: ReadOptions = {},
-  ): Promise<{ revision: number; draft: Draft; edit: BillEditState }> {
-    return this.#request(
-      `/api/parties/${partyId}/lines/${lineId}/recall`,
       "POST",
       command,
       options.signal,

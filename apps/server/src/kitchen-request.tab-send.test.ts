@@ -8,7 +8,7 @@ import { setStationToday, ticketItemAllergies } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { addTabRound, recallLines, sendLines } from "./testing/order-writer-fixture.js";
+import { addTabRound, sendLines } from "./testing/order-writer-fixture.js";
 import { createCourse } from "./kitchen.js";
 import { readAllergySendView } from "./party-allergy.js";
 import "./errors.js";
@@ -259,30 +259,6 @@ describe("A773 waiter request: tab send", () => {
       });
       expect(await sentOf(drink!.id)).toBe(LATER);
       expect(await jobCounts(tx, venue)).toEqual(before);
-    });
-  });
-
-  it("sends a recalled dish again when nothing waits", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
-    const venue = await setupSplitExtrasVenue();
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, venue.party.tabId, [burger(venue)]);
-      const [line] = await lines(tx, venue.party.tabId);
-      await recallLines(tx, venue.cfg, venue.party.tabId, [line!.lineNo]);
-      const grillBefore = (await jobsAt(tx, venue.printers.grill)).length;
-      vi.setSystemTime(new Date(LATER));
-      await sendLines(tx, venue.cfg, venue.party.tabId, [line!.lineNo]);
-      expect(await items(tx, venue.party.tabId)).toEqual([
-        expect.objectContaining({
-          stationId: venue.stations.grill,
-          requestedAt: LATER,
-          firedAt: LATER,
-          passControlled: false,
-        }),
-      ]);
-      const grill = (await jobsAt(tx, venue.printers.grill)).slice(grillBefore);
-      expect(grill).toHaveLength(1);
-      expect(grill[0]).toContain("x BURG");
     });
   });
 });

@@ -1,3 +1,4 @@
+import { cancelItemHttp, cancelItemRequest } from "./testing/cancel-line.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
@@ -93,7 +94,6 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { cancelBody } from "./testing/cancel-line.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { todayLine, todayLineNos } from "./testing/adjustment-venue.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
@@ -1269,11 +1269,7 @@ describe("an item already paid for (design §8 test 5)", () => {
   it("refuses voiding the steak", async () => {
     const billId = await steakPaid();
 
-    const refused = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
-    );
+    const refused = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 2 } });
@@ -1285,6 +1281,7 @@ describe("an item already paid for (design §8 test 5)", () => {
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);
 
     const refused = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
+      portionLineNos: [],
       revision: lines.json.revision,
       note: "rare",
     });
@@ -1310,6 +1307,7 @@ describe("an item already paid for (design §8 test 5)", () => {
     const billId = await tabWith("Paella", "Beer");
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);
     const raised = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
+      portionLineNos: [],
       revision: lines.json.revision,
       quantity: "4",
     });
@@ -1331,14 +1329,24 @@ describe("an item already paid for (design §8 test 5)", () => {
         ? [{ lineNo: 2, quantity: "2" }]
         : beers.slice(-2).map((lineNo) => ({ lineNo })),
     );
-    const cutTooFar = await request("POST", `/api/working-orders/${billId}/adjustments`, {
-      ...(await cancelBody(suite.db, billId, 2, "2")),
-      ...(await todayLine(suite, billId, 2)),
-    });
-    const cut = await request("POST", `/api/working-orders/${billId}/adjustments`, {
-      ...(await cancelBody(suite.db, billId, 2, "1")),
-      ...(await todayLine(suite, billId, 2)),
-    });
+    const cutTooFar = await cancelItemHttp(
+      suite.db,
+      venue.app,
+      venue.cookie,
+      billId,
+      2,
+      "2",
+      await todayLine(suite, billId, 2),
+    );
+    const cut = await cancelItemHttp(
+      suite.db,
+      venue.app,
+      venue.cookie,
+      billId,
+      2,
+      "1",
+      await todayLine(suite, billId, 2),
+    );
 
     expect(moved.status).toBe(200);
     expect(cutTooFar.status).toBe(409);
@@ -3183,11 +3191,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const voided = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
-    );
+    const voided = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
 
     expect(voided.status).toBe(200);
     expect(await statusOf(billId)).toBe("settled");
@@ -3208,7 +3212,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       payments: suite.db.all(sql`select * from bill_payments where working_order_id = ${billId}`),
       adjustments: suite.db.all(sql`select * from adjustments where working_order_id = ${billId}`),
     });
-    const body = await cancelBody(suite.db, billId, 2);
+    const { path, body } = await cancelItemRequest(suite.db, billId, 2);
     const before = snapshot();
     expect(before.lines.map((line) => (line as { sent_at: unknown }).sent_at)).toEqual([
       null,
@@ -3217,7 +3221,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     suite.db.run(sql`update products set available = 0 where id = ${steakId}`);
     try {
-      const refused = await request("POST", `/api/working-orders/${billId}/adjustments`, body);
+      const refused = await request("POST", path, body);
 
       expect(refused.status).toBe(409);
       expect(refused.json).toMatchObject({
@@ -3251,6 +3255,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
 
   async function raiseLine(billId: string, lineNo: number, quantity: string): Promise<void> {
     const raised = await request("PUT", `/api/working-orders/${billId}/lines/${lineNo}`, {
+      portionLineNos: [],
       revision: await revisionOf(billId),
       quantity,
     });
@@ -3265,11 +3270,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const voided = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
-    );
+    const voided = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
 
     expect(voided.status).toBe(200);
     await expectInvoicedOnDevice(billId, 2500);
@@ -3285,15 +3286,12 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     await expectInvoicedOnDevice(billId, 2500);
   });
 
-  it("issues the invoice when a line edit leaves the bill exactly paid", async () => {
+  it("issues the invoice when a partial Cancel item leaves the bill exactly paid", async () => {
     const billId = await groupedTabWith("Steak", "Beer");
     await raiseLine(billId, 2, "2");
     expect((await contribute(billId, "28.00")).status).toBe(200);
 
-    const edited = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
-      revision: await revisionOf(billId),
-      quantity: "1",
-    });
+    const edited = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2, "1");
 
     expect(edited.status).toBe(200);
     await expectInvoicedOnDevice(billId, 2800);
@@ -3318,13 +3316,15 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     await expectInvoicedOnDevice(billId, 2500);
   });
 
-  async function savedF1WithReceivedMoney(route: "void" | "split" | "line edit" | "held edit") {
+  async function savedF1WithReceivedMoney(
+    route: "void" | "split" | "partial cancel" | "held edit",
+  ) {
     const billId =
-      route === "line edit"
+      route === "partial cancel"
         ? await groupedTabWith("Steak", "Beer")
         : await tabWith("Steak", "Cake");
-    if (route === "line edit") await raiseLine(billId, 2, "2");
-    const amount = route === "line edit" ? 2800 : 2500;
+    if (route === "partial cancel") await raiseLine(billId, 2, "2");
+    const amount = route === "partial cancel" ? 2800 : 2500;
     const choice = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
       revision: await revisionOf(billId),
       invoiceType: "F1",
@@ -3342,21 +3342,14 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
 
   async function reduceToReceivedMoney(
     billId: string,
-    route: "void" | "split" | "line edit" | "held edit",
+    route: "void" | "split" | "partial cancel" | "held edit",
   ) {
     if (route === "void") {
-      return request(
-        "POST",
-        `/api/working-orders/${billId}/adjustments`,
-        await cancelBody(suite.db, billId, 2),
-      );
+      return cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
     }
     if (route === "split") return splitOff(billId, [{ lineNo: 2 }]);
-    if (route === "line edit") {
-      return request("PUT", `/api/working-orders/${billId}/lines/2`, {
-        revision: await revisionOf(billId),
-        quantity: "1",
-      });
+    if (route === "partial cancel") {
+      return cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2, "1");
     }
     const [steak] = await inTx((tx) =>
       tx
@@ -3370,7 +3363,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     });
   }
 
-  it.each(["void", "split", "line edit", "held edit"] as const)(
+  it.each(["void", "split", "partial cancel", "held edit"] as const)(
     "files saved F1 received money once when a %s leaves the bill exactly paid",
     async (route) => {
       const { billId, paymentId, amount } = await savedF1WithReceivedMoney(route);
@@ -3419,7 +3412,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       expect(replay.status).toBe(200);
       expect(replay.json).toMatchObject({
         invoiceType: "F1",
-        total: route === "line edit" ? "28.00" : "25.00",
+        total: route === "partial cancel" ? "28.00" : "25.00",
         recipient: { taxId: "B12345674", legalName: "Cliente SL" },
       });
       expect(fiscalRecordCount(billId)).toBe(1);
@@ -3428,7 +3421,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     },
   );
 
-  it.each(["void", "split", "line edit", "held edit"] as const)(
+  it.each(["void", "split", "partial cancel", "held edit"] as const)(
     "rolls back a %s completing received F1 money when the saved recipient is invalid",
     async (route) => {
       const { billId } = await savedF1WithReceivedMoney(route);
@@ -3469,10 +3462,15 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect((await contribute(billId, "42.00")).status).toBe(200);
     const before = await lineTotals(billId);
 
-    const refused = await request("POST", `/api/working-orders/${billId}/adjustments`, {
-      ...(await cancelBody(suite.db, billId, 2, "1")),
-      ...(await todayLine(suite, billId, 2)),
-    });
+    const refused = await cancelItemHttp(
+      suite.db,
+      venue.app,
+      venue.cookie,
+      billId,
+      2,
+      "1",
+      await todayLine(suite, billId, 2),
+    );
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
@@ -3487,18 +3485,13 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
 
   it("requires device proof to void a line of a bill with no payments", async () => {
     const billId = await tabWith("Steak", "Cake");
-    const body = await cancelBody(suite.db, billId, 2);
-    const refused = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      body,
-      venue.sessionCookie,
-    );
+    const { path, body } = await cancelItemRequest(suite.db, billId, 2);
+    const refused = await request("POST", path, body, venue.sessionCookie);
     expect(refused.status).toBe(401);
     expect(refused.json).toMatchObject({ code: "device.unauthorized" });
     expect(await lineTotals(billId)).toEqual(["25.00", "18.00"]);
 
-    const voided = await request("POST", `/api/working-orders/${billId}/adjustments`, body);
+    const voided = await request("POST", path, body);
     expect(voided.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["25.00"]);
   });
@@ -3507,11 +3500,12 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const billId = await tabWith("Steak", "Cake");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const refused = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
+    const refused = await cancelItemHttp(
+      suite.db,
+      venue.app,
       await revokedDeviceSessionCookie(suite.db, venue.staffId, "5555"),
+      billId,
+      2,
     );
 
     expect(refused.status).toBe(401);
@@ -4218,11 +4212,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       (await refund(billId, paymentId, { appliedAmount: "25.00", tipAmount: "0.00" })).status,
     ).toBe(200);
 
-    const voided = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
-    );
+    const voided = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
 
     expect(voided.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["35.00"]);
@@ -4802,11 +4792,7 @@ describe("refund first (design §4.3, §6a)", () => {
   it("refuses a €20.00 void by the €10.00 excess; after a €10.00 refund the void issues the €40.00 invoice with no tip (design §8 test 11)", async () => {
     const { billId, paymentId } = await sixtyHoldingFifty();
 
-    const refused = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
-    );
+    const refused = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
       code: "bill.received_exceeds_total",
@@ -4819,11 +4805,7 @@ describe("refund first (design §4.3, §6a)", () => {
       (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
     ).toBe(200);
     const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
-    const voided = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2),
-    );
+    const voided = await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2);
 
     expect(voided.status).toBe(200);
     expect(await statusOf(billId)).toBe("settled");
@@ -4880,15 +4862,7 @@ describe("the ticket after a refund", () => {
     );
     const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
 
-    expect(
-      (
-        await request(
-          "POST",
-          `/api/working-orders/${billId}/adjustments`,
-          await cancelBody(suite.db, billId, 2),
-        )
-      ).status,
-    ).toBe(200);
+    expect((await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2)).status).toBe(200);
 
     await printSaleReceipt(
       { db: suite.db, backend },
@@ -5125,15 +5099,7 @@ describe("an item payment whose line has gone", () => {
     expect(
       (await refund(billId, paymentId, { appliedAmount: "3.00", tipAmount: "0.00" })).status,
     ).toBe(200);
-    expect(
-      (
-        await request(
-          "POST",
-          `/api/working-orders/${billId}/adjustments`,
-          await cancelBody(suite.db, billId, 2),
-        )
-      ).status,
-    ).toBe(200);
+    expect((await cancelItemHttp(suite.db, venue.app, venue.cookie, billId, 2)).status).toBe(200);
 
     const { json } = await balance(billId);
 

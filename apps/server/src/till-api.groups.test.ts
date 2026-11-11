@@ -1,3 +1,4 @@
+import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
@@ -33,7 +34,6 @@ import { AppError, PERSON_HEADER } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPaidQuantities } from "./bill-payments.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
-import { cancelBody } from "./testing/cancel-line.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
 // status each refusal maps to, and the answer's shape. What the commands do is pinned in
@@ -1027,11 +1027,7 @@ describe("the line-editing routes act as the session's operator", () => {
     )!.lineNo;
     const revision = await revisionOf(party.partyId);
 
-    const voided = await call(
-      "POST",
-      `/api/working-orders/${party.tabId}/adjustments`,
-      await cancelBody(venue.db, party.tabId, lineNo),
-    );
+    const voided = await cancelItemHttp(venue.db, venue.app, venue.cookie, party.tabId, lineNo);
 
     expect(voided.status).toBe(200);
     expect(await eventsOfGroup(party.croquettes.id)).toEqual([
@@ -1050,6 +1046,7 @@ describe("the line-editing routes act as the session's operator", () => {
       "PUT",
       `/api/working-orders/${party.tabId}/lines/${beerLine.lineNo}`,
       {
+        portionLineNos: [],
         quantity: "2",
         revision: tab.revision,
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),

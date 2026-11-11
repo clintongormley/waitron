@@ -168,7 +168,7 @@ describe("A773 pass fields", () => {
         venue.cfg,
         venue.party.tabId,
         burger.lineNo,
-        { note: "No salt" },
+        { portionLineNos: [], note: "No salt" },
         order!.revision,
         OPERATOR,
       );

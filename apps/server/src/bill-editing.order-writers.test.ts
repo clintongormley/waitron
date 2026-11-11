@@ -1,26 +1,15 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
 import { saveDraft, type BillEditExpected, type BillEditState } from "./order-drafts.js";
-import { recallToDraft } from "./draft-recall.js";
 import { readDrafts } from "./order-drafts.js";
-import { partyRevisionOfOrder } from "./parties.js";
-import {
-  sendLines,
-  recallLines,
-  setLineCourse,
-  updateHeldOrder,
-  updateOrderLine,
-} from "./working-order.js";
-import { fireAll } from "./testing/serve-line.js";
+import { sendLines, setLineCourse, updateHeldOrder, updateOrderLine } from "./working-order.js";
 import { inTx, provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;
@@ -92,7 +81,7 @@ const foreign = (e: BillEditState) => ({
   ownerName: e.editorName,
   edit: e,
 });
-const operations = ["line", "whole", "course", "send", "recall"] as const;
+const operations = ["line", "whole", "course", "send"] as const;
 type Operation = (typeof operations)[number];
 async function run(
   p: Fixture,
@@ -123,7 +112,7 @@ async function run(
           venue.cfg,
           p.id,
           p.line.lineNo,
-          { note: "changed" },
+          { portionLineNos: [], note: "changed" },
           p.revision,
           { ...authority, admission: testTradingAdmission() },
         );
@@ -131,8 +120,6 @@ async function run(
         return setLineCourse(tx, venue.cfg, p.id, p.line.lineNo, null, authority);
       case "send":
         return sendLines(tx, venue.cfg, p.id, [], authority);
-      case "recall":
-        return recallLines(tx, venue.cfg, p.id, [p.line.lineNo], authority);
     }
   });
 }
@@ -190,24 +177,6 @@ for (const op of operations)
         note: op === "line" || op === "whole" ? "changed" : null,
       });
     });
-    it("refuses a reserved recalled family even for its current editor", async () => {
-      const p = await fixture();
-      await inTx(venue, async (tx) => {
-        await setChangesAfterSending(tx, "held-or-waiting");
-        await fireAll(tx, venue.cfg, p.id);
-        const party = await partyRevisionOfOrder(tx, p.id);
-        await recallToDraft(tx, venue.cfg, p.partyId, p.line.id, {
-          operatorId: venue.operatorId,
-          expectedEdit: await readBillEditState(tx, p.id),
-          expectedPartyRevision: party!.revision,
-          submissionId: randomUUID(),
-        });
-      });
-      const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.id));
-      p.revision = order!.revision;
-      const current = await edit(p.id);
-      await refused(() => run(p, op, current), "draft.out_of_date", stale(current));
-    });
   });
 
 const httpPath = (p: Fixture, op: Operation | "make-at") =>
@@ -233,7 +202,7 @@ function httpBody(
           ],
         }
       : op === "line"
-        ? { note: "changed" }
+        ? { note: "changed", portionLineNos: [] }
         : op === "course"
           ? { courseId: null }
           : op === "make-at"
@@ -252,7 +221,7 @@ for (const op of [...operations, "make-at"] as const)
         const answer = await send(
           venue.app,
           venue.cookie,
-          op === "course" ? "PATCH" : op === "send" || op === "recall" ? "POST" : "PUT",
+          op === "course" ? "PATCH" : op === "send" ? "POST" : "PUT",
           httpPath(p, op),
           httpBody(p, op, kind === "absent" ? undefined : owned.edit),
         );
@@ -278,7 +247,7 @@ for (const op of [...operations, "make-at"] as const)
       const answer = await send(
         venue.app,
         venue.cookie,
-        op === "course" ? "PATCH" : op === "send" || op === "recall" ? "POST" : "PUT",
+        op === "course" ? "PATCH" : op === "send" ? "POST" : "PUT",
         httpPath(p, op),
         httpBody(p, op, owned.edit),
       );
@@ -303,7 +272,7 @@ for (const op of [...operations, "make-at"] as const)
       const answer = await send(
         venue.app,
         venue.cookie,
-        op === "course" ? "PATCH" : op === "send" || op === "recall" ? "POST" : "PUT",
+        op === "course" ? "PATCH" : op === "send" ? "POST" : "PUT",
         httpPath(p, op),
         httpBody(p, op, old),
       );
@@ -312,38 +281,3 @@ for (const op of [...operations, "make-at"] as const)
       expect(await frozen(true)).toEqual(before);
     });
   });
-
-describe("make-at protects recalled source families", () => {
-  it.each(["parent", "extra"] as const)(
-    "refuses the reserved %s with current draft facts",
-    async (kind) => {
-      const p = await fixture();
-      const extraId = randomUUID();
-      await inTx(venue, async (tx) => {
-        await tx
-          .insert(workingOrderLines)
-          .values({ ...p.line, id: extraId, lineNo: 2, parentLineId: p.line.id });
-        await setChangesAfterSending(tx, "held-or-waiting");
-        await fireAll(tx, venue.cfg, p.id);
-        const party = await partyRevisionOfOrder(tx, p.id);
-        await recallToDraft(tx, venue.cfg, p.partyId, p.line.id, {
-          operatorId: venue.operatorId,
-          expectedEdit: await readBillEditState(tx, p.id),
-          expectedPartyRevision: party!.revision,
-          submissionId: randomUUID(),
-        });
-      });
-      const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, p.id));
-      const current = await edit(p.id),
-        before = await frozen(true);
-      const answer = await send(venue.app, venue.cookie, "PUT", httpPath(p, "make-at"), {
-        revision: order!.revision,
-        expectedEdit: current,
-        lines: { [kind === "parent" ? p.line.id : extraId]: null },
-      });
-      expect(answer.status).toBe(409);
-      expect(answer.json).toMatchObject({ code: "draft.out_of_date", params: stale(current) });
-      expect(await frozen(true)).toEqual(before);
-    },
-  );
-});

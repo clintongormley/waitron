@@ -2,7 +2,6 @@ import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
-  recallLines,
   sendLines,
   setLineCourse,
   updateHeldOrder,
@@ -138,7 +137,7 @@ describe("editing split-off extras", () => {
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
       const old = (await state(tx, id)).items;
-      await edit(tx, venue, 1, { note: "No salt" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       const current = await state(tx, id);
       expect(current.items.map((item) => item.id)).not.toContain(
         old.find((item) => item.stationId === venue.stations.fryer)!.id,
@@ -157,7 +156,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
-      await edit(tx, venue, 1, { note: "No salt", extras: [] });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt", extras: [] });
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,
       ]);
@@ -172,7 +171,10 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
-      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1).extras });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: line(venue, "burger", "1", 1).extras,
+      });
       expect((await state(tx, id)).items.map((item) => item.stationId).sort()).toEqual(
         [venue.stations.fryer, venue.stations.grill].sort(),
       );
@@ -185,7 +187,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "2", 2)]);
-      await edit(tx, venue, 1, { quantity: "1" });
+      await cancelItemForTest(tx, venue.cfg, id, 1, "1", OPERATOR);
       expect(
         (await state(tx, id)).items.find((item) => item.stationId === venue.stations.fryer)
           ?.quantity,
@@ -203,7 +205,10 @@ describe("editing split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger")], release: "hold" }],
       });
-      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1).extras });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: line(venue, "burger", "1", 1).extras,
+      });
       const chips = (await state(tx, venue.party.tabId)).items.find(
         (item) => item.stationId === venue.stations.fryer,
       );
@@ -222,7 +227,10 @@ describe("editing split-off extras", () => {
         groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
       });
       expect(await slips(tx, venue.printers.grill)).toHaveLength(1);
-      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1, 1).extras });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: line(venue, "burger", "1", 1, 1).extras,
+      });
       const rings = (await state(tx, venue.party.tabId)).lines.find(
         (row) => row.productId === venue.products.onionRings,
       )!;
@@ -264,7 +272,10 @@ describe("editing split-off extras", () => {
           stationId: venue.stations.fryer,
         },
       );
-      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1, 1).extras });
+      await edit(tx, venue, 1, {
+        portionLineNos: [],
+        extras: line(venue, "burger", "1", 1, 1).extras,
+      });
       const chipsLine = (await state(tx, venue.party.tabId)).lines.find(
         (row) => row.productId === venue.products.chips,
       )!;
@@ -281,21 +292,16 @@ describe("editing split-off extras", () => {
     });
   });
 
-  it.each(["send", "recall", "course"] as const)(
+  it.each(["send", "course"] as const)(
     "refuses %s on an extra line number without changing the order",
     async (action) => {
       const venue = await setupSplitExtrasVenue();
       await withTransaction(db, async (tx) => {
-        if (action === "recall") {
-          await addTabRound(tx, venue.cfg, venue.party.tabId, [line(venue, "burger", "1", 1)]);
-        } else {
-          await placeGroups(tx, venue.cfg, venue.party.partyId, {
-            operatorId: OPERATOR,
-            groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
-          });
-        }
+        await addTabRound(tx, venue.cfg, venue.party.tabId, [
+          { ...line(venue, "burger", "1", 1), hold: true },
+        ]);
         const extraNo = (await state(tx, venue.party.tabId)).lines.find(
-          (row) => row.productId === venue.products.chips,
+          (row) => row.parentLineId !== null,
         )!.lineNo;
         const before = await state(tx, venue.party.tabId);
         const beforeRevision = await revision(tx, venue.party.tabId);
@@ -303,9 +309,7 @@ describe("editing split-off extras", () => {
         const request =
           action === "send"
             ? sendLines(tx, venue.cfg, venue.party.tabId, [extraNo])
-            : action === "recall"
-              ? recallLines(tx, venue.cfg, venue.party.tabId, [extraNo])
-              : setLineCourse(tx, venue.cfg, venue.party.tabId, extraNo, null);
+            : setLineCourse(tx, venue.cfg, venue.party.tabId, extraNo, null);
         await expect(request).rejects.toMatchObject({
           code: "management.request_invalid",
           params: { field: "lineNo" },
@@ -330,7 +334,7 @@ describe("editing split-off extras", () => {
         "hold",
         OPERATOR,
       );
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       expect(
         (await state(tx, venue.party.tabId)).items.find(
           (item) => item.stationId === venue.stations.fryer,
@@ -361,7 +365,7 @@ describe("editing split-off extras", () => {
         },
       ];
       await placeGrouped(tx, venue.cfg, venue.party, placed, "hold", OPERATOR);
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       const items = (await state(tx, venue.party.tabId)).items;
       expect(items.find((item) => item.stationId === venue.stations.fryer)?.quantity).toBe(2000);
       expect(items).toHaveLength(2);
@@ -376,7 +380,7 @@ describe("editing split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 2)], release: "hold" }],
       });
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       const { lines, items } = await state(tx, venue.party.tabId);
       const dishes = lines.filter((row) => row.parentLineId === null);
       expect(dishes.map((row) => row.quantity)).toEqual([1000, 1000]);
@@ -415,7 +419,7 @@ describe("editing split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [burger], release: "hold" }],
       });
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       const items = (await state(tx, venue.party.tabId)).items;
       expect(
         items
@@ -435,7 +439,7 @@ describe("editing split-off extras", () => {
         groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
       });
       const before = (await slips(tx, venue.printers.fryer)).length;
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       const { lines, items } = await state(tx, venue.party.tabId);
       expect(lines.filter((row) => row.parentLineId === null).map((row) => row.quantity)).toEqual([
         1000, 1000,
@@ -460,7 +464,9 @@ describe("editing split-off extras", () => {
         (item) => item.stationId === venue.stations.fryer,
       )!;
       await tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, chips.id));
-      await expect(edit(tx, venue, 1, { note: "No salt" })).rejects.toMatchObject({
+      await expect(
+        edit(tx, venue, 1, { portionLineNos: [], note: "No salt" }),
+      ).rejects.toMatchObject({
         code: "ticket.already_started",
         params: { ticketItemId: chips.id },
       });
@@ -479,7 +485,7 @@ describe("editing split-off extras", () => {
       const sent = (await state(tx, id)).items;
       const chips = sent.find((item) => item.stationId === venue.stations.fryer)!;
       await tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, chips.id));
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       const { items } = await state(tx, id);
       expect(items.find((item) => item.id === chips.id)).toMatchObject({
         state: "preparing",
@@ -499,7 +505,7 @@ describe("editing split-off extras", () => {
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
       await setStationToday(tx, venue.stations.fryer, "closed", new Date(), venue.stations.grill);
-      await edit(tx, venue, 1, { note: "No salt" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,
       ]);
@@ -513,7 +519,7 @@ describe("editing split-off extras", () => {
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "water", "1", 2)]);
       const old = (await state(tx, id)).items[0]!;
-      await edit(tx, venue, 1, { note: "Cold" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "Cold" });
       const items = (await state(tx, id)).items;
       expect(items).toHaveLength(1);
       expect(items[0]!.id).not.toBe(old.id);
@@ -527,7 +533,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "water", "2", 1)]);
-      await edit(tx, venue, 1, { quantity: "1" });
+      await cancelItemForTest(tx, venue.cfg, id, 1, "1", OPERATOR);
       expect((await state(tx, id)).items[0]?.quantity).toBe(1000);
       expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("VOID");
       expect(await slips(tx, venue.printers.grill)).toEqual([]);
@@ -612,7 +618,7 @@ describe("editing split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "burger", "1", 1)], release: "hold" }],
       });
-      await edit(tx, venue, 1, { extras: [] });
+      await edit(tx, venue, 1, { portionLineNos: [], extras: [] });
       expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("HOLD CANCELLED");
       expect((await state(tx, id)).items.map((item) => item.stationId)).toEqual([
         venue.stations.grill,
@@ -635,7 +641,7 @@ describe("editing split-off extras", () => {
         OPERATOR,
       );
       const before = (await slips(tx, venue.printers.fryer)).length;
-      await edit(tx, venue, 1, { quantity: "2" });
+      await edit(tx, venue, 1, { portionLineNos: [], quantity: "2" });
       const items = (await state(tx, id)).items;
       expect(items).toHaveLength(1);
       expect(items[0]!.quantity).toBe(4000);
@@ -656,7 +662,7 @@ describe("editing split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "water")], release: "hold" }],
       });
-      await edit(tx, venue, 1, { extras: line(venue, "water", "1", 1).extras });
+      await edit(tx, venue, 1, { portionLineNos: [], extras: line(venue, "water", "1", 1).extras });
       expect((await state(tx, id)).items).toEqual([]);
       await fireGroup(tx, venue.cfg, venue.party.partyId, placed.groups[0]!.id, {
         operatorId: OPERATOR,
@@ -705,7 +711,7 @@ describe("editing split-off extras", () => {
         groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
       });
       const before = (await slips(tx, venue.printers.fryer)).length;
-      await edit(tx, venue, 1, { note: "Cold" });
+      await edit(tx, venue, 1, { portionLineNos: [], note: "Cold" });
       const after = await slips(tx, venue.printers.fryer);
       expect(after).toHaveLength(before + 2);
       expect(after.at(-2)).toContain("-2");
@@ -719,7 +725,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "water")]);
-      await edit(tx, venue, 1, { extras: line(venue, "water", "1", 1).extras });
+      await edit(tx, venue, 1, { portionLineNos: [], extras: line(venue, "water", "1", 1).extras });
       const items = (await state(tx, id)).items;
       expect(items).toHaveLength(1);
       expect(items[0]!.stationId).toBe(venue.stations.fryer);
@@ -736,42 +742,11 @@ describe("editing split-off extras", () => {
         operatorId: OPERATOR,
         groups: [{ lines: [line(venue, "water")], release: "fire" }],
       });
-      await edit(tx, venue, 1, { extras: line(venue, "water", "1", 1).extras });
+      await edit(tx, venue, 1, { portionLineNos: [], extras: line(venue, "water", "1", 1).extras });
       const items = (await state(tx, id)).items;
       expect(items).toHaveLength(1);
       expect(items[0]!.firedAt).not.toBeNull();
       expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("CHIPS");
-    });
-  });
-
-  it("keeps a recalled water's newly added onion rings held", async () => {
-    const venue = await setupSplitExtrasVenue();
-    const id = venue.party.tabId;
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, id, [line(venue, "water", "1", 1)]);
-      await recallLines(tx, venue.cfg, id, [1]);
-      const before = (await slips(tx, venue.printers.fryer)).length;
-      await edit(tx, venue, 1, { extras: line(venue, "water", "1", 1, 1).extras });
-      const rows = await state(tx, id);
-      const rings = rows.lines.find((row) => row.productId === venue.products.onionRings)!;
-      expect(rows.items.find((item) => item.lineId === rings.id)?.firedAt).toBeNull();
-      expect(rows.items.find((item) => item.lineId !== rings.id)?.firedAt).toBeNull();
-      expect((await slips(tx, venue.printers.fryer)).length).toBe(before);
-    });
-  });
-
-  it("keeps chips added to a recalled burger held with its dish record", async () => {
-    const venue = await setupSplitExtrasVenue();
-    const id = venue.party.tabId;
-    await withTransaction(db, async (tx) => {
-      await addTabRound(tx, venue.cfg, id, [line(venue, "burger")]);
-      await recallLines(tx, venue.cfg, id, [1]);
-      const before = (await slips(tx, venue.printers.fryer)).length;
-      await edit(tx, venue, 1, { extras: line(venue, "burger", "1", 1).extras });
-      const items = (await state(tx, id)).items;
-      expect(items).toHaveLength(2);
-      expect(items.every((item) => item.firedAt === null)).toBe(true);
-      expect((await slips(tx, venue.printers.fryer)).length).toBe(before);
     });
   });
 

@@ -47,7 +47,6 @@ import {
 } from "./working-order.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
-import { recallToDraft } from "./draft-recall.js";
 import { splitBill } from "./bill-actions.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import { cancelRefundShare } from "@waitron/shared";
@@ -1043,33 +1042,6 @@ describe("Cancel item service command", () => {
       { quantity: 6000, served: 2000, servedAt: expect.any(String) },
     ]);
     expect(after.cancellations[0]!.quantity).toBe(2000);
-  });
-
-  it("refuses a recalled source rather than cancelling behind another owner's New order", async () => {
-    const order = await fixture("hold");
-    const ask = await askFor(order);
-    await inTx(venue, async (tx) =>
-      recallToDraft(tx, venue.cfg, order.partyId, order.parent.id, {
-        expectedEdit: await readBillEditState(tx, order.parent.workingOrderId),
-        expectedPartyRevision: ask.expectedPartyRevision,
-        submissionId: randomUUID(),
-        operatorId: venue.staffId,
-      }),
-    );
-    const before = await snapshot(order);
-    const current = await askFor(order, "remove_charge");
-    current.reasonId = venue.reasonId.houseVoid;
-    const edit = await inTx(venue, (tx) => readBillEditState(tx, order.parent.workingOrderId));
-    await expect(cancel(order, current)).rejects.toMatchObject({
-      code: "draft.out_of_date",
-      params: {
-        billId: order.parent.workingOrderId,
-        draftId: edit.draftId,
-        revision: edit.draftRevision,
-        edit,
-      },
-    });
-    expect(await snapshot(order)).toEqual(before);
   });
 
   it.each(["hold", "fire"] as const)(

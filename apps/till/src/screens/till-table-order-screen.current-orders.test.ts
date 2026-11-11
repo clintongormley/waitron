@@ -506,7 +506,7 @@ describe("Current orders and Sent service", () => {
     expect(companion.querySelector("button, wt-button, wt-row-actions, input")).toBeNull();
   });
 
-  it("Sent keeps other bills as read-only companions and offers Recall only on this open bill", async () => {
+  it("Sent keeps other bills as read-only companions and keeps Recall absent on this open bill", async () => {
     const held = { released: false, kitchen: null };
     const onCheck = row("l-check", "Steak", "2.000", { ...held, workingOrderId: "wo-check" });
     const onPaid = row("l-paid", "Steak", "2.000", { ...held, workingOrderId: "wo-paid" });
@@ -534,8 +534,8 @@ describe("Current orders and Sent service", () => {
     await openSentDish(el, "l-shown", "held");
     await openSentMore(el);
     const recalls = capture(el, "recall-lines");
-    await userEvent.click(q(el, "[data-sent-line-recall]")!);
-    expect(recalls.map((event) => event.detail)).toEqual([{ lineNos: [1] }]);
+    expect(q(el, "[data-sent-line-recall]")).toBeNull();
+    expect(recalls).toEqual([]);
   });
 
   it("says the sent orders could not be read, where Sent would be", async () => {
@@ -822,7 +822,7 @@ describe("the release reminder in Sent", () => {
 });
 
 describe("held-line move editing observation", () => {
-  it("switches to the recalled source bill and refuses a local Move after its edit observation changes", async () => {
+  it("switches to the fresh draft bill and refuses a local Move after its edit observation changes", async () => {
     const own = { billId: "wo-4", editorVersion: 2, draftId: null, draftRevision: null };
     const source = {
       billId: "wo-check",
@@ -865,26 +865,15 @@ describe("held-line move editing observation", () => {
           allergens: null,
         },
         quantity: "2.000",
+        draftLineId: "other-line",
         place: { kind: "fire" },
-        source: {
-          line: {
-            ...storedDish,
-            id: "other-line",
-            name: "Other bill dish",
-            groupId: "g3",
-            unitPriceGross: "2.00",
-            listUnitPriceGross: undefined,
-          },
-          extras: [],
-          netAmount: "4.00",
-        },
       },
     ]);
     el.draftStore = draft;
     await el.updateComplete;
     await sentPanelFor(el);
     const select = q(el, '[data-draft-select="0"]');
-    expect(select, "switching to its open bill keeps the recalled dish editable").not.toBeNull();
+    expect(select, "switching to its open bill keeps the fresh dish editable").not.toBeNull();
     await userEvent.click(select!);
     await el.updateComplete;
     await userEvent.click(q(el, "[data-draft-move]")!);
@@ -895,7 +884,7 @@ describe("held-line move editing observation", () => {
     target.click();
     expect(draft.lines[0]!.place).toEqual({ kind: "fire" });
     expect(draft.lines[0]!.quantity).toBe("2.000");
-    expect(draft.lines[0]!.source!.line.id).toBe("other-line");
+    expect(draft.lines[0]!.draftLineId).toBe("other-line");
     expect(sends).toEqual([]);
     expect(events).toEqual([]);
   });

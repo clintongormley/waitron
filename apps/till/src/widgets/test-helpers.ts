@@ -377,37 +377,14 @@ export function draftServer(
     rowsAtRevision.set(draft.revision, rows);
   };
   const reidentify = (lines: DraftSave["lines"]): DraftLine[] =>
-    normaliseDraftLines(
-      lines.map((line) => (line.sourceLineId != null ? { ...line, noMerge: true as const } : line)),
-    ).map((line) => {
-      let saved: DraftLine;
-      if (line.sourceLineId != null) {
-        const prior =
-          server.linesById.get(line.id) ??
-          server.drafts.flatMap((draft) => draft.lines).find((row) => row.id === line.id);
-        if (prior?.sourceLineId !== line.sourceLineId)
-          throw { code: "management.request_invalid", status: 400, field: "sourceLineId" };
-        saved = {
-          ...prior,
-          quantity: line.quantity,
-          note: line.note,
-          courseId: line.courseId,
-          makeAt: line.makeAt,
-          slot: line.slot,
-          joinGroupId: line.joinGroupId,
-          afterGroupId: line.afterGroupId,
-          noMerge: true,
-          unavailable: false,
-        };
-      } else {
-        saved = {
-          ...line,
-          sourceLineId: null,
-          source: null,
-          id: line.id ?? `line-${++ids}`,
-          unavailable: false,
-        };
-      }
+    normaliseDraftLines(lines).map((line) => {
+      const saved: DraftLine = {
+        ...line,
+        sourceLineId: null,
+        source: null,
+        id: line.id ?? `line-${++ids}`,
+        unavailable: false,
+      };
       server.linesById.set(saved.id, saved);
       return saved;
     });

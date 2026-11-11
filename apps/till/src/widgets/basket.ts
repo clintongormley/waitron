@@ -12,19 +12,10 @@ import {
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import {
-  type Decimal,
-  decimal,
-  formatMoney,
-  grossOf,
-  multiplyDecimal,
-  perDishOptionQuantity,
-} from "@waitron/shared";
+import { type Decimal, decimal, formatMoney, grossOf, multiplyDecimal } from "@waitron/shared";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { nutritionIcons, nutritionIconStyles, nutritionDietLabels } from "./nutrition-icons.js";
 import { optionAnswers } from "./option-snapshot.js";
-import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
-import { deriveExtraSelections, sameExtraSelections } from "../state/held-extras.js";
 import { dishGross, extraGross, offeredListsOf, quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, extraNutrition } from "./diet-badges.js";
@@ -570,61 +561,11 @@ export class TillBasket extends LitElement {
         : undefined;
     this.modifierLine = line;
     this.#modifierProduct = line.product;
-    if (line.source === undefined) {
-      this.#modifierSelection = {
-        extras: line.extras ?? [],
-        options: line.options ?? [],
-        optionSnapshots: line.optionSnapshots,
-        ...(this.lineDetails ? { note: line.note ?? "" } : {}),
-      };
-      return;
-    }
-    const offered = offeredListsOf(line.product);
-    this.#modifierProduct = {
-      ...line.product,
-      offeredModifiers: offered.map((list) =>
-        list.kind === "options"
-          ? list
-          : {
-              ...list,
-              items: list.items.map((item) => {
-                const stored = this.#recordedExtra(line, list.id, item.productId);
-                return stored === undefined
-                  ? item
-                  : {
-                      ...item,
-                      name: stored.name ?? item.name,
-                      price: stored.unitPriceGross,
-                    };
-              }),
-            },
-      ),
-    };
-    const held = line.source.extras.map((extra) => ({
-      productId: extra.productId,
-      listId: extra.listId,
-      name: extra.name ?? "",
-      price: extra.unitPriceGross,
-      quantity: perDishOptionQuantity(
-        extra.quantity,
-        multiplyDecimal(decimal(line.source!.line.quantity), decimal(extra.priceQuantity ?? "1")),
-      ),
-    }));
-    const derived = held.flatMap((extra) => {
-      const [kept] = deriveExtraSelections(offered, [extra]).extras;
-      return kept !== undefined
-        ? [kept]
-        : offered.some((list) => list.kind === "extras")
-          ? [{ ...extra, listId: extra.listId ?? "", productId: extra.productId ?? "" }]
-          : [];
-    });
     this.#modifierSelection = {
+      extras: line.extras ?? [],
+      options: line.options ?? [],
       optionSnapshots: line.optionSnapshots,
       ...(this.lineDetails ? { note: line.note ?? "" } : {}),
-      extras: line.sourceSelection?.extras ?? derived,
-      options:
-        line.sourceSelection?.options ??
-        deriveOptionSelections(offered, line.optionSnapshots).options,
     };
   }
 
@@ -640,14 +581,6 @@ export class TillBasket extends LitElement {
     if (this.#lineReadOnly(line) || this.store.sending || this.orderInFlight) return;
     this.openLineDetails(line);
     if (this.modifierLine === line) this.#modifierRemoval = removal;
-  }
-
-  #recordedExtra(line: OrderLine, listId: string, productId: string): TabLine | undefined {
-    return line.source?.extras.find(
-      (extra) =>
-        extra.listId?.toLowerCase() === listId.toLowerCase() &&
-        extra.productId?.toLowerCase() === productId.toLowerCase(),
-    );
   }
 
   #confirmModifiers(detail: ModifierConfirmDetail): boolean {
@@ -673,8 +606,7 @@ export class TillBasket extends LitElement {
       return false;
     const finish = (selection: LineSelection) => {
       if (!this.lineDetails) {
-        if (line.source === undefined) this.store.setLineModifiers(index, selection);
-        else this.store.patchRecalledLineModifiers(index, selection);
+        this.store.setLineModifiers(index, selection);
         this.#closeModifierPicker();
         return true;
       }
@@ -694,29 +626,7 @@ export class TillBasket extends LitElement {
       if (applied) this.#closeModifierPicker();
       return applied;
     };
-    if (line.source === undefined) {
-      return finish(detail);
-    }
-    const offered = offeredListsOf(line.product);
-    const selection: LineSelection = {};
-    if (
-      offered.some((list) => list.kind === "options") &&
-      !sameOptionSelections(detail.options ?? [], this.#modifierSelection!.options ?? [])
-    ) {
-      selection.options = detail.options ?? [];
-      selection.optionSnapshots = detail.optionSnapshots ?? [];
-    }
-    if (
-      offered.some((list) => list.kind === "extras") &&
-      !sameExtraSelections(detail.extras ?? [], this.#modifierSelection!.extras ?? [])
-    )
-      selection.extras = (detail.extras ?? []).map((pick) => {
-        const stored = this.#recordedExtra(line, pick.listId, pick.productId);
-        return stored === undefined
-          ? pick
-          : { ...pick, name: stored.name ?? pick.name, price: stored.unitPriceGross };
-      });
-    return finish(selection);
+    return finish(detail);
   }
 
   constructor() {
@@ -1127,7 +1037,7 @@ export class TillBasket extends LitElement {
               ]}
               .disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
               .quantity=${this.modifierLine.quantity}
-              .showTotal=${this.modifierLine.source === undefined}
+              .showTotal=${true}
               .initialSelections=${this.#modifierSelection}
               .stagedRemoval=${this.#modifierRemoval}
               @wt-modifier-confirm=${(event: CustomEvent<ModifierConfirmDetail>) => {

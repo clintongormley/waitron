@@ -5,10 +5,8 @@ import { parties, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { fireGroup, moveLinesToGroup, splitHeldLineIntoUnits } from "./order-groups.js";
 import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
 import {
@@ -139,13 +137,6 @@ async function run(
         }),
   );
 }
-async function recall(p: Fixture) {
-  const args = { ...(await command(p)), expectedEdit: await edit(p.tabId) };
-  return inTx(venue, async (tx) => {
-    await setChangesAfterSending(tx, "held-or-waiting");
-    return recallToDraft(tx, venue.cfg, p.partyId, p.line.id, args);
-  });
-}
 
 for (const operation of operations)
   describe(`${operation} held dishes requires the observed bill editor`, () => {
@@ -272,39 +263,6 @@ for (const operation of operations)
       expect(await frozen(true)).toEqual(before);
     });
   });
-it("a recalled split compares the owning draft revision before touching charge or source identities", async () => {
-  const p = await fixture(),
-    recalled = await recall(p);
-  const saved = await inTx(venue, (tx) =>
-    saveDraft(tx, venue.cfg, p.partyId, venue.operatorId, {
-      billId: p.tabId,
-      draftId: recalled.draft.id,
-      revision: recalled.draft.revision,
-      expectedEdit: recalled.edit,
-      lines: recalled.draft.lines,
-    }),
-  );
-  await refused(() => run(p, "split", recalled.edit), "draft.out_of_date", stale(saved.edit));
-});
-it("a recalled source splits only with its current owning expectation, preserving the charge", async () => {
-  const p = await fixture(),
-    recalled = await recall(p);
-  await run(p, "split", recalled.edit);
-  const [draft] = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
-  expect(draft!.id).toBe(recalled.draft.id);
-  expect(draft!.revision).toBe(recalled.draft.revision + 1);
-  expect(draft!.lines).toHaveLength(3);
-  expect(draft!.lines[0]!.id).toBe(recalled.draft.lines[0]!.id);
-  expect(draft!.lines[0]!.sourceLineId).toBe(p.line.id);
-  expect(new Set(draft!.lines.map((l) => l.sourceLineId)).size).toBe(3);
-  expect((await edit(p.tabId)).editorVersion).toBe(recalled.edit.editorVersion);
-  const lines = await venue.db
-    .select()
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, p.tabId));
-  expect(lines.map((l) => l.quantity)).toEqual([1000, 1000, 1000]);
-  expect(lines.reduce((sum, l) => sum + l.lineTotal, 0)).toBe(5400);
-});
 it("already-sent group Fire stays shared while the bill belongs to a colleague", async () => {
   const p = await fixture(),
     saved = await save(p, p.tabId, venue.adminId);
@@ -318,12 +276,6 @@ it("already-sent group Fire stays shared while the bill belongs to a colleague",
     (await venue.db.select().from(workingOrderLines).where(eq(workingOrderLines.id, p.line.id)))[0]!
       .groupId,
   ).toBe(p.line.groupId);
-});
-
-it("moving a recalled source refuses the current snapshot without changing its reservation", async () => {
-  const p = await fixture(),
-    recalled = await recall(p);
-  await refused(() => run(p, "move", recalled.edit), "draft.out_of_date", stale(recalled.edit));
 });
 it.each(["missing", "extra", "unsorted"] as const)(
   "group move refuses a %s affected bill set",

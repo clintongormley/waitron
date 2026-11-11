@@ -78,6 +78,7 @@ async function action(app: Hono, id: string, kind: Action) {
   }
   if (kind === "line")
     return send(app, v.cookie, "PUT", `/api/working-orders/${id}/lines/1`, {
+      portionLineNos: [],
       revision: 0,
       note: "No salt",
       ...extra,

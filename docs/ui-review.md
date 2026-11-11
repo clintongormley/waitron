@@ -88,7 +88,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
 | 3 | Counter / walk-up sales — menu, basket, modifiers, notes, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |
-| 5 | Coursing & rounds — build, hold/fire, course move, recall/cancel | till | ⬜ | |
+| 5 | Coursing & rounds — build, hold/fire, course move, change/cancel | till | ⬜ | |
 | 6 | Handheld tableside ordering & cash-at-table | till (handheld) | ⬜ | |
 | 7 | KDS — stations, tickets, courses/fire, expo, printing, timing alerts | till (KDS) | ⬜ | |
 | 8 | Payments — cash, manual card, integrated reader, tips | till | ⬜ | |

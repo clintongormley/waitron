@@ -2,11 +2,10 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { workingOrders, workingOrderLines } from "@waitron/db";
+import { workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   saveDraft,
@@ -14,8 +13,6 @@ import {
   type BillEditExpected,
   type BillEditState,
 } from "./order-drafts.js";
-import { recallToDraft } from "./draft-recall.js";
-import { partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   setWorkingOrderLabel,
@@ -24,7 +21,6 @@ import {
   placeOrder,
   parkOrder,
 } from "./working-order.js";
-import { fireAll } from "./testing/serve-line.js";
 import { inTx, provisionBillVenue, tabWith, send, type BillVenue } from "./testing/bill-venue.js";
 
 let venue: BillVenue;
@@ -296,32 +292,6 @@ for (const op of operations)
       expect(frozen(true)).toEqual(before);
     });
   });
-
-it("Place refuses a reserved recalled source before kitchen or status writes", async () => {
-  const p = await fixture();
-  await inTx(venue, async (tx) => {
-    await setChangesAfterSending(tx, "held-or-waiting");
-    await fireAll(tx, venue.cfg, p.id);
-    const [line] = await tx
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, p.id));
-    const party = await partyRevisionOfOrder(tx, p.id);
-    await recallToDraft(tx, venue.cfg, p.partyId!, line!.id, {
-      operatorId: venue.operatorId,
-      expectedEdit: await readBillEditState(tx, p.id),
-      expectedPartyRevision: party!.revision,
-      submissionId: randomUUID(),
-    });
-  });
-  const current = await edit(p.id),
-    before = frozen();
-  await expect(run(p, "place", current)).rejects.toMatchObject({
-    code: "draft.out_of_date",
-    params: stale(current),
-  });
-  expect(frozen()).toEqual(before);
-});
 
 it("Place keeps bodyless counter requests working", async () => {
   const p = await fixture(true);

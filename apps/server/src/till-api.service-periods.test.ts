@@ -1084,6 +1084,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       at(mondayAt("14:05"));
       expect(
         await sendAsTill(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+          portionLineNos: [],
           revision: before.body.revision,
           quantity: "2",
         }),
@@ -1216,6 +1217,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     expect(
       (
         await sendAsTill(v, "PUT", `/api/working-orders/${held.id}/lines/1`, {
+          portionLineNos: [],
           revision: 0,
           extras: [{ listId, picks: [{ productId: extraId, quantity: 1 }] }],
         })

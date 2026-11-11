@@ -6,7 +6,6 @@ import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
-import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
@@ -35,7 +34,7 @@ async function open() {
       product: beer,
       quantity: "2",
       place: { kind: "fire" },
-      source: { line: storedDish, extras: [storedExtra], netAmount: "8.00" },
+      draftLineId: "fresh-saved",
     },
     { product: flan, quantity: "1", place: { kind: "new", slot: 1 } },
     {
@@ -162,7 +161,7 @@ for (const kind of ["drag", "heading", "move"] as const) {
   it(`an equivalent observation keeps an open ${kind} usable regardless of key order`, async () => {
     const { el, draft } = await open();
     const activate = await prepare(el, kind);
-    const source = draft.lines[0]!.source;
+    const source = draft.lines[0]!.draftLineId;
     el.billEdit = { draftRevision: 3, draftId: "draft", editorVersion: 2, billId: "wo-4" };
     activate();
     expect(draft.lines.map((line) => line.place)).toEqual(
@@ -175,7 +174,7 @@ for (const kind of ["drag", "heading", "move"] as const) {
           ],
     );
     expect(draft.lines.map((line) => line.quantity)).toEqual(["2", "1", "1"]);
-    expect(draft.lines[0]!.source).toBe(source);
+    expect(draft.lines[0]!.draftLineId).toBe(source);
   });
 }
 

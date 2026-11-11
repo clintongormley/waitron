@@ -4,7 +4,6 @@ import type { BillEditExpected } from "../api/client.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { storedDish, storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { beer, mount, showView } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
@@ -34,13 +33,9 @@ async function beginTakeover(el: TillTableOrderScreen) {
   );
 }
 
-async function opening(kind: "split" | "source" | "fold") {
+async function opening(kind: "split" | "fold") {
   const draft = new DraftStore();
-  draft.loadFrom("draft", [
-    { product: beer, quantity: kind === "source" ? "2" : "3", place: { kind: "fire" } },
-  ]);
-  if (kind === "source")
-    draft.lines[0]!.source = { line: storedDish, extras: [storedExtra], netAmount: "8.00" };
+  draft.loadFrom("draft", [{ product: beer, quantity: "3", place: { kind: "fire" } }]);
   const { el } = await mount({ draftStore: draft, billEdit: { ...observation } });
   await showView(el, "order", { ifShown: true });
   if (kind === "fold") {
@@ -56,7 +51,7 @@ async function opening(kind: "split" | "source" | "fold") {
   return { el, draft, control, writes };
 }
 
-for (const kind of ["split", "source", "fold"] as const) {
+for (const kind of ["split", "fold"] as const) {
   it.each([
     "billId",
     "editorVersion",
@@ -98,23 +93,13 @@ for (const kind of ["split", "source", "fold"] as const) {
   it(`an equivalent ownership observation keeps ${kind} usable`, async () => {
     const { el, draft, control, writes } = await opening(kind);
     el.billEdit = { draftRevision: 3, draftId: "draft", editorVersion: 2, billId: "wo-4" };
-    const line = draft.lines[0]!;
-    const source = line.source;
     control.click();
-    if (kind === "source") {
-      expect(writes).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ detail: { store: draft, line }, bubbles: true, composed: true }),
-      );
-      expect(draft.lines).toEqual([line]);
-      expect(line.quantity).toBe("2");
-      expect(line.source).toBe(source);
-    } else {
-      expect(draft.lines.map((row) => row.quantity)).toEqual(
-        kind === "split" ? ["1", "1", "1"] : ["3"],
-      );
-      expect(draft.total).toBe("9.00");
-      expect(writes).not.toHaveBeenCalled();
-    }
+
+    expect(draft.lines.map((row) => row.quantity)).toEqual(
+      kind === "split" ? ["1", "1", "1"] : ["3"],
+    );
+    expect(draft.total).toBe("9.00");
+    expect(writes).not.toHaveBeenCalled();
   });
 
   it.each(["busy", "ordering", "takeover"] as const)(

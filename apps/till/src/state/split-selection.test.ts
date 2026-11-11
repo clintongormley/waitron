@@ -131,7 +131,6 @@ interface SourceOptions {
   held?: SplitSource["held"];
   ownUnsent?: boolean;
   refundPending?: boolean;
-  recalled?: ReadonlySet<string>;
 }
 
 function source(
@@ -147,7 +146,7 @@ function source(
   });
   return {
     bill: bill(id, number, { status: options.status ?? "open", total: balance.total }),
-    groups: pickGroups(lines, keyFor(lines, balance), balance, options.recalled ?? new Set()),
+    groups: pickGroups(lines, keyFor(lines, balance), balance),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
     refundPending: options.refundPending ?? false,
@@ -178,7 +177,7 @@ function draft(
   billId: string,
   ownerId: string,
   ownerName: string,
-  recalls: readonly TabLine[] = [],
+  fresh: readonly TabLine[] = [],
   revision = 0,
 ): Draft {
   return {
@@ -188,12 +187,12 @@ function draft(
     ownerId,
     ownerName,
     revision,
-    lines: recalls.map(
+    lines: fresh.map(
       (row) =>
         ({
-          id: `recall-${row.id}`,
-          sourceLineId: row.id,
-          source: { line: row, extras: [], netAmount: "0.00" },
+          id: `fresh-${row.id}`,
+          sourceLineId: null,
+          source: null,
         }) as unknown as DraftLine,
     ),
     takenOverFrom: null,
@@ -442,13 +441,6 @@ describe("A803 selection:", () => {
     });
   });
 
-  it("recalled dishes are in no row", () => {
-    const lines = [dish("a", 1, "5.00"), dish("gone", 2, "6.00")];
-    const one = source("b1", 1, lines, { recalled: new Set(["gone"]), ownUnsent: true });
-
-    expect(named(rowsOf(one, NOTHING))).toEqual([["a"]]);
-  });
-
   describe("toSelection", () => {
     const one = source("b1", 1, [dish("a", 1, "5.00"), dish("b", 2, "6.00")]);
     const two = source("b2", 2, [dish("c", 3, "5.00"), dish("d", 4, "6.00")]);
@@ -617,7 +609,7 @@ describe("A803 selection:", () => {
     it("false with no balance read, whatever the listed total", () => {
       const unread: SplitSource = {
         bill: bill("b1", 1, { total: "0.00" }),
-        groups: pickGroups([], () => null, null, new Set()),
+        groups: pickGroups([], () => null, null),
         held: null,
         ownUnsent: false,
         refundPending: false,
@@ -670,20 +662,6 @@ describe("A803 selection:", () => {
     const b = dish("b", 2, "6.00");
     const c = dish("c", 3, "7.00");
 
-    it("a dish recalled into a draft on a bill not on screen is in no row", () => {
-      const [one, two] = splitSourcesFrom(
-        readOf({ id: "b1", lines: [a, b] }, { id: "b2", lines: [c] }),
-        [bill("b1", 1), bill("b2", 2)],
-        [draft("b1", "me", "Me", [a])],
-        "me",
-        new Set(),
-        keyFor,
-      );
-
-      expect(named(rowsOf(one!, NOTHING))).toEqual([["b"]]);
-      expect(named(rowsOf(two!, NOTHING))).toEqual([["c"]]);
-    });
-
     it("a fresh dish in a draft takes no bill dish out of the rows", () => {
       const fresh = { id: "fresh", sourceLineId: null, source: null } as unknown as DraftLine;
       const [one] = splitSourcesFrom(
@@ -691,7 +669,6 @@ describe("A803 selection:", () => {
         [bill("b1", 1)],
         [{ ...draft("b1", "me", "Me"), lines: [fresh] }],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -717,7 +694,6 @@ describe("A803 selection:", () => {
         [bill("pending", 1), bill("finished", 2), bill("none", 3)],
         [],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -728,30 +704,12 @@ describe("A803 selection:", () => {
       ]);
     });
 
-    it("a dish in recalled is in no row, and counts as this person's own unsent dish", () => {
-      const [one, two] = splitSourcesFrom(
-        readOf({ id: "b1", lines: [a, b] }, { id: "b2", lines: [c] }),
-        [bill("b1", 1), bill("b2", 2)],
-        [],
-        "me",
-        new Set(["a"]),
-        keyFor,
-      );
-
-      expect(named(rowsOf(one!, NOTHING))).toEqual([["b"]]);
-      expect(one!.ownUnsent).toBe(true);
-      expect(two!.ownUnsent).toBe(false);
-      const next = pickOnBill(one!, NOTHING, new Set(["b"]));
-      expect(billTick(one!, next)).toBe("some");
-    });
-
     it("someone else's draft sets held with its name and revision and leaves the bill's ownUnsent false", () => {
       const [one] = splitSourcesFrom(
         readOf({ id: "b1", lines: [a] }),
         [bill("b1", 1)],
         [draft("b1", "luis", "Luis", [], 4)],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -770,7 +728,6 @@ describe("A803 selection:", () => {
         [bill("b1", 1)],
         [draft("b1", "gone", "")],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -792,7 +749,6 @@ describe("A803 selection:", () => {
         [bill("b1", 1), bill("b2", 2)],
         [takenFrom("b1", "me"), takenFrom("b2", "marta")],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -806,7 +762,6 @@ describe("A803 selection:", () => {
         [bill("b1", 1), bill("b2", 2)],
         [draft("b1", "me", "Me")],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -822,7 +777,6 @@ describe("A803 selection:", () => {
         [bill("b2", 2)],
         [],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -835,7 +789,6 @@ describe("A803 selection:", () => {
         [bill("b1", 2), bill("b9", 1)],
         [],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -849,7 +802,6 @@ describe("A803 selection:", () => {
         [bill("b1", 1)],
         [],
         "me",
-        new Set(),
         keyFor,
       );
 
@@ -907,7 +859,7 @@ describe("A803 selection:", () => {
       const lines = [dish("a", 1, "8.00")];
       const unread: SplitSource = {
         bill: bill("b1", 1, { total: "8.00" }),
-        groups: pickGroups(lines, () => null, null, new Set()),
+        groups: pickGroups(lines, () => null, null),
         held: null,
         ownUnsent: false,
         refundPending: false,
@@ -1121,20 +1073,6 @@ describe("A803 selection:", () => {
       expect(after.gone).toEqual([]);
       expect(after.changed).toEqual([]);
       expect(heldSelected(clear, after.split)).toEqual([]);
-    });
-
-    it("a picked dish the holder recalled, once the draft goes, is dropped and named rather than kept silently", () => {
-      const clear = [source("b1", 1, [a, b, c])];
-      const held = [source("b1", 1, [a, b, c], { held: luis, recalled: new Set(["a"]) })];
-      const split = looseOf({ b1: ["a", "b"] });
-
-      const during = tidySplit(drawn(clear, split), held, split);
-      expect(sorted(during.split.picks.get("b1"))).toEqual(["a", "b"]);
-      expect(during.changed).toEqual([]);
-
-      const after = tidySplit(drawn(held, during.split), clear, during.split);
-      expect(sorted(after.split.picks.get("b1"))).toEqual(["b"]);
-      expect(after.changed).toEqual(["b1"]);
     });
 
     it("a read that removes a bill's only unpicked dish makes it whole, names it, and names it once", () => {

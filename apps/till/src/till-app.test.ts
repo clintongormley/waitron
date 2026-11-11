@@ -522,7 +522,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     markServed: vi.fn().mockResolvedValue({ revision: 4 }),
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
-    recallLines: vi.fn().mockResolvedValue(undefined),
     ...adjustmentStubs(),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", billIds: ["wo-7"] }),
@@ -9993,62 +9992,6 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("recall-lines puts the bill family into its owner's draft then reloads its lines", async () => {
-        const recallToDraft = vi.fn(async () => {
-          const draft: import("./api/client.js").Draft = {
-            id: "draft-recalled",
-            partyId: "v-2",
-            billId: "wo-7",
-            ownerId: "p1",
-            ownerName: "Ana",
-            revision: 1,
-            takenOverFrom: null,
-            lines: [
-              {
-                id: "reference-line-1",
-                sourceLineId: "line-1",
-                source: { line: tabLine, extras: [], netAmount: "3.00" },
-                quantity: "2.000",
-                note: null,
-                courseId: null,
-                makeAt: null,
-                noMerge: true,
-                unavailable: false,
-                slot: 0,
-                joinGroupId: null,
-                afterGroupId: null,
-              },
-            ],
-          };
-          drafts.drafts.push(draft);
-          return { revision: 4, draft, edit: drafts.edit(draft.billId) };
-        });
-        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
-        const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
-          listZones: vi.fn().mockResolvedValue([floorZone]),
-          recallToDraft,
-          getTabLines,
-        });
-        const screen = await toTableOrder(el, openTable);
-
-        emit(screen, "recall-lines", { lineNos: [1] });
-        await flush(el);
-
-        expect(recallToDraft).toHaveBeenCalledWith(
-          "v-2",
-          "line-1",
-          {
-            submissionId: expect.any(String),
-            expectedPartyRevision: 3,
-            expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
-          },
-          { signal: expect.any(AbortSignal) },
-        );
-        expect(tableOrder(el)!.draftStore!.lines[0]!.workingOrderLineId).toBe("line-1");
-        expect(getTabLines).toHaveBeenCalledTimes(2);
-      });
-
       it("a cancel records the started line's cancel then reloads its lines", async () => {
         const { applyAdjustment } = adjustmentStubs();
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
@@ -10067,52 +10010,6 @@ describe("till-app", () => {
           expect.objectContaining({ lineId: "line-1", action: "cancel" }),
           expect.anything(),
         );
-        expect(getTabLines).toHaveBeenCalledTimes(2);
-      });
-
-      // A raced recall of a line the kitchen has just started, and a recall its station refuses, each
-      // name what the waiter can still do.
-      it.each(["ticket.already_started", "ticket.already_fired"])(
-        "a recall-lines refused %s says so in its own words AND still reloads to reconcile to server truth",
-        async (code) => {
-          // The order is re-read after a refusal, to reconcile with the server.
-          const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
-          const { el } = await mountApp({
-            getTablesState: vi.fn().mockResolvedValue([openTable]),
-            listZones: vi.fn().mockResolvedValue([floorZone]),
-            getTabLines,
-            recallToDraft: vi.fn().mockRejectedValue({ code }),
-          });
-          const screen = await toTableOrder(el, openTable);
-          expect(getTabLines).toHaveBeenCalledTimes(1);
-
-          emit(screen, "recall-lines", { lineNos: [1] });
-          await flush(el);
-
-          expect(tableOrder(el)).not.toBeNull();
-          const banner = el.shadowRoot!.querySelector(".error")!.textContent!;
-          expect(banner).toContain(codeMessage(code));
-          expect(banner).not.toContain(t("table.error"));
-          expect(getTabLines).toHaveBeenCalledTimes(2);
-        },
-      );
-
-      it("a recall-lines refused tab.not_open shows the generic banner AND still reloads", async () => {
-        const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
-        const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([openTable]),
-          listZones: vi.fn().mockResolvedValue([floorZone]),
-          getTabLines,
-          recallToDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
-        });
-        const screen = await toTableOrder(el, openTable);
-        expect(getTabLines).toHaveBeenCalledTimes(1);
-
-        emit(screen, "recall-lines", { lineNos: [1] });
-        await flush(el);
-
-        expect(tableOrder(el)).not.toBeNull();
-        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 

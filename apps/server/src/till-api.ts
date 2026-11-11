@@ -3,7 +3,6 @@ import type { ModuleTimeRecordExport } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
 import type { LiveEvents } from "./live-api.js";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
@@ -115,7 +114,6 @@ import {
   placeOrder,
   readBillLines,
   readTabLines,
-  recallLines,
   sendLines,
   sendToPrep,
   setOrderInvoiceChoice,
@@ -190,7 +188,6 @@ import {
   parseBillEditExpecteds,
   readBillEditState,
 } from "./bill-editing.js";
-import { recallToDraft } from "./draft-recall.js";
 import { availableStations, findDeadEnds, requireMakeAtStation } from "./dead-ends.js";
 import { ensureToday } from "./floor-today-store.js";
 import { layoutOffer, zoneLayouts } from "./floor-layout-due.js";
@@ -3580,35 +3577,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/parties/:id/lines/:lineId/recall", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
-      const partyId = requirePartyParam(c.req.param("id"));
-      const lineId = c.req.param("lineId");
-      if (!isUuid(lineId)) throw new AppError("group.not_found", { lineId });
-      const body = asObject(await readRawJsonBody<unknown>(c));
-      const args = {
-        ...groupCommand(session.personId, body),
-        expectedEdit: parseBillEditExpected(body.expectedEdit),
-      };
-      const answer = await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ partyId }]);
-        return recallToDraft(
-          tx,
-          cfg,
-          partyId,
-          lineId,
-          args,
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock },
-        );
-      });
-      return c.json(answer);
-    }),
-  );
-
   app.get("/api/parties/:id/drafts", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c, { passive: true });
@@ -3980,13 +3948,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           expectedEdit: body.expectedEdit,
         });
         const entries = Object.entries(body.lines);
-        await refuseRecalledWrite(
-          tx,
-          inArray(
-            workingOrderLines.id,
-            entries.map(([id]) => id),
-          ),
-        );
         const unsent = new Set((await unsentDishLines(tx, id)).map((line) => line.id));
         for (const [lineId, stationId] of entries) {
           if (!unsent.has(lineId)) throw invalid("lines");
@@ -4175,32 +4136,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             ? undefined
             : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
           allergyCommand(body),
-        );
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/working-orders/:id/lines/recall", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
-      const id = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{
-        lineNos?: number[];
-        expectedEdit: BillEditExpected | null;
-      }>(c);
-      await withTransaction(deps.db, async (tx) => {
-        await checkZones(tx, session, [{ orderId: id }]);
-        await recallLines(
-          tx,
-          cfg,
-          id,
-          body.lineNos ?? [],
-          { operatorId: session.personId, expectedEdit: body.expectedEdit },
-          deps.attendance === undefined
-            ? undefined
-            : { recorder: deps.attendance, clock: deps.clock, personId: session.personId },
         );
       });
       return c.body(null, 200);

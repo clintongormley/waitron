@@ -180,6 +180,7 @@ describe("existing service in a closed zone", () => {
       const answer =
         change === "quantity"
           ? await request(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+              portionLineNos: [],
               revision: before.json.revision,
               quantity: "2",
             })
@@ -214,6 +215,7 @@ describe("existing service in a closed zone", () => {
     expect(
       (
         await request(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+          portionLineNos: [],
           revision: before.json.revision,
           note: "No ice",
         })

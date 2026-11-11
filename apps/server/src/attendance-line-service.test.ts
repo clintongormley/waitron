@@ -1,6 +1,6 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
-import { recallLines } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -46,7 +46,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-const actions = ["course", "send", "recall", "make-at"] as const;
+const actions = ["course", "send", "make-at"] as const;
 type Action = (typeof actions)[number];
 function api(attendance?: AttendanceRecorder) {
   const app = new Hono();
@@ -69,9 +69,16 @@ function api(attendance?: AttendanceRecorder) {
 async function prepare(action: Action) {
   let id: string;
   if (action !== "make-at") {
-    id = (await seatedWith(v, "House salad")).tabId;
-    if (action !== "recall")
-      await withTransaction(suite.db, (tx) => recallLines(tx, v.cfg, id, [1]));
+    id = (await seatedWith(v)).tabId;
+    await withTransaction(suite.db, (tx) =>
+      addTabRound(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: v.offerFor("House salad"), quantity: "1", hold: true }],
+        { creditedTo: v.operatorId },
+      ),
+    );
   } else {
     id = newId();
     await parkOrder({ db: suite.db }, v.cfg, {
@@ -147,10 +154,10 @@ describe("direct line service attendance", () => {
     const line = after.lines.find((r) => r.id === order.lineId)!;
     if (action === "course") expect(line.courseId).toBe(courseId);
     if (action === "make-at") expect(line.makeAtStationId).toBe(stationId);
-    if (action === "send" || action === "recall")
+    if (action === "send")
       expect(
         after.tickets.find((r) => r.workingOrderLineId === order.lineId)!.firedAt === null,
-      ).toBe(action === "recall");
+      ).toBe(false);
   });
   it.each(actions)("%s rolls back command writes if capture fails", async (action) => {
     const order = await prepare(action),

@@ -83,7 +83,6 @@ function row(ask: RowAsk): PassRow {
     stationClosed: false,
     extra: false,
     remaining: 1000,
-    recalled: false,
     lineNo: 1,
     order: { orderNumber: 1, kitchenNote: null, openedAt: openedAt[orderId] ?? at("12:00") },
     ...rest,
@@ -214,12 +213,9 @@ describe("A773 pass board: cards", () => {
     });
   });
 
-  it("5. puts no recalled or fully served row on a card", () => {
+  it("5. puts no fully served row on a card", () => {
     const group: Group = { ...groupG, id: "group-5" };
-    const gone = [
-      row({ id: "recalled", group, recalled: true }),
-      row({ id: "served", group, remaining: 0, lineNo: 2 }),
-    ];
+    const gone = [row({ id: "served", group, remaining: 0, lineNo: 2 })];
     expect(cards(buildPassBoard(gone, EVERY))).toEqual([]);
 
     const board = buildPassBoard([...gone, row({ id: "live", group, lineNo: 3 })], EVERY);
@@ -576,9 +572,6 @@ describe("A773 pass board: release set", () => {
     expect(passCardRelease(billTarget, base, EVERY).context).not.toBe(digest);
     const served = changed(base, "grill-1", { remaining: 0 });
     expect(passCardRelease(targetG, served, EVERY).ticketItemIds).toEqual(["grill-2"]);
-    const recalled = changed(base, "grill-1", { recalled: true });
-    expect(passCardRelease(targetG, recalled, EVERY).ticketItemIds).toEqual(["grill-2"]);
-    expect(contextOf(recalled, EVERY)).not.toBe(digest);
   });
 
   it("3. ignores everything but the candidates' facts", () => {
@@ -802,24 +795,5 @@ describe("A773 pass board: dimming", () => {
         hiddenItems: items.filter((item) => item.id === "cold-1"),
       },
     ]);
-  });
-
-  it("5b. lets no recalled pass work dim the board", () => {
-    const rows = [
-      row({ id: "grill-recalled", recalled: true, lineNo: 1 }),
-      released({
-        id: "bar-1",
-        stationId: bar,
-        state: "preparing",
-        passControlled: false,
-        lineNo: 2,
-      }),
-    ];
-    const board = buildPassBoard(rows, EVERY, {
-      showNonPassStations: true,
-      aStationInViewWaits: false,
-    });
-    expect(cards(board).flatMap((card) => card.items.map((item) => item.id))).toEqual(["bar-1"]);
-    expect(itemOf(cards(board)[0]!, "bar-1").informational).toBe(false);
   });
 });

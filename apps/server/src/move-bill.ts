@@ -3,7 +3,6 @@ import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   diningTables,
   orderGroups,
-  orderDraftRecalledLines,
   parties,
   partyTableLabels,
   ticketItems,
@@ -543,27 +542,19 @@ export async function leaveParty(
       groupState: orderGroups.state,
       firedBy: orderGroups.firedBy,
       firedByDeviceId: orderGroups.firedByDeviceId,
-      recalledId: orderDraftRecalledLines.id,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .leftJoin(
-      orderDraftRecalledLines,
-      eq(orderDraftRecalledLines.sourceLineId, workingOrderLines.id),
-    )
     .where(
       and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
     );
-  const staysHeld = (line: (typeof lines)[number]) =>
-    held === "keep" && line.groupState === "held" && line.recalledId === null;
+  const staysHeld = (line: (typeof lines)[number]) => held === "keep" && line.groupState === "held";
   const waiting = new Set(
     keepWaiting
       ? await waitingDishesOnHoldPaper(
           tx,
           lines.flatMap((line) =>
-            line.groupState === "fired" && line.recalledId === null
-              ? [{ id: line.id, groupId: line.groupId! }]
-              : [],
+            line.groupState === "fired" ? [{ id: line.id, groupId: line.groupId! }] : [],
           ),
         )
       : [],
@@ -572,7 +563,7 @@ export async function leaveParty(
     await refuseHeldLeavingParty(
       tx,
       billId,
-      lines.filter((line) => line.recalledId === null).map((line) => line.id),
+      lines.map((line) => line.id),
     );
   await clearGroups(
     tx,

@@ -48,7 +48,6 @@ export interface PassRow {
   extra: boolean;
   /** Thousandths: fired quantity less served quantity. */
   remaining: number;
-  recalled: boolean;
   lineNo: number;
   order: {
     orderNumber: number;
@@ -130,11 +129,7 @@ const phaseOf = (row: PassRow): KitchenPhase =>
 /** A live Requested dish this pass sees and that is pass work: what puts a card in To fire. */
 function isCandidate(row: PassRow, scope: PassScope): boolean {
   return (
-    !row.recalled &&
-    row.remaining > 0 &&
-    row.passControlled &&
-    passSees(scope, row) &&
-    phaseOf(row) === "requested"
+    row.remaining > 0 && row.passControlled && passSees(scope, row) && phaseOf(row) === "requested"
   );
 }
 
@@ -165,7 +160,6 @@ export function passCardRelease(
     firedAt: row.firedAt,
     passControlled: row.passControlled,
     remaining: row.remaining,
-    recalled: row.recalled,
   }));
   return {
     ticketItemIds: candidates.map((row) => row.item.id),
@@ -311,7 +305,7 @@ export function buildPassBoard(
     aStationInViewWaits = false,
   }: PassBoardOptions = {},
 ): PassBoard {
-  const live = rows.filter((row) => !row.recalled && row.remaining > 0);
+  const live = rows.filter((row) => row.remaining > 0);
   // Until the pass controls something in its view, nothing in view is dimmed (D89).
   const dims = aStationInViewWaits || live.some((row) => passSees(scope, row) && isPassWork(row));
   const byCard = new Map<string, PassRow[]>();
