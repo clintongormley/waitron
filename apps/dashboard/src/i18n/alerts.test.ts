@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { alertMessage, hasAlertMessage } from "./alerts.js";
+import { codeMessage } from "./codes.js";
 import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { t } from "./t.js";
@@ -879,6 +880,32 @@ it.each(["en", "es"])("explains affiliate rejection and refund uncertainty in %s
 });
 
 describe("refusals that name a way out the product already has", () => {
+  it.each([
+    [
+      "en",
+      "en-GB",
+      /install|support|manager/i,
+      "Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+    ],
+    [
+      "es",
+      "es-ES",
+      /instal|soporte|encargad|gerente/i,
+      "Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
+    ],
+  ] as const)(
+    "tells %s readers of a bucket copy another box holds to switch this box off if that box replaced it, and sends nobody elsewhere",
+    (lang, locale, elsewhere, switchOff) => {
+      for (const text of [
+        alertMessage("backup.stream_refused", {}, lang),
+        codeMessage("backup.stream_held_by_another_box", locale),
+      ]) {
+        expect(text.endsWith(switchOff)).toBe(true);
+        expect(text).not.toMatch(elsewhere);
+      }
+    },
+  );
+
   it.each([
     ["en", "en-GB", /install|support|manager/i],
     ["es", "es-ES", /instal|soporte|encargad|gerente/i],

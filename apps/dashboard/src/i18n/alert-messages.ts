@@ -118,8 +118,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La copia en el bucket está en pausa: no se ha podido contactar con el bucket durante tanto tiempo que el equipo ha dejado de copiar para proteger su disco. Las ventas continúan. Revisa la conexión a internet del equipo y el bucket en la página de Copias.",
   },
   "backup.stream_refused": {
-    en: "The bucket copy has stopped because another box is writing this venue's copy to the same bucket. Two boxes must never sell for one venue. Contact support.",
-    es: "La copia en el bucket se ha detenido porque otro equipo está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos equipos para un mismo local. Contacta con soporte.",
+    en: "The bucket copy has stopped because another box is writing this venue's copy to the same bucket. Two boxes must never sell for one venue: if that box replaced this one, switch this box off.",
+    es: "La copia en el bucket se ha detenido porque otro equipo está escribiendo la copia de este local en el mismo bucket. Nunca deben vender dos equipos para un mismo local: si ese equipo sustituyó a este, apaga este equipo.",
   },
   "backup.stream_settings_unusable": {
     en: "The bucket copy has not started because its settings could not be used safely. In Backups, Change bucket lets you edit them. Test checks the bucket without saving settings; Save and turn on applies them; Cancel keeps the saved settings. This form cannot diagnose faults in the box's own configuration.",

@@ -42,7 +42,7 @@ referrals, not completed recovery experiments.
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
-| [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Start the copy again (A1089 B1) restarts a copy that stopped or could not start. Host-configuration diagnosis, reason-specific guidance for a stopped copy and ownership choices remain open, with authentication and evidence before resuming a primary. |
+| [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Start the copy again (A1089 B1) restarts a copy that stopped or could not start, but not one refused because another box was found writing to the same bucket. Host-configuration diagnosis, reason-specific guidance for a stopped copy and ownership choices remain open, with authentication and evidence before resuming a primary. |
 | [Sealed state](#backup-state) | The alert names the cause (A1089 B2): a full disk, missing own files, or another. Missing own files and an unrecognised cause have no correction beyond a restart. |
 | [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
 | [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
@@ -120,6 +120,8 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:101` and `apps/dashboard/src
 State: The stream reports pointer_changed or pointer_newer_term. A competing or replaced primary is a possible state; a product bug is not required. Receipt: `apps/server/src/alert-sources.ts:81`.
 
 Route: Missing: a guided way to identify the serving primary and resolve the competing writer. Do not suggest resetting a bucket pointer or starting two sellers. The Backups screen alone does not establish which machine may resume.
+
+_2026-11-11, A1499: the alert and the Start the copy again refusal no longer say to contact support; they say that if the other box replaced this one, switch this box off. Still open: the words give no step to a box that should keep selling, and Backups does not offer it Start the copy again; when no other box exists (a late pointer write by this box, or a deleted pointer: `apps/server/src/errors.ts` on `backup.stream_refused`), the words still say another box is writing. The rest of this entry records the earlier tree._
 
 ### `backup.stream_settings_unusable`
 
@@ -830,6 +832,8 @@ or existing backup files.
 **A refused bucket stream needs ownership choices, and a stopped one reason-specific guidance.**
 Start the copy again (A1089 B1) restarts a stopped copy with its saved settings. Distinguish an
 unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary.
+2026-11-11, A1499: the refused-copy alert and the Start the copy again refusal now say to switch
+this box off if the other box replaced it; choosing which box keeps the bucket is still open.
 
 ### backup-state
 

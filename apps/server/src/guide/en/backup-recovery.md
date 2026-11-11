@@ -135,9 +135,12 @@ If the bucket copy says its settings could not be used safely, choose **Change b
 cannot diagnose a failure in the box's own configuration. Keep your recovery keys and existing
 copies if the refusal persists.
 
-If the bucket copy stopped, or could not start for a reason other than its settings, **Backups**
-shows **Start the copy again**, which starts it with the settings it already has. If it stops again, choose **Change bucket** and press
-**Test** to check the bucket.
+If the box says the bucket copy is not running, open **Backups** and press **Start the copy again**,
+which starts it with the settings it already has. If it stops again, choose **Change bucket** and
+press **Test** to check the bucket.
+
+If the bucket copy says another box is writing this venue's copy to the same bucket and that box
+replaced this one, switch this box off: two boxes must never sell for one venue.
 
 ## Make the new series {#series}
 
