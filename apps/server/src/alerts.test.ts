@@ -363,8 +363,6 @@ describe("readOpenAlerts", () => {
     const failing: AlertSource = {
       area: "backup",
       permission: "system.manage",
-      // A failed QUERY, not just a throw: a source that dies in the database, not in JavaScript,
-      // is the case `readOpenAlerts` wraps each source for.
       read: async ({ tx }) => {
         await tx.execute(sql`select * from no_such_table`);
         return [];
