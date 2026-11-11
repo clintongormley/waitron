@@ -702,6 +702,9 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
                   province: "Madrid",
                   timeZone: "Europe/Madrid",
                   dayCutover: "05:00",
+                  seriesCode: "A",
+                  fullSeriesCode: "FF",
+                  rectificativeSeriesCode: "R",
                   admin: {
                     firstNames: "Alex",
                     lastNames: "Example",
