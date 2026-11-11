@@ -238,7 +238,15 @@ describe("direct economic orchestration before startup admission", () => {
           return cancelPlacedOrder(deps, venue.cfg, id, "Guest request", actor);
         return withTransaction(venue.db, async (tx) => {
           if (operation === "line")
-            return updateOrderLine(tx, venue.cfg, id, 1, { portionLineNos: [], quantity: "1" }, 0, authority);
+            return updateOrderLine(
+              tx,
+              venue.cfg,
+              id,
+              1,
+              { portionLineNos: [], quantity: "1" },
+              0,
+              authority,
+            );
           if (operation === "split")
             return splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
               ...authority,
@@ -526,7 +534,15 @@ it.each([
         return;
       }
       if (operation === "line")
-        await updateOrderLine(tx, venue.cfg, id, 1, { portionLineNos: [], note: "No salt" }, 0, authority);
+        await updateOrderLine(
+          tx,
+          venue.cfg,
+          id,
+          1,
+          { portionLineNos: [], note: "No salt" },
+          0,
+          authority,
+        );
       if (operation === "split")
         await splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
           ...authority,
