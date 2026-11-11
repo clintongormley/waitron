@@ -1055,7 +1055,7 @@ product failures.
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
   menu activation, the sealed-key copy and public `/health` reports. The bucket copy runs as a
   service; close stops runner jobs first and the bucket copy last.
-  The future live-promotion runner slice owns wiring role changes, with a real promotion test including a mirror (watcher, 2026-11-11 05:18).
+  [A1279](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself) owns immediate role wiring and the real promotion test, including a mirror, if its live-promotion path gains a production caller. Codex attached this to A1279 after the watcher deferred immediate wiring on 2026-11-11 at 05:18.
   The other jobs still need moving onto the runner.
   Management and device events share one loop with read-only wake checks; device events carry types
   only. Browser adoption of the device stream remains for jr13/jr14. 111 product

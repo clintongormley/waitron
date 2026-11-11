@@ -8,37 +8,14 @@ import { readNodeMode } from "@waitron/node-db";
 export interface DeploymentHolders {
   readonly mode: { current: DeploymentMode };
   readonly singletonRole: { current: SingletonRole };
-  onChange(listener: () => void): () => void;
 }
-
-const notifications = new WeakMap<DeploymentHolders, () => void>();
 
 /** Builds the holders from values already read at boot — no I/O. */
 export function createDeploymentHolders(
   mode: DeploymentMode,
   singletonRole: SingletonRole,
 ): DeploymentHolders {
-  const listeners = new Set<() => void>();
-  const holders: DeploymentHolders = {
-    mode: { current: mode },
-    singletonRole: { current: singletonRole },
-    onChange(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  };
-  notifications.set(holders, () => {
-    for (const listener of listeners) {
-      try {
-        listener();
-      } catch {
-        /* A notification cannot undo the role refresh. */
-      }
-    }
-  });
-  return holders;
+  return { mode: { current: mode }, singletonRole: { current: singletonRole } };
 }
 
 /**
@@ -52,9 +29,6 @@ export async function refreshDeploymentHolders(
   holders: DeploymentHolders,
 ): Promise<void> {
   const axes = await readNodeMode(node, nodeId);
-  const changed =
-    holders.mode.current !== axes.mode || holders.singletonRole.current !== axes.singletonRole;
   holders.mode.current = axes.mode;
   holders.singletonRole.current = axes.singletonRole;
-  if (changed) notifications.get(holders)?.();
 }

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { NODE_MIGRATIONS, setNodeMode, setSingletonRole } from "@waitron/node-db";
@@ -37,27 +37,4 @@ describe("refreshDeploymentHolders", () => {
     await refreshDeploymentHolders(suite.node, NODE, holders);
     expect(holders.singletonRole.current).toBe("primary");
   });
-});
-
-it("notifies only changed axes, ignores a throwing listener, and unsubscribes", async () => {
-  await stampDeployment(suite.db, "preproduction");
-  await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "primary");
-  const holders = createDeploymentHolders("primary", "primary");
-  const heard = vi.fn(() => [holders.mode.current, holders.singletonRole.current]);
-  holders.onChange(() => {
-    throw Error("listener failed");
-  });
-  const off = holders.onChange(heard);
-  await refreshDeploymentHolders(suite.node, NODE, holders);
-  expect(heard).not.toHaveBeenCalled();
-  await setSingletonRole({ venue: suite.db, node: suite.node }, NODE, "secondary");
-  await refreshDeploymentHolders(suite.node, NODE, holders);
-  expect(heard.mock.results.map((result) => result.value)).toEqual([["primary", "secondary"]]);
-  await refreshDeploymentHolders(suite.node, NODE, holders);
-  expect(heard).toHaveBeenCalledTimes(1);
-  off();
-  await setNodeMode({ venue: suite.db, node: suite.node }, NODE, "mirror");
-  await refreshDeploymentHolders(suite.node, NODE, holders);
-  expect(heard).toHaveBeenCalledTimes(1);
-  expect(holders.mode.current).toBe("mirror");
 });

@@ -1245,7 +1245,9 @@ trust check with no pinned main-box key, because only joining pins one, so it tr
 alone. It has no production caller: the promote endpoint never calls it
 (`apps/server/src/boot.ts`, "it NEVER calls `promoteLocalSecondaryToPrimary`"), and the in-process
 handle a started server carries (`makeStartedServer`, `apps/server/src/boot.ts`) is used only by
-tests. Decide its trust set if it gains a caller.
+tests. Decide its trust set if it gains a caller. That same slice owns the immediate runner role
+notifications and a real promotion test including a mirror. Codex attached that follow-through
+here after the watcher deferred immediate wiring from A1308 jr2 on 2026-11-11 at 05:18.
 
 ## A1280: a retried join leaves the abandoned node id's node.db rows
 

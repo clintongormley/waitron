@@ -670,8 +670,9 @@ The sealed-key copy runs as `backups.sealed_state`, woken by node database commi
 Services appear in the same map with `kind: "service"`. The bucket copy is `stream`:
 `running` means its host has started a copy, `waiting` means it applies but cannot run
 (the reason is in `detail`), and `not_applicable` means it is inactive on this box.
-Jobs have `detail: null`. Automatic role-change wiring waits for a production live-promotion
-path. The runner's service API and sixty-second recheck remain available. When the duty table
+Jobs have `detail: null`. Automatic role notifications wait for a production live-promotion
+path. The service rechecks its applicability once a minute; `roleChanged()` has no production
+caller. A1279 owns the immediate wiring and promotion test if that path gains a caller. When the duty table
 closes, runner jobs stop together first and services stop last, so the bucket copy can finish
 copying writes made during close.
 Job state is reported without error codes or alert codes and never changes the health status;
