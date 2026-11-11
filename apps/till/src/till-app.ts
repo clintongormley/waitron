@@ -4757,6 +4757,8 @@ export class TillApp extends LitElement {
           this.#live = new TillLiveConnection({
             read: (types, onEvent, signal) => api.readLiveEvents(types, onEvent, { signal }),
           });
+          // Share non-transfer interests across navigation so opening a screen does not reopen the stream.
+          // Transfer interests follow the signed-in person instead of the device lifetime.
           this.#live.addInterests(
             "device",
             Object.entries(TILL_LIVE_TYPES)
