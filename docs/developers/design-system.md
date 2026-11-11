@@ -6469,12 +6469,22 @@ in one row at phone width, allowing their labels to wrap within equal columns. T
 carry one help-mode badge linked to the payment guide. Existing cash, card, equipment, recovery and
 unsaved-input handling stays in the payment window. Presented bills keep whole-only collection;
 retained whole-payment confirmations and zero-total completion keep their existing paths.
-Counter's first part payment remains with A739's next cut.
+Counter bills use the same window for their first and remaining payments.
+
+### Final payment documents
+
+Final payment and an initiating edit that settles a bill open a transient document dialog with
+Receipt selected, Full invoice and None. Print names the chosen printer; selecting a document
+prints nothing. An existing F1 keeps its recorded recipient and offers Email separately. F2's
+Full invoice choice explains that replacement is unavailable and retains the Receipt actions.
+Cash change stays beside the document choice. Failed originals keep Retry and Check; a completed F1
+keeps Confirm handover. None, closing or disconnecting dismisses the choice; table closure remains
+separate. A later order-linked receipt uses the server's print status to offer its original or a copy.
 
 ### Departments and zones
 
 You open one list, with each department followed by its indented zones. The columns show name,
-how orders start, counter service, receipt printing and Also edit. Each row opens its Edit dialog. A
+how orders start, counter service and Also edit. Each row opens its Edit dialog. A
 zone's inherited value is muted and italic; an explicit override stays normal even when it
 matches the department. The row menus stay pinned at the end.
 

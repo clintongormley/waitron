@@ -1489,9 +1489,11 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
       expect(send.mock.calls).toEqual([original, original]);
       expect(status === "open" ? api.collectOrder : api.recordSale).not.toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector("till-ticket-view")!.originalReceiptAvailable).toBe(
-        status === "open",
-      );
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        )!.originalReceiptAvailable,
+      ).toBe(status === "open");
     },
   );
   it.each([false, true])(
@@ -1574,9 +1576,11 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
       expect(send.mock.calls).toEqual([original, original]);
       expect(api.recordSale).not.toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector("till-ticket-view")!.originalReceiptAvailable).toBe(
-        false,
-      );
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        )!.originalReceiptAvailable,
+      ).toBe(false);
     },
   );
 
@@ -1665,7 +1669,11 @@ describe("till-app: a bill payment's refusals and retries", () => {
       emit(tableOrder(el), "pay-tab", { method: "cash", amount: "150.00", guestCount: 9 });
       await flush(el);
       expect(send.mock.calls).toEqual([original, original]);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        ),
+      ).not.toBeNull();
     },
   );
 
@@ -1766,7 +1774,11 @@ describe("till-app: a bill payment's refusals and retries", () => {
         amount: "140.00",
       });
       expect(send.mock.calls[2]![status === "open" ? 7 : 3]).toBe(6);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        ),
+      ).not.toBeNull();
     },
   );
 
@@ -1907,11 +1919,19 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
 
       expect(send.mock.calls[1]).toEqual(original);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        ),
+      ).toBeNull();
       emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guestCount: 6 });
       await flush(el);
       expect(send.mock.calls[2]).toEqual(original);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        ),
+      ).not.toBeNull();
     },
   );
 
@@ -2022,7 +2042,11 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await userEvent.click(confirm);
       await flush(el);
       expect(send.mock.calls[1]).toEqual(original);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        ),
+      ).not.toBeNull();
     },
   );
 
@@ -2415,7 +2439,11 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     expect(inDialog(el, "wt-form-actions")!.error ?? "").toBe("");
     expect(vi.mocked(api.getBillBalance).mock.calls.length).toBeGreaterThan(reads);
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+        "till-settlement-document-dialog",
+      ),
+    ).toBeNull();
 
     await press(el, 'input[name="way"][value="contribution"]');
     await type(el, "amount", "40");
@@ -3287,7 +3315,11 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     expect(sent()).toHaveLength(before);
     expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
     expect(dialog(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+        "till-settlement-document-dialog",
+      ),
+    ).not.toBeNull();
   });
 
   it("changes nothing while a resend of it is still out", async () => {
@@ -3677,7 +3709,7 @@ describe("till-app: a bill that already holds money", () => {
     expect(takeBillPayment).toHaveBeenCalledOnce();
     expect(dialog(el)).toBeNull();
     const ticket = el.shadowRoot!.querySelector<HTMLElement & { result: TillSaleResult }>(
-      "till-ticket-view",
+      "till-settlement-document-dialog",
     )!;
     expect(ticket.result.invoiceNumber).toBe("F-0007");
   });
@@ -4260,7 +4292,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(api.pay).not.toHaveBeenCalled();
     expect(dialog(el)).toBeNull();
     const ticket = el.shadowRoot!.querySelector<HTMLElement & { result: TillSaleResult }>(
-      "till-ticket-view",
+      "till-settlement-document-dialog",
     )!;
     expect(ticket.result.invoiceNumber).toBe("F-0007");
     const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
@@ -4340,7 +4372,11 @@ describe("till-app: a partly paid order at the counter", () => {
     );
     await flush(el);
 
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+        "till-settlement-document-dialog",
+      ),
+    ).toBeNull();
     expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull();
     expect(api.listWorkingOrders).toHaveBeenCalledTimes(listReads);
   });
@@ -4475,7 +4511,11 @@ describe("till-app: a partly paid order at the counter", () => {
     });
     emit(counter(el), "collect-card", {});
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+        "till-settlement-document-dialog",
+      ),
+    ).not.toBeNull();
     const warning = el.shadowRoot!.querySelector<
       HTMLElement & { open: boolean; duration: number; message: string }
     >("[data-capture-warning]");
@@ -5044,11 +5084,11 @@ describe("till-app: the owner's split after a contribution", () => {
 
     expect(takeBillPayment.mock.calls[0]![0]).toBe("wo-check");
     const ticket = el.shadowRoot!.querySelector<HTMLElement & { result: TillSaleResult }>(
-      "till-ticket-view",
+      "till-settlement-document-dialog",
     )!;
     expect(ticket.result.total).toBe("30.00");
 
-    emit(ticket, "new-sale");
+    emit(ticket, "settlement-close");
     await flush(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -5852,7 +5892,11 @@ describe("till-app: a bill payment on the card reader", () => {
     const { el, finish } = await knownChargeCompleted(getFiledTicket);
     await finish();
     expect(dialog(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+        "till-settlement-document-dialog",
+      ),
+    ).not.toBeNull();
     expect(getFiledTicket).toHaveBeenCalledWith("wo-4");
     expect(sent()).toHaveLength(1);
   });
@@ -5863,7 +5907,11 @@ describe("till-app: a bill payment on the card reader", () => {
     );
     await finish();
     expect(dialog(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+        "till-settlement-document-dialog",
+      ),
+    ).toBeNull();
     expect(el.shadowRoot!.querySelector(".error")?.textContent).toContain(
       t("bill_pay.ticket_unread"),
     );
@@ -5893,7 +5941,11 @@ describe("till-app: a bill payment on the card reader", () => {
       else refuse({ code: "server.internal", status: 500 });
       await flush(el);
       expect(dialog(el)).toBeNull();
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+      expect(
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-ticket-view"]>(
+          "till-settlement-document-dialog",
+        ),
+      ).toBeNull();
       expect(el.shadowRoot!.querySelector(".error")?.textContent ?? "").not.toContain(
         t("bill_pay.ticket_unread"),
       );
@@ -6013,7 +6065,9 @@ describe("till-app: a bill payment on the card reader", () => {
         await press(el, "[data-pay-continue]");
         await press(el, "[data-pay-confirm]");
         expect(sent()).toEqual([original, original]);
-        expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+        expect(
+          el.shadowRoot!.querySelector("till-ticket-view, till-settlement-document-dialog"),
+        ).toBeNull();
       } finally {
         setLocale("en-GB");
       }

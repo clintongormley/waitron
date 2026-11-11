@@ -208,7 +208,7 @@ async function venueWith(
       .values({
         name: "Barra",
         formFactor: "till",
-        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+        capabilities: [...BASIC_ACTIONS, "print-receipt", "open-cash-drawer", "take-cash"],
       })
       .returning({ id: deviceProfiles.id });
     return {
@@ -279,7 +279,17 @@ async function sell(
       tender,
     }),
   });
+  if (res.status === 200) await printOriginal(v, id);
   return { id, status: res.status, body: (await res.json()) as { locale?: string } };
+}
+
+async function printOriginal(v: Venue, id: string): Promise<void> {
+  const res = await v.app.request(`/api/sales/${id}/receipt`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: v.till },
+    body: "{}",
+  });
+  expect(res.status).toBe(200);
 }
 
 /** The receipts printed so far, oldest first, each as its printed lines; then forgets them. */
@@ -540,6 +550,7 @@ describe("a card-reader sale files and prints in the location's language when th
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.locale).toBe("ca-ES");
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+    await printSaleReceipt(deps, venue.cfg, id, false);
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
     expect(startsWith(receipt, "Tarjeta")).toBe(false);
@@ -572,6 +583,7 @@ describe("a card-reader sale files and prints in the location's language when th
     if (out.outcome !== "captured") throw new Error("unreachable");
     expect(out.ticket.locale).toBe("ca-ES");
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
+    await printSaleReceipt(deps, venue.cfg, id, false);
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Targeta"), "Targeta").toBe(true);
     expect(startsWith(receipt, "Tarjeta")).toBe(false);
@@ -941,6 +953,7 @@ describe("a sale prints its goods in the default content language its lines stor
         ...extra,
       }),
     });
+    if (res.status === 200) await printOriginal(v, id);
     return {
       id,
       status: res.status,
@@ -1020,6 +1033,7 @@ describe("a sale prints its goods in the default content language its lines stor
     expect(lineDescriptions(suite.db, id)).toEqual([
       { "ca-ES": "CLIENT-ES Pan con tomate", "es-ES": "CLIENT-ES Pan con tomate" },
     ]);
+    await printOriginal(v, id);
     const [receipt] = await takePrinted(suite.db);
     for (const label of ["Base imponible 21%", "Efectivo", "Cambio"]) {
       expect(startsWith(receipt!, label), label).toBe(true);

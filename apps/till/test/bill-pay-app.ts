@@ -407,7 +407,7 @@ export async function openDialog(
   const pay = dialog(el);
   if (pay === null) {
     if (recovery !== "settling")
-      expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
     return;
   }
   if (way !== "rest" && !pay.busy && !pay.confirmationLocked) {

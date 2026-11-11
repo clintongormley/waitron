@@ -751,23 +751,14 @@ export class DepartmentSettings extends LitElement {
   }
   private get differing() {
     const draft = this.draft!;
-    const fields = ["orderStart", "paidWhen", "collectionNumber", "receiptPrintMode"] as const;
+    const fields = ["orderStart", "paidWhen", "collectionNumber"] as const;
     return (this.model?.zones ?? [])
       .filter((z) => z.departmentId === this.departmentId)
       .flatMap((zone) => {
         const overrides = this.model!.salePolicies.zones.find((p) => p.zoneId === zone.id);
         if (!overrides) return [];
         const labels = fields
-          .filter(
-            (field) =>
-              overrides[field] !== null &&
-              overrides[field] !==
-                (field === "receiptPrintMode"
-                  ? (this.model!.salePolicies.departments.find(
-                      (p) => p.departmentId === this.departmentId,
-                    )?.receiptPrintMode ?? "auto")
-                  : draft[field]),
-          )
+          .filter((field) => overrides[field] !== null && overrides[field] !== draft[field])
           .map((field) => {
             switch (field) {
               case "orderStart":
@@ -785,12 +776,6 @@ export class DepartmentSettings extends LitElement {
               case "collectionNumber":
                 return t(
                   overrides.collectionNumber === "numbered" ? "venue.print" : "venue.dont_print",
-                );
-              case "receiptPrintMode":
-                return t(
-                  overrides.receiptPrintMode === "auto"
-                    ? "venue.always"
-                    : "venue.receipt_on_request",
                 );
             }
           });
@@ -866,7 +851,6 @@ export class DepartmentSettings extends LitElement {
             <h3>${t("venue.orders_and_payment")}</h3>
             <dashboard-service-settings-fields
               .value=${{ ...draft, receiptPrintMode: this.model!.salePolicies.departments.find((p) => p.departmentId === row.id)?.receiptPrintMode ?? "auto" }}
-              .showReceiptMode=${false}
               .errors=${serviceErrors}
               ?disabled=${disabled}
               @service-settings-change=${(e: CustomEvent<{ value: ServiceSettingsValue }>) => {

@@ -20,7 +20,7 @@ import { periodsWindowPath } from "./opening-hours-paths.js";
 
 export type DepartmentZoneRow =
   ({ kind: "department" } & Department) | ({ kind: "zone" } & ServiceZone);
-type PolicyField = "orderStart" | "paidWhen" | "receiptPrintMode";
+type PolicyField = "orderStart" | "paidWhen";
 
 @customElement("departments-list")
 export class DepartmentsList extends LitElement {
@@ -220,7 +220,7 @@ export class DepartmentsList extends LitElement {
       row.kind === "zone"
         ? this.model!.salePolicies.zones.find((policy) => policy.zoneId === row.id)
         : undefined;
-    const defaults = { orderStart: "counter", paidWhen: "prepay", receiptPrintMode: "auto" };
+    const defaults = { orderStart: "counter", paidWhen: "prepay" };
     const raw = row.kind === "department" ? parent?.[field] : zone?.[field];
     const value = raw ?? parent?.[field] ?? defaults[field];
     const labels = {
@@ -228,8 +228,6 @@ export class DepartmentsList extends LitElement {
       counter: "venue.counter_service",
       prepay: "venue.paid_before_preparation",
       ticket_then_pay: "venue.paid_at_collection",
-      auto: "venue.always",
-      on_request: "venue.on_request",
     } as const;
     const inherited = row.kind === "zone" && raw == null;
     return html`<span part=${inherited ? `policy inherited inherited-${field}` : "policy"}
@@ -344,11 +342,6 @@ export class DepartmentsList extends LitElement {
         key: "paidWhen",
         label: t("venue.counter_paid_when"),
         cell: (row) => this.#policy(row, "paidWhen"),
-      },
-      {
-        key: "receiptPrintMode",
-        label: t("venue.print_receipt"),
-        cell: (row) => this.#policy(row, "receiptPrintMode"),
       },
       {
         key: "also",

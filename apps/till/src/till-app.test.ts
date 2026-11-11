@@ -564,9 +564,34 @@ const modeIndicator = (el: TillApp) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=mode-indicator]");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
-const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+const ticket = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view, till-settlement-document-dialog");
+function closeTicket(el: TillApp): void {
+  const view = ticket(el)!;
+  emit(
+    view,
+    view.localName === "till-settlement-document-dialog" ? "settlement-close" : "new-sale",
+  );
+}
+async function openFiledReceipt(el: TillApp): Promise<void> {
+  closeTicket(el);
+  await flush(el);
+  emit(shell(el)!, "find-bill");
+  await flush(el);
+  const view = el.shadowRoot!.querySelector("till-find-bill-screen")!;
+  emit(view, "find-transaction-open", { row: transactionRow() });
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+}
 async function showTicketDocument(el: TillApp, document: "receipt" | "invoice") {
   const view = ticket(el)!;
+  if (view.localName === "till-settlement-document-dialog") {
+    await userEvent.click(
+      view.shadowRoot!.querySelector<HTMLElement>(`[data-settlement-choice=${document}]`)!,
+    );
+    await flush(el);
+    return;
+  }
   const toggle = view.shadowRoot!.querySelector<HTMLElement>("[data-test=document-print-toggle]");
   if (toggle === null || toggle.getAttribute("aria-expanded") === "true") return;
   await userEvent.click(toggle);
@@ -4116,7 +4141,10 @@ describe("till-app", () => {
       lines: [{ descriptions: { "es-ES": "Agua" }, quantity: "3", gross: "6.00" }],
     };
     const norm = (s: string): string => s.replace(/[\u00A0\u202F]/g, " ");
-    const { el } = await mountApp({ recordSale: vi.fn().mockResolvedValue(filed) });
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockResolvedValue(filed),
+      getTransactionReceipt: vi.fn().mockResolvedValue(filed),
+    });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "2"); // client basket — different from the filed lines
     await el.updateComplete;
@@ -4124,6 +4152,8 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "10" });
     await flush(el);
 
+    expect(ticket(el)!.result).toBe(filed);
+    await openFiledReceipt(el);
     const rows = ticket(el)!.shadowRoot!.querySelectorAll(".line");
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain("Agua");
@@ -4895,7 +4925,7 @@ describe("till-app", () => {
       } else c.store.addProduct(coffee, "2");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await flush(el);
       c = counter(el)!;
       if (order === "same") {
@@ -5066,7 +5096,7 @@ describe("till-app", () => {
       emit(ticket(el)!, "confirm-handover");
       await flush(el);
       expect(currentApi.confirmReceiptHandover).toHaveBeenCalledOnce();
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await flush(el);
       c = counter(el)!;
       if (order === "same") {
@@ -5138,14 +5168,14 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("does not fetch original print status for an F2 completion", async () => {
-    const getReceiptPrintStatus = vi.fn();
+  it("fetches the F2 original print status before offering a document", async () => {
+    const getReceiptPrintStatus = vi.fn().mockResolvedValue({ status: "not_queued" });
     const { el } = await mountApp({ getReceiptPrintStatus });
     const c = await toCounter(el);
     c.store.addProduct(coffee, "2");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    expect(getReceiptPrintStatus).not.toHaveBeenCalled();
+    expect(getReceiptPrintStatus).toHaveBeenCalledExactlyOnceWith(c.store.id);
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
   });
 
@@ -5241,7 +5271,7 @@ describe("till-app", () => {
         const { el } = await soldF1({ getInvoiceDeliveries }, true);
         await pass(el, 0);
         expect(getInvoiceDeliveries).toHaveBeenCalledOnce();
-        emit(ticket(el)!, "new-sale");
+        closeTicket(el);
         await pass(el, 0);
         expect(ticket(el)).toBeNull();
         await pass(el, 20_000);
@@ -5475,7 +5505,7 @@ describe("till-app", () => {
       await flush(el);
       emit(ticket(el)!, "print-invoice");
       await flush(el);
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await flush(el);
       refuse({ code: "invoice_delivery.active" });
       await flush(el);
@@ -5505,7 +5535,7 @@ describe("till-app", () => {
           );
           const { el } = await soldF1({ getInvoiceDeliveries }, true);
           await vi.advanceTimersByTimeAsync(0);
-          emit(ticket(el)!, "new-sale");
+          closeTicket(el);
           await vi.advanceTimersByTimeAsync(0);
           finish(settle as never);
           await vi.advanceTimersByTimeAsync(20_000);
@@ -5818,7 +5848,7 @@ describe("till-app", () => {
         emit(ticket(el)!, "email-invoice");
         await flush(el);
         expect(form(el)).not.toBeNull();
-        emit(ticket(el)!, "new-sale");
+        closeTicket(el);
         await flush(el);
         const c = counter(el)!;
         c.store.addProduct(coffee, "2");
@@ -5835,6 +5865,10 @@ describe("till-app", () => {
     async (receiptPrintMode) => {
       const printReceipt = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({
+        getReceiptPrintStatus: vi
+          .fn()
+          .mockResolvedValueOnce({ status: "not_queued" })
+          .mockResolvedValue({ status: "done" }),
         zonePolicy: { receiptPrintMode: receiptPrintMode },
         getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode }),
         printReceipt,
@@ -5859,6 +5893,10 @@ describe("till-app", () => {
 
   it("collection offers the original receipt after payment, then a duplicate after printing", async () => {
     const { el } = await mountApp({
+      getReceiptPrintStatus: vi
+        .fn()
+        .mockResolvedValueOnce({ status: "not_queued" })
+        .mockResolvedValue({ status: "done" }),
       zonePolicy: { serviceMode: "ticket_then_pay", receiptPrintMode: "on_request" },
       getTill: vi.fn().mockResolvedValue({
         ...till,
@@ -6277,9 +6315,7 @@ describe("till-app", () => {
     expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(2);
     expect(ticket(el)).not.toBeNull();
 
-    // Returning to the counter ("New sale") shows the refreshed (now empty) list, not the stale one —
-    // the app's held state was updated to [] by the pay refresh, so the re-rendered counter reads it.
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await flush(el);
     expect(counter(el)!.heldOrders).toEqual([]);
   });
@@ -6311,6 +6347,7 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "2.00" });
     await flush(el);
     expect(ticket(el)?.simulated).toBe(true);
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=simulation-notice]")).not.toBeNull();
   });
 
   it("retrieve then pay: recordSale settles under the RETRIEVED order's own id, not a fresh one", async () => {
@@ -7545,7 +7582,7 @@ describe("till-app", () => {
     expect(recordSale.mock.calls[1]![2]).toBe(stableId);
   });
 
-  it("new-sale: clears the basket and returns to an empty counter", async () => {
+  it("None clears the paid basket and returns to an empty counter", async () => {
     const { el } = await mountApp();
     const c = await toCounter(el);
     const store = c.store;
@@ -7554,7 +7591,7 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
 
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await flush(el);
 
     expect(counter(el)).not.toBeNull();
@@ -10964,7 +11001,7 @@ describe("till-app", () => {
 
     // A fresh sale must fire a SECOND recordSale — proving `submitting` was cleared after the first
     // success rather than left stuck (a stuck flag would make this confirm-payment a silent no-op).
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await flush(el);
     counter(el)!.store.addProduct(coffee, "1");
     await el.updateComplete;
@@ -11385,7 +11422,7 @@ describe("till-app", () => {
       emit(counter(el)!, "collect-card", {});
       await flush(el);
       expect(ticket(el)).not.toBeNull();
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await flush(el);
 
       await tenderPay(el).updateComplete;
@@ -13396,7 +13433,7 @@ describe("till-app", () => {
       await flush(el);
       expect(ticket(el)).not.toBeNull();
 
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await flush(el);
 
       expect(tenderPay(el).stage).toBe("order");
@@ -13686,10 +13723,14 @@ describe("till-app", () => {
         { receiptTrim: {}, venueAddress: [], receiptSettings: { printAddress: false } },
       ];
       const recordSale = vi.fn();
-      for (const presentation of presentations)
+      const getTransactionReceipt = vi.fn();
+      for (const presentation of presentations) {
         recordSale.mockResolvedValueOnce({ ...saleResult, ...presentation });
+        getTransactionReceipt.mockResolvedValueOnce({ ...saleResult, ...presentation });
+      }
       const { el } = await mountApp({
         recordSale,
+        getTransactionReceipt,
         getTill: vi.fn().mockResolvedValue({
           ...till,
           receipt: { headerSubtitle: "Stale boot" },
@@ -13703,6 +13744,8 @@ describe("till-app", () => {
         await flush(el);
         emit(c, "confirm-payment", { method: "cash", amount: "5" });
         await flush(el);
+        expect(ticket(el)!.result).toMatchObject(presentation);
+        await openFiledReceipt(el);
         const view = ticket(el)!;
         expect(view.result.receiptTrim).toEqual(presentation.receiptTrim);
         expect(view.result.receiptSettings).toEqual(presentation.receiptSettings);
@@ -14418,7 +14461,7 @@ describe("till-app", () => {
       expect(shell(el)!.activeScreen).toBe("counter");
     });
 
-    it("completes a sale through fixed Counter and lands on the ticket drill-in (sale-path guard)", async () => {
+    it("completes a sale through fixed Counter and opens the document chooser (sale-path guard)", async () => {
       const el = await toShellCounter();
       const c = counter(el)!;
       expect(c.shadowRoot!.querySelector("till-card-grid")).toBeNull();
@@ -14427,14 +14470,13 @@ describe("till-app", () => {
       await el.updateComplete;
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
-      // The ticket is a drill-in over the (inert) counter tab.
-      expect(ticket(el)).not.toBeNull();
-      expect(ticket(el)!.getAttribute("slot")).toBe("drill");
-      expect(drill(el)).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+      expect(drill(el)).toBeNull();
       expect(ticket(el)!.result).toBe(saleResult);
     });
 
-    it("returns to the counter tab and clears the basket on New sale from the ticket drill-in", async () => {
+    it("returns to the counter tab and clears the paid basket on None", async () => {
       const el = await toShellCounter();
       const c = counter(el)!;
       c.store.addProduct(coffee, "2");
@@ -14442,9 +14484,8 @@ describe("till-app", () => {
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       expect(ticket(el)).not.toBeNull();
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await el.updateComplete;
-      // Ticket drill gone; back on the counter tab with an empty basket ready for the next customer.
       expect(drill(el)).toBeNull();
       expect(ticket(el)).toBeNull();
       expect(counter(el)).not.toBeNull();
@@ -15336,7 +15377,7 @@ describe("till-app", () => {
       expect(selected(el)).toBe("cat-drinks");
 
       // Start the next order with the last menu still selected.
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await flush(el);
       expect(selected(el)).toBe("cat-drinks");
       expect(switcherButtons(el)[1]!.getAttribute("aria-pressed")).toBe("true");
@@ -15703,7 +15744,7 @@ describe("remembered dietary filters", () => {
     c.store.addProduct(salad, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await flush(el);
     expect(pressed(counter(el)!, "vegan")).toBe("true");
     counter(el)!.store.addProduct(salad, "1");
@@ -16959,7 +17000,7 @@ describe("a failed list refresh after a successful write", () => {
     expect(countdown(el, "station")).toBe(t("refresh.retrying"));
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await settle(el);
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await settle(el);
 
     emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-deli" });
@@ -16990,7 +17031,7 @@ describe("a failed list refresh after a successful write", () => {
     }
 
     async function payNextSale(el: TillApp): Promise<void> {
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await settle(el);
       expect(counter(el)!.busy).toBe(false);
       counter(el)!.store.addProduct(coffee, "1");
@@ -17232,7 +17273,7 @@ describe("a failed list refresh after a successful write", () => {
       listWorkingOrders.mockResolvedValue([heldSummary]);
       await tick(el, 5000);
       expect(message(el, "held")).toBe("");
-      emit(ticket(el)!, "new-sale");
+      closeTicket(el);
       await settle(el);
       expect(counter(el)!.heldOrders).toEqual([heldSummary]);
     });
@@ -18453,7 +18494,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       null,
     );
 
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await flush(el);
     expect(tenderPay(el).mode).toBe("prepay");
     expect(tenderPay(el).stage).toBe("order");
@@ -22296,7 +22337,7 @@ describe("basket unsaved replacement", () => {
     expect(question(el).open).toBe(false);
     expect(currentApi.recordSale).toHaveBeenCalledOnce();
     expect(unloadCancelled()).toBe(false);
-    emit(ticket(el)!, "new-sale");
+    closeTicket(el);
     await flush(el);
     expect(counter(el)!.store.lines).toEqual([]);
     expect(unloadCancelled()).toBe(false);
@@ -22596,7 +22637,7 @@ it("New sale keeps edits made during payment until you explicitly discard them",
   const unload = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(unload);
   expect(unload.defaultPrevented).toBe(true);
-  emit(ticket(el)!, "new-sale");
+  closeTicket(el);
   await flush(el);
   const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
   expect(question.open).toBe(true);
@@ -22606,7 +22647,7 @@ it("New sale keeps edits made during payment until you explicitly discard them",
   expect(ticket(el)).not.toBeNull();
   expect(c.store.id).toBe(id);
   expect(c.store.label).toBe("Later label");
-  emit(ticket(el)!, "new-sale");
+  closeTicket(el);
   await discardBasketChanges(el);
   await expect.poll(() => counter(el)).not.toBeNull();
   expect(counter(el)!.store.id).not.toBe(id);
@@ -22626,7 +22667,7 @@ it("a completed sale can start the next basket while its held-list refresh is st
   const id = c.store.id;
   emit(c, "confirm-payment", { method: "cash", amount: "3" });
   await expect.poll(() => ticket(el)).not.toBeNull();
-  emit(ticket(el)!, "new-sale");
+  closeTicket(el);
   await flush(el);
   const next = counter(el);
   expect(next).not.toBeNull();
@@ -25273,7 +25314,7 @@ describe("retrieved table bills paid at Counter", () => {
       await flush(el);
       expect(recordSale).toHaveBeenCalledTimes(1);
       expect(recordSale.mock.calls[0]![8]).toEqual(expectedEdit);
-      expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
     },
   );
   it("keeps the retrieved table edit observation on a connected-reader payment", async () => {
@@ -25301,7 +25342,7 @@ describe("retrieved table bills paid at Counter", () => {
     await flush(el);
     expect(pay).toHaveBeenCalledTimes(1);
     expect(pay.mock.calls[0]![0].expectedEdit).toEqual(expectedEdit);
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   });
   async function retrievedTable(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp({
@@ -25355,7 +25396,7 @@ describe("retrieved table bills paid at Counter", () => {
     expect(updateWorkingOrder.mock.invocationCallOrder[0]).toBeLessThan(
       recordSale.mock.invocationCallOrder[0]!,
     );
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   });
 });
 

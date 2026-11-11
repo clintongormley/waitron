@@ -111,51 +111,33 @@ it.each([
   ["orderStart", "counter", "Counter service", "table", "Table service"],
   ["paidWhen", "ticket_then_pay", "Paid at collection", "prepay", "Paid before preparation"],
   ["collectionNumber", "numbered", "Print", "none", "Don't print"],
-  ["receiptPrintMode", "on_request", "On request", "auto", "Always"],
 ] as const)(
   "a saved department %s reaches a following zone, while a saved override stays explicit",
   async (field, changed, changedLabel, override, overrideLabel) => {
     const { shell, settings, writes } = await mount();
     const service = settings.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
-    if (field === "receiptPrintMode") {
-      await shell.api.setDepartmentSalePolicyField("d1", field, changed);
-      shell.model = await shell.api.background.load();
-      await shell.updateComplete;
-      await shell
-        .shadowRoot!.querySelector("department-edit-dialog")!
-        .shadowRoot!.querySelector("wt-modal")!
-        .requestClose("cancel");
-      await expect.poll(() => shell.shadowRoot!.querySelector("department-edit-dialog")).toBeNull();
-    } else {
-      await selectDepartmentTab(settings, "service");
-      await pick(service, field, changed);
-      await expect.poll(() => service.value[field]).toBe(changed);
-      await settings.updateComplete;
-      settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
-    }
+    await selectDepartmentTab(settings, "service");
+    await pick(service, field, changed);
+    await expect.poll(() => service.value[field]).toBe(changed);
+    await settings.updateComplete;
+    settings.shadowRoot!.querySelector<HTMLElement>("[data-test=save-editor]")!.click();
     await expect.poll(() => shell.model.salePolicies.departments[0]![field]).toBe(changed);
     await expect.poll(() => shell.getAttribute("aria-busy")).toBe("false");
     expect(writes).toEqual([
       {
-        path:
-          field === "receiptPrintMode"
-            ? "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
-            : "/management-api/venue-service/departments/d1/settings",
-        method: field === "receiptPrintMode" ? "PATCH" : "PUT",
-        body:
-          field === "receiptPrintMode"
-            ? { value: "on_request" }
-            : {
-                name: "Restaurant",
-                tradingName: "Casa",
-                orderStart: "table",
-                paidWhen: "prepay",
-                collectionNumber: "none",
-                needsClearing: false,
-                lateSendNeedsManager: false,
-                releaseReminderMinutes: null,
-                [field]: changed,
-              },
+        path: "/management-api/venue-service/departments/d1/settings",
+        method: "PUT",
+        body: {
+          name: "Restaurant",
+          tradingName: "Casa",
+          orderStart: "table",
+          paidWhen: "prepay",
+          collectionNumber: "none",
+          needsClearing: false,
+          lateSendNeedsManager: false,
+          releaseReminderMinutes: null,
+          [field]: changed,
+        },
       },
     ]);
     const openZone = async () => {

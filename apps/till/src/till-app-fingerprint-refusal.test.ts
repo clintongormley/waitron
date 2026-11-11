@@ -94,7 +94,9 @@ async function openCounter(el: TillApp) {
 function expectRefused(el: TillApp) {
   expect(banner(el)?.textContent?.trim()).toBe(codeMessage(refusal.code));
   expect(el.shadowRoot!.textContent).not.toContain(refusal.code);
-  expect(el.shadowRoot!.querySelector("till-ticket-view, till-paid-view")).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector("till-ticket-view, till-settlement-document-dialog"),
+  ).toBeNull();
 }
 
 it.each(
@@ -168,7 +170,7 @@ it.each(["en-GB", "es-ES"])(
     emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
     await flush(el);
     expect(write).toHaveBeenCalledTimes(2);
-    expect(el.shadowRoot!.querySelector("till-paid-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
   },
 );
 

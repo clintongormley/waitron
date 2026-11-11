@@ -519,6 +519,10 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const orderId = await ringSale(app, cookie, each.menuItemId);
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
     const readerCookie = await loginOnDevice(app, await enrolTillCookie(cfg, []), operatorId);
     const snapshot = () =>
       withTransaction(suite.db, async (tx) => ({
@@ -634,6 +638,10 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const orderId = await ringSale(app, cookie, each.menuItemId);
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
     await suite.db.update(printJobs).set({ status: "done" });
     const jobsBefore = await suite.db.select().from(printJobs);
     const salesBefore = await suite.db.select().from(sales);
@@ -877,6 +885,10 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const orderId = await ringSale(app, cookie, each.menuItemId);
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
     const [original] = await suite.db.select().from(printJobs);
     await suite.db
       .update(printJobs)
@@ -1045,6 +1057,10 @@ describe("an original receipt whose printer was deleted", () => {
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
     const orderId = await ringSale(app, cookie, each.menuItemId);
+    expect(
+      (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
+        .status,
+    ).toBe(200);
     return { app, cfg, orderId, cookie, printerId, menuItemId: each.menuItemId };
   }
 

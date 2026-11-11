@@ -3041,8 +3041,65 @@ describe("A790 recorded document then printer", () => {
     expect(actions).toEqual(["print-receipt"]);
   });
 
+  it.each([
+    ["not_queued", "print-receipt"],
+    ["done", "reprint"],
+    ["queued", "reprint"],
+    ["printing", "reprint"],
+  ] as const)("a later F2 receipt follows its server history: %s", async (status, action) => {
+    const { el } = await mountChoice(
+      {
+        historical: true,
+        historicalDelivery: true,
+        originalReceiptAvailable: false,
+        originalReceiptPrint:
+          status === "not_queued" ? { status } : { status, jobId: "original", canRetry: false },
+      },
+      "F2",
+    );
+    await press(el, "document-print-toggle");
+    expect(part(el, action)).not.toBeNull();
+    expect(part(el, action === "reprint" ? "print-receipt" : "reprint")).toBeNull();
+  });
+
+  it("lets a later F2 receipt retry a failed print-status read", async () => {
+    const { el } = await mountChoice(
+      {
+        historical: true,
+        historicalDelivery: true,
+        originalReceiptPrint: undefined,
+        originalReceiptReadFailed: true,
+      },
+      "F2",
+    );
+    expect(part(el, "refresh-receipt")).not.toBeNull();
+    const checked = vi.fn();
+    el.addEventListener("refresh-receipt", checked);
+    part(el, "refresh-receipt")!.click();
+    expect(checked).toHaveBeenCalledOnce();
+  });
+
+  it("keeps copies for a past F2 receipt with no order status", async () => {
+    const { el } = await mountChoice({
+      historical: true,
+      historicalDelivery: false,
+      result: { ...result, invoiceType: "F2" },
+      originalReceiptPrint: undefined,
+      originalReceiptAvailable: false,
+    });
+    await press(el, "document-print-toggle");
+    expect(part(el, "reprint")).not.toBeNull();
+    expect(part(el, "print-receipt")).toBeNull();
+  });
+
   it("opens F2 directly at its Receipt printer and explicitly confirms a copy", async () => {
-    const { el } = await mountChoice({ originalReceiptAvailable: false }, "F2");
+    const { el } = await mountChoice(
+      {
+        originalReceiptAvailable: false,
+        originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
+      },
+      "F2",
+    );
     const copies: Event[] = [];
     el.addEventListener("reprint", (event) => copies.push(event));
     await press(el, "document-print-toggle");

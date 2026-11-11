@@ -265,7 +265,8 @@ const shell = (el: TillApp) =>
   >("till-shell");
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
-const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view");
+const ticket = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view, till-settlement-document-dialog");
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
 const privateState = <T>(el: TillApp, field: string): T =>
   (el as unknown as Record<string, T>)[field]!;
@@ -1670,25 +1671,6 @@ describe("till-app receipt issuance", () => {
     );
   });
 
-  async function ticketAfterSale(catalogue: ZoneOfferCatalogue): Promise<TillTicketView> {
-    const { el } = await mountApp({ listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue) });
-    const c = await toCounter(el);
-    c.store.addProduct(c.products[0]!, "1");
-    await el.updateComplete;
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-    return ticket(el)!;
-  }
-
-  it("uses automatic printing when zone offers omit the receipt choice, with or without a zone chooser", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.zones = [zone("zone-counter", "prepay")];
-    expect((await ticketAfterSale(catalogue)).originalReceiptAvailable).toBe(false);
-    cleanupWidgets();
-    delete catalogue.zones;
-    expect((await ticketAfterSale(catalogue)).originalReceiptAvailable).toBe(false);
-  });
-
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {
     const catalogue = zoneOffers(
       { menus: [defaultMenu], products: [coffee] },
@@ -1703,43 +1685,6 @@ describe("till-app receipt issuance", () => {
     const c = await toCounter(el);
 
     expect(c.orderFlow).toBe("ticket_then_pay");
-  });
-
-  it("offers the original receipt according to the selected zone", async () => {
-    const catalogue = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    catalogue.context.receiptPrintMode = "on_request";
-    const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
-    });
-    const c = await toCounter(el);
-    c.store.addProduct(c.products[0]!, "1");
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-
-    expect(ticket(el)!.originalReceiptAvailable).toBe(true);
-  });
-
-  it("updates original receipt availability when the counter switches zones", async () => {
-    const initial = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-counter");
-    initial.context.receiptPrintMode = "on_request";
-    initial.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
-    const deli = zoneOffers({ menus: [defaultMenu], products: [coffee] }, "zone-deli");
-    deli.context.receiptPrintMode = "auto";
-    const { el } = await mountApp({
-      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(initial)),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(initial),
-      listZoneOffers: vi.fn().mockResolvedValue(deli),
-    });
-    const c = await toCounter(el);
-    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
-    await flush(el);
-    expect(c.selectedServiceZoneId).toBe("zone-deli");
-    c.store.addProduct(c.products[0]!, "1");
-    emit(c, "confirm-payment", { method: "cash", amount: "5" });
-    await flush(el);
-
-    expect(ticket(el)!.originalReceiptAvailable).toBe(false);
   });
 
   it("keeps the original receipt on offer and says why when printing it fails", async () => {
@@ -1757,6 +1702,8 @@ describe("till-app receipt issuance", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     const workingOrderId = vi.mocked(api.recordSale).mock.calls[0]![2];
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
 
     emit(ticket(el)!, "print-receipt");
     await flush(el);
@@ -2377,6 +2324,8 @@ describe("till-app counter: the guests the receipt prints", () => {
     expect(vi.mocked(api.collectOrder).mock.calls).toStrictEqual([
       [c.store.id, { method: "cash", amount: "5" }, undefined, 2, null],
     ]);
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   });
 
   it("a zero-total completion with a full invoice chosen shows no field and sends no guests", async () => {
@@ -3470,6 +3419,55 @@ describe("till-app logout while a request is waiting for the server", () => {
     await flush(el);
 
     expect(parkOrder).toHaveBeenCalledOnce();
+  });
+
+  it("an edit that settles a counter bill opens documents without taking another payment", async () => {
+    const { el } = await mountApp({
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 1, invoice: saleResult }),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.markPersisted();
+    c.store.setLineQuantity(0, "2");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+  });
+
+  it("recovers a held save's invoice after its reply was lost and the retry is refused", async () => {
+    const { el } = await mountApp({
+      updateWorkingOrder: vi
+        .fn()
+        .mockRejectedValue({ code: "working_order.not_open", status: 409 }),
+      getBillBalance: vi.fn().mockResolvedValue({
+        status: "settled",
+        outstanding: "0.00",
+        received: "3.00",
+        total: "3.00",
+        reserved: "0.00",
+        tips: "0.00",
+        payments: [],
+        paidLines: [],
+      }),
+      getFiledTicket: vi.fn().mockResolvedValue(saleResult),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.markPersisted();
+    c.store.setLineQuantity(0, "2");
+    const billId = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
+    );
+    expect(api.getFiledTicket).toHaveBeenCalledWith(billId);
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(
+      el.shadowRoot!.querySelector("till-settlement-document-dialog")!.result.invoiceNumber,
+    ).toBe("F-0001");
   });
 
   it.each(["en-GB", "es-ES"])(
@@ -5940,7 +5938,8 @@ describe("own card payment and idle sign-out (A532)", () => {
     });
     await vi.advanceTimersByTimeAsync(0);
     await el.updateComplete;
-    expect(ticket(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
     await vi.advanceTimersByTimeAsync(299_999);
     expect(privateState<string>(el, "operatorName")).toBe("Ana");
     await vi.advanceTimersByTimeAsync(1);

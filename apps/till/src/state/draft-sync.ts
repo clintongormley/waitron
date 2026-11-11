@@ -166,7 +166,8 @@ export interface DraftSyncOptions {
   onRefused: (code: string, ownerName?: string) => void;
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;
-  onSaved?: () => void;
+  onSaved?: (snapshot: BillDraftSnapshot) => void;
+  onSaveFailed?: (error: unknown) => void;
   /** How long one read or save may stay out before it is cut off. */
   requestLimitMs: number;
   candidates?: Map<string, RetainedDraftCandidate>;
@@ -969,7 +970,11 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#ended) return "failed";
-      if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
+      if (!this.#invalidateSave(expectedEdit)) {
+        const outcome = await this.#refused(error);
+        this.#options.onSaveFailed?.(error);
+        return outcome;
+      }
       const refusal = asRefusal(error);
       return refusal?.refused === SESSION_PERSON_REFUSAL ? refusal : "failed";
     } finally {
@@ -982,16 +987,13 @@ export class DraftSync {
     const saved = snapshot.draft;
     if (saved === null) {
       this.#show(null);
-      this.#lockAuthority();
-      return "saved";
-    }
-    if (this.#unsaved) {
+    } else if (this.#unsaved) {
       this.#take(saved);
       this.#attachSavedIds(saved, pending, lines, selections);
     } else if (sameLines(lines, saved.lines)) this.#keep(saved);
     else this.#show(saved);
     this.#lockAuthority();
-    this.#options.onSaved?.();
+    this.#options.onSaved?.(snapshot);
     return "saved";
   }
 

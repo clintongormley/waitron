@@ -813,6 +813,7 @@ export type BillEditExpected = Pick<
 >;
 
 export interface BillDraftSnapshot {
+  invoice?: TillSaleResult;
   draft: Draft | null;
   edit: BillEditState;
 }
@@ -839,6 +840,7 @@ export interface DraftDiscard {
 }
 
 export interface DiscardedDraft {
+  invoice?: TillSaleResult;
   draftId: string;
   billId: string;
   revision: number;
@@ -3305,8 +3307,12 @@ export class TillApi {
       expectedEdit: BillEditExpected | null;
       lateSend?: LateSend;
     },
-  ): Promise<{ revision: number }> {
-    return this.#request<{ revision: number }>(`/api/working-orders/${id}`, "PUT", req);
+  ): Promise<{ revision: number; invoice?: TillSaleResult }> {
+    return this.#request<{ revision: number; invoice?: TillSaleResult }>(
+      `/api/working-orders/${id}`,
+      "PUT",
+      req,
+    );
   }
 
   setWorkingOrderLabel(
@@ -3328,8 +3334,8 @@ export class TillApi {
     patch: OrderLinePatch,
     revision: number,
     expectedEdit: BillEditExpected | null,
-  ): Promise<{ revision: number; party: BillParty }> {
-    return this.#request<{ revision: number; party: BillParty }>(
+  ): Promise<{ revision: number; party: BillParty; invoice?: TillSaleResult }> {
+    return this.#request<{ revision: number; party: BillParty; invoice?: TillSaleResult }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
       { ...patch, revision, expectedEdit },
@@ -4429,7 +4435,7 @@ export class TillApi {
     lineId: string,
     command: CancelItemRequest,
     options: ReadOptions = {},
-  ): Promise<CancelItemAnswer> {
+  ): Promise<CancelItemAnswer & { invoice?: TillSaleResult }> {
     return this.#request(
       `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
       "POST",
@@ -4482,7 +4488,12 @@ export class TillApi {
     orderId: string,
     command: AdjustmentCommand,
     options: ReadOptions = {},
-  ): Promise<{ adjustmentIds: string[]; revision: number; party: BillParty }> {
+  ): Promise<{
+    adjustmentIds: string[];
+    revision: number;
+    party: BillParty;
+    invoice?: TillSaleResult;
+  }> {
     return this.#request(
       `/api/working-orders/${orderId}/adjustments`,
       "POST",
@@ -4867,7 +4878,7 @@ export class TillApi {
     lineIds: readonly string[],
     toBillId: string | null,
     revisions: BillRevisions & { expectedEdits: BillEditExpected[] },
-  ): Promise<{ billId: string }> {
+  ): Promise<{ billId: string; invoice?: TillSaleResult }> {
     return this.#request(`/api/bills/${fromBillId}/move-dishes`, "POST", {
       lineIds,
       toBillId,

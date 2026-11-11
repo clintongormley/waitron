@@ -53,12 +53,7 @@ import {
   enqueueOriginalReceipt,
   readOriginalReceiptPrint,
 } from "./receipt-print.js";
-import {
-  departmentReceipts,
-  departments,
-  orderServiceContexts,
-  zoneSalePolicies,
-} from "@waitron/venue-service";
+import { departmentReceipts, departments, orderServiceContexts } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import {
@@ -1512,104 +1507,76 @@ describe("the invoice at full payment", () => {
     );
   });
 
-  it.each([
-    { invoiceType: "F1", mode: "auto", documents: 1 },
-    { invoiceType: "F1", mode: "on_request", documents: 1 },
-    { invoiceType: "F2", mode: "auto", documents: 1 },
-    { invoiceType: "F2", mode: "on_request", documents: 0 },
-  ] as const)(
-    "captured-card completion queues $documents original for $invoiceType in $mode mode",
-    async ({ invoiceType, mode, documents }) => {
-      const [policy] = await inTx((tx) =>
-        tx.select().from(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, venue.offers.zoneId)),
+  it.each(["F1", "F2"] as const)(
+    "captured-card completion retains the %s invoice and explicitly requested paper on replay",
+    async (invoiceType) => {
+      const billId = await tabWith("Beer");
+      if (invoiceType === "F1") {
+        await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
+          revision: 0,
+          invoiceType,
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "2 Main Street, 28013 Madrid, Madrid",
+            countryCode: "ES",
+          },
+        });
+      }
+      const paymentId = await insertPayment(billId, { applied: 300 });
+      const completed = await inTx((tx) =>
+        completeBillPayment(
+          tx,
+          { ...fiscal(), admission: testTradingAdmission() },
+          venue.cfg,
+          paymentId,
+          new Date(),
+        ),
       );
-      try {
-        await inTx((tx) =>
-          tx
-            .insert(zoneSalePolicies)
-            .values({ zoneId: venue.offers.zoneId, receiptPrintMode: mode })
-            .onConflictDoUpdate({
-              target: zoneSalePolicies.zoneId,
-              set: { receiptPrintMode: mode },
-            }),
+      const [sale] = await inTx((tx) =>
+        tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+      );
+      expect(
+        await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
+      ).toEqual([]);
+      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
+      const jobs = await inTx((tx) =>
+        tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
+      );
+      expect(completed.invoice).toMatchObject({ invoiceType, total: "3.00" });
+      expect(jobs).toHaveLength(1);
+      for (const job of jobs) {
+        expect(job.kind).toBe("document");
+        expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
+        expect(decodeTicket(new Uint8Array(job.payload))).toContain(
+          completed.invoice!.invoiceNumber,
         );
-        const billId = await tabWith("Beer");
-        if (invoiceType === "F1") {
-          await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
-            revision: 0,
-            invoiceType,
-            recipient: {
-              taxId: "B12345674",
-              legalName: "Cliente SL",
-              address: "2 Main Street, 28013 Madrid, Madrid",
-              countryCode: "ES",
-            },
-          });
-        }
-        const paymentId = await insertPayment(billId, { applied: 300 });
-        const completed = await inTx((tx) =>
-          completeBillPayment(
+        expect(decodeTicket(new Uint8Array(job.payload))).not.toContain("DUPLICADO");
+      }
+      if (invoiceType === "F1") {
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload)).replace(/\s+/g, " ")).toContain(
+          `FACTURA ${completed.invoice!.invoiceNumber}`,
+        );
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("Cliente SL");
+      }
+      expect(
+        await inTx((tx) =>
+          issueIfFullyPaid(
             tx,
             { ...fiscal(), admission: testTradingAdmission() },
             venue.cfg,
-            paymentId,
-            new Date(),
+            billId,
           ),
-        );
-        const [sale] = await inTx((tx) =>
-          tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
-        );
-        const jobs = await inTx((tx) =>
-          tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
-        );
-        expect(completed.invoice).toMatchObject({ invoiceType, total: "3.00" });
-        expect(jobs).toHaveLength(documents);
-        for (const job of jobs) {
-          expect(job.kind).toBe("document");
-          expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
-          expect(decodeTicket(new Uint8Array(job.payload))).toContain(
-            completed.invoice!.invoiceNumber,
-          );
-          expect(decodeTicket(new Uint8Array(job.payload))).not.toContain("DUPLICADO");
-        }
-        if (invoiceType === "F1") {
-          expect(decodeTicket(new Uint8Array(jobs[0]!.payload)).replace(/\s+/g, " ")).toContain(
-            `FACTURA ${completed.invoice!.invoiceNumber}`,
-          );
-          expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("Cliente SL");
-        }
-        expect(
-          await inTx((tx) =>
-            issueIfFullyPaid(
-              tx,
-              { ...fiscal(), admission: testTradingAdmission() },
-              venue.cfg,
-              billId,
-            ),
-          ),
-        ).toBeNull();
-        const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
-        expect(replay.invoiceNumber).toBe(completed.invoice!.invoiceNumber);
-        expect(
-          await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
-        ).toEqual(jobs);
-        expect(
-          await inTx((tx) => tx.select().from(sales).where(eq(sales.workingOrderId, billId))),
-        ).toEqual([sale]);
-      } finally {
-        if (policy === undefined) {
-          await inTx((tx) =>
-            tx.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, venue.offers.zoneId)),
-          );
-        } else {
-          await inTx((tx) =>
-            tx
-              .update(zoneSalePolicies)
-              .set({ receiptPrintMode: policy.receiptPrintMode })
-              .where(eq(zoneSalePolicies.zoneId, venue.offers.zoneId)),
-          );
-        }
-      }
+        ),
+      ).toBeNull();
+      const replay = await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId));
+      expect(replay.invoiceNumber).toBe(completed.invoice!.invoiceNumber);
+      expect(
+        await inTx((tx) => tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id))),
+      ).toEqual(jobs);
+      expect(
+        await inTx((tx) => tx.select().from(sales).where(eq(sales.workingOrderId, billId))),
+      ).toEqual([sale]);
     },
   );
 
@@ -1635,6 +1602,7 @@ describe("the invoice at full payment", () => {
         new Date(),
       ),
     );
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
     const before = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
@@ -1702,6 +1670,8 @@ describe("the invoice at full payment", () => {
         const before = await inTx((tx) =>
           tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
         );
+        if (!missingPrinter)
+          await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
         if (!missingPrinter)
           await inTx((tx) =>
             tx
@@ -1776,6 +1746,7 @@ describe("the invoice at full payment", () => {
       const [sale] = await inTx((tx) =>
         tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
       );
+      await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
       await inTx((tx) =>
         tx
           .update(printJobs)
@@ -1823,6 +1794,7 @@ describe("the invoice at full payment", () => {
     expect(
       (await inTx((tx) => readSettledTicket(backend, tx, venue.cfg, billId))).invoiceType,
     ).toBe("F1");
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
     const [original] = await inTx((tx) =>
       tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
     );
@@ -1872,6 +1844,7 @@ describe("the invoice at full payment", () => {
     const [sale] = await inTx((tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
     );
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, billId, false);
     const [original] = await inTx((tx) =>
       tx.select().from(printJobs).where(eq(printJobs.saleId, sale!.id)),
     );

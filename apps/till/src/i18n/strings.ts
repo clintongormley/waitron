@@ -343,6 +343,11 @@ export const en = {
   "mode.live": "Live",
   // Counter receipt and drawer
   "document.print": "Print/Reprint",
+  "settlement.document": "Customer document",
+  "settlement.full_invoice": "Full invoice",
+  "settlement.none": "None",
+  "settlement.replacement_unavailable":
+    "Full invoice replacement is not available yet. You can print the receipt.",
   "document.receipt": "Receipt",
   "document.invoice": "Invoice",
   "document.printer_read_failed": "Could not read the receipt printers. Refresh to try again.",
@@ -1736,16 +1741,6 @@ export const en = {
   "bill_pay.state_pending": "In progress",
   "bill_pay.state_failed": "Failed",
   "bill_pay.state_declined": "Declined",
-  "paid.title": "{table} paid",
-  "paid.summary": "{amount} in {n} payments · simplified invoice issued",
-  "paid.summary_one": "{amount} in one payment · simplified invoice issued",
-  "paid.bills_left": "Still to pay: {bills}",
-  "paid.ticket_sent": "Ticket sent",
-  "paid.ticket_failed": "Could not print",
-  "paid.ticket_not_printed": "No ticket printed",
-  "paid.ticket_reprint_hint": "A device whose profile may print tickets can reprint it.",
-  "paid.simplified": "Simplified invoice",
-  "paid.back": "Back to the table",
   "bill_pay.pending_where":
     "If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
   "bill_pay.refunded": "Refunded: {amount}",
@@ -2328,6 +2323,11 @@ export const es: Record<StringKey, string> = {
   "mode.prepare": "Preparación",
   "mode.live": "En vivo",
   "document.print": "Imprimir/Reimprimir",
+  "settlement.document": "Documento para el cliente",
+  "settlement.full_invoice": "Factura completa",
+  "settlement.none": "Ninguno",
+  "settlement.replacement_unavailable":
+    "El cambio por una factura completa aún no está disponible. Puedes imprimir el recibo.",
   "document.receipt": "Recibo",
   "document.invoice": "Factura",
   "document.printer_read_failed":
@@ -3684,17 +3684,6 @@ export const es: Record<StringKey, string> = {
   "bill_pay.state_pending": "En curso",
   "bill_pay.state_failed": "Fallido",
   "bill_pay.state_declined": "Rechazado",
-  "paid.title": "{table} pagada",
-  "paid.summary": "{amount} en {n} pagos · factura simplificada emitida",
-  "paid.summary_one": "{amount} en un pago · factura simplificada emitida",
-  "paid.bills_left": "Por pagar: {bills}",
-  "paid.ticket_sent": "Ticket enviado",
-  "paid.ticket_failed": "No se ha podido imprimir",
-  "paid.ticket_not_printed": "No se ha impreso ticket",
-  "paid.ticket_reprint_hint":
-    "Un dispositivo cuyo perfil puede imprimir tickets puede reimprimirlo.",
-  "paid.simplified": "Factura simplificada",
-  "paid.back": "Volver a la mesa",
   "bill_pay.pending_where":
     "Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
   "bill_pay.refunded": "Devuelto: {amount}",

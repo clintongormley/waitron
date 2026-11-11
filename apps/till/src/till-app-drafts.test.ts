@@ -1,3 +1,4 @@
+import { balanceOf, invoiceOf } from "../test/bill-pay-app.js";
 import {
   current,
   currentGroup,
@@ -7617,7 +7618,7 @@ describe("recalled draft source splitting", () => {
     expect(tableOrder(el)!.retainedDraft?.lines[0]!.note).toBe("Keep this unsaved note");
     expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-candidate]")).not.toBeNull();
     expect(draft(el).editsLocked).toBe(true);
-    expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+    await vi.waitFor(() => expect(banner(el)?.textContent).toContain(t("table.draft_save_failed")));
   });
 
   it("Discard closes a refused confirmation when the recovery read also fails", async () => {
@@ -11392,3 +11393,61 @@ describe("native app phone order view with mixed dish families", () => {
         });
       }
 });
+
+it.each(["reducing", "adding"])(
+  "locks the recovered invoice draft after a %s save and keeps its paid notice after None",
+  async (kind) => {
+    const previousLocale = currentLocale();
+    try {
+      const { el } = await mountApp({
+        getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+      });
+      await openTable(el);
+      press(el, "Beer");
+      press(el, "Beer");
+      await vi.waitFor(() => expect(server.drafts[0]?.lines[0]?.quantity).toBe("2"));
+      api.saveDraft.mockRejectedValue({ code: "bill.paid", status: 409 });
+      api.getBillBalance.mockResolvedValue(
+        balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
+      );
+      api.getPartyBills.mockResolvedValue([
+        partyBillOf("v1", "wo-4", 1, {
+          status: "settled",
+          total: "120.00",
+          outstanding: "0.00",
+          hasPayments: true,
+        }),
+      ]);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      if (kind === "reducing") draft(el).setLineQuantity(0, "1");
+      else press(el, "Beer");
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+      expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+      expect(
+        el.shadowRoot!.querySelector("till-settlement-document-dialog")!.result.invoiceNumber,
+      ).toBe("F-0007");
+      expect(banner(el)?.textContent).toContain(codeMessage("bill.paid"));
+      expect(draft(el).editsLocked).toBe(true);
+      el.shadowRoot!.querySelector("till-settlement-document-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!
+        .click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+      expect(banner(el)?.textContent).toContain(codeMessage("bill.paid"));
+      expect(draft(el).lines.map((line) => line.quantity)).toEqual(
+        kind === "reducing" ? ["1"] : ["3"],
+      );
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+      expect(api.getFiledTicket).toHaveBeenCalledOnce();
+      expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      setLocale(previousLocale);
+    }
+  },
+);

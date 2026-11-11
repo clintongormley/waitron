@@ -1,3 +1,4 @@
+import { printSaleReceipt } from "./till-sale.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -1828,6 +1829,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
       update departments set trading_name = 'Blue terrace' where id = ${department!.id}`);
     try {
       expect((await contribute(billId, "12.00")).status).toBe(200);
+      await printSaleReceipt(
+        { db: suite.db, backend },
+        { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+        billId,
+        false,
+      );
       const [sale] = await saleOf(billId);
       const [snapshot] = suite.db.all<{
         department_id: string;
@@ -3126,7 +3133,7 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     }
   });
 
-  it("puts every payment on the ticket, each with its own change, and prints the receipt once", async () => {
+  it("puts every payment on the ticket, each with its own change, and prints it once on request", async () => {
     const billId = await tabWith("Steak", "Cake");
     await pay(billId, {
       kind: "contribution",
@@ -3157,6 +3164,12 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         { method: "card", amount: "23.00", tip: "0.00", reference: "OP-1" },
       ],
     });
+    await printSaleReceipt(
+      { db: suite.db, backend },
+      { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+      billId,
+      false,
+    );
     const receiptsAfter = suite.db.all<{ n: number }>(
       sql`select count(*) as n from print_jobs where printer_id = ${venue.printerId} and kind = 'document'`,
     )[0]!.n;
@@ -4825,6 +4838,12 @@ describe("refund first (design §4.3, §6a)", () => {
     expect(await tendersOf(sale!.id)).toEqual([
       { method: "cash", amount: 4000, tip: 0, billPaymentId: paymentId },
     ]);
+    await printSaleReceipt(
+      { db: suite.db, backend },
+      { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+      billId,
+      false,
+    );
     const tickets = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
       .map((job) => printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " ")))
@@ -4876,6 +4895,12 @@ describe("the ticket after a refund", () => {
       ).status,
     ).toBe(200);
 
+    await printSaleReceipt(
+      { db: suite.db, backend },
+      { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+      billId,
+      false,
+    );
     const printed = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
       .flatMap((job) => printedLines(job.payload))
@@ -5573,7 +5598,7 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
 
 describe("simplified invoice original HTTP requests", () => {
   it.each([true, false])(
-    "keeps one original across repeated requests (queued at issue: %s)",
+    "keeps one original across repeated requests (already requested: %s)",
     async (queuedAtIssue) => {
       const billId = await bill120();
       const [device] = await suite.db.select().from(devices).where(eq(devices.id, venue.deviceId));
@@ -5601,6 +5626,13 @@ describe("simplified invoice original HTTP requests", () => {
         .set({ capabilities: [...(profile!.capabilities as string[]), "print-receipt"] })
         .where(eq(deviceProfiles.id, venue.profileId));
       try {
+        if (queuedAtIssue)
+          await printSaleReceipt(
+            { db: suite.db, backend },
+            { ...venue.cfg, origin: deviceOrigin(venue.deviceId) },
+            billId,
+            false,
+          );
         const before = await inTx((tx) =>
           tx.select().from(printJobs).where(eq(printJobs.saleId, sale.id)),
         );

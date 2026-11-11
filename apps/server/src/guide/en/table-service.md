@@ -12,6 +12,16 @@ Choose **Pay** to take all or part of a Counter bill. **Whole bill** starts sele
 you can instead enter an amount, split equally or choose items. Choose **Cash** or **Card**
 for each payment. After a part payment, check **Still to pay** before taking the next payment.
 
+## Choose documents after paying {#settlement-document}
+
+After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes
+paying the bill offers the same choice. To print, wait for **Print on {printer}** to name your
+destination, then press it. A full invoice keeps its recorded customer; its **Email** action is
+separate from **Print**.
+
+Choose **None** or close the window to carry on without printing. You close the table separately.
+For a document later, open the sale and choose **Print/Reprint**.
+
 ## Check a card before cancelling {#cancel-pending-card}
 
 If cancelling an order says a card payment is pending, wait for the reader to finish, then choose

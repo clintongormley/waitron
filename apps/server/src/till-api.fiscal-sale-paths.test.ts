@@ -3250,16 +3250,28 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   it("a card sale at the device with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
     const { cfg, each, app, on, operatorId } = await venueWithTill();
-    const deviceCookie = await enrolDrawerTill(cfg);
+    const deviceCookie = await enrolTillCookie(
+      cfg,
+      await seedProfileFF("till", ["open-cash-drawer", "take-cash", "print-receipt"]),
+    );
     const deviceId = deviceIdOf(deviceCookie);
     const printerId = await deviceReceiptPrinter(deviceCookie, true);
     const workingOrderId = randomUUID();
 
-    const first = await cardSale(app, await on(deviceCookie), {
+    const cookie = await on(deviceCookie);
+    const first = await cardSale(app, cookie, {
       workingOrderId,
       menuItemId: each.menuItemId,
     });
     expect(first.status).toBe(200);
+    expect(
+      (
+        await app.request(`/api/sales/${workingOrderId}/receipt`, {
+          method: "POST",
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(200);
 
     const saleId = await saleIdOf(workingOrderId);
     expect(await drawerOpenRows()).toEqual([
@@ -3309,7 +3321,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   });
 
   it.each(["cash", "card"] as const)(
-    "a handheld whose profile allows the drawer prints a %s sale's receipt on its own printer and opens the drawer, for the sale and by hand",
+    "a handheld whose profile allows the drawer explicitly prints a %s sale's receipt on its own printer and opens the drawer, for the sale and by hand",
     async (method) => {
       const { cfg, each, app } = await venueWithTill();
       const [supervisor] = await suite.db
@@ -3331,11 +3343,12 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       const session = (await loginSession(app, cfg, supervisor!.id, handheldCookie)).split(";")[0]!;
       const cookie = `${session}; ${handheldCookie}`;
 
+      const workingOrderId = randomUUID();
       const res = await app.request("/api/sales", {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
         body: JSON.stringify({
-          workingOrderId: randomUUID(),
+          workingOrderId,
           lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
           tender: { method, amount: "5.00" },
         }),
@@ -3343,6 +3356,14 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       const manual = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
 
       expect(res.status).toBe(200);
+      expect(
+        (
+          await app.request(`/api/sales/${workingOrderId}/receipt`, {
+            method: "POST",
+            headers: { cookie },
+          })
+        ).status,
+      ).toBe(200);
       expect(manual.status).toBe(200);
       expect((await drawerOpenRows()).map((row) => [row.reason, row.printerId])).toEqual([
         [method === "cash" ? "cash_sale" : "card_slip", printerId],
@@ -3393,15 +3414,28 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   it("a card sale at a device whose drawer printer has no drawer opens nothing, while another printer here has one", async () => {
     const { cfg, each, app, on } = await venueWithTill();
     await otherDevicesDrawerPrinter(cfg);
-    const deviceCookie = await enrolDrawerTill(cfg);
+    const deviceCookie = await enrolTillCookie(
+      cfg,
+      await seedProfileFF("till", ["open-cash-drawer", "take-cash", "print-receipt"]),
+    );
     await deviceReceiptPrinter(deviceCookie, false);
 
-    const res = await cardSale(app, await on(deviceCookie), {
-      workingOrderId: randomUUID(),
+    const cookie = await on(deviceCookie);
+    const workingOrderId = randomUUID();
+    const res = await cardSale(app, cookie, {
+      workingOrderId,
       menuItemId: each.menuItemId,
     });
 
     expect(res.status).toBe(200);
+    expect(
+      (
+        await app.request(`/api/sales/${workingOrderId}/receipt`, {
+          method: "POST",
+          headers: { cookie },
+        })
+      ).status,
+    ).toBe(200);
     expect(await drawerOpenRows()).toEqual([]);
     const printed = await jobs();
     expect(printed.drawer).toEqual([]);

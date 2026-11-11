@@ -47,7 +47,10 @@ import { acceptDeviceJoinRequest, createJoinRequest } from "./join-requests.js";
 import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
-import { recordTillSaleOrchestration as recordTillSale } from "./testing/whole-payment-fixture.js";
+import {
+  printSaleReceipt,
+  recordTillSaleOrchestration as recordTillSale,
+} from "./testing/whole-payment-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -193,7 +196,8 @@ async function signIn(deviceId: string, displayName = "Lucía") {
   return { personId: person!.id, sessionId: session.id, token: session.token };
 }
 
-async function cashSale(venue: Venue, deviceId: string): Promise<void> {
+async function cashSale(venue: Venue, deviceId: string): Promise<string> {
+  const id = randomUUID();
   const departmentIds = (await suite.db.select({ id: departments.id }).from(departments)).map(
     (row) => row.id,
   );
@@ -207,12 +211,14 @@ async function cashSale(venue: Venue, deviceId: string): Promise<void> {
     { admission: testTradingAdmission(), db: suite.db, backend, clock },
     cfg,
     {
+      workingOrderId: id,
       zoneId: offers.zoneId,
       lines: offers.toOfferLines([{ productId: venue.waterId, quantity: "1" }]),
       tender: { method: "cash", amount: "2.00" },
     },
     OPERATOR,
   );
+  return id;
 }
 
 async function documentJobPrinters(): Promise<string[]> {
@@ -305,8 +311,14 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     });
     const a = await enrol(venue, "Caja", profile);
 
-    await cashSale(venue, a);
-
+    const orderId = await cashSale(venue, a);
+    expect(await documentJobPrinters()).toEqual([]);
+    await printSaleReceipt(
+      { db: suite.db, backend },
+      { ...venue.cfg, origin: deviceOrigin(a) },
+      orderId,
+      false,
+    );
     expect(await documentJobPrinters()).toEqual([bar]);
     expect((await inTx((tx) => resolvePaymentSlipPrinter(tx, deviceOrigin(a))))?.id).toBe(counter);
   });

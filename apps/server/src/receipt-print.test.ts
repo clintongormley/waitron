@@ -48,7 +48,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   departmentSalePolicies,
   departments,
-  zoneSalePolicies,
   zoneServicePolicies,
   saleReceiptHeaders,
   departmentReceipts,
@@ -464,16 +463,20 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
+    const workingOrderId = randomUUID();
     const ticket = await recordTillSale(
       { admission: testTradingAdmission(), db: suite.db, backend: backendForSale, clock },
       cfg,
       {
+        workingOrderId,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
     );
+    const saleId = await onlySaleId(cfg);
+    await withTransaction(suite.db, (tx) => enqueueOriginalReceipt(tx, cfg, ticket, saleId));
     const papers = (await printJobsFor(cfg)).map((job) => new Uint8Array(job.payload));
     const receipt = papers.find((payload) => decodeTicket(payload).includes("TOTAL"))!;
     return { ticket, lines: printedLines(receipt).map((line) => line.trim()) };
@@ -634,6 +637,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
     { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
     OPERATOR,
   );
+  await printSaleReceipt(deps(), cfg, id, false);
 
   const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
   const papers = jobs.map((job) => decodeTicket(new Uint8Array(job.payload))).filter(Boolean);
@@ -649,6 +653,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
     { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
     OPERATOR,
   );
+  await printSaleReceipt(deps(), cfg, id, false);
   expect(
     (await printJobsFor(cfg))
       .filter((job) => job.printerId === printerId)
@@ -657,7 +662,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
   ).toHaveLength(2);
 });
 
-it("a prepaid cash sale reads the device's printers once for its collection ticket, receipt and drawer", async () => {
+it("a prepaid cash sale reads the device's printers once for its collection ticket and drawer", async () => {
   const { cfg, each, zoneId } = await setupVenue("prepay");
   const printerId = await makePrinter();
   await configureReceipt(cfg, { mode: "auto", printerId });
@@ -684,7 +689,9 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
         { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
         operatorId,
       );
-      return selects.mock.calls.length;
+      return selects.mock.calls.filter(
+        ([fields]) => fields !== undefined && "hasCashDrawer" in fields && "capabilities" in fields,
+      ).length;
     } finally {
       selects.mockRestore();
     }
@@ -698,10 +705,7 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
   const receiptOnly = await readsOfSale(undefined);
 
   expect(await drawerOpensFor(cfg)).toHaveLength(2);
-  // The collection document also reads the saved frame language; the device-printer lookup and the
-  // venue id its jobs are filed under are each read once per sale.
-  expect(all - noDrawer).toBe(1);
-  expect(noDrawer - receiptOnly).toBe(2);
+  expect([all, noDrawer, receiptOnly]).toEqual([1, 1, 0]);
 });
 
 it("a cash bill payment that pays the bill in full reads the device's printers once for its drawer and receipt", async () => {
@@ -755,7 +759,7 @@ it("a cash bill payment that pays the bill in full reads the device's printers o
   expect((await drawerOpensFor(cfg)).map((open) => open.reason)).toEqual(["bill_payment"]);
   const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
   expect(jobs.filter((job) => opensDrawer(new Uint8Array(job.payload)))).toHaveLength(1);
-  expect(jobs.filter((job) => decodeTicket(new Uint8Array(job.payload)))).toHaveLength(1);
+  expect(jobs.filter((job) => decodeTicket(new Uint8Array(job.payload)))).toHaveLength(0);
   expect(printerReads).toBe(1);
 });
 
@@ -819,9 +823,12 @@ describe("receipt grouping after table changes", () => {
           );
         }
       }
-      expect(decodeTicket(new Uint8Array((await printJobsFor(cfg))[0]!.payload))).toContain(
-        "Terrace 6",
-      );
+      if (orderFlow !== "issued") await printSaleReceipt(deps(), cfg, orderId, false);
+      expect(
+        (await printJobsFor(cfg))
+          .map((job) => decodeTicket(new Uint8Array(job.payload)))
+          .find((text) => text.includes("TOTAL")),
+      ).toContain("Terrace 6");
       await withTransaction(suite.db, async (tx) => {
         await tx
           .update(diningTables)
@@ -876,6 +883,7 @@ describe("receipt original and copy tracking", () => {
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, workingOrderId, false);
     const before = await withTransaction(suite.db, (tx) =>
       tx.select().from(sales).where(eq(sales.workingOrderId, workingOrderId)),
     );
@@ -928,6 +936,7 @@ describe("simplified invoice original requests", () => {
         },
         OPERATOR,
       );
+      await printSaleReceipt(deps(), cfg, workingOrderId, false);
       const saleId = await onlySaleId(cfg);
       await withTransaction(suite.db, (tx) =>
         tx
@@ -986,16 +995,19 @@ describe("cash payment drawer separation", () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter({ hasCashDrawer: false });
     await configureReceipt(cfg, { mode: "auto", printerId });
+    const explicitPrintOrder1 = randomUUID();
     const result = await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder1,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "2.00" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder1, false);
     expect(result.total).toBe("1.50");
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
@@ -1028,7 +1040,7 @@ describe("cash payment drawer separation", () => {
       const documents = jobs.filter((job) =>
         decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
       );
-      expect(documents).toHaveLength(mode === "auto" ? 1 : 0);
+      expect(documents).toHaveLength(0);
       for (const job of documents) expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
       expect(await drawerOpensFor(cfg)).toHaveLength(1);
     },
@@ -1036,36 +1048,6 @@ describe("cash payment drawer separation", () => {
 });
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
-  it("uses the zone's automatic receipt policy when the department setting is on request", async () => {
-    const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter();
-    await configureReceipt(cfg, { mode: "on_request", printerId });
-    await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(zoneSalePolicies)
-        .set({ receiptPrintMode: "auto" })
-        .where(eq(zoneSalePolicies.zoneId, zoneId));
-    });
-
-    await recordTillSale(
-      { ...deps(), admission: testTradingAdmission() },
-      cfg,
-      {
-        zoneId,
-        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
-        tender: { method: "card", amount: "1.50" },
-      },
-      OPERATOR,
-    );
-
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    const documents = (await printJobsFor(cfg)).filter((job) =>
-      decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
-    );
-    expect(documents).toHaveLength(1);
-    expect(opensDrawer(new Uint8Array(documents[0]!.payload))).toBe(false);
-  });
-
   it("lays the automatic receipt out for the device printer's paper width and resolution", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter();
@@ -1076,16 +1058,19 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
       });
     });
     await configureReceipt(cfg, { mode: "auto", printerId });
+    const explicitPrintOrder2 = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder2,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder2, false);
     const receipt = (await printJobsFor(cfg))
       .map((job) => new Uint8Array(job.payload))
       .find((payload) => decodeTicket(payload).includes("VERI*FACTU"))!;
@@ -1110,16 +1095,19 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter({ transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const explicitPrintOrder3 = randomUUID();
     const result = await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder3,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
         tender: { method: "cash", amount: "5.00" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder3, false);
 
     // Filing is unaffected by the print hook: the chained fiscal record exists.
     expect(result.total).toBe("3.00");
@@ -1160,44 +1148,60 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter({ transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const explicitPrintOrder4 = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder4,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder4, false);
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
-    const decoded = decodeTicket(new Uint8Array(jobs[0]!.payload));
+    const decoded = decodeTicket(
+      new Uint8Array(
+        jobs.find((job) => decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"))!.payload,
+      ),
+    );
     expect(decoded).toContain("VERI*FACTU"); // still a real fiscal receipt
     expect(decoded).not.toContain("Gracias por su visita");
   });
 
-  it("marks an automatically printed practice sale as simulated", async () => {
+  it("marks an explicitly printed practice sale as simulated", async () => {
     const base = await setupVenue();
     const cfg = { ...base.cfg, practiceMode: true };
     const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const explicitPrintOrder5 = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder5,
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
         tender: { method: "cash", amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder5, false);
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(2);
-    expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("PRUEBA - SIN COBRO REAL");
+    expect(
+      decodeTicket(
+        new Uint8Array(
+          jobs.find((job) => decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"))!.payload,
+        ),
+      ),
+    ).toContain("PRUEBA - SIN COBRO REAL");
   });
 
   it("auto + printer + hand-keyed CARD: the receipt carries NO kick; a separate drawer job opens the drawer for the card slip", async () => {
@@ -1205,16 +1209,19 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const explicitPrintOrder6 = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder6,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "card", amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder6, false);
 
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
@@ -1243,16 +1250,19 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const explicitPrintOrder7 = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder7,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "card", amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder7, false);
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -1265,16 +1275,19 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter({ hasCashDrawer: false });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const explicitPrintOrder8 = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId: explicitPrintOrder8,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "card", amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder8, false);
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -1287,11 +1300,14 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
+    const unattributedPrintOrder1 = randomUUID();
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
+      workingOrderId: unattributedPrintOrder1,
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
+    await printSaleReceipt(deps(), cfg, unattributedPrintOrder1, false);
 
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -1419,11 +1435,14 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     // No operator: the kick and its audit row are skipped; the customer receipt still prints.
+    const unattributedPrintOrder2 = randomUUID();
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
+      workingOrderId: unattributedPrintOrder2,
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "cash", amount: "1.50" },
     });
+    await printSaleReceipt(deps(), cfg, unattributedPrintOrder2, false);
 
     expect(await fiscalRecordCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
@@ -1532,16 +1551,19 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
     product: { zoneId: string; menuItemId: string },
     method: "cash" | "card" = "cash",
   ): Promise<void> {
+    const workingOrderId = randomUUID();
     await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId,
         zoneId: product.zoneId,
         lines: [{ menuItemId: product.menuItemId, quantity: "1" }],
         tender: { method, amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, workingOrderId, false);
   }
 
   /** Each job's printer, and whether it is a drawer kick or a document. */
@@ -1729,6 +1751,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, workingOrderId, false);
   }
 
   /** A venue whose device prints receipts on `receipt` and opens the drawer of `drawer`. */
@@ -1771,13 +1794,15 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     const saleId = await onlySaleId(cfg);
     const jobs = await allJobs();
     expect(jobs.map((job) => [job.printerId, job.kind])).toEqual([
-      [portable, "document"],
       [drawer, "drawer"],
+      [portable, "document"],
     ]);
-    const kick = jobs[1]!;
+    const kick = jobs.find((job) => job.kind === "drawer")!;
     expect(kick.saleId).toBeNull();
     expect([...new Uint8Array(kick.payload)]).toEqual([...DRAWER_KICK]);
-    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(opensDrawer(new Uint8Array(jobs.find((job) => job.kind === "document")!.payload))).toBe(
+      false,
+    );
     expect(await drawerOpensFor(cfg)).toEqual([
       {
         reason: "cash_sale",
@@ -1795,8 +1820,8 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     await sell(cfg, product, "card");
 
     expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([
-      [receipt, "document"],
       [drawer, "drawer"],
+      [receipt, "document"],
     ]);
     expect(await drawerOpensFor(cfg)).toEqual([
       {
@@ -1846,8 +1871,8 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     await sell(cfg, product, "cash");
 
     expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([
-      [receipt, "document"],
       [drawer, "drawer"],
+      [receipt, "document"],
     ]);
     expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId])).toEqual([
       ["cash_sale", drawer],
@@ -1858,7 +1883,17 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
     const { cfg, drawer, receipt, product } = await venue({ receiptHasDrawer: true });
     await configureReceipt(cfg, { mode: "on_request" });
     const workingOrderId = randomUUID();
-    await sell(cfg, product, "cash", workingOrderId);
+    await recordTillSale(
+      { ...deps(), admission: testTradingAdmission() },
+      cfg,
+      {
+        workingOrderId,
+        zoneId: product.zoneId,
+        lines: [{ menuItemId: product.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "2.00" },
+      },
+      OPERATOR,
+    );
     expect((await allJobs()).map((job) => [job.printerId, job.kind])).toEqual([[drawer, "drawer"]]);
 
     await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
@@ -1936,10 +1971,10 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
         .orderBy(sql`rowid desc`)
         .limit(1),
     );
+    await printSaleReceipt(deps(), venue.cfg, sale!.workingOrderId!, false);
     return { saleId: sale!.saleId, workingOrderId: sale!.workingOrderId! };
   }
 
-  /** An auto-printed card sale's receipt that ran out of attempts, then the till's reprint of it. */
   async function failedThenReprinted() {
     const venue = await setupVenue();
     const printerId = await makePrinter(NO_DRAWER);
@@ -2176,11 +2211,14 @@ describe("receipt issuer", () => {
     await withTransaction(suite.db, (tx) =>
       tx.execute(sql`update departments set trading_name = 'Deli Counter' `),
     );
+    const explicitPrintOrder9 = randomUUID();
     const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
+      workingOrderId: explicitPrintOrder9,
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
       tender: { method: "card", amount: "1.50" },
     });
+    await printSaleReceipt(deps(), cfg, explicitPrintOrder9, false);
     const saleId = await onlySaleId(cfg);
     const original = (await printJobsFor(cfg)).map((job) =>
       printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
@@ -2277,6 +2315,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     await pay(v, tabId, "12.00");
+    await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, false);
 
     const receipts = (await printJobsFor(v.cfg))
       .map((job) => decodeTicket(new Uint8Array(job.payload)))
@@ -2339,6 +2378,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     await pay(v, tabId, "12.00");
+    await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, false);
 
     const receipts = (await printJobsFor(v.cfg))
       .map((job) => decodeTicket(new Uint8Array(job.payload)))
@@ -2444,6 +2484,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
       const { partyId, tabId } = await seat(v, await v.table(table), 4);
       await orderForParty(v, partyId, ["Burger"], tabId);
       await pay(v, tabId, "12.00", ...chosen);
+      await printSaleReceipt({ db: v.db, backend: v.backend }, v.cfg, tabId, false);
       const [sale] = await inTx(v, (tx) =>
         tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, tabId)),
       );
@@ -2572,16 +2613,20 @@ describe("the receipt's top block: logo, address, phone and email", () => {
   }
 
   async function sellOne(cfg: DeviceRequestConfig, each: { menuItemId: string }, zoneId: string) {
-    return recordTillSale(
+    const workingOrderId = randomUUID();
+    const ticket = await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
       cfg,
       {
+        workingOrderId,
         zoneId,
         lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         tender: { method: "card", amount: "1.50" },
       },
       OPERATOR,
     );
+    await printSaleReceipt(deps(), cfg, workingOrderId, false);
+    return ticket;
   }
 
   /** The receipt jobs' payloads, oldest first. */
@@ -2870,11 +2915,41 @@ describe("automatic F1 receipt delivery enrollment", () => {
     });
   }
 
+  it.each([
+    ["auto", true],
+    ["on_request", true],
+    ["auto", false],
+    ["on_request", false],
+  ] as const)("waits for an explicit document command (policy=%s, full=%s)", async (mode, full) => {
+    const { cfg, saleId, ticket, personId } = await issued(mode, true, full);
+    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    expect(await suite.db.select().from(printJobs)).toEqual([]);
+    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+    await withTransaction(suite.db, (tx) =>
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+    );
+    expect(await suite.db.select().from(printJobs)).toEqual([
+      expect.objectContaining({ saleId, receiptCopy: false, kind: "document" }),
+    ]);
+    expect(await suite.db.select().from(drawerOpens)).toEqual([]);
+  });
+
   it("propagates an engine rollback and reports no successful optional rollback", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       await expect(
         issued("auto", true, true, async (tx, value) => {
+          const [sale] = await tx.select().from(sales).where(eq(sales.id, value.saleId));
+          await tx
+            .update(workingOrders)
+            .set({
+              invoiceDelivery: {
+                medium: "email",
+                recipient: "customer@example.test",
+                personId: sale!.operatorId!,
+              },
+            })
+            .where(eq(workingOrders.id, sale!.workingOrderId!));
           await tx.execute(
             sql`create trigger test_engine_receipt_rollback before insert on invoice_deliveries begin select raise(rollback, 'engine transaction invalidated'); end`,
           );
@@ -2954,26 +3029,28 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect((await readTenant(suite.db))!.legalName).toBe("Staged refusal did not abort invoice");
   });
 
-  it("rolls back a partial automatic document on a delivery refusal while committing the invoice", async () => {
-    const { cfg, saleId, ticket } = await issued("auto", true, true, async (tx, value) => {
-      await VENUE_SERVICE.recordSaleReceiptHeader(tx, value.saleId, null);
-      await tx.execute(
-        sql`create trigger test_receipt_delivery_refusal before insert on invoice_deliveries begin select raise(abort, 'optional receipt refusal'); end`,
-      );
-      try {
-        await enqueueSaleReceipt(tx, value.cfg, value.ticket, value.saleId);
-        await tx.update(tenants).set({ legalName: "Outer write remains usable" });
-      } finally {
-        await tx.execute(sql`drop trigger test_receipt_delivery_refusal`);
-      }
-    });
-    expect(await fiscalRecordCount(cfg)).toBe(1);
-    expect(await suite.db.select().from(sales)).toHaveLength(1);
-    expect(await suite.db.select().from(saleReceiptHeaders)).toHaveLength(1);
-    expect(await suite.db.select().from(printJobs)).toEqual([]);
-    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
-    expect((await readTenant(suite.db))!.legalName).toBe("Outer write remains usable");
-    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+  it("rolls back a partial explicit original on a delivery refusal without changing the issued invoice", async () => {
+    const { cfg, saleId, ticket, personId } = await issued("auto");
+    const before = await suite.db.select().from(sales);
+    await suite.db.execute(
+      sql`create trigger test_receipt_delivery_refusal before insert on invoice_deliveries begin select raise(abort, 'explicit receipt refusal'); end`,
+    );
+    try {
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+        ),
+      ).rejects.toThrow("explicit receipt refusal");
+      expect(await suite.db.select().from(sales)).toEqual(before);
+      expect(await suite.db.select().from(printJobs)).toEqual([]);
+      expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
+      expect(await fiscalRecordCount(cfg)).toBe(1);
+    } finally {
+      await suite.db.execute(sql`drop trigger test_receipt_delivery_refusal`);
+    }
+    await withTransaction(suite.db, (tx) =>
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+    );
     const jobs = await suite.db.select().from(printJobs);
     expect(jobs).toHaveLength(1);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
@@ -3035,12 +3112,14 @@ describe("automatic F1 receipt delivery enrollment", () => {
   );
 
   it.each(["auto", "on_request"] as const)(
-    "enrolls the automatic original with its recorded issuer under %s policy",
+    "enrolls the explicit original with its recorded issuer under %s policy",
     async (mode) => {
       const { cfg, printerId, saleId, ticket, personId } = await issued(mode);
       const invoices = await suite.db.select().from(sales);
       const fiscal = await suite.db.select().from(registrosFacturacion);
-      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      await withTransaction(suite.db, (tx) =>
+        enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      );
       const jobs = await suite.db.select().from(printJobs);
       expect(jobs).toHaveLength(1);
       expect(jobs[0]).toMatchObject({ saleId, printerId, receiptCopy: false, kind: "document" });
@@ -3057,7 +3136,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
       ]);
       expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).not.toContain("DUPLICADO");
       expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
-      await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+      await withTransaction(suite.db, (tx) =>
+        enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+      );
       expect(await suite.db.select().from(printJobs)).toEqual(jobs);
       expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
       expect(await suite.db.select().from(sales)).toEqual(invoices);
@@ -3306,23 +3387,6 @@ describe("automatic F1 receipt delivery enrollment", () => {
     ]);
   });
 
-  it("keeps a saved receipt choice on the paper-original path", async () => {
-    const { cfg, saleId, orderId, ticket } = await issued("on_request");
-    await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(workingOrders)
-        .set({ invoiceDelivery: { medium: "receipt" } })
-        .where(eq(workingOrders.id, orderId));
-      await enqueueSaleReceipt(tx, cfg, ticket, saleId);
-    });
-    const jobs = await suite.db.select().from(printJobs);
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ saleId, receiptCopy: false });
-    expect(await suite.db.select().from(invoiceDeliveries)).toEqual([
-      expect.objectContaining({ saleId, medium: "receipt", printJobId: jobs[0]!.id }),
-    ]);
-  });
-
   it("does not interpret a synthetic F2's stale email draft as a full-invoice delivery", async () => {
     const { cfg, saleId, orderId, ticket, personId } = await issued("auto", true, false);
     await withTransaction(suite.db, async (tx) => {
@@ -3339,14 +3403,15 @@ describe("automatic F1 receipt delivery enrollment", () => {
       await enqueueSaleReceipt(tx, cfg, ticket, saleId);
     });
     const jobs = await suite.db.select().from(printJobs);
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]).toMatchObject({ saleId, receiptCopy: false });
+    expect(jobs).toHaveLength(0);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
   });
 
-  it("refuses a competing email after an automatic paper original", async () => {
+  it("refuses a competing email after an explicit paper original", async () => {
     const { cfg, saleId, ticket, personId } = await issued("auto");
-    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    await withTransaction(suite.db, (tx) =>
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+    );
     await expect(
       withTransaction(suite.db, (tx) =>
         reserveInvoiceDelivery(tx, saleId, {
@@ -3381,7 +3446,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
 
   it("preserves an unattributed sale's paper original without inventing a staff identity", async () => {
     const { cfg, saleId, ticket } = await issued("on_request", false);
-    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    await withTransaction(suite.db, (tx) =>
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, null),
+    );
     expect(await suite.db.select().from(printJobs)).toEqual([
       expect.objectContaining({ saleId, receiptCopy: false }),
     ]);
@@ -3390,7 +3457,9 @@ describe("automatic F1 receipt delivery enrollment", () => {
       expect.objectContaining({ saleId, printJobId: job!.id, personId: null, status: "queued" }),
     ]);
     expect((await suite.db.select().from(sales))[0]!.operatorId).toBeNull();
-    await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
+    await withTransaction(suite.db, (tx) =>
+      enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, null),
+    );
     expect(await suite.db.select().from(printJobs)).toHaveLength(1);
     expect(await suite.db.select().from(invoiceDeliveries)).toHaveLength(1);
   });
@@ -3422,17 +3491,22 @@ describe("department receipt presentation on thermal jobs", () => {
       .update(departmentSalePolicies)
       .set({ printTradingName: true })
       .where(eq(departmentSalePolicies.departmentId, departmentId!));
-    const sell = () =>
-      recordTillSale(
+    const sell = async () => {
+      const workingOrderId = randomUUID();
+      const ticket = await recordTillSale(
         { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
+          workingOrderId,
           zoneId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
           tender: { method: "cash" as const, amount: "1.50" },
         },
         OPERATOR,
       );
+      await printSaleReceipt(deps(), cfg, workingOrderId, false);
+      return ticket;
+    };
     const documents = async () =>
       (await suite.db.select().from(printJobs)).filter(
         (job) => job.saleId !== null && job.kind === "document",
@@ -3526,7 +3600,9 @@ describe("department receipt presentation on thermal jobs", () => {
             code: "receipt.read_failed",
           },
         ];
-        expect(warning.mock.calls).toEqual(source === "venue" ? [] : [diagnostic, diagnostic]);
+        expect(warning.mock.calls).toEqual(
+          source === "venue" ? [] : [diagnostic, diagnostic, diagnostic],
+        );
         expect(ticket.receiptTrim).toEqual(
           source === "venue" ? { headerSubtitle: "Own subtitle", email: "own@example.test" } : {},
         );
@@ -3540,13 +3616,17 @@ describe("department receipt presentation on thermal jobs", () => {
     },
   );
 
-  it("commits one sale, tender, header and drawer when optional formatting fails, including replay", async () => {
+  it("keeps one committed sale, tender, header and drawer when an explicit print fails, including replay", async () => {
     const { cfg, sell } = await setupReceipt();
     const formatter = vi.spyOn(receiptTicket, "formatReceipt").mockImplementationOnce(() => {
       throw new Error("untrusted imported detail");
     });
     try {
-      const ticket = await sell();
+      await expect(sell()).rejects.toThrow("untrusted imported detail");
+      const [filed] = await suite.db.select().from(sales);
+      const ticket = await withTransaction(suite.db, (tx) =>
+        readSettledTicket(backend, tx, cfg, filed!.workingOrderId!),
+      );
       expect(ticket.total).toBe("1.50");
       expect(await fiscalRecordCount(cfg)).toBe(1);
       const sold = await suite.db.select().from(sales);
@@ -3568,6 +3648,7 @@ describe("department receipt presentation on thermal jobs", () => {
         },
         OPERATOR,
       );
+      await printSaleReceipt(deps(), cfg, sold[0]!.workingOrderId!, false);
       expect(replay.invoiceNumber).toBe(ticket.invoiceNumber);
       expect(await fiscalRecordCount(cfg)).toBe(1);
       expect(await suite.db.select().from(tenders)).toHaveLength(1);
@@ -3758,17 +3839,22 @@ describe("the theme's logo on thermal receipts", () => {
       .select({ departmentId: zoneServicePolicies.departmentId })
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, zoneId));
-    const sell = () =>
-      recordTillSale(
+    const sell = async () => {
+      const workingOrderId = randomUUID();
+      const ticket = await recordTillSale(
         { ...deps(), admission: testTradingAdmission() },
         cfg,
         {
+          workingOrderId,
           zoneId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
           tender: { method: "cash" as const, amount: "1.50" },
         },
         OPERATOR,
       );
+      await printSaleReceipt(deps(), cfg, workingOrderId, false);
+      return ticket;
+    };
     const documents = async () =>
       (await suite.db.select().from(printJobs)).filter(
         (job) => job.saleId !== null && job.kind === "document",
@@ -3986,6 +4072,7 @@ it("keeps the original history after printer deletion and prints a marked copy o
     },
     OPERATOR,
   );
+  await printSaleReceipt(deps(), cfg, workingOrderId, false);
   const fiscal = await suite.db.select().from(registrosFacturacion);
   const drawer = await suite.db.select().from(drawerOpens);
   await withTransaction(suite.db, (tx) => deletePrinter(tx, firstPrinter));
@@ -4054,9 +4141,7 @@ describe("A964 collection language", () => {
               .join("\n") === `${kitchenTicketWords(language).collectionOrder}\n${orderNumber}\n`,
         );
         expect(slip).toHaveLength(1);
-        expect(added.filter((j) => !opensDrawer(j.payload))).toHaveLength(
-          mode === "prepay" ? 2 : 1,
-        );
+        expect(added.filter((j) => !opensDrawer(j.payload))).toHaveLength(1);
         expect(added.filter((j) => opensDrawer(j.payload))).toHaveLength(mode === "prepay" ? 1 : 0);
         expect(opensDrawer(slip[0]!.payload)).toBe(false);
         const after = await suite.db.select().from(printJobs);

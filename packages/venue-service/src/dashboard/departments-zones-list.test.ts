@@ -35,7 +35,6 @@ it("keeps departments expanded with each active zone indented below its owning r
     "name",
     "orderStart",
     "paidWhen",
-    "receiptPrintMode",
     "also",
     "actions",
   ]);
@@ -225,14 +224,7 @@ it("orders the columns as drawn, ignoring an order stored before the Also edit c
   const { table } = await setup();
   expect(
     [...table.shadowRoot!.querySelectorAll("thead th")].map((th) => th.textContent!.trim()),
-  ).toEqual([
-    "Name",
-    "How orders start",
-    "When counter service is used",
-    "Print a receipt",
-    "Also edit",
-    "Actions",
-  ]);
+  ).toEqual(["Name", "How orders start", "When counter service is used", "Also edit", "Actions"]);
 });
 
 it("labels the Also edit column in Spanish", async () => {

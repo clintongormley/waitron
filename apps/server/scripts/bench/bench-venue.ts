@@ -69,6 +69,7 @@ import { BENCH_PROFILE } from "./profile.js";
 const LOCALE = "es-ES";
 const TILL_CAPABILITIES = [
   ...BASIC_ACTIONS,
+  "print-receipt",
   "integrated-card-payment",
   "open-cash-drawer",
   "take-cash",

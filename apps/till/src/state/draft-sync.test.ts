@@ -289,6 +289,33 @@ describe("DraftSync: bill ownership", () => {
 });
 
 describe("DraftSync: saving", () => {
+  it.each([false, true])(
+    "forwards the adopted save result when the draft ends: %s",
+    async (ended) => {
+      const notifications: unknown[] = [];
+      const draft = new DraftSync({
+        api: server,
+        partyId: "v1",
+        billId: "wo-4",
+        personId: "p1",
+        rebuild,
+        onRefused: (code) => refused.push(code),
+        onSaved: (...answer) => notifications.push({ answer, rows: rows(draft) }),
+        requestLimitMs: LIMIT,
+      });
+      await draft.load();
+      draft.store.addProduct(beer, "1");
+      const saved = seed("p1", beer);
+      const snapshot = server.snapshot(ended ? null : saved, "wo-4");
+      server.saveDraft.mockResolvedValueOnce(snapshot);
+
+      expect(await draft.flush()).toBe("saved");
+
+      expect(notifications).toEqual([{ answer: [snapshot], rows: ended ? [] : ["Beer ×1"] }]);
+      draft.drop();
+    },
+  );
+
   it("retains saved row IDs on load, save answers and later edits", async () => {
     const initial = seed("p1", beer);
     const draft = sync();

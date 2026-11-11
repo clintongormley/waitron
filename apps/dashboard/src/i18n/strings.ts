@@ -566,7 +566,6 @@ export const en = {
 
   "nav.venue_settings": "Venue settings",
   "receipts.subtitle": "Subtitle",
-  "receipts.print_receipt": "Print a receipt",
   "receipts.print_trading_name": "Print the trading name above the legal name",
   "receipts.venue_defaults": "Venue defaults",
   "receipts.header_subtitle_hint": "e.g. a tagline",
@@ -4415,7 +4414,6 @@ export const es: Record<StringKey, string> = {
 
   "nav.venue_settings": "Ajustes del local",
   "receipts.subtitle": "Subtítulo",
-  "receipts.print_receipt": "Imprimir un recibo",
   "receipts.print_trading_name": "Imprimir el nombre comercial encima del nombre legal",
   "receipts.venue_defaults": "Valores del local",
   "receipts.header_subtitle_hint": "p. ej., un lema",

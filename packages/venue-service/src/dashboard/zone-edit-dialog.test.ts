@@ -50,7 +50,7 @@ it.each([1280, 390])("Save's right edge lines up with the last field's at %i px"
     await page.viewport(old[0]!, old[1]!);
   }
 });
-it("opens the selected zone with name and four raw overrides, offering each department value explicitly", async () => {
+it("opens the selected zone with name and three service overrides, offering each department value explicitly", async () => {
   const { el, modal, writes } = await mountZoneEditor();
   expect(modal.heading).toBe("Edit zone: Terrace");
   const name = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name]")!;
@@ -58,18 +58,12 @@ it("opens the selected zone with name and four raw overrides, offering each depa
   expect(name.value).toBe("Terrace");
   const fields = await zoneFields(el);
   const choices = [...fields.shadowRoot!.querySelectorAll("wt-combobox")];
-  expect(choices.map((f) => f.name)).toEqual([
-    "orderStart",
-    "paidWhen",
-    "collectionNumber",
-    "receiptPrintMode",
-  ]);
-  expect(choices.map((f) => f.value)).toEqual(["counter", "", "", ""]);
+  expect(choices.map((f) => f.name)).toEqual(["orderStart", "paidWhen", "collectionNumber"]);
+  expect(choices.map((f) => f.value)).toEqual(["counter", "", ""]);
   expect(choices.map((f) => f.options[0])).toEqual([
     { value: "", label: "Same as department (Table service)" },
     { value: "", label: "Same as department (Paid before preparation)" },
     { value: "", label: "Same as department (Don't print)" },
-    { value: "", label: "Same as department (Always)" },
   ]);
   expect(zoneSave(el).disabled).toBe(true);
   expect(zoneSave(el).variant).toBe("secondary");
@@ -292,7 +286,7 @@ it("changed policy events stay inside the editor and an explicit policy saves wi
   const fields = await zoneFields(el);
   fields.dispatchEvent(
     new CustomEvent("service-settings-change", {
-      detail: { value: { ...fields.value, receiptPrintMode: "on_request" } },
+      detail: { value: { ...fields.value, paidWhen: "ticket_then_pay" } },
       bubbles: true,
       composed: true,
     }),
@@ -307,9 +301,9 @@ it("changed policy events stay inside the editor and an explicit policy saves wi
       {
         name: "Terrace",
         orderStart: "counter",
-        paidWhen: null,
+        paidWhen: "ticket_then_pay",
         collectionNumber: null,
-        receiptPrintMode: "on_request",
+        receiptPrintMode: null,
       },
     ],
   ]);

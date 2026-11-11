@@ -653,18 +653,28 @@ export class TillTicketView extends LitElement {
   @state() private invoicePrinterOpen = false;
   @property({ attribute: false }) receiptEquipment?: RoleEquipment;
   @state() private documentPrinterOpen = false;
-  @state() private printDocument: "receipt" | "invoice" | null = null;
+  @state() protected printDocument: "receipt" | "invoice" | null = null;
   @state() private takingPrinter: EquipmentItem | null = null;
 
   #documentChoice(document: "receipt" | "invoice"): void {
     this.printDocument = document;
     this.invoicePrinterOpen = true;
-    this.#readInvoicePrinters();
+    this.readInvoicePrinters();
   }
 
-  #receiptDesignation(): "original" | "duplicate" | null {
-    if (this.result.invoiceType !== "F1")
-      return this.historical || !this.originalReceiptAvailable ? "duplicate" : "original";
+  protected receiptDesignation(): "original" | "duplicate" | null {
+    if (this.result.invoiceType !== "F1") {
+      if (this.historical && !this.historicalDelivery) return "duplicate";
+      if (this.originalReceiptReadFailed) return null;
+      const status = this.originalReceiptPrint?.status;
+      if (status !== undefined)
+        return status === "not_queued"
+          ? "original"
+          : status === "done" || this.historical
+            ? "duplicate"
+            : null;
+      return this.historical ? null : this.originalReceiptAvailable ? "original" : "duplicate";
+    }
     const status = this.originalReceiptPrint?.status;
     const attempt = this.deliveries?.current?.status;
     if (
@@ -681,7 +691,7 @@ export class TillTicketView extends LitElement {
   #renderDocumentPrinter() {
     if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
     const receipt = this.printDocument === "receipt";
-    const designation = this.#receiptDesignation();
+    const designation = this.receiptDesignation();
     const destination = this.receiptEquipment?.resolved;
     return html`<section class="invoice-printer" aria-label=${t("document.print")}>
       <wt-button
@@ -712,7 +722,7 @@ export class TillTicketView extends LitElement {
                       ${this.result.invoiceType === "F1" ? html`<wt-button data-test="document-invoice" variant="secondary" @click=${() => this.#documentChoice("invoice")}>${t("document.invoice")}</wt-button>` : nothing}
                     `
                   : html`
-                      ${this.#renderInvoicePrinter()}
+                      ${this.renderInvoicePrinter()}
                       ${
                         receipt
                           ? designation === null
@@ -726,7 +736,7 @@ export class TillTicketView extends LitElement {
                                   >${t(designation === "original" ? "invoice.print_on" : "invoice.print_on_copy").replace("{printer}", () => destination?.name ?? t("equipment.none"))}</wt-button
                                 >
                               `
-                          : this.#renderInvoicePrint()
+                          : this.renderInvoicePrint()
                       }
                     `
               }
@@ -746,7 +756,7 @@ export class TillTicketView extends LitElement {
     </section>`;
   }
 
-  #renderInvoicePrint() {
+  protected renderInvoicePrint() {
     const status = this.deliveries;
     const print = this.canPrintReceipt ? status?.actions.print : null;
     return print
@@ -760,7 +770,7 @@ export class TillTicketView extends LitElement {
       : nothing;
   }
 
-  #readInvoicePrinters(): void {
+  protected readInvoicePrinters(): void {
     this.dispatchEvent(
       new CustomEvent("invoice-printer-open", {
         detail: { role: this.printDocument ?? "invoice" },
@@ -770,7 +780,7 @@ export class TillTicketView extends LitElement {
     );
   }
 
-  #renderInvoicePrinter() {
+  protected renderInvoicePrinter() {
     if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
     const receipt = this.printDocument === "receipt";
     const role = receipt ? this.receiptEquipment : this.invoiceEquipment;
@@ -788,7 +798,7 @@ export class TillTicketView extends LitElement {
         aria-expanded=${this.invoicePrinterOpen}
         @click=${() => {
           this.invoicePrinterOpen = !this.invoicePrinterOpen;
-          if (this.invoicePrinterOpen) this.#readInvoicePrinters();
+          if (this.invoicePrinterOpen) this.readInvoicePrinters();
         }}
         >${t(receipt ? "equipment.receipt" : "equipment.invoice")}:
         ${role?.resolved?.name ?? (!receipt ? this.deliveries?.actions.print?.printers[0]?.name : undefined) ?? t("equipment.none")}${paper ? ` · ${paper}` : ""}</wt-button
@@ -855,7 +865,7 @@ export class TillTicketView extends LitElement {
                 data-test="invoice-printer-read-retry"
                 variant="secondary"
                 ?disabled=${this.invoicePrinterLoading}
-                @click=${() => this.#readInvoicePrinters()}
+                @click=${() => this.readInvoicePrinters()}
                 >${t("hours.refresh")}</wt-button
               >
             `
@@ -923,7 +933,21 @@ export class TillTicketView extends LitElement {
     this.dispatchEvent(new CustomEvent("open-drawer", { bubbles: true, composed: true }));
   }
 
-  #renderDelivery() {
+  protected renderDrawer() {
+    return !this.historical && this.canOpenDrawer
+      ? html`<wt-button
+          class="open-drawer"
+          variant="secondary"
+          size="lg"
+          data-test="open-drawer"
+          @click=${() => this.#openDrawer()}
+        >
+          ${t("action.open_drawer")}
+        </wt-button>`
+      : nothing;
+  }
+
+  protected renderDelivery() {
     const status = this.deliveries;
     const words = status?.current ? deliveryWords(status.current) : undefined;
     const busy = this.deliveryBusy || this.originalReceiptBusy;
@@ -949,7 +973,7 @@ export class TillTicketView extends LitElement {
             </p>`
           : nothing
       }
-      ${this.invoicePrintersEnabled ? nothing : this.#renderInvoicePrint()}
+      ${this.invoicePrintersEnabled ? nothing : this.renderInvoicePrint()}
       ${
         emailAgainId
           ? html`<wt-button
@@ -995,6 +1019,94 @@ export class TillTicketView extends LitElement {
                 )}
               >${t("invoice.receipt_instead")}</wt-button
             >`
+          : nothing
+      }
+    `;
+  }
+
+  protected renderReceiptRetry(failedButSuperseded: boolean) {
+    const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    return this.canPrintReceipt &&
+      this.originalReceiptPrint?.status === "failed" &&
+      this.originalReceiptPrint.canRetry &&
+      !this.originalReceiptPrint.printerWithdrawn &&
+      !failedButSuperseded
+      ? html`<wt-button
+          variant="secondary"
+          data-test="retry-receipt"
+          size="lg"
+          ?disabled=${receiptBusy}
+          @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
+          >${t("invoice.retry_original")}</wt-button
+        >`
+      : nothing;
+  }
+
+  protected renderOriginalDelivery(includeRetry = false) {
+    const attempt = this.deliveries?.current;
+    const notQueued = this.originalReceiptPrint?.status === "not_queued";
+    const failedReceipt = this.originalReceiptPrint?.status === "failed";
+    const failedButDelivered = failedReceipt && this.deliveries?.originalCompleted === true;
+    // The server refuses to resend the receipt original beside any active delivery or once an original
+    // completed; only an A4 or email one replaces the receipt's own failure line.
+    const failedButSuperseded =
+      failedButDelivered ||
+      (failedReceipt &&
+        attempt != null &&
+        attempt.medium !== "receipt" &&
+        (attempt.status === "queued" || attempt.status === "sending"));
+    const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    return html`
+      ${
+        (this.result.invoiceType === "F1" && (!this.historical || this.historicalDelivery)) ||
+        (this.result.invoiceType !== "F1" &&
+          (includeRetry || this.historicalDelivery) &&
+          (this.originalReceiptReadFailed ||
+            (this.originalReceiptPrint !== undefined && !notQueued)))
+          ? html`<section class="original-delivery" data-test="original-delivery">
+              ${
+                this.result.invoiceType === "F1"
+                  ? html`<p role="status">
+                      <strong
+                        >${t(this.originalReceiptPrint?.status !== "not_queued" && this.originalReceiptPrint?.handover ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : "invoice.not_delivered")}</strong
+                      >
+                    </p>`
+                  : nothing
+              }
+              ${
+                // An A4 or email attempt says where the invoice is; "not sent to a printer", or a
+                // receipt failure that no longer matters, would contradict it.
+                !this.originalReceiptReadFailed &&
+                ((notQueued && attempt != null && attempt.medium !== "receipt") ||
+                  failedButSuperseded)
+                  ? nothing
+                  : html`<p>
+                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
+                    </p>`
+              }
+              ${this.renderDelivery()}
+              ${
+                this.result.invoiceType === "F1" &&
+                this.originalReceiptPrint?.status === "done" &&
+                !this.originalReceiptPrint.handover
+                  ? html`<wt-button
+                      variant="primary"
+                      data-test="confirm-handover"
+                      ?disabled=${receiptBusy}
+                      @click=${() => this.dispatchEvent(new CustomEvent("confirm-handover", { bubbles: true, composed: true }))}
+                      >${t("invoice.confirm_handover")}</wt-button
+                    >`
+                  : nothing
+              }
+              <wt-button
+                variant="secondary"
+                data-test="refresh-receipt"
+                ?disabled=${receiptBusy}
+                @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
+                >${t("invoice.check_print")}</wt-button
+              >
+              ${includeRetry ? this.renderReceiptRetry(failedButSuperseded) : nothing}
+            </section>`
           : nothing
       }
     `;
@@ -1212,47 +1324,7 @@ export class TillTicketView extends LitElement {
         }
       </article>
 
-      ${
-        r.invoiceType === "F1" && (!this.historical || this.historicalDelivery)
-          ? html`<section class="original-delivery" data-test="original-delivery">
-              <p role="status">
-                <strong
-                  >${t(this.originalReceiptPrint?.status !== "not_queued" && this.originalReceiptPrint?.handover ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : "invoice.not_delivered")}</strong
-                >
-              </p>
-              ${
-                // An A4 or email attempt says where the invoice is; "not sent to a printer", or a
-                // receipt failure that no longer matters, would contradict it.
-                !this.originalReceiptReadFailed &&
-                ((notQueued && attempt != null && attempt.medium !== "receipt") ||
-                  failedButSuperseded)
-                  ? nothing
-                  : html`<p>
-                      ${this.originalReceiptReadFailed ? t("invoice.print_status_failed") : this.originalReceiptPrint === undefined ? t("invoice.print_checking") : this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.failureCode === "printer.deleted" ? codeMessage("printer.deleted") : t(this.originalReceiptPrint.status === "failed" && this.originalReceiptPrint.printerWithdrawn ? "invoice.print_failed_withdrawn" : this.originalReceiptPrint.status === "failed" && !this.originalReceiptPrint.canRetry ? "invoice.print_auto_retry" : this.originalReceiptPrint.status === "done" && this.originalReceiptPrint.handover ? "invoice.print_completed" : `invoice.print_${this.originalReceiptPrint.status}`)}
-                    </p>`
-              }
-              ${this.#renderDelivery()}
-              ${
-                this.originalReceiptPrint?.status === "done" && !this.originalReceiptPrint.handover
-                  ? html`<wt-button
-                      variant="primary"
-                      data-test="confirm-handover"
-                      ?disabled=${receiptBusy}
-                      @click=${() => this.dispatchEvent(new CustomEvent("confirm-handover", { bubbles: true, composed: true }))}
-                      >${t("invoice.confirm_handover")}</wt-button
-                    >`
-                  : nothing
-              }
-              <wt-button
-                variant="secondary"
-                data-test="refresh-receipt"
-                ?disabled=${receiptBusy}
-                @click=${() => this.dispatchEvent(new CustomEvent("refresh-receipt", { bubbles: true, composed: true }))}
-                >${t("invoice.check_print")}</wt-button
-              >
-            </section>`
-          : nothing
-      }
+      ${this.renderOriginalDelivery()}
       ${
         r.invoiceType === "F1" && this.emailOpen && this.canPrintReceipt
           ? html`<till-invoice-email-dialog
@@ -1277,20 +1349,7 @@ export class TillTicketView extends LitElement {
         ${
           this.canPrintReceipt
             ? this.invoicePrintersEnabled
-              ? r.invoiceType === "F1" &&
-                this.originalReceiptPrint?.status === "failed" &&
-                this.originalReceiptPrint.canRetry &&
-                !this.originalReceiptPrint.printerWithdrawn &&
-                !failedButSuperseded
-                ? html`<wt-button
-                    variant="secondary"
-                    data-test="retry-receipt"
-                    size="lg"
-                    ?disabled=${receiptBusy}
-                    @click=${() => this.dispatchEvent(new CustomEvent("retry-receipt", { bubbles: true, composed: true }))}
-                    >${t("invoice.retry_original")}</wt-button
-                  >`
-                : nothing
+              ? this.renderReceiptRetry(failedButSuperseded)
               : this.historical && !this.historicalDelivery
                 ? html`<wt-button
                     variant="secondary"
@@ -1359,19 +1418,7 @@ export class TillTicketView extends LitElement {
               </wt-button>`
             : nothing
         }
-        ${
-          !this.historical && this.canOpenDrawer
-            ? html`<wt-button
-                class="open-drawer"
-                variant="secondary"
-                size="lg"
-                data-test="open-drawer"
-                @click=${() => this.#openDrawer()}
-              >
-                ${t("action.open_drawer")}
-              </wt-button>`
-            : nothing
-        }
+        ${this.renderDrawer()}
       </div>
 
       ${

@@ -83,6 +83,7 @@ import {
 } from "./working-order.js";
 import { createTable } from "./testing/live-table.js";
 import {
+  printSaleReceipt,
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
@@ -1458,7 +1459,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(await paymentCount(id)).toBe(1);
   });
 
-  it("auto-prints the customer receipt on an integrated card sale (no kick, no drawer), and a REPLAY does not double-print", async () => {
+  it("prints an explicitly requested integrated-card receipt without a drawer kick, and a replay does not print again", async () => {
     // An integrated card's receipt carries no drawer kick and records no `drawer_opens` row; a
     // replay prints nothing more.
     const { cfg, coffee } = await setupVenue();
@@ -1475,6 +1476,8 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     const first = await payWorkingOrderIntegrated(deps, cfg, req);
     expect(first.outcome).toBe("captured");
 
+    expect(await printJobPayloads(cfg, printerId)).toHaveLength(0);
+    await printSaleReceipt(deps, cfg, id, false);
     const afterFirst = await printJobPayloads(cfg, printerId);
     expect(afterFirst).toHaveLength(1);
     const payload = new Uint8Array(afterFirst[0]!);

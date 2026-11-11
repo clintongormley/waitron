@@ -770,8 +770,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/till/src/screens/till-floor-screen.test.ts",
   "apps/till/src/screens/till-floor-screen.today.test.ts",
   "apps/till/src/screens/till-lock-screen.test.ts",
-  "apps/till/src/screens/till-paid-view.a11y.test.ts",
-  "apps/till/src/screens/till-paid-view.test.ts",
   "apps/till/src/screens/till-pass-screen.a11y.test.ts",
   "apps/till/src/screens/till-pass-screen.fire.test.ts",
   "apps/till/src/screens/till-pass-screen.help.test.ts",

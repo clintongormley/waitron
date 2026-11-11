@@ -59,7 +59,10 @@ const product: TillProduct = {
   catalogueId: "cat-default",
   catalogueName: "Menu",
 };
-const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view")!;
+const ticket = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTicketView>(
+    "till-ticket-view, till-settlement-document-dialog",
+  )!;
 const part = (el: TillApp, name: string) =>
   ticket(el).shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
 const initialUrl = location.href;
@@ -105,7 +108,7 @@ async function sold(overrides: Record<string, unknown> = {}) {
   const id = counter.store.id;
   emit(counter, "confirm-payment", { method: "cash", amount: "12.00" });
   await flush(el);
-  expect(ticket(el)).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   await openInvoice(el);
   await userEvent.click(part(el, "invoice-printer-toggle")!);
   await flush(el);
@@ -113,6 +116,17 @@ async function sold(overrides: Record<string, unknown> = {}) {
 }
 
 async function openInvoice(el: TillApp) {
+  const chooser = el.shadowRoot!.querySelector("till-settlement-document-dialog");
+  if (chooser !== null) {
+    const invoice = chooser.shadowRoot!.querySelector<HTMLElement>(
+      "[data-settlement-choice=invoice]",
+    )!;
+    if (invoice.getAttribute("aria-pressed") !== "true") {
+      await userEvent.click(invoice);
+      await flush(el);
+    }
+    return;
+  }
   if (part(el, "invoice-printer-toggle")) return;
   await userEvent.click(part(el, "document-print-toggle")!);
   await userEvent.click(part(el, "document-invoice")!);
@@ -295,14 +309,14 @@ it("accepts a saved preference while an existing delivery is busy without a fals
   expect(part(el, "print-invoice")!.hasAttribute("disabled")).toBe(false);
 });
 
-it.each(["new-sale", "logout"])(
+it.each(["None", "logout"])(
   "a pending choice may save after %s without changing the new screen",
   async (leave) => {
     const saving = pending<DeviceEquipment>();
     const { el, api } = await sold({ setDeviceEquipment: vi.fn().mockReturnValue(saving.promise) });
     await choose(el, bar.id);
     if (leave === "logout") emit(shell(el), "logout");
-    else emit(ticket(el), "new-sale");
+    else emit(ticket(el), "settlement-close");
     await flush(el);
     expect(ticket(el)).toBeNull();
     const reads = vi.mocked(api.getInvoiceDeliveries).mock.calls.length;
@@ -446,7 +460,7 @@ it("a new invoice clears the old hold and ignores the old invoice's delayed stat
       .mockResolvedValue(delivery(office)),
   });
   await choose(el, bar.id);
-  emit(ticket(el), "new-sale");
+  emit(ticket(el), "settlement-close");
   await flush(el);
   const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
   counter.store.addProduct(product, "1");
@@ -463,6 +477,8 @@ it("keeps the latest row read when an older opening answers last", async () => {
   const older = pending<DeviceEquipment>();
   const newer = pending<DeviceEquipment>();
   const { el, api } = await sold();
+  await userEvent.click(part(el, "invoice-printer-toggle")!);
+  await flush(el);
   vi.mocked(api.getDeviceEquipment)
     .mockReturnValueOnce(older.promise)
     .mockReturnValueOnce(newer.promise);
@@ -488,7 +504,7 @@ it("Back to Find a bill leaves a pending device save without changing the return
     listTransactions: vi.fn().mockResolvedValue(listPage([])),
     getTransactionReceipt: vi.fn().mockResolvedValue({ ...invoiceOf("12.00"), invoiceType: "F1" }),
   });
-  emit(ticket(el), "new-sale");
+  emit(ticket(el), "settlement-close");
   await flush(el);
   emit(shell(el), "find-bill");
   await flush(el);

@@ -2177,11 +2177,11 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
     expect(tender).toEqual({ bill_payment_id: id, method: "card" });
   });
 
-  it("prints the invoice's receipt on the receipt printer of the device that started the payment", async () => {
+  it("does not automatically print an attested invoice", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, { kind: "failed" });
-    const printerId = await withTransaction(suite.db, async (tx) => {
+    await withTransaction(suite.db, async (tx) => {
       const printer = await createPrinter(tx, {
         name: "Recibos",
         transport: "cloud_poll",
@@ -2201,7 +2201,7 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       suite.db.all<{ printer_id: string; kind: string }>(
         sql`select printer_id, kind from print_jobs`,
       ),
-    ).toEqual([{ printer_id: printerId, kind: "document" }]);
+    ).toEqual([]);
   });
 
   it("keeps the payment's device, and files the invoice it completes under that device", async () => {
