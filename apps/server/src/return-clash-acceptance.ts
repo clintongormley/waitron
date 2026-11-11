@@ -143,7 +143,11 @@ export async function retainReturnClashes(
   );
   const fresh = clashes
     .filter((clash) => !group?.clashes.some((held) => held.clashId === evidenceId(body, clash)))
-    .map((clash) => ({ ...clash, clashId: evidenceId(body, clash) }));
+    .map((clash) => {
+      const stored = { ...clash, clashId: evidenceId(body, clash) };
+      delete stored.readable;
+      return stored;
+    });
   if (!fresh.length) return;
   await appendHandoverEventTx(node, {
     nodeId: deps.nodeId,
@@ -272,6 +276,11 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
               batchId: event.detail.batchId,
               ...binding(evidence.body),
               ...clash,
+              ...(clash.kind === "record"
+                ? {
+                    downloadUrl: `/management-api/return-clashes/${clashId}/download`,
+                  }
+                : {}),
               eligible: evidence.current.some(
                 (row) => row.fingerprint === clash.fingerprint && row.eligible,
               ),
@@ -283,6 +292,30 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
       });
       c.header("Cache-Control", "no-store");
       return c.json(report);
+    }),
+  );
+  app.get("/management-api/return-clashes/:clashId/download", (c) =>
+    run(c, log, async () => {
+      const token = requireManagementSession(c);
+      const clashId = c.req.param("clashId");
+      const readable = await withTransaction(deps.db, async (tx) => {
+        await authorize(tx, token);
+        const group = evidenceGroups(await events(deps, "return-clash-evidence")).find((row) =>
+          row.clashes.some((clash) => clash.clashId === clashId),
+        );
+        if (!group) throw new AppError("handover.return_clash_not_found", { clashId });
+        const evidence = await readEvidence(deps, group, tx);
+        const current = evidence.current.find((row) => evidenceId(evidence.body, row) === clashId);
+        if (!current) refuseReturn("clash changed");
+        if (current.readable === undefined)
+          throw new AppError("handover.return_clash_not_found", { clashId });
+        return current.readable;
+      });
+      c.header("Content-Type", "text/plain; charset=utf-8");
+      c.header("Content-Disposition", `attachment; filename="return-clash-${clashId}.txt"`);
+      c.header("Cache-Control", "no-store");
+      c.header("X-Content-Type-Options", "nosniff");
+      return c.body(readable);
     }),
   );
   app.post("/management-api/return-clashes/:clashId/accept", (c) =>

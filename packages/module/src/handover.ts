@@ -6,6 +6,8 @@ import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
 export interface ReturnDiscrepancy {
+  kind?: "record";
+  readable?: string;
   saleId: string;
   fingerprint: string;
   outstanding: CanonicalValue;

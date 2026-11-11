@@ -22,6 +22,8 @@ import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { inspectReturnedPayments } from "./handover-return.js";
+import { VERIFACTU_HANDOVER } from "./handover-summary.js";
+import type { CanonicalValue } from "@waitron/membership";
 import { listFilingCases } from "./filing-cases.js";
 import { appendToChain } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
@@ -43,6 +45,63 @@ import {
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const receiver = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+async function recordClash() {
+  const source = await original("Source", 1, copyBase);
+  await suite.db.execute(sql`insert into envios
+    (registro_id, estado, csv, codigo_error, proximo_intento_en)
+    values (${source.recordId}, 'aceptado_con_errores', 'old-csv', '2000',
+      '2026-07-20T17:21:00.000Z')`);
+  const returned = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  const existing = structuredClone(returned);
+  existing.records[0]!.id = "held-record";
+  existing.records[0]!.sale_id = "held-sale";
+  existing.sales[0]!.id = "held-sale";
+  existing.heads[0]!.ultimo_registro_id = "held-record";
+  existing.deliveries[0]!.registro_id = "held-record";
+  existing.deliveries[0]!.estado = "pendiente";
+  existing.deliveries[0]!.csv = null;
+  existing.deliveries[0]!.codigo_error = null;
+  const now = new Date("2026-07-20T17:22:00.000Z");
+  await withTransaction(receiver.db, (tx) =>
+    receiveReturnedOriginals(tx, source.nodeId, existing, now),
+  );
+  return { source, returned, existing, now };
+}
+
+it("lists both versions of a record clash with current filing status for a readable download", async () => {
+  const { source, returned, existing } = await recordClash();
+  const inspect = () =>
+    VERIFACTU_HANDOVER.returnRecords!.inspect!(
+      receiver.db,
+      source.nodeId,
+      returned as unknown as CanonicalValue,
+    );
+  const [clash] = await inspect();
+  expect(clash).toMatchObject({
+    kind: "record",
+    saleId: source.saleId,
+    eligible: true,
+    incoming: returned.records[0],
+    held: existing.records,
+  });
+  expect(clash!.readable).toContain("Old-box record");
+  expect(clash!.readable).toContain("Record held by the new main");
+  expect(clash!.readable).toContain("Source/1");
+  expect(clash!.readable).toContain("123.45");
+  expect(clash!.readable).toContain("21.43");
+  expect(clash!.readable).toContain("Accepted with errors (aceptado_con_errores)");
+  expect(clash!.readable).toContain("old-csv");
+  expect(clash!.readable).toContain("2000");
+  await receiver.db.execute(sql`update envios set estado = 'aceptado', csv = 'new-csv'
+    where registro_id = 'held-record'`);
+  const [current] = await inspect();
+  expect(current!.fingerprint).toBe(clash!.fingerprint);
+  expect(current!.readable).toContain("Accepted (aceptado)");
+  expect(current!.readable).toContain("new-csv");
+});
 
 async function checkFixture() {
   const directory = await mkdtemp(join(tmpdir(), "waitron-return-fixture-"));

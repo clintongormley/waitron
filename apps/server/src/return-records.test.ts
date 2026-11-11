@@ -508,6 +508,71 @@ async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true
   });
 }
 
+it("downloads current readable record evidence with permission before lookup, without fresh sign-in or write admission", async () => {
+  accounted = false;
+  let readable = "Old-box record\nInvoice: old/1\nFiling status: Pending";
+  const seat = modules[0]!.handover!.returnRecords!;
+  const inspect = vi.spyOn(seat, "inspect").mockImplementation(async (_tx, _source, batch) => [
+    {
+      kind: "record",
+      readable,
+      saleId: String(batch),
+      fingerprint: returnDigest(batch),
+      eligible: true,
+      outstanding: [batch],
+      original: batch,
+      incoming: batch,
+      held: "held",
+    },
+  ]);
+  try {
+    const app = destination();
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+    const session = await acceptanceSession("admin", false);
+    const staff = await acceptanceSession("staff");
+    const reader = destination(() => {
+      throw new AppError("node.read_only", {});
+    });
+    const unknown = "/management-api/return-clashes/unknown/download";
+    expect((await reader.request(unknown)).status).toBe(401);
+    expect((await reader.request(unknown, { headers: { cookie: staff.cookie } })).status).toBe(403);
+    expect((await reader.request(unknown, { headers: { cookie: session.cookie } })).status).toBe(
+      404,
+    );
+    const listing = await reader.request("/management-api/return-clashes", {
+      headers: { cookie: session.cookie },
+    });
+    const { clashes } = (await listing.json()) as {
+      clashes: { clashId: string; downloadUrl: string; readable?: string }[];
+    };
+    const clash = clashes[0]!;
+    expect(clash.readable).toBeUndefined();
+    expect(clash.downloadUrl).toBe(`/management-api/return-clashes/${clash.clashId}/download`);
+    const retained = suite.node.all<{ detail: string }>(
+      sql`select detail from node_handover_events where kind = 'return-clash-evidence'`,
+    );
+    expect(retained.map((row) => row.detail).join("")).not.toContain('"readable"');
+    readable = "Old-box record\nInvoice: old/1\nFiling status: Accepted\nCSV: current-csv";
+    const response = await reader.request(clash.downloadUrl, {
+      headers: { cookie: session.cookie },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
+    expect(response.headers.get("Content-Disposition")).toBe(
+      `attachment; filename="return-clash-${clash.clashId}.txt"`,
+    );
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(await response.text()).toBe(readable);
+    inspect.mockResolvedValue([]);
+    const stale = await reader.request(clash.downloadUrl, { headers: { cookie: session.cookie } });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({ error: { code: "handover.return_refused" } });
+  } finally {
+    inspect.mockRestore();
+  }
+});
+
 it("accepts two signed clashing batches separately across restarted duties and replays the original decision", async () => {
   accounted = false;
   const session = await acceptanceSession();
