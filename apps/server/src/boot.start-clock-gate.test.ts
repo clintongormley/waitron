@@ -172,7 +172,7 @@ describe("the start clock gate as boot wires it", () => {
 
     const sale = await sellOnce(host, async () => {
       expect(sets).toEqual([]);
-      // Control: a till's "Use this time" two days out reaches the same fake as a set.
+      // Control: a till's "This device" two days out reaches the same fake as a set.
       const asked = (await (await post("/api/box-clock/challenge", {})).json()) as {
         challengeId: string;
       };

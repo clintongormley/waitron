@@ -4686,11 +4686,11 @@ the start waits, the challenge needs no stop, asks neither the start-up window n
 answers `keepOffered: true`; the till's profile and the person are still checked. The confirm then
 takes one of three paths:
 
-- `keep: true` ("The server's time is right") confirms the box's time as it stands, whatever the
+- `keep: true` ("The server") confirms the box's time as it stands, whatever the
   till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
   source `staff` or `admin`;
-- a till within a minute confirms the same way ("The time is right");
-- a till further out ("Use this time") sets the clock through the host with reason `start`, which
+- a till within a minute confirms the same way ("Yes");
+- a till further out ("This device") sets the clock through the host with reason `start`, which
   writes the row every set writes and raises `clock.corrected` with its email, then, when the set is
   verified, confirms `by_person`; if the chain heads cannot be read then, the start stays
   waiting and `clock_start.mark_failed` is logged.

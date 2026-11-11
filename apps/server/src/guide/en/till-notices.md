@@ -77,14 +77,16 @@ of the screen. Tap **Check the time** to open its dialog; when another notice sh
 list and tap it there. Anyone signed in on the till can use it.
 
 The dialog shows the server's time and this till's time. Nobody types a time: the till's own time is
-what is sent, so if the till's time is wrong too, correct it in the till's own settings first, then
-check again.
+what is sent.
 
-- When the two times are more than a minute apart, it asks **Use this device's time?** Press **Use
-  this time** to set the server's clock to the till's time; payments start again. Press **Not
-  now** to leave it.
-- When they agree, it asks you to confirm that the server's time is right. Press **The time is right**
-  if it is; payments start again on the server's clock. Press **Not now** to leave it.
+- When the two times are more than a minute apart, it asks which is correct. Press **This device**
+  if the till's time is right: the server's clock is set to it and payments start again. Press **The
+  server** if the server's time is right, or **Both times are wrong** if neither is.
+- When they agree, it asks **Is this time correct:**. Press **Yes** if it is; payments start again.
+  Press **No** if it is not.
+
+If the dialog asks you to correct the time on the till, do it in the till's own settings, then
+reconnect to the server.
 
 The people who manage the system are told when the server's clock is set from a till. If the server refuses,
 the dialog says why above its buttons and, where trying again can help, offers **Check again**.

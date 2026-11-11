@@ -96,7 +96,7 @@ describe("the till's Check the time", () => {
     expect(opened).not.toBeNull();
     await settle(el);
     const reads = getDeviceEquipment.mock.calls.length;
-    opened.shadowRoot!.querySelector<HTMLElement>('[data-box-time="primary"]')!.click();
+    opened.shadowRoot!.querySelector<HTMLElement>('[data-box-time="yes"]')!.click();
     await settle(el);
     expect(boxClockConfirm).toHaveBeenCalledTimes(1);
     expect(getDeviceEquipment.mock.calls.length).toBe(reads + 1);

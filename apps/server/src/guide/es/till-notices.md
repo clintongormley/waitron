@@ -85,15 +85,17 @@ abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ah
 cualquiera con la sesión iniciada en la caja.
 
 El diálogo muestra la hora del servidor y la de esta caja. Nadie escribe una hora: lo que se envía es
-la hora de la propia caja, así que si la hora de la caja también está mal, corrígela primero en los
-ajustes de la caja y vuelve a comprobarlo.
+la hora de la propia caja.
 
-- Cuando las dos horas están a más de un minuto, pregunta **¿Usar la hora de este dispositivo?**
-  Pulsa **Usar esta hora** para poner el reloj del servidor a la hora de la caja; se
-  puede volver a cobrar. Pulsa **Ahora no** para dejarlo.
-- Cuando coinciden, te pide que confirmes que la hora del servidor es correcta. Pulsa **La hora es
-  correcta** si lo es; se puede volver a cobrar con el reloj del servidor. Pulsa **Ahora no** para
-  dejarlo.
+- Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
+  dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
+  puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la buena, o **Las dos
+  horas están mal** si ninguna lo es.
+- Cuando coinciden, pregunta **¿Es correcta esta hora?** Pulsa **Sí** si lo es; se puede volver a
+  cobrar. Pulsa **No** si no lo es.
+
+Si el diálogo te pide que corrijas la hora de la caja, hazlo en los ajustes de la propia caja y
+vuelve a conectarte al servidor.
 
 Se avisa a quienes gestionan el sistema cuando el reloj del servidor se pone en hora desde una
 caja. Si el
