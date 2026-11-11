@@ -78,8 +78,10 @@ Run `--case existing-stick` with `B3_INSTALLER_IMAGE` set as below. It installs 
 an encrypted development disk, completes Prepare through the real setup route, then boots
 the stick again. After Prepare, it waits for the server's existing startup counter to clear
 before powering off, so the rehearsal's rapid restarts do not send it into recovery.
-The console names the taxpayer and starts the installed disk after 15 seconds. Press any
-key to pause; it returns after 120 seconds without further typing. Reinstall, erase and
+The console shows Spanish and English together, names the taxpayer and warns when the
+disk tag marks it Live. An unavailable tag leaves the name and Live status unknown.
+The installed disk starts after 15 seconds. Press any key to pause; it returns after
+120 seconds without further typing. Reinstall, erase and
 recovery-key inspection remain unavailable on this console.
 
 The rig sends keys, observes the guest's restart with USB still attached and first, pauses

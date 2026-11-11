@@ -40,9 +40,9 @@ function reader({
 }
 it("reads the stored legal name without unlocking or writing the disk", async () => {
   const run = reader();
-  expect(await installerNameNotice(target, run)).toBe(
-    "This box already has Waitron (Harbour Restaurant Ltd).",
-  );
+  expect(await installerNameNotice(target, run)).toEqual({
+    tag: { name: "Harbour Restaurant Ltd", live: false },
+  });
   expect(run.mock.calls.map(([command, args]) => [command, ...args])).toEqual([
     ["sfdisk", "--json", target],
     ["cryptsetup", "--disable-locks", "--debug", "luksDump", "/dev/vdb3"],
@@ -51,9 +51,7 @@ it("reads the stored legal name without unlocking or writing the disk", async ()
 });
 it("names a recognised disk even when its tag is absent or unusable", async () => {
   for (const tokens of [{}, { 2: { ...token, name: "bad\nname" } }])
-    expect(await installerNameNotice(target, reader({ tokens }))).toBe(
-      "This box already has Waitron (Venue name unavailable).",
-    );
+    expect(await installerNameNotice(target, reader({ tokens }))).toEqual({ tag: null });
 });
 it("leaves foreign disks at the occupied refusal without reading their encryption header", async () => {
   const run = reader({ marked: false });
@@ -73,7 +71,13 @@ it("keeps the occupied refusal when cryptsetup cannot read the header", async ()
 });
 
 it("recognises the uppercase partition GUID emitted by sfdisk", async () => {
-  expect(await installerNameNotice(target, reader({ type: partition.type.toUpperCase() }))).toBe(
-    "This box already has Waitron (Harbour Restaurant Ltd).",
+  expect(await installerNameNotice(target, reader({ type: partition.type.toUpperCase() }))).toEqual(
+    { tag: { name: "Harbour Restaurant Ltd", live: false } },
   );
+});
+
+it("retains the checked Live marking for the warning", async () => {
+  expect(
+    await installerNameNotice(target, reader({ tokens: { 2: { ...token, live: true } } })),
+  ).toEqual({ tag: { name: token.name, live: true } });
 });
