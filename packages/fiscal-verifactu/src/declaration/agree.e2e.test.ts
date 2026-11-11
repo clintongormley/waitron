@@ -11,6 +11,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SistemaInformatico } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../../test/migrations.js";
 import { seedTenantWithSif } from "../../test/fixtures.js";
+import { testProducer as producer } from "../../test/declaration.js";
 import {
   fakeClient,
   saleInput,
@@ -25,12 +26,6 @@ import { fillProducer } from "./render.js";
 import { declarationItems, prepareDeclarationSource } from "./source.js";
 
 const pg = useVenueDb({ migrations: TEST_MIGRATIONS });
-
-const producer = {
-  name: "PRODUCER PERSON",
-  taxId: "00000000T",
-  address: "1 Example Street, 00000 Nowhere (Province), Spain",
-};
 
 const SI_NO = { S: "S - Sí", N: "N - No" } as const;
 

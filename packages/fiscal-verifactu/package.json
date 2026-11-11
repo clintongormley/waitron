@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "db:generate": "pnpm --filter @waitron/server migration-baseline rebuild --set fiscal-verifactu",
-    "test:build-custodian": "node scripts/build-custodian.mjs"
+    "test:build-custodian": "node scripts/build-custodian.mjs",
+    "declaration": "tsx scripts/declaration.ts"
   },
   "dependencies": {
     "@waitron/core": "workspace:*",

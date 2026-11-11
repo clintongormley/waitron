@@ -11,7 +11,7 @@ import {
   runningProducer,
   SOFTWARE_IDENTITY,
 } from "../software-identity.js";
-import { renderDeclaration, type DeclarationProducer } from "./render.js";
+import { BREAK_OR_CONTROL, renderDeclaration, type DeclarationProducer } from "./render.js";
 import {
   declarationItems,
   prepareDeclarationSource,
@@ -61,17 +61,24 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
   const [command = "", ...rest] = argv;
   if (!Object.hasOwn(OPTIONS, command)) refuse(command);
   const names: readonly string[] = OPTIONS[command as Subcommand];
-  let values: Record<string, string | boolean | undefined>;
-  try {
-    values = parseArgs({
-      args: rest,
-      strict: true,
-      options: Object.fromEntries(
-        names.map((name) => [name, { type: name === "draft" ? "boolean" : "string" }] as const),
-      ),
-    }).values;
-  } catch {
-    refuse(command);
+  const { values, tokens } = parseArgs({
+    args: rest,
+    strict: false,
+    tokens: true,
+    options: Object.fromEntries(
+      names.map((name) => [name, { type: name === "draft" ? "boolean" : "string" }] as const),
+    ),
+  });
+  for (const token of tokens) {
+    if (token.kind === "positional") refuse(token.value);
+    if (token.kind !== "option") continue;
+    if (!names.includes(token.name)) refuse(token.rawName);
+    if (token.name === "draft") {
+      if (token.value !== undefined) refuse(token.rawName);
+    } else if (token.value === undefined || (!token.inlineValue && token.value.startsWith("-"))) {
+      // Otherwise `--place --date …` would take `--date` as the place.
+      refuse(token.rawName);
+    }
   }
   for (const name of names) {
     if (name !== "draft" && values[name] === undefined) refuse(`--${name}`);
@@ -79,7 +86,10 @@ function parse(argv: string[]): { command: Subcommand; args: Arguments } {
   const args = values as Partial<Arguments>;
   if (!VERSION.test(args.version!)) refuse("--version");
   // The place is written into the source before its markup is read, so it may carry none.
-  if (args.place !== undefined && (args.place.trim() === "" || /[\r\n‹›]|\*\*/.test(args.place))) {
+  if (
+    args.place !== undefined &&
+    (args.place.trim() === "" || BREAK_OR_CONTROL.test(args.place) || /[‹›]|\*\*/.test(args.place))
+  ) {
     refuse("--place");
   }
   if (args.date !== undefined) spanishDate(args.date);

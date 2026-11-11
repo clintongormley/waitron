@@ -132,55 +132,55 @@ describe("runDeclarationCommand", () => {
     expect(result.stdout).toContain("L'Alfàs del Pi – España");
   });
 
+  const place = (value: string) => [
+    "show",
+    "--version",
+    "1.0.0",
+    "--place",
+    value,
+    "--date",
+    "2026-10-22",
+  ];
+  const invalid = (argument: string) =>
+    `declaration.argument_invalid ${JSON.stringify({ argument })}\n`;
+
   it.each([
-    ["no subcommand", [], "declaration.argument_invalid"],
-    ["an unknown subcommand", ["sign", ...SIGNING], "declaration.argument_invalid"],
+    ["no subcommand", [], invalid("")],
+    ["an unknown subcommand", ["sign", ...SIGNING], invalid("sign")],
+    ["an option the subcommand lacks", ["write", "--draft", ...SIGNING], invalid("--draft")],
+    ["an unknown option", ["show", "--unknown", ...SIGNING], invalid("--unknown")],
+    ["an unknown short option", ["check", "-x", "--version", "1.0.0"], invalid("-x")],
+    ["a stray positional", ["check", "--version", "1.0.0", "extra"], invalid("extra")],
     [
-      "an option the subcommand lacks",
-      ["write", "--draft", ...SIGNING],
-      "declaration.argument_invalid",
+      "a positional after the end of the options",
+      ["check", "--version", "1.0.0", "--", "extra"],
+      invalid("extra"),
     ],
-    ["a missing option", ["check"], "declaration.argument_invalid"],
+    ["an option without its value", ["check", "--version"], invalid("--version")],
     [
-      "a version with a leading zero",
-      ["check", "--version", "1.01.0"],
-      "declaration.argument_invalid",
+      "an option followed by another option instead of its value",
+      ["show", "--version", "1.0.0", "--place", "--date", "2026-10-22"],
+      invalid("--place"),
     ],
-    [
-      "a version with a suffix",
-      ["check", "--version", "1.0.0-rc.1"],
-      "declaration.argument_invalid",
-    ],
-    [
-      "an empty place",
-      ["show", "--version", "1.0.0", "--place", " ", "--date", "2026-10-22"],
-      "declaration.argument_invalid",
-    ],
-    [
-      "a place with a line break",
-      ["show", "--version", "1.0.0", "--place", "A\nB", "--date", "2026-10-22"],
-      "declaration.argument_invalid",
-    ],
-    [
-      "a place holding a slot",
-      ["show", "--version", "1.0.0", "--place", "‹x›", "--date", "2026-10-22"],
-      "declaration.argument_invalid",
-    ],
-    [
-      "a place holding bold markup",
-      ["show", "--version", "1.0.0", "--place", "A**B", "--date", "2026-10-22"],
-      "declaration.argument_invalid",
-    ],
+    ["a flag given a value", ["show", "--draft=yes", ...SIGNING], invalid("--draft")],
+    ["a missing option", ["check"], invalid("--version")],
+    ["a version with a leading zero", ["check", "--version", "1.01.0"], invalid("--version")],
+    ["a version with a suffix", ["check", "--version", "1.0.0-rc.1"], invalid("--version")],
+    ["an empty place", place(" "), invalid("--place")],
+    ["a place with a line break", place("A\nB"), invalid("--place")],
+    ["a place with a line separator", place("A\u2028B"), invalid("--place")],
+    ["a place with a paragraph separator", place("A\u2029B"), invalid("--place")],
+    ["a place with a NUL", place("A\u0000B"), invalid("--place")],
+    ["a place with a tab", place("A\tB"), invalid("--place")],
+    ["a place holding a slot", place("‹x›"), invalid("--place")],
+    ["a place holding bold markup", place("A**B"), invalid("--place")],
     [
       "a date in another form",
       ["show", "--version", "1.0.0", "--place", "Elche", "--date", "22/10/2026"],
-      "declaration.date_invalid",
+      'declaration.date_invalid {"date":"22/10/2026"}\n',
     ],
   ])("refuses %s before reading any blocker", async (_name, argv, expected) => {
-    const result = await run(real, argv);
-
-    expect(result.status).toBe(1);
-    expect(code(result.stderr)).toBe(expected);
+    expect(await run(real, argv)).toEqual({ status: 1, stdout: "", stderr: expected });
   });
 
   it("lets an error that is not a refusal through", async () => {
