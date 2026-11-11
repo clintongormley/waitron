@@ -93,7 +93,7 @@ async function kitchenStationId(v: PartyVenue): Promise<string> {
     const [row] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.name, "Cocina"));
+      .where(eq(kitchenStations.isDefault, true));
     return row!.id;
   });
 }
