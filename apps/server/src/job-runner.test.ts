@@ -225,6 +225,20 @@ describe("job runner", () => {
     expect(runner.views()["menu.activation"].state).toBe("stopped");
   });
 
+  it("reports a sleep failure other than stopping when closed", async () => {
+    const failure = new Error("timer broken");
+    const delay = vi.fn(async () => {
+      throw failure;
+    });
+    runner = createJobRunner({ now: () => new Date(), log, delay, subscribe: () => () => {} });
+    runner.add(job());
+    await advance();
+    expect(delay).toHaveBeenCalledOnce();
+    const closing = runner.stopJobs();
+    runner = createJobRunner({ now: () => new Date(), log, subscribe: () => () => {} });
+    await expect(closing).rejects.toBe(failure);
+  });
+
   it("keeps a stop-hook rejection handled until close can report it", async () => {
     const failure = Error("stop failed");
     const unhandled: unknown[] = [];

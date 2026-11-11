@@ -48,9 +48,9 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-watch.js")>();
   return {
     ...actual,
-    startClockWatch: (...args: Parameters<typeof actual.startClockWatch>) => {
+    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
       seen.watchCorrections.push(args[0].correction);
-      const watch = actual.startClockWatch(...args);
+      const watch = actual.createClockWatch(...args);
       seen.watches.push(watch);
       return watch;
     },

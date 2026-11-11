@@ -44,19 +44,13 @@ export interface BackgroundDutyHandles {
   fiscalReconciliation?: Stopper;
   invoiceEmailLoop: unknown;
   mailLoop: unknown;
-  cloudWorker: unknown;
   cloudSnapshots: unknown;
-  suggestionLoop: unknown;
   unsubscribeFromChanges: () => unknown;
   jobRunner: Pick<JobRunner, "signalStepdown" | "stopJobs" | "stopServices">;
-  appendOnlyWatch: Stopper;
-  freeSpaceWatch: Stopper;
   boxEmails: Stopper;
   liveEvents: { close(): unknown };
   loop: unknown;
   backupSupervisor: Stopper;
-  demoPrinterLoop: Stopper | undefined;
-  clockWatch: Stopper;
   handoverDestinationDuty: Stopper | undefined;
   chartPost: Stopper;
 }
@@ -123,18 +117,8 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       reason: LOOP_WAIT,
     },
     {
-      name: "cloudWorker",
-      close: () => h.cloudWorker,
-      reason: LOOP_WAIT,
-    },
-    {
       name: "cloudSnapshots",
       close: () => h.cloudSnapshots,
-      reason: LOOP_WAIT,
-    },
-    {
-      name: "suggestionLoop",
-      close: () => h.suggestionLoop,
       reason: LOOP_WAIT,
     },
     {
@@ -151,18 +135,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
             atStepdown: true as const,
           },
         ]),
-    {
-      name: "appendOnlyWatch",
-      close: () => h.appendOnlyWatch.stop(),
-      reason:
-        "checks the append-only triggers and, on a mismatch, records a refusal and restarts the box; local, sends nothing outside the box",
-    },
-    {
-      name: "freeSpaceWatch",
-      close: () => h.freeSpaceWatch.stop(),
-      reason:
-        "on low space puts back the spare file and deletes old local backup archives; local, sends nothing outside the box",
-    },
     { name: "boxEmails", close: () => h.boxEmails.stop(), atStepdown: true },
     {
       name: "liveEvents",
@@ -179,8 +151,6 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       close: () => h.backupSupervisor.stop(),
       reason: "stops after the sending loop has finished",
     },
-    { name: "demoPrinterLoop", close: () => h.demoPrinterLoop?.stop(), atStepdown: true },
-    { name: "clockWatch", close: () => h.clockWatch.stop(), atStepdown: true },
     {
       name: "handoverDestinationDuty",
       close: () => h.handoverDestinationDuty?.stop(),

@@ -130,6 +130,7 @@ function buildApp(
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readTime: async () => ({ synced: false, source: "unavailable", warn: false }),
+      readJobs: () => ({}),
       readAwaitingFiscalCertificate: () => false,
     },
     () => {},

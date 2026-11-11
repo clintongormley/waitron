@@ -1,5 +1,8 @@
+import { createJobRunner, type JobRunner } from "./job-runner.js";
+import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
+import type { ResourceChange } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   deviceProfilePrinters,
@@ -27,7 +30,7 @@ import {
   configureDemoPrinter,
   deliverDemoPrinterJobs,
   routeToDemoPrinter,
-  startDemoPrinterLoop,
+  demoPrinterJob,
 } from "./demo-printer.js";
 import { deletePrinter } from "./printer-delete.js";
 
@@ -512,47 +515,94 @@ describe("the Demo printer", () => {
     expect(agent?.active).toBe(false);
   });
 
-  it("waits for an in-flight delivery when stopping", async () => {
-    await venue();
-    const demo = await configureDemoPrinter(suite.db, true);
-    const job = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
-    );
-    const loop = startDemoPrinterLoop(suite.db, demo!, 10);
-    await loop.stop();
-    const [row] = await suite.db
-      .select({ status: printJobs.status })
-      .from(printJobs)
-      .where(eq(printJobs.id, job.jobId));
-    expect(row?.status).toBe("done");
-  });
+  describe("the runner job", () => {
+    let runner: JobRunner;
+    let emit: (change: ResourceChange) => void;
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+    });
+    afterEach(async () => {
+      await runner?.stopJobs();
+      vi.useRealTimers();
+    });
+    function start(identity: NonNullable<Awaited<ReturnType<typeof configureDemoPrinter>>>) {
+      runner = createJobRunner({
+        now: () => new Date(),
+        log: () => {},
+        delay: fakeTimerDelay,
+        subscribe: (fn) => {
+          emit = fn;
+          return () => {};
+        },
+      });
+      const job = demoPrinterJob(suite.db, identity, () => {});
+      const pass = vi.spyOn(job, "pass");
+      runner.add(job);
+      return pass;
+    }
+    const status = async (id: string) =>
+      (
+        await suite.db
+          .select({ status: printJobs.status })
+          .from(printJobs)
+          .where(eq(printJobs.id, id))
+      )[0]?.status;
 
-  it("delivers after the sale enqueues, and stops before closing the store", async () => {
-    await venue();
-    const demo = await configureDemoPrinter(suite.db, true);
-    const loop = startDemoPrinterLoop(suite.db, demo!, 10);
-    try {
+    it("waits for an in-flight delivery when stopping", async () => {
+      await venue();
+      const demo = await configureDemoPrinter(suite.db, true);
+      const job = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
+      );
+      start(demo!);
+      await runner.stopJobs();
+      expect(await status(job.jobId)).toBe("done");
+    });
+
+    it("delivers within a second of a print-job wake without a half-second poll, and stops before closing the store", async () => {
+      await venue();
+      const demo = await configureDemoPrinter(suite.db, true);
+      const began = Date.now();
+      const pass = start(demo!);
+      await vi.waitFor(() => expect(runner.views()["demo.printer"]?.state).toBe("waiting"));
       const first = await withTransaction(suite.db, (tx) =>
         enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
       );
-      await vi.waitFor(async () => {
-        const [job] = await suite.db
-          .select({ status: printJobs.status })
-          .from(printJobs)
-          .where(eq(printJobs.id, first.jobId));
-        expect(job?.status).toBe("done");
+      emit({ resources: [{ type: "print_jobs" }] });
+      await vi.advanceTimersByTimeAsync(499 - (Date.now() - began));
+      expect(await status(first.jobId)).toBe("queued");
+      await vi.advanceTimersByTimeAsync(1);
+      await vi.waitFor(async () => expect(await status(first.jobId)).toBe("done"));
+      expect(Date.now() - began).toBeLessThan(1_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(pass).toHaveBeenCalledTimes(2);
+      await runner.stopJobs();
+      const second = await withTransaction(suite.db, (tx) =>
+        enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
+      );
+      emit({ resources: [{ type: "print_jobs" }] });
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(await status(second.jobId)).toBe("queued");
+    });
+
+    it("delivers many print jobs written together in one pass", async () => {
+      await venue();
+      const demo = await configureDemoPrinter(suite.db, true);
+      const pass = start(demo!);
+      await vi.waitFor(() => expect(runner.views()["demo.printer"]?.state).toBe("waiting"));
+      const ids = await withTransaction(suite.db, async (tx) => {
+        const ids: string[] = [];
+        for (let i = 0; i < 4; i++)
+          ids.push(
+            (await enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer")).jobId,
+          );
+        return ids;
       });
-    } finally {
-      await loop.stop();
-    }
-    const second = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
-    );
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const [job] = await suite.db
-      .select({ status: printJobs.status })
-      .from(printJobs)
-      .where(eq(printJobs.id, second.jobId));
-    expect(job?.status).toBe("queued");
+      emit({ resources: [{ type: "print_jobs" }] });
+      await vi.advanceTimersByTimeAsync(500);
+      await vi.waitFor(() => expect(runner.views()["demo.printer"]?.state).toBe("waiting"));
+      for (const id of ids) expect(await status(id)).toBe("done");
+      expect(pass).toHaveBeenCalledTimes(2);
+    });
   });
 });

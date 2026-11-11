@@ -327,12 +327,12 @@ it.each([
 it("the scheduled Cloud worker waits for a ready chain before opening the entrance and skips a secondary", async () => {
   const f = await fixture(),
     controller = new AbortController();
-  const { runCloudWorker } = await import("./cloud-worker.js");
+  const { runCloudConnectionForTest } = await import("./testing/cloud-connection-job.js");
   let primary = false,
     ticks = 0;
   const opened: string[] = [];
   try {
-    await runCloudWorker({
+    await runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => primary,
@@ -505,7 +505,7 @@ it.each(["before demotion", "after demotion", "after abort"])(
   async (stage) => {
     const f = await fixture(),
       controller = new AbortController();
-    const { runCloudWorker } = await import("./cloud-worker.js");
+    const { runCloudConnectionForTest } = await import("./testing/cloud-connection-job.js");
     let primary = true,
       opened = 0;
     f.ready();
@@ -523,7 +523,7 @@ it.each(["before demotion", "after demotion", "after abort"])(
       return ready;
     });
     try {
-      await runCloudWorker({
+      await runCloudConnectionForTest({
         connection: f.client,
         signal: controller.signal,
         isPrimary: () => primary,
@@ -549,11 +549,11 @@ it.each(["before demotion", "after demotion", "after abort"])(
 it("a revoked installation does not attempt certificate work or log a spurious failure", async () => {
   const f = await fixture(),
     controller = new AbortController();
-  const { runCloudWorker } = await import("./cloud-worker.js");
+  const { runCloudConnectionForTest } = await import("./testing/cloud-connection-job.js");
   const errors: unknown[] = [];
   try {
     await f.client.revoke(async () => {});
-    await runCloudWorker({
+    await runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => true,

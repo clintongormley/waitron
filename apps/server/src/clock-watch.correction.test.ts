@@ -9,7 +9,7 @@ import type {
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { ClockSetAnswer, ClockSetInput } from "./clock-correction.js";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { CLOCK_WATCH_MS, createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
@@ -56,7 +56,7 @@ function harness(
   let wallMs = START_MS;
   let monoMs = 1_000;
   let checkId = "check-1";
-  const timers: { fn: () => void }[] = [];
+  let running: Promise<void> = Promise.resolve();
   const order: string[] = [];
   const sets: ClockSetInput[] = [];
   const log = vi.fn();
@@ -96,8 +96,8 @@ function harness(
     }),
     writePending: vi.fn(async () => void order.push("writePending")),
   };
-  const watch = startClockWatch({
-    backend: backend as unknown as Parameters<typeof startClockWatch>[0]["backend"],
+  const watch = createClockWatch({
+    backend: backend as unknown as Parameters<typeof createClockWatch>[0]["backend"],
     store,
     clock: {
       now: () =>
@@ -115,25 +115,15 @@ function harness(
     correction,
     filesRecords: () => false,
     isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
     log,
-    timer: (_ms, fn) => {
-      timers.push({ fn });
-      return { cancel: () => {} };
-    },
   });
 
   /** Moves both clocks a look's interval, fires the armed look and waits for the next. */
   async function look(): Promise<void> {
     monoMs += CLOCK_WATCH_MS;
     wallMs += CLOCK_WATCH_MS;
-    const count = timers.length;
-    timers.at(-1)!.fn();
-    // Thousands of looks: yield to the event loop rather than poll on a timer.
-    for (let turn = 0; timers.length === count; turn++) {
-      if (turn > 1_000) throw new Error("the look did not finish");
-      await new Promise((resolve) => setImmediate(resolve));
-    }
+    running = watch.check().catch(() => {});
+    await running;
   }
 
   /** AEAT's clock reads `offsetMs` from the box's, measured now. */
@@ -149,7 +139,12 @@ function harness(
   }
 
   return {
-    watch,
+    watch: Object.assign(watch, {
+      stop: () => {
+        watch.halt();
+        return running;
+      },
+    }),
     backend,
     correction,
     sets,

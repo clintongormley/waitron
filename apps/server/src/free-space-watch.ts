@@ -3,7 +3,7 @@ import type { DiskFullState } from "./disk-full-state.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
-import { unrefTimer, type Timer } from "./unref-timer.js";
+import type { JobDefinition } from "./job-runner.js";
 
 /** Below this the box warns that its disk is running out (design §4.6 item 4), and the watch deletes
  * old backups. */
@@ -51,15 +51,7 @@ export function createFreeSpaceState(deps: { log: Logger }): FreeSpaceState {
   };
 }
 
-/**
- * Reads `dir`'s free space at once and then every `intervalMs`, each timer armed after the reading
- * before it finished. Each reading lets `freeOldBackups` delete old backups, then `restoreSpare`
- * write the box's spare file back, then reads free space, so room the deletion made is in the
- * reading and the spare. While `disk` holds a noted stop, each reading also asks it to re-check, so a stop
- * lifts when space is freed even if nothing writes. `stop()` aborts the deletion's signal and
- * answers once the reading in flight, and any deletion or write-back in it, has finished.
- */
-export function startFreeSpaceWatch(deps: {
+export function freeSpaceJob(deps: {
   dir: string;
   state: FreeSpaceState;
   disk: Pick<DiskFullState, "noted" | "full">;
@@ -69,62 +61,39 @@ export function startFreeSpaceWatch(deps: {
   statfs?: Statfs;
   restoreSpare?: () => Promise<void>;
   freeOldBackups?: (signal: AbortSignal) => Promise<void>;
-  timer?: (ms: number, fn: () => void) => Timer;
-}): { stop: () => Promise<void> } {
-  const timer = deps.timer ?? unrefTimer;
-  let stopped = false;
-  const stopping = new AbortController();
-  let reading: Promise<void> = Promise.resolve();
-
-  async function read(): Promise<void> {
-    try {
-      await freeOldBackups();
-      if (stopped) return;
-      await restore();
-      if (stopped) return;
-      const free = await freeBytes(deps.dir, deps.statfs);
-      if (stopped) return;
-      deps.state.record(free, deps.now());
-      if (deps.disk.noted()) await deps.disk.full();
-    } catch (error) {
-      deps.log("warn", "storage.free_space_check_failed", { errorCode: codeOf(error) });
-    } finally {
-      if (!stopped) armed = timer(deps.intervalMs, start);
-    }
-  }
-
-  async function freeOldBackups(): Promise<void> {
-    try {
-      await deps.freeOldBackups?.(stopping.signal);
-    } catch (error) {
-      if (stopped) return;
-      deps.log("warn", "backup.low_space_delete_failed", {
-        errorCode: codeOf(error),
-        errno: errnoOf(error) ?? null,
-      });
-    }
-  }
-
-  async function restore(): Promise<void> {
-    try {
-      await deps.restoreSpare?.();
-    } catch (error) {
-      deps.log("warn", "storage.spare_restore_failed", { errno: errnoOf(error) ?? null });
-    }
-  }
-
-  function start(): void {
-    reading = read();
-  }
-
-  let armed = timer(0, start);
-
+}): JobDefinition {
   return {
-    stop: () => {
-      stopped = true;
-      stopping.abort();
-      armed.cancel();
-      return reading;
+    name: "storage.free_space",
+    applies: () => true,
+    minSleepMs: deps.intervalMs,
+    maxSleepMs: deps.intervalMs,
+    backoff: { firstMs: deps.intervalMs, maxMs: deps.intervalMs },
+    async pass({ signal }) {
+      try {
+        try {
+          await deps.freeOldBackups?.(signal);
+        } catch (error) {
+          if (signal.aborted) return { nextDueAt: null };
+          deps.log("warn", "backup.low_space_delete_failed", {
+            errorCode: codeOf(error),
+            errno: errnoOf(error) ?? null,
+          });
+        }
+        if (signal.aborted) return { nextDueAt: null };
+        try {
+          await deps.restoreSpare?.();
+        } catch (error) {
+          deps.log("warn", "storage.spare_restore_failed", { errno: errnoOf(error) ?? null });
+        }
+        if (signal.aborted) return { nextDueAt: null };
+        const free = await freeBytes(deps.dir, deps.statfs);
+        if (signal.aborted) return { nextDueAt: null };
+        deps.state.record(free, deps.now());
+        if (deps.disk.noted()) await deps.disk.full();
+      } catch (error) {
+        deps.log("warn", "storage.free_space_check_failed", { errorCode: codeOf(error) });
+      }
+      return { nextDueAt: null };
     },
   };
 }

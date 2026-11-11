@@ -26,6 +26,11 @@ already knows there is work.
 for a production live-promotion path (watcher, 05:18).
 Descriptions below of the bucket copy checking its role only on start record the earlier implementation.
 
+**2026-11-11, jr3:** the six watches now use the runner: append-only protections, clock, free
+space, Cloud connection, translation suggestions and the practice printer. Practice printing wakes
+on print-job changes with a one-minute safety check. The manager's box-status read carries full job
+views; repeated throws raise `job.failing`. The source descriptions below record the earlier timers.
+
 ## 1. The target picture
 
 **Today** the server runs about twenty background duties, built at least four different ways:

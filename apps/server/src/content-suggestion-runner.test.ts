@@ -1,3 +1,5 @@
+import { suggestionsJob } from "./content-suggestion-runner.js";
+import { runTestJob } from "./testing/run-job.js";
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
@@ -1083,6 +1085,22 @@ it("a stored job 24 hours old is released without a call and keeps its state", a
   }
 });
 
+function runSuggestions(
+  runner: ReturnType<typeof createContentSuggestionRunner>,
+  signal: AbortSignal,
+  options: {
+    sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+    onError?: (error: unknown) => void;
+  } = {},
+  isPrimary: () => boolean = () => true,
+) {
+  return runTestJob(
+    suggestionsJob(runner, isPrimary, options.onError),
+    signal,
+    options.sleep ? { sleep: options.sleep } : {},
+  );
+}
+
 it("an unreachable Cloud keeps the job and backs off from 5 to 60 seconds, starting again at 5 after a success", async () => {
   const f = await connected();
   try {
@@ -1093,7 +1111,7 @@ it("an unreachable Cloud keeps the job and backs off from 5 to 60 seconds, start
     const sleeps: number[] = [];
     const errors: string[] = [];
 
-    await createContentSuggestionRunner(deps(f)).run(controller.signal, {
+    await runSuggestions(createContentSuggestionRunner(deps(f)), controller.signal, {
       onError: (error) => errors.push(codeOf(error)),
       sleep: async (ms) => {
         sleeps.push(ms);
@@ -1101,7 +1119,7 @@ it("an unreachable Cloud keeps the job and backs off from 5 to 60 seconds, start
         if (sleeps.length === 7) f.offline();
         if (sleeps.length === 8) controller.abort();
       },
-    });
+    }).done;
     // Six failed submits, a submit and a poll that succeed, then a failed poll.
     expect(sleeps).toEqual([5000, 10000, 20000, 40000, 60000, 60000, 5000, 5000]);
     expect(errors).toEqual(Array(7).fill("cloud.unavailable"));
@@ -1121,12 +1139,12 @@ it("polls no more than once every five seconds while Cloud runs the job", async 
     const controller = new AbortController();
     const sleeps: number[] = [];
 
-    await createContentSuggestionRunner(deps(f)).run(controller.signal, {
+    await runSuggestions(createContentSuggestionRunner(deps(f)), controller.signal, {
       sleep: async (ms) => {
         sleeps.push(ms);
         if (actions(f).filter((action) => action === STATUS).length === 3) controller.abort();
       },
-    });
+    }).done;
     expect(actions(f)).toEqual([SUBMIT, STATUS, STATUS, STATUS]);
     expect(sleeps).toEqual([5000, 5000, 5000]);
     expect(await runView()).toMatchObject({ state: "running", total: 2, progress: 1 });
@@ -1180,12 +1198,17 @@ it("does nothing on a node that is not the primary, and waits a minute between l
 
     const controller = new AbortController();
     const sleeps: number[] = [];
-    await runner.run(controller.signal, {
-      sleep: async (ms) => {
-        sleeps.push(ms);
-        if (sleeps.length === 2) controller.abort();
+    await runSuggestions(
+      runner,
+      controller.signal,
+      {
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          if (sleeps.length === 2) controller.abort();
+        },
       },
-    });
+      () => false,
+    ).done;
     expect(sleeps).toEqual([60000, 60000]);
     expect(f.calls).toEqual([]);
     expect(await runView()).toMatchObject({ state: "sending" });
@@ -1204,7 +1227,7 @@ it("wakes at once when a run starts", async () => {
     const idling = new Promise<void>((resolve) => {
       idle = resolve;
     });
-    const loop = runner.run(controller.signal, {
+    const loop = runSuggestions(runner, controller.signal, {
       sleep: (ms, signal) => {
         if (ms !== 60000) return Promise.resolve();
         idle();
@@ -1215,11 +1238,11 @@ it("wakes at once when a run starts", async () => {
     });
     await idling;
     await inTx((tx) => startSuggestionRun(tx, context));
-    runner.wake();
+    loop.runner.wake("cloud.suggestions");
 
     await vi.waitFor(() => expect(actions(f)).toContain(SUBMIT), { timeout: 2000 });
     controller.abort();
-    await loop;
+    await loop.done;
   } finally {
     await f.close();
   }
@@ -1229,9 +1252,9 @@ it("stops during its own idle pause when told to stop", async () => {
   const f = await connected();
   try {
     const controller = new AbortController();
-    const loop = createContentSuggestionRunner(deps(f)).run(controller.signal);
+    const loop = runSuggestions(createContentSuggestionRunner(deps(f)), controller.signal);
     setTimeout(() => controller.abort(), 50);
-    await expect(loop).resolves.toBeUndefined();
+    await expect(loop.done).resolves.toBeUndefined();
     expect(f.calls).toEqual([]);
   } finally {
     await f.close();
@@ -1254,31 +1277,19 @@ it("a step that fails because it was stopped ends the loop without reporting an 
     const errors: unknown[] = [];
     const sleeps: number[] = [];
 
-    await createContentSuggestionRunner(deps(f, { connection })).run(controller.signal, {
-      onError: (error) => errors.push(error),
-      sleep: async (ms) => {
-        sleeps.push(ms);
+    await runSuggestions(
+      createContentSuggestionRunner(deps(f, { connection })),
+      controller.signal,
+      {
+        onError: (error) => errors.push(error),
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
       },
-    });
+    ).done;
     expect(errors).toEqual([]);
     expect(sleeps).toEqual([]);
     expect(await runView()).toMatchObject({ state: "sending" });
-  } finally {
-    await f.close();
-  }
-});
-
-it("stops with the error when its sleep fails for a reason other than stopping", async () => {
-  const f = await connected();
-  try {
-    const failure = new Error("timer broken");
-    await expect(
-      createContentSuggestionRunner(deps(f)).run(new AbortController().signal, {
-        sleep: async () => {
-          throw failure;
-        },
-      }),
-    ).rejects.toBe(failure);
   } finally {
     await f.close();
   }

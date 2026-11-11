@@ -42,9 +42,9 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-watch.js")>();
   return {
     ...actual,
-    startClockWatch: (...args: Parameters<typeof actual.startClockWatch>) => {
+    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
       const [deps] = args;
-      return actual.startClockWatch({
+      return actual.createClockWatch({
         ...deps,
         backend: new Proxy(deps.backend, {
           get: (target, key) => {

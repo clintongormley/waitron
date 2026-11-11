@@ -10,7 +10,7 @@ import type {
   TrustedClock,
 } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
@@ -81,10 +81,8 @@ async function sale(at: Box): Promise<number> {
 /** A clock watch on the box's clocks and store over the real seat, AEAT's time answered by
  * `authority`; `look(real)` moves real time and runs one check. */
 function watch(at: Box, authority: () => AuthorityTimeSample | null) {
-  let fire = (): void => {};
-  let armed = 0;
   const readAuthorityTime = vi.fn(async () => authority());
-  const running = startClockWatch({
+  const running = createClockWatch({
     backend: Object.create(venue.backend, {
       readAuthorityTime: { value: readAuthorityTime },
     }) as FiscalBackend,
@@ -97,23 +95,15 @@ function watch(at: Box, authority: () => AuthorityTimeSample | null) {
     transaction: (fn) => withTransaction(venue.db, fn),
     filesRecords: () => true,
     isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
     log: () => {},
-    timer: (_ms, fn) => {
-      fire = fn;
-      armed += 1;
-      return { cancel: () => {} };
-    },
   });
   return {
     readAuthorityTime,
     async look(real: number) {
       at.clocks.real = real;
-      const before = armed;
-      fire();
-      await vi.waitFor(() => expect(armed).toBe(before + 1));
+      await running.check();
     },
-    stop: () => running.stop(),
+    stop: () => running.halt(),
   };
 }
 

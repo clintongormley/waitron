@@ -7,7 +7,7 @@ import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { startAppendOnlyWatch } from "./append-only-watch.js";
+import { tamperWatchJob } from "./append-only-watch.js";
 import type { StartedServer } from "./boot.js";
 import * as reminderWorker from "./certificate-reminder-worker.js";
 import { awaitListening, copyMigrationsRoot } from "./testing/boot-harness.js";
@@ -22,7 +22,7 @@ vi.mock("@hono/node-server", async () => {
 
 vi.mock("./append-only-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./append-only-watch.js")>();
-  return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
+  return { ...actual, tamperWatchJob: vi.fn(actual.tamperWatchJob) };
 });
 // Submissions are switched on for these boots; nothing here may reach AEAT.
 vi.mock("@waitron/module", async (importOriginal) => {
@@ -160,7 +160,7 @@ describe("the certificate reminder loop at boot", () => {
     const f = await prepared(true);
     const loop = holdingLoop();
     const failure = new Error("append-only watch refused");
-    vi.mocked(startAppendOnlyWatch).mockImplementationOnce(() => {
+    vi.mocked(tamperWatchJob).mockImplementationOnce(() => {
       throw failure;
     });
     let rejected = false;

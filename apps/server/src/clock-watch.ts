@@ -13,7 +13,7 @@ import type { ClockAnchor, clockCorrection } from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
-import { unrefTimer, type Timer } from "./unref-timer.js";
+import type { JobDefinition } from "./job-runner.js";
 
 export const CLOCK_WATCH_MS = 15_000;
 
@@ -37,17 +37,7 @@ const PENDING_MAX = 1_440;
 const SET_BACKOFF_MS = 10 * 60_000;
 const SET_BACKOFF_MAX_MS = 4 * 60 * 60_000;
 
-/** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
- * last finished, on the primary only. While the seat answers a clock stop state, each check offers
- * the seat a clock check to open, asks the correction to set the clock to AEAT's time when AEAT
- * disagrees (not again in that check for a while after a set the host failed), confirms the clock
- * when the witnesses are ready, and asks AEAT's time when an ask is due; while the seat answers a waiting check, each check does the same ask and
- * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished,
- * and no check runs after it; a disproof write that `stepComing` or `reanchor` began before it can
- * still finish later. As a set's anchor, it takes no jump from the wall clock between
- * `stepComing` and `reanchor`, and each of them first records the disproof of every disagreeing
- * AEAT reading not yet taken, or throws. */
-export function startClockWatch(deps: {
+export function createClockWatch(deps: {
   backend: Pick<
     FiscalBackend,
     | "assertRecordableAt"
@@ -82,18 +72,14 @@ export function startClockWatch(deps: {
   startUp?: Pick<ClockStartUp, "open" | "noStop" | "authorityAsked">;
   filesRecords: () => boolean;
   isPrimary: () => boolean;
-  intervalMs: number;
   log: Logger;
-  timer?: (ms: number, fn: () => void) => Timer;
-}): ClockAnchor & { stop: () => Promise<void> } {
-  const timer = deps.timer ?? unrefTimer;
+}): ClockAnchor & { check(): Promise<void>; halt(): void } {
   const wall = deps.wall ?? (() => Date.now());
   const boot = deps.boot ?? bootReader();
   const monotonic = deps.monotonic ?? boot.elapsed;
   let stopped = false;
   let lastAuthorityMs: number | null = null;
   let lastCheckId: string | null = null;
-  let running: Promise<void> | null = null;
   let previous = { wallMs: wall(), monoMs: monotonic() };
   /** A set is coming or under way: no look compares the wall clock with `previous`. */
   let held = false;
@@ -431,20 +417,6 @@ export function startClockWatch(deps: {
     if (recorded) await recordPending();
   }
 
-  function scheduled(): void {
-    if (stopped) return;
-    running = check()
-      .catch((error: unknown) => {
-        deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
-      })
-      .finally(() => {
-        running = null;
-        if (!stopped) armed = timer(deps.intervalMs, scheduled);
-      });
-  }
-
-  let armed = timer(deps.intervalMs, scheduled);
-
   return {
     stepComing: async () => {
       held = true;
@@ -458,10 +430,41 @@ export function startClockWatch(deps: {
         held = false;
       }
     },
-    stop: async () => {
+    check: async () => {
+      try {
+        await check();
+      } catch (error) {
+        deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+        throw error;
+      }
+    },
+    halt: () => {
       stopped = true;
-      armed.cancel();
-      await running;
+    },
+  };
+}
+
+export type ClockWatch = ReturnType<typeof createClockWatch>;
+
+export function clockWatchJob(watch: ClockWatch, intervalMs: number): JobDefinition {
+  let listening = false;
+  return {
+    name: "clock.watch",
+    applies: () => true,
+    firstPassAfterMs: intervalMs,
+    minSleepMs: intervalMs,
+    maxSleepMs: intervalMs,
+    backoff: { firstMs: intervalMs, maxMs: intervalMs },
+    async pass({ signal }) {
+      if (!listening) {
+        signal.addEventListener("abort", () => watch.halt(), { once: true });
+        listening = true;
+      }
+      await watch.check();
+      return { nextDueAt: null };
+    },
+    async onStop() {
+      if (!listening) watch.halt();
     },
   };
 }

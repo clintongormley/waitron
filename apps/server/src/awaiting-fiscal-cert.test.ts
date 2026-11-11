@@ -81,6 +81,7 @@ function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
       readMode: () => "primary",
       readSingletonRole: () => "primary",
       readTime: async () => ({ synced: false, source: "unavailable", warn: false }),
+      readJobs: () => ({}),
       readAwaitingFiscalCertificate: () => awaitingCert.current,
     },
     () => {},

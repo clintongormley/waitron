@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
-import { runCloudWorker } from "./cloud-worker.js";
+import { runCloudConnectionForTest } from "./testing/cloud-connection-job.js";
 it("refreshes a real installation without a manager session, waits between ticks and stops on abort", async () => {
   const f = await installationFixture(),
     controller = new AbortController();
@@ -11,7 +11,7 @@ it("refreshes a real installation without a manager session, waits between ticks
     waiting = r;
   });
   try {
-    const worker = runCloudWorker({
+    const worker = runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => true,
@@ -45,7 +45,7 @@ it("a secondary does not refresh and an outage is retried on the next scheduled 
     ticks = 0;
   const errors: unknown[] = [];
   try {
-    await runCloudWorker({
+    await runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => primary,

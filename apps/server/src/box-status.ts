@@ -16,6 +16,7 @@ import type { TimeHealth } from "./time-health.js";
 import { healthSnapshot, type HealthState } from "./health.js";
 import { requireManagementSession } from "@waitron/server-kit";
 import { createErrorBoundary } from "@waitron/server-kit";
+import type { JobView } from "./job-runner.js";
 import type { Logger } from "./logger.js";
 
 /** "No records" is `chain.height === 0`, never `chain.lastAt`: a provisioned node's head row carries a
@@ -32,6 +33,7 @@ export type BoxStatus = {
   backup: BackupStatus;
   stream: StreamView;
   duties: Record<string, unknown>;
+  jobs: Readonly<Record<string, JobView>>;
 };
 
 export type BoxStatusReaders = {
@@ -45,6 +47,7 @@ export type BoxStatusReaders = {
   backup: (() => Promise<BackupStatus>) | undefined;
   stream: () => StreamView;
   duties: () => Record<string, unknown>;
+  jobs: () => Readonly<Record<string, JobView>>;
 };
 
 export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxStatus> {
@@ -83,6 +86,7 @@ export async function collectBoxStatus(readers: BoxStatusReaders): Promise<BoxSt
     backup,
     stream: readers.stream(),
     duties: readers.duties(),
+    jobs: readers.jobs(),
   };
 }
 
@@ -96,6 +100,7 @@ export type BoxStatusDeps = {
   readBackup: (() => Promise<BackupStatus>) | undefined;
   readStream: () => StreamView;
   readMode: () => DeploymentMode;
+  readJobs: () => Readonly<Record<string, JobView>>;
   readSingletonRole: () => SingletonRole;
   readAwaitingFiscalCertificate: () => boolean;
   /** Shared with `/api/box/health`, so both read the host's clock service once a minute. */
@@ -132,6 +137,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         chain: async () => chain,
         backup: deps.readBackup,
         stream: deps.readStream,
+        jobs: deps.readJobs,
         duties: () =>
           healthSnapshot(deps.health, deps.now()).body.duties as Record<string, unknown>,
       });

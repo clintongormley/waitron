@@ -8,7 +8,7 @@ import type {
 } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import { clockStartUp, type ClockStartUp } from "./clock-start-up.js";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { CLOCK_WATCH_MS, createClockWatch } from "./clock-watch.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const START_MS = Date.parse("2026-10-31T10:00:00.000Z");
@@ -71,7 +71,6 @@ function harness(
 ) {
   let wallMs = options.startMs ?? START_MS;
   let monoMs = 1_000;
-  const timers: { fn: () => void }[] = [];
   const state = { stop: options.stop === undefined ? STOPPED : options.stop };
   const sample: AuthorityTimeSample | null =
     options.sample === undefined
@@ -106,8 +105,8 @@ function harness(
           authorityAsked: vi.fn(),
         });
   const logs: { event: string; fields: unknown }[] = [];
-  startClockWatch({
-    backend: backend as unknown as Parameters<typeof startClockWatch>[0]["backend"],
+  const watch = createClockWatch({
+    backend: backend as unknown as Parameters<typeof createClockWatch>[0]["backend"],
     store: {
       noteAuthority: vi.fn(),
       witnesses: vi.fn(() => []),
@@ -125,21 +124,14 @@ function harness(
     transaction: (async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX)) as never,
     filesRecords: () => true,
     isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
     log: (_level, event, fields) => logs.push({ event, fields }),
-    timer: (_ms, fn) => {
-      timers.push({ fn });
-      return { cancel: () => {} };
-    },
     ...(startUp === undefined ? {} : { startUp }),
   });
 
   async function tick() {
     monoMs += CLOCK_WATCH_MS;
     wallMs += CLOCK_WATCH_MS;
-    const count = timers.length;
-    timers.at(-1)!.fn();
-    await vi.waitFor(() => expect(timers.length).toBe(count + 1));
+    await watch.check();
   }
 
   return { backend, state, startUp, logs, tick };

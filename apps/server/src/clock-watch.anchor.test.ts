@@ -11,7 +11,7 @@ import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { clockCorrection } from "./clock-correction.js";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { CLOCK_WATCH_MS, createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore } from "./clock-witnesses.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
@@ -63,7 +63,7 @@ function harness(
 ) {
   let wallMs = START_MS;
   let monoMs = 1_000;
-  const timers: { fn: () => void }[] = [];
+  let running: Promise<void> = Promise.resolve();
   const notes: Note[] = [];
   const lifts: string[] = [];
   let calls = 0;
@@ -85,8 +85,8 @@ function harness(
           closeClockCheckByItself: vi.fn(async () => ({ confirmation: CONFIRMATION })),
         }),
   };
-  const watch = startClockWatch({
-    backend: backend as unknown as Parameters<typeof startClockWatch>[0]["backend"],
+  const watch = createClockWatch({
+    backend: backend as unknown as Parameters<typeof createClockWatch>[0]["backend"],
     store,
     clock: {
       now: () => ({ instant: new Date(wallMs), offsetMinutes: 60 }) as unknown as TrustedReading,
@@ -109,17 +109,12 @@ function harness(
         }),
     filesRecords: () => false,
     isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
     log: () => {},
-    timer: (_ms, fn) => {
-      timers.push({ fn });
-      return { cancel: () => {} };
-    },
   });
 
   /** Fires the armed look without waiting for it. */
   function fire(): void {
-    timers.at(-1)!.fn();
+    running = watch.check().catch(() => {});
   }
 
   /** Moves the steady clock a look's interval and the wall clock by as much plus `wallJumpMs`,
@@ -127,9 +122,8 @@ function harness(
   async function look(wallJumpMs = 0): Promise<void> {
     monoMs += CLOCK_WATCH_MS;
     wallMs += CLOCK_WATCH_MS + wallJumpMs;
-    const count = timers.length;
     fire();
-    await vi.waitFor(() => expect(timers.length).toBe(count + 1));
+    await running;
   }
 
   /** AEAT says the box's clock is `aheadMs` ahead of it, measured now. */
@@ -142,7 +136,12 @@ function harness(
   }
 
   return {
-    watch,
+    watch: Object.assign(watch, {
+      stop: () => {
+        watch.halt();
+        return running;
+      },
+    }),
     store,
     backend,
     notes,
@@ -155,7 +154,7 @@ function harness(
     },
     wall: () => wallMs,
     reasons: () => notes.map((note) => note.input.reason),
-    armed: () => timers.length,
+    settled: () => running,
   };
 }
 
@@ -204,7 +203,7 @@ describe("the clock watch as a set's anchor", () => {
     h.fire();
     held.release();
     await reanchored;
-    await vi.waitFor(() => expect(h.armed()).toBe(2));
+    await h.settled();
     expect(h.reasons()).toEqual(["authority"]);
   });
 
@@ -342,7 +341,7 @@ describe("the clock watch as a set's anchor", () => {
       held.release();
       await expect(coming).rejects.toThrow(AppError);
       expect(h.notes.map((note) => note.input.trustedUntil.getTime())).toEqual([START_MS]);
-      await vi.waitFor(() => expect(h.armed()).toBe(2));
+      await h.settled();
       await h.look();
       expect(h.notes.map((note) => note.input.trustedUntil.getTime())).toEqual([
         START_MS,
