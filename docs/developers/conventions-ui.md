@@ -1031,6 +1031,13 @@ calibration. System-unpaired printers stay listed. Guards: `packages/printing/sr
 `printer-delete-history.test.ts` (assignments/history), `apps/server/src/print-api.test.ts`
 (discovery and routes), `apps/dashboard/src/screens/printers-screen.test.ts` (staff controls).
 
+A4 printers also offer Delete and Add, with no on/off control. Delete hides the retained row,
+clears device and profile invoice-printer choices, and ends queued or sending A4 deliveries.
+Add matches host, port and resource path, retaining the name and refreshing capabilities and
+agent; it restores neither assignments nor ended deliveries. Guards: `apps/server/src/page-printers.test.ts`
+(assignments/history/restoration), `page-printers-api.test.ts` (routes), and dashboard
+`printers-screen.test.ts` (Delete/Add and confirmation).
+
 Card readers and devices retain their Disable/Enable behavior until their own A1484 slices land.
 
 A deleted card reader is offered as a new registration: when discovery finds it again it is offered as available, and

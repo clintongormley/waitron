@@ -110,6 +110,13 @@ export const QUERY_DEPENDENCIES = {
   ],
   listPrinterStationNames: ["station_printers", "kitchen_stations"],
   listPagePrinters: ["page_printers", "print_agents"],
+  getPagePrinterDeleteImpact: [
+    "page_printers",
+    "invoice_deliveries",
+    "devices",
+    "device_profiles",
+    "device_profile_printers",
+  ],
   getPrinterDeleteImpact: [
     "printers",
     "print_jobs",

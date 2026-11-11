@@ -1,3 +1,4 @@
+import { listPagePrinters, registerPagePrinter } from "./page-printers.js";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { floorTodayTables } from "@waitron/db";
 import { deleteCourse } from "./course-delete.js";
@@ -634,7 +635,7 @@ describe("configuration transfer database path", () => {
     expect(persisted.rows[0]!.count).toBe(0);
   });
 
-  it("transfers page-printer capabilities to the target location, clears its agent, and requires reactivation", async () => {
+  it("transfers page-printer capabilities to the target location, waits in Add, then restores its id and saved name", async () => {
     const source = await applyVenue(planVenue(venue("B12345678"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -695,6 +696,52 @@ describe("configuration transfer database path", () => {
     // The agent itself travels, so a kept key would have been remapped to the imported agent.
     expect(await targetSuite.db.select({ id: printAgents.id }).from(printAgents)).toHaveLength(1);
     expect(imported!.id).not.toBe("55555555-aaaa-aaaa-aaaa-555555555555");
+    expect(await listPagePrinters(targetSuite.db)).toEqual([]);
+    const [localAgent] = await targetSuite.db
+      .insert(printAgents)
+      .values({
+        locationId: targetVenueId,
+        name: "New office agent",
+        tokenHash: "hash",
+      })
+      .returning({ id: printAgents.id });
+    const now = Date.parse("2026-10-07T12:00:00.000Z");
+    const restored = await withTransaction(targetSuite.db, (tx) =>
+      registerPagePrinter(
+        tx,
+        {
+          name: "Discovered office label",
+          entry: {
+            agentId: localAgent!.id,
+            host: "192.0.2.20",
+            lastSeenAt: now,
+            office: {
+              port: 8631,
+              resourcePath: "/ipp/printer",
+              printable: true,
+              documentFormat: "application/pdf",
+              supportedFormats: ["application/pdf"],
+              media: "iso_a4_210x297mm",
+              resolutionDpi: 300,
+            },
+          },
+        },
+        { now, discoveryUntil: 0 },
+      ),
+    );
+    expect(restored).toEqual({ id: imported!.id, outcome: "enabled" });
+    expect(await listPagePrinters(targetSuite.db)).toEqual([
+      expect.objectContaining({
+        id: imported!.id,
+        name: "Invoice office",
+        active: true,
+        agentId: localAgent!.id,
+        agentName: "New office agent",
+        documentFormat: "application/pdf",
+        supportedFormats: ["application/pdf"],
+        resolutionDpi: 300,
+      }),
+    ]);
     expect(await targetSuite.db.select().from(printers)).toEqual([]);
   });
 

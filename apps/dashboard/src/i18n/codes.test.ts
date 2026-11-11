@@ -39,7 +39,6 @@ it("words the office-printer refusals in both languages", () => {
   for (const code of [
     "page_printer.not_found",
     "page_printer.not_printable",
-    "page_printer.rediscover",
     "page_printer.no_agent",
   ]) {
     for (const locale of ["en", "es"] as const) {

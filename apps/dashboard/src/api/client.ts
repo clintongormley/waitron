@@ -3961,8 +3961,16 @@ export class DashboardApi {
     return this.#request("/management-api/page-printers", "POST", input);
   }
 
-  updatePagePrinter(id: string, patch: { name?: string; active?: false }): Promise<void> {
+  updatePagePrinter(id: string, patch: { name: string }): Promise<void> {
     return this.#request<void>(`/management-api/page-printers/${id}`, "PATCH", patch);
+  }
+
+  getPagePrinterDeleteImpact(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/page-printers/${id}/delete-impact`, "GET");
+  }
+
+  deletePagePrinter(id: string): Promise<DeleteImpact> {
+    return this.#request(`/management-api/page-printers/${id}`, "DELETE");
   }
 
   /** Answers the printer's page already out, if there is one. */

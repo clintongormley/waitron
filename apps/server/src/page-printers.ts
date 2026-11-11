@@ -1,6 +1,9 @@
 import "./errors.js";
 import { and, asc, eq, sql } from "drizzle-orm";
 import {
+  deviceProfilePrinters,
+  deviceProfiles,
+  devices,
   invoiceDeliveries,
   pagePrinters,
   printAgents,
@@ -8,7 +11,8 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import type { OfficePrinterReport } from "@waitron/print-agent";
-import { AppError } from "@waitron/shared";
+import { AppError, type DeleteImpact } from "@waitron/shared";
+import { named } from "./delete-impact.js";
 import { isListed } from "./discovery-listing.js";
 
 /** One agent's discovery report of a device, as the server holds it. */
@@ -33,15 +37,11 @@ export async function listPagePrinters(tx: Transaction): Promise<PagePrinterRow[
     .select({ printer: pagePrinters, agentName: printAgents.name })
     .from(pagePrinters)
     .leftJoin(printAgents, eq(printAgents.id, pagePrinters.agentId))
+    .where(eq(pagePrinters.active, true))
     .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
   return rows.map((row) => ({ ...row.printer, agentName: row.agentName }));
 }
 
-/**
- * Adds the printer a current discovery entry reports, or brings back the row already at that IPP
- * queue under its id: a disabled one is enabled, and an active one is re-pointed to the reporting
- * agent. Either way its capabilities are refreshed from the report; `name` is used only for a new row.
- */
 export async function registerPagePrinter(
   tx: Transaction,
   input: { name: string; entry: PagePrinterDiscovery | undefined },
@@ -106,22 +106,66 @@ export async function renamePagePrinter(tx: Transaction, id: string, name: strin
   if (renamed.length === 0) throw new AppError("page_printer.not_found", {});
 }
 
-/**
- * Ends this printer's A4 deliveries that have not finished: a waiting one fails, and one an agent is
- * sending becomes uncertain, its claim kept so a late report is still accepted. Enabling the
- * printer again sends none of them.
- */
-export async function disablePagePrinter(
+export async function readPagePrinterDeleteImpact(
+  tx: Transaction,
+  id: string,
+): Promise<DeleteImpact> {
+  const [printer] = await tx
+    .select({ id: pagePrinters.id, name: pagePrinters.name })
+    .from(pagePrinters)
+    .where(and(eq(pagePrinters.id, id), eq(pagePrinters.active, true)));
+  if (printer === undefined) throw new AppError("page_printer.not_found", {});
+  const deliveries = await tx
+    .select({ id: invoiceDeliveries.id })
+    .from(invoiceDeliveries)
+    .where(
+      and(
+        eq(invoiceDeliveries.pagePrinterId, id),
+        sql`${invoiceDeliveries.status} in ('queued', 'sending')`,
+      ),
+    );
+  const choosing = await tx
+    .select({ id: devices.id, name: devices.label })
+    .from(devices)
+    .where(eq(devices.invoicePagePrinterId, id));
+  const profiles = await tx
+    .select({
+      id: deviceProfiles.id,
+      name: deviceProfiles.name,
+      isDefault: deviceProfilePrinters.isDefault,
+    })
+    .from(deviceProfilePrinters)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+    .where(eq(deviceProfilePrinters.pagePrinterId, id));
+  const removes = [
+    named("device_invoice", choosing),
+    named("profile_invoice", profiles),
+    named(
+      "profile_invoice_default",
+      profiles.filter((row) => row.isDefault),
+    ),
+  ];
+  return {
+    target: printer,
+    refusals: [],
+    ends:
+      deliveries.length === 0 ? [] : [{ key: "invoice_a4", count: deliveries.length, targets: [] }],
+    removes: removes.filter((item) => item.count > 0),
+  };
+}
+
+export async function deletePagePrinter(
   tx: Transaction,
   id: string,
   now = new Date(),
-): Promise<void> {
-  const disabled = await tx
-    .update(pagePrinters)
-    .set({ active: false })
-    .where(eq(pagePrinters.id, id))
-    .returning({ id: pagePrinters.id });
-  if (disabled.length === 0) throw new AppError("page_printer.not_found", {});
+): Promise<DeleteImpact> {
+  const impact = await readPagePrinterDeleteImpact(tx, id);
+  await tx
+    .update(devices)
+    .set({ invoicePagePrinterId: null })
+    .where(eq(devices.invoicePagePrinterId, id));
+  await tx.delete(deviceProfilePrinters).where(eq(deviceProfilePrinters.pagePrinterId, id));
+  await tx.update(pagePrinters).set({ active: false }).where(eq(pagePrinters.id, id));
   const ofThisPrinter = eq(invoiceDeliveries.pagePrinterId, id);
   await tx
     .update(invoiceDeliveries)
@@ -131,4 +175,5 @@ export async function disablePagePrinter(
     .update(invoiceDeliveries)
     .set({ status: "unknown", failureCode: "printer_disabled", expiredAt: now.toISOString() })
     .where(and(ofThisPrinter, eq(invoiceDeliveries.status, "sending")));
+  return impact;
 }

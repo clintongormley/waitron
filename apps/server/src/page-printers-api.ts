@@ -16,7 +16,8 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import {
-  disablePagePrinter,
+  deletePagePrinter,
+  readPagePrinterDeleteImpact,
   listPagePrinters,
   registerPagePrinter,
   renamePagePrinter,
@@ -46,7 +47,6 @@ export interface PagePrintersApiDeps {
 const STATUS: Record<string, ContentfulStatusCode> = {
   "page_printer.not_found": 404,
   "page_printer.not_printable": 409,
-  "page_printer.rediscover": 409,
   "page_printer.no_agent": 409,
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -150,9 +150,8 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
-      // A disabled printer is still read: its waiting page fails as `printer_disabled` at the first agent
-      // claim that hands out no invoice, or as `not_claimed` once its claim window has passed.
       await gated(sessionId, async (tx) => {
+        // Keep a pending test page's outcome readable after its printer is deleted.
         const [printer] = await tx
           .select({ id: pagePrinters.id })
           .from(pagePrinters)
@@ -163,8 +162,22 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
     }),
   );
 
-  // Enabling needs current capabilities and a current agent, which only a fresh discovery entry
-  // gives: it goes through the POST.
+  app.get("/management-api/page-printers/:id/delete-impact", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
+      return c.json(await gated(sessionId, (tx) => readPagePrinterDeleteImpact(tx, id)));
+    }),
+  );
+
+  app.delete("/management-api/page-printers/:id", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
+      return c.json(await gated(sessionId, (tx) => deletePagePrinter(tx, id, deps.now?.())));
+    }),
+  );
+
   app.patch("/management-api/page-printers/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -172,15 +185,13 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
       const body = await readJsonBody<{ name?: unknown; active?: unknown }>(c);
       await gated(sessionId, async (tx) => {
         const name = body.name === undefined ? undefined : requireName(body.name);
-        if (body.active !== undefined && typeof body.active !== "boolean") {
+        if (Object.hasOwn(body, "active")) {
           throw new AppError("management.request_invalid", { field: "active" });
         }
-        if (body.active === true) throw new AppError("page_printer.rediscover", {});
-        if (name === undefined && body.active === undefined) {
+        if (name === undefined) {
           throw new AppError("management.request_invalid", { field: "name" });
         }
         if (name !== undefined) await renamePagePrinter(tx, id, name);
-        if (body.active === false) await disablePagePrinter(tx, id, deps.now?.());
       });
       return c.body(null, 204);
     }),

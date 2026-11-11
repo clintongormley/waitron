@@ -39,8 +39,12 @@ Elige el nombre de una impresora en la pestaña **Impresoras** o en la **Cola de
 abrir sus detalles. **Editar** cambia su nombre y, si
 es una impresora de recibos de red, su dirección. **Calibrar impresora** repite la calibración.
 Los detalles de una impresora A4 no tienen calibración;
-**Imprimir página de prueba** la comprueba. Su interruptor **Activa** la apaga. Para volver a activarla, búscala de nuevo con
-**Añadir impresora**.
+**Imprimir página de prueba** la comprueba. Para quitarla, elige **Eliminar** en su menú. La
+confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
+usarla, elige **Añadir impresora**, después **Añadir como impresora A4** junto a ella y **Añadir**.
+Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perfiles de dispositivo.
+
+Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.
 
 ## Cola de impresión {#print-queue}
 
