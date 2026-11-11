@@ -1,9 +1,10 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
+  BUSINESS_DAY_SETTINGS,
+  readBusinessDayRevision,
+  saveSettings,
+  dayCutoverChanges,
   readVenueClock,
-  venueLocationId,
   type Transaction,
 } from "@waitron/db";
 import { validateBusinessDay } from "@waitron/reporting";
@@ -78,9 +79,7 @@ export async function readBusinessDayClockModel(
   at: Date,
 ): Promise<BusinessDayClockModel> {
   const clock = await readVenueClock(tx);
-  // Keyed by the venue's row id, so the table holds at most one row.
-  const [settings] = await tx.select().from(locationBusinessDaySettings).limit(1);
-  const base = { clock, revision: settings?.revision ?? 0 };
+  const base = { clock, revision: await readBusinessDayRevision(tx) };
   let currentBusinessDay: string;
   try {
     currentBusinessDay = businessDayAt(clock, at);
@@ -170,25 +169,14 @@ export async function previewBusinessDayStart(
     backupDeadlines: { archive: null, cloud: null },
   };
 }
-async function bumpRevision(tx: Transaction, venueId: string, revision: number): Promise<void> {
-  await tx
-    .insert(locationBusinessDaySettings)
-    .values({ locationId: venueId, revision: revision + 1 })
-    .onConflictDoUpdate({
-      target: locationBusinessDaySettings.locationId,
-      set: { revision: revision + 1 },
-    });
-}
-function pendingScope(venueId: string, effectiveBusinessDay: string) {
-  return and(
-    eq(locationDayCutoverChanges.locationId, venueId),
-    eq(locationDayCutoverChanges.effectiveBusinessDay, effectiveBusinessDay),
-  );
+function pendingScope(effectiveBusinessDay: string) {
+  return eq(dayCutoverChanges.effectiveBusinessDay, effectiveBusinessDay);
 }
 export async function writeBusinessDayStart(
   tx: Transaction,
   input: unknown,
   at: Date,
+  personId: string,
 ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
   const proposal = proposalOf(input);
   const model = await readBusinessDayClockModel(tx, at);
@@ -210,17 +198,19 @@ export async function writeBusinessDayStart(
   for (const removed of plan.removed)
     await protectHistory(tx, model.clock, plan.candidate, removed);
   await protectHistory(tx, model.clock, plan.candidate, effectiveDay);
-  const venueId = await venueLocationId(tx);
   await VENUE_SERVICE.assertBusinessDayClockChange(tx, plan.before, plan.candidate, effectiveDay);
   for (const removed of plan.removed)
-    await tx.delete(locationDayCutoverChanges).where(pendingScope(venueId, removed));
+    await tx.delete(dayCutoverChanges).where(pendingScope(removed));
   if (plan.candidate !== plan.before)
-    await tx.insert(locationDayCutoverChanges).values({
-      locationId: venueId,
+    await tx.insert(dayCutoverChanges).values({
       effectiveBusinessDay: effectiveDay,
       dayCutover: `${proposal.dayCutover}:00`,
     });
-  await bumpRevision(tx, venueId, model.revision);
+  await saveSettings(tx, BUSINESS_DAY_SETTINGS, {
+    doc: { timeZone: model.clock.timeZone },
+    expectedRevision: model.revision,
+    personId,
+  });
   return { changed: true, model: await readVenueDetails(tx, at) };
 }
 function sameChanges(left: BusinessDayClock, right: BusinessDayClock): boolean {

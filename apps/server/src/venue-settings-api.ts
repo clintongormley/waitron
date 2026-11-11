@@ -215,8 +215,8 @@ export function mountVenueSettingsApi(
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
-      const result = await gated(session, (tx) =>
-        writeBusinessDayStart(tx, body, (deps.now ?? (() => new Date()))()),
+      const result = await gated(session, (tx, personId) =>
+        writeBusinessDayStart(tx, body, (deps.now ?? (() => new Date()))(), personId),
       );
       return c.json(result);
     }),

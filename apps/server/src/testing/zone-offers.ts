@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { catalogues, floorZones, products, locations } from "@waitron/db";
+import { catalogues, floorZones, products, readVenue } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { addProducts, createCatalogue, menuItems, requireMenuRoot } from "@waitron/catalogue";
 import {
@@ -106,15 +106,12 @@ async function resolveZone(
     .from(zoneServicePolicies)
     .where(eq(zoneServicePolicies.zoneId, zoneId));
   const departmentId = policy?.departmentId ?? (await department(tx, orderStart));
-  const [location] = await tx
-    .select({ operationDescription: locations.operationDescription })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
+  const location = await readVenue(tx);
   await tx
     .insert(departmentReceipts)
     .values({
       departmentId,
-      receipt: { operationDescription: location!.operationDescription },
+      receipt: { operationDescription: location.operationDescription },
     })
     .onConflictDoNothing({ target: departmentReceipts.departmentId });
   await configureZone(tx, { zoneId, departmentId, orderStart });

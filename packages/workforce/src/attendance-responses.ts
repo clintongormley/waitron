@@ -5,7 +5,7 @@ import { recordRoot } from "./record-projection.js";
 import { correctionGroupCanApply } from "./corrections.js";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { locationBusinessDaySettings, readVenueClock, type Transaction } from "@waitron/db";
+import { readBusinessDayRevision, readVenueClock, type Transaction } from "@waitron/db";
 import { readRecordedEntries } from "./record-reads.js";
 import { attendanceQuestions } from "./schema/attendance.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
@@ -23,7 +23,7 @@ export async function readAttendanceRevision(tx: Transaction, personId: string):
     .where(eq(attendanceResponseCommands.personId, personId))
     .orderBy(attendanceResponseCommands.id);
   const clock = await readVenueClock(tx);
-  const settings = await tx.select().from(locationBusinessDaySettings);
+  const settings = await readBusinessDayRevision(tx);
   return createHash("sha256")
     .update(JSON.stringify({ personId, entries, questions, commands, clock, settings }))
     .digest("hex");

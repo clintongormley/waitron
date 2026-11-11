@@ -81,6 +81,7 @@ export {
   createVenueSettings,
   saveVenueFields,
   readVenueClock,
+  readBusinessDayRevision,
   readVenueClockAndPlace,
   readVenueInvoiceLocales,
   venueLocationId,
@@ -365,11 +366,6 @@ export {
 } from "./schema/invoice-deliveries.js";
 export { pagePrinters, pagePrinterFormat, pagePrinterMedia } from "./schema/page-printers.js";
 
-export {
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
-} from "./schema/business-day-clock.js";
-
 export { tenderRefunds, tenderRefundState } from "./schema/tender-refunds.js";
 export { nextStationColour } from "./station-colour.js";
 
@@ -534,5 +530,7 @@ export type {
   ActivityReadOptions,
 } from "./activity-log.js";
 
-export { VENUE_SETTINGS } from "./venue-settings.js";
-export type { VenueSettings } from "./venue-settings.js";
+export { VENUE_SETTINGS, BUSINESS_DAY_SETTINGS, FIRST_DAY_START } from "./venue-settings.js";
+export type { VenueSettings, BusinessDaySettings } from "./venue-settings.js";
+
+export { dayCutoverChanges } from "./schema/day-cutover-changes.js";

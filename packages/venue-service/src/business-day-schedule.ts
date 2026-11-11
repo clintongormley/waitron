@@ -5,7 +5,7 @@ import {
   departmentDays,
   departments,
   floorZones,
-  locationBusinessDaySettings,
+  readBusinessDayRevision,
   menuPeriods,
   readVenueClock,
   seasons,
@@ -378,10 +378,7 @@ export function sameScheduleRanges(
 }
 
 export async function readBusinessDayScheduleRevision(tx: Transaction): Promise<number> {
-  const [settings] = await tx
-    .select({ revision: locationBusinessDaySettings.revision })
-    .from(locationBusinessDaySettings);
-  return settings?.revision ?? 0;
+  return readBusinessDayRevision(tx);
 }
 
 export async function readBusinessDayScheduleStatus(

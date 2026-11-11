@@ -16,6 +16,7 @@ import {
   BILL_REFUND_CHANGE_REFUSAL,
   BILL_REFUND_DELETE_REFUSAL,
   COVERAGE_REFUSAL,
+  DAY_START_HISTORY_REFUSAL,
   FORM_FACTOR_REFUSAL,
   LOCALES_REFUSAL,
   OPEN_PARENT_REFUSAL,
@@ -92,6 +93,8 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
+  "day_cutover_changes_no_update",
+  "day_cutover_changes_keep_closed",
   "bill_payment_refunds_guard_update",
   "bill_payment_refunds_no_delete",
   "bill_payments_guard_update",
@@ -266,7 +269,7 @@ function seed(connection) {
   const statements = [
     // Venue: one location with TWO invoice locales, so "exactly the venue locales" has a set to be
     // wrong about in both directions.
-    `insert into locations (id, operation_description) values ('loc', 'Restaurant')`,
+    `insert into locations (id) values ('loc')`,
     `insert into settings (module,version,revision,doc,updated_at) values ('venue',1,1,'{"invoiceLocales":["es","ca"]}','${STAMP}')`,
 
     // Working orders, one per case that changes an order's state.
@@ -1882,5 +1885,48 @@ describe("bill_payment_refunds_no_delete", () => {
     expect(
       refusalFor(connection, `delete from bill_payment_refunds where id = 'bpr-pending'`),
     ).toBe(BILL_REFUND_DELETE_REFUSAL);
+  });
+});
+
+describe("day-start history", () => {
+  it.each([
+    [
+      "refuses updates",
+      "2026-11-02",
+      "update day_cutover_changes set day_cutover = '07:00:00' where effective_business_day = '2026-11-03'",
+      DAY_START_HISTORY_REFUSAL,
+    ],
+    [
+      "keeps a row covered by a close on the previous day",
+      "2026-11-02",
+      "delete from day_cutover_changes where effective_business_day = '2026-11-03'",
+      DAY_START_HISTORY_REFUSAL,
+    ],
+    [
+      "allows deleting a waiting row when the last close is two days before",
+      "2026-11-01",
+      "delete from day_cutover_changes where effective_business_day = '2026-11-03'",
+      undefined,
+    ],
+  ])("%s", (_name, closedDay, statement, expected) => {
+    connection.exec("savepoint day_start_case");
+    try {
+      connection.exec("insert into day_cutover_changes values ('2026-11-03', '06:00:00')");
+      connection
+        .prepare(
+          "insert into daily_closes (id,node_id,business_day,sequence_no,prev_entry_hash,entry_hash,closed_at,closed_by,snapshot) values ('day-start-close','node',?,1,'','hash','2026-11-03T12:00:00Z','person','{}')",
+        )
+        .run(closedDay);
+      expect(refusalFor(connection, statement!)).toBe(expected);
+      expect(
+        connection
+          .prepare(
+            "select day_cutover from day_cutover_changes where effective_business_day = '2026-11-03'",
+          )
+          .get(),
+      ).toEqual(expected === undefined ? undefined : { day_cutover: "06:00:00" });
+    } finally {
+      connection.exec("rollback to day_start_case; release day_start_case");
+    }
   });
 });

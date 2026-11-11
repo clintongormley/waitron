@@ -1,13 +1,18 @@
 import { requireCountryTimeZone } from "@waitron/country-packs";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
+  BUSINESS_DAY_SETTINGS,
+  FIRST_DAY_START,
+  dayCutoverChanges,
+  readSettings,
+  saveSettings,
+  readVenueClock,
+  readVenue,
   invoiceSeries,
   createVenueSettings,
-  readVenueSettings,
   kitchenStations,
   locations,
-  locationDayCutoverChanges,
   nextStationColour,
   nodes,
   tenants,
@@ -125,12 +130,11 @@ export async function applyVenue(
     }
   }
   const requireSavedZones = async (db: Database | Transaction): Promise<void> => {
-    const saved = await db.select({ timeZone: locations.timeZone }).from(locations);
-    for (const row of saved) {
-      const zone = classifySavedTimeZone(row.timeZone);
-      if (zone.kind !== "valid") {
+    const saved = await readSettings(db, BUSINESS_DAY_SETTINGS);
+    if (saved.revision > 0) {
+      const zone = classifySavedTimeZone(saved.doc.timeZone);
+      if (zone.kind !== "valid")
         throw new AppError("venue.time_zone_invalid", { reason: zone.kind });
-      }
     }
   };
   await requireSavedZones(deps.db);
@@ -246,36 +250,15 @@ export async function applyVenue(
           break;
         case "create-venue": {
           const existing = await tx
-            .select({
-              id: locations.id,
-              operationDescription: locations.operationDescription,
-              fiscalTerritory: locations.fiscalTerritory,
-              timeZone: locations.timeZone,
-              dayCutover: locations.dayCutover,
-            })
+            .select({ id: locations.id })
             .from(locations)
             .orderBy(locations.id);
           if (existing.length > 1) {
             throw new AppError("provisioning.second_venue", {});
           }
           if (existing.length === 1) {
-            const row = { ...existing[0]!, ...(await readVenueSettings(tx)).doc };
-            const changes = await tx
-              .select({
-                effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
-                dayCutover: locationDayCutoverChanges.dayCutover,
-              })
-              .from(locationDayCutoverChanges)
-              .where(eq(locationDayCutoverChanges.locationId, row.id))
-              .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
-            const clock = {
-              timeZone: row.timeZone,
-              dayCutover: normalizeDayCutover(row.dayCutover).slice(0, 5),
-              cutoverChanges: changes.map((change) => ({
-                ...change,
-                dayCutover: normalizeDayCutover(change.dayCutover).slice(0, 5),
-              })),
-            };
+            const row = { ...existing[0]!, ...(await readVenue(tx)) };
+            const clock = await readVenueClock(tx);
             const currentCutover = cutoverForBusinessDay(clock, businessDayAt(clock, new Date()));
             const matches =
               row.name === action.name &&
@@ -299,15 +282,13 @@ export async function applyVenue(
           locationId = randomUUID();
           await tx.insert(locations).values({
             id: locationId,
-            operationDescription: action.operationDescription,
-            fiscalTerritory: action.fiscalTerritory,
-            timeZone: action.timeZone,
-            dayCutover: action.dayCutover,
           });
           await createVenueSettings(
             tx,
             {
               name: action.name,
+              fiscalTerritory: action.fiscalTerritory,
+              operationDescription: action.operationDescription,
               invoiceLocales: [...action.invoiceLocales],
               contentLanguages: null,
               defaultContentLanguage: null,
@@ -320,6 +301,15 @@ export async function applyVenue(
             },
             null,
           );
+          await saveSettings(tx, BUSINESS_DAY_SETTINGS, {
+            doc: { timeZone: action.timeZone },
+            expectedRevision: 0,
+            personId: null,
+          });
+          await tx.insert(dayCutoverChanges).values({
+            effectiveBusinessDay: FIRST_DAY_START,
+            dayCutover: normalizeDayCutover(action.dayCutover),
+          });
           // A line with no more specific route fires to the default station; with no active
           // default, firing fails with `station.no_default`. So a fresh venue ships one.
           await tx.insert(kitchenStations).values({

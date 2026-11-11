@@ -1,7 +1,11 @@
+import { DEFAULT_TIME_ZONE } from "./schema/tenants.js";
 import { defineSettingsDocument, type SettingsParse } from "./settings.js";
 
 export interface VenueSettings {
   name: string;
+  fiscalTerritory: string;
+  /** vb6 removes the interim venue description. */
+  operationDescription: string;
   invoiceLocales: string[];
   contentLanguages: string[] | null;
   defaultContentLanguage: string | null;
@@ -24,6 +28,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
   transfers: false,
   defaults: () => ({
     name: "",
+    fiscalTerritory: "ES-common",
+    operationDescription: "Restaurant",
     invoiceLocales: ["es"],
     contentLanguages: null,
     defaultContentLanguage: null,
@@ -48,6 +54,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
     for (const field of Object.keys(value))
       if (
         field !== "name" &&
+        field !== "fiscalTerritory" &&
+        field !== "operationDescription" &&
         !["invoiceLocales", "contentLanguages", "defaultContentLanguage", "holidayArea"].includes(
           field,
         ) &&
@@ -56,6 +64,10 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
         return { ok: false, field };
     if (typeof value.name !== "string" || value.name.trim() === "")
       return { ok: false, field: "name" };
+    if (typeof value.fiscalTerritory !== "string" || value.fiscalTerritory.trim() === "")
+      return { ok: false, field: "fiscalTerritory" };
+    if (typeof value.operationDescription !== "string")
+      return { ok: false, field: "operationDescription" };
     const invoiceLocales = value.invoiceLocales;
     if (
       !Array.isArray(invoiceLocales) ||
@@ -100,6 +112,8 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
       ok: true,
       doc: {
         name: value.name.trim(),
+        fiscalTerritory: value.fiscalTerritory,
+        operationDescription: value.operationDescription,
         invoiceLocales: [...invoiceLocales],
         contentLanguages: languages === null ? null : [...(languages as string[])],
         defaultContentLanguage: defaultLanguage as string | null,
@@ -111,5 +125,28 @@ export const VENUE_SETTINGS = defineSettingsDocument<VenueSettings>({
         province: value.province as string | null,
       },
     };
+  },
+});
+
+export const FIRST_DAY_START = "2000-01-01";
+
+export interface BusinessDaySettings {
+  /** Stored verbatim so the zone repair can read an invalid saved zone. */
+  timeZone: string;
+}
+
+export const BUSINESS_DAY_SETTINGS = defineSettingsDocument<BusinessDaySettings>({
+  module: "business_day",
+  version: 1,
+  transfers: false,
+  defaults: () => ({ timeZone: DEFAULT_TIME_ZONE }),
+  parse(input: unknown): SettingsParse<BusinessDaySettings> {
+    if (typeof input !== "object" || input === null || Array.isArray(input))
+      return { ok: false, field: "doc" };
+    const value = input as Record<string, unknown>;
+    for (const field of Object.keys(value)) if (field !== "timeZone") return { ok: false, field };
+    if (typeof value.timeZone !== "string" || value.timeZone === "")
+      return { ok: false, field: "timeZone" };
+    return { ok: true, doc: { timeZone: value.timeZone } };
   },
 });

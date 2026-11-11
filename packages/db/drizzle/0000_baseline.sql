@@ -15,6 +15,13 @@ CREATE INDEX `activity_log_subject_idx` ON `activity_log` (`subject_kind`,`subje
 CREATE INDEX `activity_log_kind_at_idx` ON `activity_log` (`kind`,`at`);--> statement-breakpoint
 CREATE INDEX `activity_log_at_idx` ON `activity_log` (`at`);--> statement-breakpoint
 CREATE INDEX `activity_log_person_at_idx` ON `activity_log` (`person_id`,`at`);--> statement-breakpoint
+CREATE TABLE `day_cutover_changes` (
+	`effective_business_day` text PRIMARY KEY NOT NULL,
+	`day_cutover` text NOT NULL,
+	CONSTRAINT "day_cutover_changes_date_ck" CHECK(length("day_cutover_changes"."effective_business_day") = 10 and "day_cutover_changes"."effective_business_day" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+	CONSTRAINT "day_cutover_changes_time_ck" CHECK(length("day_cutover_changes"."day_cutover") = 8 and "day_cutover_changes"."day_cutover" glob '[0-2][0-9]:[0-5][0-9]:00' and substr("day_cutover_changes"."day_cutover", 1, 2) <= '23')
+);
+--> statement-breakpoint
 CREATE TABLE `settings` (
 	`module` text PRIMARY KEY NOT NULL,
 	`version` integer NOT NULL,
@@ -31,10 +38,6 @@ CREATE TABLE `settings` (
 --> statement-breakpoint
 CREATE TABLE `locations` (
 	`id` text PRIMARY KEY NOT NULL,
-	`operation_description` text NOT NULL,
-	`fiscal_territory` text DEFAULT 'ES-common' NOT NULL,
-	`time_zone` text DEFAULT 'Europe/Madrid' NOT NULL,
-	`day_cutover` text DEFAULT '06:00:00' NOT NULL,
 	`bump_mode` text DEFAULT 'line' NOT NULL,
 	`fire_control` text DEFAULT 'waiter' NOT NULL,
 	`catalogue_id` text,
@@ -1528,23 +1531,6 @@ CREATE TABLE `page_printers` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `page_printers_endpoint_uq` ON `page_printers` (`location_id`,`host`,`port`,`resource_path`);--> statement-breakpoint
-CREATE TABLE `location_business_day_settings` (
-	`location_id` text PRIMARY KEY NOT NULL,
-	`revision` integer NOT NULL,
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "location_business_day_settings_revision_ck" CHECK(typeof("location_business_day_settings"."revision") = 'integer' and "location_business_day_settings"."revision" >= 0)
-);
---> statement-breakpoint
-CREATE TABLE `location_day_cutover_changes` (
-	`location_id` text NOT NULL,
-	`effective_business_day` text NOT NULL,
-	`day_cutover` text NOT NULL,
-	PRIMARY KEY(`location_id`, `effective_business_day`),
-	FOREIGN KEY (`location_id`) REFERENCES `locations`(`id`) ON UPDATE no action ON DELETE no action,
-	CONSTRAINT "location_day_cutover_changes_date_ck" CHECK(length("location_day_cutover_changes"."effective_business_day") = 10 and "location_day_cutover_changes"."effective_business_day" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
-	CONSTRAINT "location_day_cutover_changes_time_ck" CHECK(length("location_day_cutover_changes"."day_cutover") = 8 and "location_day_cutover_changes"."day_cutover" glob '[0-2][0-9]:[0-5][0-9]:00' and substr("location_day_cutover_changes"."day_cutover", 1, 2) <= '23')
-);
---> statement-breakpoint
 CREATE TABLE `tender_refunds` (
 	`id` text PRIMARY KEY NOT NULL,
 	`sale_id` text NOT NULL,
@@ -3851,4 +3837,24 @@ WHEN new.module = 'venue'
        OR json_array_length(new.doc, '$.invoiceLocales') NOT BETWEEN 1 AND 2)
 BEGIN
   SELECT raise(abort, 'settings.invalid');
+END;
+
+--> statement-breakpoint
+CREATE TRIGGER day_cutover_changes_no_update
+BEFORE UPDATE ON day_cutover_changes
+FOR EACH ROW
+BEGIN
+  SELECT raise(abort, 'day start history cannot change');
+END;
+
+--> statement-breakpoint
+-- Weaker than its name: without a daily close, code protects past days using the venue's zone.
+-- A1325 replaces daily_closes and changes this trigger in the same pull request.
+CREATE TRIGGER day_cutover_changes_keep_closed
+BEFORE DELETE ON day_cutover_changes
+FOR EACH ROW
+WHEN exists (SELECT 1 FROM daily_closes c
+             WHERE c.business_day >= date(old.effective_business_day, '-1 day'))
+BEGIN
+  SELECT raise(abort, 'day start history cannot change');
 END;

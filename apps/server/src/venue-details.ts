@@ -1,11 +1,10 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
-  locations,
-  locationBusinessDaySettings,
+  BUSINESS_DAY_SETTINGS,
+  saveSettings,
   readTenant,
   readVenue,
   saveVenueFields,
-  venueLocationId,
   type Transaction,
 } from "@waitron/db";
 import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
@@ -271,13 +270,11 @@ export async function writeVenueDetails(
   const { timeZone } = delta;
   if (Object.keys(venueFields).length > 0) await saveVenueFields(tx, venueFields, personId);
   if (timeZone !== undefined) {
-    const venueId = await venueLocationId(tx);
-    await tx.update(locations).set({ timeZone }).where(eq(locations.id, venueId));
-    const revision = model.businessDayClock.revision + 1;
-    await tx
-      .insert(locationBusinessDaySettings)
-      .values({ locationId: venueId, revision })
-      .onConflictDoUpdate({ target: locationBusinessDaySettings.locationId, set: { revision } });
+    await saveSettings(tx, BUSINESS_DAY_SETTINGS, {
+      doc: { timeZone },
+      expectedRevision: model.businessDayClock.revision,
+      personId,
+    });
   }
   return {
     changed: true,

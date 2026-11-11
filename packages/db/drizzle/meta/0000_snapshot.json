@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2da5625a-4684-41cc-baa9-e00482dcf696",
+  "id": "34db6d2a-7318-4b18-b039-d03adc644012",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -129,6 +129,39 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "day_cutover_changes": {
+      "name": "day_cutover_changes",
+      "columns": {
+        "effective_business_day": {
+          "name": "effective_business_day",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "day_cutover": {
+          "name": "day_cutover",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "day_cutover_changes_date_ck": {
+          "name": "day_cutover_changes_date_ck",
+          "value": "length(\"day_cutover_changes\".\"effective_business_day\") = 10 and \"day_cutover_changes\".\"effective_business_day\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+        },
+        "day_cutover_changes_time_ck": {
+          "name": "day_cutover_changes_time_ck",
+          "value": "length(\"day_cutover_changes\".\"day_cutover\") = 8 and \"day_cutover_changes\".\"day_cutover\" glob '[0-2][0-9]:[0-5][0-9]:00' and substr(\"day_cutover_changes\".\"day_cutover\", 1, 2) <= '23'"
+        }
+      }
+    },
     "settings": {
       "name": "settings",
       "columns": {
@@ -221,37 +254,6 @@
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
-        },
-        "operation_description": {
-          "name": "operation_description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "fiscal_territory": {
-          "name": "fiscal_territory",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'ES-common'"
-        },
-        "time_zone": {
-          "name": "time_zone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'Europe/Madrid'"
-        },
-        "day_cutover": {
-          "name": "day_cutover",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'06:00:00'"
         },
         "bump_mode": {
           "name": "bump_mode",
@@ -10523,111 +10525,6 @@
         "page_printers_resolution_ck": {
           "name": "page_printers_resolution_ck",
           "value": "\"page_printers\".\"resolution_dpi\" > 0"
-        }
-      }
-    },
-    "location_business_day_settings": {
-      "name": "location_business_day_settings",
-      "columns": {
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "revision": {
-          "name": "revision",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "location_business_day_settings_location_id_locations_id_fk": {
-          "name": "location_business_day_settings_location_id_locations_id_fk",
-          "tableFrom": "location_business_day_settings",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "location_business_day_settings_revision_ck": {
-          "name": "location_business_day_settings_revision_ck",
-          "value": "typeof(\"location_business_day_settings\".\"revision\") = 'integer' and \"location_business_day_settings\".\"revision\" >= 0"
-        }
-      }
-    },
-    "location_day_cutover_changes": {
-      "name": "location_day_cutover_changes",
-      "columns": {
-        "location_id": {
-          "name": "location_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "effective_business_day": {
-          "name": "effective_business_day",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "day_cutover": {
-          "name": "day_cutover",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "location_day_cutover_changes_location_id_locations_id_fk": {
-          "name": "location_day_cutover_changes_location_id_locations_id_fk",
-          "tableFrom": "location_day_cutover_changes",
-          "tableTo": "locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "location_day_cutover_changes_location_id_effective_business_day_pk": {
-          "columns": [
-            "location_id",
-            "effective_business_day"
-          ],
-          "name": "location_day_cutover_changes_location_id_effective_business_day_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "location_day_cutover_changes_date_ck": {
-          "name": "location_day_cutover_changes_date_ck",
-          "value": "length(\"location_day_cutover_changes\".\"effective_business_day\") = 10 and \"location_day_cutover_changes\".\"effective_business_day\" glob '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
-        },
-        "location_day_cutover_changes_time_ck": {
-          "name": "location_day_cutover_changes_time_ck",
-          "value": "length(\"location_day_cutover_changes\".\"day_cutover\") = 8 and \"location_day_cutover_changes\".\"day_cutover\" glob '[0-2][0-9]:[0-5][0-9]:00' and substr(\"location_day_cutover_changes\".\"day_cutover\", 1, 2) <= '23'"
         }
       }
     },
