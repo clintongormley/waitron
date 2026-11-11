@@ -224,9 +224,13 @@ after that wait keeps the retry hosted even after the old queue has disappeared.
 retry record or previous attempt is uncertainty: routing still checks other readable runs for stalls.
 
 The hosted queue watchdog reads its configured families in pages of 30, allowing ten
-seconds for each complete read. It waits up to five minutes, with at most ten polls and
-200 API calls including dispatch of the health check. Reads require complete family membership,
-unique job IDs and matching run, attempt, head and labels. After the wait it dispatches
+seconds for each complete read. It waits up to five minutes, with at most ten ordinary polls.
+After ordinary polling ends, an invalid final inventory gets one complete reread, sharing the existing
+200-call cap and outer deadline. Failed page reads report their poll, page, endpoint and
+exit status, with the captured error or exhausted deadline. Structural failures name their reason.
+Reads require complete family membership, unique job IDs and matching run, metadata attempt and head.
+A completed job may retain an exact routing label from an earlier attempt of the same run;
+queued and running jobs require the current attempt's label. After the wait it dispatches
 `server-health.yml` on `main`. A valid waiting inventory and accepted dispatch pass this
 watchdog; incomplete inventories and refused dispatches fail it. The shell retains its
 1,260-second outer deadline inside a 22-minute job. Timeout selection prefers
