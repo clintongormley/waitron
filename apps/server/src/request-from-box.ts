@@ -66,10 +66,11 @@ export function requestFromBox(c: Context, deps: RequestSourceDeps = {}): boolea
 }
 
 /**
- * For permitting what only the box itself may do: only a readable address of the box's own counts.
+ * For permitting what only the box itself may do: only a readable loopback address counts, since
+ * another device on the venue's network can hold one of the box's own link-local addresses.
  * Node stops reporting the address once a client resets, though the request it sent is still read.
  */
-export function requestProvenFromBox(c: Context, deps: RequestSourceDeps = {}): boolean {
+export function requestProvenFromBox(c: Context): boolean {
   const address = requestAddress(c);
-  return !isRemoteStaffRequest(c) && address !== undefined && addressIsBox(address, deps);
+  return !isRemoteStaffRequest(c) && address !== undefined && isLoopbackHost(address);
 }

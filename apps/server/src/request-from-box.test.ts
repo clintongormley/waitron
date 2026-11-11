@@ -96,15 +96,20 @@ it("never counts a request through the remote entrance as the box, even over loo
   expect(await sourceOf({ remoteStaff: true })).toBe(false);
 });
 
-it("a box check that permits counts only a readable box address", async () => {
+it("a box check that permits counts only a readable loopback address", async () => {
   const strictOf = async (env: unknown) => {
     const app = new Hono();
-    app.get("/", (c) => c.json({ onBox: requestProvenFromBox(c, deps) }));
+    app.get("/", (c) => c.json({ onBox: requestProvenFromBox(c) }));
     return ((await (await app.request("/", {}, env)).json()) as { onBox: boolean }).onBox;
   };
   const socket = (remoteAddress?: string) => ({ incoming: { socket: { remoteAddress } } });
-  expect(await strictOf(socket("::ffff:192.168.10.20"))).toBe(true);
   expect(await strictOf(socket("127.0.0.1"))).toBe(true);
+  expect(await strictOf(socket("::ffff:127.0.0.1"))).toBe(true);
+  expect(await strictOf(socket("::1"))).toBe(true);
+  // The box's own addresses on the venue's network: a router on another link can hold `fe80::1`.
+  expect(await strictOf(socket("::ffff:192.168.10.20"))).toBe(false);
+  expect(await strictOf(socket("fe80::1%eth1"))).toBe(false);
+  expect(await strictOf(socket("172.17.0.1"))).toBe(false);
   expect(await strictOf(socket("192.168.10.31"))).toBe(false);
   expect(await strictOf(socket())).toBe(false);
   expect(await strictOf(undefined)).toBe(false);
@@ -118,7 +123,7 @@ describe("a connection reset before its route runs", () => {
   beforeAll(async () => {
     const app = new Hono();
     app.get("/", (c) =>
-      c.json({ lenient: requestFromBox(c, deps), permits: requestProvenFromBox(c, deps) }),
+      c.json({ lenient: requestFromBox(c, deps), permits: requestProvenFromBox(c) }),
     );
     server = serve({ fetch: reset.wrap(app.fetch), port: 0, hostname: "127.0.0.1" });
     await once(server, "listening");
