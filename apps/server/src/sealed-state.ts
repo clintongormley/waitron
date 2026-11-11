@@ -1,3 +1,4 @@
+import type { JobDefinition } from "./job-runner.js";
 import { join } from "node:path";
 import { SCRATCH_DIR } from "@waitron/store";
 import { eq } from "drizzle-orm";
@@ -197,6 +198,27 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
     settled: async () => {
       for (let pending = waiting ?? running; pending !== undefined; pending = waiting ?? running)
         await pending.catch(() => {});
+    },
+  };
+}
+
+export function sealedStateJob(
+  refresher: SealedStateRefresher,
+  unsubscribe: () => void,
+): JobDefinition {
+  return {
+    name: "backups.sealed_state",
+    applies: () => true,
+    pass: async () => ({ nextDueAt: null, degraded: (await refresher.refresh()) === "failed" }),
+    minSleepMs: 1_000,
+    maxSleepMs: 24 * 60 * 60 * 1_000,
+    firstPassAfterMs: 24 * 60 * 60 * 1_000,
+    backoff: { firstMs: 60_000, maxMs: 3_600_000 },
+    ownFailureAlert: "backup.sealed_state_failed",
+    onStop: async () => {
+      unsubscribe();
+      await refresher.refresh();
+      await refresher.settled();
     },
   };
 }

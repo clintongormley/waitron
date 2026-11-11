@@ -8,18 +8,7 @@ import {
 } from "./job-runner.js";
 import * as wakers from "./loop-wake.js";
 
-function fakeDelay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) return resolve();
-    const timer = setTimeout(done, ms);
-    signal.addEventListener("abort", done, { once: true });
-    function done() {
-      clearTimeout(timer);
-      signal.removeEventListener("abort", done);
-      resolve();
-    }
-  });
-}
+import { fakeTimerDelay as fakeDelay } from "./testing/fake-timer-delay.js";
 
 let runner: JobRunner;
 let emit: (change: ResourceChange) => void;
@@ -64,6 +53,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await runner.stopJobs();
+  await runner.stopServices();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -450,5 +440,185 @@ describe("job runner", () => {
     runner.add(job());
     expect(() => runner.add(job())).toThrow();
     expect(() => runner.add(job({ name: "stream" }))).toThrow();
+  });
+});
+
+describe("runner services", () => {
+  function service(overrides: Partial<import("./job-runner.js").ServiceDefinition> = {}) {
+    return {
+      name: "stream" as const,
+      applies: () => true,
+      start: vi.fn(async () => {}),
+      suspend: vi.fn(async () => {}),
+      stop: vi.fn(async () => {}),
+      describe: () => ({ running: true, reason: null }),
+      ...overrides,
+    };
+  }
+
+  it("starts an applicable service before registration resolves and reports the host's state", async () => {
+    let running = false;
+    const host = service({
+      describe: () => ({ running, reason: running ? null : "not_configured" }),
+    });
+    await runner.addService(host);
+    expect(host.start).toHaveBeenCalledTimes(1);
+    expect(runner.views().stream).toMatchObject({
+      kind: "service",
+      state: "waiting",
+      detail: "not_configured",
+    });
+    running = true;
+    expect(runner.views().stream).toMatchObject({ state: "running", detail: null });
+  });
+
+  it("starts and suspends on role changes, then starts again on promotion", async () => {
+    let primary = false;
+    const host = service({ applies: () => primary });
+    await runner.addService(host);
+    expect(runner.views().stream.state).toBe("not_applicable");
+    primary = true;
+    runner.roleChanged();
+    await advance();
+    expect(host.start).toHaveBeenCalledTimes(1);
+    primary = false;
+    runner.roleChanged();
+    await advance();
+    expect(host.suspend).toHaveBeenCalledTimes(1);
+    expect(runner.views().stream.state).toBe("not_applicable");
+    primary = true;
+    runner.roleChanged();
+    await advance();
+    expect(host.start).toHaveBeenCalledTimes(2);
+  });
+
+  it("rechecks missed role changes at sixty seconds without starting twice while a check is pending", async () => {
+    let primary = false;
+    let release!: () => void;
+    const host = service({
+      applies: () => primary,
+      start: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          }),
+      ),
+    });
+    await runner.addService(host);
+    primary = true;
+    await advance(59_999);
+    expect(host.start).not.toHaveBeenCalled();
+    await advance(1);
+    expect(host.start).toHaveBeenCalledTimes(1);
+    runner.roleChanged();
+    await advance(60_000);
+    expect(host.start).toHaveBeenCalledTimes(1);
+    release();
+    await advance();
+  });
+
+  it("keeps an active service through stepdown until close, and never starts an inactive one", async () => {
+    let primary = true;
+    const host = service({ applies: () => primary });
+    await runner.addService(host);
+    runner.signalStepdown();
+    await advance(60_000);
+    expect(host.suspend).not.toHaveBeenCalled();
+    expect(host.stop).not.toHaveBeenCalled();
+    primary = false;
+    runner.roleChanged();
+    await advance();
+    expect(host.suspend).toHaveBeenCalledTimes(1);
+    primary = true;
+    runner.roleChanged();
+    await advance(60_000);
+    expect(host.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("close waits for a pending start, stops once, and prevents later checks", async () => {
+    let release!: () => void;
+    let applies = true;
+    const calls: string[] = [];
+    const host = service({
+      applies: () => applies,
+      start: async () => {
+        calls.push("start");
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      },
+      stop: async () => {
+        calls.push("stop");
+      },
+    });
+    const registering = runner.addService(host);
+    await advance();
+    const first = runner.stopServices();
+    const second = runner.stopServices();
+    try {
+      await advance(60_000);
+      expect(calls).toEqual(["start"]);
+    } finally {
+      release();
+      await Promise.all([registering, first, second]);
+    }
+    applies = false;
+    runner.roleChanged();
+    await advance(120_000);
+    expect(calls).toEqual(["start", "stop"]);
+    expect(runner.views().stream.state).toBe("stopped");
+    expect(host.suspend).not.toHaveBeenCalled();
+  });
+
+  it("logs a failed start, reports it, and retries at the next check", async () => {
+    const host = service({
+      start: vi
+        .fn()
+        .mockRejectedValueOnce(new AppError("storage.disk_full", {}))
+        .mockResolvedValue(undefined),
+    });
+    await runner.addService(host);
+    expect(log).toHaveBeenCalledWith(
+      "error",
+      "job.failed",
+      expect.objectContaining({ job: "stream", errorCode: "storage.disk_full" }),
+    );
+    expect(runner.views().stream).toMatchObject({
+      state: "not_applicable",
+      consecutiveFailures: 1,
+      lastErrorCode: "storage.disk_full",
+    });
+    await advance(60_000);
+    expect(host.start).toHaveBeenCalledTimes(2);
+    expect(runner.views().stream).toMatchObject({
+      state: "running",
+      consecutiveFailures: 0,
+      throwsSinceClean: 0,
+      throwingSince: null,
+    });
+  });
+
+  it("retries an off active service on wake, but never after stepdown", async () => {
+    let running = false;
+    const host = service({
+      describe: () => ({ running, reason: running ? null : "reseal_required" }),
+    });
+    await runner.addService(host);
+    runner.wake("stream");
+    await advance();
+    expect(host.start).toHaveBeenCalledTimes(2);
+    running = true;
+    runner.wake("stream");
+    await advance();
+    expect(host.start).toHaveBeenCalledTimes(2);
+    running = false;
+    runner.signalStepdown();
+    runner.wake("stream");
+    await advance(60_000);
+    expect(host.start).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a job registered as a service", async () => {
+    await expect(runner.addService(service({ name: "menu.activation" }))).rejects.toThrow();
   });
 });

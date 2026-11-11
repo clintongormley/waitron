@@ -17,6 +17,7 @@ import { ALL_MODULES } from "./modules.js";
 import {
   collectSealedEntries,
   createSealedStateRefresher,
+  sealedStateJob,
   readSealedStateRow,
   sealNodeState,
   unsealNodeState,
@@ -24,6 +25,8 @@ import {
   type SealedStateDeps,
   type SealedStateStatus,
 } from "./sealed-state.js";
+import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
+import { createJobRunner, type JobRunner } from "./job-runner.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -536,5 +539,103 @@ describe("createSealedStateRefresher", () => {
     releaseFirst();
     await tail;
     expect(finished).toBe(2);
+  });
+});
+
+describe("sealed state on the runner", () => {
+  let runner: JobRunner;
+  const log = vi.fn();
+  beforeEach(() => {
+    log.mockClear();
+    runner = createJobRunner({
+      now: () => new Date(),
+      monotonicMs: () => Date.now(),
+      delay: fakeTimerDelay,
+      log,
+      subscribe: () => () => {},
+    });
+  });
+  afterEach(async () => {
+    await runner.stopJobs();
+    await runner.stopServices();
+  });
+
+  it("waits after boot and refreshes on wake, coalescing a burst during it", async () => {
+    let release!: () => void;
+    const refresh = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve("sealed");
+          }),
+      )
+      .mockResolvedValue("sealed");
+    runner.add(sealedStateJob({ refresh, settled: async () => {} }, () => {}));
+    expect(refresh).not.toHaveBeenCalled();
+    runner.wake("backups.sealed_state");
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1), { timeout: 3_000 });
+    for (let i = 0; i < 8; i++) runner.wake("backups.sealed_state");
+    release();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(2), { timeout: 3_000 });
+  });
+
+  it("reports a failed refresh as degraded with its own alert, then clears after a successful refresh", async () => {
+    const refresh = vi.fn().mockResolvedValueOnce("failed").mockResolvedValue("sealed");
+    runner.add(sealedStateJob({ refresh, settled: async () => {} }, () => {}));
+    runner.wake("backups.sealed_state");
+    await vi.waitFor(
+      () =>
+        expect(runner.views()["backups.sealed_state"]).toMatchObject({
+          consecutiveFailures: 1,
+          ownFailureAlert: "backup.sealed_state_failed",
+          throwsSinceClean: 0,
+        }),
+      { timeout: 3_000 },
+    );
+    expect(log).not.toHaveBeenCalled();
+    runner.wake("backups.sealed_state");
+    await vi.waitFor(
+      () =>
+        expect(runner.views()["backups.sealed_state"]).toMatchObject({
+          consecutiveFailures: 0,
+          failingSince: null,
+        }),
+      { timeout: 3_000 },
+    );
+  });
+
+  it("unhooks commits, seals once more, then waits for an external refresh at close", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    runner.add(
+      sealedStateJob(
+        {
+          refresh: async () => {
+            order.push("final refresh");
+            return "sealed";
+          },
+          settled: async () => {
+            order.push("settling");
+            await new Promise<void>((resolve) => {
+              release = resolve;
+            });
+            order.push("settled");
+          },
+        },
+        () => {
+          order.push("unsubscribed");
+        },
+      ),
+    );
+    const closing = runner.stopJobs();
+    try {
+      await vi.waitFor(() => expect(order).toEqual(["unsubscribed", "final refresh", "settling"]));
+    } finally {
+      release?.();
+      await closing;
+    }
+    expect(order).toEqual(["unsubscribed", "final refresh", "settling", "settled"]);
   });
 });

@@ -652,6 +652,7 @@ describe("the bucket copy on /health", () => {
 describe("runner jobs on health", () => {
   const view = {
     kind: "job" as const,
+    detail: null,
     state: "waiting" as const,
     judged: false,
     lastTurnAt: "2026-07-25T08:00:00.000Z",
@@ -674,6 +675,7 @@ describe("runner jobs on health", () => {
     expect(body.jobs).toEqual({
       "menu.activation": {
         kind: "job",
+        detail: null,
         state: "waiting",
         judged: false,
         lastTurnAt: "2026-07-25T08:00:00.000Z",

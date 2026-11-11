@@ -79,7 +79,6 @@ const STOPPERS = [
   "clockWatch",
   "handoverDestinationDuty",
   "chartPost",
-  "streamHost",
 ] as const;
 const AT_STEPDOWN = [
   "certificateDiagnosis",
@@ -105,6 +104,10 @@ function fakeDuties(overrides: Partial<Record<string, unknown>> = {}) {
   }
   handles.jobRunner = {
     signalStepdown: () => controllers.jobRunner!.abort(),
+    stopServices: () => {
+      calls.push("jobRunnerServices");
+      return Promise.resolve();
+    },
     stopJobs: () => {
       calls.push("jobRunner");
       return Promise.resolve();
@@ -121,13 +124,6 @@ function fakeDuties(overrides: Partial<Record<string, unknown>> = {}) {
     });
   }
   handles.unsubscribeFromChanges = () => calls.push("unsubscribeFromChanges");
-  handles.stopSealingNodeCommits = () => calls.push("stopSealingNodeCommits");
-  handles.sealedState = {
-    settled: () => {
-      calls.push("sealedState");
-      return Promise.resolve();
-    },
-  };
   handles.liveEvents = { close: () => calls.push("liveEvents") };
   for (const [name, value] of Object.entries(overrides)) {
     Object.defineProperty(handles, name, { enumerable: true, value });
@@ -289,8 +285,8 @@ describe("a stepdown", () => {
     const r = rig(suite.node, { onAnswer: () => void (before = [...r.calls]) });
     await r.app.request("/stepdown", { method: "POST" });
     expect(before).not.toContain("backupSupervisor");
-    expect(before).not.toContain("streamHost");
-    await vi.waitFor(() => expect(r.calls).toContain("streamHost"));
+    expect(before).not.toContain("jobRunnerServices");
+    await vi.waitFor(() => expect(r.calls).toContain("jobRunnerServices"));
   });
 
   it("after the answer the close runs in the table's order, Litestream last", async () => {
@@ -302,7 +298,7 @@ describe("a stepdown", () => {
     expect(after).toEqual(
       r.deps.duties.closers.filter((c) => c.atStepdown !== true).map((c) => c.name),
     );
-    expect(after.at(-1)).toBe("streamHost");
+    expect(after.at(-1)).toBe("jobRunnerServices");
   });
 
   it("each stop runs exactly once across the stepdown and the close", async () => {
@@ -392,6 +388,7 @@ describe("a stepdown", () => {
     const duties = fakeDuties({
       jobRunner: {
         stopJobs: () => Promise.resolve(),
+        stopServices: () => Promise.resolve(),
         signalStepdown: () => {
           throw new Error("stop failed");
         },
@@ -417,7 +414,7 @@ describe("a stepdown", () => {
     await r.app.request("/stepdown", { method: "POST" });
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     expect(r.logs.map((l) => l.event)).toContain("handover.stepdown_close_failed");
-    expect(r.calls.at(-1)).toBe("streamHost");
+    expect(r.calls.at(-1)).toBe("jobRunnerServices");
   });
 
   it("a request still running at the limit is cut and logged by route, and the stepdown proceeds", async () => {
@@ -433,14 +430,14 @@ describe("a stepdown", () => {
     await r.app.request("/stepdown", { method: "POST" });
     await vi.advanceTimersByTimeAsync(HANDOVER_ADMITTED_WORK_LIMIT_MS - 1);
     expect(r.restart).not.toHaveBeenCalled();
-    expect(r.calls).not.toContain("streamHost");
+    expect(r.calls).not.toContain("jobRunnerServices");
     await vi.advanceTimersByTimeAsync(1);
     vi.useRealTimers();
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     expect(r.logs.filter((l) => l.event === "handover.admitted_work_cut")).toEqual([
       { event: "handover.admitted_work_cut", fields: { method: "GET", path: "/slow" } },
     ]);
-    expect(r.calls.at(-1)).toBe("streamHost");
+    expect(r.calls.at(-1)).toBe("jobRunnerServices");
   });
 
   it("a close that never settles still restarts once the shutdown deadline passes", async () => {
@@ -514,7 +511,7 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(r.restart).toHaveBeenCalledTimes(1);
-    expect(r.calls.filter((name) => name === "streamHost")).toHaveLength(1);
+    expect(r.calls.filter((name) => name === "jobRunnerServices")).toHaveLength(1);
   });
 
   describe("a chart that names no main box got there first, and wrote no restriction", () => {

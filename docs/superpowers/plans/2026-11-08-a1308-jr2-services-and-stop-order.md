@@ -4,6 +4,18 @@
 
 **Owner lands:** no (rules §6: nothing fiscal, no AEAT sending).
 
+**Watcher scope correction, 2026-11-11 05:18:** keep services, the sealed-key job and close order,
+but leave `holders.onChange` → `roleChanged` unwired. No production live-promotion path calls the
+local-secondary helper today; the listener starts the bucket copy before a mirror's restart.
+Codex attached the wiring and real promotion test, including a mirror, to existing A1279 if
+the local-secondary helper gains a production caller. Task 5's new local-helper promotion tests are deferred with that wiring.
+The unused holders-notification API is also deferred. Existing runner interfaces and unit checks
+remain; the existing promotion assertions stay unchanged.
+
+**Watcher close correction, 2026-11-11 05:41:** Task 4's `onStop` unsubscribes, awaits one
+final `refresher.refresh()`, then awaits `settled()`. This preserves a node change committed
+while the job is still queued; the close test reads that verifier from the sealed row after close.
+
 **Goal:** The runner gains its second kind, the **service** (something long-running that is started
 and stopped rather than run in passes); the bucket copy becomes a service that starts and stops
 when the box's role changes; the sealed copy of the box's keys becomes a job woken by each

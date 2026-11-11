@@ -1,3 +1,4 @@
+import type { ServiceDefinition } from "./job-runner.js";
 import { STREAM_DIR } from "@waitron/store";
 import { isDeepStrictEqual } from "node:util";
 import { stat } from "node:fs/promises";
@@ -324,6 +325,11 @@ export class StreamHost {
     this.#deps.log("info", "stream.stopped", {});
   }
 
+  async suspend(): Promise<void> {
+    await this.#retire();
+    this.#notStarted = undefined;
+  }
+
   /** Stops the running supervisor, if any; resolves once every stop begun so far has finished. */
   #retire(): Promise<void> {
     const supervisor = this.#supervisor;
@@ -366,4 +372,23 @@ async function fileBytes(path: string): Promise<number> {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
     throw error;
   }
+}
+
+export function streamService(host: StreamHost, isPrimary: () => boolean): ServiceDefinition {
+  return {
+    name: "stream",
+    applies: isPrimary,
+    start: () => host.start(),
+    suspend: () => host.suspend(),
+    stop: () => host.stop(),
+    describe: () => {
+      const status = host.status();
+      return {
+        running: status.state !== "off",
+        reason:
+          ("reason" in status ? status.reason : null) ??
+          (status.state === "off" ? "not_configured" : null),
+      };
+    },
+  };
 }

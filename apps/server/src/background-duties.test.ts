@@ -18,6 +18,7 @@ const ABORTS = [
 ];
 
 const CLOSERS = [
+  "jobRunner",
   "pendingCardLoop",
   "tenderRefundLoop",
   "attendanceLoop",
@@ -29,9 +30,6 @@ const CLOSERS = [
   "cloudSnapshots",
   "suggestionLoop",
   "unsubscribeFromChanges",
-  "stopSealingNodeCommits",
-  "sealedState",
-  "jobRunner",
   "appendOnlyWatch",
   "freeSpaceWatch",
   "boxEmails",
@@ -42,7 +40,7 @@ const CLOSERS = [
   "clockWatch",
   "handoverDestinationDuty",
   "chartPost",
-  "streamHost",
+  "jobRunnerServices",
 ];
 
 /** Every handle records its own name when the duty table touches it. */
@@ -79,10 +77,11 @@ function recordingHandles(
     cloudSnapshots: awaited("cloudSnapshots"),
     suggestionLoop: awaited("suggestionLoop"),
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
-    stopSealingNodeCommits: () => void calls.push("call stopSealingNodeCommits"),
-    sealedState: { settled: () => void calls.push("settled sealedState") },
     jobRunner: {
       signalStepdown: () => void calls.push("abort jobRunner"),
+      stopServices: async () => {
+        calls.push("stop jobRunnerServices");
+      },
       stopJobs: async () => {
         calls.push("stop jobRunner");
       },
@@ -97,7 +96,6 @@ function recordingHandles(
     clockWatch: stopper("clockWatch"),
     handoverDestinationDuty: stopper("handoverDestinationDuty"),
     chartPost: stopper("chartPost"),
-    streamHost: stopper("streamHost"),
     ...overrides,
   };
 }
@@ -114,6 +112,7 @@ describe("background duties", () => {
     await stopBackgroundDuties(backgroundDuties(recordingHandles(calls)));
     expect(calls).toEqual([
       ...ABORTS.map((name) => `abort ${name}`),
+      "stop jobRunner",
       "await pendingCardLoop",
       "await tenderRefundLoop",
       "await attendanceLoop",
@@ -125,9 +124,6 @@ describe("background duties", () => {
       "await cloudSnapshots",
       "await suggestionLoop",
       "call unsubscribeFromChanges",
-      "call stopSealingNodeCommits",
-      "settled sealedState",
-      "stop jobRunner",
       "stop appendOnlyWatch",
       "stop freeSpaceWatch",
       "stop boxEmails",
@@ -138,7 +134,7 @@ describe("background duties", () => {
       "stop clockWatch",
       "stop handoverDestinationDuty",
       "stop chartPost",
-      "stop streamHost",
+      "stop jobRunnerServices",
     ]);
   });
 
@@ -156,7 +152,7 @@ describe("background duties", () => {
     expect(calls).not.toContain("await attendanceLoop");
     expect(calls).not.toContain("stop certificateDiagnosis");
     expect(calls).not.toContain("stop demoPrinterLoop");
-    expect(calls.at(-1)).toBe("stop streamHost");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
   it("carries on past a failing closer and rejects with the first failure", async () => {
@@ -165,6 +161,9 @@ describe("background duties", () => {
     const handles = recordingHandles(calls, {
       jobRunner: {
         signalStepdown: () => {},
+        stopServices: async () => {
+          calls.push("stop jobRunnerServices");
+        },
         stopJobs: () => {
           throw first;
         },
@@ -172,7 +171,7 @@ describe("background duties", () => {
       clockWatch: { stop: () => Promise.reject(new Error("clock watch failed")) },
     });
     await expect(stopBackgroundDuties(backgroundDuties(handles))).rejects.toBe(first);
-    expect(calls.at(-1)).toBe("stop streamHost");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
     expect(calls).toContain("stop appendOnlyWatch");
   });
 
@@ -204,11 +203,11 @@ describe("background duties", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(settled).toBe(false);
     expect(calls).toContain("abort tenderRefundController");
-    expect(calls).not.toContain("stop streamHost");
+    expect(calls).not.toContain("stop jobRunnerServices");
 
     finish();
     await expect(stopping).rejects.toBe(first);
-    expect(calls.at(-1)).toBe("stop streamHost");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
   it("awaits a stop called early in its place, without calling it again", async () => {
@@ -237,7 +236,7 @@ describe("background duties", () => {
     finish();
     await stopping;
     expect(stops).toBe(1);
-    expect(calls.at(-1)).toBe("stop streamHost");
+    expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
   it("rethrows a closer's first synchronous failure on a later call, without calling it again", () => {

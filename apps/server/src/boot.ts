@@ -402,7 +402,11 @@ import { invoiceFontBytes } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
-import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
+import {
+  createSealedStateRefresher,
+  sealedStateJob,
+  type SealedStateStatus,
+} from "./sealed-state.js";
 import {
   isBackupManagedByEnvironment as backupKeysInEnv,
   assertBackupOutsideScratch,
@@ -431,7 +435,12 @@ import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.j
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
-import { readNewerBucketMain, StreamHost, type StreamHostDeps } from "./stream-host.js";
+import {
+  readNewerBucketMain,
+  StreamHost,
+  streamService,
+  type StreamHostDeps,
+} from "./stream-host.js";
 import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
@@ -2288,7 +2297,10 @@ async function bootServer(
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
-  const stopJobRunner = () => jobRunner.stopJobs();
+  const stopJobRunner = async () => {
+    await jobRunner.stopJobs();
+    await jobRunner.stopServices();
+  };
   undoOnFailure.push(stopJobRunner);
   health.readJobs = () => jobRunner.views();
   const liveEvents = new LiveEvents();
@@ -3044,23 +3056,30 @@ async function bootServer(
     refreshSealedState: () => sealedState.refresh(),
     ...seams.stream,
   });
-  undoOnFailure.push(() => streamHost.stop());
-  // The refresher writes only venue.db, so its own commit cannot call it again.
-  const stopSealingNodeCommits = store.node.onCommit(() => {
-    void sealedState.refresh().then(async (outcome) => {
-      const status = streamHost.status();
-      if (
-        outcome === "sealed" &&
-        status.state === "off" &&
-        "reason" in status &&
-        status.reason === "reseal_required"
-      )
-        await streamHost.start();
-    });
-  });
-  undoOnFailure.push(() => sealedState.settled());
-  undoOnFailure.push(async () => stopSealingNodeCommits());
-  await streamHost.start();
+  const stopSealingNodeCommits = store.node.onCommit(() => jobRunner.wake("backups.sealed_state"));
+  jobRunner.add(
+    sealedStateJob(
+      {
+        refresh: async () => {
+          const outcome = await sealedState.refresh();
+          const status = streamHost.status();
+          if (
+            outcome === "sealed" &&
+            status.state === "off" &&
+            "reason" in status &&
+            status.reason === "reseal_required"
+          )
+            jobRunner.wake("stream");
+          return outcome;
+        },
+        settled: () => sealedState.settled(),
+      },
+      stopSealingNodeCommits,
+    ),
+  );
+  await jobRunner.addService(
+    streamService(streamHost, () => holders.singletonRole.current === "primary"),
+  );
   health.readStream = () => streamHost.status();
 
   // Dashboard alerts, mounted after the backup supervisor exists because the backups source reads
@@ -4006,8 +4025,6 @@ async function bootServer(
     cloudSnapshots,
     suggestionLoop,
     unsubscribeFromChanges,
-    stopSealingNodeCommits,
-    sealedState,
     jobRunner,
     appendOnlyWatch,
     freeSpaceWatch,
@@ -4019,7 +4036,6 @@ async function bootServer(
     clockWatch,
     handoverDestinationDuty,
     chartPost,
-    streamHost,
   });
   const started = makeStartedServer(
     server,

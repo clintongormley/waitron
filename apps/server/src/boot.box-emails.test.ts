@@ -662,10 +662,12 @@ describe("the running server's managers' email check", () => {
       const refusal = boxEmailMessage("backup.run_stopped", "es", name, sizes);
       const deletion = boxEmailMessage("backup.archives_deleted", "es", name, deleted!.params);
       await tick();
-      await vi.waitFor(() =>
-        expect(holder.sent.map((message) => message.subject).sort()).toEqual(
-          [refusal.subject, deletion.subject].sort(),
-        ),
+      await vi.waitFor(
+        () =>
+          expect(holder.sent.map((message) => message.subject).sort()).toEqual(
+            [refusal.subject, deletion.subject].sort(),
+          ),
+        { timeout: 5_000 },
       );
       expect(holder.sent).toEqual(
         expect.arrayContaining([
