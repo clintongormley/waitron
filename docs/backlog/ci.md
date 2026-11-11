@@ -517,8 +517,8 @@ A1424's live qualification was added on 7 November 2026.
   `TMPDIR=/dev/shm`; this is that job’s receipt, not a full guest qualification.
   Retain runner identities and unchanged source heads for the unavailable-label and hosted-retry
   drills. Keep the corrected v41 controller; the existing routing job uses the hosted
-  approximation above (watcher, 2026-11-09 10:01). A1454 is dropped with six slots retained (watcher,
-  2026-11-09 10:24); A1461 reduces run sizes. Per-job
+  approximation above (watcher, 2026-11-09 10:01). A1454 keeps six slots per host (owner,
+  2026-11-11; see Decisions and deliberate limits); A1461 reduces run sizes. Per-job
   overflow, the remaining workflows, second-host registration and queue measurements remain open. Lane I reports
   existing-record observations on 15 November; episodic status reads cannot prove the full-day
   no-avoidable-wait target. Never drain other lanes' work for a drill.
@@ -656,6 +656,13 @@ A1424's live qualification was added on 7 November 2026.
   (#916). [Detail](till.md#task-11-916-cancellations-comps-and-discounts-b11ab11g)
 
 ## Decisions and deliberate limits
+
+- **A1454: keep six CI slots per host (owner, 2026-11-11).**
+  The 11 November measurements show about 125 GiB per host. The simplest fixed split
+  is two large and five small guests, seven jobs against six today, but large-job
+  concurrency falls from six to two. The owner answered “Ok” to not building it
+  (Lane I questions.md, watcher 19:07). No guest profiles or slot changes were built.
+
 
 - **A1440: retain v40 without a new capacity gate (watcher, 2026-11-08 22:14).**
   The [routing comparison](../superpowers/plans/2026-11-08-a1440-capacity-routing.md) is an
