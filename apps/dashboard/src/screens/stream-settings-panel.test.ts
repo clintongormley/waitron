@@ -1238,6 +1238,9 @@ describe("stream-settings-panel: Start the copy again", () => {
     expect(text(el, "[data-test=refusal]")).toBe(codeMessage("backup.stream_held_by_another_box"));
     expect(codeMessage("backup.stream_held_by_another_box")).toMatch(/^Another box/);
     expect(codeMessage("backup.stream_held_by_another_box")).not.toMatch(/support/i);
+    expect(codeMessage("backup.stream_held_by_another_box")).toMatch(
+      /if that box replaced this one, switch this box off\.$/,
+    );
     expect(invalidate).not.toHaveBeenCalled();
   });
 });

@@ -147,10 +147,13 @@ el bucket sin guardar ajustes; **Guardar y activar** también comprueba que un a
 guardados como estaban. Este formulario no puede diagnosticar un fallo de configuración del propio
 equipo. Conserva las claves de recuperación y las copias existentes si el rechazo persiste.
 
-Si la copia en el bucket se ha detenido, o no ha podido iniciarse por un motivo distinto de sus
-ajustes, **Copias de seguridad** muestra **Volver a iniciar la copia**, que la inicia con los
-ajustes que ya tiene. Si se vuelve a detener,
+Si el equipo indica que la copia en el bucket no está en marcha, abre **Copias de seguridad** y pulsa
+**Volver a iniciar la copia**, que la inicia con los ajustes que ya tiene. Si se vuelve a detener,
 elige **Cambiar de bucket** y pulsa **Probar** para comprobar el bucket.
+
+Si la copia en el bucket indica que otro equipo está escribiendo la copia de este local en el mismo
+bucket y ese equipo sustituyó a este, apaga este equipo: nunca deben vender dos equipos para un
+mismo local.
 
 ## Crea las nuevas series {#series}
 
