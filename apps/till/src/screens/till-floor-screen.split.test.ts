@@ -550,7 +550,7 @@ describe("till-floor-screen: Split tables… on a group", () => {
     );
   });
 
-  it("leaves an unticked group's party out of the split observations", async () => {
+  it("leaves the party at an unticked group table out of the split observations", async () => {
     const api = stubApi();
     const el = await mount(seatedAt(groupFloor(), "bar"), api);
     send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["c5"], seats: 8 });
