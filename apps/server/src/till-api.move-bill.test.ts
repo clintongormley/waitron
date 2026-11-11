@@ -253,7 +253,7 @@ async function prepayOrder(...names: string[]): Promise<string> {
 
 describe("a bill moved between service modes sends each dish to the kitchen once", () => {
   it("settles a table bill whose dish was sent, moved to a pay-first counter while its card is at the reader, with one invoice", async () => {
-    const firstParty = await seatedWith(venue, "Pulpo");
+    const firstParty = await seatedWith(venue, "Octopus");
     expect(kitchenItems(firstParty.tabId)).toEqual({ items: 1, fired: 1 });
     const { release, paying } = await wholeBillAtReader(firstParty.tabId);
 
@@ -270,7 +270,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   });
 
   it("settles a table bill whose dish was sent, moved to a pay-first counter, by a cash contribution with one invoice", async () => {
-    const firstParty = await seatedWith(venue, "Pulpo");
+    const firstParty = await seatedWith(venue, "Octopus");
 
     const moved = await toCounter(firstParty, prepayZone);
     const paid = await cashContribution(firstParty.tabId, "20.00");
@@ -285,7 +285,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   it.each(["cash", "card"] as const)(
     "settles a table bill whose dish was sent, moved to a pay-first counter, by a %s sale with one invoice and no second send",
     async (method) => {
-      const firstParty = await seatedWith(venue, "Pulpo");
+      const firstParty = await seatedWith(venue, "Octopus");
 
       const moved = await toCounter(firstParty, prepayZone);
       const paid = await post("/api/sales", {
@@ -303,7 +303,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
   );
 
   it("places a sent table bill moved to a ticket-then-pay counter without filing, then collects its one invoice without sending again", async () => {
-    const firstParty = await seatedWith(venue, "Pulpo");
+    const firstParty = await seatedWith(venue, "Octopus");
 
     const moved = await toCounter(firstParty, ticketThenPayZone);
     const placed = await post(`/api/working-orders/${firstParty.tabId}/place`, {});
@@ -332,7 +332,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 
   it("sends the dish of a pay-first counter order moved into a party while its card is at the reader, and the card settles it", async () => {
     const seatedParty = await seatedWith(venue, "Caña");
-    const orderId = await prepayOrder("Pulpo");
+    const orderId = await prepayOrder("Octopus");
     const { release, paying } = await wholeBillAtReader(orderId);
 
     const moved = await moveTo(orderId, seatedParty.tableId, {}, venue.cookie2);
@@ -349,7 +349,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 
   it("sends the dish of a pay-first counter order when it moves into a party, and paying in cash sends nothing again", async () => {
     const seatedParty = await seatedWith(venue, "Caña");
-    const orderId = await prepayOrder("Pulpo");
+    const orderId = await prepayOrder("Octopus");
 
     const moved = await moveTo(orderId, seatedParty.tableId);
     const sent = kitchenItems(orderId);
@@ -366,7 +366,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
 
 describe("money on a moved bill", () => {
   it("finishes a card payment still at the reader on the bill it began on, after the bill moved party", async () => {
-    const firstParty = await seatedWith(venue, "Tarta", "Pulpo"); // €18.00 + €20.00
+    const firstParty = await seatedWith(venue, "Tarta", "Octopus"); // €18.00 + €20.00
     const secondParty = await seatedWith(venue, "Caña");
     const split = await send(
       venue.app,
@@ -378,7 +378,7 @@ describe("money on a moved bill", () => {
         expectedPartyRevision: firstParty.revision,
       }),
     );
-    const billId = split.json.billId as string; // Pulpo, €20.00
+    const billId = split.json.billId as string; // Octopus, €20.00
     const body: Body = {
       submissionId: randomUUID(),
       kind: "contribution",
@@ -422,7 +422,7 @@ describe("money on a moved bill", () => {
   });
 
   it("keeps a partly paid bill's payments where they were, on the same bill", async () => {
-    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     expect((await cashContribution(billId, "5.00")).status).toBe(200);
     const before = await paymentRows(venue, billId);
 
@@ -437,7 +437,7 @@ describe("money on a moved bill", () => {
   });
 
   it("refunds an earlier payment after the move, through the same bill", async () => {
-    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const card = await cardContribution(billId, "5.00");
     const paymentId = (card.json.payment as { id: string }).id;
     expect((await moveTo(billId, secondParty.tableId)).status).toBe(200);
@@ -466,7 +466,7 @@ describe("money on a moved bill", () => {
 
   it("keeps an item paid for before the move applied to its line, and settles the rest in one invoice of both dishes", async () => {
     const { secondParty, billId } = await splitAtTwoParties(
-      ["Tarta", "Pulpo", "Croquetas"],
+      ["Tarta", "Octopus", "Croquettes"],
       [2, 3],
     );
     const paid = await pay(billId, {
@@ -503,7 +503,7 @@ describe("money on a moved bill", () => {
         .where(eq(sales.workingOrderId, billId))
         .orderBy(saleLines.lineNo),
     );
-    expect(invoiced).toEqual([{ name: "Pulpo" }, { name: "Croquetas" }]);
+    expect(invoiced).toEqual([{ name: "Octopus" }, { name: "Croquettes" }]);
     expect(fiscalRecordCount(venue, billId)).toBe(1);
   });
 
@@ -562,7 +562,7 @@ describe("the counter's held list after a move", () => {
   }
 
   it("lists a partly paid bill taken to the counter with no party, what it still owes, and that it holds a payment", async () => {
-    const firstParty = await seatedWith(venue, "Pulpo"); // €20.00, the party's only bill
+    const firstParty = await seatedWith(venue, "Octopus"); // €20.00, the party's only bill
     expect((await cashContribution(firstParty.tabId, "5.00")).status).toBe(200);
 
     const moved = await toCounter(firstParty, venue.zoneId);
@@ -610,7 +610,7 @@ describe("the counter's held list after a move", () => {
 
 describe("paying a moved bill, by its state", () => {
   it("refuses a partly paid bill taken to the counter by collect, which takes only a presented bill, and by the single payment, and takes the rest as a bill payment with one invoice", async () => {
-    const firstParty = await seatedWith(venue, "Pulpo"); // €20.00
+    const firstParty = await seatedWith(venue, "Octopus"); // €20.00
     expect((await cashContribution(firstParty.tabId, "5.00")).status).toBe(200);
     expect((await toCounter(firstParty, venue.zoneId)).status).toBe(200);
 
@@ -717,7 +717,7 @@ describe("paying a moved bill, by its state", () => {
 
 describe("a move while a whole bill is being paid by card at the reader", () => {
   it("keeps the moved bill separate from the receiving table's bill made at seating, being paid in full, and both complete", async () => {
-    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const { release, paying } = await wholeBillAtReader(secondParty.tabId);
 
     const moved = await moveTo(billId, secondParty.tableId, {}, venue.cookie2);
@@ -732,7 +732,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(linesNamed(secondParty.tabId)).toEqual(["Caña"]);
     expect(await statusOf(venue, billId)).toBe("open");
     expect(partyOfBill(billId)).toBe(secondParty.partyId);
-    expect(linesNamed(billId)).toEqual(["Pulpo"]);
+    expect(linesNamed(billId)).toEqual(["Octopus"]);
   });
 
   it("keeps a counter order being paid in full separate from the party's bill made at seating, and its card completes on it", async () => {
@@ -756,8 +756,8 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
   });
 
   it("keeps the moved bill separate from the receiving table's bill made at seating, with a card refund in progress", async () => {
-    const firstParty = await seatedWith(venue, "Tarta", "Pulpo");
-    const secondParty = await seatedWith(venue, "Croquetas");
+    const firstParty = await seatedWith(venue, "Tarta", "Octopus");
+    const secondParty = await seatedWith(venue, "Croquettes");
     const split = await post(
       `/api/bills/${firstParty.tabId}/split`,
       await observedBillActionBody(venue.db, `/api/bills/${firstParty.tabId}/split`, {
@@ -794,7 +794,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     expect(moved.status).toBe(200);
     expect(moved.json).toEqual({ partyId: secondParty.partyId, billId });
     expect(refunded.status).toBe(200);
-    expect(linesNamed(secondParty.tabId)).toEqual(["Croquetas"]);
+    expect(linesNamed(secondParty.tabId)).toEqual(["Croquettes"]);
     expect(await statusOf(venue, billId)).toBe("open");
     expect(partyOfBill(billId)).toBe(secondParty.partyId);
   });
@@ -849,7 +849,7 @@ describe("two tills moving one counter order", () => {
   }
 
   it("refuses a move naming a party for a bill another till has taken to the counter", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const read = revisionOf(firstParty.partyId);
     const toCounter = await post(
       `/api/bills/${billId}/move`,
@@ -883,7 +883,7 @@ describe("two tills moving one counter order", () => {
   });
 
   it("still refuses a party's bill sent with neither a party nor its revision", async () => {
-    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { tableId: secondParty.tableId },
@@ -901,7 +901,7 @@ describe("two tills moving one counter order", () => {
 
 describe("the move route", () => {
   it("refuses a paid bill with 409 bill.paid, changing nothing", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     expect((await cashContribution(billId, "20.00")).status).toBe(200);
     const revisions = [revisionOf(firstParty.partyId), revisionOf(secondParty.partyId)];
 
@@ -914,7 +914,7 @@ describe("the move route", () => {
   });
 
   it("answers 401 without a session", async () => {
-    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
     const answer = await send(venue.app, "", "POST", `/api/bills/${billId}/move`, {
       to: { tableId: secondParty.tableId },
@@ -949,7 +949,7 @@ describe("the move route", () => {
   it.each(BAD_TARGETS.map((to) => ({ to })))(
     "answers the target $to with 400 management.request_invalid, changing nothing",
     async ({ to }) => {
-      const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+      const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
       const revision = revisionOf(firstParty.partyId);
 
       const answer = await post(`/api/bills/${billId}/move`, {
@@ -967,7 +967,7 @@ describe("the move route", () => {
   );
 
   it("answers a malformed table id as the seat and tab routes do, with 404 table.not_found", async () => {
-    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const revision = revisionOf(firstParty.partyId);
 
     const answer = await post(`/api/bills/${billId}/move`, {
@@ -984,7 +984,7 @@ describe("the move route", () => {
   });
 
   it("answers a malformed counter zone id as the sale route does, with 400 shared.invalid_id", async () => {
-    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const revision = revisionOf(firstParty.partyId);
 
     const answer = await post(`/api/bills/${billId}/move`, {
@@ -1003,7 +1003,7 @@ describe("the move route", () => {
   it.each([["merge"], ["separate"], ["together"], [null], [1]])(
     "A803 no merge flag: a bills key of any value, including an invalid one, is ignored (%j)",
     async (bills) => {
-      const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+      const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
       const answer = await moveTo(billId, secondParty.tableId, { bills });
 
@@ -1020,7 +1020,7 @@ describe("the move route", () => {
     ["expectedOtherPartyRevision", "3"],
     ["otherPartyId", "not-a-uuid"],
   ])("answers a malformed %s with 400 management.request_invalid", async (field, value) => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { tableId: secondParty.tableId },
@@ -1035,7 +1035,7 @@ describe("the move route", () => {
   });
 
   it("answers a move sent with the target read free (otherPartyId null) to a table a party now holds with 409 party.out_of_date, changing nothing", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const revisions = [revisionOf(firstParty.partyId), revisionOf(secondParty.partyId)];
 
     const answer = await post(`/api/bills/${billId}/move`, {
@@ -1055,7 +1055,7 @@ describe("the move route", () => {
   });
 
   it("takes a move sent with the target read free (otherPartyId null) to a table still free, opening a new party there", async () => {
-    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const to = await freeTable();
 
     const answer = await post(`/api/bills/${billId}/move`, {
@@ -1111,7 +1111,7 @@ describe("the move route", () => {
   });
 
   it("answers a move sent with the target read free to its own party's table with 409 table.already_in_party, changing nothing", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const revisions = [revisionOf(firstParty.partyId), revisionOf(secondParty.partyId)];
 
     const answer = await post(`/api/bills/${billId}/move`, {
@@ -1131,7 +1131,7 @@ describe("the move route", () => {
   });
 
   it("answers a move sent with the target read free and another party's revision with 400, changing nothing", async () => {
-    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const revision = revisionOf(firstParty.partyId);
     const to = await freeTable();
 
@@ -1154,7 +1154,7 @@ describe("the move route", () => {
   });
 
   it("answers the other party's revision sent without its id with 400, changing nothing", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const revisions = [revisionOf(firstParty.partyId), revisionOf(secondParty.partyId)];
 
     const answer = await post(`/api/bills/${billId}/move`, {
@@ -1173,7 +1173,7 @@ describe("the move route", () => {
   });
 
   it("takes the other party's id in upper case as in lower", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { tableId: secondParty.tableId },
@@ -1187,7 +1187,7 @@ describe("the move route", () => {
   });
 
   it("answers a move to a table the party it read there has left with 409 party.out_of_date", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const read = {
       expectedPartyRevision: revisionOf(firstParty.partyId),
       otherPartyId: secondParty.partyId,
@@ -1213,7 +1213,7 @@ describe("the move route", () => {
   });
 
   it("keeps the bill separate by default, moves a party's first bill while it holds another, and answers the new codes with 409", async () => {
-    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
     const own = await moveTo(billId, firstParty.tableId);
     const first = await post(`/api/bills/${firstParty.tabId}/move`, {
       to: { counter: { zoneId: null } },
@@ -1237,7 +1237,7 @@ describe("the move route", () => {
   });
 
   it("A803 no main bill (move): a bill moved onto a table held by another party stays its own open bill, beside the open bill already there", async () => {
-    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { secondParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
     const answer = await moveTo(billId, secondParty.tableId);
 
@@ -1249,7 +1249,7 @@ describe("the move route", () => {
   });
 
   it("moves a bill to the counter in the zone sent, answering no party", async () => {
-    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { firstParty, billId } = await splitAtTwoParties(["Tarta", "Octopus"], [2]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { counter: { zoneId: ticketThenPayZone.toUpperCase() } },

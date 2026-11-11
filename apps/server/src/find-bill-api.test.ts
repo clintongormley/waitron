@@ -143,7 +143,7 @@ describe("Find a bill list routes", () => {
       status: 404,
       json: { code: "working_order.not_found" },
     });
-    const order = await placedIssuedBill(venue, "Croquetas");
+    const order = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, order, "10.00")).status).toBe(200);
     const transactions = await get("/api/transactions?preset=any");
     expect(transactions.status).toBe(200);
@@ -244,7 +244,7 @@ describe("Find a bill list routes", () => {
         operatorId: venue.supervisorId,
       }),
     );
-    const issued = await placedIssuedBill(venue, "Croquetas");
+    const issued = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, issued, "10.00")).status).toBe(200);
     await restrict([venue.counterZone]);
     const ownPage = await get("/api/bills");
@@ -323,7 +323,7 @@ describe("Find a bill list routes", () => {
         .where(eq(workingOrders.id, old)),
     );
     for (let i = 0; i < 51; i++) await parked(venue, "Tarta");
-    const issued = await placedIssuedBill(venue, "Croquetas");
+    const issued = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, issued, "10.00")).status).toBe(200);
     await inTx(venue, (tx) =>
       tx.update(persons).set({ status: "suspended" }).where(eq(persons.id, venue.supervisorId)),

@@ -89,7 +89,7 @@ async function jobs() {
   }));
 }
 it("reads the filed invoice before collection without settling or enqueuing anything", async () => {
-  const order = await placedIssuedBill(venue, "Croquetas");
+  const order = await placedIssuedBill(venue, "Croquettes");
   const sale = await saleOf(order);
   await inTx(venue, (tx) =>
     tx.update(products).set({ customerName: { "es-ES": "Renamed after filing" } }),

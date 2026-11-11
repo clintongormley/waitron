@@ -95,7 +95,7 @@ async function setup(release: "hold" | "fire", count = 1, shape?: "grouped") {
   expect(seated.status).toBe(200);
   const { partyId, tabId } = seated.json as unknown as { partyId: string; tabId: string };
   const placed = Array.from({ length: count }, (_, i) => ({
-    menuItemId: venue.offerFor(i === 0 ? "Tarta" : "Croquetas"),
+    menuItemId: venue.offerFor(i === 0 ? "Tarta" : "Croquettes"),
     quantity: "2",
   }));
   let groupId: string;
@@ -540,7 +540,7 @@ describe("party Recall to draft", () => {
       .values({
         draftId: draft.id,
         position: 2,
-        menuItemId: venue.offerFor("Croquetas"),
+        menuItemId: venue.offerFor("Croquettes"),
         quantity: 1000,
         options: [],
         extras: [],
@@ -548,7 +548,7 @@ describe("party Recall to draft", () => {
       .returning();
     const lines = [
       { ...draft.lines[0]!, note: "Must roll back" },
-      { id: fresh[0]!.id, menuItemId: venue.offerFor("Croquetas"), quantity: "1" },
+      { id: fresh[0]!.id, menuItemId: venue.offerFor("Croquettes"), quantity: "1" },
     ];
     const before = await frozen(p.partyId);
     const readLines = orderWrites.readTabLines;
@@ -590,7 +590,7 @@ describe("party Recall to draft", () => {
     await venue.db.insert(orderDraftLines).values({
       draftId: draft!.id,
       position: 1,
-      menuItemId: venue.offerFor("Croquetas"),
+      menuItemId: venue.offerFor("Croquettes"),
       quantity: 1000,
       options: [],
       extras: [],
@@ -658,7 +658,7 @@ describe("party Recall to draft", () => {
             release: "hold",
             lines: [
               {
-                menuItemId: venue.offerFor("Croquetas"),
+                menuItemId: venue.offerFor("Croquettes"),
                 quantity: "1",
                 courseId: kind === "immediate course" ? course!.id : earlier!.id,
               },
@@ -675,7 +675,7 @@ describe("party Recall to draft", () => {
             {
               release: "hold",
               lines: [
-                { menuItemId: venue.offerFor("Croquetas"), quantity: "1", courseId: course!.id },
+                { menuItemId: venue.offerFor("Croquettes"), quantity: "1", courseId: course!.id },
               ],
             },
           ],
@@ -689,7 +689,7 @@ describe("party Recall to draft", () => {
       await venue.db.insert(orderDraftLines).values({
         draftId: own!.id,
         position: 1,
-        menuItemId: venue.offerFor("Croquetas"),
+        menuItemId: venue.offerFor("Croquettes"),
         quantity: 1000,
         options: [],
         extras: [],
@@ -778,7 +778,7 @@ describe("party Recall to draft", () => {
       .values({
         draftId: draft!.id,
         position: 8,
-        menuItemId: venue.offerFor("Croquetas"),
+        menuItemId: venue.offerFor("Croquettes"),
         quantity: 1000,
         options: [],
         extras: [],
@@ -914,7 +914,7 @@ describe("party Recall to draft", () => {
       groups: [
         {
           release: "hold",
-          lines: [{ menuItemId: venue.offerFor("Croquetas"), quantity: "1", courseId: course.id }],
+          lines: [{ menuItemId: venue.offerFor("Croquettes"), quantity: "1", courseId: course.id }],
         },
       ],
     });
@@ -1357,7 +1357,7 @@ describe("party Recall to draft", () => {
       }
       for (const [name, station] of [
         ["Paella", barId],
-        ["Pulpo", screenId],
+        ["Octopus", screenId],
       ] as const) {
         const [product] = await tx
           .select({ id: products.id })
@@ -1388,7 +1388,7 @@ describe("party Recall to draft", () => {
         groups: [
           {
             release: "hold",
-            lines: ["Tarta", "Paella", "Pulpo"].map((name) => ({
+            lines: ["Tarta", "Paella", "Octopus"].map((name) => ({
               menuItemId: venue.offerFor(name),
               quantity: "1",
             })),

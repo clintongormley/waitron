@@ -52,7 +52,7 @@ useVenueDb({
     extras = await inTx(venue, async (tx) => {
       const { offers } = await VENUE_SERVICE.listZoneOffers(tx, venue.zoneId);
       const mainOffer = offers.find((offer) => offer.id === venue.offerFor("Paella"))!;
-      const sideOffer = offers.find((offer) => offer.id === venue.offerFor("Croquetas"))!;
+      const sideOffer = offers.find((offer) => offer.id === venue.offerFor("Croquettes"))!;
       const list = await createExtraList(
         tx,
         {
@@ -90,7 +90,7 @@ async function setup() {
     draftId: null,
     revision: 0,
     expectedEdit: { billId, editorVersion: 0, draftId: null, draftRevision: null },
-    lines: ["Tarta", "Croquetas"].map((name, index) => ({
+    lines: ["Tarta", "Croquettes"].map((name, index) => ({
       menuItemId: venue.offerFor(name),
       variantId: null,
       menuVersionId: null,

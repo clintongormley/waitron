@@ -139,8 +139,8 @@ useVenueDb({
       await assignProductUnit(tx, await productOf(tx, "Paella"), gram!.id);
       await assignProductUnit(tx, await productOf(tx, "Steak"), ml.id);
       await assignProductUnit(tx, await productOf(tx, "House salad"), kilo!.id);
-      await assignProductUnit(tx, await productOf(tx, "Croquetas"), tenth.id);
-      const octopus = await productOf(tx, "Pulpo");
+      await assignProductUnit(tx, await productOf(tx, "Croquettes"), tenth.id);
+      const octopus = await productOf(tx, "Octopus");
       await assignProductUnit(tx, octopus, gram!.id);
       const [large] = await setProductVariants(
         tx,
@@ -513,7 +513,7 @@ describe("readOrderStateCounts", () => {
   });
 
   it("counts 1.5 of a dish in a unit with one decimal place as one", async () => {
-    const id = await parked([["Croquetas", "1.5"]]);
+    const id = await parked([["Croquettes", "1.5"]]);
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
@@ -533,14 +533,14 @@ describe("readOrderStateCounts", () => {
     await parkOrder(deps(), venue.cfg, {
       id,
       zoneId: zones.prepay,
-      lines: [{ menuItemId: venue.offerFor("Pulpo"), variantId: octopusLarge, quantity: "150" }],
+      lines: [{ menuItemId: venue.offerFor("Octopus"), variantId: octopusLarge, quantity: "150" }],
       operatorId: venue.operatorId,
     });
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
   it("counts by the line's frozen places, not its unit's current ones", async () => {
-    const id = await parked([["Croquetas", "2"]]);
+    const id = await parked([["Croquettes", "2"]]);
     await inTx(venue, (tx) =>
       tx
         .update(workingOrderLines)

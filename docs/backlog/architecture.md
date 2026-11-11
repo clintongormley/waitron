@@ -403,6 +403,9 @@ listed in `scripts/english-only-still-to-clean.ts` line by line).
   choices carrying such a code before changing it. Its reachability through an installed pack
   has not been established. `git blame` attributes the selection expression to `082553a65`.
 - **A976 — remaining test-venue defaults.** Menu-period rule samples use English names.
+  BillVenue uses Croquettes and Octopus as staff keys, with their matching selectors and
+  readbacks; customer Croquetas de jamón / Pulpo a la gallega and kitchen CROQ / PULPO stay.
+  Its Tarta, Caña and Paella keys remain, along with the other fixture work below.
   The nine local party suites use English table, party, course and printer samples; shared
   party-venue defaults, dish selectors and till-API samples remain.
   The filing order-portion suite still has Spanish dish samples. Shared helpers' dish names and selectors
@@ -833,9 +836,9 @@ product failures.
   `provisionVenueBody` use `Main room`, with the venue-details readbacks and eight local
   route/command seeds. Other suites' own venue seeds, the stream-loop/pause helpers and the boot
   helper's raw `Barra` location seeds remain. The shared `setupVenue` uses Administrator,
-  Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle and House salad as
-  staff keys, with Spanish customer and kitchen names unchanged. Tarta, Caña, Croquetas,
-  Pulpo and its other labels remain outside this piece.
+  Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
+  and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,
+  Caña, Paella and its other labels remain.
   Local party-suite table, party,
   course and printer samples use English. Shared dish samples remain in their helpers and
   consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,

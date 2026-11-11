@@ -226,7 +226,7 @@ describe("Find Bills SQL paging", () => {
   });
 
   it("an issued but unsettled projection retains received bill payments until settlement", async () => {
-    const id = await parked(venue, "Croquetas");
+    const id = await parked(venue, "Croquettes");
     await contribute(id, "4.00");
     const saleId = randomUUID();
     const at = "2026-10-15T12:00:00.000Z";
@@ -266,7 +266,7 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("a settled counter bill counts the applied tender without counting its tip as paid", async () => {
-    const id = await parked(venue, "Croquetas");
+    const id = await parked(venue, "Croquettes");
     await contribute(id, "10.00", "2.00");
     expect(await inTx(venue, (tx) => readFindBill(tx, id))).toMatchObject({
       total: "10.00",
@@ -341,7 +341,7 @@ describe("Find Bills SQL paging", () => {
   it("includes open and placed bills and paid counter orders awaiting handover", async () => {
     const held = await parked(venue, "Caña");
     const party = await seatedWith(venue, "Tarta");
-    const placed = await parked(venue, "Pulpo");
+    const placed = await parked(venue, "Octopus");
     await placeOrder(
       {
         admission: testTradingAdmission(),
@@ -353,7 +353,7 @@ describe("Find Bills SQL paging", () => {
       placed,
       venue.operatorId,
     );
-    const issued = await placedIssuedBill(venue, "Croquetas");
+    const issued = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, issued, "10.00")).status).toBe(200);
     const abandoned = await parked(venue, "Caña");
     await abandonHeldOrder({ db: venue.db }, venue.cfg, abandoned);
@@ -433,7 +433,7 @@ describe("Find Bills SQL paging", () => {
   });
   it("filters zone, any credited staff and state before counts, with no-zone allowed controls", async () => {
     const own = await parked(venue, "Caña", "Tarta");
-    const other = await parkedBy(venue, venue.supervisorId, "Pulpo");
+    const other = await parkedBy(venue, venue.supervisorId, "Octopus");
     await parkedBy(venue, venue.operatorId, "Caña");
     const placed = await parkedBy(venue, venue.supervisorId, "Caña");
     await placeOrder(
@@ -552,7 +552,7 @@ describe("Find Bills SQL paging", () => {
   });
   it("sorts money numerically both ways and leaves missing labels last", async () => {
     const two = await named("Alpha", "Caña");
-    const ten = await named("Beta", "Croquetas");
+    const ten = await named("Beta", "Croquettes");
     const empty = await inTx(venue, async (tx) => {
       await tx
         .update(workingOrderLines)
@@ -647,7 +647,7 @@ describe("Find Bills SQL paging", () => {
     });
   });
   it("counts settled linked tenders once and leaves finished table bills out", async () => {
-    const counter = await parked(venue, "Croquetas");
+    const counter = await parked(venue, "Croquettes");
     await contribute(counter, "4.00");
     await contribute(counter, "6.00");
     expect((await list()).rows).toEqual([
@@ -669,7 +669,7 @@ describe("Find Bills SQL paging", () => {
   it("sorts each semantic column in both directions with stable ties", async () => {
     const first = await parkedBy(venue, venue.supervisorId, "Caña");
     const second = await parkedBy(venue, venue.operatorId, "Tarta", "Caña");
-    const third = await placedIssuedBill(venue, "Croquetas");
+    const third = await placedIssuedBill(venue, "Croquettes");
     await contribute(second, "1.00");
     await inTx(venue, async (tx) => {
       await tx

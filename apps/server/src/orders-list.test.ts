@@ -302,7 +302,7 @@ describe("filters and search", () => {
   });
 
   it("finds an invoice by A/12, by its bare number, and by its credit note's number", async () => {
-    const id = await placedIssuedBill(venue, "Croquetas");
+    const id = await placedIssuedBill(venue, "Croquettes");
     await credit(venue, id, "2.00", "-2.42");
     const row = await rowOf(id);
     const [, number] = (row.invoiceNumber as string).split("/");
@@ -346,7 +346,7 @@ describe("filters and search", () => {
   });
 
   it("filters by who a line is credited to, and by having a credit note", async () => {
-    const id = await placedIssuedBill(venue, "Pulpo");
+    const id = await placedIssuedBill(venue, "Octopus");
     await credit(venue, id, "2.00", "-2.42");
     expect(ids((await list(`anyDate=true&limit=200&staff=${venue.operatorId}`)).rows)).toContain(
       id,

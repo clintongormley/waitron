@@ -59,7 +59,7 @@ async function oneOfEach(): Promise<void> {
   await contribute(venue, party.tabId, "5.00");
   const invoiced = await placedIssuedBill(venue, "Red wine bottle");
   await credit(venue, invoiced, "2.00", "-2.42");
-  await departed(venue, "Croquetas");
+  await departed(venue, "Croquettes");
 }
 
 async function readsFor(limit: number) {
