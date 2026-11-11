@@ -1,4 +1,5 @@
 import { cancelItemForTest } from "./testing/cancel-line.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {

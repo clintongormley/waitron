@@ -1,4 +1,3 @@
-import { cancelItemForTest } from "./testing/cancel-line.js";
 import { floorLabelSuffix } from "./testing/floor-label.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
