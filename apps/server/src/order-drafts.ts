@@ -633,7 +633,8 @@ export async function discardDraft(
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
   if (expectedEdit.draftId !== id) throw invalid("expectedEdit.draftId");
   if (input.revision !== expectedEdit.draftRevision) throw invalid("revision");
-  const { submissionId, admission, ...command } = input;
+  const { submissionId, admission: _, ...command } = input;
+  void _;
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
