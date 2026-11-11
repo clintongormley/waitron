@@ -298,9 +298,6 @@ export interface BoxHostRequests {
 export const DEFAULT_HOST_READ_MS = 5_000;
 /** Longer than the host unit's `RuntimeMaxSec=15` (`deploy/box/waitron-box@.service`). */
 export const DEFAULT_HOST_CHANGE_MS = 20_000;
-/**
- * A clock-only host reads at most 700 characters and refuses longer requests before dispatch.
- */
 const SHELL_LINE_MAX = 700;
 
 async function request<Value extends object, Refusal extends string>(
