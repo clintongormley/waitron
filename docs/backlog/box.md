@@ -566,6 +566,8 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
+The installed name-tag writer must land with the reinstall screen/header reader that uses it (watcher, 2026-11-11). PR 4’s unknown-token unlock, oversized-replacement and tag-space questions are measured on a disposable Debian 13 guest; the installed-image and physical-device checks remain open. [Measured scope and commands](../superpowers/plans/2026-11-11-b3-16-name-tag-duty.md#measured-on-11-november-2026).
+
 **2026-11-11 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
 install five btrfs areas inside LUKS2 onto a second virtual disk. The first disk boot retains a recovery
 key and seals against a virtual TPM, then requests a restart with Docker stopped. Two subsequent
@@ -1088,12 +1090,8 @@ client. No screen calls them yet.
   name.
 - Slice 1's recipe: `systemd-repart` v257, read in its source and not run, sets the LUKS2 label to
   the partition's label and sets no subsystem, so the `waitron-box-1` subsystem marker PR 1
-  recognises needs its own step. The real header's free metadata space, with systemd's TPM and
-  recovery tokens in it, is a rig measurement; on a 64 MiB test file, cryptsetup 2.7.5's default
-  metadata area was 12,288 bytes, and the largest tag is 1100.
-- Two rig checks: that a token of an unknown type assigned to no keyslot leaves
-  `systemd-cryptsetup`'s automatic unlock unchanged, and that a too-big `--token-replace` leaves the
-  header as it was (both read in the source, not measured).
+  recognises needs its own step. The installed-image writer and header reader remain unbuilt;
+  the disposable-header measurements are linked above.
 - Decisions recorded for review: a name the tag cannot hold gets no tag, never a cut-down one
   (D4); a power cut while removing a doubled tag can leave one old tag readable until the next
   write (D7).
