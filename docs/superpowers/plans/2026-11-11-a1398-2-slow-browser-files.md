@@ -1,9 +1,11 @@
 # A1398-2: remove measured waits from slow browser tests
 
-Codex Sol/high drafted this plan; Claude reviewed it in 295 seconds. This revision accepts the smaller route from that read. Watcher clearance is pending; no owner design approval is claimed.
+Codex Sol/high drafted this plan; Claude reviewed it in 295 seconds. This revision accepts the smaller route from that read. The watcher cleared the narrowed build on 2026-11-11 at 16:38 in Lane I questions.md, with the four corrections below; no owner design approval is claimed.
 Ask: Lane I queue.md A1398-2, “find why each is slow ... and fix that, or split a file along its existing describe blocks”. The target remains complete CI jobs of about four minutes, with every check retained.
 
 ## Smallest useful build and present limit
+
+The ceiling is limited: drafts runs only in till shard 1 (job 130571603466, 266 s). Its 32 source sleeps of about 450 ms suggest about 14 s saved, leaving that job near 250 s rather than 240 s. This is an estimate, not a measured saving. Shard 2 (253 s, including 215 s of tests) and shard 5 (250 s, including a 59 s pnpm install) are untouched. Judge this cut by the drafts file’s own CI time. Bring those other test/setup costs and the dashboard remainder back to the watcher before expanding.
 
 First remove demonstrated real-clock waits in `apps/till/src/till-app-drafts.test.ts`, reusing its existing selective fake timers and asynchronous timer advancement. Keep every existing assertion, parameter row, interaction and per-case fixture. Diagnose menus/editor/list only for a similarly small demonstrated saving. No split is cleared by this plan, and no new fixture module or harness is needed.
 
@@ -27,8 +29,8 @@ Files that may change: the four exact test files above (only demonstrated fixes)
 ## Verify and decide from measurements
 
 Before edits retain `vitest list --json` expanded names for the affected files. Afterward compare the same names/parameter rows and require every original case exactly once. Run every changed file with its existing assertions, and retain a paired local before/after using identical coverage settings. Existing unchanged diagnostics are not the coverage-on baseline.
-Run focused order checks at both base and candidate if changing shared timer helpers; first verify that the configured custom sequencer honors the requested file order rather than assuming `--sequence.shuffle` does. No new inventory guard or test of test code.
-Use normal finish-branch review, hook and scoped PR CI. One final-head full dispatch supplies all eleven target shards and the two coverage merges; read their 98/98/98/95 results. Record runner identity/CPU information and compare like-speed runs, using unaffected-file timings as context; when speed cannot be matched, label the comparison unqualified rather than attributing it to the fix. Retain incident-history, download and checkout checks. Use a further measurement only when a concrete mismatch requires it.
+Compare `vitest list --json` case lists; no file-order or sequencer-order checks. No new inventory guard or test of test code.
+Use normal finish-branch review, hook and scoped PR CI. Take till timings from the PR’s own CI run. Dispatch a full run only if a dashboard file changes; package-wide coverage remains with the normal full-run gate. Record runner identity/CPU information and compare like-speed runs, using unaffected-file timings as context; when speed cannot be matched, label the comparison unqualified rather than attributing it to the fix. Retain incident-history, download and checkout checks. Use a further measurement only when a concrete mismatch requires it.
 Compare per-file/case, test-step and whole-job times, including setup, maximum and summed target seconds, against qualified coverage-on run 43034947887. A local pass proves behavior, not CI speed. If the small fixes leave jobs over about four minutes, return the measured remainder to the watcher; changing runner capacity or splitting a file needs a separately cleared step.
 
 Expected scope: production +0/−0; test code at most about +150/−150, no moved suites, no new test support or generated data; docs about +25/−10 plus this plan. Count actual added/removed lines separately and stop for outside opinion beyond 1.5 times that estimate. Exclude application behavior changes, new harnesses, split fallbacks, broad cleanup, skipped/weakened checks and lower coverage/timeout limits.

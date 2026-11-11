@@ -348,7 +348,8 @@ async function mountApp(
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
   for (let i = 0; i < rounds; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    else await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
   }
 }
@@ -1147,7 +1148,10 @@ beforeEach(() => {
   setLocale("en");
   server = draftServer();
 });
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  vi.useRealTimers();
+});
 
 describe("till-app: a table's draft is kept on the server", () => {
   it("keeps each bill's draft separate when switching and returning", async () => {
@@ -1345,12 +1349,13 @@ describe("till-app: a table's draft is kept on the server", () => {
   it("saves three taps on Beer as one line, Beer ×3, in one save once the taps stop", async () => {
     const { el } = await mountApp();
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
     await tap(el, "Beer");
     await tap(el, "Beer");
     expect(rows(el)).toEqual(["Beer ×3"]);
 
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await flush(el);
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
@@ -1569,8 +1574,9 @@ describe("till-app: signing out with a draft", () => {
     const { el } = await mountApp();
     el.reload = reload;
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenCalledOnce();
 
     emit(tableOrder(el)!, "logout");
@@ -1624,8 +1630,9 @@ describe("till-app: signing out with a draft", () => {
     const { el } = await mountApp();
     el.reload = reload;
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenCalledOnce();
     emit(tableOrder(el)!, "logout");
     await flush(el);
@@ -1688,8 +1695,9 @@ describe("till-app: signing out with a draft", () => {
       server.personId = now;
       return server.snapshot(saved);
     });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await tap(el, "Steak");
     expect(api.saveDraft).toHaveBeenCalledOnce();
 
@@ -1698,7 +1706,7 @@ describe("till-app: signing out with a draft", () => {
     await signIn(el, "p2", "Sam");
     answer();
     await flush(el);
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(server.drafts.map((each) => [each.ownerId, each.lines.length])).toEqual([["p1", 1]]);
@@ -3005,8 +3013,9 @@ describe("till-app: sending the draft", () => {
       }),
     });
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     server.drafts[0]!.ownerId = "p2";
 
     await act(el, "fire-all");
@@ -3149,8 +3158,9 @@ describe("till-app: a refused save when the draft is sent", () => {
       saveDraft: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
     });
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await flush(el);
     expect(api.saveDraft).toHaveBeenCalledOnce();
 
@@ -3227,17 +3237,18 @@ describe("till-app: signing out while a save is out", () => {
       await new Promise<void>((resolve) => (answer = resolve));
       return server.snapshot(server.save(partyId, save));
     });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await tap(el, "Steak");
     // The second save is queued behind the first, which is still out.
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
 
     emit(tableOrder(el)!, "logout");
     await flush(el);
     answer();
     await flush(el);
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
 
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(api.logout).toHaveBeenCalledOnce();
@@ -3257,8 +3268,9 @@ describe("till-app: signing out while a save is out", () => {
       await new Promise<void>((resolve) => (answer = resolve));
       return server.snapshot(server.save(partyId, save));
     });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
 
     emit(tableOrder(el)!, "logout");
     await flush(el);
@@ -3304,8 +3316,9 @@ describe("till-app: signing out while a save is out", () => {
           refuse = () => reject({ code: "session.person_not_signed_in", status: 409 });
         }),
     );
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     emit(tableOrder(el)!, "logout");
     await flush(el);
     await signIn(el, "p2", "Sam");
@@ -3538,8 +3551,9 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
   /** Beer's save is held, and Steak is an edit waiting behind it, so the next save queues. */
   async function editBehindHeldSave(el: TillApp): Promise<() => void> {
     const answer = holdNextSave();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await tap(el, "Steak");
     expect(api.saveDraft).toHaveBeenCalledOnce();
     return answer;
@@ -4574,9 +4588,10 @@ describe("till-app: the last-added bar across a save", () => {
   it("still shows the line after the save answers, and +1 on it is saved", async () => {
     const { el } = await mountApp();
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await flush(el);
     expect(api.saveDraft).toHaveBeenCalledOnce();
     expect(bar(el)).toContain("Beer ×2");
@@ -4593,13 +4608,14 @@ describe("till-app: the last-added bar across a save", () => {
   it("follows its line when the save's answer replaces the lines", async () => {
     const { el } = await mountApp();
     await openTable(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
     draft(el).setLineExtras(0, { note: "no ice" });
     await tap(el, "Beer");
     draft(el).setLineExtras(1, { note: "no ice" });
     await flush(el);
     expect(rows(el)).toEqual(["Beer ×1", "Beer ×1"]);
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await flush(el);
     expect(rows(el)).toEqual(["Beer ×2"]);
     expect(bar(el)).toContain("Beer ×2");
@@ -4774,12 +4790,13 @@ describe("till-app: another device's save arriving while the draft is shown", ()
         "[data-draft-select], span.draft-line-name[slot]",
       ),
     ].map((line) => line.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim());
-  const saveWait = () => new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+  const saveWait = () => vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
 
   it("on Order, shows the server's draft there, says so, and sends nothing again", async () => {
     const { el } = await mountBeforeSave();
     await openTable(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
     await showView(tableOrder(el)!, "order", { scripted: true });
     await flush(el);
@@ -4800,6 +4817,7 @@ describe("till-app: another device's save arriving while the draft is shown", ()
     const { el } = await mountBeforeSave();
     await openTable(el);
     server.save("v1", { billId: "wo-4", draftId: null, revision: 0, lines: [steakLine] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Steak");
     expect(bar(el)).toContain("Steak ×1");
 
@@ -4977,8 +4995,9 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(panels(el)).toEqual([]);
     expect(rows(el)).toEqual(["Beer ×1"]);
     await browsing(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Flan");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenLastCalledWith(
       "v1",
       expect.objectContaining({ draftId: alexs.id, revision: alexs.revision + 1 }),
@@ -5036,8 +5055,9 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(server.drafts.find((draft) => draft.id === sams.id)).toEqual(before);
     expect(panels(el)).toEqual([]);
     await browsing(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Steak");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenLastCalledWith(
       "v1",
       expect.objectContaining({ draftId: alexs.id, revision: alexs.revision + 1 }),
@@ -5049,8 +5069,9 @@ describe("till-app: other people's drafts and taking one over", () => {
   it("retains Alex's refused save separately and shows Sam's saved bill read-only", async () => {
     const { el } = await mountApp();
     await openAs(el, ALEX, "Alex");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     const alexs = structuredClone(server.drafts[0]!);
     server.personId = SAM;
     server.personName = "Sam";
@@ -5061,7 +5082,7 @@ describe("till-app: other people's drafts and taking one over", () => {
     await browsing(el);
 
     await tap(el, "Flan");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     await flush(el);
 
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
@@ -5073,13 +5094,13 @@ describe("till-app: other people's drafts and taking one over", () => {
     expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer", "Flan"]);
     await onOrder(el);
     expect(panelOf(el)).toMatchObject({ heading: "Taken over by Sam", lines: ["Beer ×1"] });
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
 
     await browsing(el);
 
     await tap(el, "Steak");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenCalledTimes(2);
     expect(rows(el)).toEqual(["Beer ×1"]);
     expect(retainedCandidate(el)?.lines.map((line) => line.product.name)).toEqual(["Beer", "Flan"]);
@@ -5238,8 +5259,9 @@ describe("till-app: other people's drafts and taking one over", () => {
     const { el } = await mountApp();
     await openAs(el, SAM, "Sam");
     const answer = holdNextSave();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Flan");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     expect(api.saveDraft).toHaveBeenCalledOnce();
     const alex = savedBy(ALEX, "Alex", "offer-beer");
     window.dispatchEvent(new Event("focus"));
@@ -5287,8 +5309,9 @@ describe("till-app: other people's drafts and taking one over", () => {
         }),
       });
       await openAs(el, ALEX, "Alex");
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       await tap(el, "Beer");
-      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
       await flush(el);
 
       expect(banner(el)!.textContent).toBe(
@@ -5300,8 +5323,9 @@ describe("till-app: other people's drafts and taking one over", () => {
   it("says the change was not saved when Alex's Send finds the draft taken over by Sam", async () => {
     const { el } = await mountApp();
     await openAs(el, ALEX, "Alex");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await tap(el, "Beer");
-    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
     const alexs = structuredClone(server.drafts[0]!);
     server.personId = SAM;
     server.personName = "Sam";
@@ -8787,8 +8811,9 @@ describe("recalled draft source splitting", () => {
           .fn()
           .mockRejectedValue({ code: "session.person_not_signed_in", status: 409 }),
       });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       await tap(el, "Beer");
-      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
       await flush(el);
       const reads = api.listDrafts.mock.calls.length;
 
@@ -8835,8 +8860,9 @@ describe("recalled draft source splitting", () => {
     it("sends no recall as the next person when it was waiting on the person's already-sent save at sign-out", async () => {
       const { el, order } = await recallOpening();
       const answer = holdNextSave();
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       await tap(el, "Beer");
-      await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
       expect(api.saveDraft).toHaveBeenCalledOnce();
       emit(order, "recall-lines", { lineNos: [7] });
       await flush(el, 6);
