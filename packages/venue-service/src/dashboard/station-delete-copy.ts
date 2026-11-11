@@ -1,3 +1,4 @@
+import { deleteTargetName } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeOf } from "@waitron/dashboard-kit";
 import { format } from "./hours-view.js";
@@ -59,9 +60,7 @@ export function stationDeleteCopy(): DeleteDialogCopy {
       return format(single ? one : many, {
         count: String(item.count),
         names: item.targets
-          .map((target) =>
-            target.deleted ? `${target.name} (${t("venue.delete_mark_deleted")})` : target.name,
-          )
+          .map((target) => deleteTargetName(target, t("venue.delete_mark_deleted")))
           .join(", "),
       });
     },
@@ -70,13 +69,7 @@ export function stationDeleteCopy(): DeleteDialogCopy {
         ? t("prep.delete_default")
         : item.code === "station.screen_in_use"
           ? format(item.targets.length === 1 ? "prep.delete_screens_one" : "prep.delete_screens", {
-              names: item.targets
-                .map((target) =>
-                  target.deleted
-                    ? `${target.name} (${t("venue.delete_mark_deleted")})`
-                    : target.name,
-                )
-                .join(", "),
+              names: item.targets.map((target) => target.name).join(", "),
             })
           : work(Number(item.params.count)),
   };

@@ -15,3 +15,7 @@ export type DeleteImpact = {
   ends: DeleteImpactItem[];
   removes: DeleteImpactItem[];
 };
+
+export function deleteTargetName(target: DeleteTarget, deletedLabel: string): string {
+  return target.deleted ? `${target.name} (${deletedLabel})` : target.name;
+}

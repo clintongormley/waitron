@@ -1,3 +1,4 @@
+import { deleteTargetName } from "@waitron/shared";
 import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
@@ -22,9 +23,7 @@ const ROLES = [
 ] as const;
 
 const names = (item: DeleteImpactItem): string =>
-  item.targets
-    .map(({ name, deleted }) => (deleted ? `${name} (${t("delete.deleted")})` : name))
-    .join(", ");
+  item.targets.map((target) => deleteTargetName(target, t("delete.deleted"))).join(", ");
 
 function line(key: Counted, item: DeleteImpactItem, role = ""): string {
   return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {
@@ -53,9 +52,7 @@ function itemLine(item: DeleteImpactItem): string {
 }
 
 function refusalLine(refusal: DeleteImpactRefusal): string {
-  const named = refusal.targets
-    .map(({ name, deleted }) => (deleted ? `${name} (${t("delete.deleted")})` : name))
-    .join(", ");
+  const named = refusal.targets.map(({ name }) => name).join(", ");
   const message = codeMessage(refusal.code);
   return named ? `${message.replace(/\.$/, "")}: ${named}` : message;
 }

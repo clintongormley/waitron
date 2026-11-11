@@ -29,6 +29,7 @@ import {
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
 } from "@waitron/venue-service";
+import { deleteDevice } from "./device-delete.js";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { createStation, listStations, updateStation, setDefaultStation } from "./kitchen.js";
 import { listStationPrinters } from "./station-printers.js";
@@ -273,6 +274,24 @@ describe("permanent station deletion", () => {
       expect(await snapshot(v)).toEqual(before);
     },
   );
+  it("marks a deleted device's retained made-here choice", async () => {
+    const { v, id } = await fixture();
+    await inTx(v, async (tx) => {
+      await tx
+        .update(devices)
+        .set({ label: "Terrace" })
+        .where(eq(devices.id, v.cfg.origin.deviceId));
+      await tx
+        .insert(deviceMadeHereStations)
+        .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
+      await deleteDevice(tx, v.cfg, v.cfg.origin.deviceId);
+    });
+    const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, id));
+    expect(impact.removes.find((item) => item.key === "station_made_here")?.targets).toEqual([
+      { id: v.cfg.origin.deviceId, name: "Terrace", deleted: true },
+    ]);
+  });
+
   it("clears eligible choices and core settings, bumps revisions once, and retains history", async () => {
     const { v, id } = await fixture();
     const first = await food(v, id, { ticket: false });

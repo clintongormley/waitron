@@ -1,4 +1,4 @@
-import { eq, inArray, sql, type SQL } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -1516,7 +1516,7 @@ describe("a profile save narrowing its devices", () => {
     expect(await removalsOf(all)).toEqual([]);
   });
 
-  it("backstop: a deleted device's retained choice is not narrowed", async () => {
+  it("narrows an active device while leaving a tombstoned device's retained choice alone", async () => {
     const { venue, line, all } = await narrowing();
     await deleted(all);
 
