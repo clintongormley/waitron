@@ -17,6 +17,7 @@ import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
 import "./errors.js";
+import { freezeCardSlip, printCapturedCardSlip } from "./payment-slip-print.js";
 import { replayPrepayMadeHere, storePrepayMadeHere } from "./made-here.js";
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import {
@@ -585,6 +586,7 @@ async function storeSentReceiptLanguage(
  *    locked lines (`priceStoredOrderForIssuance`).
  */
 export interface IntegratedPayRequest {
+  printCardSlip?: boolean;
   expectedEdit: BillEditExpected | null;
   id: string;
   kitchenNote?: string | null;
@@ -629,7 +631,7 @@ export type IntegratedPayOutcome = (
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" }
-) & { captureWarning?: CaptureMismatch };
+) & { captureWarning?: CaptureMismatch; slipPrintFailed?: true };
 
 /** {@link payWorkingOrderIntegrated}'s deps: the fiscal {@link TillSaleDeps} plus the card `provider`. */
 export type IntegratedPayDeps = TillSaleDeps & {
@@ -1276,7 +1278,12 @@ async function payIntegrated(
           },
           () => deps.clock.now().instant,
         );
-        return { kind: "settle" as const, outstanding, attendanceKey };
+        return {
+          kind: "settle" as const,
+          outstanding,
+          attendanceKey,
+          slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
+        };
       }
 
       // After the recovery above, so a till pressing Pay again to file a captured payment is never
@@ -1374,6 +1381,7 @@ async function payIntegrated(
       wasPlaced,
       attemptAt,
       attendanceKey,
+      slip: await freezeCardSlip(tx, cfg, req.id, req.printCardSlip, deps.readerId),
     };
   });
 
@@ -1395,6 +1403,7 @@ async function payIntegrated(
     );
   }
 
+  const slip = prepared.slip;
   // ---- P2 (no tx) ----
   const tip = tipOf(cfg, req);
   const baseAmount =
@@ -1462,10 +1471,14 @@ async function payIntegrated(
           }),
         )
       : null;
-  if (short !== null) return short;
+  if (short !== null)
+    return {
+      ...short,
+      ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, undefined, deps.log)),
+    };
   if (prepared.kind === "settle") {
     const { outstanding, attendanceKey } = prepared;
-    return {
+    const answer: IntegratedPayOutcome = {
       outcome: "captured",
       ticket: await afterCardCharged(deps, req.id, () =>
         finalizeSettle(
@@ -1478,6 +1491,18 @@ async function payIntegrated(
           attendanceKey,
         ),
       ),
+    };
+    return {
+      ...answer,
+      ...(await printCapturedCardSlip(
+        deps.db,
+        cfg,
+        req.id,
+        result,
+        slip,
+        subtractDecimal(result.amount, baseAmount),
+        deps.log,
+      )),
     };
   }
   const { gross, identities, wasPlaced, attendanceKey } = prepared;
@@ -1499,6 +1524,7 @@ async function payIntegrated(
   return {
     outcome: "captured",
     ticket,
+    ...(await printCapturedCardSlip(deps.db, cfg, req.id, result, slip, actualTip, deps.log)),
   };
 }
 

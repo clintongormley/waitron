@@ -1116,6 +1116,7 @@ export interface BillPaymentAsk {
  * number) or `reader`.
  */
 export interface BillPaymentRequest extends BillPaymentAsk {
+  printCardSlip?: boolean;
   submissionId: string;
   applied: string;
   tip: string;
@@ -1205,6 +1206,7 @@ export interface BillBalance {
 }
 
 export interface BillPaymentResult {
+  slipPrintFailed?: true;
   /** A reader card's own answer is `declined`, `timeout` (still pending) or `network_unavailable`
    * (failed, nothing charged); a resend answers the state it finds. */
   outcome: "received" | "pending" | "failed" | "declined" | "timeout" | "network_unavailable";
@@ -2045,7 +2047,7 @@ export type PayOutcome = (
   | { outcome: "declined"; failureReason?: string }
   | { outcome: "timeout" }
   | { outcome: "network_unavailable" }
-) & { captureWarning?: CaptureWarning };
+) & { captureWarning?: CaptureWarning; slipPrintFailed?: true };
 
 /** The `absence_kind` members; the server re-validates against the real enum. */
 export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";
@@ -3006,6 +3008,7 @@ export class TillApi {
     } | null;
     zoneId?: string;
     tip?: string;
+    printCardSlip?: boolean;
     simulationOutcome?: "captured" | "declined" | "attempting";
     readerId?: string;
     receiptLanguage?: string;

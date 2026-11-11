@@ -2471,3 +2471,30 @@ it("waits for the Counter routing check before opening its payment window", asyn
   proceed(true);
   expect(opened).toHaveBeenCalledOnce();
 });
+
+it("offers an unticked whole-card slip and clears it when the order changes", async () => {
+  const store = new WorkingOrderStore();
+  store.addProduct(coffee, "1");
+  const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+    store,
+    cardProvider: "simulator",
+    slipPrinterAvailable: true,
+  });
+  const box = () =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]');
+  expect(box()).not.toBeNull();
+  expect(box()!.checked).toBe(false);
+  box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
+  await el.updateComplete;
+  const collect = vi.fn();
+  el.addEventListener("collect-card", (event) => collect((event as CustomEvent).detail));
+  el.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+  await el.updateComplete;
+  expect(collect).toHaveBeenCalledWith(expect.objectContaining({ printCardSlip: true }));
+  store.clear();
+  store.addProduct(coffee, "1");
+  el.cardAttemptsOver++;
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(box()!.checked).toBe(false);
+});

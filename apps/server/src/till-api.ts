@@ -1815,6 +1815,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
       requireUuidParam(body.id, "WorkingOrderId");
       optionalMoney(body.tip, "tip");
+      if (body.printCardSlip !== undefined && typeof body.printCardSlip !== "boolean")
+        throw new AppError("management.request_invalid", { field: "printCardSlip" });
       if (
         body.simulationOutcome !== undefined &&
         (deps.cardProvider?.provider !== "simulator" ||

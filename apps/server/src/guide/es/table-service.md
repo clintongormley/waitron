@@ -70,6 +70,8 @@ elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se h
 
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 
+Activa **Imprimir justificante de tarjeta** antes de cobrar si el cliente lo quiere. Empieza desactivado para cada pago e imprime cuando se confirma la tarjeta. Si la respuesta del lector no está clara o el servidor se reinicia antes de imprimir, usa una copia.
+
 Para imprimir un pago con tarjeta antes de completar la cuenta, vuelve a **Cobrar** y elige **Imprimir una copia** junto al pago recibido en **Pagos de esta cuenta**. La copia muestra lo que quedaba pendiente cuando se cobró esa tarjeta.
 
 Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el

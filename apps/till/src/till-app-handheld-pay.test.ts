@@ -407,6 +407,22 @@ describe("a presented bill on a handheld", () => {
     expect(stubs.getDeviceEquipment).toHaveBeenCalledTimes(readsBefore + 1);
   });
 
+  it("forwards the presented slip choice and warns after successful money", async () => {
+    const { el } = await openPresented({
+      pay: vi.fn().mockResolvedValue({
+        outcome: "captured",
+        ticket: saleOf("120.00"),
+        slipPrintFailed: true,
+      }),
+    });
+    await payFromSheet(el, { method: "card", readerId: "r2", printCardSlip: true });
+    expect(vi.mocked(api.pay).mock.calls[0]![0]).toHaveProperty("printCardSlip", true);
+    expect(text(el.shadowRoot!.querySelector('.error[role="alert"]'))).toContain(
+      t("payment_slip.capture_failed"),
+    );
+    expect(vi.mocked(api.pay)).toHaveBeenCalledOnce();
+  });
+
   it("a full invoice's presented bill asks for no guests", async () => {
     const { el } = await openPresented({
       getPartyBills: vi.fn().mockResolvedValue([{ ...placedBill, invoiceType: "F1" }]),

@@ -121,7 +121,7 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   };
   const guestCount = readGuestCountChoice(body.guestCount);
   if (guestCount !== undefined) request.guestCount = guestCount;
-  const readerOnly = ["readerId", "simulationOutcome"] as const;
+  const readerOnly = ["readerId", "simulationOutcome", "printCardSlip"] as const;
   if (request.method === "card") {
     request.entry = oneOf(body.entry, ["manual", "reader"] as const, "entry");
   } else if (body.entry !== undefined) {
@@ -136,6 +136,10 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     throw invalid("externalRef");
   }
   if (request.entry === "reader") {
+    if (body.printCardSlip !== undefined) {
+      if (typeof body.printCardSlip !== "boolean") throw invalid("printCardSlip");
+      request.printCardSlip = body.printCardSlip;
+    }
     if (body.simulationOutcome !== undefined) {
       request.simulationOutcome = oneOf(
         body.simulationOutcome,

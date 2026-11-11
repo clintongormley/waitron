@@ -1013,3 +1013,23 @@ describe("till-presented-pay-dialog: the buttons stay in view at the sheet's foo
     await expectInView(el, "[data-pay-scan-back]", false);
   });
 });
+
+it("offers an initially off slip only with a printer and forgets it on reopening", async () => {
+  const el = await mount({ slipPrinterAvailable: true });
+  const box = () =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]');
+  expect(box()).not.toBeNull();
+  expect(box()!.checked).toBe(false);
+  box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
+  await el.updateComplete;
+  const seen = capture<PresentedPayDetail>(el, "presented-pay");
+  await take(el);
+  expect(seen.at(-1)).toMatchObject({ method: "card", printCardSlip: true });
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  expect(box()!.checked).toBe(false);
+  await pick(el, "cash");
+  expect(box()).toBeNull();
+});

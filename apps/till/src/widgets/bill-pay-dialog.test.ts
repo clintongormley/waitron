@@ -3271,3 +3271,40 @@ it.each(
     }
   },
 );
+
+it("starts the reader slip unticked, forwards the choice, and resets for the next payer", async () => {
+  const el = await mount({
+    way: "contribution",
+    takesCash: false,
+    cardReader: "simulator",
+    slipPrinterAvailable: true,
+    asked: {
+      choice: { kind: "contribution", amount: "10.00" },
+      pay: { method: "card" },
+      card: { entry: "reader" },
+    },
+    preview: {
+      kind: "allocated",
+      choice: null,
+      applied: "10.00",
+      tip: "0.00",
+      change: null,
+      charged: "10.00",
+    },
+  });
+  const box = () =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-switch"]>('[name="printCardSlip"]');
+  expect(box()).not.toBeNull();
+  expect(box()!.checked).toBe(false);
+  box()!.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true }));
+  await el.updateComplete;
+  const seen = capture<{ printCardSlip?: boolean }>(el, "bill-pay-confirm");
+  await click(el, "[data-pay-confirm]");
+  expect(seen.at(-1)).toMatchObject({ printCardSlip: true });
+  el.paymentAccepted();
+  await el.updateComplete;
+  expect(box()!.checked).toBe(false);
+  el.slipPrinterAvailable = false;
+  await el.updateComplete;
+  expect(box()).toBeNull();
+});
