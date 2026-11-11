@@ -39,22 +39,36 @@ function readable(witness: ClockWitness): Reading | undefined {
   return { witness, boxAtMs, differenceMs };
 }
 
+function agreesWithin(reading: Reading, marginMs: number): boolean {
+  return Math.abs(reading.differenceMs) + reading.witness.uncertaintyMs <= marginMs;
+}
+
+function disagreesBeyond(reading: Reading, marginMs: number): boolean {
+  return Math.abs(reading.differenceMs) - reading.witness.uncertaintyMs > marginMs;
+}
+
 function agrees(reading: Reading): boolean {
-  return Math.abs(reading.differenceMs) + reading.witness.uncertaintyMs <= CLOCK_WITNESS_MARGIN_MS;
+  return agreesWithin(reading, CLOCK_WITNESS_MARGIN_MS);
 }
 
 function disagrees(reading: Reading): boolean {
-  return Math.abs(reading.differenceMs) - reading.witness.uncertaintyMs > CLOCK_WITNESS_MARGIN_MS;
+  return disagreesBeyond(reading, CLOCK_WITNESS_MARGIN_MS);
 }
 
-function latestPer(readings: readonly Reading[], key: (reading: Reading) => string): Reading[] {
+function latestPer(
+  readings: readonly Reading[],
+  key: (reading: Reading) => string,
+  marginMs: number,
+): Reading[] {
   const latest = new Map<string, Reading>();
   for (const reading of readings) {
     const seen = latest.get(key(reading));
     if (
       seen === undefined ||
       reading.boxAtMs > seen.boxAtMs ||
-      (reading.boxAtMs === seen.boxAtMs && disagrees(reading) && !disagrees(seen))
+      (reading.boxAtMs === seen.boxAtMs &&
+        disagreesBeyond(reading, marginMs) &&
+        !disagreesBeyond(seen, marginMs))
     ) {
       latest.set(key(reading), reading);
     }
@@ -62,13 +76,16 @@ function latestPer(readings: readonly Reading[], key: (reading: Reading) => stri
   return [...latest.values()];
 }
 
-function latestPerId(readings: readonly Reading[]): Reading[] {
-  return latestPer(readings, (reading) => reading.witness.id);
+function latestPerId(readings: readonly Reading[], marginMs = CLOCK_WITNESS_MARGIN_MS): Reading[] {
+  return latestPer(readings, (reading) => reading.witness.id, marginMs);
 }
 
-function latestPerAddress(readings: readonly Reading[]): Reading[] {
-  return latestPer(readings, ({ witness }) =>
-    witness.address === undefined ? `id ${witness.id}` : `address ${witness.address}`,
+function latestPerAddress(readings: readonly Reading[], marginMs: number): Reading[] {
+  return latestPer(
+    readings,
+    ({ witness }) =>
+      witness.address === undefined ? `id ${witness.id}` : `address ${witness.address}`,
+    marginMs,
   );
 }
 
@@ -78,20 +95,24 @@ function newestBoxAtMs(group: readonly Reading[]): number {
 
 /** Differences on one line agree pairwise exactly when the group's spread is within the margin, so
  * the largest groups are runs of the devices sorted by difference. */
-function largestDeviceGroup(devices: readonly Reading[]): Reading[] {
+function largestDeviceGroup(
+  devices: readonly Reading[],
+  marginMs = CLOCK_WITNESS_MARGIN_MS,
+  smallest = 2,
+): Reading[] {
   const sorted = [...devices].sort((a, b) => a.differenceMs - b.differenceMs);
   let best: Reading[] = [];
   for (const [start, first] of sorted.entries()) {
     let end = start;
     while (
       end + 1 < sorted.length &&
-      sorted[end + 1]!.differenceMs - first.differenceMs <= CLOCK_WITNESS_MARGIN_MS
+      sorted[end + 1]!.differenceMs - first.differenceMs <= marginMs
     ) {
       end++;
     }
     const group = sorted.slice(start, end + 1);
     if (
-      group.length >= 2 &&
+      group.length >= smallest &&
       (group.length > best.length ||
         (group.length === best.length && newestBoxAtMs(group) > newestBoxAtMs(best)))
     ) {
@@ -105,17 +126,38 @@ function witnessesOf(readings: readonly Reading[]): ClockWitness[] {
   return readings.map((reading) => reading.witness);
 }
 
-function latestDevices(readings: readonly Reading[]): Reading[] {
+function latestDevices(
+  readings: readonly Reading[],
+  marginMs = CLOCK_WITNESS_MARGIN_MS,
+): Reading[] {
   return latestPerAddress(
-    latestPerId(readings.filter((reading) => reading.witness.kind === "device")),
+    latestPerId(
+      readings.filter((reading) => reading.witness.kind === "device"),
+      marginMs,
+    ),
+    marginMs,
   );
 }
 
-/** The largest group of two or more devices, one per address, that each agree with the box and
- * every pair of which agree with each other; chosen as `devicesDisagreeing` is, else empty. */
-export function agreeingDeviceGroup(witnesses: readonly ClockWitness[]): ClockWitness[] {
+function agreeingDevices(witnesses: readonly ClockWitness[], marginMs: number): Reading[] {
   const readings = witnesses.flatMap((witness) => readable(witness) ?? []);
-  return witnessesOf(largestDeviceGroup(latestDevices(readings).filter(agrees)));
+  return latestDevices(readings, marginMs).filter((reading) => agreesWithin(reading, marginMs));
+}
+
+/** The largest group of two or more devices, one per address, that each agree with the box and
+ * every pair of which agree with each other, all within `marginMs`; chosen as `devicesDisagreeing`
+ * is, else empty. */
+export function agreeingDeviceGroup(
+  witnesses: readonly ClockWitness[],
+  marginMs = CLOCK_WITNESS_MARGIN_MS,
+): ClockWitness[] {
+  return witnessesOf(largestDeviceGroup(agreeingDevices(witnesses, marginMs), marginMs));
+}
+
+/** The size of the largest group `agreeingDeviceGroup` would choose from, counting a single
+ * agreeing device as a group of one. */
+export function agreeingDeviceCount(witnesses: readonly ClockWitness[], marginMs: number): number {
+  return largestDeviceGroup(agreeingDevices(witnesses, marginMs), marginMs, 1).length;
 }
 
 /** A witness whose times are unreadable, or whose uncertainty is negative or not finite, counts

@@ -15,10 +15,13 @@ import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 type Override = { personId: string; pin: string };
 
 export interface BoxTimeApi {
-  boxClockChallenge(override?: Override): Promise<{ challengeId: string; boxAt: string }>;
+  boxClockChallenge(
+    override?: Override,
+  ): Promise<{ challengeId: string; boxAt: string; keepOffered?: true }>;
   boxClockConfirm(body: {
     challengeId: string;
     deviceAt: number;
+    keep?: true;
     override?: Override;
   }): Promise<BoxClockConfirmed>;
   listAdjustmentApprovers(roles: PersonRole[]): Promise<StaffMember[]>;
@@ -29,7 +32,7 @@ const AGREES_MS = 60_000;
 
 type View =
   | { kind: "loading" }
-  | { kind: "ask"; boxAt: number; tillAt: number; sending: boolean }
+  | { kind: "ask"; boxAt: number; tillAt: number; keepOffered: boolean; sending: boolean }
   | { kind: "done"; text: string }
   | { kind: "refused"; text: string; checkAgain: boolean; admin: boolean };
 
@@ -88,6 +91,9 @@ export class TillBoxTimeDialog extends LitElement {
       .words p {
         margin: 0 0 var(--wt-space-3);
       }
+      wt-button[slot="cancel"] {
+        white-space: nowrap;
+      }
     `,
   ];
 
@@ -107,15 +113,22 @@ export class TillBoxTimeDialog extends LitElement {
   async #check(): Promise<void> {
     this.view = { kind: "loading" };
     try {
-      const { boxAt } = await this.api.boxClockChallenge(this.#override);
-      this.view = { kind: "ask", boxAt: Date.parse(boxAt), tillAt: Date.now(), sending: false };
+      const { boxAt, keepOffered } = await this.api.boxClockChallenge(this.#override);
+      this.view = {
+        kind: "ask",
+        boxAt: Date.parse(boxAt),
+        tillAt: Date.now(),
+        keepOffered: keepOffered === true,
+        sending: false,
+      };
     } catch (error) {
       this.#refused(error);
     }
   }
 
-  /** A fresh challenge, since one lives only a few seconds, then the confirm with this till's time. */
-  async #send(): Promise<void> {
+  /** A fresh challenge, since one lives only a few seconds, then the confirm with this till's time;
+   * with `keep`, the box keeps its own time whatever this till's says. */
+  async #send(keep = false): Promise<void> {
     if (this.view.kind !== "ask" || this.view.sending) return;
     const override = this.#override;
     this.view = { ...this.view, sending: true };
@@ -125,6 +138,7 @@ export class TillBoxTimeDialog extends LitElement {
       const answer = await this.api.boxClockConfirm({
         challengeId,
         deviceAt,
+        ...(keep ? { keep: true as const } : {}),
         ...(override === undefined ? {} : { override }),
       });
       this.view = {
@@ -229,6 +243,7 @@ export class TillBoxTimeDialog extends LitElement {
       case "ask": {
         const box = clockDateTime(view.boxAt);
         const differs = Math.abs(view.tillAt - view.boxAt) > AGREES_MS;
+        const keep = differs && view.keepOffered;
         return html`<div class="words" data-box-time-words>
             ${
               differs
@@ -238,8 +253,14 @@ export class TillBoxTimeDialog extends LitElement {
                         .replace("{till}", () => clockDateTime(view.tillAt))}
                     </p>
                     <p>${t("box_time.differs_ask")}</p>
-                    <p>${t("box_time.differs_wrong_till")}</p>`
-                : html`<p>${t("box_time.agrees").replace("{box}", () => box)}</p>`
+                    <p>${t("box_time.differs_wrong_till")}</p>
+                    ${keep ? html`<p>${t("box_time.differs_keep")}</p>` : nothing}`
+                : html`<p>
+                    ${t(view.keepOffered ? "box_time.agrees_waiting" : "box_time.agrees").replace(
+                      "{box}",
+                      () => box,
+                    )}
+                  </p>`
             }
           </div>
           <wt-form-actions
@@ -250,7 +271,18 @@ export class TillBoxTimeDialog extends LitElement {
               .disabled=${view.sending}
               @click=${close}
               >${t("box_time.not_now")}</wt-button
-            ><wt-button
+            >${
+              keep
+                ? html`<wt-button
+                    variant="primary"
+                    data-box-time="keep"
+                    .loading=${view.sending}
+                    .disabled=${view.sending}
+                    @click=${() => void this.#send(true)}
+                    >${t("box_time.keep_server")}</wt-button
+                  >`
+                : nothing
+            }<wt-button
               variant="primary"
               data-box-time="primary"
               .loading=${view.sending}

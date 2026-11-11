@@ -325,6 +325,27 @@ describe("POST /api/pay when the sale fails for a full disk after the card was c
     ]);
     expect(capturedUnlinked(id)).toBe(1);
   });
+
+  it("says the card was charged when the start's time is unconfirmed after capture", async () => {
+    const { log, charged } = capturingLog();
+    vi.spyOn(venue.backend, "recordSale").mockRejectedValueOnce(
+      new AppError("clock.unconfirmed", {}),
+    );
+    const id = randomUUID();
+    const before = collects();
+
+    const answer = await walkUpPay(id, log);
+
+    expect(answer.status).toBe(507);
+    expect(answer.json).toEqual({
+      code: "sale.charged_not_recorded",
+      params: { workingOrderId: id, reason: "clock_unconfirmed" },
+    });
+    expect(collects()).toBe(before + 1);
+    expect(charged()).toEqual([
+      { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
+    ]);
+  });
 });
 
 /** Lets the next card collect run, then fills the database to a page limit, as a full disk does. */

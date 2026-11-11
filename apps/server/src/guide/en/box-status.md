@@ -406,7 +406,7 @@ administrator. A restart of the box counts as a start, whether after a power cut
 **Restart the box** or by hand.
 
 The time from the start until the clock no longer stops payments is called start-up here. Within about
-half a minute of the start, once the box has asked the tax agency and had no answer, every till
+half a minute of the start, once the box has found it cannot confirm its time by itself, every till
 and handheld where someone is signed in ends its red clock line with **Check the time** instead of
 **Tell a manager**. On a box whose clock reads before 28 October 2024, or one that does not send
 records to the tax agency, it does so at the till's next check, within about 15 seconds. Any staff member signed in on the
@@ -414,14 +414,14 @@ till can press it; it needs no permission. The [till notices guide](till-notices
 what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, the box sets its clock
-to it; when it is within a minute, the box keeps its clock, and payments restart on it. Either way
-the bell and the email name the staff member and the till. When the till's time is used, other
+to it; when it is within a minute, the box keeps its clock, and payments restart on it. When the
+box sets its clock, the bell and the email name the staff member and the till. When the till's time is used, other
 devices' readings do not stop it. When the till agrees with the box, two devices that disagree
 with the box stop the confirmation, and the dialog says why. Two tills or handhelds that agree
 with the box do not restart payments on their own during start-up; a person confirms instead.
 
-Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, a
-staff member can no longer set the clock from a till. If payments stop for the clock again while
+Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
+the internet has confirmed the box's time, a staff member can no longer set the clock from a till. If payments stop for the clock again while
 the box is running, the tills offer nothing: an administrator sets the clock from this page on
 their own phone or computer. If the tax agency answers while **Check the time** is offered, the
 offer ends and the box uses the tax agency's time itself.

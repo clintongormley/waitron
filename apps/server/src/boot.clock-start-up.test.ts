@@ -28,7 +28,19 @@ const seen = vi.hoisted(() => ({
   notedAuthority: [] as unknown[],
   onSamples: [] as (((sample: unknown) => void) | undefined)[],
   stopReaders: [] as Record<string, unknown>[],
+  boxClocks: [] as Record<string, unknown>[],
 }));
+
+vi.mock("./till-box-clock-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./till-box-clock-api.js")>();
+  return {
+    ...actual,
+    mountTillBoxClockApi: (...args: Parameters<typeof actual.mountTillBoxClockApi>) => {
+      seen.boxClocks.push(args[1].boxClock as unknown as Record<string, unknown>);
+      return actual.mountTillBoxClockApi(...args);
+    },
+  };
+});
 
 vi.mock("./clock-start-up.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-start-up.js")>();
@@ -126,6 +138,7 @@ beforeEach(async () => {
   seen.notedAuthority.length = 0;
   seen.onSamples.length = 0;
   seen.stopReaders.length = 0;
+  seen.boxClocks.length = 0;
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-clock-start-up-"));
 });
 
@@ -199,6 +212,21 @@ describe("boot's clock start-up window", () => {
       seen.onSamples[0]!(sample);
       expect(window.authorityAsked).toHaveBeenCalledExactlyOnceWith(true);
       expect(seen.notedAuthority).toEqual([sample]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("hands the tills' check and notice the start check the watch reads", async () => {
+    const env = await tradingEnv("primary");
+    const server = await startServer(env, env);
+    try {
+      const watchStart = seen.watchArgs[0]!.start as { state: unknown };
+      expect(seen.checkArgs[0]!.start).toBe(watchStart.state);
+      expect(seen.boxClocks).toHaveLength(1);
+      expect((seen.boxClocks[0]!.start as { state: unknown }).state).toBe(watchStart.state);
+      expect(seen.noticeBoxes[0]!.startClockAgreed).toBeTypeOf("function");
+      expect(seen.noticeBoxes[1]!.startClockAgreed).toBeUndefined();
     } finally {
       await server.close();
     }

@@ -462,6 +462,7 @@ declare module "@waitron/shared" {
         | "disk_full"
         | "clock_behind_chain"
         | "clock_unusable"
+        | "clock_unconfirmed"
         | "issuance_refused"
         | "partial_refund";
       recoveryUrl?: string;
@@ -1644,6 +1645,9 @@ declare module "@waitron/shared" {
      * `unverified`, it moved further, but the box could not confirm it landed where it was asked
      * to. */
     "clock.set_failed": { reason: "refused" | "unverified" };
+    /** The box has not confirmed its time since this start, so it writes no fiscal record and
+     * takes or gives back no money until the time service, two devices or a person confirms it. */
+    "clock.unconfirmed": Record<string, never>;
     /** The box's host service cannot take this request: `missing`, no connection to its socket
      * was made (`detail` is the connection error's code); `unsupported`, the host does not take the
      * request (`detail` is the host's word). */

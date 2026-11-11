@@ -11,7 +11,7 @@ import {
 } from "./tender-refund-sends.js";
 import { realSleep, sleepMsFor } from "./loop.js";
 import type { TenderRefundDeps } from "./tender-refunds.js";
-import { refundRefused } from "./bill-refunds.js";
+import { refundsPaused } from "./bill-refunds.js";
 
 const RECHECK_MS = 60_000;
 const UNRESOLVED_MS = 3_600_000;
@@ -28,15 +28,7 @@ export async function recoverTenderRefunds(
   const reading = deps.clock.now();
   const now = reading.instant;
   const instant = now.toISOString();
-  // A completed refund's time places it in a cash-up window, so none is settled by a clock that
-  // reads behind the last sale.
-  const stopped = await withTransaction(
-    deps.db,
-    async (tx) =>
-      (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
-      (await refundRefused(tx, deps)),
-  );
-  if (stopped) {
+  if (await refundsPaused(deps, reading)) {
     const [summary] = await deps.db
       .select({ pending: sql<number>`count(*)` })
       .from(tenderRefunds)

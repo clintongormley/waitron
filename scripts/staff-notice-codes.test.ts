@@ -49,7 +49,13 @@ function wordedAsUnknown(codes: readonly string[]): string[] {
         return (
           staffNoticeText({
             code,
-            params: { count: 2, held: 0, printer: "Kitchen", since: "2026-10-23T19:16:00.000Z" },
+            params: {
+              count: 2,
+              held: 0,
+              printer: "Kitchen",
+              since: "2026-10-23T19:16:00.000Z",
+              agreed: 1,
+            },
           }).main === unknown
         );
       }),

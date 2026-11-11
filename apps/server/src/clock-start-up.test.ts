@@ -3,6 +3,7 @@ import type { ClockStopState, ClockWitness } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
+import { startClockState } from "./start-clock-check.js";
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const NOW = { instant: new Date("2026-10-31T10:00:00.000Z"), offsetMinutes: 60 };
@@ -179,5 +180,53 @@ describe("tillClockCheck", () => {
     h.startUp.noStop();
     expect(await h.clockCheck(TX, NOW)).toBe(false);
     expect(h.backend.clockStopState).not.toHaveBeenCalled();
+  });
+});
+
+describe("tillClockCheck while the start check waits", () => {
+  function waitingCheck(options: { primaryAtStart?: boolean; files?: boolean } = {}) {
+    const startUp = clockStartUp({ primaryAtStart: options.primaryAtStart ?? true });
+    const start = startClockState();
+    const backend = {
+      assertRecordableAt: vi.fn(),
+      clockStopState: vi.fn(async (): Promise<ClockStopState | null> => null),
+      readAuthorityTime: vi.fn(async () => null),
+    };
+    const clockCheck = tillClockCheck({
+      startUp,
+      backend,
+      witnesses: () => [],
+      filesRecords: () => options.files ?? true,
+      start,
+    });
+    return { startUp, start, backend, clockCheck };
+  }
+
+  it("offers the check at once, before AEAT is asked, and still once a read that saw no stop shuts the window", async () => {
+    const h = waitingCheck();
+    expect(await h.clockCheck(TX, NOW)).toBe(true);
+    expect(h.startUp.open()).toBe(true);
+    expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    h.startUp.noStop();
+    expect(await h.clockCheck(TX, NOW)).toBe(true);
+  });
+
+  it("offers the check on a box that was not the primary at its start", async () => {
+    const h = waitingCheck({ primaryAtStart: false });
+    expect(h.startUp.open()).toBe(false);
+    expect(await h.clockCheck(TX, NOW)).toBe(true);
+  });
+
+  it("offers nothing for waiting on a box that files no records", async () => {
+    const h = waitingCheck({ files: false });
+    expect(await h.clockCheck(TX, NOW)).toBe(false);
+  });
+
+  it("offers nothing for waiting once by the internet, the window open and no stop holding", async () => {
+    const h = waitingCheck();
+    h.start.confirm("by_internet", {});
+    expect(h.startUp.open()).toBe(true);
+    expect(await h.clockCheck(TX, NOW)).toBe(false);
+    expect(h.backend.clockStopState).toHaveBeenCalledOnce();
   });
 });

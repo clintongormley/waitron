@@ -10,10 +10,18 @@ afterEach(() => {
   cleanupWidgets();
 });
 
-function api(boxAt: number, confirm: BoxTimeApi["boxClockConfirm"]): BoxTimeApi {
+function api(
+  boxAt: number,
+  confirm: BoxTimeApi["boxClockConfirm"],
+  keepOffered = false,
+): BoxTimeApi {
   return {
     boxClockChallenge: () =>
-      Promise.resolve({ challengeId: "c1", boxAt: new Date(boxAt).toISOString() }),
+      Promise.resolve({
+        challengeId: "c1",
+        boxAt: new Date(boxAt).toISOString(),
+        ...(keepOffered ? { keepOffered: true as const } : {}),
+      }),
     boxClockConfirm: confirm,
     listAdjustmentApprovers: () => Promise.resolve([{ personId: "p1", displayName: "Alex Admin" }]),
   };
@@ -39,11 +47,15 @@ async function press(el: TillBoxTimeDialog, name: string): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("till-box-time-dialog a11y (%s theme)", (theme) => {
-  async function open(boxAt: number, confirm: BoxTimeApi["boxClockConfirm"] = confirmed) {
+  async function open(
+    boxAt: number,
+    confirm: BoxTimeApi["boxClockConfirm"] = confirmed,
+    keepOffered = false,
+  ) {
     vi.spyOn(Date, "now").mockReturnValue(TILL_AT);
     const { el, host } = await mountWidget<TillBoxTimeDialog>(
       "till-box-time-dialog",
-      { api: api(boxAt, confirm) },
+      { api: api(boxAt, confirm, keepOffered) },
       theme,
     );
     await settle(el);
@@ -57,6 +69,11 @@ describe.each(["light", "dark"] as const)("till-box-time-dialog a11y (%s theme)"
 
   it("has no violations when this till agrees", async () => {
     const { host } = await open(TILL_AT - 10_000);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while the server waits and this till differs", async () => {
+    const { host } = await open(Date.UTC(2001, 0, 2, 3, 4), confirmed, true);
     await expectNoA11yViolations(host);
   });
 

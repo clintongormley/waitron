@@ -8,12 +8,14 @@ import {
 } from "@waitron/fiscal";
 import { codeOf } from "@waitron/server-kit";
 import { bootReader, type BootReader, type BootReading } from "./boot-reader.js";
+import type { ClockServiceStatus } from "./box-host-client.js";
 import { readClockStopState } from "./box-health.js";
 import type { ClockAnchor, clockCorrection } from "./clock-correction.js";
 import type { ClockStartUp } from "./clock-start-up.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import type { JobDefinition } from "./job-runner.js";
+import { lookAtClockService, type ChainHeads, type StartClockState } from "./start-clock-check.js";
 
 export const CLOCK_WATCH_MS = 15_000;
 
@@ -70,6 +72,13 @@ export function createClockWatch(deps: {
   /** While open, two agreeing devices alone confirm nothing; a look that sees no stop holding
    * closes it. */
   startUp?: Pick<ClockStartUp, "open" | "noStop" | "authorityAsked">;
+  /** The start check: until the internet confirms it, each look reads the time service through
+   * `clockStatus`, and while it waits, offers it the device readings. Never asks AEAT. */
+  start?: {
+    state: StartClockState;
+    clockStatus: () => Promise<ClockServiceStatus>;
+    heads: (tx: Transaction) => Promise<ChainHeads>;
+  };
   filesRecords: () => boolean;
   isPrimary: () => boolean;
   log: Logger;
@@ -304,7 +313,43 @@ export function createClockWatch(deps: {
     });
   }
 
+  async function lookForStart(): Promise<void> {
+    const start = deps.start;
+    if (start === undefined) return;
+    const byInternet = () => start.state.status === "by_internet";
+    if (byInternet()) return;
+    const heads = () => deps.read(start.heads);
+    await lookAtClockService({ state: start.state, clockStatus: start.clockStatus, heads });
+    if (stopped) return;
+    if (byInternet()) {
+      deps.log("info", "clock_start.confirmed", {
+        source: "internet",
+        boxAt: deps.clock.now().instant.toISOString(),
+        heads: start.state.mark,
+      });
+      return;
+    }
+    if (start.state.status !== "waiting") return;
+    // In the correction's turn, so no set runs while devices confirm, and the readings are read
+    // after any set, which clears them when it moves the clock. confirmDevices checks the status
+    // again inside the turn, since a set may have changed it while this look waited.
+    const agreeing = await inTurn(() => start.state.confirmDevices(deps.store.witnesses(), heads));
+    if (agreeing.length === 0) return;
+    deps.log("info", "clock_start.confirmed", {
+      source: "devices",
+      devices: agreeing.map((witness) => witness.id),
+      boxAt: deps.clock.now().instant.toISOString(),
+      heads: start.state.mark,
+    });
+  }
+
   async function check(): Promise<void> {
+    try {
+      await lookForStart();
+    } catch (error) {
+      deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+    }
+    if (stopped) return;
     const current = { wallMs: wall(), monoMs: monotonic() };
     const earlier = previous;
     previous = current;

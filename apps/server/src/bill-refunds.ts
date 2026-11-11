@@ -85,7 +85,25 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   attendance?: AttendanceRecorder;
   /** Once aborted, no provider lookup starts and the refund stays pending. */
   stopSignal?: AbortSignal;
+  /** True while the start clock gate holds: a refund is then left pending, as in a clock stop. */
+  clockUnconfirmed?: () => boolean;
 };
+
+/** Whether a recovery pass leaves every pending refund as it is: while the start clock gate
+ * holds, while the clock reads behind the last record (a completed refund's time places it in
+ * a cash-up window), or while the seat refuses a new refund. */
+export async function refundsPaused(
+  deps: BillRefundDeps,
+  reading: TrustedReading,
+): Promise<boolean> {
+  if (deps.clockUnconfirmed?.() === true) return true;
+  return withTransaction(
+    deps.db,
+    async (tx) =>
+      (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null ||
+      (await refundRefused(tx, deps)),
+  );
+}
 
 export async function refundRefused(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
   try {
@@ -208,7 +226,7 @@ function providerRefundRefOf(evidence: RefundEvidence): string | null {
  */
 export async function clockStopsRefund(
   tx: Transaction,
-  deps: Pick<BillRefundDeps, "backend">,
+  deps: Pick<BillRefundDeps, "backend" | "clockUnconfirmed">,
   evidence: RefundEvidence | null,
   reading: TrustedReading,
 ): Promise<boolean> {
@@ -216,6 +234,7 @@ export async function clockStopsRefund(
     await deps.backend.refuseWhileClockBehind(tx, reading);
     return false;
   }
+  if (deps.clockUnconfirmed?.() === true) return true;
   return (await deps.backend.clockBehindLatestRecord(tx, reading)) !== null;
 }
 

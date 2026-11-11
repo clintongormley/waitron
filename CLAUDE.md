@@ -894,9 +894,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
   governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
   preproduction plus `config.devMode`.
-- **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
-  and the internet are never on the sale path of whichever node is primary: records chain locally and
-  the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+- **Nothing EXTERNAL may block a sale, though a start must have its time confirmed first — and a till
+  needs the venue's PRIMARY.** AEAT, the card network and the internet are never on the sale path of
+  whichever node is primary, except that, on a box that files records, a start the internet cannot
+  confirm waits for two devices or a person to confirm its time before its first payment (owner,
+  2026-11-10): records chain locally and the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. TODAY a venue has ONE node and no failover at all. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -915,6 +917,17 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
   is weaker than its name: stored text only, only tables migrated at start.
+- **Every start of a box that files records writes no fiscal record and moves no money until its
+  time is confirmed: by the box's internet time service being synchronised, by two enrolled devices
+  at different addresses reading within 5 seconds of it, or by a person confirming or correcting the
+  date and time on a till; AEAT is not asked, and orders still reach the kitchen** (owner,
+  2026-11-10: "we rely on NTP only, we don't bother about AEAT … If we are not on the internet then
+  we either wait for two devices … Or we stop and ask a user to confirm that our current date+time
+  is correct (or we ask them to correct it)"; "Orders still go"). Guards:
+  `apps/server/src/start-clock-check.test.ts`, `apps/server/src/clock-unconfirmed-gate.test.ts` and
+  `apps/server/src/boot.start-clock-gate.test.ts`, weaker than the rule: the seat's four writers and
+  one cash sale only; the record remedies, off in production, are outside it.
+  [Detail](docs/developers/conventions-data.md#every-start-confirms-the-boxs-time-before-it-trades).
 - **More than a minute behind the latest fiscal record, write no record and take/refund no new money
   unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
   reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
@@ -924,11 +937,14 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   device outside development:
   [conventions-data.md](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-06).
   Guards: clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm
-  route and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule. **The box
-  sets its clock only through the host service, from AEAT, a till's time (a staff member's during
-  start-up, an administrator's at any time) or an administrator's own device — never from devices
-  alone and never while it keeps time over the internet — and every step it verifies, or sees move
-  the clock by over a second, is alerted and emailed.** Guards:
+  route and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule. **The box's
+  internet time service keeps its clock; Waitron sets it only through the host service, from a till's
+  time (a staff member's while the start waits for its time, or during a stop until the internet
+  confirms that start or during start-up; an administrator's at any time), an administrator's own
+  device, or AEAT only inside the clock-behind stop — never from devices alone and never while it
+  keeps time over the internet — and every step it verifies, or sees move the clock by over a second,
+  is alerted and emailed** (owner, 2026-11-10: "we rely on NTP only, we don't bother about AEAT").
+  Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
   rule. [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).

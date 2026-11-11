@@ -571,3 +571,31 @@ describe("bill refund recovery stopping", () => {
     expect(settled!.state).toBe("completed");
   });
 });
+describe("settled tender recovery while the start's time is unconfirmed", () => {
+  it("leaves a pending refund untouched for a pass while waiting, and completes it once confirmed", async () => {
+    const t = await retained(true);
+    vi.spyOn(v.card, "lookupRefund").mockResolvedValue({
+      kind: "match",
+      providerRefundRef: randomUUID(),
+      outcome: "completed",
+      providerStatus: "completed",
+    });
+    let waiting = true;
+    const deps = { ...v.deps, clockUnconfirmed: () => waiting };
+    const before = v.snapshot();
+    const lookups = v.card.lookupCalls.length;
+    const asked = vi.mocked(v.card.lookupRefund).mock.calls.length;
+
+    await recoverTenderRefunds(deps);
+
+    expect(v.snapshot()).toEqual(before);
+    expect(vi.mocked(v.card.lookupRefund).mock.calls.length).toBe(asked);
+    expect(v.card.lookupCalls).toHaveLength(lookups);
+
+    waiting = false;
+    await recoverTenderRefunds(deps);
+
+    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
+    expect(row!.state).toBe("completed");
+  });
+});

@@ -816,6 +816,16 @@ it("says a clock behind the last sale means nothing can be recorded, in both lan
   ]);
 });
 
+it("says a start whose time is unconfirmed means nothing can be recorded, and points at Check the time, in both languages", () => {
+  expect([
+    codeMessage("clock.unconfirmed", "en-GB"),
+    codeMessage("clock.unconfirmed", "es-ES"),
+  ]).toEqual([
+    "Can't be recorded: the server is waiting for its time to be confirmed. Use “Check the time” at the top of the screen.",
+    "No se puede registrar: el servidor espera a que se confirme su hora. Usa «Comprobar la hora» en la parte superior de la pantalla.",
+  ]);
+});
+
 it("names a full disk, a card charged but not recorded, and a wrong clock in both languages", () => {
   const cases: [string, string, string][] = [
     [

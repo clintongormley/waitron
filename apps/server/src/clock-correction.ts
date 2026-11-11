@@ -15,6 +15,7 @@ import type { BoxHostClient, ClockSetAnswer as HostSetAnswer } from "./box-host-
 import type { EmailedIncident } from "./box-alert-email.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
+import type { ChainHeads, StartClockState } from "./start-clock-check.js";
 
 /** How far a set may land from its target, by the boot-time clock, and still be verified. */
 const VERIFY_MS = 2_000;
@@ -57,7 +58,7 @@ export type ClockSetRefusal =
   | "unverified";
 
 export interface ClockSetInput {
-  reason: "behind_chain" | "unusable";
+  reason: "behind_chain" | "unusable" | "start";
   source: "authority" | "admin" | "staff";
   offsetMs: number;
   /** The box's wall and steady clocks when the witness's reading arrived. */
@@ -96,6 +97,9 @@ export function clockCorrection(deps: {
   onCorrected?: (incident: EmailedIncident) => void;
   nodeId: string;
   log: Logger;
+  /** The start's clock check, which admits a set at reason `start` until it is confirmed by the
+   * internet, and the chain heads a person's set there marks it with. */
+  start?: { state: StartClockState; heads(tx: Transaction): Promise<ChainHeads> };
 }): {
   addAnchor(anchor: ClockAnchor): void;
   steps(): number;
@@ -221,8 +225,16 @@ export function clockCorrection(deps: {
   async function admission(
     input: ClockSetInput,
   ): Promise<{ refusal: ClockSetRefusal | null; authoritySpoke: boolean }> {
+    if (input.reason === "start") {
+      if (input.source === "authority") return { refusal: "not_admitted", authoritySpoke: false };
+      if (deps.start === undefined || deps.start.state.status === "by_internet")
+        return { refusal: "not_stopped", authoritySpoke: false };
+    }
     return deps.read(async (tx) => {
-      const stop = await judge(tx, input.reason);
+      const stop =
+        input.reason === "start"
+          ? { stopped: true, authoritySpoke: false }
+          : await judge(tx, input.reason);
       if (!stop.stopped) return { refusal: "not_stopped" as const, authoritySpoke: false };
       const refusal = input.admit === undefined ? null : await input.admit(tx);
       return { refusal, authoritySpoke: stop.authoritySpoke };
@@ -234,6 +246,26 @@ export function clockCorrection(deps: {
     if (authoritySpoke) return "witnessed";
     if (agrees(input)) return "agrees";
     return null;
+  }
+
+  /** A step the host moved but did not verify leaves the clock where nothing confirmed it, so a
+   * start confirmed by devices or a person waits again — before any further await, because sales
+   * do not take this turn and could otherwise pass the gate on the unconfirmed clock. */
+  function unverifiedStep(stepMs: number): void {
+    const state = deps.start?.state;
+    if (state?.status !== "by_devices" && state?.status !== "by_person") return;
+    state.backToWaiting("start");
+    deps.log("warn", "clock_start.step_unverified", { stepMs });
+  }
+
+  /** A verified set at the start confirms it by a person; a failed heads read leaves the start as
+   * it was. */
+  async function confirmByPerson(start: NonNullable<typeof deps.start>): Promise<void> {
+    try {
+      start.state.confirm("by_person", await deps.read((tx) => start.heads(tx)));
+    } catch (error) {
+      deps.log("warn", "clock_start.mark_failed", { errorCode: codeOf(error) });
+    }
   }
 
   async function setInTurn(input: ClockSetInput): Promise<ClockSetAnswer> {
@@ -288,67 +320,75 @@ export function clockCorrection(deps: {
     const before = reading();
     const targetMs = wallBefore + input.offsetMs;
     steps++;
+    const unwrittenBefore = unwritten;
     unwritten = "setting";
-    let answer: HostSetAnswer;
     try {
-      answer = await deps.host.setClock({ targetMs, requester: input.requester });
-    } catch (error) {
-      // The request may have reached the host, so the clock may have moved.
-      deps.log("warn", "clock_correction.set_threw", { errorCode: codeOf(error) });
-      answer = { available: false, reason: "lost" };
-    }
-    const wallAfter = wall();
-    const monoAfter = monotonic();
-    const bootAfter = deps.boot.readBoot();
-    const after = reading();
-    const bootDifference = bootAfter.ms - bootBefore.ms;
-    const bootElapsed = Number.isFinite(bootDifference) ? bootDifference : monoAfter - monoBefore;
-    const stepMs = wallAfter - wallBefore - bootElapsed;
-    // A host that did not answer may still have moved the clock, but never confirmed it.
-    const verified =
-      answer.available && Math.abs(wallAfter - (targetMs + bootElapsed)) <= VERIFY_MS;
-    const moved = Math.abs(stepMs) > MOVED_MS;
-
-    unwritten = verified || moved ? { confirmedAt: after.instant.toISOString(), stepMs } : null;
-    const anchored = await reanchorAll();
-    if (!verified && !moved) {
-      deps.log("warn", "clock_correction.set_refused", {
-        reason: answer.available ? "unmoved" : answer.reason,
-      });
-      // No socket: the request never reached the host, so nothing was refused or tried.
-      if (!answer.available && answer.reason === "missing")
-        return { set: false, reason: "host_unavailable" };
-      return { set: false, reason: "refused" };
-    }
-    deps.store.clear();
-    const request: ClockStepRequest = {
-      before,
-      after,
-      bootBefore,
-      bootAfter,
-      targetAt: new Date(targetMs).toISOString(),
-      stepMs,
-      verified,
-      reason: input.reason,
-      source: input.source,
-      witnesses: input.witnesses,
-      ...(input.admin === undefined ? {} : { admin: input.admin }),
-      nodeId: deps.nodeId,
-    };
-    let confirmationId: string | null = null;
-    if (!anchored) keep(request, undefined);
-    else {
+      let answer: HostSetAnswer;
       try {
-        confirmationId = await write(request);
-        unwritten = null;
+        answer = await deps.host.setClock({ targetMs, requester: input.requester });
       } catch (error) {
-        keep(request, error);
+        // The request may have reached the host, so the clock may have moved.
+        deps.log("warn", "clock_correction.set_threw", { errorCode: codeOf(error) });
+        answer = { available: false, reason: "lost" };
       }
+      const wallAfter = wall();
+      const monoAfter = monotonic();
+      const bootAfter = deps.boot.readBoot();
+      const after = reading();
+      const bootDifference = bootAfter.ms - bootBefore.ms;
+      const bootElapsed = Number.isFinite(bootDifference) ? bootDifference : monoAfter - monoBefore;
+      const stepMs = wallAfter - wallBefore - bootElapsed;
+      // A host that did not answer may still have moved the clock, but never confirmed it.
+      const verified =
+        answer.available && Math.abs(wallAfter - (targetMs + bootElapsed)) <= VERIFY_MS;
+      const moved = Math.abs(stepMs) > MOVED_MS;
+      if (!verified && moved) unverifiedStep(stepMs);
+
+      unwritten = verified || moved ? { confirmedAt: after.instant.toISOString(), stepMs } : null;
+      const anchored = await reanchorAll();
+      if (!verified && !moved) {
+        deps.log("warn", "clock_correction.set_refused", {
+          reason: answer.available ? "unmoved" : answer.reason,
+        });
+        // No socket: the request never reached the host, so nothing was refused or tried.
+        if (!answer.available && answer.reason === "missing")
+          return { set: false, reason: "host_unavailable" };
+        return { set: false, reason: "refused" };
+      }
+      deps.store.clear();
+      const request: ClockStepRequest = {
+        before,
+        after,
+        bootBefore,
+        bootAfter,
+        targetAt: new Date(targetMs).toISOString(),
+        stepMs,
+        verified,
+        reason: input.reason,
+        source: input.source,
+        witnesses: input.witnesses,
+        ...(input.admin === undefined ? {} : { admin: input.admin }),
+        nodeId: deps.nodeId,
+      };
+      let confirmationId: string | null = null;
+      if (!anchored) keep(request, undefined);
+      else {
+        try {
+          confirmationId = await write(request);
+          unwritten = null;
+        } catch (error) {
+          keep(request, error);
+        }
+      }
+      deps.log("info", "clock_correction.stepped", { source: input.source, stepMs, verified });
+      if (verified && input.reason === "start" && deps.start !== undefined)
+        await confirmByPerson(deps.start);
+      return verified
+        ? { set: true, confirmationId, stepMs, confirmedAt: after.instant.toISOString() }
+        : { set: false, reason: "unverified" };
+    } finally {
+      if (unwritten === "setting") unwritten = unwrittenBefore;
     }
-    deps.log("info", "clock_correction.stepped", { source: input.source, stepMs, verified });
-    return verified
-      ? { set: true, confirmationId, stepMs, confirmedAt: after.instant.toISOString() }
-      : { set: false, reason: "unverified" };
   }
 
   return {

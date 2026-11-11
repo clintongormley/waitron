@@ -23,6 +23,7 @@ import type { StepDownRequest, StepDownResult } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
+import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -308,6 +309,7 @@ describe("a card sale in flight when the box steps down", () => {
 
     let card: FakePaymentProvider | undefined;
     server = await startServer(env, env, {
+      boxHost: synchronisedBoxHost(),
       peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
       // The venue's readers are Stripe's here, so the till's own credential check passes and the
       // card sweep reaches this stand-in through the held Stripe credential.

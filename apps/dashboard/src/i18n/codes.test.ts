@@ -776,6 +776,15 @@ it("words a refused confirmation of the clock in both languages", () => {
   );
 });
 
+it("words a refusal while the start's time is unconfirmed in both languages", () => {
+  expect(codeMessage("clock.unconfirmed", "en")).toBe(
+    "Not recorded: the box is waiting for its time to be confirmed. Use “Check the time” on a till.",
+  );
+  expect(codeMessage("clock.unconfirmed", "es")).toBe(
+    "No se ha registrado: el equipo espera a que se confirme su hora. Usa «Comprobar la hora» en una caja.",
+  );
+});
+
 it("words a note refused on an already handled alert in both languages", () => {
   expect(codeMessage("alert.already_handled", "en")).toBe(
     "This alert was already marked handled, so the note was not saved. Add it from Handled lists on the Box status page.",

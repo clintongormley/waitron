@@ -447,6 +447,33 @@ describe("a step of the box's clock with no payment stop", () => {
     expect(incidentsOf("clock.corrected")).toHaveLength(1);
   });
 
+  it("writes one row naming the staff member and reason start for a start's step, raising clock.corrected", async () => {
+    await sale(R - 5 * M);
+    const A = R + H;
+    await step(
+      request(A, {
+        reason: "start",
+        source: "staff",
+        admin: ANA_ON_A_DEVICE,
+        witnesses: [device("till-1", R - S, A - R, "10.0.0.1")],
+      }),
+    );
+
+    const stored = await rows();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      reason: "start",
+      source: "staff",
+      personId: "person-ana",
+      checkId: null,
+      registroId: null,
+      confirmedAt: new Date(A),
+    });
+    expect(incidentsOf("clock.corrected").map((i) => i.params)).toMatchObject([
+      { confirmationId: stored[0]!.id },
+    ]);
+  });
+
   it("says the clock moved back when an administrator sets it earlier", async () => {
     await sale(R - 5 * H);
     const A = R - H;
@@ -617,6 +644,16 @@ it("never marks the open clock.corrected handled before it was detected, when a 
   const corrected = incidentsOf("clock.corrected");
   expect(corrected[0]).toMatchObject({ acknowledged_at: iso(first) });
   expect(corrected[1]).toMatchObject({ acknowledged_at: null });
+});
+
+describe("the seat's chain heads", () => {
+  it("answers each chain's node with its highest record position, and none before a record", async () => {
+    const heads = () => withTransaction(suite.db, (tx) => backend.chainHeads(tx));
+    await expect(heads()).resolves.toEqual({});
+    await sale(R);
+    await sale(R + M);
+    await expect(heads()).resolves.toEqual({ [nodeId]: 2 });
+  });
 });
 
 describe("latestClockStep", () => {

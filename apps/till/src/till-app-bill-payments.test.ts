@@ -5724,6 +5724,7 @@ describe("till-app: a bill payment on the card reader", () => {
   it.each([
     ["clock_behind_chain", "bill_pay.charged_clock_behind"],
     ["clock_unusable", "bill_pay.charged_clock_unusable"],
+    ["clock_unconfirmed", "bill_pay.charged_clock_unconfirmed"],
   ] as const)(
     "A1399: a charged clock stop retains its cause through a recheck: %s",
     async (reason, key) => {

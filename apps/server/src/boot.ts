@@ -6,7 +6,6 @@ import {
   boxHostRequests,
   type BoxHostClient,
   type BoxHostRequests,
-  type ClockServiceStatus,
 } from "./box-host-client.js";
 import { boxNameTagJob } from "./box-name-tag.js";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
@@ -388,8 +387,11 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { mountBoxHostApi } from "./box-host-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
+import { sharedClockServiceReading } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
+import { startClockAgreed, startClockCheck, startClockState } from "./start-clock-check.js";
+import { gateSeatOnStartClock, startClockGateHolds } from "./start-clock-gate.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
@@ -2149,7 +2151,14 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  const nodeBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  const startClock = startClockState();
+  // Bound once the clock correction is built below; until then no set can be with the host.
+  let clockSetting = () => false;
+  const startClockHolds = startClockGateHolds(startClock, filesRecords, () => clockSetting());
+  const nodeBackend = gateSeatOnStartClock(
+    makeFiscalBackend(setsToMigrate, filingModule, db, env),
+    startClockHolds,
+  );
   // Only a node that can add a record is asked: a mirror's copy may hold its own node's chain from
   // before it handed over, made under the producer it ran then.
   if (!fencedOrMirror && nodeBackend.checkFilingIdentity !== undefined) {
@@ -2400,6 +2409,7 @@ async function bootServer(
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
+  const recordHeads = (tx: Transaction) => nodeBackend.chainHeads?.(tx) ?? Promise.resolve({});
   // Before the tills' routes, which set the clock through it.
   const correction = clockCorrection({
     host: boxHost,
@@ -2413,7 +2423,9 @@ async function bootServer(
     onCorrected: (incident) => boxEmails.remember(incident),
     nodeId: tradingContext.nodeId,
     log,
+    start: { state: startClock, heads: recordHeads },
   });
+  clockSetting = () => correction.unwrittenStep() === "setting";
   const tableRemovals = enabledTableRemovals(
     ALL_MODULES.filter((module) => (appliedModuleVersions[migrationSetOf(module)] ?? 0) > 0),
   );
@@ -2458,6 +2470,7 @@ async function bootServer(
         steady: () => performance.now(),
         requestFromBox: seams.requestFromBox,
         filesRecords,
+        start: { state: startClock, heads: recordHeads },
       },
     },
     log,
@@ -2699,7 +2712,13 @@ async function bootServer(
                 backend: nodeBackend,
                 witnesses: () => clockWitnesses.witnesses(),
                 filesRecords,
+                start: startClock,
               }),
+              // The waiting start alone: its words say devices are awaited, untrue during a set.
+              startClockAgreed: () =>
+                filesRecords() && startClock.unconfirmed()
+                  ? startClockAgreed(clockWitnesses.witnesses())
+                  : null,
             },
             setsToMigrate,
           ),
@@ -3212,9 +3231,22 @@ async function bootServer(
     log,
   });
   undoOnFailure.push(() => boxEmails.stop());
-  // One read of the host's clock service a minute, shared by every reader of it.
-  const clockServiceCache = createTtlCache<ClockServiceStatus>({ ttlMs: 60_000, now });
-  const readClockService = () => clockServiceCache.get("status", () => boxHost.clockStatus());
+  const clockService = sharedClockServiceReading(boxHost, now);
+  const readClockService = clockService.read;
+  // Before the listener opens, so its first answer already knows whether the start is confirmed.
+  if (
+    (await startClockCheck({
+      state: startClock,
+      clockStatus: readClockService,
+      heads: () => db.withWriteLock(() => recordHeads(db)),
+    })) === "by_internet"
+  )
+    log("info", "clock_start.confirmed", {
+      source: "internet",
+      boxAt: tillClock.now().instant.toISOString(),
+      heads: startClock.mark,
+    });
+  else log("warn", "clock_start.waiting", { hostAnswers: startClock.hostAnswers });
   const timeHealthCache = createTtlCache<TimeHealth>({ ttlMs: 60_000, now });
   const readTimeHealth = () =>
     timeHealthCache.get("sync", () =>
@@ -3226,7 +3258,7 @@ async function bootServer(
   correction.addAnchor({
     stepComing: async () => {},
     reanchor: async () => {
-      clockServiceCache.clear();
+      clockService.clear();
       timeHealthCache.clear();
     },
   });
@@ -3240,6 +3272,7 @@ async function bootServer(
     transaction: (fn) => withTransaction(db, fn),
     correction,
     startUp: clockStart,
+    start: { state: startClock, clockStatus: readClockService, heads: recordHeads },
     filesRecords,
     isPrimary: () => holders.singletonRole.current === "primary",
     log,
@@ -3953,6 +3986,7 @@ async function bootServer(
               clock: tillClock,
               cfg: tradingContext,
               refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+              clockUnconfirmed: startClockHolds,
               log,
             },
             signal,
@@ -3982,6 +4016,7 @@ async function bootServer(
           clock: tillClock,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
           attendance: attendanceRecorder,
+          clockUnconfirmed: startClockHolds,
           signal: tenderRefundController.signal,
           onShutdownTimeout: (refundIds) =>
             log("warn", "tender_refund.shutdown_pending", { refundIds }),

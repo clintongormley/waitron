@@ -1343,6 +1343,7 @@ function notRecordedReason(error: unknown): NotRecordedReason | null {
   if (diskFullIn(error)) return "disk_full";
   if (error instanceof AppError && error.code === "clock.behind_chain") return "clock_behind_chain";
   if (error instanceof AppError && error.code === "clock.unusable") return "clock_unusable";
+  if (error instanceof AppError && error.code === "clock.unconfirmed") return "clock_unconfirmed";
   return null;
 }
 
@@ -1362,7 +1363,8 @@ export function collectFailure(
   return chargedNotRecorded(deps.log, workingOrderId, "disk_full");
 }
 
-type NotRecordedReason = "disk_full" | "clock_behind_chain" | "clock_unusable" | "issuance_refused";
+type NotRecordedReason =
+  "disk_full" | "clock_behind_chain" | "clock_unusable" | "clock_unconfirmed" | "issuance_refused";
 
 /** Carries no cause: the error boundary answers `storage.disk_full` for any full disk in the chain. */
 function chargedNotRecorded(

@@ -71,7 +71,7 @@ the server also restart payments, unless the stop has lasted since the server st
 the clock.
 
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server
-started with its clock in doubt and could not reach the tax agency's time. It ends either
+started with its clock in doubt and could not confirm it by itself. It ends either
 of the two red clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.
@@ -86,9 +86,9 @@ check again.
 - When they agree, it asks you to confirm that the server's time is right. Press **The time is right**
   if it is; payments start again on the server's clock. Press **Not now** to leave it.
 
-Either way, every manager is told who confirmed the time and from which till. If the server refuses,
+The people who manage the system are told when the server's clock is set from a till. If the server refuses,
 the dialog says why above its buttons and, where trying again can help, offers **Check again**.
-If the server's [start-up](box-status.md#clock-at-start) ends while the dialog is open, a staff member can no longer set the clock from a till:
+If the server's [start-up](box-status.md#clock-at-start) ends while the dialog is open, and the internet has confirmed the server's time, a staff member can no longer set the clock from a till:
 the dialog says so and offers **Administrator sign-in**, so that an administrator can sign in there
 with their PIN and set the clock from the same till.
 

@@ -78,8 +78,8 @@ equivocada, dos cajas o terminales que coinciden con el servidor también reanud
 que la parada dure desde que arrancó el servidor. Nunca ponen la hora.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
-significa que el servidor arrancó con su hora en duda y no ha podido obtener la hora de
-Hacienda. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
+significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí
+mismo. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja.
@@ -95,10 +95,11 @@ ajustes de la caja y vuelve a comprobarlo.
   correcta** si lo es; se puede volver a cobrar con el reloj del servidor. Pulsa **Ahora no** para
   dejarlo.
 
-En los dos casos, se avisa a todos los encargados de quién confirmó la hora y desde qué caja. Si el
+Se avisa a quienes gestionan el sistema cuando el reloj del servidor se pone en hora desde una
+caja. Si el
 servidor se niega, el diálogo dice por qué encima de sus botones y, cuando volver a intentarlo puede
 servir, ofrece **Comprobar otra vez**. Si el [arranque](box-status.md#clock-at-start) del servidor termina con el
-diálogo abierto, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
+diálogo abierto, y internet ha confirmado la hora del servidor, un empleado ya no puede poner el reloj en hora desde una caja: el diálogo lo dice y
 ofrece **Acceso de administrador**, para que un administrador inicie sesión ahí con su PIN y ponga
 la hora desde la misma caja.
 

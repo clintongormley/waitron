@@ -706,6 +706,7 @@ const TABLE_REFUSALS = new Set([
   "working_order.not_open",
   "storage.disk_full",
   "clock.behind_chain",
+  "clock.unconfirmed",
   "menu_period.ended",
   "station.no_default",
   "department.operation_description_required",
@@ -1018,6 +1019,7 @@ const ACTIONABLE_REFUSALS = new Set([
   "sale.department_missing",
   "storage.disk_full",
   "clock.behind_chain",
+  "clock.unconfirmed",
   "menu_period.ended",
   "station.no_default",
 ]);
@@ -1112,6 +1114,7 @@ function discardError(error: unknown): CounterError {
     code === "bill.refund_in_progress" ||
     code === "storage.disk_full" ||
     code === "clock.behind_chain" ||
+    code === "clock.unconfirmed" ||
     code === "draft.out_of_date"
     ? { code }
     : "held.stale";
@@ -1855,6 +1858,8 @@ function saleRefusalOf(
       | "sale.charged_disk_full"
       | "sale.charged_clock_behind"
       | "sale.charged_clock_unusable"
+      | "sale.charged_clock_unconfirmed"
+      | "sale.clock_unconfirmed"
     >
   | { code: string; recoveryUrl?: string; manualCard?: true }
   | { clockUnusable: { clockAt: string; offsetMinutes: number } }
@@ -1889,7 +1894,9 @@ function saleRefusalOf(
           ? "sale.charged_clock_behind"
           : refusal.reason === "clock_unusable"
             ? "sale.charged_clock_unusable"
-            : { code: "sale.charged_not_recorded" };
+            : refusal.reason === "clock_unconfirmed"
+              ? "sale.charged_clock_unconfirmed"
+              : { code: "sale.charged_not_recorded" };
     case "clock.unusable": {
       const reading = clockReadingOf(refusal);
       return reading === undefined ? { code: "clock.unusable" } : { clockUnusable: reading };
@@ -1898,6 +1905,8 @@ function saleRefusalOf(
       const behind = clockBehindOf(refusal);
       return behind === undefined ? { code: "clock.behind_chain" } : { clockBehind: behind };
     }
+    case "clock.unconfirmed":
+      return "sale.clock_unconfirmed";
     default:
       return undefined;
   }

@@ -39,6 +39,16 @@ describe.each(LANGUAGES)("staffNoticeText in %s", (locale, words) => {
     });
   });
 
+  it.each([{}, { agreed: 2 }, { agreed: -1 }, { agreed: 0.5 }, { agreed: "1" }])(
+    "words the waiting start as unknown when its count is %o",
+    (params) => {
+      setLocale(locale);
+      expect(staffNoticeText({ code: "clock.unconfirmed", params }).main).toBe(
+        words["staff_notice.unknown"],
+      );
+    },
+  );
+
   it("words the unsent count with its number and the retried hint while nothing is held", () => {
     setLocale(locale);
     expect(
@@ -151,6 +161,13 @@ describe.each(LANGUAGES)(
         });
       },
     );
+
+    it("gives the waiting start the Check the time words as its hint", () => {
+      setLocale(locale);
+      expect(staffNoticeText({ code: "clock.unconfirmed", params: { agreed: 1 } }, true).hint).toBe(
+        words["staff_notice.check_time"],
+      );
+    });
 
     it("leaves every other notice's hint as it is", () => {
       setLocale(locale);

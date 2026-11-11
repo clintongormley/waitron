@@ -302,7 +302,7 @@ export interface ClockStepRequest {
   targetAt: string;
   stepMs: number;
   verified: boolean;
-  reason: "behind_chain" | "unusable";
+  reason: "behind_chain" | "unusable" | "start";
   source: "authority" | "admin" | "staff";
   witnesses: readonly ClockWitness[];
   admin?: ClockAdminConfirm;
@@ -481,6 +481,9 @@ export interface FiscalBackend {
    * order they were written, never by their dates; null when none has. Only steps the box made are
    * recorded: one by the time service, or by a person on the host, is never answered here. */
   latestClockStep?(tx: Transaction): Promise<ClockStep | null>;
+
+  /** Each chain's node and its highest record position. Absent when the regime keeps no chain. */
+  chainHeads?(tx: Transaction): Promise<Record<string, number>>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
    * the open one; null, and nothing written, while there is no stop. */
