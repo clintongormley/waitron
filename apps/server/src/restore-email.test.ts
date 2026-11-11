@@ -94,7 +94,7 @@ beforeAll(async () => {
       if (configured) await putCredential(tx, ring, { purpose: "email.smtp", value: SMTP });
       else await deleteCredential(tx, { purpose: "email.smtp" });
     });
-    const status = { failedSince: null };
+    const status = { failedSince: null, errorCode: null };
     expect(
       await createSealedStateRefresher({
         db: suite.db,

@@ -3019,7 +3019,7 @@ async function bootServer(
   });
   undoOnFailure.push(() => backupSupervisor.stop());
   await backupSupervisor.reload();
-  const sealedStateStatus: SealedStateStatus = { failedSince: null };
+  const sealedStateStatus: SealedStateStatus = { failedSince: null, errorCode: null };
   // After migrations, so the row's manifest names the schema the database holds.
   const sealedState = createSealedStateRefresher({
     db,

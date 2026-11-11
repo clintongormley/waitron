@@ -130,8 +130,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Abre Copias de seguridad y pulsa Volver a iniciar la copia. Si se vuelve a detener, elige allí Cambiar de bucket y pulsa Probar para comprobar el bucket.",
   },
   "backup.sealed_state_failed": {
-    en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",
-    es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. Las ventas continúan. Contacta con soporte.",
+    en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. {errorCode:sealed_state}",
+    es: "El equipo no ha podido actualizar la copia cifrada de sus propias claves y ajustes que guarda junto con tus datos. Un equipo reconstruido desde tu bucket podría volver con claves y ajustes desactualizados, o sin ellos si nunca se llegaron a guardar. {errorCode:sealed_state}",
   },
   "storage.space_low": {
     en: "The box has {freeBytes:bytes} of disk space left. Everything still works, but if it fills up nothing can be saved. See what is using it on the Box status page.",
@@ -519,6 +519,22 @@ export const ALERT_WORDS: Readonly<
       },
     },
     otherwise: { en: "Contact support.", es: "Contacta con soporte." },
+  },
+  sealed_state: {
+    words: {
+      "storage.disk_full": {
+        en: "The box's disk is full. Free space on the Box status page, then switch the box off and on: each start updates the copy again.",
+        es: "El disco del equipo está lleno. Libera espacio en Estado del equipo y después apaga y enciende el equipo: cada arranque vuelve a actualizar la copia.",
+      },
+      "recovery.state_incomplete": {
+        en: "Sales continue. Some of the box's own files that the copy must include are missing.",
+        es: "Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir.",
+      },
+    },
+    otherwise: {
+      en: "Sales continue. Each start tries again, so switch the box off and on.",
+      es: "Las ventas continúan. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.",
+    },
   },
   // Why the box's time service is not keeping its clock right, by the `reason` param of
   // `clock.sync_off`. `unreachable` names no install step: the person reading it has no terminal.

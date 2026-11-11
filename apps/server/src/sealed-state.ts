@@ -19,6 +19,7 @@ import {
 import { decryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
+import { startFailureCode } from "./boot-failure.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -82,10 +83,12 @@ export type SealedStateOutcome = "sealed" | "no_key" | "failed";
 /**
  * Since when this node's refreshes have failed, read by `sealedStateAlertSource`: the first
  * failure's time, kept across repeats; null again after a refresh that seals, or that finds no
- * recovery key, when no row is expected at all.
+ * recovery key, when no row is expected at all. `errorCode` is the latest failure's cause as
+ * `startFailureCode` names it, null whenever `failedSince` is.
  */
 export interface SealedStateStatus {
   failedSince: string | null;
+  errorCode: string | null;
 }
 
 export interface SealedStateDeps {
@@ -123,12 +126,24 @@ export interface SealedStateRefresher {
  * throws changes neither the outcome nor the row.
  */
 export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRefresher {
-  type Attempt = readonly [SealedStateOutcome, Parameters<Logger>];
+  type Attempt = readonly [SealedStateOutcome, Parameters<Logger>, string | null];
+  type Result = readonly [SealedStateOutcome, string | null];
+  const causeOf = async (err: unknown): Promise<string> => {
+    try {
+      return await startFailureCode(err, [deps.stateDir, deps.venueDir ?? deps.stateDir]);
+    } catch {
+      return "unknown";
+    }
+  };
   const attempt = async (): Promise<Attempt> => {
     try {
       const recoveryKey = await deps.readRecoveryKey();
       if (recoveryKey === undefined) {
-        return ["no_key", ["info", "backup.sealed_state_skipped", { reason: "no_recovery_key" }]];
+        return [
+          "no_key",
+          ["info", "backup.sealed_state_skipped", { reason: "no_recovery_key" }],
+          null,
+        ];
       }
       const now = deps.now();
       const manifest = await buildManifest({
@@ -149,23 +164,29 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
       // Sealed before the transaction opens, so the write lock is not held across the derivation.
       const sealed = await sealNodeState(entries, recoveryKey);
       await withTransaction(deps.db, (tx) => writeSealedStateRow(tx, deps.nodeId, sealed, now));
-      return ["sealed", ["info", "backup.sealed_state_refreshed", { entries: entries.length }]];
+      return [
+        "sealed",
+        ["info", "backup.sealed_state_refreshed", { entries: entries.length }],
+        null,
+      ];
     } catch (err) {
-      return ["failed", ["warn", "backup.sealed_state_failed", failureFields(err)]];
+      const cause = await causeOf(err);
+      return ["failed", ["warn", "backup.sealed_state_failed", failureFields(err)], cause];
     }
   };
-  const once = async (): Promise<SealedStateOutcome> => {
-    const [outcome, line] = await attempt();
+  const once = async (): Promise<Result> => {
+    const [outcome, line, cause] = await attempt();
     try {
       deps.log(...line);
     } catch {
       // Logging is best effort; the outcome already stands.
     }
-    return outcome;
+    return [outcome, cause];
   };
-  const record = (outcome: SealedStateOutcome): SealedStateOutcome => {
+  const record = ([outcome, cause]: Result): SealedStateOutcome => {
     if (outcome !== "failed") deps.status.failedSince = null;
     else deps.status.failedSince ??= deps.now().toISOString();
+    deps.status.errorCode = cause;
     return outcome;
   };
   let running: Promise<SealedStateOutcome> | undefined;
@@ -175,7 +196,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
     // does; without it the refresh would reject.
     const run = Promise.resolve()
       .then(once)
-      .catch((): SealedStateOutcome => "failed")
+      .catch((): Result => ["failed", "unknown"])
       .then(record);
     running = run;
     const clear = () => {

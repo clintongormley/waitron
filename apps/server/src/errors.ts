@@ -1590,8 +1590,9 @@ declare module "@waitron/shared" {
      * never thrown. */
     "backup.stream_stopped": { reason: string | null };
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
-     * is out of date or missing. Built as data by the sealed-state alert source, never thrown. */
-    "backup.sealed_state_failed": Record<string, never>;
+     * is out of date or missing. `errorCode` is the failure's cause, `unknown` when unnamed. Built
+     * as data by the sealed-state alert source, never thrown. */
+    "backup.sealed_state_failed": { errorCode: string };
     /** The box's disk fell below `SPACE_LOW_BYTES` (`free-space-watch.ts`) free and no reading
      * since has reached `SPACE_OK_BYTES`. `freeBytes` is the latest reading. Built as data by the
      * box alert source, never thrown. */

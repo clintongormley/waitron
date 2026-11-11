@@ -43,7 +43,7 @@ referrals, not completed recovery experiments.
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
 | [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Start the copy again (A1089 B1) restarts a copy that stopped or could not start. Host-configuration diagnosis, reason-specific guidance for a stopped copy and ownership choices remain open, with authentication and evidence before resuming a primary. |
-| [Sealed state](#backup-state) | Expose the safe cause and a correction/retry choice; show whether the key copy was refreshed. |
+| [Sealed state](#backup-state) | The alert names the cause (A1089 B2): a full disk, missing own files, or another. Missing own files and an unrecognised cause have no correction beyond a restart. |
 | [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
 | [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
 | [Fiscal integrity](#fiscal-integrity) | Offer evidence inspection and a supported decision/recovery path without editing immutable records. An administrator referral does not provide that path. |
@@ -167,6 +167,8 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:117` and `apps/dashboard/src
 State: Reading the recovery key, collecting files, sealing, or writing the row threw. Missing files and storage failures are possible without a product bug. Receipt: `apps/server/src/sealed-state.ts:108`; `apps/server/src/alert-sources.ts:230`.
 
 Route: Missing: expose a non-secret cause and an action to retry after fixing it. Do not claim the recovery copy is current until refresh succeeds.
+
+_2026-11-11, A1089 B2: the words no longer say to contact support. The alert now ends with words chosen by the failure's cause (`ALERT_WORDS.sealed_state`, `apps/dashboard/src/i18n/alert-messages.ts:523`, read by the `errorCode` param that `apps/server/src/alert-sources.ts:249` sends): for a full disk, free space on the Box status page, then switch the box off and on, since each start updates the copy again; for missing own files, that some of the box's own files are missing, with no next step; for any other cause, that each start tries again, so switch the box off and on. “Sales continue” is said for the last two only: a full disk can refuse sales (`apps/server/src/till-api.disk-full-gate.test.ts`). The alert clears once a refresh seals. Still open: missing own files and an unrecognised cause have no correction beyond a restart. The rest of this entry records the earlier tree._
 
 ### `restore.first_start_failed`
 
@@ -825,7 +827,7 @@ unavailable process from a conflicting writer; do not suggest resuming an unauth
 
 ### backup-state
 
-**A failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.
+**A failed sealed-state refresh needs a correction beyond a restart.** 2026-11-11, A1089 B2: the alert names the cause (full disk: free space on Box status, then restart; missing own files: says only that; any other cause: restart) and clears once a refresh seals. Still open: missing own files and an unrecognised cause have no correction beyond a restart. Do not promise current recovery keys before success.
 
 ### backup-preparation
 

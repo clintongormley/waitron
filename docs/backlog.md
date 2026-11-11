@@ -1662,7 +1662,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 - **A1089: exhausted cleanup still needs a supported disk-recovery workflow.** Box status explains the backup-retention choice, its lack of immediate space recovery and leaving without changes. Provide an authenticated recovery choice when no reclaimable files remain and a new backup cannot fit; preserve database files, keys and saved backups.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 
-- **A1089: a failed sealed-state refresh needs its cause and a retry route.** Expose a safe cause, offer a correction and any required sign-in there, and recheck that sealing succeeds. Do not promise current recovery keys before success.
+- **A1089: a failed sealed-state refresh needs a correction beyond a restart.** The alert names the cause (A1089 B2). Missing own files and an unrecognised cause have no correction beyond a restart. Do not promise current recovery keys before success.
   [Audit](backlog/self-service-refusals.md#backup-state).
 
 - **A1089: bucket-copy host-configuration failures need guided diagnosis.** The settings refusal explains Change bucket, Test, Save and turn on, and Cancel. A configuration failure outside those fields still needs authenticated diagnosis and an applicable correction; preserve recovery keys and existing copies.

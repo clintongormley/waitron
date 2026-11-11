@@ -51,6 +51,7 @@ import type { BackupStatus } from "./backup-status.js";
 import { deleteCardReader } from "./card-reader-delete.js";
 import { createDiskFullState } from "./disk-full-state.js";
 import { createFreeSpaceState } from "./free-space-watch.js";
+import type { SealedStateStatus } from "./sealed-state.js";
 import { createTtlCache } from "./ttl-cache.js";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
@@ -630,16 +631,17 @@ describe("backupAlertSource and the bucket copy", () => {
 
 describe("sealedStateAlertSource", () => {
   it("raises backup.sealed_state_failed while the last refresh failed, and clears after", async () => {
-    const holder = { failedSince: null as string | null };
+    const holder: SealedStateStatus = { failedSince: null, errorCode: null };
     const source = sealedStateAlertSource(holder);
     expect(source).toMatchObject({ area: "backup", permission: "system.manage" });
     expect(await source.read(ctx)).toEqual([]);
     holder.failedSince = "2026-09-15T11:00:00.000Z";
+    holder.errorCode = "storage.disk_full";
     expect(await source.read(ctx)).toEqual([
       {
         key: "backup.sealed_state_failed",
         code: "backup.sealed_state_failed",
-        params: {},
+        params: { errorCode: "storage.disk_full" },
         severity: "error",
         since: "2026-09-15T11:00:00.000Z",
         screen: "backup",
@@ -647,6 +649,14 @@ describe("sealedStateAlertSource", () => {
     ]);
     holder.failedSince = null;
     expect(await source.read(ctx)).toEqual([]);
+  });
+
+  it("names the cause unknown when the refresher recorded none", async () => {
+    const source = sealedStateAlertSource({
+      failedSince: "2026-09-15T11:00:00.000Z",
+      errorCode: null,
+    });
+    expect(await source.read(ctx)).toMatchObject([{ params: { errorCode: "unknown" } }]);
   });
 });
 
