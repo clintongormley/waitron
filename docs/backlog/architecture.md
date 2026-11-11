@@ -1079,7 +1079,8 @@ product failures.
   transfers retain their access timer to notice ended sessions, and payment-owned equipment changes
   retain their timed refresh so the connection also works with payments disabled;
   the remaining screen reads belong to jr14. A one-box till pauses primary-server probes while its
-  device connection is ready and resumes immediately when it drops; lists with more than one box
+  device connection is ready and the last probe found a primary, resuming immediately when it drops;
+  lists with more than one box
   keep probing and handing on membership charts. Handhelds and kitchen displays keep timed reads under
   jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
   jr13's SIGSTOP probe is a stand-in only. 111 product

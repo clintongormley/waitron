@@ -2480,11 +2480,9 @@ export class TillApp extends LitElement {
     this.router?.addEventListener("server-changed", this.#onServerChanged);
     this.router?.addEventListener("state-changed", this.#onServerState);
     this.#subscribedRouter = this.router;
-    this.#routerLive();
   }
 
   #detach(): void {
-    this.#subscribedRouter?.setLive(false);
     this.#subscribedRouter?.removeEventListener("server-changed", this.#onServerChanged);
     this.#subscribedRouter?.removeEventListener("state-changed", this.#onServerState);
     this.#subscribedRouter = undefined;

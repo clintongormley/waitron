@@ -15,9 +15,11 @@ does not leave a rejected subscription. Handhelds and kitchen displays retain
 timed reads under jr11's measured tills-only fallback. The remaining screen reads belong to jr14.
 
 At a venue with one logical box, the till pauses its five-second primary-server probe while its
-device connection is ready. A lost or stopped connection probes immediately and restores the timer.
+device connection is ready and the last probe found a primary. A lost or stopped connection
+restores a paused timer and probes immediately. A box last seen unavailable keeps being checked
+until it answers as primary. A silent connection counts as lost after thirty seconds.
 A list with more than one box keeps probing, including handing the held membership chart to a box
-that reports an older term. The list itself still refreshes only at start-up.
+that reports an older term. The list itself updates when the till re-reads its start-up data.
 
 The dashboard treats thirty seconds without an event as a lost connection, re-reads its watched
 queries and reconnects with back-off. Keepalives keep the connection alive. Queries marked

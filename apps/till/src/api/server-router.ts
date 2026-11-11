@@ -41,12 +41,6 @@ interface Tracked {
   term: number | null;
 }
 
-/**
- * The one place the till knows more than one server exists. `current` points at whichever server
- * answered `acceptingSales: true`, the highest `term` if several; if none did, it stays put and the
- * till keeps probing, with no failure count (owner decision, 2026-09-05). The page's own origin is
- * always listed, so a stale or empty cache still reaches the box.
- */
 export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
@@ -110,7 +104,6 @@ export class ServerRouter extends EventTarget {
     if (this.#live === up) return;
     this.#live = up;
     this.#syncTimer();
-    if (!up && this.#started) void this.probeNow();
   }
 
   /** Keeps the newer of this chart and the one held, to hand to a server that answers an older term
@@ -131,7 +124,7 @@ export class ServerRouter extends EventTarget {
   }
 
   #syncTimer(): void {
-    if (!this.#started || (this.#live && this.#shown().length === 1)) {
+    if (!this.#started || (this.#live && !this.#waiting && this.#shown().length === 1)) {
       clearInterval(this.#timer);
       this.#timer = undefined;
     } else if (this.#timer === undefined) {

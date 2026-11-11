@@ -405,6 +405,58 @@ describe("ServerRouter — polling, refusals and stored state", () => {
     r.stop();
   });
 
+  it("a one-box restart recovers waiting even when the stream reconnects before the next probe", async () => {
+    vi.useFakeTimers();
+    const table: Record<string, Answer> = { [BOX]: { acceptingSales: true, term: 1 } };
+    const r = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    const probes = vi.spyOn(r, "probeNow");
+    try {
+      r.start();
+      await r.probeNow();
+      r.setLive(true);
+      table[BOX] = "down";
+      r.setLive(false);
+      await probes.mock.results.at(-1)!.value;
+      expect(r.waiting).toBe(true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      table[BOX] = { acceptingSales: true, term: 1 };
+      r.setLive(true);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.waitFor(() => expect(r.waiting).toBe(false));
+      expect(r.statuses()[0]?.state).toBe("primary");
+      probes.mockClear();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(probes).not.toHaveBeenCalled();
+    } finally {
+      r.stop();
+    }
+  });
+
+  it("a multi-box connection dropping keeps the existing probe schedule", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = probeFetch({
+      [BOX]: { acceptingSales: true, term: 1 },
+      [CLOUD]: { acceptingSales: false, term: 1 },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    try {
+      r.setServers([{ url: CLOUD }]);
+      r.start();
+      await r.probeNow();
+      r.setLive(true);
+      r.setLive(false);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+    } finally {
+      r.stop();
+    }
+  });
+
   it("start() probes at once and then every interval; a second start() adds no second poller", async () => {
     vi.useFakeTimers();
     const fetchImpl = probeFetch({ [BOX]: { acceptingSales: true, term: 1, nodeId: "b" } });
