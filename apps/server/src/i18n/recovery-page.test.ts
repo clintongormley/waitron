@@ -72,21 +72,20 @@ describe("recovery page wording", () => {
         "Si vuelve a fallar, apaga y enciende el equipo: así se cierra cualquier programa que tenga ocupada la base de datos.",
       );
       for (const lang of ["en-GB", "es-ES"] as const) {
-        expect(text[lang].action, lang).not.toMatch(/whoever installed|quien instaló/i);
+        expect(text[lang].action, lang).not.toMatch(
+          /whoever installed|quien instaló|support|soporte/i,
+        );
       }
     },
   );
 
   it("sends nobody to someone else on any row, in either language", () => {
     const rows: [string, Record<string, string>][] = [
-      ...Object.entries(OPERATOR_TEXT)
-        // reworded by A1501 (#2829)
-        .filter(([code]) => code !== "deployment.environment_mismatch")
-        .flatMap(([code, text]) =>
-          (["en-GB", "es-ES"] as const).map(
-            (lang) => [`${code} ${lang}`, { ...text![lang] }] as [string, Record<string, string>],
-          ),
+      ...Object.entries(OPERATOR_TEXT).flatMap(([code, text]) =>
+        (["en-GB", "es-ES"] as const).map(
+          (lang) => [`${code} ${lang}`, { ...text![lang] }] as [string, Record<string, string>],
         ),
+      ),
       ...(["en-GB", "es-ES"] as const).map(
         (lang) =>
           [`generic ${lang}`, { ...GENERIC_TEXT[lang] }] as [string, Record<string, string>],

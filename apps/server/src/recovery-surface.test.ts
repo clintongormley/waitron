@@ -245,7 +245,7 @@ const ENGLISH_CHROME = [
   "<title>Waitron did not start</title>",
   "<h1>Waitron did not start</h1>",
   "Retry a normal boot",
-  "Details",
+  "<h2>Details</h2>",
   "Log tail",
   "Level: recovery. Failed 3 times.",
   "(no log yet)",
@@ -254,7 +254,7 @@ const SPANISH_CHROME = [
   "<title>Waitron no ha arrancado</title>",
   "<h1>Waitron no ha arrancado</h1>",
   "Reintentar un arranque normal",
-  "Detalles",
+  "<h2>Detalles</h2>",
   "Final del registro",
   "Nivel: recovery. Intentos fallidos: 3.",
   "(aún no hay registro)",
@@ -625,12 +625,12 @@ describe("curated operator text", () => {
     expect(text).toBeDefined();
     expect(text!["en-GB"].action).toMatch(/retry/i);
     expect(text!["en-GB"].action).toContain(
-      "If it still fails, this is a fault in this box's disk or in Waitron: the box's database is a file on its disk, and the software cannot read it.",
+      "If it still fails, this is a fault in Waitron or this box's disk: the box's database is a file on its disk, and the software cannot read it.",
     );
     expect(text!["es-ES"].action).toContain("«Reintentar un arranque normal»");
     expect(text!["es-ES"].action).toMatch(/reinicia el equipo/i);
     expect(text!["es-ES"].action).toContain(
-      "Si sigue fallando, es un fallo del disco de este equipo o de Waitron: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
+      "Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
     );
   });
 

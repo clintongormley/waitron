@@ -420,10 +420,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   open by A1099; needs an owner decision.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
-- **The recovery page's operator texts send the person to whoever installed the box**, which a
-  test still requires against CLAUDE.md §3's first rule. Left open by A1384 (#2527).
-  [Detail](backlog/setup.md#the-recovery-pages-operator-texts-send-the-person-to-whoever-installed-the-box)
-
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Loose ends left by A496 (moving to a new tax ID).**
@@ -1645,22 +1641,13 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   from accepting a later submission.
   [Correction](backlog/self-service-refusals.md#backup-key)
 
-- **A1089: boot recovery must offer choices instead of an installer referral.** Recheck each
-  remaining cause and offer applicable restart, space, backup or reinstall choices, any needed
-  authentication there and a safe Stop before destructive work. The wrong-environment row has
-  its A1501 Start again/Stop route. The original audit did not exercise these routes.
-  [Correction](backlog/self-service-refusals.md#boot-recovery).
-
 - **A1089: a repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.
   [Audit](backlog/self-service-refusals.md#restore-start).
-
-- **A1089: backup preparation still needs missing-file and unknown-cause recovery.** Establish a supported remedy for `recovery.state_incomplete` and the `backup_stop` fallback; retain the safe cause and never manufacture replacement keys.
-  [Audit](backlog/self-service-refusals.md#backup-preparation).
 
 - **A1089: exhausted cleanup still needs a supported disk-recovery workflow.** Box status explains the backup-retention choice, its lack of immediate space recovery and leaving without changes. Provide an authenticated recovery choice when no reclaimable files remain and a new backup cannot fit; preserve database files, keys and saved backups.
   [Audit](backlog/self-service-refusals.md#backup-preparation).
 
-- **A1089: a failed sealed-state refresh needs a correction beyond a restart.** The alert names the cause (A1089 B2). Missing own files and an unrecognised cause have no correction beyond a restart. Do not promise current recovery keys before success.
+- **A1089: a failed sealed-state refresh for an unrecognised cause needs a correction beyond a restart.** The alert names the cause (A1089 B2); missing own files now says it is a fault, and the owner's answer of 2026-11-11 plans no route for it. Do not promise current recovery keys before success.
   [Audit](backlog/self-service-refusals.md#backup-state).
 
 - **A1089: bucket-copy host-configuration failures need guided diagnosis.** The settings refusal explains Change bucket, Test, Save and turn on, and Cancel. A configuration failure outside those fields still needs authenticated diagnosis and an applicable correction; preserve recovery keys and existing copies.

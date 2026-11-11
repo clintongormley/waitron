@@ -202,12 +202,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "Waitron could not open the box's database.",
       action:
-        "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, this is a fault in this box's disk or in Waitron: the box's database is a file on its disk, and the software cannot read it.",
+        "Press Retry. If it fails again, restart the box — that can fix a disk or a volume that did not come up. If it still fails, this is a fault in Waitron or this box's disk: the box's database is a file on its disk, and the software cannot read it.",
     },
     "es-ES": {
       title: "Waitron no ha podido abrir la base de datos del equipo.",
       action:
-        "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo del disco de este equipo o de Waitron: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
+        "Pulsa «Reintentar un arranque normal». Si vuelve a fallar, reinicia el equipo: eso puede arreglar un disco o un volumen que no se activó. Si sigue fallando, es un fallo de Waitron o del disco de este equipo: la base de datos del equipo es un archivo en su disco, y el software no puede leerlo.",
     },
   },
   "storage.disk_full": {

@@ -588,13 +588,13 @@ export const ALERT_WORDS: Readonly<
   backup_stop: {
     words: {
       "recovery.state_incomplete": {
-        en: "Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk.",
-        es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo.",
+        en: "Some of the box's own files that every backup must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.",
+        es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.",
       },
     },
     otherwise: {
-      en: "Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron.",
-      es: "Waitron lo vuelve a intentar en la próxima copia programada. Si este mensaje sigue, es un fallo de Waitron.",
+      en: "Waitron tries again at the next scheduled backup. If this message stays, this is a fault in Waitron or this box.",
+      es: "Waitron lo vuelve a intentar en la próxima copia programada. Si el mensaje sigue, es un fallo de Waitron o de este equipo.",
     },
   },
   sealed_state: {
@@ -604,8 +604,8 @@ export const ALERT_WORDS: Readonly<
         es: "El disco del equipo está lleno. Libera espacio en Estado del equipo y después pulsa allí Reiniciar el equipo: cada arranque vuelve a actualizar la copia.",
       },
       "recovery.state_incomplete": {
-        en: "Sales continue. Some of the box's own files that the copy must include are missing.",
-        es: "Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir.",
+        en: "Sales continue. Some of the box's own files that the copy must include are missing. This is a fault in Waitron or this box's disk, or a program other than Waitron removed them.",
+        es: "Las ventas continúan. Faltan algunos archivos propios del equipo que la copia debe incluir. Es un fallo de Waitron o del disco de este equipo, o un programa que no es Waitron los ha quitado.",
       },
     },
     otherwise: {
