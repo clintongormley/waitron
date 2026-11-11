@@ -109,6 +109,21 @@ it("discards buffered keys and resets a two-minute idle return after each new ch
   expect(f.calls.at(-1)).toEqual(["systemctl", "reboot", "--no-block"]);
 });
 
+it("disables terminal echo before inviting typing", async () => {
+  const f = fixture();
+  let rawAtPrompt;
+  f.output.on("data", (bytes) => {
+    if (bytes.toString().includes("Press any key")) {
+      rawAtPrompt = f.input.isRaw;
+      f.input.write("immediate typing");
+    }
+  });
+  const done = installerReturn("/dev/vdb", f);
+  await vi.advanceTimersByTimeAsync(120000);
+  await done;
+  expect(rawAtPrompt).toBe(true);
+});
+
 it.each(["non-tty", "raw-error", "eof", "error"])(
   "keeps the return deadline when keys are unavailable: %s",
   async (kind) => {

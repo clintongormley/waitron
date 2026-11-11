@@ -508,7 +508,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       new URL(`../../deploy/box/${unitName}.service`, import.meta.url),
       "utf8",
     );
-    observedUnit += `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}${source ? "" : `; ${bootRead}`}'\n`;
+    observedUnit += `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}${source ? "; stty -F /dev/ttyS0 115200" : `; ${bootRead}`}'\n`;
     args.push(
       "-smbios",
       `type=11,value=io.systemd.credential.binary:systemd.extra-unit.${unitName}.service=${Buffer.from(observedUnit).toString("base64")}`,
@@ -897,9 +897,14 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
           !exact.test(firmware)
         )
           throw new Error("returned firmware entry, ESP, loader or BootOrder mismatch");
-        const disk = JSON.parse(rigLine(serial, "B3_DISK_START:"));
+        const disk = serial
+          .split(/\r?\n/)
+          .map((line) => rigLine(`${line}\n`, "B3_DISK_START:"))
+          .filter((text) => text !== undefined)
+          .map((text) => JSON.parse(text))
+          .find((record) => record.action === "ready");
         if (
-          disk.action !== "ready" ||
+          disk?.action !== "ready" ||
           disk.openedBy !== "chip" ||
           disk.emptyPassword !== false ||
           JSON.stringify(disk.tpmPcrs) !== "[5,7,8,9,15]"

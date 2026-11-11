@@ -16,7 +16,7 @@ const firmwareCommand = (command, args) =>
     env: { ...process.env, LC_ALL: "C" },
   });
 
-async function waitForReturn(input, output) {
+async function waitForReturn(input, output, notice) {
   await new Promise((done) => {
     let timer;
     const wasRaw = input?.isRaw === true;
@@ -54,21 +54,26 @@ async function waitForReturn(input, output) {
       detach();
       output.write("Keys unavailable; automatic return remains active.\n");
     };
-    arm(INSTALLER_TIMINGS_MS.waitronStart);
+    let available = false;
     try {
-      if (!input?.isTTY || input.readableEnded || input.destroyed) {
-        unavailable();
-        return;
+      if (input?.isTTY && !input.readableEnded && !input.destroyed) {
+        input.setRawMode(true);
+        raw = true;
+        available = true;
       }
-      input.setRawMode(true);
-      raw = true;
-      input.on("end", unavailable);
-      input.on("error", unavailable);
-      input.on("data", typed);
-      input.resume();
     } catch {
-      unavailable();
+      /* The automatic return remains available without a keyboard. */
     }
+    output.write(`${notice}\nStarting the installed box in 15 seconds. Press any key to pause.\n`);
+    arm(INSTALLER_TIMINGS_MS.waitronStart);
+    if (!available) {
+      unavailable();
+      return;
+    }
+    input.on("end", unavailable);
+    input.on("error", unavailable);
+    input.on("data", typed);
+    input.resume();
   });
 }
 
@@ -78,8 +83,7 @@ export async function installerReturn(
 ) {
   const notice = await installerNameNotice(target);
   if (notice === null) throw new Error("install.refused:occupied");
-  output.write(`${notice}\nStarting the installed box in 15 seconds. Press any key to pause.\n`);
-  await waitForReturn(input, output);
+  await waitForReturn(input, output, notice);
   try {
     const table = JSON.parse(await run("sfdisk", ["--json", target])).partitiontable;
     const esp = table?.partitions?.[0];
