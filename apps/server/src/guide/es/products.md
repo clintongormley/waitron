@@ -264,6 +264,11 @@ de ese producto. Aun así puedes publicar o programar: el aviso te pide que comp
 declaraciones, no rechaza la publicación. Si cancelas la confirmación de programación, se conservan la
 fecha y la hora que introdujiste.
 
+Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
+cuyos alérgenos nadie ha introducido, ni en el plato ni en ninguna de sus variantes. Para que un
+plato así aparezca, elige sus alérgenos, o **No contiene ninguno de los 14**, y vuelve a publicar
+cada carta en la que esté.
+
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
 

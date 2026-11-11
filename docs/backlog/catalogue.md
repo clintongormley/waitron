@@ -1154,13 +1154,10 @@ A running-down quantity (“only 5 left”) stays parked.
 not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
 11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
 the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
-split the remaining implementation into six follow-ups for the watcher to queue. No product change
+split the remaining implementation into six follow-ups; five remain for the watcher to queue. No product change
 is built by the proposal. It distinguishes the narrower measured cases from these original observations.
 
-1. **The till's allergen filter still shows dishes nobody has checked.** Filtering out an allergen
-   hides dishes that declare it but keeps dishes whose allergens were never entered, with no
-   warning on their tile. A test pins this on purpose (A738, the "A738 filter combinations" cases
-   in `apps/till/src/menu-filter.test.ts`). The filter also ignores the allergens of extras.
+1. **The till's allergen filter ignores the allergens of extras**, and the allergens of variants of a dish that has its own declaration (found in A1517-1's review, 2026-11-11).
 2. **Paper kitchen tickets show no dish allergens** unless a guest at the table was flagged as
    allergic. The kitchen screen shows them; a cook working from paper does not see them.
 3. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
