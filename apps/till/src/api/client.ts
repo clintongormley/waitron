@@ -52,7 +52,7 @@ import type {
   MenuUnavailable,
   ServedMenu,
 } from "@waitron/shared";
-import { readTransferEvents } from "./transfer-events.js";
+import { readTransferEvents, readEventStream } from "./transfer-events.js";
 import type {
   BillRow,
   BillsQuery,
@@ -2742,6 +2742,20 @@ export class TillApi {
       `/api/department-transfers/${encodeURIComponent(requestId)}/decline`,
       "POST",
       { reason },
+    );
+  }
+
+  readLiveEvents(
+    types: readonly string[],
+    onEvent: (event: string, data: string) => void,
+    options: ReadOptions = {},
+  ): Promise<void> {
+    const resources = encodeURIComponent(JSON.stringify(types.map((type) => ({ type }))));
+    return readEventStream(
+      this.#baseUrl + `/api/live/events?resources=${resources}`,
+      this.#fetchImpl,
+      onEvent,
+      options.signal,
     );
   }
 

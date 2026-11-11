@@ -1,7 +1,7 @@
-export async function readTransferEvents(
+export async function readEventStream(
   url: string,
   fetchImpl: typeof fetch,
-  reload: (event: "ready" | "change") => void,
+  onEvent: (event: string, data: string) => void,
   signal?: AbortSignal,
   onRefused: (code: string) => void = () => {},
 ): Promise<void> {
@@ -45,18 +45,7 @@ export async function readTransferEvents(
         const line = buffer.slice(0, end).replace(/\r$/, "");
         buffer = buffer.slice(end + 1);
         if (line === "") {
-          if (event === "session-invalid") {
-            const parsed: unknown = JSON.parse(data.join("\n"));
-            const code =
-              parsed !== null &&
-              typeof parsed === "object" &&
-              "code" in parsed &&
-              typeof parsed.code === "string"
-                ? parsed.code
-                : "session.required";
-            throw { code };
-          }
-          if (!signal?.aborted && (event === "ready" || event === "change")) reload(event);
+          if (!signal?.aborted) onEvent(event, data.join("\n"));
           event = "";
           data = [];
         } else if (line.startsWith("event:")) event = line.slice(6).replace(/^ /, "");
@@ -68,4 +57,33 @@ export async function readTransferEvents(
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+}
+
+export function readTransferEvents(
+  url: string,
+  fetchImpl: typeof fetch,
+  reload: (event: "ready" | "change") => void,
+  signal?: AbortSignal,
+  onRefused: (code: string) => void = () => {},
+): Promise<void> {
+  return readEventStream(
+    url,
+    fetchImpl,
+    (event, data) => {
+      if (event === "session-invalid") {
+        const parsed: unknown = JSON.parse(data);
+        const code =
+          parsed !== null &&
+          typeof parsed === "object" &&
+          "code" in parsed &&
+          typeof parsed.code === "string"
+            ? parsed.code
+            : "session.required";
+        throw { code };
+      }
+      if (event === "ready" || event === "change") reload(event);
+    },
+    signal,
+    onRefused,
+  );
 }
