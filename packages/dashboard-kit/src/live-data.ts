@@ -6,6 +6,7 @@ export interface ResourceQuery<T> {
   dependencies: readonly ResourceIdentity[];
   read: () => Promise<T>;
   refreshMs?: number;
+  quietWhileConnected?: boolean;
 }
 
 export interface ResourceSnapshot<T> {
@@ -35,6 +36,7 @@ interface Entry {
 export class LiveData {
   #entries = new Map<string, Entry>();
   #paused = false;
+  #connected = false;
   #interestListeners = new Set<() => void>();
 
   get interests(): ResourceIdentity[] {
@@ -81,6 +83,7 @@ export class LiveData {
       if (query.refreshMs !== undefined) {
         const timed = entry;
         timed.timer = setInterval(() => {
+          if (this.#connected && timed.query.quietWhileConnected) return;
           timed.dirty = true;
           this.#schedule(timed);
         }, query.refreshMs);
@@ -111,6 +114,10 @@ export class LiveData {
 
   pause(): void {
     this.#paused = true;
+  }
+
+  setConnected(up: boolean): void {
+    this.#connected = up;
   }
 
   resume(): boolean {

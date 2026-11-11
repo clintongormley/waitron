@@ -59,6 +59,111 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it("closes a silent stream after thirty seconds, re-reads once and reconnects", async () => {
+  streams[0]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(29_999);
+  expect(values).toEqual([1, 2]);
+  expect(streams[0]!.close).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(streams[0]!.close).toHaveBeenCalledOnce();
+  expect(values).toEqual([1, 2, 3]);
+  await vi.advanceTimersByTimeAsync(999);
+  expect(streams).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(streams).toHaveLength(2);
+});
+
+it("keeps a stream open while it receives a keepalive every fifteen seconds", async () => {
+  streams[0]!.dispatchEvent(new Event("open"));
+  for (let n = 0; n < 6; n++) {
+    await vi.advanceTimersByTimeAsync(15_000);
+    streams[0]!.send("keepalive", []);
+  }
+  expect(streams[0]!.close).not.toHaveBeenCalled();
+  expect(streams).toHaveLength(1);
+  expect(values).toEqual([1, 2]);
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(streams[0]!.close).toHaveBeenCalledOnce();
+});
+
+it.each(["open", "ready", "keepalive", "change", "reset", "error", "session-invalid"])(
+  "restarts the silence clock when it receives %s",
+  async (event) => {
+    streams[0]!.dispatchEvent(new Event("open"));
+    await vi.advanceTimersByTimeAsync(25_000);
+    streams[0]!.send(event, []);
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(streams[0]!.close).toHaveBeenCalledOnce();
+  },
+);
+
+it("starts a new silence clock when a suspended page returns", async () => {
+  streams[0]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(25_000);
+  page.dispatchEvent(new Event("pagehide"));
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(values).toEqual([1, 2]);
+  expect(streams).toHaveLength(1);
+  page.dispatchEvent(new Event("pageshow"));
+  await vi.advanceTimersByTimeAsync(0);
+  streams[1]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(29_999);
+  expect(streams[1]!.close).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(streams[1]!.close).toHaveBeenCalledOnce();
+});
+
+it("quiets opted-in timers only after ready and resumes them on error", async () => {
+  let value = 1;
+  const observed = data.observe(
+    {
+      key: "quiet-alerts",
+      dependencies: [{ type: "alerts" }],
+      refreshMs: 7000,
+      quietWhileConnected: true,
+      read: async () => value++,
+    },
+    () => {},
+  );
+  streams[0]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(observed.snapshot.value).toBe(2);
+  streams[0]!.send("ready", {});
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(observed.snapshot.value).toBe(2);
+  streams[0]!.dispatchEvent(new Event("error"));
+  await vi.advanceTimersByTimeAsync(7000);
+  expect(observed.snapshot.value).toBe(4);
+  observed.unsubscribe();
+});
+
+it("resumes opted-in timers after silence until the new stream is ready", async () => {
+  let value = 1;
+  const observed = data.observe(
+    {
+      key: "quiet-alerts",
+      dependencies: [{ type: "alerts" }],
+      refreshMs: 7000,
+      quietWhileConnected: true,
+      read: async () => value++,
+    },
+    () => {},
+  );
+  streams[0]!.dispatchEvent(new Event("open"));
+  streams[0]!.send("ready", {});
+  await vi.advanceTimersByTimeAsync(28_000);
+  expect(observed.snapshot.value).toBe(1);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(observed.snapshot.value).toBe(2);
+  expect(streams[0]!.close).toHaveBeenCalledOnce();
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(observed.snapshot.value).toBe(3);
+  expect(streams).toHaveLength(2);
+  observed.unsubscribe();
+});
+
 it("starts no read when a stream errors just before pagehide", async () => {
   streams[0]!.dispatchEvent(new Event("error"));
   // Chromium can report the stream failure before it dispatches pagehide during reload.
