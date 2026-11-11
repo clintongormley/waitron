@@ -3,7 +3,7 @@
 **Cleared by the watcher 2026-11-11 10:24 with two changes (below, marked "watcher 10:24"); owner
 question 1 answered "B" 2026-11-11 10:25 (each download recorded).** Earlier status: proposed
 2026-11-11, revised the same day after a fresh reader's review; for the watcher;
-on `feat/a275-transfer-export` (off `main` at `e57d4ba008`).** Every `file:line` below was read at
+on `feat/a275-transfer-export` (off `main` at `e57d4ba008`). Every `file:line` below was read at
 that commit. One thing was run; it is marked **Measured**. Everything else is read, not run.
 
 **When this lands, a manager or the administrator can:** on the dashboard's **Sales & takings**
@@ -48,7 +48,7 @@ customer (`packages/core/src/record-correction.ts:207` → `correction-eligibili
   the invoice writers) is untouched; the golden hash test and `inmutabilidad` are not edited; no
   existing assertion changes.
 
-## Owner question (one; the build follows the recommendation unless told otherwise)
+## Owner question (answered B, 2026-11-11 10:25)
 
 **1. Who may download this file, and is each download recorded?** The file is a bulk list of
 customers' tax numbers. Example: a manager downloads October's file on 3 November: 40 rows, six of
@@ -120,8 +120,10 @@ issued at real time was then accepted (no clock-behind refusal), and a €1.21 c
    - Words in a new `apps/server/src/i18n/transfer-export.ts`, EN and ES, beside
      `i18n/misdated-sales.ts`.
 2. `misdated-sales-csv.ts:44`: export `amountCell`.
-3. `apps/server/src/report-api.ts`, after the `period` route (`:328`): `GET
-   /management-api/reports/closed-by-transfer?from=&to=`. `requireManagementSession`, then
+3. `apps/server/src/report-api.ts`, after the `period` route (`:328`): `POST
+   /management-api/reports/closed-by-transfer?from=&to=` (a POST because it writes the activity entry:
+   the own-page origin check and the read-only gate pass a GET unchecked; finish-branch review
+   2026-11-11). `requireManagementSession`, then
    `requireRange` (as `period` does: a malformed range is a 400 `management.request_invalid` with
    `field` "from", "to" or "range", already in `STATUS`, `:74`), then one `withTransaction` that calls
    `authorizeManager` with `report.export` (`:172–181` shows the shared gate; this route needs its
@@ -144,7 +146,7 @@ which lists neither today); never a bare `legalName` or `taxId`.
 **6b, dashboard and guide.**
 
 5. `api/client.ts`: `downloadClosedByTransfer({ from, to }): Promise<Blob>`, as
-   `downloadVatReturnFile` (`:4400–4409`).
+   `downloadOrderInvoicePdf` (a POST, `:4366`).
 6. `screens/dashboard-sales-screen.ts`: `@property canExport = false` (beside `:193`); state
    `exporting` and `exportErrorKey`. Under the date fields (`render`, after the pickers block ending
    `:403`), only when `canExport`: a secondary `wt-button` `data-test="export-transfer"`, loading while
@@ -183,12 +185,14 @@ in a spreadsheet in each language. Screenshots stay out of the repository.
 `recordCorrection`.
 
 1. **Filtered by the closing day, not the issue day.** A Counter F2 (Tarta, €18.00) issued now and
-   closed with `clockAt(now + 1 day)` (measured above): listed for tomorrow with
+   closed with `clockAt(now + 30 hours)`, so the close lands on a later business day even before the
+   05:00 day change: listed for that day with
    `{ invoiceNumber: "A/1", invoiceType: "F2", issueDate: <today>, closedOn: <tomorrow>,
    recipientName: null, recipientTaxId: null, base: "14.88", vat: "3.12", total: "18.00",
-   correctedBy: [], correctionsTotal: "0.00" }`; today alone lists nothing. The file's only write
-   ahead of real time is this close, which writes no fiscal record (the invoice was already issued),
-   so later fiscal writes at real time pass the clock-behind stop (measured; CLAUDE.md §4).
+   correctedBy: [], correctionsTotal: "0.00" }`; today alone lists nothing. This close writes no
+   fiscal record (the invoice was already issued), so later fiscal writes at real time pass the
+   clock-behind stop (measured; CLAUDE.md §4). The local-day reader case added at review issues a
+   sale a year ahead, last of the reader's cases; nothing after it in the file writes a fiscal record.
 2. **A full invoice names its customer.** A table F1 to `RECIPIENT`, closed now (the shape of
    `transfer-close.test.ts:76–103`): `recipientName: "Cliente SL"`, `recipientTaxId: "B12345674"`,
    `invoiceType: "F1"`.
@@ -208,7 +212,12 @@ in a spreadsheet in each language. Screenshots stay out of the repository.
    `R/1`; under option B, one new `activity_log` row of kind `transfer_export.downloaded`, actor the
    manager, data `{ from, to, rows: 1 }`. The supervisor (holds `report.view`) answers 403
    `authorization.not_permitted` and adds no activity row. (No backwards-range case: it is tested
-   where `requireRange` lives; watcher 10:24.)
+   where `requireRange` lives; watcher 10:24.) Added at review (2026-11-11): a GET or HEAD to the
+   address serves no file and records nothing; a refused activity insert answers 500 with no file.
+   A reader case added then, last of the reader's cases: an invoice issued at
+   `<next year>-01-01T23:30Z` at offset +60 shows issue date `<next year>-01-02` and closing day
+   `<next year>-01-01`; it writes a fiscal record a year ahead, so no later case in the file writes
+   one.
 
 **Dashboard** (after `memory_pressure` shows headroom; real Chromium):
 
@@ -226,7 +235,9 @@ day (case 1 fails); recipient columns read as null (case 2); corrections query r
 `total`); `order by` removed (case 4: insertion order puts case 1 first); `null` passed to `csvCell`
 unmapped (case 5 reads `"null"`); cells quoted without `csvCell` (case 5); amounts through `csvCell`
 (case 5 reads `"'-1.21"`); language ignored (case 5, Spanish); no byte-order mark, or LF line ends
-(case 5); route gated by `report.view` (case 6, 403); `recordActivity` removed (case 6, option B); screen ignores `canExport`, sends today instead of the
+(case 5); route gated by `report.view` (case 6, 403); `recordActivity` removed (case 6, option B); added at review: route registered with
+`app.get` (the GET/HEAD case gets 200), `recordActivity`'s failure swallowed (the refused-insert case
+gets 200), issue date taken as the UTC day (the local-day case reads `…-01-01`); screen ignores `canExport`, sends today instead of the
 fields, drops the refusal, or never disables (case 7); `.canExport` not passed (case 8).
 
 **Commands:**
@@ -296,6 +307,6 @@ lines; Task 6 does not edit `transfer-close-fixture.ts`, which #2797 changes.
 
 ## For the watcher
 
-Owner question 1 needs an answer before 6a lands; the build follows option B meanwhile (switching to
-A deletes about 10 lines, to C changes about 2). Open questions 1–5 have defaults. Build 6a off
+Owner question 1 was answered B (2026-11-11 10:25); 6a is built to it. Open questions 1–5 have
+defaults. Build 6a off
 `main`; rebase after #2797 or Task 5, whichever lands first.
