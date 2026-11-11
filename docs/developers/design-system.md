@@ -5660,7 +5660,7 @@ and its contents are moved or archived according to the dialog's answer. Product
 directly are archived in either case.
 
 Print agents offer **Delete** in the row menu and keep only active agents in the main list, with
-no lifecycle status column/filter. Delete opens a confirmation explaining that printing stops and
+no lifecycle status column/filter. Delete opens a confirmation explaining that it stops taking new print jobs and
 queued work may resume if the same agent is added again. **Add an agent** offers retained
 trusted agents by saved name, including this box's agent, before the existing fresh-pairing steps.
 
