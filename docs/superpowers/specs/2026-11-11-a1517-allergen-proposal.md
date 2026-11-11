@@ -1,5 +1,7 @@
 # A1517: allergen choices before go-live
 
+The owner accepted these recommendations on 11 November 2026. See [the recorded decisions](#owner-decisions-2026-11-11) below; the original proposal and its evidence remain unchanged.
+
 These are recommendations for your choices, not permission to build. Costs are estimates in developer days, including focused tests, English/Spanish wording and guides. [Your October decisions](2026-10-14-a668-allergen-info-editor-and-till-design.md#decisions-owner-2026-10-14) warn about missing information at publication, remove “Not reviewed” from kitchen screens and retire the till’s allergen-sheet screen. The recommendations below preserve those decisions; point 3 asks whether to bring existing menu work forward.
 
 1. **Filtering unchecked dishes and extras.** The running filter retains an unreviewed dish and a reviewed salad offering walnuts when nuts are excluded. A mounted unreviewed tile has no mark (R1; `apps/till/src/menu-filter.ts:66`). **1a: recommend hiding unchecked dishes during an active allergen exclusion**, without tile warnings contrary to October decision 6. A guest says “no nuts”: unknown soup disappears. **Estimate: under one day. Your choice:** this small change, or today’s rule? **1b is separate:** recommend carrying the exclusion into variant/extra choices, asking before replacing incompatible preselected extras. A salad remains available without walnut topping. **Estimate: 2–4 days**, including rules for unknown extras and required choices; these combinations are source-identified, not runtime-verified here. **Your choice:** design this follow-up too, or decide only 1a now? Recommend 1a first.
@@ -11,3 +13,16 @@ These are recommendations for your choices, not permission to build. Costs are e
 
 5. **Earlier orders.** Editing milk to eggs changes a sent table row’s nutrition; its saved context/version retain milk. Parked counter retrieval separately retains its original declaration (R5; `apps/server/src/line-nutrition.ts:24`). Recommend recording the chosen product’s effective *current* declaration at sending for sent-order/history displays, reusing existing order context after tracing its consumers. Preserve variant inheritance; the parent offer’s context is not a child’s declaration. Yesterday’s sent burger then keeps its recorded milk. Keep kitchen screens, paper and guest-clash checks live: a recipe can change before cooking. Published versions can lag edits, so they are not the proposed source. **Estimate: 2–3 days. Your choice:** freeze order/history displays only, freeze kitchen displays too, or retain live declarations throughout? Recommend the first, clearly labelled.
 Runtime receipts: Lane I’s corrected driver `receipts/a1517-20261111/probe-summary.json` (R1–R5) and `host-dom.json`: 99 existing passing cases and seven final temporary probes, including two mounted Chromium probes in English/default light at 414px. No physical-printer or all-layout audit. Repository source sites are above; campaign receipts retain commands, outputs and replay sources. The original author-only summary is separately retained under `author-receipts/`.
+
+## Owner decisions, 2026-11-11
+
+The watcher recorded the owner's answer at 22:01 in Lane I's `questions.md`, under the heading beginning “WATCHER 2026-11-11 22:01 — A1517 allergens”. Asked “Take them as recommended?”, the owner answered **“As recommended”**. The watcher recorded these six decisions:
+
+1. With an allergen filter on, hide dishes whose allergens nobody entered. Keep today's presentation when no allergen exclusion is active.
+2. After that change, extend the filter to extras and options. Settle the required-choice and unknown-extra rules in that follow-up's design.
+3. Print each dish's live allergen declarations on every kitchen ticket, with selected extras separately and guest instructions prominent. Keep the October decision against “Not reviewed” labels.
+4. Bring forward A670's basic printable guest menu with allergens. Design it first; keep the retired till allergen screen retired.
+5. Show an extra's declared allergens before it is added, without adding missing-information warnings.
+6. Show sent-order and history declarations as they were when sent, using the chosen product's effective current declaration at sending. Kitchen screens, kitchen tickets and guest-clash checks keep using current declarations.
+
+These are accepted product choices, not completed features. The watcher will queue their implementation separately; this proposal item changes no product behavior. The estimates above remain estimates, and A670 still needs a design before its build can be sized reliably.

@@ -709,6 +709,10 @@ every icon (the regulation wants words, with symbols only in addition — A668's
 online menu (A509) it is the written allergen record a customer or inspector is shown, now that the
 till no longer offers a separate Allergens screen.
 
+The owner accepted bringing forward a basic printable guest menu through
+[A1517](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
+on 11 November 2026. Design comes first; no menu implementation is recorded here.
+
 ## The products' made-at read has no screen since A655
 
 **The products' made-at read has no screen since A655** — `GET /management-api/products/made-at`,
@@ -1154,8 +1158,10 @@ list.
 
 **Before go-live (owner, 2026-11-11).** The original observations below came from reading,
 not running. The [proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md) records the
-11 November runtime checks, their limits and five choices for the owner; no implementation is
-authorised. It distinguishes the narrower measured cases from these original observations.
+11 November runtime checks and their limits. The owner accepted its recommendations at 22:01;
+the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11)
+split the remaining implementation into six follow-ups for the watcher to queue. No product change
+is built by the proposal. It distinguishes the narrower measured cases from these original observations.
 
 1. **The till's allergen filter still shows dishes nobody has checked.** Filtering out an allergen
    hides dishes that declare it but keeps dishes whose allergens were never entered, with no
@@ -1172,6 +1178,12 @@ authorised. It distinguishes the narrower measured cases from these original obs
    a later edit changes what staff see on an earlier order.
 
 ## Decisions and deliberate limits
+
+- **Allergen choices (A1517, owner 2026-11-11, “As recommended”).** Hide unchecked dishes while
+  excluding allergens, then extend filtering to extras/options; print live declarations on every
+  kitchen ticket; bring forward A670's basic guest-menu design; label extras before selection; keep
+  sent-order/history declarations as sent while kitchen and guest-clash checks stay current.
+  [Decision record](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11).
 
 - **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before
   saving the copy, matching floor plan sets. Cancel saves nothing. The browser and server refuse

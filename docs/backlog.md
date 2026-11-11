@@ -489,9 +489,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   use the button and whether "sold out" switches back by itself the next day; today it never does.
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
-- **A1517. Allergen points to revisit before go-live (owner, 2026-11-11): go-live.** Five recommendations
-  need the owner's choices before implementation. Runtime checks confirm that the filter retains
-  unchecked dishes; choose their treatment before go-live.
+- **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
+  the recommendations: hide unchecked dishes while filtering, then filter extras/options; print live
+  declarations on kitchen tickets; design A670's guest menu; label extras before selection; preserve
+  sent-order declarations. Implementation remains open for the watcher to queue separately.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
@@ -508,6 +509,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A670 — printed menus (owner, 2026-10-14; open, not designed).** A printed menu carries each
   dish's allergen icons after its name and a key on the page naming every icon.
+  The owner brought its basic guest-menu design forward on 11 November through A1517.
   [Detail](backlog/catalogue.md#a670--printed-menus-owner-2026-10-14-open-not-designed)
 
 - **Icon button** (bundle of 2, size M). [Detail](backlog/catalogue.md#bundle-icon-button)
