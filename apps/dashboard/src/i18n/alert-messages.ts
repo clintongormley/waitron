@@ -126,8 +126,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Tu bucket está rechazando este equipo: puede que su clave de acceso ya no funcione, o que el bucket ya no admita la comprobación que usa Waitron para evitar que dos equipos sobrescriban la copia del otro. Revisa los ajustes del bucket en la página de Copias.",
   },
   "backup.stream_stopped": {
-    en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Contact support.",
-    es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Contacta con soporte.",
+    en: "The bucket copy is not running, so new changes are not reaching your bucket. Sales continue. Open Backups and press Start the copy again. If it stops again, choose Change bucket there and press Test to check the bucket.",
+    es: "La copia en el bucket no está en marcha, así que los cambios nuevos no llegan a tu bucket. Las ventas continúan. Abre Copias de seguridad y pulsa Volver a iniciar la copia. Si se vuelve a detener, elige allí Cambiar de bucket y pulsa Probar para comprobar el bucket.",
   },
   "backup.sealed_state_failed": {
     en: "The box could not update the locked copy of its own keys and settings that it keeps with your data. A box rebuilt from your bucket might come back with out-of-date keys and settings, or without them if none were ever saved. Sales continue. Contact support.",

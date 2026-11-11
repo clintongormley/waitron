@@ -4690,6 +4690,11 @@ export class DashboardApi {
     return this.#request<StreamSettingsView>("/api/backup/stream", "DELETE");
   }
 
+  /** Starts a copy that stopped by itself with the settings it already holds. */
+  restartStream(): Promise<StreamSettingsView> {
+    return this.#request<StreamSettingsView>("/api/backup/stream/restart", "POST");
+  }
+
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
 
   listPaymentProviders(): Promise<PaymentProviderRow[]> {

@@ -2180,6 +2180,7 @@ export const en = {
     "The recovery key this box holds is too short, so the bucket copy cannot use it.",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
+  "stream.restart": "Start the copy again",
   "stream.turn_off_confirm": "Turn off this copy?",
   "stream.probe.encryption_unavailable":
     "The bucket refused the encryption check. Allow customer-supplied encryption keys in its settings, or use a bucket login allowed to change that setting. Then save again.",
@@ -6060,6 +6061,7 @@ export const es: Record<StringKey, string> = {
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla.",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
+  "stream.restart": "Volver a iniciar la copia",
   "stream.turn_off_confirm": "¿Desactivar esta copia?",
   "stream.probe.encryption_unavailable":
     "El bucket ha rechazado la comprobación de cifrado. Permite claves de cifrado proporcionadas por el cliente en sus ajustes o usa un acceso al bucket con permiso para cambiar ese ajuste. Después, vuelve a guardar.",

@@ -151,6 +151,8 @@ State: The stream is absent, refused, or stopped for a reported reason such as l
 
 Route: Existing: saving or removing stream settings calls reload. Missing: an explicit supported restart/retry action and reason-specific guidance; changing a healthy setting just to trigger a reload is not a documented recovery procedure. See apps/server/src/stream-api.ts:232 and :260.
 
+_2026-11-11, A1089 B1: the words no longer say to contact support. Backups now shows Start the copy again while the copy is off for a reason other than a first start waiting after a restore (`POST /api/backup/stream/restart`, which reloads the copy with its saved settings and refuses with `backup.stream_held_by_another_box` while another box writes this venue's copy to the same bucket). The alert says to press it, and if the copy stops again, to choose Change bucket and press Test. Still open: the Backups page shows only "Not running", not the reason the copy stopped, so reason-specific guidance is still missing, and a copy that keeps stopping with a bucket that passes Test has no further remedy. The rest of this entry records the earlier tree._
+
 ### `backup.sealed_state_failed`
 
 Screen: Dashboard alerts bell (incident history where applicable). Fix: [backup-state](#backup-state).

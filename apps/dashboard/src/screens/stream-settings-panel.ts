@@ -99,6 +99,12 @@ function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
 }
 
+/** The states the server raises `backup.stream_stopped` for, bar a refusal: a first start deferred
+ * after a restore (`FIRST_START_PENDING`, `apps/server/src/stream-host.ts`) is not a stop. */
+function stoppedByItself(status: StreamStatusView): boolean {
+  return status.state === "off" && "reason" in status && status.reason !== "first_start_pending";
+}
+
 function stateKey(status: StreamStatusView): StringKey {
   switch (status.state) {
     case "streaming":
@@ -446,6 +452,25 @@ export class StreamSettingsPanel extends LitElement {
     }
   }
 
+  async #restart(): Promise<void> {
+    if (this.busy) return;
+    this.#clearMessages();
+    this.busy = true;
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
+    try {
+      const settings = await this.api.restartStream();
+      if (!current()) return;
+      this.settings = settings;
+      this.#trackShownForm(settings);
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
+    } catch (error) {
+      if (current()) this.#fail(error);
+    } finally {
+      if (current()) this.busy = false;
+    }
+  }
+
   #startEdit(): void {
     // A new-bucket form a read replaced keeps its scope, whose baseline is not the stored bucket.
     this.#releaseForm();
@@ -552,6 +577,19 @@ export class StreamSettingsPanel extends LitElement {
             : nothing
         }
       </dl>
+      ${
+        stoppedByItself(status)
+          ? html`<div class="actions">
+              <wt-button
+                variant="primary"
+                data-test="restart"
+                ?disabled=${this.busy}
+                @click=${() => void this.#restart()}
+                >${t("stream.restart")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
     `;
   }
 

@@ -147,6 +147,9 @@ el bucket sin guardar ajustes; **Guardar y activar** también comprueba que un a
 guardados como estaban. Este formulario no puede diagnosticar un fallo de configuración del propio
 equipo. Conserva las claves de recuperación y las copias existentes si el rechazo persiste.
 
+Si la copia en el bucket se ha detenido sola, **Copias de seguridad** muestra **Volver a iniciar la
+copia**, que la inicia con los ajustes que ya tiene.
+
 ## Crea las nuevas series {#series}
 
 Si este navegador guardó observaciones de facturas del contribuyente y entorno seleccionados, el

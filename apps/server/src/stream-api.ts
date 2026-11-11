@@ -87,6 +87,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.recovery_key_too_short": 400,
   "backup.not_primary": 409,
   "backup.reload_in_progress": 409,
+  "backup.stream_held_by_another_box": 409,
   "backup.stream_test_failed": 422,
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
@@ -250,6 +251,26 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
             value: streamSettingsPayload({ venueId: deps.venueId, bucket }),
           }),
         );
+        await deps.stream.reload();
+        return c.json(await view());
+      });
+    }),
+  );
+
+  // Not a settings change, so no fresh sign-in.
+  app.post("/api/backup/stream/restart", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      guardPrimary();
+      return deps.turns(async () => {
+        guardPrimary();
+        const status = deps.stream.status();
+        if (
+          status.state === "refused" &&
+          (status.reason === "pointer_changed" || status.reason === "pointer_newer_term")
+        ) {
+          throw new AppError("backup.stream_held_by_another_box", {});
+        }
         await deps.stream.reload();
         return c.json(await view());
       });
