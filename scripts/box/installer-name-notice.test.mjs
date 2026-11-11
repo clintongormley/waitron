@@ -14,13 +14,19 @@ const token = {
   name: "Harbour Restaurant Ltd",
   live: false,
 };
-function reader({ marked = true, diagnostic = "", tokens = { 2: token }, failed = false } = {}) {
+function reader({
+  marked = true,
+  type = partition.type,
+  diagnostic = "",
+  tokens = { 2: token },
+  failed = false,
+} = {}) {
   return vi.fn(async (command, args) => {
     if (command === "sfdisk")
       return JSON.stringify({
         partitiontable: {
           label: "gpt",
-          partitions: [{}, {}, { ...partition, name: marked ? "waitron-box" : "other" }],
+          partitions: [{}, {}, { ...partition, type, name: marked ? "waitron-box" : "other" }],
         },
       });
     expect(command).toBe("cryptsetup");
@@ -64,4 +70,10 @@ it.each([
 });
 it("keeps the occupied refusal when cryptsetup cannot read the header", async () => {
   expect(await installerNameNotice(target, reader({ failed: true }))).toBeNull();
+});
+
+it("recognises the uppercase partition GUID emitted by sfdisk", async () => {
+  expect(await installerNameNotice(target, reader({ type: partition.type.toUpperCase() }))).toBe(
+    "This box already has Waitron (Harbour Restaurant Ltd).",
+  );
 });

@@ -23,7 +23,10 @@ export async function installerNameNotice(target, run) {
     const part = layout?.partitions?.[2];
     if (layout?.label !== "gpt" || part?.node !== `${target}3`) return null;
     const marker = WAITRON_LAYOUTS.find(
-      (value) => value.typeGuid === part.type && value.partitionName === part.name,
+      (value) =>
+        typeof part.type === "string" &&
+        value.typeGuid === part.type.toLowerCase() &&
+        value.partitionName === part.name,
     );
     if (!marker) return null;
     // With locks disabled cryptsetup reports recovery needs without repairing this offline disk.
