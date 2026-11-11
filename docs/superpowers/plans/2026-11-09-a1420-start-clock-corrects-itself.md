@@ -27,6 +27,13 @@
 - **Task 7a's sentence** now reads "`keep: true` is refused once the start check is `by_internet`", so it cannot be read as refusing "The server's time is right" while the box waits.
 - **Readings 1-5 are confirmed as they stand.** Reading 3 now puts the till guide's sentence in PR 1c, the PR that changes the till's PIN screen.
 
+**Changed by PR 1a's review (2026-11-11), against the plan text at lines 17, 27, 73, 170-171 and 532 of this file** (receipts: PR #2808's thread and `docs/developers/conventions-data.md`):
+
+- A confirmation that sets nothing still writes no row of its own, but when a clock stop also holds it writes the old stop's confirmation row in the same transaction.
+- `keep: true` ("The server") is not offered while a clock stop holds, and is refused `stopped` then, leaving the start-up window open, even after the internet has confirmed the start.
+- A set at reason `start` writes its row at reason `behind_chain` while the clock-behind stop holds, so it ends that stop, and then refuses a person `witnessed`, as main does at that reason, once AEAT has a reading taken during the stop.
+- Open for the owner: a set at the start that moves a clock not behind the latest record to more than a minute behind it leaves the clock-behind stop in force after the start is confirmed; a person's "Yes" then lifts it while the till still offers "Check the time".
+
 Earlier revisions are in this branch's history (`git log docs/a1420-start-clock-plan`). Task numbers are kept from revision 3 so earlier notes still point at the right task; Tasks 5 and 13 are gone, and Tasks 4b, 6a, 6b, 7a, 7b, 9a, 9b and 10b are new halves.
 
 **What a person can do when this lands.**

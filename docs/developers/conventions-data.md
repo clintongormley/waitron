@@ -4657,8 +4657,9 @@ How it moves (plan D3):
   set's reason. The watch's device check runs in the correction's turn, so it never confirms while a
   set is in flight.
 
-A confirmation that sets nothing writes a log line, and no row unless the clock-behind stop also
-holds, when it writes that stop's confirmation row as before. Each confirmation keeps the chain
+A confirmation that sets nothing writes a log line, and no row unless a clock stop also holds:
+while the clock-behind stop holds it writes that stop's confirmation row as before; while the clock
+reads a date before 28-10-2024 it is refused and writes nothing (below). Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
 
 **The gate** (`apps/server/src/start-clock-gate.ts`, plan D4 and R6). Boot wraps the one fiscal
@@ -4691,14 +4692,24 @@ till's profile and the person are still checked. The confirm then takes one of t
   till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
   source `staff` or `admin`. While either stop holds it is refused `clock.set_refused` with reason
   `stopped`, writing nothing: a keep writes no confirmation, so it could not end the stop;
-- a till within a minute confirms the same way ("Yes"); while the clock-behind stop also holds, it
-  writes that stop's confirmation (`confirmClockStop`) in the same transaction;
+- a till within a minute confirms the same way ("Yes"); while either stop holds, it calls
+  `confirmClockStop` in the same transaction, which writes the clock-behind stop's confirmation.
+  On a clock reading before 28-10-2024 a "Yes" is refused, leaving the start waiting: the till then
+  reads before that date too, so the confirm refuses it `target_invalid` (run, in
+  `till-box-clock-api.test.ts`); a till reading that passes that check, within a minute of that
+  date, reaches `confirmClockStop`, which refuses it `clock.unusable` (read, not run);
 - a till further out ("This device") sets the clock through the host with reason `start`, which
   writes the row every set writes and raises `clock.corrected` with its email, then, when the set is
   verified, confirms `by_person`; if the chain heads cannot be read then, the start stays
   waiting and `clock_start.mark_failed` is logged. While the clock-behind stop also holds at the
-  set, judged in the correction's turn on a clock reading no date before 28-10-2024, the row is written at reason `behind_chain`, so it ends
-  that stop as a set outside the start does.
+  set, judged in the correction's turn, the row is written at reason `behind_chain`, so it ends
+  that stop as a set outside the start does, and, as at that reason, a person is then refused
+  `witnessed` once AEAT has a reading taken during that stop, agreeing or not. With no clock-behind
+  stop (the seat answers none for a reading before 28-10-2024 either) the row is at reason `start`
+  and AEAT's readings refuse nothing. A set that moves a clock not behind the latest record to more
+  than a minute behind it writes its row at reason `start`, so the clock-behind stop then holds
+  after the start is confirmed `by_person`; a person's "Yes" lifts it, while the till offers
+  “Check the time” (`till-box-clock-api.test.ts`).
 
 Once the start is `by_devices` or `by_person`, the notice and the challenge follow the clock-behind
 stop's paths again, except that staff are admitted whatever the start-up window and AEAT say until
@@ -4801,7 +4812,8 @@ Inside the turn, each refusal asking nothing further:
    ([above](#every-start-confirms-the-boxs-time-before-it-trades));
 4. the host's status: `host_unavailable`, then `synchronised`;
 5. for a person: `witnessed` when AEAT has a reading taken during this stop, agreeing or not, so the
-   box sets or confirms from AEAT itself; then `agrees` when the device is within a minute, so
+   box sets or confirms from AEAT itself (at reason `start`, only while the clock-behind stop also
+   holds); then `agrees` when the device is within a minute, so
    confirming is the way;
 6. each anchor's `stepComing` (a throw refuses `pending_disproofs`); then steps 3 and 5 again,
    because AEAT can answer or the stop end during the waits (a refusal there re-anchors every
@@ -4826,8 +4838,8 @@ by hand): an offset is valid only while the clock has not stepped since it was m
 **A step's row and alert** (`confirmClockStep`, `packages/fiscal-verifactu/src/clock-step.ts`). A
 verified step writes one `clock_confirmations` row: `box_clock_at` the reading before,
 `confirmed_at` the reading after (the time the cover takes as adopted), `step_ms` the measured step
-rounded, `source` `authority`, `admin` or `staff`, `person_id` the person, `reason` `behind_chain`
-or `unusable`, and in `proof` what set the clock (AEAT's reading, or the person's reading with
+rounded, `source` `authority`, `admin` or `staff`, `person_id` the person, `reason` `behind_chain`,
+`unusable` or `start`, and in `proof` what set the clock (AEAT's reading, or the person's reading with
 `device` naming the till when there was one) plus `step: { beforeAt, afterAt, stepMs, targetAt }`.
 For the clock-behind stop it also closes the open check (opening one at the before reading if none
 is open), stores `heads` and `closing` as slice 9 does, lists the wrongly dated sales

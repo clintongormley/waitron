@@ -414,13 +414,18 @@ till can press it; it needs no permission. The [till notices guide](till-notices
 what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, **This device** sets the
-box's clock to it; when it is within a minute, **Yes** keeps the box's clock. While the box waits for
-its time to be confirmed after a start, the till also offers **The server**, which keeps the box's
-clock whatever the till's time, unless payments are also stopped because the clock reads more than a
-minute earlier than the last record, or before 28 October 2024. Each restarts payments. When the box sets its clock, the bell and the email name the staff member and the till.
-When the till's time is used, other devices' readings do not stop it. When the till agrees with a
-clock that reads earlier than the last record, two devices that disagree with the box stop the
-confirmation, and the dialog says why.
+box's clock to it, and **The server** keeps the box's clock whatever the till's time while the box
+waits for its time to be confirmed after a start and payments are not also stopped because the clock
+reads more than a minute earlier than the last record, or before 28 October 2024; otherwise **The
+server** asks the person to correct the till's time. When it is within a minute, **Yes** keeps the
+box's clock. Each of these the box accepts restarts payments, with one exception: when **This
+device** moves a clock that read no more than a minute earlier than the last record to more than a
+minute earlier, payments stop until the clock is confirmed again, as [When payments stop because of
+the clock](box-status.md#clock-behind) explains; a person can do it with **Check the time** and
+**Yes** while the till still offers it. When the box sets its clock, the bell and the email name the
+staff member and the till. When the till's time is used, other devices' readings do not stop it.
+When the till agrees with a clock that reads earlier than the last record, two devices that disagree
+with the box stop the confirmation, and the dialog says why.
 
 Two tills or handhelds that agree with the box confirm its time after a start by themselves. During
 start-up they do not end a stop for a clock that reads earlier than the last record; a person

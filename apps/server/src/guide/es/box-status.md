@@ -440,15 +440,20 @@ permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué
 de la caja y qué hace cada botón.
 
 La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, **Este dispositivo**
-pone el reloj del equipo a esa hora; cuando está a menos de un minuto, **Sí** mantiene el reloj del
-equipo. Mientras el equipo espera a que se confirme su hora tras un arranque, la caja ofrece también
-**El servidor**, que mantiene el reloj del equipo sea cual sea la hora de la caja, salvo que los
-cobros estén parados además porque el reloj marca más de un minuto antes del último registro, o una
-fecha anterior al 28 de octubre de 2024. Cualquiera de ellos reanuda los cobros. Cuando el
-equipo pone su reloj en hora, la campana y el correo nombran al empleado y a la caja. Cuando se usa
-la hora de la caja, las lecturas de otros dispositivos no lo impiden. Cuando la caja coincide con un
-reloj que marca una hora anterior al último registro, dos dispositivos que no coinciden con el
-equipo impiden la confirmación, y el diálogo dice por qué.
+pone el reloj del equipo a esa hora, y **El servidor** mantiene el reloj del equipo sea cual sea la
+hora de la caja mientras el equipo espera a que se confirme su hora tras un arranque y los cobros no
+están parados además porque el reloj marca más de un minuto antes del último registro, o una fecha
+anterior al 28 de octubre de 2024; si no, **El servidor** pide a la persona que corrija la hora de
+la caja. Cuando está a menos de un minuto, **Sí** mantiene el reloj del equipo. Cada uno de ellos
+que el equipo acepta reanuda los cobros, con una excepción: cuando **Este dispositivo** lleva un
+reloj que marcaba como mucho un minuto antes del último registro a más de un minuto antes, los
+cobros se paran hasta que el reloj se vuelve a confirmar, como explica [Cuando se paran los cobros
+por la hora](box-status.md#clock-behind); una persona puede hacerlo con **Comprobar la hora** y
+**Sí** mientras la caja lo siga ofreciendo. Cuando el equipo pone su reloj en hora, la campana y el
+correo nombran al empleado y a la caja. Cuando se usa la hora de la caja, las lecturas de otros
+dispositivos no lo impiden. Cuando la caja coincide con un reloj que marca una hora anterior al
+último registro, dos dispositivos que no coinciden con el equipo impiden la confirmación, y el
+diálogo dice por qué.
 
 Dos cajas o terminales que coinciden con el equipo confirman su hora tras un arranque por sí solos.
 Durante el arranque no terminan una parada por un reloj que marca una hora anterior al último

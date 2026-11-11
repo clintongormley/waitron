@@ -385,7 +385,7 @@ describe("till-box-time-dialog", () => {
       ["close", "check-again"],
     ],
     [
-      "a keep refused while the server's clock reads earlier than its last sale",
+      "a keep refused while payments are stopped for the server's clock",
       { code: "clock.set_refused", reason: "stopped" },
       "box_time.refused.stopped",
       ["close", "check-again"],

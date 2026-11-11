@@ -223,7 +223,8 @@ export function clockCorrection(deps: {
 
   /** The stop and the till's check, judged in one write-lock turn. `rowReason` is the reason the
    * step's row is written under: at reason `start`, `behind_chain` while that stop also holds, so
-   * the row ends it as a set at that reason does. */
+   * the row ends it as a set at that reason does — and then, as for that reason, AEAT's reading
+   * taken during the stop refuses a person. */
   async function admission(input: ClockSetInput): Promise<{
     refusal: ClockSetRefusal | null;
     authoritySpoke: boolean;
@@ -239,9 +240,9 @@ export function clockCorrection(deps: {
       let rowReason = input.reason;
       let stop: { stopped: boolean; authoritySpoke: boolean };
       if (input.reason === "start") {
-        stop = { stopped: true, authoritySpoke: false };
-        if (!unusable(reading()) && (await judge(tx, "behind_chain")).stopped)
-          rowReason = "behind_chain";
+        const behind = await judge(tx, "behind_chain");
+        stop = { stopped: true, authoritySpoke: behind.authoritySpoke };
+        if (behind.stopped) rowReason = "behind_chain";
       } else stop = await judge(tx, input.reason);
       if (!stop.stopped)
         return { refusal: "not_stopped" as const, authoritySpoke: false, rowReason };

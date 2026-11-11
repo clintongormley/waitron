@@ -86,10 +86,13 @@ The dialog shows the server's time and this till's time. Nobody types a time: th
 what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
-  if the till's time is right: the server's clock is set to it and payments start again. Press **The
+  if the till's time is right: the server's clock is set to it and payments start again. If the
+  till's time is more than a minute earlier than the server's last sale, payments can stop: when the
+  red clock line then ends with **Check the time**, open it again and press **Yes**. Press **The
   server** if the server's time is right: when **Payments wait** is the only red clock line, the
   server keeps its time and payments start again; otherwise the dialog asks you to correct the
-  till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither is.
+  till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither
+  is.
 - When they agree, it asks whether the time is correct. Press **Yes** if it is; payments start
   again. Press **No** if it is not.
 

@@ -24,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ClockServiceStatus } from "./box-host-client.js";
 import { clockCorrection } from "./clock-correction.js";
-import { clockStartUp, type ClockStartUp } from "./clock-start-up.js";
+import { clockStartUp, tillClockCheck, type ClockStartUp } from "./clock-start-up.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -1381,6 +1381,32 @@ it("sets a waiting box behind the chain from a till still more than a minute bef
   await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
 });
 
+it("refuses a waiting box's set behind the chain once AEAT has spoken during that stop, leaving the start waiting", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start, authority: "answered" });
+  noteAuthority(box, DAY);
+  const before = written(box);
+  await expectRefused(box, check(box, staffCookie, 10 * MINUTE), 409, setRefused("witnessed"));
+  expect(box.host.sets).toHaveLength(0);
+  expect(written(box)).toEqual(before);
+  expect(start.status).toBe("waiting");
+});
+
+it("sets a waiting box whose clock reads before 28-10-2024 at reason start, and refuses its Yes", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(0, { at: IN_2001, start });
+  // A till that agrees with the box also reads before 28-10-2024.
+  await expectRefused(box, check(box, staffCookie, 20_000), 409, setRefused("target_invalid"));
+  expect(start.status).toBe("waiting");
+  const answer = await check(box, staffCookie, Date.now() + DAY - IN_2001);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(confirmationRow(answer.json.confirmationId as string)).toMatchObject({
+    source: "staff",
+    reason: "start",
+  });
+  expect(start.status).toBe("by_person");
+});
+
 it("keeps the box's time from a till whose own clock reads 1970", async () => {
   const { box, start } = await waitingBox();
   const asked = await ask(box, staffCookie);
@@ -1425,3 +1451,37 @@ it("admits a staff member to today's stop with the window shut once a person has
     reason: "behind_chain",
   });
 });
+
+it.each([
+  ["shut, as the clock watch leaves it after seeing no stop, so the till offers nothing", true],
+  ["still open, so the till offers Check the time", false],
+])(
+  "leaves the clock-behind stop in force after a waiting box ahead of its last record is set ten minutes back, with the start-up window %s; a person's Yes then lifts it",
+  async (_, shut) => {
+    const start = startClockState();
+    const box = await stoppedBox(-MINUTE, { start });
+    if (shut) box.startUp.noStop();
+    const set = await check(box, staffCookie, -10 * MINUTE);
+    expect(set.status, JSON.stringify(set.json)).toBe(200);
+    expect(confirmationRow(set.json.confirmationId as string)).toMatchObject({ reason: "start" });
+    expect(start.status).toBe("by_person");
+    await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+    const offered = await venue.db.withWriteLock(() =>
+      tillClockCheck({
+        startUp: box.startUp,
+        backend: venue.backend,
+        witnesses: () => box.witnesses.witnesses(),
+        filesRecords: () => true,
+        start,
+      })(venue.db as unknown as Transaction, box.clock.now()),
+    );
+    expect(offered).toBe(!shut);
+    const yes = await check(box, staffCookie, 0);
+    expect(yes.status, JSON.stringify(yes.json)).toBe(200);
+    expect(confirmationRow(yes.json.confirmationId as string)).toMatchObject({
+      source: "staff",
+      reason: "behind_chain",
+    });
+    await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+  },
+);
