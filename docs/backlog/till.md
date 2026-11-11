@@ -3979,15 +3979,6 @@ floor screen re-reads the floor every 15 seconds while a zone's map is on screen
 events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
 few seconds on every till; choose the interval and cost first.
 
-## In dark, the till's Cash and Card turn dim blue while a payment is being sent
-
-- **A842. While a payment is being sent, the pressed Cash or Card keeps its colour with a spinner**
-  (owner, 2026-10-17; left open by A535, #1617). They are switched off with `disabled` while
-  sending, not `loading`, so they now take the dark disabled colours (`--wt-color-primary-disabled`)
-  instead of a half-faded full blue; A417 asked for them to keep blue while sending. Follow the
-  owner's 2026-10-08 rule: the pressed button keeps its own colour with a spinner while its request
-  is sent, and the other goes quiet.
-
 ## A921. On a narrow till, should the person's name give room to the tab strip?
 
 A question for the owner, left open by A582 slice 4a. On a till (not a handheld) the bar's

@@ -5518,6 +5518,18 @@ describe("till-app: paying a bill by its state", () => {
     ).toBe(offered);
   });
 
+  it("explains a bill emptied before its whole payment reaches the server", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "sale.empty_basket" }),
+    });
+    const order = await openPartyTable(el);
+    emit(order, "pay-tab", { method: "cash", amount: "14.00" });
+    await flush(el);
+    expect(banner(el)?.textContent?.trim()).toBe(
+      "This order has no items. Add an item before continuing.",
+    );
+  });
+
   it("says to take the rest as a bill payment when the single payment is refused for money already on the bill", async () => {
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),

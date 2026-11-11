@@ -337,14 +337,6 @@ and the Spanish
 refund slip says "Propina" where the English says "Tip returned"
 (`apps/server/src/tender-refund-receipt.ts:79-92`).
 
-## A848. Show a clear message when the till pays, sends or moves an empty order
-
-`#onPayTab`
-(`apps/till/src/till-app.ts`) shows `sale.error` for any server code it does not name, which
-hides `sale.empty_basket`. On the till, try paying, sending and moving an empty order; where no
-clear message shows, add one in English and Spanish. Done when each of the three has been tried
-and shows a clear message.
-
 ## Loose ends left by A633
 
 - `packages/payments-stripe`'s `tenant-scoping.test.ts` is named for tenant scoping but guards

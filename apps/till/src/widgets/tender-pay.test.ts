@@ -1936,17 +1936,64 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
     expect(variants(el)).toEqual(["primary", "primary"]);
   });
 
-  it("keeps both blue while a payment is being sent", async () => {
-    const { el } = await mountPay(1, { busy: true });
-    expect(variants(el)).toEqual(["primary", "primary"]);
-  });
+  it.each([
+    { method: "cash", free: false },
+    { method: "card", free: false },
+    { method: "cash", free: true },
+    { method: "card", free: true },
+  ] as const)(
+    "keeps only the sent $method action primary and loading (zero total: $free)",
+    async ({ method, free }) => {
+      const { el, store } = await mountPay(free ? 0 : 1, { paymentWindow: free });
+      if (free) {
+        store.addProduct({ ...coffee, unitPrice: "0.00" }, "1");
+        await el.updateComplete;
+      }
+      el.addEventListener("confirm-payment", () => {
+        el.busy = true;
+      });
+      click(el, method === "cash" ? ".pay" : ".pay-card");
+      await el.updateComplete;
+      if (method === "cash") await type(el, "2");
+      click(el, ".confirm");
+      await el.updateComplete;
+      const active = query(
+        el,
+        method === "cash" ? ".pay" : ".pay-card",
+      ) as HTMLElementTagNameMap["wt-button"];
+      const other = query(
+        el,
+        method === "cash" ? ".pay-card" : ".pay",
+      ) as HTMLElementTagNameMap["wt-button"];
+      expect(active.loading).toBe(true);
+      expect(active.variant).toBe("primary");
+      expect(other.loading).toBe(false);
+      expect(other.variant).toBe("secondary");
+      expect(other.disabled).toBe(true);
+      store.clear();
+      await el.updateComplete;
+      expect(active.loading).toBe(true);
+      expect(active.variant).toBe("primary");
+      el.busy = false;
+      await el.updateComplete;
+      expect(active.loading).toBe(false);
+      expect(variants(el)).toEqual(["secondary", "secondary"]);
+    },
+  );
 
-  it("keeps both blue while a payment is being sent, even once the basket has emptied", async () => {
-    const { el, store } = await mountPay(1, { busy: true });
-    store.clear();
+  it("keeps Counter Pay primary and loading while the order is saved", async () => {
+    const { el } = await mountPay(1, { paymentWindow: true });
+    el.addEventListener("counter-bill-pay", () => {
+      el.busy = true;
+    });
+    click(el, "[data-counter-pay]");
     await el.updateComplete;
-    expect(store.lineCount).toBe(0);
-    expect(variants(el)).toEqual(["primary", "primary"]);
+    const pay = query(el, "[data-counter-pay]") as HTMLElementTagNameMap["wt-button"];
+    expect(pay.loading).toBe(true);
+    expect(pay.variant).toBe("primary");
+    el.busy = false;
+    await el.updateComplete;
+    expect(pay.loading).toBe(false);
   });
 
   it("draws both grey while the pay controls are held, when the screen holds its pay controls", async () => {

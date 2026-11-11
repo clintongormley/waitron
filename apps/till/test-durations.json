@@ -294,7 +294,6 @@
   "src/till-app-boot-and-counter.test.ts": 43,
   "src/till-app-chain-handed-over.test.ts": 1.9,
   "src/till-app-counter-adjustments.test.ts": 21.3,
-  "src/till-app-counter-cancel-credit.test.ts": 3.6,
   "src/till-app-counter-move-station.test.ts": 10.2,
   "src/till-app-counter-payment-window.test.ts": 1,
   "src/till-app-device-zones.test.ts": 33.5,

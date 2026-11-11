@@ -1083,15 +1083,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Reads and saves with no time limit** (bundle of 2, size S). [Detail](backlog/till.md#bundle-reads-and-saves-with-no-time-limit)
 
-- **A840. Can anything still reach the counter's Cancel and credit? Check, then clean up (owner,
-  2026-10-17).** B34 (#1077) built it for a counter order invoiced when it was placed, and
-  invoicing at placement was retired on 2026-10-06 (A261-2c, #1285); the button and its dialog
-  text are still in the code. Find whether any path still reaches it. If none does, remove the
-  button and dialog text and delete this entry; if one does, fix its three gaps: the result names
-  no credit note, a cancel that gets no answer is never shown as done, and the button does not
-  check for a payment on the order.
-  [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-
 - **Loose ends left by the table actions plan (Tasks 8, 10 and 11, #869, #875, #881; C77/C86;
   C84).**
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
@@ -1213,14 +1204,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   [Detail](backlog/till.md#the-tills-home-page-task-9-729)
 
 - **Reopening a held order keeps its lines right** (bundle of 5, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
-
-- **A842. While a payment is being sent, the pressed Cash or Card keeps its colour with a spinner
-  (owner, 2026-10-17; left open by A535, #1617).** Both are switched off with `disabled` while
-  sending, so in dark they turn dim blue. Follow the owner's 2026-10-08 rule: the pressed button
-  keeps its own colour with a spinner while its request is sent, and the other goes quiet. Done
-  when a test finds the pressed button in `loading` with its own colour, and the other one quiet,
-  while the payment is sent.
-  [Detail](backlog/till.md#in-dark-the-tills-cash-and-card-turn-dim-blue-while-a-payment-is-being-sent)
 
 ### Printers, the print agent and receipts
 
@@ -1389,9 +1372,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   shows a bill payment's applied amount without its tip; the card slip's words are fixed Spanish;
   and the Spanish refund slip says "Propina" where the English says "Tip returned".
   [Detail](backlog/payments.md#three-small-tip-display-gaps)
-
-- **A848. Show a clear message when the till pays, sends or moves an empty order.**
-  [Detail](backlog/payments.md#a848-show-a-clear-message-when-the-till-pays-sends-or-moves-an-empty-order)
 
 - **Reader status time limits** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-reader-status-time-limits)
 
@@ -2592,8 +2572,8 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q21 (pre-bill, or the invoice when a table asks for the bill)                                         | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10)                                                                     | S1 |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD)                                        | explicit document type and issuer identify foreign recipients; F3 uses `full`                                                                                                                                                   | fields and identity types answered from AEAT's technical rules; R4 |
 | Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows)    | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying built on the owner's decision (B17)                                                     | S3, S6, S10 (A445, A447) |
-| Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit)_                                              | **Answered**: the business's choice (art. 15.5; AEAT FAQ) |
-| Q32 (how a cancelled order's already-issued simplified invoice is undone)                             | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126)                                                                                                  | S7 |
+| Q31 (correct an issued ticket by differences or by substitution)                                      | `recordCorrection` files by differences (`"I"`); no route calls it _(2026-10-02, C126: the whole-order cancel route now calls it for a whole-invoice credit; 2026-11-11, A840: that route branch is retired, see C126's dated note)_                                              | **Answered**: the business's choice (art. 15.5; AEAT FAQ) |
+| Q32 (how a cancelled order's already-issued simplified invoice is undone)                             | the whole-order cancel credits the invoice in full with an R5 corrective invoice, not an annulment (C126; 2026-11-11, A840: that route branch is retired, see C126's dated note)                                                                                                  | S7 |
 | Q42 (a bill paid later by transfer: invoice now, or a proforma and the invoice on payment; F1 and F2) | no till action issues an invoice for the customer to pay later (only invoice-first placing and an unpaid departure issue one before payment); a payment by transfer is refused (`sale.unsupported_tender`) | Option 2 not lawful for a consumer; deposits S8, unpaid debts S6 |
 
 **The laboral advisor** (a _graduado social / gestoría_) has its own list in

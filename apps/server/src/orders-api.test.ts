@@ -74,19 +74,9 @@ describe("Orders routes", () => {
     const left = (await departed(venue, "Caña")).tabId;
     const paid = await placedIssuedBill(venue, "Caña");
     expect((await collect(venue, paid, "3.00")).status).toBe(200);
-    const cancelled = await placedIssuedBill(venue, "Caña");
+    const cancelled = await parked(venue, "Caña");
     expect(
-      (
-        await send(
-          venue.app,
-          venue.supervisorTill,
-          "POST",
-          `/api/working-orders/${cancelled}/cancel`,
-          {
-            reason: "Error",
-          },
-        )
-      ).status,
+      (await send(venue.app, venue.cookie, "DELETE", `/api/working-orders/${cancelled}`)).status,
     ).toBe(200);
     const sale = await billlessSale(venue);
 

@@ -112,6 +112,31 @@ const selectedZone = (el: TillShell) =>
 
 afterEach(cleanupWidgets);
 
+it.each(["en", "es"] as const)(
+  "an empty counter order explains disabled Pay and Send (%s)",
+  async (locale) => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const { el } = await mount({ orderFlow: "ticket_then_pay" });
+      const basket = el.shadowRoot!.querySelector("till-basket")!;
+      const pay = tender(el);
+      await Promise.all([basket.updateComplete, pay.updateComplete]);
+      expect(basket.shadowRoot!.querySelector(".empty")?.textContent?.trim()).toBe(
+        locale === "en" ? "Basket is empty" : "La cesta está vacía",
+      );
+      expect(
+        pay.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".pay")!.disabled,
+      ).toBe(true);
+      expect(
+        pay.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".place")!.disabled,
+      ).toBe(true);
+    } finally {
+      setLocale(previous);
+    }
+  },
+);
+
 describe("closed zone ordering", () => {
   it("replaces add controls with the area notice and retains the counter basket", async () => {
     const previous = currentLocale();

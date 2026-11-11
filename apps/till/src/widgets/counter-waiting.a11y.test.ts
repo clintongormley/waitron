@@ -64,16 +64,6 @@ describe.each(["light", "dark"] as const)("till-counter-waiting a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("an invoiced, unpaid order with Cancel and credit has no violations", async () => {
-    const { el, host } = await mountWidget<TillCounterWaiting>(
-      "till-counter-waiting",
-      { orders: [{ ...sent, serviceMode: "ticket_then_pay", invoiceNumber: "A/12" }] },
-      theme,
-    );
-    expect(el.shadowRoot!.querySelector("[data-waiting-cancel-credit]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
   it("a paid order with Hand over and Move to station has no violations", async () => {
     const { el, host } = await mountWidget<TillCounterWaiting>(
       "till-counter-waiting",

@@ -52,8 +52,6 @@ export class TillCancelCreditDialog extends LitElement {
   @property({ attribute: false }) refusal: DialogRefusal | null = null;
   @property({ attribute: false }) done: CancelCreditDone | null = null;
   @property({ type: Boolean }) busy = false;
-  /** The order is a counter order from the waiting list, not a table's bill. */
-  @property({ type: Boolean }) fromCounter = false;
 
   @state() private reason = "";
   @state() private attempted = false;
@@ -122,8 +120,6 @@ export class TillCancelCreditDialog extends LitElement {
   #refusalText(refusal: DialogRefusal): string {
     const recovery = recoveryRefusalText(refusal);
     if (recovery !== null) return recovery;
-    if (this.fromCounter && refusal.code === "network")
-      return t("cancel_credit.unconfirmed_counter");
     return Object.hasOwn(REFUSALS, refusal.code)
       ? t(REFUSALS[refusal.code]!)
       : codeMessage(refusal.code);

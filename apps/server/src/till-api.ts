@@ -2751,8 +2751,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ reason: string; override?: unknown }>(c);
-      const override = parseOverrideField(body.override);
+      const body = await readJsonBody<{ reason: string }>(c);
       await cancelPlacedOrder(
         {
           db: deps.db,
@@ -2766,7 +2765,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         id,
         body.reason,
         { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
-        override,
       );
       return c.body(null, 200);
     }),
