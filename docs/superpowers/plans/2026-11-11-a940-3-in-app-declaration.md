@@ -28,6 +28,11 @@ terminal), §7.2 (before setup and while stopped), §8, §10 slice 3, §12.
 #2836 (release commands and runbook). Slice 3 uses slice 2's renderer only in tests: the box
 serves files, it never renders.
 
+**Approval of this plan's departures from the design:** the eight departures (the handheld's
+About Waitron position, `/legal/about`, `release.json`, the download links' place, the kiosk ⓘ,
+the dashboard window, the setup sheet, the three states) were cleared by the campaign watcher on
+2026-11-11 at 17:55 (lane A's `questions.md`). No owner approval of them is claimed.
+
 **Pull requests:** four, each one implementer's work, landed in order.
 
 | PR  | What                                                   | Production lines (estimate) |
