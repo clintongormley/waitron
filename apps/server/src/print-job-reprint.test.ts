@@ -185,7 +185,9 @@ async function kitchenTicket(setting: EscSetting): Promise<string> {
     allergy: { party: { answer: "none", guests: [] }, ticks: [] },
     submissionId: randomUUID(),
     expectedPartyRevision: party!.revision,
-    groups: [{ lines: [{ menuItemId: venue.offerFor("Pulpo"), quantity: "1" }], release: "fire" }],
+    groups: [
+      { lines: [{ menuItemId: venue.offerFor("Octopus"), quantity: "1" }], release: "fire" },
+    ],
   });
   expect(submitted.status).toBe(200);
   const [link] = await inTx(venue, (tx) =>
