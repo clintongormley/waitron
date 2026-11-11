@@ -326,6 +326,8 @@ the state (established at its site), or a new self-service step; a code with non
 the owner. After A760 a box moved to the new image without a reset shows
 `provisioning.database_ahead`'s page.
 
+_2026-11-11, A1089 slice 1: `holderStalledText` no longer names the installer; if Retry fails again it says to switch the box off and on. The other texts listed here are still open._
+
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
 A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,

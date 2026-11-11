@@ -829,3 +829,31 @@ it.each(["en", "es"])("explains affiliate rejection and refund uncertainty in %s
   expect(refund).toContain("ref-refund");
   expect(refund).not.toMatch(/marked the payment as failed|marcado el pago como fallido/);
 });
+
+it("names the way out a failed first start after a restore already has, and sends nobody to support", () => {
+  const en = alertMessage("restore.first_start_failed", {}, "en-GB");
+  const es = alertMessage("restore.first_start_failed", {}, "es-ES");
+  expect(en).toContain("Each start tries again, so switch the box off and on.");
+  expect(en).toContain("check the box's internet connection and the bucket on the Backups page");
+  expect(es).toContain("Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.");
+  expect(es).toContain(
+    "revisa la conexión a internet del equipo y el bucket en la página de Copias",
+  );
+  expect(en).not.toMatch(/support/i);
+  expect(es).not.toMatch(/soporte/i);
+});
+
+it("sends a bill payment that could not be recorded to Check with provider, never to support or a second charge", () => {
+  const en = alertMessage("payment.bill_settle_failed", { amount: "12.00" }, "en-GB");
+  const es = alertMessage("payment.bill_settle_failed", { amount: "12.00" }, "es-ES");
+  expect(en).toContain(
+    "open Card payments and, under Bill payments and refunds awaiting a card provider, press Check with provider.",
+  );
+  expect(es).toContain(
+    "abre Pagos con tarjeta y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor.",
+  );
+  expect(en).toContain("Do not charge the card again.");
+  expect(es).toContain("No vuelvas a cobrar la tarjeta.");
+  expect(en).not.toMatch(/support/i);
+  expect(es).not.toMatch(/soporte/i);
+});

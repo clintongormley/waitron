@@ -117,12 +117,12 @@ export function holderStalledText(kind: VenueHolderKind | undefined): OperatorTe
     "en-GB": {
       title: `The box's database is held by ${name["en-GB"]}, which appears to have stopped responding.`,
       action:
-        "Wait two minutes, then press Retry: Waitron normally ends a program of its own that stops responding within that time. If it fails again, ask whoever installed this box to look at it.",
+        "Wait two minutes, then press Retry: Waitron normally ends a program of its own that stops responding within that time. If it fails again, switch the box off and on: that ends any program holding the database.",
     },
     "es-ES": {
       title: `La base de datos de este equipo está ocupada por ${name["es-ES"]}, que parece haber dejado de responder.`,
       action:
-        "Espera dos minutos y pulsa «Reintentar un arranque normal»: Waitron normalmente cierra en ese tiempo un programa propio que deja de responder. Si vuelve a fallar, pide a quien instaló este equipo que lo revise.",
+        "Espera dos minutos y pulsa «Reintentar un arranque normal»: Waitron normalmente cierra en ese tiempo un programa propio que deja de responder. Si vuelve a fallar, apaga y enciende el equipo: así se cierra cualquier programa que tenga ocupada la base de datos.",
     },
   };
 }

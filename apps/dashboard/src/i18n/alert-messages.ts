@@ -146,8 +146,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Faltaba una protección de registros al arrancar y se ha restablecido.",
   },
   "restore.first_start_failed": {
-    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Restart the box; if this message stays, contact support.",
-    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Reinicia el equipo; si el mensaje sigue, contacta con soporte.",
+    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Each start tries again, so switch the box off and on. If this message stays, check the box's internet connection and the bucket on the Backups page, because that start reads the bucket, then switch the box off and on again.",
+    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo. Si el mensaje sigue, revisa la conexión a internet del equipo y el bucket en la página de Copias, porque ese arranque lee el bucket, y después vuelve a apagar y encender el equipo.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",
@@ -348,8 +348,8 @@ export const ALERT_MESSAGES: Readonly<
     es: `Comprueba el pago con tarjeta {paymentRef} y sus devoluciones en el panel del proveedor antes de volver a cobrar.${MORE_ES}`,
   },
   "payment.bill_settle_failed": {
-    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN}`,
-    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Contacta con soporte.${MORE_ES}`,
+    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Waitron tries again by itself; to try now, open Card payments and, under Bill payments and refunds awaiting a card provider, press Check with provider. Do not charge the card again.${MORE_EN}`,
+    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Waitron lo vuelve a intentar por sí solo; para intentarlo ya, abre Pagos con tarjeta y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor. No vuelvas a cobrar la tarjeta.${MORE_ES}`,
   },
   "payment.tender_refund_unresolved": {
     en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Check the refund in the provider's own dashboard, and record the outcome it confirms. The original invoice is unchanged.${MORE_EN}`,

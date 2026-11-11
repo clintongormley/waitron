@@ -734,14 +734,14 @@ describe("a start refused by a holder that stopped", () => {
     expect(spanish).not.toContain('lang="en');
   });
 
-  it("tells the operator to wait for the holder to be ended, then retry, then ask for help", async () => {
+  it("tells the operator to wait for the holder to be ended, then retry, then switch the box off and on", async () => {
     const body = await pageFor(code, "restore");
     expect(body).toMatch(/wait two minutes, then press retry/i);
-    expect(body).toMatch(/ask whoever installed this box/i);
+    expect(body).toMatch(/if it fails again, switch the box off and on/i);
     expect(body).not.toMatch(/\bwipe\b|\berase\b|\bdelete the database\b/i);
     const spanish = await pageFor(code, "restore", SPANISH);
     expect(spanish).toMatch(/espera dos minutos y pulsa «Reintentar un arranque normal»/i);
-    expect(spanish).toMatch(/quien instaló este equipo/i);
+    expect(spanish).toMatch(/si vuelve a fallar, apaga y enciende el equipo/i);
     expect(spanish).not.toMatch(NEVER_WIPE_ES);
   });
 
