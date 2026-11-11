@@ -43,7 +43,12 @@ export async function publishRestoreFlow(
   await mkdirDurable(join(stateDir, FLOWS_DIR), 0o700);
   await endRestoreFlow(stateDir);
   await rename(staged, join(stateDir, RESTORE_FLOW_DIR));
-  await syncFolderHolding(join(stateDir, RESTORE_FLOW_DIR));
+  try {
+    await syncFolderHolding(join(stateDir, RESTORE_FLOW_DIR));
+  } catch (error) {
+    await endRestoreFlow(stateDir);
+    throw error;
+  }
 }
 
 export async function updateRestoreFlow(

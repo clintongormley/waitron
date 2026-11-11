@@ -15,7 +15,7 @@ afterEach(async () => {
 
 it.each([
   [
-    "restore-request.json",
+    "flows/restore/record.json",
     (dir: string) =>
       stageRestoreRequest(dir, {
         artifact: new Uint8Array([1]),
@@ -30,7 +30,10 @@ it.each([
   await fs.writeFile(join(dir, "setup-operation.json"), "existing progress");
   const actual = await vi.importActual<typeof fs>("node:fs/promises");
   vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
-    if (String(args[0]) === dir && existsSync(join(dir, marker)))
+    if (
+      String(args[0]) === (marker.includes("/") ? join(dir, "flows") : dir) &&
+      existsSync(join(dir, marker))
+    )
       throw Object.assign(new Error("folder sync failed"), { code: "EIO" });
     return actual.open(...args);
   });

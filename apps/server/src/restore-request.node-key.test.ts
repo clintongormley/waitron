@@ -9,10 +9,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { stageRestoreRequest, runStagedRestore, type RestoreRequest } from "./restore-request.js";
 import { ALL_MODULES } from "./modules.js";
+import { firstStartPending } from "./restore-flow.js";
+import { emptyScratch } from "./scratch.js";
 import { writeValidated } from "./restore.js";
 
 const dirs: string[] = [];
-const NODE_KEY_FILE = "restore-request.node-key";
+const NODE_KEY_FILE = "flows/restore/node-key";
 const secret = "synthetic node credential";
 const operation = {
   binding: {
@@ -56,7 +58,10 @@ it.each(["marker", "directory"])(
     vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
       const handle = await originalOpen(...args);
       if (
-        String(args[0]) === (part === "marker" ? join(stateDir, "restore-request.json") : stateDir)
+        String(args[0]) ===
+        (part === "marker"
+          ? join(stateDir, "flows/restore/record.json.tmp")
+          : join(stateDir, "flows/restore"))
       )
         handle.sync = async () => {
           throw new Error("injected placement sync failure");
@@ -99,14 +104,14 @@ it.each(["archive", "stream"])(
     await stageRestoreRequest(stateDir, request);
     expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
     expect((await stat(join(stateDir, NODE_KEY_FILE))).mode & 0o777).toBe(0o600);
-    const marker = await readFile(join(stateDir, "restore-request.json"), "utf8");
+    const marker = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
     expect(marker).not.toContain(secret);
-    expect(JSON.parse(marker)).toMatchObject({
+    expect(JSON.parse(marker).request).toMatchObject({
       nodeRecoveryKey: true,
       recoveryOperation: request.recoveryOperation,
     });
     if (kind === "archive")
-      expect(await readFile(join(stateDir, "restore-request.key"), "utf8")).toBe(
+      expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe(
         "archive encryption key",
       );
   },
@@ -117,7 +122,7 @@ it.each(["", " ", null, 42, "x".repeat(4097)])(
   async (nodeRecoverySecret) => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, archive());
-    const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+    const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
     await expect(
       stageRestoreRequest(stateDir, {
         ...archive(),
@@ -127,7 +132,7 @@ it.each(["", " ", null, 42, "x".repeat(4097)])(
       code: "server.config_invalid",
       params: { variable: "WAITRON_NODE_RECOVERY_KEY", reason: "invalid_credential" },
     });
-    expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
+    expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
     expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
   },
 );
@@ -160,8 +165,8 @@ it.each(["success", "refusal"])(
     else {
       expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
       expect(
-        JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8")),
-      ).toHaveProperty("placementStarted", true);
+        JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")),
+      ).toHaveProperty("phase", "placing");
     }
     expect(JSON.stringify(context.log.mock.calls)).not.toContain(secret);
   },
@@ -172,21 +177,31 @@ it.each(["", " and the clean-up then fails too"])(
   async (cleanUp) => {
     const stateDir = await fresh();
     await stageRestoreRequest(stateDir, archive());
-    const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+    const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
     const writeFailure = Object.assign(new Error("injected secrets write failure"), {
       code: "ENOSPC",
     });
     const cleanUpFailure = Object.assign(new Error("injected clean-up failure"), { code: "EIO" });
     const failure = cleanUp === "" ? writeFailure : cleanUpFailure;
+    let originalOpenMocked = false;
     const originalOpen = nativeFs.open;
     vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
-      if (String(args[0]) === join(stateDir, "secrets.env.incoming.tmp")) throw writeFailure;
+      if (String(args[0]) === join(stateDir, "secrets.env.incoming.tmp")) {
+        originalOpenMocked = true;
+        throw writeFailure;
+      }
       return originalOpen(...args);
     });
     const originalRm = nativeFs.rm;
     vi.spyOn(nativeFs, "rm").mockImplementation(async (...args) => {
-      if (cleanUp !== "" && String(args[0]) === join(stateDir, "rebuild-first-start.json"))
+      if (
+        cleanUp !== "" &&
+        originalOpenMocked &&
+        String(args[0]) === join(stateDir, "flows/restore/record.json.tmp")
+      ) {
+        originalOpenMocked = false;
         throw cleanUpFailure;
+      }
       return originalRm(...args);
     });
     syncBuiltinESMExports();
@@ -217,7 +232,7 @@ it.each(["", " and the clean-up then fails too"])(
       );
     };
     await expect(runStagedRestore(deps(stateDir), restore)).rejects.toBe(failure);
-    expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
+    expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
     expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
   },
 );
@@ -225,7 +240,7 @@ it.each(["", " and the clean-up then fails too"])(
 it("writes a started request's marker back durably: the file synced before it is renamed into place, then its folder", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
-  const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+  const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
   const events: string[] = [];
   const rel = (path: unknown) => String(path).slice(stateDir.length + 1) || ".";
   const originalOpen = nativeFs.open;
@@ -249,12 +264,12 @@ it("writes a started request's marker back durably: the file synced before it is
       throw new Error("injected failure before placement");
     }),
   ).rejects.toThrow("injected failure before placement");
-  expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
-  const writeBack = events.lastIndexOf("restore-request.json.tmp → restore-request.json");
+  expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
+  const writeBack = events.lastIndexOf("flows/restore/record.json.tmp → flows/restore/record.json");
   expect(events.slice(writeBack - 1)).toEqual([
-    "sync restore-request.json.tmp",
-    "restore-request.json.tmp → restore-request.json",
-    "sync .",
+    "sync flows/restore/record.json.tmp",
+    "flows/restore/record.json.tmp → flows/restore/record.json",
+    "sync flows/restore",
   ]);
 });
 
@@ -267,10 +282,9 @@ it("keeps the node credential when the venue lock refuses before placement", asy
     }),
   ).rejects.toMatchObject({ code: "provisioning.database_in_use" });
   expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
-  expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toHaveProperty(
-    "nodeRecoveryKey",
-    true,
-  );
+  expect(
+    JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).request,
+  ).toHaveProperty("nodeRecoveryKey", true);
 });
 
 it("a lock refusal leaves the next attempt as a fresh placement", async () => {
@@ -294,19 +308,25 @@ it("restaging without a node credential removes the old credential", async () =>
   await stageRestoreRequest(stateDir, { ...archive(), nodeRecoverySecret: undefined });
   await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
   expect(
-    JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8")),
+    JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).request,
   ).not.toHaveProperty("nodeRecoveryKey");
 });
 
-it("a partial restage leaves neither a bootable marker nor its node credential", async () => {
+it("a failed replacement keeps its original request and node credential", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
-  await mkdir(join(stateDir, "restore-request.key.tmp", "blocked"), { recursive: true });
-  await expect(stageRestoreRequest(stateDir, archive())).rejects.toThrow();
-  await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
-    code: "ENOENT",
+  const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
+  const originalOpen = nativeFs.open;
+  vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
+    if (String(args[0]).endsWith("/key.tmp")) throw new Error("injected key write failure");
+    return originalOpen(...args);
   });
-  await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
+  syncBuiltinESMExports();
+  await expect(stageRestoreRequest(stateDir, archive())).rejects.toThrow(
+    "injected key write failure",
+  );
+  expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
 });
 
 it.each(["missing", "empty", "oversized"])(
@@ -324,7 +344,7 @@ it.each(["missing", "empty", "oversized"])(
       params: { variable: "WAITRON_NODE_RECOVERY_KEY", reason: "invalid_credential" },
     });
     expect(restore).not.toHaveBeenCalled();
-    await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
@@ -352,56 +372,68 @@ it.each(["marker-json", "marker-shape", "operation", "archive-key", "stream-entr
         },
         nodeRecoverySecret: secret,
       });
-      await rm(join(stateDir, "restore-request.entries"));
+      await rm(join(stateDir, "flows/restore/entries"));
     } else {
       await stageRestoreRequest(stateDir, archive());
-      if (part === "archive-key") await rm(join(stateDir, "restore-request.key"));
-      if (part === "marker-json") await writeFile(join(stateDir, "restore-request.json"), "{");
+      if (part === "archive-key") await rm(join(stateDir, "flows/restore/key"));
+      if (part === "marker-json") await writeFile(join(stateDir, "flows/restore/record.json"), "{");
       if (part === "marker-shape" || part === "operation") {
-        const marker = JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"));
-        if (part === "marker-shape") marker.nodeRecoveryKey = false;
-        else marker.recoveryOperation = { invalid: true };
-        await writeFile(join(stateDir, "restore-request.json"), JSON.stringify(marker));
+        const marker = JSON.parse(
+          await readFile(join(stateDir, "flows/restore/record.json"), "utf8"),
+        );
+        if (part === "marker-shape") marker.request.nodeRecoveryKey = false;
+        else marker.request.recoveryOperation = { invalid: true };
+        await writeFile(join(stateDir, "flows/restore/record.json"), JSON.stringify(marker));
       }
     }
     const restore = vi.fn(async () => {});
+    if (part === "marker-json") {
+      await expect(runStagedRestore(deps(stateDir), restore, restore)).resolves.toBe(false);
+      expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
+      expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
+      expect(restore).not.toHaveBeenCalled();
+      return;
+    }
     await expect(runStagedRestore(deps(stateDir), restore, restore)).rejects.toThrow();
     expect(restore).not.toHaveBeenCalled();
     await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
-    await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
 );
 
-it("clears a node credential left by interruption before the marker was written", async () => {
+it("the next start clears a node credential in unpublished scratch staging", async () => {
   const stateDir = await fresh();
-  await writeFile(join(stateDir, NODE_KEY_FILE), secret, { mode: 0o600 });
-  await writeFile(join(stateDir, `${NODE_KEY_FILE}.tmp`), secret, { mode: 0o600 });
+  const staged = join(stateDir, "scratch/restore-flow-interrupted");
+  await mkdir(staged, { recursive: true });
+  await writeFile(join(staged, "node-key"), secret, { mode: 0o600 });
+  await writeFile(join(staged, "node-key.tmp"), secret, { mode: 0o600 });
+  await emptyScratch(stateDir, vi.fn());
   const restore = vi.fn(async () => {});
   await expect(runStagedRestore(deps(stateDir), restore)).resolves.toBe(false);
   expect(restore).not.toHaveBeenCalled();
-  expect(await readdir(stateDir)).toEqual([]);
+  expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
 });
 
 it("refuses another backup's allocation source before replacing an existing staged request", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
-  const before = await readFile(join(stateDir, "restore-request.json"), "utf8");
+  const before = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
   await expect(
     stageRestoreRequest(stateDir, { ...archive(), artifact: Buffer.from("different backup") }),
   ).rejects.toMatchObject({
     code: "server.config_invalid",
     params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "source_mismatch" },
   });
-  expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(before);
+  expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(before);
   expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
 });
 
 it("refuses changed archive bytes before invoking the restarted restore", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
-  await writeFile(join(stateDir, "restore-request.artifact"), "different backup");
+  await writeFile(join(stateDir, "flows/restore/artifact"), "different backup");
   const restore = vi.fn(async () => {});
   await expect(runStagedRestore(deps(stateDir), restore)).rejects.toMatchObject({
     code: "server.config_invalid",
@@ -438,17 +470,18 @@ it.each(["staging", "restart-db", "restart-entries"])(
         code: "server.config_invalid",
         params: { reason: "source_mismatch" },
       });
-      await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+      await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
         code: "ENOENT",
       });
       expect(await readFile(databasePath, "utf8")).toBe("later point in the same generation");
       return;
     }
     await stageRestoreRequest(stateDir, request);
-    if (phase === "restart-db") await writeFile(join(stateDir, "restore-request.db"), "changed");
+    if (phase === "restart-db")
+      await writeFile(join(stateDir, "flows/restore/venue.db"), "changed");
     else
       await writeFile(
-        join(stateDir, "restore-request.entries"),
+        join(stateDir, "flows/restore/entries"),
         packArchive([{ name: "manifest.json", bytes: Buffer.from("changed") }]),
       );
     const restore = vi.fn(async () => {});
@@ -461,13 +494,14 @@ it.each(["staging", "restart-db", "restart-entries"])(
   },
 );
 
-it("erases the private key even when its restart marker cannot be read", async () => {
+it("an unreadable restart record retains the key until its unknown first start ends", async () => {
   const stateDir = await fresh();
   await stageRestoreRequest(stateDir, archive());
-  await rm(join(stateDir, "restore-request.json"));
-  await mkdir(join(stateDir, "restore-request.json"));
+  await rm(join(stateDir, "flows/restore/record.json"));
+  await mkdir(join(stateDir, "flows/restore/record.json"));
   const restore = vi.fn(async () => {});
-  await expect(runStagedRestore(deps(stateDir), restore)).rejects.toMatchObject({ code: "EISDIR" });
+  await expect(runStagedRestore(deps(stateDir), restore)).resolves.toBe(false);
+  expect(await firstStartPending(stateDir)).toEqual({ source: "unknown" });
   expect(restore).not.toHaveBeenCalled();
-  await expect(readFile(join(stateDir, NODE_KEY_FILE))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(stateDir, NODE_KEY_FILE), "utf8")).toBe(secret);
 });
