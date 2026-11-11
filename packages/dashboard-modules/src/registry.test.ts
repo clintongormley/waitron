@@ -97,7 +97,7 @@ it("registers workforce Hours beside Time corrections with current correction au
   });
 });
 
-it("gives every optional module a browser-side display label", () => {
+it("declares a browser display-label key for every optional module", () => {
   expect(
     ALL_MODULES.filter((module) => module.tier === "toggleable")
       .filter((module) => !MODULE_LABEL_KEYS[module.name])

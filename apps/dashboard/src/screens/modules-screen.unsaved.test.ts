@@ -112,12 +112,24 @@ it.each([
     const request = vi.fn(async () => ({
       merchantName: "Restaurant",
     })) as unknown as DashboardRequest;
-    const { screen, form, api } = await mount(provider, request);
+    const api = modulesClient();
+    vi.mocked(api.listPaymentProviders).mockResolvedValue(
+      (await api.listPaymentProviders()).map((row) => ({
+        ...row,
+        state: "not_connected" as const,
+      })),
+    );
+    const { screen, form } = await mount(provider, request, api);
     const save =
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=connect]")!;
     expect(save.textContent?.trim()).toBe("Save");
     expect(save.disabled).toBe(true);
     expect(save.variant).toBe("secondary");
+    expect(
+      screen
+        .shadowRoot!.querySelector("wt-data-table")!
+        .shadowRoot!.querySelector(`[data-row-key="card-provider:${provider}"]`)!.textContent,
+    ).toContain("Needs setup");
     await field(form, input, value);
     expect(save.disabled).toBe(false);
     vi.mocked(api.listModules).mockRejectedValue({ code: "connection.failed" });

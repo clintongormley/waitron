@@ -2472,8 +2472,8 @@ export class PaymentsScreen extends LitElement {
           >${tRaw("modules.configure_providers")}</a
         >
       </p>
-      <section aria-label=${t("payments.providers_heading")}>
-        <h2>${t("payments.providers_heading")}</h2>
+      <section aria-labelledby="payment-providers-heading">
+        <h2 id="payment-providers-heading">${t("payments.providers_heading")}</h2>
         ${
           this.providers === undefined
             ? nothing
@@ -2484,8 +2484,8 @@ export class PaymentsScreen extends LitElement {
                 </ul>`
         }
       </section>
-      <section data-test="readers-section" aria-label=${t("payments.readers_heading")}>
-        <h2>${t("payments.readers_heading")}</h2>
+      <section data-test="readers-section" aria-labelledby="card-readers-heading">
+        <h2 id="card-readers-heading">${t("payments.readers_heading")}</h2>
         <div class="reader-tools">
           <wt-button
             variant="secondary"

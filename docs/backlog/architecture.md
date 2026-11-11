@@ -19,7 +19,7 @@ their full text.
   the every-administrator check before switching it off) are withdrawn.
   The agreed revision uses one complete optional catalogue, initially Enabled; Add a module filters
   that same list to Disabled. Category is independent, and Card payments links to Card providers
-  with All states. Rows offer Configure where settings exist, plus Enable/Disable when switching is available, with persistent red reasons
+  with All states. Rows offer Configure where settings exist (watcher, 2026-11-11 17:15), plus Enable/Disable when switching is available, with persistent red reasons
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
   separate confirmation and server checks. Stripe/SumUp remain Payments
   contributions. Other optional modules are listed but cannot be switched. Reuse provider

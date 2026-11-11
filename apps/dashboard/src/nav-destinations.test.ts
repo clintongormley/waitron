@@ -135,5 +135,13 @@ it("searches card providers under Modules without offering the removed Card paym
       heading: "Settings",
       href: "/manage/modules/view/card-providers/state/all",
     },
+    {
+      id: "payments:readers",
+      screen: "payments",
+      label: "payments.readers_heading",
+      pageLabel: "Card payments",
+      heading: "Settings",
+      href: "/manage/payments",
+    },
   ]);
 });

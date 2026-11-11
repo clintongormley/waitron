@@ -28,6 +28,12 @@ const coreDestinations: readonly DashboardSearchDestination[] = [
     labelKey: "modules.providers",
     path: "/manage/modules/view/card-providers/state/all",
   },
+  {
+    id: "payments:readers",
+    screen: "payments",
+    labelKey: "payments.readers_heading",
+    path: "/manage/payments",
+  },
 ];
 
 export function collectSearchDestinations(input: {
