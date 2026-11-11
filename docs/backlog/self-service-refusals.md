@@ -1219,6 +1219,9 @@ The earlier server-page inventory did not exercise those recovery procedures.
 
 _2026-11-11, A1089 slice 1: the held-database page (`holderStalledText`) now says, if Retry fails again, to switch the box off and on, which ends any program holding the database, instead of asking whoever installed the box. The other rows' installer referrals are still open._
 
+
+_2026-11-11, A1501: the wrong-environment database row now offers Start again/Stop, with a read-only administrator password check over HTTPS before moving the installed files aside. The next first setup offers fresh setup or another backup; this does not relabel records or change restore admission._
+
 ### Backup-key self-service rework, 2026-10-25
 
 The `backup.effective_mismatch` refusal now says the saved key could not be confirmed, asks you

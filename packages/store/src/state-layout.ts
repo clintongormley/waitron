@@ -21,6 +21,7 @@ export const RESTORE_STAGING_DIR = "scratch/restore";
 export const BACKUP_STAGING_DIR = "scratch/backup";
 export const STREAM_RESTORE_PREFIX = "stream-restore-";
 export const RESTORE_ENTRY_PREFIX = "restore-entry-";
+export const ENVIRONMENT_RECOVERY_MOVE_FILE = "environment-recovery-move.json";
 export const START_AGAIN_GUESSES_FILE = "first-setup-start-again-guesses.json";
 export const SECRETS_ENV_FILE = "secrets.env";
 export const TRADING_ENV_FILE = "trading.env";
@@ -73,6 +74,12 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "folder",
     reset: "deleted",
     why: "Operations that continue across a restart keep their record and attachments together.",
+  },
+  {
+    name: ENVIRONMENT_RECOVERY_MOVE_FILE,
+    kind: "file",
+    reset: "deleted",
+    why: "Resumes setting aside a database from another environment.",
   },
   {
     name: SPARE_SPACE_FILE,

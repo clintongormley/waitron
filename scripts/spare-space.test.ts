@@ -25,6 +25,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     allowed: [
       "apps/server/src/spare-space.ts",
       "packages/provisioning/src/index.ts",
+      "packages/provisioning/src/environment-recovery-move.ts", // Names them only to leave them in place.
       "packages/store/src/state-layout.ts",
     ],
   },
@@ -37,6 +38,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     allowed: [
       "apps/server/src/spare-space.ts",
       "packages/provisioning/src/index.ts",
+      "packages/provisioning/src/environment-recovery-move.ts", // Names them only to leave them in place.
       "packages/store/src/state-layout.ts",
     ],
   },

@@ -196,8 +196,9 @@ that bundle's heading in the area's file: take a bundle as one pull request.
   [Audit](backlog/self-service-refusals.md#fiscal-environment).
   The owner approved running-dashboard evidence-first planning on 2026-10-29. The
   [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-environment-evidence.md)
-  awaits separate build approval. Persistent repair and failed-start access remain open. The startup
-  database guard also applies; a host-setting change alone is not a qualified remedy.
+  awaits separate build approval. Persistent repair from the running dashboard remains open;
+  the startup database guard also applies. A1501 supplies the wrong-environment failed-start
+  Move/Stop route; it never relabels the retained database.
 
 - **A1089: a fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
   [Audit](backlog/self-service-refusals.md#fiscal-reply).
@@ -1645,8 +1646,9 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   [Correction](backlog/self-service-refusals.md#backup-key)
 
 - **A1089: boot recovery must offer choices instead of an installer referral.** Recheck each
-  cause and offer applicable restart, space, backup or reinstall choices, any needed authentication
-  there and a safe Stop before destructive work. The original audit did not exercise these routes.
+  remaining cause and offer applicable restart, space, backup or reinstall choices, any needed
+  authentication there and a safe Stop before destructive work. The wrong-environment row has
+  its A1501 Start again/Stop route. The original audit did not exercise these routes.
   [Correction](backlog/self-service-refusals.md#boot-recovery).
 
 - **A1089: a repeated restored-box first-start failure needs a specific remedy.** Keep the existing restart attempt and identify a persistent completion refusal before suggesting another action.

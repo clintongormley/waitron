@@ -1459,6 +1459,26 @@ weaker than its name, and its header is the authority for these limits:
   and sees no spread or variable passed as the fields;
 - it never reads free text, and does not see the watchdog's line.
 
+### Wrong-environment recovery (A1501, 11 November 2026)
+
+A failed start recorded as `deployment.environment_mismatch` offers Start again and Stop on the
+recovery page. Stop records no choice. If the host setting is wrong, correct it and retry. Over
+HTTPS, an active administrator's password authorises setting the installed venue's files aside;
+no sign-in session is written. The files and their old key ring stay in the set-aside folder.
+The box restarts into ordinary first setup, where you can start fresh or choose another backup.
+A wrong candidate backup continues to use the setup preview's existing refusal.
+
+The Move inventory derives from `STATE_LAYOUT` and `FIRST_SETUP_HOST_FILES`, keeping locks,
+records, logs and spare files. An unjoined box keeps its TLS authority; a joined box sets that
+authority aside too. The durable Move record is resumed before setup inspection. The server uses
+the unchanged Start again guesses file under a fixed recovery UUID. Switching recovery families
+resets that counter; retries and restarts within this recovery keep it.
+
+The entry/restart test runs three real refused boots before using the recovery page, then opens
+first setup over HTTPS with the retained CA and previews an encrypted backup after rejecting the
+wrong environment. The unfinished-Move page explains that each start resumes the recorded move. The preservation and interrupted-Move tests use
+filesystem fault injection, not a physical power cut.
+
 ## Printed documents take the printer's own layout settings
 
 A printed document never hard-codes a paper width or a QR size: it reads them from the printer it is

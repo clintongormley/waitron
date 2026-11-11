@@ -33,6 +33,7 @@ declare module "@waitron/shared" {
     "setup.start_again_incomplete": Record<string, never>;
     "setup.start_again_files_found": Record<string, never>;
     "setup.start_again_kept": Record<string, never>;
+    "setup.environment_move_unfinished": Record<string, never>;
     "setup.start_again_move_unfinished": Record<string, never>;
     "setup.start_again_files_changed": Record<string, never>;
     "setup.start_again_set_aside_unavailable": Record<string, never>;

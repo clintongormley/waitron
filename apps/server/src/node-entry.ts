@@ -63,6 +63,7 @@ import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
+import { resumeEnvironmentRecovery } from "./recovery-environment.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { deleteOldBackupsAtStart } from "./start-backup-room.js";
 import { maskPersonalData } from "./log-personal-data.js";
@@ -330,6 +331,28 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     throw new AppError("server.entry_arguments_refused", {});
   }
 
+  let environmentMoveError: AppError | undefined;
+  try {
+    const resumed = await resumeEnvironmentRecovery(deps);
+    if (resumed !== null)
+      deps = {
+        ...deps,
+        ...resumed,
+        baseEnv: {
+          ...deps.baseEnv,
+          WAITRON_STATE_DIR: resumed.stateDir,
+          WAITRON_VENUE_DIR: resumed.venueDir,
+        },
+      };
+  } catch (error) {
+    environmentMoveError = new AppError(
+      "setup.environment_move_unfinished",
+      {},
+      {
+        reason: isAppError(error) ? error.code : (errnoOf(error) ?? "move_failed"),
+      },
+    );
+  }
   const now = deps.now ?? (() => new Date());
   const floor = deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR;
   const cleanUp = {
@@ -378,18 +401,28 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
   await releaseSpareToStart(deps);
 
-  const admission = await resolveFirstSetupEntry(
-    deps,
-    deps.baseEnv,
-    () => (deps.exit ?? DEFAULT_EXIT)(0),
-    deps.log,
-    {
-      stateDir: deps.stateDir,
-      venueDir: deps.venueDir,
-      logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
-      statfs: deps.statfs,
-    },
-  );
+  const admission =
+    (environmentMoveError === undefined
+      ? undefined
+      : {
+          kind: "refused" as const,
+          code: "setup.environment_move_unfinished" as const,
+          roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
+          error: environmentMoveError,
+          survey: undefined,
+        }) ??
+    (await resolveFirstSetupEntry(
+      deps,
+      deps.baseEnv,
+      () => (deps.exit ?? DEFAULT_EXIT)(0),
+      deps.log,
+      {
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
+        statfs: deps.statfs,
+      },
+    ));
   await finishTlsInstall(admission.roots.stateDir);
   const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
   const transportPort = httpPortFrom(transportEnv);
@@ -582,6 +615,17 @@ async function runAdmittedEntry(
     await deps.serveRecovery(
       recoveryApp({
         state,
+        ...(state.lastErrorCode !== "deployment.environment_mismatch"
+          ? {}
+          : {
+              environment: {
+                roots: { stateDir: deps.stateDir, venueDir: deps.venueDir },
+                baseEnv: deps.baseEnv,
+                onFinished: async () => {
+                  exit(0);
+                },
+              },
+            }),
         logDir,
         // The exit is the whole retry: Docker's restart policy performs the restart.
         onRetry: async () => {

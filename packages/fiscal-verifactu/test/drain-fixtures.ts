@@ -645,3 +645,6 @@ export const consultaNames = (client: VerifactuClient, codigo: number): Verifact
     };
   },
 });
+
+export const seedNonproductionHistory = (db: Database) =>
+  seedPendingEnvios(db, { count: 1, entorno: "preproduction" });

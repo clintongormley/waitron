@@ -235,3 +235,9 @@ export {
   setAsideFolderPaths,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
+
+export {
+  beginEnvironmentMove,
+  resumeEnvironmentMove,
+  finishEnvironmentMove,
+} from "./environment-recovery-move.js";

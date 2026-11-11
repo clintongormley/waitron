@@ -374,9 +374,10 @@ called weaker than its name, the topic file lists what it does not see.
   tail is written through `redactSecrets` and the personal-data mask (except the frozen-process
   watchdog's own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26;
   the personal-data mask is A980 S10's default, open to the owner). `redactSecrets` masks only a
-  password in a URL, which is why no code's params and no logged message may carry a secret. Its one
-  password form, for `setup.start_again_files_found`, takes the administrator password over HTTPS
-  only; its Move choice is the owner's one exception to never suggesting a removal (A1098). The
+  password in a URL, which is why no code's params and no logged message may carry a secret. Its
+  password forms, for `setup.start_again_files_found` and `deployment.environment_mismatch`, take
+  the administrator password over HTTPS only; their Move choices are the exceptions to never
+  suggesting removal (A1098, A1501). The
   tail's span and the cost of taking that password without HTTPS:
   [conventions-ui.md](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-06). Guard:
   the never-delete cases in `apps/server/src/recovery-surface.test.ts`, weaker than their name: they
