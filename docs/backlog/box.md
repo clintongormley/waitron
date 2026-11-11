@@ -551,7 +551,7 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
-The development recipe binds the name-tag writer and the occupied-disk console reader together. The `existing-stick` rig case completes Prepare, checks the actual header and serial notice, and checks that reads leave the disk hash unchanged. Timed firmware return and the graphical warning remain unbuilt; physical qualification remains open. [Console cut](../superpowers/plans/2026-11-11-b3-18a-name-notice.md).
+The development console names an existing venue and returns through a one-time EFI boot choice after 15 seconds. Keys pause it until 120 seconds without typing. The `existing-stick` rig completes Prepare, waits for the real startup counter to clear, and requires a continuous return with USB attached, unchanged disk hash before installed startup, unchanged chip unlock and `/health`. The graphical warning, reinstall controls and physical qualification remain open. [Return cut](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
 
 **2026-11-11 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
 install five btrfs areas inside LUKS2 onto a second virtual disk. The first disk boot retains a recovery
@@ -568,8 +568,8 @@ other prerequisites still apply. [Startup plan](../superpowers/plans/2026-11-10-
 The [11 November firmware measurement](../superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026)
 observed one guest-requested restart into an exact target EFI entry, with the USB attached and
 first, BootNext consumed, BootOrder unchanged and both read-only disk hashes unchanged.
-The installed automatic-return adapter, encrypted-root transition and physical-box checks remain
-unbuilt or unqualified; this measurement changes no installer behavior.
+That measurement preceded the [development console return](../superpowers/plans/2026-11-11-b3-18b-firmware-return.md).
+Physical-box checks remain unqualified.
 
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”

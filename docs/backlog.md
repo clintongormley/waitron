@@ -1738,8 +1738,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   retains its recovery key and seals to a virtual TPM. Its first disk boot requests a restart with Docker stopped;
   two subsequent chip-unlocked boots must remove the empty password and reach setup. The rig independently
   tests the retained key. Setup offers Prepare/Live/existing and refuses Demo.
-  The [firmware measurement](superpowers/plans/2026-11-11-b3-17-existing-stick.md#measured-on-11-november-2026) reached the selected target after a guest reboot with the USB still first and attached; product automatic return remains unbuilt.
-  The development recipe now binds the name-tag writer to an occupied-disk console reader; `existing-stick` completes Prepare and checks its real header and serial notice. Timed return and the graphical warning remain unbuilt; physical qualification remains open. [Console cut](superpowers/plans/2026-11-11-b3-18a-name-notice.md).
+  The development console names an existing venue and returns through the firmware's one-time boot choice after 15 seconds; keys pause it until 120 seconds without typing. `existing-stick` completes Prepare, waits for the server's startup counter to clear, then requires a continuous USB-to-disk return, unchanged target hash before installed startup, unchanged chip seal and `/health`. [Return cut](superpowers/plans/2026-11-11-b3-18b-firmware-return.md). The graphical warning, reinstall controls and physical qualification remain open.
   Signed boot/Secure Boot, other-stick and missing-container checks, failure/recovery screens, key sheets,
   update resealing and physical-device qualification remain release gates. This development cut claims no theft protection.
   No setup codes: the owner closed W60's first-claim concern. Remaining mode work: no same-box re-setup of Live/restored production venues, and

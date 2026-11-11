@@ -461,15 +461,16 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
   await writeFile(proof, "", { mode: 0o600 });
   await truncate(proof, 32 * 1024 ** 2);
   execFileSync("mkfs.ext4", ["-q", "-F", proof]);
-  const pcrRead = "echo B3_PCRS:$(tpm2_pcrread sha256:8,9,15 | base64 -w0)";
+  const pcrRead = "echo B3_PCRS:$(tpm2_pcrread sha256:5,7,8,9,15 | base64 -w0)";
   const bootRead =
     'echo B3_MEASURED:$(sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI | sha256sum | cut -d" " -f1)';
-  async function boot(name, source, marker, deadline) {
+  async function boot(name, source, marker, deadline, returnHash) {
+    const returning = returnHash !== undefined;
     const tpmSocket = await startTpm();
     const phaseStarted = Date.now();
     const monitor = join(runDir, `${name}-monitor.sock`);
     const args = [
-      ...common,
+      ...common.filter((arg) => !returning || arg !== "-no-reboot"),
       "-chardev",
       `socket,id=chrtpm,path=${tpmSocket}`,
       "-tpmdev",
@@ -483,6 +484,8 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       "-drive",
       `if=pflash,format=raw,file=${vars}`,
     ];
+    const qmpPath = join(runDir, `${name}-qmp.sock`);
+    if (returning) args.push("-qmp", `unix:${qmpPath},server=on,wait=off`);
     if (source)
       args.push(
         "-drive",
@@ -498,20 +501,30 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       "-device",
       `virtio-blk-pci,drive=target,serial=waitron-dev-target,bootindex=${source ? 2 : 1}`,
       "-nic",
-      source ? "none" : "user,restrict=on,hostfwd=tcp:127.0.0.1:443-:443",
+      source && !returning ? "none" : "user,restrict=on,hostfwd=tcp:127.0.0.1:443-:443",
     );
     const unitName = source ? "waitron-dev-install" : "waitron-disk-start";
     let observedUnit = await readFile(
       new URL(`../../deploy/box/${unitName}.service`, import.meta.url),
       "utf8",
     );
-    observedUnit += `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}${source ? "" : `; ${bootRead}`}'\n`;
+    observedUnit += `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}${source ? "; stty -F /dev/ttyS0 115200" : `; ${bootRead}`}'\n`;
     args.push(
       "-smbios",
       `type=11,value=io.systemd.credential.binary:systemd.extra-unit.${unitName}.service=${Buffer.from(observedUnit).toString("base64")}`,
     );
-    if (!source) {
-      args.push("-drive", `file=${proof},format=raw,if=virtio`);
+    if (returning) {
+      const diskUnit = await readFile(
+        new URL("../../deploy/box/waitron-disk-start.service", import.meta.url),
+        "utf8",
+      );
+      args.push(
+        "-smbios",
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-disk-start.service=${Buffer.from(diskUnit + `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}; ${bootRead}; echo B3_RETURN_FIRMWARE:$(efibootmgr -v | base64 -w0); echo B3_RETURN_ROOT:$(findmnt -n -o UUID /)'\n`).toString("base64")}`,
+      );
+    }
+    if (!source || returning) {
+      if (!returning) args.push("-drive", `file=${proof},format=raw,if=virtio`);
       const unit = await readFile(
         new URL("../../deploy/box/waitron-dev.service", import.meta.url),
         "utf8",
@@ -522,17 +535,29 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const deny = `const net=require("node:net");const c=net.connect("/run/waitron-box/box.sock");c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>{c.destroy();process.exitCode=1});c.on("error",e=>{if(e.code!=="EACCES")throw e;console.log("B3_SOCKET_DENIED:EACCES")})`;
       const probe = (code, denied = false) =>
         `printf %%s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
-      const checks = caseName === "existing-stick" ? `; ${probe(clock)}; ${probe(deny, true)}` : "";
+      const stayed = `const fs=require("node:fs");const until=Date.now()+180000;let last="not read";function poll(){try{last=fs.readFileSync("/var/lib/docker/volumes/waitron_state/_data/recovery.json","utf8");const state=JSON.parse(last);if(state.failures===0&&state.level==="normal"){console.log("B3_STAYED_UP:"+JSON.stringify(state));return;}}catch(e){last=e.message;}if(Date.now()>=until)throw Error("startup counter did not clear: "+last);setTimeout(poll,250);}poll();`;
+      const checks =
+        caseName === "existing-stick"
+          ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayed)}` : ""}`
+          : "";
+      const returned =
+        "curl -kfsS --max-time 10 https://127.0.0.1/health >/run/b3-health.json; echo B3_RETURN_HEALTH:$(cat /run/b3-health.json); echo B3_RETURN_READY";
       args.push(
         "-smbios",
-        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${copy}${checks}'\n`).toString("base64")}`,
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${returning ? returned : `${copy}${checks}`}'\n`).toString("base64")}`,
       );
     }
     await writeFile(join(runDir, `${name}-args.json`), JSON.stringify(args));
-    const child = spawn("qemu-system-x86_64", args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("qemu-system-x86_64", args, {
+      stdio: [returning ? "pipe" : "ignore", "pipe", "pipe"],
+    });
     await writeFile(join(runDir, `${name}-pid.json`), JSON.stringify({ pid: child.pid }));
     let serial = "";
     let failure;
+    let qmp;
+    let resetOffset;
+    let returnEvidence;
+    let typedAt;
     const stopped = new Promise((done) =>
       child.once("exit", (code, signal) => {
         console.error(name, "exit", { code, signal });
@@ -540,6 +565,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       }),
     );
     const stop = async () => {
+      qmp?.destroy();
       clearTimeout(deadlineKill);
       await writeFile(
         join(runDir, `${name}-timing.json`),
@@ -577,6 +603,75 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
     }, deadline);
     try {
       await new Promise((done, reject) => {
+        if (returning) {
+          let id = 0;
+          const pending = new Map();
+          const execute = (command) =>
+            new Promise((resolveCommand, rejectCommand) => {
+              pending.set(++id, { resolveCommand, rejectCommand });
+              qmp.write(`${JSON.stringify({ execute: command, id })}\n`);
+            });
+          let resetSeen = false;
+          const connect = async () => {
+            while (true) {
+              try {
+                await stat(qmpPath);
+                break;
+              } catch {
+                if (failure || child.exitCode !== null) return;
+                await new Promise((next) => setTimeout(next, 20));
+              }
+            }
+            qmp = createConnection(qmpPath);
+            qmp.on("error", reject);
+            let buffer = "";
+            qmp.on("data", (bytes) => {
+              buffer += bytes.toString();
+              let end;
+              while ((end = buffer.indexOf("\n")) >= 0) {
+                const event = JSON.parse(buffer.slice(0, end));
+                buffer = buffer.slice(end + 1);
+                appendFileSync(join(runDir, `${name}-qmp.log`), `${JSON.stringify(event)}\n`);
+                if (event.QMP) void execute("qmp_capabilities").catch(reject);
+                else if (event.id) {
+                  const command = pending.get(event.id);
+                  pending.delete(event.id);
+                  if (event.error) command?.rejectCommand(new Error(JSON.stringify(event.error)));
+                  else command?.resolveCommand(event.return);
+                } else if (event.event === "SHUTDOWN")
+                  reject(new Error("return shut down instead of resetting"));
+                else if (event.event === "RESET" && rigLine(serial, "B3_RETURN:")) {
+                  if (resetSeen) {
+                    reject(new Error("second return reset"));
+                    continue;
+                  }
+                  resetSeen = true;
+                  resetOffset = serial.length;
+                  void (async () => {
+                    if (event.data?.reason !== "guest-reset")
+                      throw new Error("return reset was not guest-requested");
+                    await execute("stop");
+                    const status = await execute("query-status");
+                    if (status.status !== "paused") throw new Error("return did not pause");
+                    const after = await diskHash(target);
+                    if (returnHash !== after)
+                      throw new Error("USB return changed target before installed boot");
+                    returnEvidence = {
+                      before: returnHash,
+                      after,
+                      reset: event,
+                      idleMs: Date.now() - typedAt,
+                    };
+                    if (!typedAt || returnEvidence.idleMs < 120000)
+                      throw new Error("return did not wait for keyboard idle");
+                    await execute("cont");
+                  })().catch(reject);
+                }
+              }
+            });
+          };
+          void connect().catch(reject);
+        }
         for (const stream of [child.stdout, child.stderr])
           stream.on("data", (bytes) => {
             serial += bytes.toString();
@@ -584,6 +679,16 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
             if (bootHasOrderingCycle(serial)) reject(new Error(`${name} has an ordering cycle`));
             if (name === "bootstrap" && dockerStarted(serial))
               reject(new Error("bootstrap started Docker before the key was ready"));
+            if (
+              returning &&
+              !typedAt &&
+              rigLine(serial, "Starting the installed box in 15 seconds.")
+            ) {
+              typedAt = Date.now();
+              child.stdin.write("pause");
+            }
+            if (returning && serial.split("This box already has Waitron (").length > 2)
+              reject(new Error("returned to the USB installer again"));
             if (rigLine(serial, marker) !== undefined) done();
           });
         child.once("error", reject);
@@ -594,6 +699,12 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       return {
         get serial() {
           return serial;
+        },
+        get returnedSerial() {
+          return serial.slice(resetOffset);
+        },
+        get returnEvidence() {
+          return returnEvidence;
         },
         finish: async () => {
           const result = await stopped;
@@ -649,7 +760,12 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
     const { chromium } = require("playwright");
     async function inspect(name) {
-      const guest = await boot(name, false, "B3_INSTALLED:", 300000);
+      const guest = await boot(
+        name,
+        false,
+        "B3_INSTALLED:",
+        caseName === "existing-stick" && name === "again" ? 480000 : 300000,
+      );
       try {
         const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
         if (caseName === "existing-stick") {
@@ -739,6 +855,13 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
                 throw new Error(`tag writer deadline: ${JSON.stringify(body)}`);
               await new Promise((done) => setTimeout(done, 200));
             }
+            const clearedBy = Date.now() + 200000;
+            while (!rigLine(guest.serial, "B3_STAYED_UP:")) {
+              if (Date.now() >= clearedBy)
+                throw new Error("guest did not report its cleared startup counter");
+              await new Promise((done) => setTimeout(done, 100));
+            }
+            observed.stayedUp = JSON.parse(rigLine(guest.serial, "B3_STAYED_UP:"));
           }
           await writeFile(join(runDir, `${name}-observed.json`), JSON.stringify(observed, null, 2));
         } finally {
@@ -772,19 +895,74 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
           throw new Error("clock/socket binding not qualified");
       }
       const before = await diskHash(target);
-      const guest = await boot(
-        "existing-stick",
-        true,
-        "This box already has Waitron (Harbour Restaurant Ltd).",
-        300000,
-      );
-      await guest.finish();
-      const after = await diskHash(target);
-      if (before !== after) throw new Error("existing-stick changed target");
-      await writeFile(
-        join(runDir, "existing-stick.json"),
-        JSON.stringify({ tag: afterTag.tag, before, after, writer: again.tagJob }, null, 2),
-      );
+      const guest = await boot("existing-stick", true, "B3_RETURN_READY", 600000, before);
+      try {
+        const selected = JSON.parse(rigLine(guest.serial, "B3_RETURN:"));
+        const serial = guest.returnedSerial;
+        const firmware = Buffer.from(rigLine(serial, "B3_RETURN_FIRMWARE:"), "base64").toString();
+        const current = /^BootCurrent:\s*([0-9a-f]{4})\s*$/im.exec(firmware)?.[1];
+        const order = /^BootOrder:\s*([0-9a-f,]+)\s*$/im.exec(firmware)?.[1];
+        const exact = new RegExp(
+          `^Boot${selected.entry}\\*[^\\r\\n]*HD\\(1,GPT,${selected.esp},[^)]*\\)/File\\(\\\\EFI\\\\BOOT\\\\BOOTX64\\.EFI\\)\\s*$`,
+          "im",
+        );
+        if (
+          current !== selected.entry ||
+          order !== selected.bootOrder ||
+          /^BootNext:/m.test(firmware) ||
+          !exact.test(firmware)
+        )
+          throw new Error("returned firmware entry, ESP, loader or BootOrder mismatch");
+        const disk = serial
+          .split(/\r?\n/)
+          .map((line) => rigLine(`${line}\n`, "B3_DISK_START:"))
+          .filter((text) => text !== undefined)
+          .map((text) => JSON.parse(text))
+          .find((record) => record.action === "ready");
+        if (
+          disk?.action !== "ready" ||
+          disk.openedBy !== "chip" ||
+          disk.emptyPassword !== false ||
+          JSON.stringify(disk.tpmPcrs) !== "[5,7,8,9,15]"
+        )
+          throw new Error("unchanged chip seal did not open returned disk");
+        if (
+          rigLine(serial, "B3_RETURN_ROOT:") !== installedUuid ||
+          rigLine(serial, "B3_MEASURED:") !== again.measured
+        )
+          throw new Error("returned root identity or boot bytes mismatch");
+        const pcrs = Buffer.from(rigLine(serial, "B3_PCRS:"), "base64").toString();
+        if (
+          !/15\s*:\s*0x8878B15A7D6A3A4F464E8F9F42591DBC0CF4BEDEA0EC309003D2B2EE53655EF8/i.test(pcrs)
+        )
+          throw new Error("returned PCR15 was not extended exactly once");
+        if (!guest.returnEvidence) throw new Error("missing reset/hash evidence");
+        await writeFile(
+          join(runDir, "existing-stick.json"),
+          JSON.stringify(
+            {
+              tag: afterTag.tag,
+              writer: again.tagJob,
+              ...guest.returnEvidence,
+              selected,
+              firmware,
+              disk,
+              pcrs,
+              health: JSON.parse(rigLine(serial, "B3_RETURN_HEALTH:")),
+            },
+            null,
+            2,
+          ),
+        );
+      } finally {
+        await guest.stop();
+      }
+      const returnedHeader = await headerProof("after-return");
+      if (
+        JSON.stringify(returnedHeader.keyslots) !== JSON.stringify(afterTag.keyslots) ||
+        JSON.stringify(returnedHeader.otherTokens) !== JSON.stringify(afterTag.otherTokens)
+      )
+        throw new Error("return changed unlock material");
     }
     const sourcePcr = Buffer.from(rigLine(install.serial, "B3_PCRS:"), "base64").toString();
     const bootstrapPcr = Buffer.from(rigLine(bootstrap.serial, "B3_PCRS:"), "base64").toString();
