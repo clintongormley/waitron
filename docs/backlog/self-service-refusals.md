@@ -84,13 +84,6 @@ They declare shapes, not the conditions that make a retry useful.
 
 Waitron Cloud's product is excluded (D254); Waitron's local Cloud client is in scope.
 
-## Saved Cloud reconnection request
-
-A1500 removes the local-operator referral from `cloud.replacement_state_invalid` (dashboard Cloud
-services, EN/ES) and identifies the damaged saved request as a Waitron fault. The Servers guide
-says to keep the Cloud files. This is wording only: the page has no repair choice. Cloud
-reconnection after a restore remains test-only (`docs/developers/cloud-connection.md`).
-
 ## Support instructions
 
 Each entry records the current words, the state behind them and the existing or missing route.
@@ -1248,3 +1241,8 @@ an existing encrypted backup was qualified by this wording change.
 They do not exercise navigation through the unsaved-changes prompt. They read the downloaded
 key files, but check only that the Copy controls exist; clipboard contents were not exercised.
 Keep these limits separate from the open authenticated diagnosis and correction workflow.
+
+## Decisions and deliberate limits
+
+Cloud reconnection after a restore is test-only. An unusable saved reconnection request stops
+reconnection; the Cloud services page has no repair choice (watcher2026-11-11 12:44, A1500).
