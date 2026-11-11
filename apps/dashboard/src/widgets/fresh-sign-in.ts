@@ -58,6 +58,7 @@ export class FreshSignIn extends LitElement {
     "getProfile" | "freshSignInPasskeyOptions"
   >;
   @property({ type: Boolean }) disabled = false;
+  @property({ type: Boolean }) passwordAndCodeOnly = false;
 
   @state() private profile: OwnProfile | null = null;
   @state() private profileFailed = false;
@@ -108,7 +109,11 @@ export class FreshSignIn extends LitElement {
     const errors: Partial<Record<Field, string>> = {};
     if (way === "password" && this.password === "") errors.password = t("form.password_required");
     if (this.profile?.hasTotp && this.code.trim() === "")
-      errors.code = t("fresh_sign_in.code_required");
+      errors.code = t(
+        this.passwordAndCodeOnly
+          ? "fresh_sign_in.authenticator_required"
+          : "fresh_sign_in.code_required",
+      );
     return errors;
   }
 
@@ -264,7 +269,7 @@ export class FreshSignIn extends LitElement {
       ${ways.password ? autofillUsername(this.profile!.email) : nothing}
       ${ways.password ? this.#passwordField() : nothing}
       ${this.profile!.hasTotp ? this.#codeField() : nothing}
-      <div>
+      <div ?hidden=${this.passwordAndCodeOnly}>
         <wt-button
           data-test="use-passkey"
           variant=${ways.password ? "secondary" : "primary"}
@@ -315,8 +320,8 @@ export class FreshSignIn extends LitElement {
   #codeField() {
     return html`<wt-input
       name="totp"
-      label=${t("fresh_sign_in.code")}
-      placeholder=${t("fresh_sign_in.code_hint")}
+      label=${t(this.passwordAndCodeOnly ? "fresh_sign_in.authenticator_code" : "fresh_sign_in.code")}
+      placeholder=${t(this.passwordAndCodeOnly ? "fresh_sign_in.authenticator_hint" : "fresh_sign_in.code_hint")}
       required
       ?disabled=${this.disabled}
       autocomplete="one-time-code"

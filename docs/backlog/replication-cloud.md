@@ -607,6 +607,10 @@ wrong, and none is reachable on a real box before A947 3b.
 
 ## Slice 6's list: the handover words no screen shows yet
 
+9 November: the controlled Servers-to-spare flow now shows start refusals with next steps. The
+setup page describes stored copy waits without rendering their raw codes. The list below keeps
+wording still left in other routes and the return flow.
+
 Left open by A1018 Slice 5 (Ruling P29 allows such words until a screen shows them; Ruling R53). This
 is read from `apps/dashboard/src/i18n/codes.ts` at Slice 5's tip, and which words name a next step is
 a reader's judgement.
@@ -618,26 +622,15 @@ a reader's judgement.
 route answers (`apps/server/src/handover-compare.ts`).
 
 **Words naming no next step:** `stepping_down`, `known_handover`, `peer_unknown`, `not_stepped_down`,
-`operation_unknown`, `final_copy_changed`, `not_a_spare`, `membership_mismatch`, `not_main_box`,
-`venue_not_supported`, `destination_not_spare`, `destination_not_joined`, `destination_unaddressable`,
-`backup_settings_differ`, `modules_differ`, `key_ring_mismatch`, `indicator_untrusted`, `chain_broken`,
+`operation_unknown`, `final_copy_changed`, `not_a_spare`, `membership_mismatch`,
+`indicator_untrusted`, `chain_broken`,
 `preparation_state_too_large`, `summary_mismatch`, `summary_unreadable`, `copy_lacks_destination`,
 `authoriser_not_permitted`, `preparation_state_unusable`, `accepted_copy_missing`,
 `indicator_mismatch`, `copy_check_failed` (all `handover.`).
 
 **Words false, or misleading, where they appear:**
-- `operation_in_progress` says "or abandon it", and the spare has no way to abandon. "Start a new
-  handover" gets this code until the spare closes its copy.
-- "Unreadable" settings: `settings_unreadable` and `destination_settings_unreadable` name a repair a
-  person with no terminal cannot do. The first says "keeps selling" even if a newer chart stops the
-  box during the status query, and the second says "start a new handover" with the old box stopped.
-- `destination_unreachable` says "This box keeps selling" when a chart arrives during an offer that
-  then fails, on a box that is stopping; `restarted_before_stepdown` says the same when stored after
-  a chart naming no main box.
 - `source_unreachable` also covers a local disk error on the spare, a real full disk on the old box
   (its 507) and a chart with the old box gone from it, and says "Nothing was changed".
-- `not_main_box` says "Nothing was changed" when also answered after `abandoned`.
-- `key_ring_mismatch` says "this box uses", the wrong box when the spare shows it.
 - `indicator_mismatch`, `copy_check_failed`, `not_stepped_down` say nothing changed, reused at
   `copy_accepted`, after the spare accepted.
 - `copy_damaged` says "damaged" and "fetching it again" for a row the old box itself holds, which a

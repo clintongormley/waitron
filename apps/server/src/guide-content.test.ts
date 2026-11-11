@@ -98,6 +98,8 @@ describe("the user guides", () => {
     expect(markdown).toBeDefined();
     expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
       "spare",
+      "hand-over",
+      "after-hand-over",
       "handed-over",
       "waiting",
       "carry-on",

@@ -9,6 +9,7 @@ import {
 } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
+import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
@@ -36,6 +37,7 @@ interface RestrictedView {
   successor: string;
   steps: Step[];
   timeZone: string;
+  handoverPage?: string;
 }
 
 /** `Object.hasOwn`: the kind is read from a file, and `toString` must not find an inherited value. */
@@ -92,6 +94,8 @@ async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
     successor: row === undefined || row.name === "" ? restriction.successorNodeId : row.name,
     steps,
     timeZone: await readTimeZone(deps.venue),
+    handoverPage:
+      operation === null ? undefined : await handoverPageOf({ db: deps.venue }, operation),
   };
 }
 
@@ -125,6 +129,7 @@ ${view.steps
 <body>
 <h1>${escapeHtml(text.title)}</h1>
 <p>${escapeHtml(text.body[0])}<strong>${escapeHtml(view.successor)}</strong>${escapeHtml(text.body[1])}</p>
+${view.handoverPage === undefined || !/^https?:\/\//.test(view.handoverPage) ? "" : `<p><a href="${escapeHtml(view.handoverPage)}">${escapeHtml(text.progress)}</a></p>`}
 ${steps}
 </body>
 </html>
@@ -148,7 +153,7 @@ function renderFailure(locale: SupportedLocale): string {
 `;
 }
 
-/** The page a person opening a stepped-down box sees. It offers nothing to do: none is needed. */
+/** The page a person opening a stepped-down box sees. */
 export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => void {
   return (app) => {
     app.get("/", async (c) => {

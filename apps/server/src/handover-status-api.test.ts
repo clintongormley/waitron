@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, writeNodeMembership } from "@waitron/db";
+import { CORE_MIGRATIONS, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import { verifyEnvelope, type HandoverRole, type HandoverState } from "@waitron/handover";
 import type { SignedMembershipDocument } from "@waitron/membership";
-import { NODE_MIGRATIONS } from "@waitron/node-db";
+import { appendHandoverEventTx, NODE_MIGRATIONS } from "@waitron/node-db";
 import { mountHandoverStatusApi, type HandoverStatusBody } from "./handover-status-api.js";
 import { advanceHandover, beginHandover, waitHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -104,6 +104,21 @@ describe("GET /api/node/handover/:operationId", () => {
       destinationNodeId: self,
       waitingReason: null,
     });
+  });
+
+  it("reports a placed destination copy only after this operation records placement", async () => {
+    await operation("destination", ["copy_accepted", "filing_assumed"]);
+    expect(await signedStatus()).not.toHaveProperty("copyPlaced");
+    await withNodeTransaction(suite.node, (tx) =>
+      appendHandoverEventTx(tx, {
+        nodeId: self,
+        operationId: OP,
+        kind: "copy_placed",
+        detail: {},
+        envelope: null,
+      }),
+    );
+    expect(await signedStatus()).toHaveProperty("copyPlaced", true);
   });
 
   it("carries why the box is waiting", async () => {

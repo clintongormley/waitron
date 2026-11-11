@@ -6,6 +6,33 @@ Si ves **Este es el equipo de reserva**, abre la dirección del equipo principal
 pantallas y los datos del local. La página de reserva muestra su estado; no acepta ventas ni
 ofrece acceso al panel de gestión.
 
+## Traspasar el local a un equipo de reserva {#hand-over}
+
+Usa este proceso solo con un equipo de reserva que haya terminado de unirse al local.
+
+En el equipo principal, abre **Ajustes → Servidores**. Abre el menú de la fila del equipo de reserva
+y elige **Traspasar el local**. Lee la explicación e introduce tu contraseña de administrador y el
+código de autenticador, si está configurado. Elige **Parar** para mantener el local en este equipo,
+o **Traspasar el local** para detener las ventas aquí y mover la copia final. Necesitas una cuenta
+con contraseña; las llaves de acceso y los códigos de recuperación no completan este proceso.
+
+Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue
+la transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador, compara
+los relojes y crea la nueva serie. Elige **Iniciar el local en este equipo**. Si la página indica
+que el equipo se está reiniciando, mantenla abierta hasta que aparezca **Continuar en este equipo**.
+Los pagos ya registrados se conservan en la copia transferida.
+
+Si se pierde una respuesta en Servidores, mantén abierto el diálogo y elige **Consultar el
+progreso del traspaso**. En la página de traspaso del equipo de reserva puedes recargar para
+consultar el progreso. No inicies otro traspaso. Un mensaje de espera describe el último intento;
+mantén los dos equipos conectados mientras vuelven a intentarlo.
+
+## Después del traspaso {#after-hand-over}
+
+Usa la dirección del nuevo equipo. Si la página del equipo anterior ofrece **Progreso**, sigue el
+enlace para continuar el traspaso en el de reserva. Conserva el equipo anterior y sus datos hasta
+que esté disponible el proceso de devolución.
+
 ## Cuando el local ya no funciona con un equipo {#handed-over}
 
 Si abres la dirección de un equipo en un navegador y ves una página titulada **El local ya no
@@ -15,8 +42,7 @@ página indica, en negrita, el equipo que pasa a llevar el local.
 Debajo, la página enumera cada paso del traspaso que este equipo ha registrado, en el orden en que
 los registró, con la fecha y la hora de cada uno en la zona horaria del local.
 
-La página no tiene botones, porque no hay nada que tengas que hacer: es normal que el equipo esté
-en este estado.
+Si la página ofrece **Progreso**, úsalo para terminar el traspaso en el equipo de reserva.
 
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.

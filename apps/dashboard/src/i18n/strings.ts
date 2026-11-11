@@ -1210,6 +1210,9 @@ export const en = {
   "profile.password_recovery":
     "To set a password, sign out and choose “I’ve forgotten my password” when logging in.",
   "fresh_sign_in.password": "Password",
+  "fresh_sign_in.authenticator_code": "Authenticator code",
+  "fresh_sign_in.authenticator_hint": "6-digit code from your app",
+  "fresh_sign_in.authenticator_required": "Enter a code from your authenticator app",
   "fresh_sign_in.code": "Authenticator or recovery code",
   "fresh_sign_in.code_hint": "6-digit code from your app, or one of your recovery codes",
   "fresh_sign_in.code_required": "Enter a code from your authenticator app or a recovery code",
@@ -1858,6 +1861,17 @@ export const en = {
   "diagnostics.action.clear": "Clear",
   "diagnostics.empty": "No log lines yet",
   "servers.title": "Servers",
+  "servers.hand_over": "Hand over the venue",
+  "servers.handover_intro":
+    "Sales stop on this box while the final copy moves. On the spare, sign in again, compare clocks and start the venue. Payments already recorded stay in the copy. Keep both boxes connected.",
+  "servers.handover_password":
+    "Use an administrator account with a password and its authenticator code. Passkeys and recovery codes cannot start this handover.",
+  "servers.handover_reconnect":
+    "Could not read handover progress. Keep both boxes connected and check progress again.",
+  "servers.handover_check": "Check handover progress",
+  "servers.handover_stop": "Stop",
+  "servers.handover_sent":
+    "The request has been sent. Closing this window does not cancel it. Check progress before starting another handover.",
   "servers.fingerprint": "This server's public certificate fingerprint",
   "servers.intro":
     "Every machine on this venue's list of servers. A standby that never finished joining can be removed, so tills stop trying to reach it. To use that machine again, it has to join from scratch. A removed machine can be cleared from the list to free its place.",
@@ -5050,6 +5064,9 @@ export const es: Record<StringKey, string> = {
   "profile.password_recovery":
     "Para crear una contraseña, cierra la sesión y elige «¿Has olvidado tu contraseña?» al iniciar sesión.",
   "fresh_sign_in.password": "Contraseña",
+  "fresh_sign_in.authenticator_code": "Código del autenticador",
+  "fresh_sign_in.authenticator_hint": "Código de 6 cifras de tu app",
+  "fresh_sign_in.authenticator_required": "Introduce un código de tu app de autenticación",
   "fresh_sign_in.code": "Código del autenticador o de recuperación",
   "fresh_sign_in.code_hint": "Código de 6 cifras de tu app, o uno de tus códigos de recuperación",
   "fresh_sign_in.code_required":
@@ -5711,6 +5728,17 @@ export const es: Record<StringKey, string> = {
   "diagnostics.action.clear": "Borrar",
   "diagnostics.empty": "Aún no hay líneas de registro",
   "servers.title": "Servidores",
+  "servers.hand_over": "Traspasar el local",
+  "servers.handover_intro":
+    "Las ventas se detienen en este equipo mientras se mueve la copia final. En el de reserva, identifícate de nuevo, compara los relojes e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos equipos conectados.",
+  "servers.handover_password":
+    "Usa una cuenta de administrador con contraseña y su código de autenticador. Las llaves de acceso y los códigos de recuperación no pueden iniciar este traspaso.",
+  "servers.handover_reconnect":
+    "No se pudo consultar el progreso. Mantén los dos equipos conectados y vuelve a consultarlo.",
+  "servers.handover_check": "Consultar el progreso del traspaso",
+  "servers.handover_stop": "Parar",
+  "servers.handover_sent":
+    "La solicitud se ha enviado. Cerrar esta ventana no la cancela. Consulta el progreso antes de iniciar otro traspaso.",
   "servers.fingerprint": "Huella del certificado público de este servidor",
   "servers.intro":
     "Todas las máquinas de la lista de servidores del local. Un servidor en espera que no terminó de unirse se puede retirar, para que las cajas dejen de intentar conectar con él. Para volver a usar esa máquina, tiene que unirse de nuevo desde el principio. Una máquina retirada se puede quitar de la lista para liberar su sitio.",

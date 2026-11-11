@@ -210,3 +210,105 @@ for (const theme of ["light", "dark"] as const)
         await page.viewport(original[0]!, original[1]!);
       }
     });
+
+for (const theme of ["light", "dark"] as const)
+  for (const locale of ["en", "es"] as const)
+    it(`${locale} ${theme} promotion clocks fit and remain accessible`, async () => {
+      const original = [window.innerWidth, window.innerHeight];
+      try {
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 1600);
+          for (const state of ["empty", "selected", "second-clock", "refused"] as const) {
+            const host = document.createElement("main");
+            hosts.push(host);
+            document.body.append(host);
+            applyTokens(host);
+            host.dataset.theme = theme;
+            host.lang = locale;
+            host.style.cssText =
+              "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
+            const binding = {
+              module: "fiscal-verifactu",
+              action: "promote",
+              eventId: "handover",
+              sourceId: "old-box",
+              targetNodeId: "new-box",
+            };
+            const instant = Date.parse("2026-10-18T12:30:00Z");
+            const el = FISCAL_SETUP.createPromotion!({
+              locale,
+              binding,
+              timeZone: "America/New_York",
+              prepare: async (proposal) => {
+                if (state === "refused") throw { code: "password.invalid", params: {} };
+                const action = (proposal as { action: string }).action;
+                if (action === "clock-challenge") return { id: "challenge" };
+                if (action === "compare-clocks")
+                  return {
+                    id: "compared",
+                    clock: {
+                      usable: [
+                        { source: "box", lowerMs: instant, upperMs: instant },
+                        ...(state === "second-clock"
+                          ? []
+                          : [{ source: "browser", lowerMs: instant, upperMs: instant }]),
+                      ],
+                      unavailable:
+                        state === "second-clock"
+                          ? [{ source: "browser", result: "unavailable", reason: "same_machine" }]
+                          : [],
+                      secondClock: state !== "second-clock",
+                      disagreement: false,
+                      releaseBlocked: false,
+                      rangeBlocked: false,
+                    },
+                  };
+                if (action === "preview") return { status: "preview" };
+                return {
+                  status: "selected",
+                  binding,
+                  identity: "0CSQW",
+                  input: { selected: "server-input" },
+                };
+              },
+            }) as RecoveryHourEntry;
+            host.append(el);
+            await el.updateComplete;
+            const action = (name: string) =>
+              el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+                `[data-test="${name}"]`,
+              )!;
+            if (state !== "empty") {
+              action("compare").click();
+              if (state === "refused") {
+                await vi.waitFor(() =>
+                  expect(
+                    (
+                      el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+                        error: string;
+                      }
+                    ).error.length,
+                  ).toBeGreaterThan(0),
+                );
+              } else {
+                await vi.waitFor(() => expect(action("select").disabled).toBe(false));
+                action("select").click();
+                if (state === "selected")
+                  await vi.waitFor(() => expect(el.readOperation()).not.toBeNull());
+                else
+                  await vi.waitFor(() =>
+                    expect(el.shadowRoot!.querySelector('[data-test="clock-wait"]')).not.toBeNull(),
+                  );
+              }
+            }
+            expect((await axe.run(host)).violations).toEqual([]);
+            expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth);
+            expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
+            el.remove();
+            host.remove();
+          }
+        }
+      } finally {
+        await page.viewport(original[0]!, original[1]!);
+      }
+    });

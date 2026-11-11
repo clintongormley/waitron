@@ -2,10 +2,11 @@ import type { Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
 import type { SignedHandoverEnvelope } from "@waitron/handover";
 import type { CanonicalValue } from "@waitron/membership";
-import { readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
+import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { signAsThisBox } from "./handover-signing.js";
+import { HANDOVER_EVENT } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import type { PeerOperationStatus, PeerStatusApiDeps } from "./peer-status-api.js";
 import "./errors.js";
@@ -13,6 +14,7 @@ import "./errors.js";
 export interface HandoverStatusBody extends PeerOperationStatus {
   waitingReason: string | null;
   handoverPage?: string;
+  copyPlaced?: boolean;
 }
 
 const STATUS = {
@@ -28,7 +30,7 @@ export function handoverPageAt(contactUrl: string, operationId: string): string 
 }
 
 export async function handoverPageOf(
-  deps: PeerStatusApiDeps,
+  deps: Pick<PeerStatusApiDeps, "db">,
   operation: HandoverOperation,
 ): Promise<string | undefined> {
   // `abandoned` is not past `prepared`: a source reaches it only from there, without stepping down.
@@ -53,6 +55,14 @@ export async function signedHandoverStatus(
   operation: HandoverOperation,
 ): Promise<SignedHandoverEnvelope<CanonicalValue>> {
   const handoverPage = await handoverPageOf(deps, operation);
+  const copyPlaced =
+    operation.role === "destination" &&
+    (await readHandoverEvent(
+      deps.node,
+      deps.nodeId,
+      operation.operationId,
+      HANDOVER_EVENT.copyPlaced,
+    )) !== null;
   const body: HandoverStatusBody = {
     operationId: operation.operationId,
     role: operation.role,
@@ -62,6 +72,7 @@ export async function signedHandoverStatus(
     destinationNodeId: operation.destinationNodeId,
     waitingReason: operation.waitingReason,
     ...(handoverPage === undefined ? {} : { handoverPage }),
+    ...(copyPlaced ? { copyPlaced: true } : {}),
   };
   return signAsThisBox(deps, "status", body as unknown as CanonicalValue);
 }

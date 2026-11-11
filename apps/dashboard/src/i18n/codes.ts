@@ -1400,8 +1400,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
   },
   "handover.operation_in_progress": {
-    en: "Nothing was started, because this server is already in the middle of another handover. Finish that handover, or abandon it, and then start this one again.",
-    es: "No se ha empezado nada, porque este servidor ya está en medio de otro cambio de servidor. Termina ese cambio de servidor, o abandónalo, y luego vuelve a empezar este.",
+    en: "Another handover is already in progress. Keep both boxes connected. Do not start another handover until it finishes.",
+    es: "Ya hay otro traspaso en curso. Mantén los dos equipos conectados. No inicies otro traspaso hasta que termine.",
   },
   // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
   // rewrites one.
@@ -1450,64 +1450,64 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El equipo que ofrece este traspaso no es el equipo principal en la lista de equipos del local de este equipo, o los dos equipos tienen datos del local o listas distintos, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
   },
   "handover.not_main_box": {
-    en: "This box is not the venue's main box, so it cannot hand the venue over. Nothing was changed.",
-    es: "Este equipo no es el equipo principal del local, así que no puede traspasar el local. No se ha cambiado nada.",
+    en: "This box is not the main box. Open Servers at the main box’s address to start a handover.",
+    es: "Este equipo no es el principal. Abre Servidores en la dirección del equipo principal para iniciar un traspaso.",
   },
   "handover.venue_not_supported": {
-    en: "A handover between boxes is not available yet for this venue's way of filing invoices. Nothing was changed and this box keeps selling.",
-    es: "El traspaso entre equipos aún no está disponible para la forma de presentar facturas de este local. No se ha cambiado nada y este equipo sigue vendiendo.",
+    en: "This venue’s way of filing invoices does not support handover yet. Choose Stop and keep using the main box.",
+    es: "La forma de presentar facturas de este local aún no admite el traspaso. Elige Parar y sigue usando el equipo principal.",
   },
   "handover.destination_not_spare": {
-    en: "The box you chose is not a spare waiting to take over this venue, so the handover did not start. This box keeps selling.",
-    es: "El equipo elegido no es un equipo de reserva a la espera de llevar este local, así que el traspaso no ha empezado. Este equipo sigue vendiendo.",
+    en: "That box is not listed as a spare. Choose Stop and check the current Servers list before choosing a spare.",
+    es: "Ese equipo no figura como reserva. Elige Parar y revisa la lista actual de Servidores antes de elegir un equipo de reserva.",
   },
   "handover.destination_not_joined": {
-    en: "This box holds no record of the box you chose having finished joining the venue, so the handover did not start and this box keeps selling.",
-    es: "Este equipo no tiene constancia de que el equipo elegido haya terminado de unirse al local, así que el traspaso no ha empezado y este equipo sigue vendiendo.",
+    en: "That spare has not finished joining this venue. Choose Stop and finish joining it before handing over.",
+    es: "Ese equipo de reserva no ha terminado de unirse a este local. Elige Parar y termina de incorporarlo antes de traspasar el local.",
   },
   "handover.destination_unaddressable": {
-    en: "The venue's list of boxes holds no address of its own for the box you chose, so this box cannot reach it. The handover did not start and this box keeps selling.",
-    es: "La lista de equipos del local no tiene una dirección propia para el equipo elegido, así que este equipo no puede llegar a él. El traspaso no ha empezado y este equipo sigue vendiendo.",
+    en: "The spare has no separate address on this box’s list. Choose Stop and finish the spare’s network setup before handing over.",
+    es: "El equipo de reserva no tiene una dirección propia en la lista de este equipo. Elige Parar y termina de configurar su red antes de traspasar el local.",
   },
   "handover.destination_unreachable": {
-    en: "The box you chose did not answer, or its answer could not be checked, so the handover did not start. This box keeps selling. Try again with a new handover once that box is running.",
-    es: "El equipo elegido no ha respondido, o no se ha podido comprobar su respuesta, así que el traspaso no ha empezado. Este equipo sigue vendiendo. Inténtalo de nuevo con otro traspaso cuando ese equipo esté en marcha.",
+    en: "The spare did not give a verifiable answer. Check its power and network connection, then try the handover again.",
+    es: "El equipo de reserva no ha dado una respuesta verificable. Comprueba su alimentación y su conexión de red y vuelve a intentar el traspaso.",
   },
   "handover.restarted_before_stepdown": {
-    en: "This box restarted before the handover took effect, so that handover was cancelled and this box keeps selling. Start a new handover to try again.",
-    es: "Este equipo se ha reiniciado antes de que el traspaso surtiera efecto, así que ese traspaso se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+    en: "This handover was cancelled before this box handed over. Check the current Servers list, then start a new handover if the spare is still listed.",
+    es: "Este traspaso se canceló antes de que este equipo cediera el local. Revisa la lista actual de Servidores e inicia otro traspaso si el equipo de reserva sigue en ella.",
   },
   "handover.superseded_during_start": {
-    en: "This box no longer runs the venue, because another box took over or the venue's list of boxes changed, so this handover did not go ahead. Nothing is needed on this box.",
-    es: "Este equipo ya no lleva el local, porque otro equipo ha pasado a llevarlo o ha cambiado la lista de equipos del local, así que este traspaso no ha seguido adelante. No hace falta hacer nada en este equipo.",
+    en: "Another box took over or the venue’s list of boxes changed. Open the current main box’s address to continue.",
+    es: "Otro equipo ha pasado a llevar el local o ha cambiado la lista de equipos. Abre la dirección del equipo principal actual para continuar.",
   },
   "handover.membership_changed": {
-    en: "The venue's details or its list of boxes changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
-    es: "Los datos del local o su lista de equipos han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+    en: "The venue’s details or its list of boxes changed during this handover. Check Servers on the current main box before starting a new handover.",
+    es: "Los datos del local o su lista de equipos han cambiado durante el traspaso. Revisa Servidores en el equipo principal actual antes de iniciar otro.",
   },
   "handover.backup_settings_differ": {
-    en: "The two boxes hold different backup settings, so the spare did not accept this handover.",
-    es: "Los dos equipos tienen ajustes de copia de seguridad distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+    en: "The two boxes have different backup settings. Choose Stop and make their backup settings match before handing over.",
+    es: "Los dos equipos tienen ajustes de copia de seguridad distintos. Elige Parar e iguala sus ajustes antes de traspasar el local.",
   },
   "handover.modules_differ": {
-    en: "The two boxes run different versions of the software or have different modules switched on, so the spare did not accept this handover.",
-    es: "Los dos equipos usan versiones distintas del programa o tienen activados módulos distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+    en: "The two boxes have different software or enabled modules. Choose Stop and bring both boxes to the same software and module selection before handing over.",
+    es: "Los dos equipos tienen programas o módulos activados distintos. Elige Parar y pon en ambos los mismos programas y módulos antes de traspasar el local.",
   },
   "handover.key_ring_mismatch": {
-    en: "The spare does not hold every encryption key this box uses, so it did not accept this handover.",
-    es: "El equipo de reserva no tiene todas las claves de cifrado que usa este equipo, así que no ha aceptado este traspaso.",
+    en: "The spare lacks an encryption key needed for this venue. Choose Stop and join the spare again before handing over.",
+    es: "Al equipo de reserva le falta una clave de cifrado necesaria para este local. Elige Parar y vuelve a unirlo al local antes de traspasarlo.",
   },
   "handover.settings_unreadable": {
-    en: "This box could not read one of its own files (backup.env, modules.json or module-preparation-state.json), so this handover did not go ahead and this box keeps selling. Once that file is repaired, start a new handover.",
-    es: "Este equipo no ha podido leer uno de sus archivos (backup.env, modules.json o module-preparation-state.json), así que este traspaso no ha seguido adelante y este equipo sigue vendiendo. Cuando ese archivo esté reparado, empieza un traspaso nuevo.",
+    en: "This box could not read the settings needed for handover. Choose Stop, restart this box and check its start page before trying again.",
+    es: "Este equipo no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
   },
   "handover.destination_settings_unreadable": {
-    en: "The spare could not read one of its own files (backup.env, modules.json or module-preparation-state.json), so it did not accept this handover. Once that file is repaired, start a new handover.",
-    es: "El equipo de reserva no ha podido leer uno de sus archivos (backup.env, modules.json o module-preparation-state.json), así que no ha aceptado este traspaso. Cuando ese archivo esté reparado, empieza un traspaso nuevo.",
+    en: "The spare could not read the settings needed for handover. Choose Stop, restart the spare and check its start page before trying again.",
+    es: "El equipo de reserva no ha podido leer los ajustes necesarios para el traspaso. Elige Parar, reinícialo y revisa su página de inicio antes de volver a intentarlo.",
   },
   "handover.settings_changed": {
-    en: "This box's settings changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
-    es: "Los ajustes de este equipo han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+    en: "This box’s settings changed during the handover. Check Servers on the current main box before starting a new handover.",
+    es: "Los ajustes de este equipo han cambiado durante el traspaso. Revisa Servidores en el equipo principal actual antes de iniciar otro.",
   },
   "handover.indicator_untrusted": {
     en: "The description of the final copy was not signed by the box handing over, so the spare did not accept it. The old box stays stopped.",

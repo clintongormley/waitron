@@ -3,7 +3,10 @@ import { userEvent } from "vitest/browser";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import type { Mock } from "vitest";
-import type { ModuleRecoveryEntry } from "@waitron/module/src/setup-contract.js";
+import type {
+  ModuleRecoveryEntry,
+  ModulePromotionEntry,
+} from "@waitron/module/src/setup-contract.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 
 const binding = {
@@ -99,7 +102,7 @@ async function ready(el: Entry) {
   check(el, "recovery-sole-operation");
   await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
 }
-function button(el: Entry, name: string) {
+function button(el: LitElement, name: string) {
   const value = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
     `[data-test="${name}"]`,
   );
@@ -1520,5 +1523,114 @@ it("drops a returning device's report when the selected backup scope changes", a
   await recovery.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=device-invoices]")!.textContent).toContain(
     observation.invoiceNumber,
+  );
+});
+
+it("compares and selects a promotion without a recovery key or recovery declarations", async () => {
+  const promotionBinding = { ...binding, action: "promote" };
+  let decision = clock;
+  const prepare = vi.fn(async (proposal: unknown) => {
+    const action = (proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock: decision };
+    if (action === "preview") return { status: "preview" };
+    if (action === "select") return { ...selected, binding: promotionBinding };
+    throw new Error("unexpected promotion proposal");
+  });
+  const factory = Reflect.get(FISCAL_SETUP, "createPromotion") as
+    | undefined
+    | ((context: {
+        locale: "en" | "es";
+        timeZone: string;
+        binding: typeof promotionBinding;
+        prepare: typeof prepare;
+      }) => Entry & {
+        readOperation(): { binding: typeof promotionBinding; input: unknown } | null;
+      });
+  expect(factory, "the fiscal contribution offers the shared promotion clock form").toBeTypeOf(
+    "function",
+  );
+  const host = document.createElement("main");
+  applyTokens(host);
+  document.body.append(host);
+  hosts.push(host);
+  const el = factory!({
+    locale: "en",
+    timeZone: "America/New_York",
+    binding: promotionBinding,
+    prepare,
+  });
+  host.append(el);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("vf-recovery-key")).toBeNull();
+  expect(el.shadowRoot!.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="device-invoices"]')).toBeNull();
+  expect(button(el, "compare").disabled).toBe(false);
+  expect(el.readOperation()).toBeNull();
+  await compare(el);
+  await vi.waitFor(() => expect(button(el, "select").disabled).toBe(false));
+  button(el, "select").click();
+  await vi.waitFor(() =>
+    expect(el.readOperation()).toEqual({ binding: promotionBinding, input: selected.input }),
+  );
+  expect(prepare.mock.calls.map(([proposal]) => (proposal as { action: string }).action)).toEqual([
+    "clock-challenge",
+    "compare-clocks",
+    "preview",
+    "clock-challenge",
+    "compare-clocks",
+    "select",
+  ]);
+  el.clear();
+  await el.updateComplete;
+  expect(el.readOperation()).toBeNull();
+  decision = noSecondClock;
+  await compare(el);
+  await vi.waitFor(() => expect(button(el, "select").disabled).toBe(false));
+  button(el, "select").click();
+  await vi.waitFor(() =>
+    expect(text(el)).toContain("open this handover page on another phone or laptop"),
+  );
+  expect(text(el)).not.toContain("has the backup");
+  el.clear();
+  await el.updateComplete;
+  prepare.mockRejectedValue({ code: "password.invalid", params: {} });
+  button(el, "compare").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
+      "Check your password and code",
+    ),
+  );
+  expect(button(el, "compare").disabled).toBe(false);
+});
+
+it.each([
+  [{ code: "password.throttled", params: {} }, "Wait before trying your password again"],
+  [
+    { code: "authorization.not_permitted", params: {} },
+    "Use an administrator account allowed to hand over",
+  ],
+  [
+    { code: "sif.allocation_invalid", params: { reason: "clock_stale" } },
+    "The clock check is too old",
+  ],
+] as const)("explains the promotion preparation refusal: %s", async (refusal, message) => {
+  const host = document.createElement("main");
+  applyTokens(host);
+  document.body.append(host);
+  hosts.push(host);
+  const el = FISCAL_SETUP.createPromotion!({
+    locale: "en",
+    timeZone: "UTC",
+    binding: { ...binding, action: "promote" },
+    prepare: async () => {
+      throw refusal;
+    },
+  }) as LitElement & ModulePromotionEntry;
+  host.append(el);
+  await el.updateComplete;
+  button(el, "compare").click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(message),
   );
 });

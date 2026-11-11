@@ -22,7 +22,7 @@ import { hashPassword, managementSessions, persons } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron/node-db";
-import { createFirstSetupCoordinator } from "@waitron/provisioning";
+import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mountHandoverActivationApi, type HandoverActivationDeps } from "./handover-activation.js";
 import { handoverPromotionContext, mountHandoverPreparationApi } from "./handover-preparation.js";
@@ -148,6 +148,7 @@ function spareOn(store: Store, service: Service = serviceFor(store)) {
     nodeId: standby.nodeId,
     appDb: store.venue,
     nodePreparation: service,
+    passwordThrottle: createPasswordThrottle(),
   };
   mountHandoverPreparationApi(app, { ...common, requestFromBox: () => false });
   mountHandoverActivationApi(app, { ...common, run });
@@ -553,6 +554,29 @@ describe("signing in against the placed copy", () => {
       body: { error: { code: "authorization.not_permitted" } },
     });
     expect(await activations(store)).toEqual([]);
+  }, 60_000);
+
+  it("shares password refusal delays between preparation and activation", async () => {
+    const store = await placedSpare();
+    const { app } = spareOn(store);
+    const selected = await selectName(app);
+    const body = {
+      moduleOperation: { binding, input: selected.input },
+      signIn: { ...signIn, password: "wrong" },
+      proposal: { action: "clock-challenge" },
+    };
+    for (const step of ["preparation", "activate", "preparation", "activate"] as const) {
+      expect(await request(app, step, body)).toMatchObject({
+        status: 401,
+        body: { error: { code: "password.invalid" } },
+      });
+    }
+    for (const step of ["preparation", "activate"] as const) {
+      expect(await request(app, step, body)).toMatchObject({
+        status: 429,
+        body: { error: { code: "password.throttled" } },
+      });
+    }
   }, 60_000);
 
   it("an unknown email and a wrong password are both password.invalid", async () => {

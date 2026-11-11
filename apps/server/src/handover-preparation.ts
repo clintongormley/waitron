@@ -3,13 +3,15 @@ import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Database, NodeDatabase } from "@waitron/db";
 import { READY_TO_PROMOTE } from "@waitron/handover";
+import { inTurn } from "@waitron/provisioning";
 import { personIdForLoginEmail } from "@waitron/identity";
 import type { OperationBinding } from "@waitron/module";
 import { readHandoverEvent, readHandoverOperation, type HandoverOperation } from "@waitron/node-db";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { HANDOVER_EVENT } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { createNodeOperationPreparation } from "./node-operation-preparation.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
@@ -20,12 +22,14 @@ export interface HandoverPreparationDeps {
   nodeId: string;
   appDb: Database;
   nodePreparation: ReturnType<typeof createNodeOperationPreparation>;
+  passwordThrottle?: PasswordThrottle;
   /** Whether a request came from a browser on the box itself; tests replace it. */
   requestFromBox?: (c: Context) => boolean;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
+  "password.throttled": 429,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,
@@ -96,6 +100,25 @@ export async function signInCredentials(
   return { personId: await personIdForLoginEmail(db, email), password, totp };
 }
 
+export async function handoverSignInAttempt<T>(
+  throttle: PasswordThrottle,
+  credentials: { personId: string },
+  perform: () => Promise<T>,
+): Promise<T> {
+  const key = `person:${credentials.personId}`;
+  return inTurn(throttle, key, async () => {
+    const finish = throttle.begin(key);
+    try {
+      const result = await perform();
+      finish("success");
+      return result;
+    } catch (error) {
+      finish(isAppError(error) && error.code === "password.invalid" ? "invalid" : "error");
+      throw error;
+    }
+  });
+}
+
 /**
  * `POST /api/node/handover/:operationId/preparation`: the browser's clock check and minute name.
  * A good sign-in first makes sure the dormant setup they read exists.
@@ -106,6 +129,7 @@ export function mountHandoverPreparationApi(
   log: Logger = () => {},
 ): void {
   const run = createErrorBoundary(STATUS, "handover-preparation.failed");
+  const throttle = deps.passwordThrottle ?? createPasswordThrottle();
 
   app.post("/api/node/handover/:operationId/preparation", (c) =>
     run(c, log, async () => {
@@ -127,16 +151,18 @@ export function mountHandoverPreparationApi(
       const credentials = await signInCredentials(deps.appDb, body.signIn);
       const onBox = (deps.requestFromBox ?? requestFromBox)(c);
       return c.json(
-        await deps.nodePreparation.prepareWithDormantSetup(
-          moduleOperation.binding,
-          credentials,
-          handoverPromotionContext(operation),
-          body.proposal,
-          { onBox },
-          // The password check takes long enough for the operation to move on.
-          async () => {
-            await readOperationReadyToPromote(deps, operationId);
-          },
+        await handoverSignInAttempt(throttle, credentials, () =>
+          deps.nodePreparation.prepareWithDormantSetup(
+            moduleOperation.binding,
+            credentials,
+            handoverPromotionContext(operation),
+            body.proposal,
+            { onBox },
+            // The password check takes long enough for the operation to move on.
+            async () => {
+              await readOperationReadyToPromote(deps, operationId);
+            },
+          ),
         ),
       );
     }),

@@ -35,6 +35,7 @@ export interface SetupContribution {
     binding: RecoveryOperationBinding;
     prepare(request: ModuleRecoveryPreparationRequest): Promise<unknown>;
   }): ModuleRecoveryEntry;
+  createPromotion?(context: ModulePromotionContext): ModulePromotionEntry;
   createRecoveryKey?(context: {
     locale: "en" | "es";
     selection?: RecoveryKeySelection;
@@ -78,4 +79,17 @@ export interface ModuleRecoveryEntry extends HTMLElement {
   refusedField?: string;
   clear(): void;
   readCredentials(): ModuleRecoveryCredentials | null;
+}
+
+export interface ModulePromotionContext {
+  locale: "en" | "es";
+  binding: RecoveryOperationBinding;
+  timeZone: string;
+  prepare(proposal: unknown): Promise<unknown>;
+}
+export interface ModulePromotionEntry extends HTMLElement {
+  refusalMessage(error: unknown): string;
+  locale: "en" | "es";
+  clear(): void;
+  readOperation(): { binding: RecoveryOperationBinding; input: unknown } | null;
 }

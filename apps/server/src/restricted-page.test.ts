@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, nodes, withNodeTransaction, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  nodes,
+  withNodeTransaction,
+  writeNodeMembership,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { HandoverBinding } from "@waitron/handover";
@@ -106,6 +112,36 @@ describe("the restricted box's own page", () => {
       "Traspaso iniciado",
       "Ha dejado de vender",
     ]);
+  });
+
+  it.each([
+    ["https://new-box.example", true],
+    ["javascript:alert(1);//", false],
+  ] as const)("offers only a web handover link after restart: %s", async (contactUrl, linked) => {
+    const successor = await seedSuccessor("Counter box");
+    await handOver(successor);
+    await writeNodeMembership(suite.db, {
+      body: {
+        term: 3,
+        nodes: [
+          { nodeId: NODE, contactUrl: "https://old-box.example", standing: "serving-primary" },
+          {
+            nodeId: successor,
+            contactUrl,
+            standing: "serving-secondary",
+          },
+        ],
+      },
+      signerNodeId: NODE,
+      signature: "not-verified-by-this-read",
+      endorsements: [],
+    });
+    for (const language of ["en-GB", "es-ES"]) {
+      const result = await page(language);
+      expect(result.status).toBe(200);
+      if (linked) expect(result.html).toContain(`href="${contactUrl}/handover/${OP}"`);
+      else expect(result.html).not.toContain("<a ");
+    }
   });
 
   it("escapes the successor's name", async () => {

@@ -1,6 +1,7 @@
 import { currentLocale } from "./i18n/t.js";
 
 export const GUIDE_LINKS = {
+  "servers.handover": { page: "servers", section: "hand-over" },
   "email.set-up": { page: "email", section: "set-up" },
   "email.remove": { page: "email", section: "remove" },
   "email.test-results": { page: "email", section: "test-results" },

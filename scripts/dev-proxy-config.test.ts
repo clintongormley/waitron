@@ -20,7 +20,7 @@ const stateDir = mkdtempSync(join(import.meta.dirname, "dev-proxy-state-"));
 
 const EXPECTED_ROUTES: Record<string, string[]> = {
   dashboard: ["/api", "/help", "/management-api", "/media"],
-  setup: ["/setup-api"],
+  setup: ["/api/node/handover", "/setup-api"],
   till: ["/api", "/help", "/media"],
 };
 

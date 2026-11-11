@@ -661,6 +661,10 @@ the A1018 plan, not run.
   screen; pushing a ring needs its own secret channel and a restart of the spare; and go-live does
   not rotate.
 - **D8 — A mirror listens on the venue's network, and this is everything it serves there.**
+  **2026-11-10 A1018 update:** the preparation and activation routes now share a password delay;
+  the no-throttle grep below is historical. Lifting the exposed-mirror guard also makes
+  controlled handover live on real boxes, whether or not emergency recovery has landed.
+  See the [A947 backlog](../../backlog/replication-cloud.md#a947-go-live-on-two-local-boxes).
   `assertMirrorBindSafe` and `WAITRON_MIRROR_ALLOW_EXPOSED` are retired. **2026-11-10 (Fable
   review), why the guard can go although A1113 kept it:** the watcher's A1113 ruling (2026-11-08,
   [narrowed A1113 plan](2026-11-08-a1113-spare-screen.md)) kept it for two reasons. Legacy promotion

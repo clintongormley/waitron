@@ -23,12 +23,14 @@ import { usableBase } from "./handover-destination-duty.js";
 import {
   assertBindingNamesOperation,
   handoverPromotionContext,
+  handoverSignInAttempt,
   OPERATION_ID_MAX_LENGTH,
   readOperationReadyToPromote,
   signInCredentials,
 } from "./handover-preparation.js";
 import { advanceHandover, readHandoverEnvelope } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { CHART_MINT_REFUSALS } from "./membership-mint.js";
 import { assertHeldDocumentReadable, HELD_DOCUMENT_REFUSALS } from "./membership-trust.js";
 import { boxExchange } from "./mirror-bundle-fetch.js";
@@ -43,6 +45,7 @@ export interface HandoverActivationDeps {
   nodeId: string;
   appDb: Database;
   nodePreparation: ReturnType<typeof createNodeOperationPreparation>;
+  passwordThrottle?: PasswordThrottle;
   run: (
     attestation: FenceAttestation,
     operation: PromotionOperationRunner,
@@ -52,6 +55,7 @@ export interface HandoverActivationDeps {
 
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
+  "password.throttled": 429,
   "authorization.not_permitted": 403,
   "handover.request_invalid": 400,
   "handover.operation_unknown": 404,
@@ -84,6 +88,7 @@ async function activate(
   deps: HandoverActivationDeps,
   operationId: string,
   body: { moduleOperation?: unknown; signIn?: unknown },
+  throttle: PasswordThrottle,
 ): Promise<{ activated: true; restarting: boolean }> {
   if (await alreadyActivated(deps, operationId)) return ALREADY_ANSWER;
   const operation = await readOperationReadyToPromote(deps, operationId);
@@ -102,37 +107,39 @@ async function activate(
   if (!committed) await assertOldBoxStillMain(deps.appDb);
   const credentials = await signInCredentials(deps.appDb, body.signIn);
   const evidence = await storedEvidence(deps, operation);
-  const result = await deps.nodePreparation.withPromotion(
-    moduleOperation,
-    credentials,
-    handoverPromotionContext(operation),
-    (_modules, runner) =>
-      deps.run(
-        { oldNodeNeutralised: true },
-        (context, consume) =>
-          runner(context, async (tx, operations) => {
-            // In the transaction that writes the chart: a chart taken after this waits behind it.
-            await assertOldBoxStillMain(tx);
-            const series = await consume(tx, operations);
-            await insertHandoverActivationTx(tx, {
-              operationId,
-              scenario: operation.scenario,
-              sourceNodeId: operation.sourceNodeId,
-              destinationNodeId: operation.destinationNodeId,
-              evidence,
-              personId: credentials.personId,
-              activatedAt: nowIso(),
-            });
-            return series;
-          }),
-        // Venue first, node after: a repeat finishes this record from the committed row, and no record
-        // can claim a promotion that did not commit.
-        () => advanceHandover(deps, operationId, "activated", {}),
-      ),
-    // The password check takes long enough for the operation to move on.
-    async () => {
-      await readOperationReadyToPromote(deps, operationId);
-    },
+  const result = await handoverSignInAttempt(throttle, credentials, () =>
+    deps.nodePreparation.withPromotion(
+      moduleOperation,
+      credentials,
+      handoverPromotionContext(operation),
+      (_modules, runner) =>
+        deps.run(
+          { oldNodeNeutralised: true },
+          (context, consume) =>
+            runner(context, async (tx, operations) => {
+              // In the transaction that writes the chart: a chart taken after this waits behind it.
+              await assertOldBoxStillMain(tx);
+              const series = await consume(tx, operations);
+              await insertHandoverActivationTx(tx, {
+                operationId,
+                scenario: operation.scenario,
+                sourceNodeId: operation.sourceNodeId,
+                destinationNodeId: operation.destinationNodeId,
+                evidence,
+                personId: credentials.personId,
+                activatedAt: nowIso(),
+              });
+              return series;
+            }),
+          // Venue first, node after: a repeat finishes this record from the committed row, and no record
+          // can claim a promotion that did not commit.
+          () => advanceHandover(deps, operationId, "activated", {}),
+        ),
+      // The password check takes long enough for the operation to move on.
+      async () => {
+        await readOperationReadyToPromote(deps, operationId);
+      },
+    ),
   );
   if (!result.alreadyPrimary) return { activated: true, restarting: result.restarting };
   if ((await readHandoverActivation(deps.appDb, operationId)) === null)
@@ -154,6 +161,7 @@ export function mountHandoverActivationApi(
   log: Logger = () => {},
 ): void {
   const run = createErrorBoundary(STATUS, "handover-activation.failed");
+  const throttle = deps.passwordThrottle ?? createPasswordThrottle();
 
   app.post("/api/node/handover/:operationId/activate", (c) =>
     run(c, log, async () => {
@@ -165,7 +173,9 @@ export function mountHandoverActivationApi(
       const body = await readJsonBody<{ moduleOperation?: unknown; signIn?: unknown }>(c);
       // In turn, not sharing the first attempt's answer as a capture does: each caller's own
       // password decides its own refusal, and the turn behind a success finds it activated.
-      return c.json(await inTurn(deps.node, operationId, () => activate(deps, operationId, body)));
+      return c.json(
+        await inTurn(deps.node, operationId, () => activate(deps, operationId, body, throttle)),
+      );
     }),
   );
 }

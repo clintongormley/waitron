@@ -4472,6 +4472,24 @@ export class DashboardApi {
 
   // ── Servers ───────────────────────────────────────────────────────────────────────────────────
 
+  startHandover(body: {
+    operationId: string;
+    destinationNodeId: string;
+    signIn: FreshSignInBody;
+  }): Promise<{ handoverPage?: string }> {
+    return this.#request("/management-api/handover", "POST", body);
+  }
+
+  async handoverStatus(operationId: string): Promise<{ handoverPage?: string; state: string }> {
+    const response = await this.#request<{ body: { handoverPage?: string; state: string } }>(
+      `/api/node/handover/${encodeURIComponent(operationId)}`,
+      "GET",
+      undefined,
+      { passive: true },
+    );
+    return response.body;
+  }
+
   listServers(): Promise<ServerListing> {
     return this.#request<ServerListing>("/management-api/servers", "GET");
   }
