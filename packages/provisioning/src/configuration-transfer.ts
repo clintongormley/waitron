@@ -716,9 +716,9 @@ export function validateConfigurationBundle(
   if (unrecorded !== undefined) {
     throw new AppError("setup.request_invalid", { field: `module:${unrecorded.name}` });
   }
-  const differences = versioned
-    .filter((module) => exportSets.has(module.name))
-    .map((module) => bundle.modules[module.name]! - targetVersions[module.name]!);
+  const differences = versioned.map(
+    (module) => bundle.modules[module.name]! - targetVersions[module.name]!,
+  );
   if (differences.some((difference) => difference > 0)) {
     throw new AppError("setup.configuration_newer", {});
   }
