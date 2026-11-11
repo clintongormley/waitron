@@ -28,6 +28,7 @@ const complete = {
 it.each([
   ['B3_DISK_START:{"action":"restart"}\n', true],
   ['B3_DISK_START:{"action":"ready"}\n', false],
+  ['B3_INSTALLED:{}\nB3_DISK_START:{"action":"restart"}\n', false],
   ...[
     "Starting docker.service - Docker Application Container Engine...",
     "Started docker.service - Docker Application Container Engine.",

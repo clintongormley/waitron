@@ -372,6 +372,13 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const record = JSON.parse(text);
       if (record.diskUuid !== diskUuid || !/^[0-9a-f]{64}$/.test(record.key))
         throw new Error("retained record identity");
+      const empty = await runDiskCommand(
+        "cryptsetup",
+        ["open", "--test-passphrase", "--key-file", "/proc/self/fd/3", loop],
+        new Uint8Array(),
+      );
+      if (empty.status !== 2)
+        throw new Error(`independent empty-password refusal: ${empty.status}`);
       const secret = diskRecoveryKeyPassphrase(Buffer.from(record.key, "hex"));
       const result = await runDiskCommand(
         "cryptsetup",
@@ -386,7 +393,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         throw new Error("unlocked retained record differs");
       await writeFile(
         join(runDir, "retained-key-proof.json"),
-        JSON.stringify({ diskUuid, unlocked: true, recordMatches: true }),
+        JSON.stringify({ diskUuid, emptyRefused: true, unlocked: true, recordMatches: true }),
       );
     } finally {
       if (dataMounted) execFileSync("umount", [unlocked]);
