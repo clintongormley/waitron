@@ -1584,6 +1584,13 @@ The decision and its tests, called directly; no route change yet.
   `@waitron/server` — pass.
 - [ ] **Step 5: Commit** — `git commit -s -m "The server can reprint a printout on another printer: receipts and invoices laid out again for it, kitchen tickets and refund receipts centred on one at least as wide (A405 point 4)"`.
 
+
+_As built (2026-11-11, review fixes): `layOutSaleReceipt` and its type live in `receipt-print.ts`,
+and `buildReceiptBytes` stays private; `reprintJobOn` takes a required `{ seen }` check in place of
+`ownPrinterUnseen`, and shares `isStuckJob`, `reprintRule` and `linkedPrintoutSql` with the list
+route; Pair again brings a printer back with `createPrinter({ name, transport: 'bluetooth',
+localKey })` (after A1484, #2772), not `updatePrinter`._
+
 ### Task 17b-2: The resend route takes a printer, and the queue says where each printout may go
 
 **Files:**

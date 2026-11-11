@@ -4304,7 +4304,7 @@ Delete or Calibrate; Print test page and Edit sit in its footer only when the sc
 is set. Its Active switch, under Status, only switches off, and its Edit form holds the name alone.
 A disabled Bluetooth printer that no agent reports paired offers Pair again in its row's actions
 and under Connection in its details; it opens a compact window that looks for the printer, then
-the Pair dialog. The Print Queue's Reprint opens `apps/dashboard/src/widgets/print-job-reprint-dialog.ts`,
+opens the Pair dialog, or switches the printer back on when its agent already reports it paired. The Print Queue's Reprint opens `apps/dashboard/src/widgets/print-job-reprint-dialog.ts`,
 which holds a choice, not staged input, so it takes no draft scope and has no `*.unsaved.test.ts`.
 
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its

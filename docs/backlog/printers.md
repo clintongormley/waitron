@@ -165,8 +165,8 @@ chosen destination.
 
 ## A device unpaired outside Waitron still reads as paired for a short while
 
-- **A device unpaired outside Waitron still reads as paired for a short while** (found in A405's
-  review, read, not run). The server calls a Bluetooth device paired while the agent's last
+- **A device unpaired outside Waitron still reads as paired for a short while** (found in C103's
+  review, narrowed in A405's, read, not run). The server calls a Bluetooth device paired while the agent's last
   "paired" report is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while
   a discovery window is open, 15 otherwise). A successful Unpair sent from Waitron now clears that
   report; a device unpaired some other way, such as on the printer itself, keeps it, so Pair again
@@ -658,7 +658,7 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 5 entries, size M.
 
-- **A device unpaired outside Waitron still reads as paired for a short while** — found in A405's review, read, not run. A successful Unpair from Waitron now clears the paired report; one done elsewhere keeps it for up to 45 seconds. [Detail](printers.md#a-device-unpaired-outside-waitron-still-reads-as-paired-for-a-short-while)
+- **A device unpaired outside Waitron still reads as paired for a short while** — found in C103's review, narrowed in A405's, read, not run. A successful Unpair from Waitron now clears the paired report; one done elsewhere keeps it for up to 45 seconds. [Detail](printers.md#a-device-unpaired-outside-waitron-still-reads-as-paired-for-a-short-while)
 - **A command queued behind a slow pair can run out of time.** A second command waiting behind that
   pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
   says "No answer from the print agent — try again" whatever actually happened.

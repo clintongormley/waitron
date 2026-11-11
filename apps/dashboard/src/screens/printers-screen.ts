@@ -1079,7 +1079,7 @@ export class PrintersScreen extends LitElement {
     if (changed.has("jobs") && this.reprintJob !== null) {
       const id = this.reprintJob.id;
       const fresh = this.jobs.find((job) => job.id === id);
-      // A job that only left the list (its newer printouts pushed it out) can still be reprinted.
+      // A job that left the list (newer printouts push older ones out) keeps its last row.
       if (fresh !== undefined && !fresh.canResend && !fresh.stuck && !this.reprintsSending.has(id))
         this.reprintJob = null;
       else this.reprintJob = fresh ?? this.reprintJob;
