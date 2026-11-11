@@ -1,5 +1,8 @@
-import { ENVIRONMENT_RECOVERY_TEXT } from "./i18n/recovery-page.js";
-import type { ServerResponse } from "node:http";
+import {
+  ENVIRONMENT_RECOVERY_TEXT,
+  OPERATOR_TEXT,
+  RECOVERY_PAGE_WORDS,
+} from "./i18n/recovery-page.js";
 import { TLSSocket } from "node:tls";
 import type { Context, Hono } from "hono";
 import {
@@ -21,7 +24,9 @@ import "./errors.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { sentFromThisOrigin } from "./own-page.js";
-import { escapeHtml, type RecoveryDeps } from "./recovery-surface.js";
+import { escapeHtml, renderDocument } from "./html-page.js";
+import type { RecoveryDeps } from "./recovery-surface.js";
+import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 import { lowestFreeBytes } from "./start-space.js";
 
 export interface StartAgainPageText {
@@ -412,33 +417,18 @@ export function movedFolder(setAside: { state: string; venue: string }): string 
   return `state/${setAside.state}, venue/${setAside.venue}`;
 }
 
-function outgoingOf(c: Context): ServerResponse | undefined {
-  return (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
+/** Drawn without the page's `render`, for a recorded Move whose answer page failed to draw. */
+export function movedPage(locale: SupportedLocale, folder: string): string {
+  return renderDocument(
+    locale,
+    RECOVERY_PAGE_WORDS[locale].heading,
+    `<p>${escapeHtml(START_AGAIN_PAGE_TEXT[locale].moved(folder))}</p>\n`,
+  );
 }
 
-/**
- * Runs `then` once the answer is written or the connection is gone, whichever comes first: a
- * browser that disconnects mid-answer closes the response without `'finish'`, and the finished
- * Move must still restart.
- */
-export function afterResponse(outgoing: ServerResponse | undefined, then: () => void): void {
-  if (
-    outgoing === undefined ||
-    outgoing.writableFinished ||
-    outgoing.destroyed ||
-    outgoing.closed
-  ) {
-    then();
-    return;
-  }
-  let ran = false;
-  const once = () => {
-    if (ran) return;
-    ran = true;
-    then();
-  };
-  outgoing.once("finish", once);
-  outgoing.once("close", once);
+function keptPage(locale: SupportedLocale): string {
+  const kept = OPERATOR_TEXT["setup.start_again_kept"]![locale];
+  return renderDocument(locale, kept.title, `<p>${escapeHtml(kept.action)}</p>\n`);
 }
 
 /**
@@ -525,17 +515,28 @@ export function mountStartAgainChoice(
         // The choice is answered either way.
       }
     };
-    if (result.choice === "keep") {
-      onKept?.();
-      const answer = await page(200, { code: "setup.start_again_kept", secure: true });
+    const recorded = async (view: Omit<StartAgainView, "locale">, fallback: string) => {
+      let answer: Response;
+      try {
+        answer = await page(200, view);
+      } catch {
+        answer = c.html(fallback, 200);
+        try {
+          log?.("warn", "recovery.start_again_draw_failed", { choice: result.choice });
+        } catch {
+          // The recorded page is answered either way.
+        }
+      }
       logChoice();
       return answer;
+    };
+    if (result.choice === "keep") {
+      onKept?.();
+      return recorded({ code: "setup.start_again_kept", secure: true }, keptPage(locale));
     }
     moved = { kind: "moved", folder: movedFolder(result.setAside) };
-    afterResponse(outgoingOf(c), () => void deps.onFinished());
-    const answer = await page(200, { code, secure: true, message: moved });
-    logChoice();
-    return answer;
+    restartAfterResponse(outgoingOf(c), deps.onFinished, log);
+    return recorded({ code, secure: true, message: moved }, movedPage(locale, moved.folder));
   });
 }
 

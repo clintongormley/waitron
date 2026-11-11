@@ -374,31 +374,6 @@ today (`deploy/` names none); a cloud profile can (`box-env.ts`). Decide whether
 record the key in use or refuse to copy, and whether a join should refuse before any write when
 the environment's key would hide the ring it receives.
 
-## A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw after a recorded choice answers a bare 500
-
-Left open by A1098. Both recovery-page routes, `POST /recovery-api/retry` and `POST
-/recovery-api/start-again`, start the restart with `void` once the answer is written
-(`apps/server/src/recovery-surface.ts`, `apps/server/src/recovery-start-again.ts`), so a restart
-that rejects is an unhandled rejection, which exits the process (Node 26, a rejection in a
-`finish` listener, run by the A1098 Task 8a review). Separately, the Start again route draws its
-answer after the choice is recorded and outside its error handling, so a throw while drawing
-answers Hono's bare 500 (`apps/server/src/recovery-start-again.test.ts`, "a page that fails to
-draw after a recorded Move is not answered as unfinished, and still restarts once"); the recovery
-app sets no error handler. Wanted: both routes log a failed restart and keep serving the page, and
-the draw failure answers a page that says the choice was recorded.
-
-## A1153: the recovery page's Retry restarts nothing if the browser disconnects before the answer arrives
-
-Left open by A1098 (owner, 2026-10-27: file it, give it the Move's fix). `POST
-/recovery-api/retry` asks for its restart only on the answer's `'finish'` event
-(`apps/server/src/recovery-surface.ts`, unchanged since 2026-09-09 per `git blame`). A browser that
-drops the connection first closes the response without `'finish'`, so the box would stay on the page
-without restarting. The Move had the same shape and was fixed in #2131 by `afterResponse` in
-`apps/server/src/recovery-start-again.ts`: restart once on whichever comes first of the answer
-finishing, the connection closing, or a connection already over. For the Retry this was read, not
-run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
-once-only restart, with a test that closes the connection before the answer is written.
-
 ## A1223. A stored series pick that turns out taken
 
 From A1207. An attempt whose chosen name is found taken before it finishes is refused
@@ -521,17 +496,6 @@ that operation's reader. Do not remove exact-content checks to make a large file
   one in use.** A joined spare then cannot open its own signing key after a restart. Left open by
   A947 slice 3a.
   [Detail](setup.md#a1284-where-the-environment-sets-the-vault-key-a-move-or-a-join-leaves-a-ring-that-is-not-the-one-in-use)
-
-## Bundle: The recovery page's restart
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw
-  after a recorded choice answers a bare 500.** Both recovery-page routes. Left open by A1098.
-  [Detail](setup.md#a1149-a-failed-restart-after-retry-or-a-move-exits-the-process-and-a-page-that-fails-to-draw-after-a-recorded-choice-answers-a-bare-500)
-- **A1153: the recovery page's Retry restarts nothing if the browser disconnects before the answer
-  arrives.** Give it the once-only restart the Move got in #2131. Read, not run. Left open by A1098.
-  [Detail](setup.md#a1153-the-recovery-pages-retry-restarts-nothing-if-the-browser-disconnects-before-the-answer-arrives)
 
 ## Bundle: Setup wizard tidy
 

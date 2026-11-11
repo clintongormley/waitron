@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import type { Hono } from "hono";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
 import { AppError } from "@waitron/shared";
 import { lockVenueDatabase } from "@waitron/db";
 import { VENUE_HOLDER_FILE } from "@waitron/store";

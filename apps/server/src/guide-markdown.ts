@@ -1,4 +1,4 @@
-import { escapeHtml } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
 
 export interface GuideSection {
   id: string;

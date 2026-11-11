@@ -1343,10 +1343,10 @@ After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
 recorded Keep from disk. After a Move, the answer names the set-aside folder, above the list of
 found files, in place of the files-found title, action and Retry button (`startAgainDraw`), and the
-process restarts once the answer is written, as Retry does. Until it has restarted, the process
-keeps serving that answer on `GET /`, and every later `POST /recovery-api/start-again` answers 409
-with the same answer without choosing again, so a stale form cannot record a choice over the moved
-files. A Move refused
+process restarts once the answer is written or the connection closes, as Retry does. Until it has
+restarted, the process keeps serving that answer on `GET /`, and every later
+`POST /recovery-api/start-again` answers 409 with the same answer without choosing again, so a
+stale form cannot record a choice over the moved files. A Move refused
 `setup.start_again_move_unfinished` answers 409 with that code's recovery page and no list or form,
 does not restart, and the process keeps serving that page on `GET /`; every later `POST
 /recovery-api/start-again` in that process answers 409 with the same page without choosing again,

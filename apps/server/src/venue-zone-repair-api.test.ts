@@ -14,6 +14,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, managementSessions, startManagementSession } from "@waitron/identity";
 import * as requestKit from "@waitron/server-kit";
+import { AppError } from "@waitron/shared";
 import { mountVenueZoneRepairApi } from "./venue-zone-repair-api.js";
 import { TradingAdmission } from "./trading-admission.js";
 
@@ -141,6 +142,24 @@ describe("time-zone repair management boundary", () => {
       expect(restart).toHaveBeenCalledTimes(1);
     },
   );
+  it("logs a restart that throws once the confirmed repair is answered", async () => {
+    restart.mockImplementation(() => {
+      throw new AppError(
+        "venue.time_zone_not_ready",
+        { reason: "restart_required" },
+        { reason: "probe" },
+      );
+    });
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(() => outgoing.emit("finish")).not.toThrow();
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(logs).toContainEqual([
+      "error",
+      "server.restart_failed",
+      { errorCode: "venue.time_zone_not_ready", errno: null, reason: "probe" },
+    ]);
+  });
   it.each(["staff", "supervisor"] as const)(
     "refuses live %s permission on both routes",
     async (role) => {

@@ -1,6 +1,5 @@
 import type { Logger } from "./logger.js";
 import { errnoOf } from "./errno.js";
-import type { ServerResponse } from "node:http";
 import type { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { verifyPassword } from "@waitron/identity";
@@ -39,10 +38,11 @@ import { withRecoveryLock } from "./recovery-lock.js";
 import {
   isSecure,
   formBody,
-  afterResponse,
   movedFolder,
+  movedPage,
   type StartAgainMessage,
 } from "./recovery-start-again.js";
+import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { sentFromThisOrigin } from "./own-page.js";
 
@@ -214,10 +214,16 @@ export function mountEnvironmentChoice(
       if (password === null || password === "") return answer(400, { kind: "passwordMissing" });
       const folder = await chooseEnvironmentMove(deps, password);
       completed = true;
-      const result = await answer(200, { kind: "moved", folder });
+      restartAfterResponse(outgoingOf(c), deps.onFinished, log);
+      let result: Response;
+      try {
+        result = await answer(200, { kind: "moved", folder });
+      } catch {
+        // The Move is recorded, so a failure to draw must not say nothing changed.
+        result = c.html(movedPage(locale, folder), 200);
+        record("warn", "recovery.environment_draw_failed", {});
+      }
       record("info", "recovery.environment_moved", { folder });
-      const outgoing = (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
-      afterResponse(outgoing, () => void deps.onFinished());
       return result;
     } catch (error) {
       if (isAppError(error) && hasCode(error, "password.throttled")) {

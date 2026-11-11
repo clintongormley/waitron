@@ -7,7 +7,7 @@ import { codeOf } from "@waitron/server-kit";
 import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { escapeHtml, renderDocument } from "./html-page.js";
 
 /** A failure's log fields: an app error's log-only `reason` when it carries one, else its errno. */
 export function failureFields(error: unknown): Record<string, string | null> {
@@ -40,28 +40,6 @@ export function otherBoxPhrase(names: readonly (string | null)[], locale: Suppor
   return shown.length === 0
     ? text.otherBox
     : new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
-}
-
-/** A whole page: `title` as its heading, then `body`, which is HTML the caller has escaped. */
-export function renderDocument(
-  locale: SupportedLocale,
-  title: string,
-  body: string,
-  head = "",
-): string {
-  return `<!doctype html>
-<html lang="${locale}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-${head}<title>${escapeHtml(title)}</title>
-<style>:root { color-scheme: light dark; } h1, h2, p { overflow-wrap: anywhere; }</style>
-</head>
-<body>
-<h1>${escapeHtml(title)}</h1>
-${body}</body>
-</html>
-`;
 }
 
 /** The waiting page, with `section` (escaped HTML, such as the carry-on form) below its body. */
