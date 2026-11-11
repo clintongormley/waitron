@@ -293,57 +293,13 @@ describe("till-counter-waiting", () => {
     });
   });
 
-  describe("Cancel and credit", () => {
-    const invoiced: CounterWaitingOrder = { ...sent, invoiceNumber: "A/12" };
-
-    it("an order sent with its invoice issued and not paid offers it last, as a secondary action naming the order", async () => {
-      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-        orders: [invoiced],
-      });
-      const row = rowOf(el, "wo-sent");
-
-      expect(buttons(row)).toEqual([
-        t("action.pay"),
-        t("waiting.hand_over"),
-        t("cancel_credit.action"),
-      ]);
-      const action = row.querySelector<HTMLElement>("wt-button[data-waiting-cancel-credit]")!;
-      expect(action.getAttribute("variant")).toBe("secondary");
-      expect(action.ariaLabel).toBe(`${t("cancel_credit.action")} #12`);
+  it("an invoiced waiting row keeps Pay without the retired Cancel and credit entry", async () => {
+    const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+      orders: [{ ...sent, invoiceNumber: "A/12" }],
     });
-
-    it("is offered on an invoiced order already handed over", async () => {
-      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-        orders: [{ ...handedOver, invoiceNumber: "A/13" }],
-      });
-
-      expect(buttons(rowOf(el, "wo-handed"))).toEqual([t("action.pay"), t("cancel_credit.action")]);
-    });
-
-    it("is not offered on an order whose invoice is not issued yet, nor on a paid one", async () => {
-      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-        orders: [sent, { ...paid, invoiceNumber: "A/11" }],
-      });
-
-      for (const id of ["wo-sent", "wo-paid"])
-        expect(rowOf(el, id).querySelector("[data-waiting-cancel-credit]")).toBeNull();
-    });
-
-    it("asks the app, naming the order, past the widget's shadow root", async () => {
-      const { el, host } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-        orders: [invoiced],
-      });
-      const seen: unknown[] = [];
-      host.addEventListener("cancel-credit-waiting-order", (event) =>
-        seen.push((event as CustomEvent).detail),
-      );
-
-      rowOf(el, "wo-sent")
-        .querySelector<HTMLElement>("wt-button[data-waiting-cancel-credit]")!
-        .click();
-
-      expect(seen).toEqual([{ id: "wo-sent" }]);
-    });
+    const row = rowOf(el, "wo-sent");
+    expect(buttons(row)).toEqual([t("action.pay"), t("waiting.hand_over")]);
+    expect(row.querySelector("[data-waiting-cancel-credit]")).toBeNull();
   });
 });
 
@@ -550,41 +506,6 @@ describe("A738 order item previews", () => {
       await userEvent.click(
         el
           .shadowRoot!.querySelector("[data-waiting-kitchen-note]")!
-          .shadowRoot!.querySelector("button")!,
-      );
-      await el.updateComplete;
-      expect(calls).toEqual([{ id: sent.id }]);
-      expect(summary.getAttribute("aria-expanded")).toBe(String(expanded));
-    },
-  );
-  it.each([false, true])(
-    "A738 row action cancel-credit-waiting-order does not toggle its preview (expanded %s)",
-    async (expanded) => {
-      const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
-        orders: [
-          {
-            ...sent,
-            items,
-            invoiceNumber: "A/12",
-            movableDishes: [{ lineId: "dish-1", stationId: "grill" }],
-          },
-        ],
-        canMoveStation: true,
-        canEditKitchenNote: true,
-      });
-      const summary = el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!;
-      expect(summary).not.toBeNull();
-      if (expanded) {
-        await userEvent.click(summary);
-        await el.updateComplete;
-      }
-      const calls: unknown[] = [];
-      el.addEventListener("cancel-credit-waiting-order", (event) =>
-        calls.push((event as CustomEvent).detail),
-      );
-      await userEvent.click(
-        el
-          .shadowRoot!.querySelector("[data-waiting-cancel-credit]")!
           .shadowRoot!.querySelector("button")!,
       );
       await el.updateComplete;

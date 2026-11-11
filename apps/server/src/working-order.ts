@@ -7516,6 +7516,36 @@ async function cancelPlaced(
     }
     if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
 
+    const kitchenWork = await tx
+      .select({
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        quantity: sql<number>`${firedQuantity} - ${workingOrderLines.servedQuantity}`,
+        state: ticketItems.state,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
+      .where(
+        and(
+          eq(ticketItems.workingOrderId, id),
+          isNotNull(ticketItems.firedAt),
+          isNull(workingOrders.collectedAt),
+          isNull(workingOrderLines.servedAt),
+          gt(firedQuantity, workingOrderLines.servedQuantity),
+        ),
+      );
+    await enqueueCorrectionSlips(
+      tx,
+      cfg,
+      id,
+      kitchenWork.map(({ state, ...item }) => ({
+        ...item,
+        wasStarted: isStarted(state),
+      })),
+      "VOID",
+    );
+
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [id]);
 

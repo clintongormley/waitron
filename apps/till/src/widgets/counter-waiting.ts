@@ -26,7 +26,6 @@ export function waitingScope(order: CounterWaitingOrder): string {
  * The counter orders still waiting on the counter: sent and not paid, or paid and not handed over
  * (spec §5, "Counter service"). A pure view that renders nothing when no order waits; the app turns
  * its `hand-over-order` and `pay-waiting-order` events into API calls, its
- * `cancel-credit-waiting-order` event into the cancel and credit dialog, and its
  * `move-waiting-order` event into the move-to-station dialog.
  */
 @customElement("till-counter-waiting")
@@ -196,17 +195,6 @@ export class TillCounterWaiting extends LitElement {
                   aria-label=${`${t("table.move_station")} ${scope}`}
                   @click=${() => this.#emit("move-waiting-order", { id: order.id })}
                   >${t("table.move_station")}</wt-button
-                >`
-              : nothing
-          }
-          ${
-            pay && order.invoiceNumber !== undefined
-              ? html`<wt-button
-                  data-waiting-cancel-credit
-                  variant="secondary"
-                  aria-label=${`${t("cancel_credit.action")} ${scope}`}
-                  @click=${() => this.#emit("cancel-credit-waiting-order", { id: order.id })}
-                  >${t("cancel_credit.action")}</wt-button
                 >`
               : nothing
           }

@@ -14,6 +14,8 @@ seleccionada; también puedes indicar una cantidad, dividir a partes iguales o e
 Elige **Efectivo** o **Tarjeta** en cada pago. Después de un pago parcial, comprueba **Queda por pagar**
 antes de cobrar el siguiente.
 
+Añade un artículo antes de cobrar o enviar un pedido.
+
 ## Elegir documentos después de cobrar {#settlement-document}
 
 Después del último pago, elige **Recibo**, **Factura completa** o **Ninguno**. Un cambio que deja

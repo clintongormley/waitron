@@ -1355,8 +1355,8 @@ Tokens → Colour): in dark a dim fill close to the surface, so it stays the blu
 without looking pressable; in light, within one step per colour channel of what the old half fade
 gave over a white surface. A `loading` one keeps its colour, faded. A primary or danger button
 switched off with `?disabled=${busy}` while its own request is sent is not `loading`, so it takes
-the disabled pair — the till's Cash and Card while a payment is sent among them
-(`apps/till/src/widgets/tender-pay.ts`).
+the disabled pair. The till's pressed Cash or Card uses `loading` while sending;
+the alternative is secondary and disabled (`apps/till/src/widgets/tender-pay.ts`).
 
 `wt-button` has no `type` property — see "Forms" below. `wt-button loading` is how a button shows an
 action in progress: it disables the button, sets `aria-busy`, and leads the label with a decorative

@@ -3642,10 +3642,14 @@ Board 1 is the target; board 2 the windows.
 
 ### A739. Paying: Hold · Pay, and one payment window
 
-**Reader-setting cut:** the dashboard saves each reader's automatic-slip setting; equipment and
-setup reads carry it, and the existing sale-slip action excludes readers that print their own.
-A1141's Counter retrieval keeps the table bill's edit observation for payment and stored-line
-saves. A790's order-linked till slice is landed (#2677). The [current payment-flow plan](../superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for cuts 1, 2, 5, 6, 7 and 8 in order (watcher, 10 November 01:26); the owner has since chosen “Memory only (Recommended)” for requested card slips (10 November, 16:53; relayed by the watcher at 17:38). The [revised slip plan](../superpowers/plans/2026-11-10-a739-memory-only-card-slips.md) was reviewed by Claude and cleared by watcher17:32 for cuts 3/4 (#2736 is landed): keep requests in memory, store reader payments’ remaining balances and offer a copy before full payment; cash/manual balance writes and copy auditing are excluded. Practice-card Approve/Decline/No answer and manager-ended uncertainty are delivered by the first cut. The separate Demo reader and dashboard decision channel are retired. The table Pay entry and shared four-way bill window are delivered; Counter first-part payments now use that window, retaining the balance for the next tender. Settling edits return their existing invoice, including recovery when a refused edit finds the bill settled; final payments and settling edits offer Receipt / Full invoice / None, with explicit printing and no automatic order-linked receipt. The unused stored receipt-print policy is retired, including its API and configuration-export fields. Receipt email is available through the explicit address form, with original/copy history shared with paper. Physical printer, reader and inbox qualification remains open. No G4/A947, origin file, browser journal or prepare/accept protocol is authorised. Reader payments retain their original remaining balance, and Payments offers Print a copy before full payment. Eligible reader payments offer an initially-off Print card slip choice and print after confirmed capture; requests are not recovered after a restart or unclear answer.
+**2026-11-11 software completion:** the watcher closed the software item at 17:20
+following Receipt Email (#2840, `e0fa9c300f7aa43178404461efd3d5e498328650`).
+The remaining physical printer, reader and inbox checks are in the existing
+[real-box session](printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer),
+with no new prerequisite for A840/A842/A848. The following records the decisions;
+the [current payment-flow plan](../superpowers/plans/2026-11-10-a739-current-payment-flow.md)
+and [memory-only slip plan](../superpowers/plans/2026-11-10-a739-memory-only-card-slips.md)
+remain historical implementation references.
 
 **2026-10-27 approved update (owner, about 02:01/02:05/02:12 CET).**
 Read the [authoritative addendum](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
@@ -3974,15 +3978,6 @@ floor screen re-reads the floor every 15 seconds while a zone's map is on screen
 (`#watchFloor`, `apps/till/src/screens/till-floor-screen.ts`). Elsewhere it still reads only on
 events handled by `till-app.ts`'s `floor-refresh`. Polling would read `listTablesWithState` every
 few seconds on every till; choose the interval and cost first.
-
-## In dark, the till's Cash and Card turn dim blue while a payment is being sent
-
-- **A842. While a payment is being sent, the pressed Cash or Card keeps its colour with a spinner**
-  (owner, 2026-10-17; left open by A535, #1617). They are switched off with `disabled` while
-  sending, not `loading`, so they now take the dark disabled colours (`--wt-color-primary-disabled`)
-  instead of a half-faded full blue; A417 asked for them to keep blue while sending. Follow the
-  owner's 2026-10-08 rule: the pressed button keeps its own colour with a spinner while its request
-  is sent, and the other goes quiet.
 
 ## A921. On a narrow till, should the person's name give room to the tab strip?
 

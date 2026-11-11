@@ -782,6 +782,13 @@ yet, so the screen should add an open-only filter or paging when it calls them.
 
 ## C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b, decided without the asesor) — landed as #1030
 
+**11 November 2026, A840:** Counter's Cancel and credit entry is retired. The
+unpaid-departure move route check refuses a closed party with `party.not_open`
+and finds no invoiced Counter waiting row for that bill. The shared server
+invoice-credit/PIN branch and its financial tests remain: a later cancellation
+of the departed bill requires correction authority and writes its credit note
+(`cancel-invoiced-order.test.ts:838`). The account below records the earlier counter entry.
+
 - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
   decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
   `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) issues

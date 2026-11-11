@@ -258,6 +258,7 @@ describe("the Pay entry while the basket's pay controls are held", () => {
       store,
       payHeld: true,
       busy,
+      sendingTender: busy ? "pay" : null,
       menus: servedMenus([{ id: "lunch", name: "Lunch", versionId: "v1", isDefault: true }], []),
     });
     const pay = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(

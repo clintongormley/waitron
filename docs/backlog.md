@@ -105,7 +105,7 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 **3. The foundation, already running.** A1308 stays first in lane A, with
 [Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
 
-**4. Released by the hold, once A760 lands.** Build order: A739 paying, the pay window, A446 pre-bill,
+**4. Released by the hold, once A760 lands.** Build order: the pay window, A446 pre-bill,
 A555, close the day, then A947 and its handover bundles, including the spare's backup settings, which
 A947 3b's plan still owes. A1150 (allergens from the live product) is needed before go-live and has
 no design yet.
@@ -933,9 +933,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   catalogue, reports and invoice-line identity before building an arbitrary-price path.
   [Detail](backlog/till.md#custom-item-on-the-counter-a738-residual)
 
-- **A739 — Park · Pay and one payment window.** The [current plan](superpowers/plans/2026-11-10-a739-current-payment-flow.md) is approved for its non-slip cuts (watcher, 10 November 01:26); build those in order. Practice Approve/Decline/No answer and manager-ended recovery are delivered; the separate Demo reader is retired. The owner chose “Memory only (Recommended)” for requested card slips (10 November, 16:53; relayed by the watcher at 17:38). The [revised slip plan](superpowers/plans/2026-11-10-a739-memory-only-card-slips.md) was reviewed by Claude and cleared by watcher17:32 for cuts 3/4 (#2736 is landed), with reader-payment balances and copies before full payment; the table Pay entry and shared four-way bill window are delivered. Counter first-part payments now use that window, with the balance retained for the next tender. Settling edits return their existing invoice, including recovery when a refused edit finds the bill settled; final payments and settling edits offer Receipt / Full invoice / None, with explicit printing and no automatic order-linked receipt. The unused stored receipt-print policy is retired, including its API and configuration-export fields. Receipt email is available through the explicit address form, with original/copy history shared with paper. Physical printer, reader and inbox qualification remains open. Reader payments retain their original remaining balance, and Payments offers Print a copy before full payment. Eligible reader payments offer an initially-off Print card slip choice and print after confirmed capture; requests are not recovered after a restart or unclear answer.
-  [Detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window)
-
 - **A666 — A floor join that moves tables together is sent once without seats and refused before
   the Seats prompt opens (2026-10-14; owner decided 2026-10-17).** It first sends the merge or
   join with no seat count, gets `400 merge.seats_required`, then opens the Seats prompt and sends
@@ -1089,15 +1086,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Reads and saves with no time limit** (bundle of 2, size S). [Detail](backlog/till.md#bundle-reads-and-saves-with-no-time-limit)
 
-- **A840. Can anything still reach the counter's Cancel and credit? Check, then clean up (owner,
-  2026-10-17).** B34 (#1077) built it for a counter order invoiced when it was placed, and
-  invoicing at placement was retired on 2026-10-06 (A261-2c, #1285); the button and its dialog
-  text are still in the code. Find whether any path still reaches it. If none does, remove the
-  button and dialog text and delete this entry; if one does, fix its three gaps: the result names
-  no credit note, a cancel that gets no answer is never shown as done, and the button does not
-  check for a payment on the order.
-  [Detail](backlog/fiscal.md#c126-cancelling-an-order-whose-invoice-was-issued-credits-it-owner-2026-10-02-option-b-decided-without-the-asesor--landed-as-1030)
-
 - **Loose ends left by the table actions plan (Tasks 8, 10 and 11, #869, #875, #881; C77/C86;
   C84).**
   [Detail](backlog/till.md#tables-parties-and-bills--the-tills-table-actions)
@@ -1220,14 +1208,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Reopening a held order keeps its lines right** (bundle of 5, 1 important, size S). [Detail](backlog/till.md#bundle-reopening-a-held-order-keeps-its-lines-right)
 
-- **A842. While a payment is being sent, the pressed Cash or Card keeps its colour with a spinner
-  (owner, 2026-10-17; left open by A535, #1617).** Both are switched off with `disabled` while
-  sending, so in dark they turn dim blue. Follow the owner's 2026-10-08 rule: the pressed button
-  keeps its own colour with a spinner while its request is sent, and the other goes quiet. Done
-  when a test finds the pressed button in `loading` with its own colour, and the other one quiet,
-  while the payment is sent.
-  [Detail](backlog/till.md#in-dark-the-tills-cash-and-card-turn-dim-blue-while-a-payment-is-being-sent)
-
 ### Printers, the print agent and receipts
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
@@ -1248,7 +1228,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   is in the server log. Decide how the till should show that outcome and offer another copy.
   [Receipt-branch observation](backlog/printers.md#show-a-failed-automatic-invoice-copy-to-staff)
 
-- **One session at the real box: printers, paper, tax QR, the drawer** (bundle of 23, 2 go-live, 13 important, size M, needs the real hardware). Holds A773, A773, A552, A553. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
+- **One session at the real box: printers, paper, tax QR, the drawer** (size M, needs the real hardware and inbox). Holds A739, A773, A552, A553. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 
 - **Printing does not wait for discovery** (bundle of 5, 2 important, size M). [Detail](backlog/printers.md#bundle-printing-does-not-wait-for-discovery)
 
@@ -1395,9 +1375,6 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   shows a bill payment's applied amount without its tip; the card slip's words are fixed Spanish;
   and the Spanish refund slip says "Propina" where the English says "Tip returned".
   [Detail](backlog/payments.md#three-small-tip-display-gaps)
-
-- **A848. Show a clear message when the till pays, sends or moves an empty order.**
-  [Detail](backlog/payments.md#a848-show-a-clear-message-when-the-till-pays-sends-or-moves-an-empty-order)
 
 - **Reader status time limits** (bundle of 2, size S). [Detail](backlog/payments.md#bundle-reader-status-time-limits)
 

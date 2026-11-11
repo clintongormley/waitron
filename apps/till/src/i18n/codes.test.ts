@@ -3,6 +3,15 @@ import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
 import { codeMessage } from "./codes.js";
 
+it("explains an empty order in English and Spanish", () => {
+  expect(codeMessage("sale.empty_basket", "en")).toBe(
+    "This order has no items. Add an item before continuing.",
+  );
+  expect(codeMessage("sale.empty_basket", "es")).toBe(
+    "Este pedido no tiene artículos. Añade uno antes de continuar.",
+  );
+});
+
 it.each([
   "tender.refund_exceeds_payment",
   "tender.refund_unavailable",

@@ -1571,8 +1571,6 @@ export const en = {
     "The order was handed over, but the kitchen queue could not refresh.",
   "refresh.station_after_move": "The dishes were moved, but the kitchen queue could not refresh.",
   "refresh.station_after_sale": "The sale was recorded, but the kitchen queue could not refresh.",
-  "refresh.station_after_cancel":
-    "The order was cancelled and credited, but the kitchen queue could not refresh.",
   "refresh.waiting": "The list of waiting orders could not refresh.",
   "refresh.waiting_after_sale":
     "The sale was recorded, but the list of waiting orders could not refresh.",
@@ -1582,8 +1580,6 @@ export const en = {
     "The order was handed over, but the list of waiting orders could not refresh.",
   "refresh.waiting_after_move":
     "The dishes were moved, but the list of waiting orders could not refresh.",
-  "refresh.waiting_after_cancel":
-    "The order was cancelled and credited, but the list of waiting orders could not refresh.",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "refresh.retry_in": "Trying again in {n} seconds.",
   "refresh.retry_in_one": "Trying again in 1 second.",
@@ -1805,8 +1801,6 @@ export const en = {
   "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
   "cancel_credit.unconfirmed":
     "The cancel got no answer, so it may have been made. Check the table's bills before trying again.",
-  "cancel_credit.unconfirmed_counter":
-    "The cancel got no answer, so it may have been made. Check the waiting orders before trying again.",
   "cancel_credit.refused_payments":
     "This bill holds a payment, so it cannot be cancelled and credited.",
   "cancel_credit.refused_payment_in_flight":
@@ -3517,8 +3511,6 @@ export const es: Record<StringKey, string> = {
     "Los platos se pasaron, pero la cola de cocina no se pudo actualizar.",
   "refresh.station_after_sale":
     "La venta se registró, pero la cola de cocina no se pudo actualizar.",
-  "refresh.station_after_cancel":
-    "El pedido se canceló y se abonó, pero la cola de cocina no se pudo actualizar.",
   "refresh.waiting": "La lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_sale":
     "La venta se registró, pero la lista de pedidos pendientes no se pudo actualizar.",
@@ -3528,8 +3520,6 @@ export const es: Record<StringKey, string> = {
     "El pedido se entregó, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.waiting_after_move":
     "Los platos se pasaron, pero la lista de pedidos pendientes no se pudo actualizar.",
-  "refresh.waiting_after_cancel":
-    "El pedido se canceló y se abonó, pero la lista de pedidos pendientes no se pudo actualizar.",
   "refresh.retry_in": "Se reintentará en {n} segundos.",
   "refresh.retry_in_one": "Se reintentará en 1 segundo.",
   "refresh.retrying": "Reintentando…",
@@ -3746,8 +3736,6 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "cancel_credit.unconfirmed":
     "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
-  "cancel_credit.unconfirmed_counter":
-    "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa los pedidos pendientes antes de volver a intentarlo.",
   "cancel_credit.refused_payments":
     "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
   "cancel_credit.refused_payment_in_flight":

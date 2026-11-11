@@ -1,3 +1,4 @@
+import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { addTabRound, setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
@@ -258,6 +259,36 @@ function nextInvoiceNumbers(): { id: string; next: number }[] {
     sql`select id, next_number as next from invoice_series order by id`,
   );
 }
+
+it("an invoiced unpaid departure cannot become a counter waiting order", async () => {
+  const party = await seatedWith(venue, "Steak");
+  const departed = await depart(party.partyId, {
+    expectedPartyRevision: revisionOf(party.partyId),
+    reason: "Guest left without paying",
+  });
+  expect(departed.status).toBe(200);
+  const path = `/api/bills/${party.tabId}/move`;
+  const moved = await send(
+    venue.app,
+    supervisorCookie,
+    "POST",
+    path,
+    await observedMoveBillBody(venue.db, path, {
+      to: { counter: { zoneId: ticketThenPayZone } },
+      expectedPartyRevision: revisionOf(party.partyId),
+    }),
+  );
+  expect(moved.status).toBe(409);
+  expect(moved.json).toMatchObject({ code: "party.not_open" });
+  const waiting = await send(venue.app, venue.cookie, "GET", "/api/orders/counter-waiting");
+  expect(waiting.status).toBe(200);
+  expect(waiting.json).toEqual(expect.any(Array));
+  expect(waiting.json).not.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: party.tabId, invoiceNumber: expect.any(String) }),
+    ]),
+  );
+});
 
 describe("recording that a table left without paying", () => {
   it("issues a saved full invoice when the party leaves without paying", async () => {
