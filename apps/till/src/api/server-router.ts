@@ -41,6 +41,7 @@ interface Tracked {
   term: number | null;
 }
 
+/** No failure count ends probing (owner decision, 2026-09-05). */
 export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
