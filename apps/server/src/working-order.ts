@@ -7236,7 +7236,7 @@ function rowRise(total: unknown, row: EditableParent[]): Decimal {
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   id: string,
   authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
