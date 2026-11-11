@@ -840,8 +840,7 @@ product failures.
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
-  Local diagnostics, box-status, box-retirement, purchasing/workforce gate-sweep and
-  mirror-bundle fixtures use Administrator for the administrator sample.
+  Administrator display samples remain in backup, stream and shared-helper fixtures.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
