@@ -2695,6 +2695,13 @@ not prove a cache hit: check that **Install the saved Ubuntu packages offline** 
 These sets share the repository's cache budget with `node-cache-*`, `playwright-*`
 and `lint-results-*`; there is no extra storage allocation or cache deletion.
 
+Cold installation and daily refresh each give the hosted runner's native Ubuntu lookup
+five seconds. If it fails, they warn, point that runner's resolver at `1.1.1.1` once,
+and flush its DNS cache, with five-second bounds on both commands. The Ubuntu hosts
+and signature checks stay the same. This check never runs on a successful offline hit.
+In A1509 diagnostic run `43061661754`, flushing alone left lookup timed out; switching
+the runner's resolver let the unchanged HTTP-source acquisition save its set.
+
 Every `apt-get update` and `apt-get install` in a workflow, in `deploy/Dockerfile`, in
 `deploy/waitron.sh` and in the bench's CA probe image (`bench/sqlite-failover/src/probes/linux-binaries.ts`)
 runs under an outer `timeout`, and runs again when it stalls or exits non-zero (in the workflow, the
