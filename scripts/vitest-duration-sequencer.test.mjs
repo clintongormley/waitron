@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { URL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { createVitest } from "vitest/node";
 import serverConfig from "../apps/server/vitest.config.ts";
