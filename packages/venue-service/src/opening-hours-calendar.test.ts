@@ -619,7 +619,7 @@ describe("the Opening hours month read", () => {
       closedAllDay: true,
     });
     expect(frame.plan.seasonIdOn.get("2025-12-29")).toBe(v.seasons.Winter);
-    for (const unread of ["floor_zones", "holiday_geographies", "location_business_day_settings"])
+    for (const unread of ["floor_zones", "holiday_geographies"])
       expect(tables).not.toContain(unread);
   });
 

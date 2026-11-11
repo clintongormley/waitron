@@ -7598,7 +7598,7 @@ describe("dated business-day configuration transfer", () => {
     );
     expect(exported.venue.dayCutover).toBe("07:00:00");
     expect(exported.tables).not.toHaveProperty("day_cutover_changes");
-    expect(exported.tables).not.toHaveProperty("location_business_day_settings");
+    expect(exported.settings).not.toHaveProperty("business_day");
     const request = venue("B33221177");
     request.dayCutover = exported.venue.dayCutover;
     await applyVenue(planVenue(request, ALL_MODULES), {

@@ -205,18 +205,13 @@ describe("readStaffingMonth", () => {
     expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
   });
 
-  it("reads each table once, joins included, and not floor_zones, the holiday tables or the clock status", async () => {
+  it("reads each table once, joins included, and not floor_zones, the holiday tables ", async () => {
     await painted();
     const { tables } = await tablesRead((tx) => readStaffingMonth(tx, "2026-08", AT));
     expect(tables).toContain("staffing_days");
     expect(tables).toContain("day_cutover_changes");
     expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
-    for (const unshown of [
-      "floor_zones",
-      "holiday_geographies",
-      "location_business_day_settings",
-      "tenants",
-    ])
+    for (const unshown of ["floor_zones", "holiday_geographies", "tenants"])
       expect(tables).not.toContain(unshown);
   });
 
@@ -260,8 +255,7 @@ describe("readStaffingMonth", () => {
           ),
       ),
     ).toEqual([]);
-    for (const unshown of ["floor_zones", "location_business_day_settings"])
-      expect(tables).not.toContain(unshown);
+    for (const unshown of ["floor_zones"]) expect(tables).not.toContain(unshown);
   });
 });
 

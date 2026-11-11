@@ -347,8 +347,7 @@ it("configuration export carries settings without fiscal, payment, location hist
     ...Object.keys(before),
     "locations",
     "nodes",
-    "location_business_day_settings",
-    "location_business_day_changes",
+    "day_cutover_changes",
     "fiscal_allocations",
     "registro_sif",
   ])
