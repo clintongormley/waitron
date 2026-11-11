@@ -5,6 +5,7 @@ import { lstatSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import {
+  access,
   chmod,
   copyFile,
   lstat,
@@ -549,6 +550,7 @@ export async function writeValidated(
           async () => {},
         ));
     const clearFirstStart = deps.clearFirstStart ?? (() => endRestoreFlow(deps.stateDir));
+    if (!deps.skipSecrets && deps.recordFirstStart === undefined) await access(deps.stateDir);
     try {
       if (!deps.skipSecrets) await recordFirstStart(deps.rebuildSource ?? "archive");
       await placeValidated(admitted, deps);
