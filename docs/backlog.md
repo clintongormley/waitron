@@ -2286,6 +2286,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
   and kitchen names stay. PartyVenue uses Red wine bottle and Water as staff keys,
   with customer Rioja crianza / Agua mineral and kitchen TINTO / AGUA unchanged.
+  The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
+  their Spanish product samples (Agua mineral in both, Cerveza in the till API) remain.
   Local party-suite table, party, course and printer samples use English. Shared dish samples
   remain in their helpers and consumers, including party bill-action, bill-move, arriving-dish
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
