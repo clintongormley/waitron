@@ -361,7 +361,7 @@ import {
   type MdnsResponder,
   type MdnsSocket,
 } from "./mdns.js";
-import type { MdnsQuerySocket } from "./box-lookup.js";
+import { countAsOwnAddresses, type MdnsQuerySocket } from "./box-lookup.js";
 import { ownInterfaceAddresses, requestProvenFromBox } from "./request-from-box.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES, boxHostnameFor, leafHostnamesFor } from "./box-name.js";
 import { createJobRunner } from "./job-runner.js";
@@ -1143,6 +1143,7 @@ async function bootServer(
   // QR and mDNS answers to an address the certificate does not cover. Set it on the FIRST boot of a
   // state dir, or discard the `tls/` files to re-mint.
   const boxAddresses = (): string[] => config.boxAddresses ?? listBoxIpv4();
+  countAsOwnAddresses(config.boxAddresses ?? []);
   // Before any surface that gates on a management session is mounted, in either mode.
   registerModulePermissions(ALL_MODULE_PERMISSIONS);
   const verbosity = createVerbosityController({ defaultLevel: "info", now });

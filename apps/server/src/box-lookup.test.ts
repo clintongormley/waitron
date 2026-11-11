@@ -9,6 +9,7 @@ vi.mock("node:dns/promises", () => ({ lookup: systemLookup }));
 
 import {
   askedAndHeardOthers,
+  countAsOwnAddresses,
   lookupBoxName,
   MDNS_TTL_SECONDS,
   RememberedAnswers,
@@ -117,6 +118,26 @@ describe("lookupBoxName", () => {
     await expect(
       lookupBoxName(NAME, { timeoutMs: 20, makeSocket: () => fake.socket }),
     ).resolves.toEqual(fresh("192.0.2.77"));
+  });
+
+  it("leaves out the addresses the box was configured with by default", async () => {
+    const fake = fakeSocket([[a("203.0.113.7"), a("192.0.2.77")]]);
+    countAsOwnAddresses(["203.0.113.7"]);
+    try {
+      await expect(
+        lookupBoxName(NAME, { timeoutMs: 20, makeSocket: () => fake.socket }),
+      ).resolves.toEqual(fresh("192.0.2.77"));
+    } finally {
+      countAsOwnAddresses([]);
+    }
+  });
+
+  it("takes at most four addresses from one ask, in the order heard", async () => {
+    const many = Array.from({ length: 300 }, (_, i) => a(`10.0.${i >> 8}.${i & 255}`));
+    const fake = fakeSocket([many]);
+    await expect(lookupBoxName(NAME, opts(fake))).resolves.toEqual(
+      fresh("10.0.0.0", "10.0.0.1", "10.0.0.2", "10.0.0.3"),
+    );
   });
 
   it("refuses after its time limit", async () => {

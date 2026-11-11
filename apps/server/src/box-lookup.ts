@@ -100,9 +100,22 @@ export class RememberedAnswers {
 
 const DEFAULT_TIMEOUT_MS = 2000;
 
+/**
+ * A box answers with one address per network it is on, and each dead one costs a caller up to two
+ * seconds of a five-second ask, so more than this from one ask cannot be another box's.
+ */
+const MAX_HEARD_ADDRESSES = 4;
+
+let configuredOwn: readonly string[] = [];
+
+/** The addresses `WAITRON_BOX_ADDRESSES` names, which this box answers to without holding them. */
+export function countAsOwnAddresses(addresses: readonly string[]): void {
+  configuredOwn = [...addresses];
+}
+
 /** Read when asked, so an address this box has taken since an answer was kept counts as its own. */
 function ownAddressCheck(opts: BoxLookupOptions): (ip: string) => boolean {
-  const own = new Set(opts.ownAddresses?.() ?? ownInterfaceAddresses());
+  const own = new Set(opts.ownAddresses?.() ?? [...ownInterfaceAddresses(), ...configuredOwn]);
   return (ip) => own.has(ip) || isLoopbackHost(ip);
 }
 
@@ -136,6 +149,7 @@ function askNetwork(
         const ip = answer.data;
         if (typeof ip !== "string" || isIP(ip) !== 4) continue;
         if (isOwn(ip) || heard.some((h) => h.address === ip)) continue;
+        if (heard.length >= MAX_HEARD_ADDRESSES) break;
         heard.push({ address: ip, ttlSeconds: answer.ttl });
       }
     });
