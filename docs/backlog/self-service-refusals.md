@@ -995,6 +995,8 @@ awaits the owner's scope decision. It changes no runtime behavior.
 | Failed-start surface | `apps/server/src/recovery-surface.ts:351` gives the deployment mismatch an installer referral. A dashboard-only inspection would not repair that failed-start path. Its replacement needs its own authenticated recovery entry; lane A's setup/backup redesign is not authorised by this proposal. |
 | Restore boundary | `apps/server/src/restore-gate.ts:20` refuses a backup from the other environment. A backup is not evidence that missing record metadata may be filled in, nor that a later fiscal record can be discarded. |
 
+_2026-11-11, A1501 (#2829): the failed-start row now offers Start again/Stop instead of the installer referral; see [boot-recovery](#boot-recovery)._
+
 Existing checks run unchanged:
 
 ```sh
@@ -1227,7 +1229,7 @@ _2026-11-11, A1089 slice 1: the held-database page (`holderStalledText`) now say
 
 _2026-11-11, A1501: the wrong-environment database row now offers Start again/Stop, with a read-only administrator password check over HTTPS before moving the installed files aside. The next first setup offers fresh setup or another backup; this does not relabel records or change restore admission._
 
-_2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended", choosing the option ending "the rest say plainly what happened and that it is a fault"): no other row of `OPERATOR_TEXT` or `GENERIC_TEXT` in `apps/server/src/i18n/recovery-page.ts` sends the person to whoever installed the box; `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). Each row that named the installer now names the fault (in Waitron, its installation, or the box's disk) and keeps the restart, restore or reinstall step it already offered; the generic row now says to press Retry a normal boot; the two restore rows (`provisioning.database_ahead`, `provisioning.schema_mismatch`) instead say what reinstalling without a backup loses. The page's details heading is now "Details" / "Detalles". No action, route or button was added, and the owner's answer plans none beyond what each row names. Guards: the "sends nobody to someone else" cases in `apps/server/src/i18n/recovery-page.test.ts` and `apps/server/src/recovery-start-again.test.ts`. The lead paragraph records the earlier tree._
+_2026-11-11, A1089 (owner, 2026-11-11 10:14, "As recommended", choosing the option ending "the rest say plainly what happened and that it is a fault"): no other row of `OPERATOR_TEXT` or `GENERIC_TEXT` in `apps/server/src/i18n/recovery-page.ts` sends the person to whoever installed the box; `deployment.environment_mismatch` now offers Start again instead (A1501, #2829). Each other row that named the installer now names the fault (in Waitron, its installation, or the box's disk) and keeps the restart, restore or reinstall step it already offered; the generic row now says to press Retry a normal boot; the two restore rows (`provisioning.database_ahead`, `provisioning.schema_mismatch`) instead say what reinstalling without a backup loses. The page's details heading is now "Details" / "Detalles". No action, route or button was added, and the owner's answer plans none beyond what each row names. Guards: the "sends nobody to someone else" cases in `apps/server/src/i18n/recovery-page.test.ts` and `apps/server/src/recovery-start-again.test.ts`. The lead paragraph records the earlier tree._
 
 ### Backup-key self-service rework, 2026-10-25
 
