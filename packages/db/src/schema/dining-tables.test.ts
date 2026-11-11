@@ -19,6 +19,27 @@ import { locations } from "./tenants.js";
 let LOCATION_A: string;
 const LOCATION_B = "aaaaaaaa-0000-4000-8000-000000000002";
 
+describe("table labels without a location", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("two tables cannot share a label, including in different zones", async () => {
+    await suite.db.run(sql`insert into floor_zones (id, name, created_at)
+      values ('inside', 'Inside', '2026-11-11'), ('outside', 'Outside', '2026-11-11')`);
+    const insert = (id: string, label: string, zone: string) =>
+      suite.db.run(sql`insert into dining_tables (id, label, zone_id, created_at)
+        values (${id}, ${label}, ${zone}, '2026-11-11')`);
+    await insert("first", "Table 1", "inside");
+    await insert("second", "Table 2", "outside");
+    const error = await captureError(() => insert("duplicate", "Table 1", "outside"));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: dining_tables.label");
+    expect(suite.db.all(sql`select id from dining_tables order by id`)).toEqual([
+      { id: "first" },
+      { id: "second" },
+    ]);
+  });
+});
+
 describe("dining_tables columns", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 

@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
-import { foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
-import { locations } from "./tenants.js";
 
 /**
  * A kitchen course. `display_order` is the firing sequence. On a counter order or a bill with no
@@ -13,7 +12,6 @@ export const kitchenCourses = table(
   "kitchen_courses",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id").notNull(),
     name: label("name").notNull(),
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),
@@ -22,12 +20,7 @@ export const kitchenCourses = table(
   },
   (t) => [
     uniqueIndex("kitchen_courses_name_key")
-      .on(t.locationId, t.name)
+      .on(t.name)
       .where(sql`${t.active} = 1`),
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "kitchen_courses_location_fk",
-    }),
   ],
 );

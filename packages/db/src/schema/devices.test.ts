@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { restrictRefused } from "../constraint-target.js";
-import { FOREIGN_KEY_VIOLATION } from "../sql-state.js";
+import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
-import { captureError } from "../testing/errors.js";
+import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedVenue } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
@@ -27,6 +27,29 @@ const RECEIPT_PRINTER = "11111111-0000-4000-8000-0000000000a1";
 const PAGE_PRINTER = "11111111-0000-4000-8000-0000000000a2";
 const GHOST_PRINTER = "11111111-0000-4000-8000-0000000000ff";
 const TOKEN_HASH = "scrypt$00$00";
+
+describe("device labels without a location", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("two active devices cannot share a label, and an inactive one can", async () => {
+    await suite.db
+      .insert(deviceProfiles)
+      .values({ id: KDS_PROFILE_A, name: "Till profile", formFactor: "till" });
+    const insert = (id: string, active: number) =>
+      suite.db.run(sql`insert into devices
+        (id, device_profile_id, label, token_hash, active, enrolled_at, created_at)
+        values (${id}, ${KDS_PROFILE_A}, 'Till', 'hash', ${active}, '2026-11-11', '2026-11-11')`);
+    await insert("active", 1);
+    await insert("inactive", 0);
+    const error = await captureError(() => insert("duplicate", 1));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: devices.label");
+    expect(suite.db.all(sql`select id from devices order by id`)).toEqual([
+      { id: "active" },
+      { id: "inactive" },
+    ]);
+  });
+});
 
 describe("devices schema (columns, FKs, unique)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });

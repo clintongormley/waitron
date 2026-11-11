@@ -19,6 +19,27 @@ let LOCATION_A: string;
 const LOCATION_A2 = "aaaaaaaa-0000-4000-8000-000000000002";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
 
+describe("default station without a location", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("a second default station is refused, and two non-defaults are not", async () => {
+    const insert = (id: string, isDefault: number) =>
+      suite.db.run(sql`insert into kitchen_stations (id, name, is_default, created_at)
+        values (${id}, ${id}, ${isDefault}, '2026-11-11')`);
+    await insert("default", 1);
+    await insert("first-non-default", 0);
+    await insert("second-non-default", 0);
+    const error = await captureError(() => insert("second-default", 1));
+    expect(isRefusal(error, UNIQUE_VIOLATION)).toBe(true);
+    expect(engineErrorMessage(error)).toBe("UNIQUE constraint failed: kitchen_stations.is_default");
+    expect(suite.db.all(sql`select id from kitchen_stations order by id`)).toEqual([
+      { id: "default" },
+      { id: "first-non-default" },
+      { id: "second-non-default" },
+    ]);
+  });
+});
+
 describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 

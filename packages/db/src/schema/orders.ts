@@ -23,7 +23,6 @@ import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
 import { originChecks, sourceColumn } from "./origin.js";
-import { locations } from "./tenants.js";
 import { parties } from "./parties.js";
 
 export const workingOrderStatus = enumType([
@@ -69,9 +68,6 @@ export const workingOrders = table(
     source: sourceColumn("source").notNull(),
     /* v8 ignore start */
     deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
-    locationId: id("location_id")
-      .notNull()
-      .references(() => locations.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     // Nullable although `createOpenOrder` always sets it: a NULL node_id skips the FK check below,
     // leaving room for a future writer with no node to omit it.

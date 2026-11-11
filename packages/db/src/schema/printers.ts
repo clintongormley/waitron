@@ -12,7 +12,6 @@ import {
   table,
   tsString,
 } from "./columns.js";
-import { locations } from "./tenants.js";
 
 /**
  * How a printer is reached. `local_key` is the USB serial or the Bluetooth MAC; `cloud_poll` is a
@@ -37,11 +36,6 @@ export const printers = table(
   "printers",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => locations.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     name: label("name").notNull(),
     transport: printTransport("transport").notNull(),
     // The stable device id an agent matches at run time.
@@ -67,7 +61,7 @@ export const printers = table(
   (t) => [
     // One undeleted printer per physical USB/BT device per venue; a deleted row frees its key.
     uniqueIndex("printers_local_key_key")
-      .on(t.locationId, t.localKey)
+      .on(t.localKey)
       .where(sql`${t.localKey} is not null and ${t.deletedAt} is null`),
     check("printers_transport_ck", enumCheck(t.transport)),
     check("printers_ticket_scope_ck", enumCheck(t.ticketScope)),

@@ -1,6 +1,5 @@
 import { unique } from "drizzle-orm/sqlite-core";
 import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
-import { locations } from "./tenants.js";
 
 /**
  * An approved local print worker. Its bearer secret stays in the worker; the database holds only its
@@ -11,11 +10,6 @@ export const printAgents = table(
   "print_agents",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => locations.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     name: label("name").notNull(),
     // Reported by the agent after authentication; independent of its editable display name.
     host: label("host"),

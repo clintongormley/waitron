@@ -306,7 +306,6 @@ BEGIN
     AND new.source IS old.source
     AND new.device_id IS old.device_id
     AND new.node_id IS old.node_id
-    AND new.location_id IS old.location_id
     AND new.method IS old.method
     AND new.manual IS old.manual
     AND new.provider IS old.provider
@@ -530,7 +529,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -556,7 +554,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -581,7 +578,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -608,7 +604,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label
@@ -634,7 +629,6 @@ BEGIN
         AND new.id IS old.id
         AND new.source IS old.source
         AND new.device_id IS old.device_id
-        AND new.location_id IS old.location_id
         AND new.node_id IS old.node_id
         AND new.order_number IS old.order_number
         AND new.label IS old.label

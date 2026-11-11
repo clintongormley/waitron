@@ -18,7 +18,6 @@ import { devices } from "./devices.js";
 import { nodes } from "./nodes.js";
 import { originChecks, saleSourceColumn } from "./origin.js";
 import { sales, tenders } from "./sales.js";
-import { locations } from "./tenants.js";
 
 export const tenderRefundState = enumType(["pending", "completed", "failed"]);
 const refundMethod = enumType(["cash", "card"]);
@@ -42,7 +41,6 @@ export const tenderRefunds = table(
     source: saleSourceColumn("source").notNull(),
     deviceId: id("device_id"),
     nodeId: id("node_id").notNull(),
-    locationId: id("location_id").notNull(),
     method: refundMethod("method").notNull(),
     manual: flag("manual").notNull().default(false),
     provider: label("provider"),
@@ -79,11 +77,6 @@ export const tenderRefunds = table(
       columns: [t.nodeId],
       foreignColumns: [nodes.id],
       name: "tender_refunds_node_fk",
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.locationId],
-      foreignColumns: [locations.id],
-      name: "tender_refunds_location_fk",
     }).onDelete("restrict"),
     unique("tender_refunds_submission_key").on(t.saleId, t.submissionId),
     uniqueIndex("tender_refunds_pending_tender_key")

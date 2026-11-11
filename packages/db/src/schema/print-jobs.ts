@@ -18,7 +18,6 @@ import {
 import { printAgents } from "./print-agents.js";
 import { printers } from "./printers.js";
 import { sales } from "./sales.js";
-import { locations } from "./tenants.js";
 
 export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
@@ -30,11 +29,6 @@ export const printJobs = table(
   "print_jobs",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => locations.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     printerId: id("printer_id")
       .notNull()
       /* v8 ignore start */

@@ -4,17 +4,11 @@ import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./c
 import { deviceProfiles } from "./device-profiles.js";
 import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
-import { locations } from "./tenants.js";
 
 export const devices = table(
   "devices",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    locationId: id("location_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => locations.id, { onDelete: "restrict" }),
-    /* v8 ignore stop */
     deviceProfileId: id("device_profile_id")
       .notNull()
       /* v8 ignore start */
@@ -65,10 +59,8 @@ export const devices = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // A record stores `device_id` and screens show its device by label, so two ACTIVE devices at a
-    // location never share one; a revoked device's name is free again.
-    uniqueIndex("devices_location_label_active_key")
-      .on(t.locationId, t.label)
+    uniqueIndex("devices_label_active_key")
+      .on(t.label)
       .where(sql`${t.active} = 1`),
   ],
 );
