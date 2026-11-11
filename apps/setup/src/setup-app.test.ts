@@ -1870,7 +1870,7 @@ describe("setup-app", () => {
   });
 
   it.each([
-    ["mirror.bundle_fetch_failed", 502, "Adding a mirror is unavailable in this version"],
+    ["mirror.bundle_fetch_failed", 502, "couldn't supply a mirror setup"],
     ["setup.request_invalid", 400, "rejected the details"],
     ["setup.not_ready", 503, "isn't ready"],
     ["server.internal", 500, "Couldn't connect"],
@@ -1890,14 +1890,14 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "The primary couldn't supply a mirror setup. Adding a mirror is unavailable in this version. Go back and choose Restore a backup or Restore from my bucket.",
+      "The primary couldn't supply a mirror setup. Go back and press Connect again, or choose Restore a backup or Restore from my bucket.",
     ],
     [
       "es-ES",
-      "El servidor principal no ha podido proporcionar la configuración de una réplica. Añadir una réplica no está disponible en esta versión. Vuelve y elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
+      "El servidor principal no ha podido proporcionar la configuración de una réplica. Vuelve y pulsa Conectar otra vez, o elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
     ],
   ] as const)(
-    "says a mirror join is unavailable and offers backup restore, naming no refused login (%s)",
+    "says the primary could not supply a mirror setup and offers Connect again or a restore, naming no refused login (%s)",
     async (locale, sentence) => {
       try {
         const adopt = vi
@@ -2036,16 +2036,16 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Back returns to the start of setup. You can leave this server switched off and join it after an update that adds this.",
+        "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Choose Back to set this server up another way, or leave it switched off and join it after an update that adds this.",
       ],
       [
         "es-ES",
-        "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de los dos servidores, y el principal sigue funcionando como antes. Volver te lleva al inicio de la configuración. Puedes dejar este servidor apagado y unirlo después de una actualización que lo permita.",
+        "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de los dos servidores, y el principal sigue funcionando como antes. Elige Volver para configurar este servidor de otra forma, o déjalo apagado y únelo después de una actualización que lo permita.",
       ],
     ] as const)("shows the Veri*Factu refusal and Back (%s)", async (locale, sentence) => {
       try {
         const { el, connect, control } = await refusedJoin("module.operation_invalid", locale, {
-          module: "verifactu",
+          module: "fiscal-verifactu",
         });
         expect(await bottomOf(connect)).toBe(sentence);
         await backLeadsToRole(el, control);
@@ -2054,14 +2054,23 @@ describe("setup-app", () => {
       }
     });
 
+    it("shows the generic join failure for a refused operation of another module", async () => {
+      const { connect } = await refusedJoin("module.operation_invalid", "en-GB", {
+        module: "bookings",
+      });
+      expect(await bottomOf(connect)).toBe(
+        "Couldn't connect to the primary. Check the address and login, then try again.",
+      );
+    });
+
     it.each([
       [
         "en-GB",
-        "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Back returns to the start of setup, where this server can be set up for another restaurant; or leave it switched off.",
+        "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Choose Back to set this server up for another restaurant instead, or leave it switched off.",
       ],
       [
         "es-ES",
-        "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Volver te lleva al inicio de la configuración, donde puedes configurar este servidor para otro restaurante; o déjalo apagado.",
+        "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para configurar este servidor para otro restaurante, o déjalo apagado.",
       ],
     ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
       try {
@@ -2477,7 +2486,7 @@ describe("setup-app", () => {
       const el = await mountSetupApp(stubApi({ adopt, primaryCertificate }));
       await typeAndConnect(el);
       const connect = await screenHost(el, "connect");
-      expect(await bottomOf(connect)).toContain("Adding a mirror is unavailable in this version");
+      expect(await bottomOf(connect)).toContain("couldn't supply a mirror setup");
       expect(button(connect, "check-address")!.textContent!.trim()).toBe("Check the address");
 
       button(connect, "check-address")!.click();

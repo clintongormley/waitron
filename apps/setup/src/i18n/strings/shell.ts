@@ -89,7 +89,7 @@ export const shellEn = {
     "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
 
   "shell.adopt.bundle_fetch_failed":
-    "The primary couldn't supply a mirror setup. Adding a mirror is unavailable in this version. Go back and choose Restore a backup or Restore from my bucket.",
+    "The primary couldn't supply a mirror setup. Go back and press Connect again, or choose Restore a backup or Restore from my bucket.",
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.vault_not_empty":
@@ -105,9 +105,9 @@ export const shellEn = {
   "shell.adopt.standby_name_taken":
     "This server picked a name another server of the restaurant already uses. Nothing was changed on either server. Press Connect again: it picks a new name.",
   "shell.adopt.verifactu_unsupported":
-    "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Back returns to the start of setup. You can leave this server switched off and join it after an update that adds this.",
+    "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Choose Back to set this server up another way, or leave it switched off and join it after an update that adds this.",
   "shell.adopt.spare_already_joined":
-    "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Back returns to the start of setup, where this server can be set up for another restaurant; or leave it switched off.",
+    "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Choose Back to set this server up for another restaurant instead, or leave it switched off.",
   "shell.adopt.clocks_apart":
     "This server's clock and the primary server's are 10 minutes or more apart: this server reads {standbyAt}, the primary reads {primaryAt}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then press Connect again.",
   "shell.adopt.incomplete":
@@ -305,7 +305,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La configuración ha fallado. Comprueba que el servidor está encendido y que tu dispositivo está conectado a su red, e inténtalo de nuevo. Si ves un aviso de certificado, usa la ayuda sobre el certificado de abajo.",
 
   "shell.adopt.bundle_fetch_failed":
-    "El servidor principal no ha podido proporcionar la configuración de una réplica. Añadir una réplica no está disponible en esta versión. Vuelve y elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
+    "El servidor principal no ha podido proporcionar la configuración de una réplica. Vuelve y pulsa Conectar otra vez, o elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.vault_not_empty":
@@ -321,9 +321,9 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.adopt.standby_name_taken":
     "Este servidor eligió un nombre que ya usa otro servidor del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Vuelve a pulsar Conectar: elegirá un nombre nuevo.",
   "shell.adopt.verifactu_unsupported":
-    "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de los dos servidores, y el principal sigue funcionando como antes. Volver te lleva al inicio de la configuración. Puedes dejar este servidor apagado y unirlo después de una actualización que lo permita.",
+    "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de los dos servidores, y el principal sigue funcionando como antes. Elige Volver para configurar este servidor de otra forma, o déjalo apagado y únelo después de una actualización que lo permita.",
   "shell.adopt.spare_already_joined":
-    "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Volver te lleva al inicio de la configuración, donde puedes configurar este servidor para otro restaurante; o déjalo apagado.",
+    "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para configurar este servidor para otro restaurante, o déjalo apagado.",
   "shell.adopt.clocks_apart":
     "El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca {standbyAt} y el principal marca {primaryAt}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj y vuelve a pulsar Conectar.",
   "shell.adopt.incomplete":
