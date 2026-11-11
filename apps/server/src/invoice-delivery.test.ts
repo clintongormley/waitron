@@ -137,6 +137,25 @@ async function rows() {
 }
 
 describe("invoice delivery reservation", () => {
+  it("reserves and replays an explicit simplified-receipt email", async () => {
+    const sale = await issue(false);
+    const request = email();
+    const first = await withTransaction(suite.db, (tx) =>
+      reserveInvoiceDelivery(tx, sale.saleId, request),
+    );
+    expect(first).toMatchObject({
+      saleId: sale.saleId,
+      medium: "email",
+      recipient: request.recipient,
+      designation: "original",
+      status: "queued",
+    });
+    expect(
+      await withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
+    ).toEqual(first);
+    expect(await rows()).toHaveLength(1);
+  });
+
   it("reserves an A4 original with only the page-printer reference and replays it", async () => {
     const sale = await issue();
     const [node] = await suite.db.select().from(nodes);
@@ -428,13 +447,20 @@ describe("invoice delivery reservation", () => {
     expect(await rows()).toHaveLength(0);
   });
 
-  it("refuses an absent sale and an F2 with domain codes", async () => {
+  it("refuses an absent sale and A4 delivery of an F2 with domain codes", async () => {
     await expect(
       withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, randomUUID(), email())),
     ).rejects.toMatchObject({ code: "invoice_delivery.not_found" });
     const sale = await issue(false);
     await expect(
-      withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, email())),
+      withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, sale.saleId, {
+          requestKey: randomUUID(),
+          personId: "staff-one",
+          medium: "a4",
+          pagePrinterId: randomUUID(),
+        }),
+      ),
     ).rejects.toMatchObject({ code: "invoice_delivery.full_invoice_required" });
     expect(await rows()).toHaveLength(0);
   });

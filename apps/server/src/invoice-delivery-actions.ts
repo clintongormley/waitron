@@ -10,6 +10,7 @@ import {
 } from "./invoice-delivery.js";
 import {
   readInvoiceDeliveryState,
+  readReceiptEmailDeliveries,
   rowAttempt,
   type InvoiceDeliveryAttempt,
   type PrinterOffer,
@@ -106,7 +107,7 @@ export async function requestPrintDelivery(
   return rowAttempt(row);
 }
 
-/** Emails a full invoice to `recipient`, as the delivery status offers it. */
+/** Emails the recorded document to `recipient`, as the delivery status offers it. */
 export async function requestEmailDelivery(
   tx: Transaction,
   saleId: string,
@@ -120,12 +121,8 @@ export async function requestEmailDelivery(
     (row) => row.medium === "email" && !row.madeByRetry && row.recipient === request.recipient,
   );
   if (replay !== undefined) return rowAttempt(replay);
-  const [sale] = await tx
-    .select({ recipient: sales.counterpartyTaxId })
-    .from(sales)
-    .where(eq(sales.id, saleId));
+  const [sale] = await tx.select({ id: sales.id }).from(sales).where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
-  if (sale.recipient === null) throw new AppError("invoice_delivery.full_invoice_required", {});
   if (!(await canEmailInvoice(tx, saleId, request.transport))) {
     throw new AppError("invoice_delivery.email_unavailable", {});
   }
@@ -160,10 +157,8 @@ export async function retryEmailDelivery(
     (row) => row.madeByRetry && ended !== undefined && row.generation === ended.generation + 1,
   );
   if (replay !== undefined) return rowAttempt(replay);
-  const state = await readInvoiceDeliveryState(tx, saleId, { emailAvailable: true });
-  if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  const status = await readReceiptEmailDeliveries(tx, saleId, { emailAvailable: true });
   if (ended === undefined) throw new AppError("invoice_delivery.not_found", {});
-  const { status } = state;
   if (status.current?.id !== deliveryId || status.actions.retryOriginal?.medium !== "email") {
     throw new AppError("invoice_delivery.active", {});
   }

@@ -49,7 +49,8 @@ export async function reserveInvoiceDelivery(
     .from(sales)
     .where(eq(sales.id, saleId));
   if (sale === undefined) throw new AppError("invoice_delivery.not_found", {});
-  if (sale.recipient === null) throw new AppError("invoice_delivery.full_invoice_required", {});
+  if (sale.recipient === null && input.medium !== "email")
+    throw new AppError("invoice_delivery.full_invoice_required", {});
   if (input.medium === "receipt") {
     const [target] = await tx
       .select({ id: printers.id, deletedAt: printers.deletedAt })

@@ -1796,7 +1796,7 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     expect(await deliveryRows(saleId)).toHaveLength(1);
   });
 
-  it("refuses while another attempt is active, and a simplified invoice", async () => {
+  it("refuses an active attempt and emails a simplified receipt", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);
     await printInvoice(v, orderId);
@@ -1804,11 +1804,54 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     expect(await emailIt(v, orderId)).toEqual(refusal(409, "invoice_delivery.active"));
     expect(await deliveryRows(saleId)).toEqual(before);
     const simplified = await invoice(v, false);
-    expect(await emailIt(v, simplified.orderId)).toEqual(
-      refusal(409, "invoice_delivery.full_invoice_required"),
-    );
-    expect(await deliveryRows(simplified.saleId)).toEqual([]);
+    expect(
+      (await send(v, "GET", `/api/sales/${simplified.orderId}/deliveries?medium=email`)).body,
+    ).toMatchObject({
+      current: null,
+      actions: { email: { designation: "original" }, print: null },
+    });
+    const key = randomUUID();
+    const accepted = await emailIt(v, simplified.orderId, CUSTOMER_EMAIL, key);
+    expect(accepted).toMatchObject({
+      status: 200,
+      body: { medium: "email", status: "queued", designation: "original" },
+    });
+    expect(await emailIt(v, simplified.orderId, CUSTOMER_EMAIL, key)).toEqual(accepted);
+    expect(await deliveryRows(simplified.saleId)).toEqual([
+      expect.objectContaining({ recipient: CUSTOMER_EMAIL, personId: v.staffId }),
+    ]);
+    expect((await readStatus(v, simplified.orderId)).body).toBeNull();
+    expect(
+      (await send(v, "GET", `/api/sales/${simplified.orderId}/deliveries?medium=email`)).body,
+    ).toMatchObject({ current: accepted.body, actions: { email: null } });
+    expect(await jobsOf(simplified.saleId)).toEqual([]);
+    expect(await emailWorkerPass("throws")).toMatchObject({ processed: true });
+    expect(await retry(v, simplified.orderId, accepted.body!.id as string)).toMatchObject({
+      status: 200,
+      body: { designation: "original", status: "queued", medium: "email" },
+    });
+    expect((await deliveryRows(simplified.saleId)).map((row) => row.recipient)).toEqual([
+      CUSTOMER_EMAIL,
+      CUSTOMER_EMAIL,
+    ]);
   });
+
+  it.each(["queued", "sent"] as const)(
+    "does not resend a failed simplified-paper original beside an email that is %s",
+    async (status) => {
+      const v = await venue();
+      const { orderId, saleId } = await invoice(v, false);
+      await receiptOriginal(v, saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+      expect((await emailIt(v, orderId)).status).toBe(200);
+      if (status === "sent")
+        expect(await emailWorkerPass("sent")).toMatchObject({ processed: true });
+      const jobs = await jobsOf(saleId);
+      expect(await send(v, "POST", `/api/sales/${orderId}/receipt/retry`, {})).toEqual(
+        refusal(409, "print_job.not_resendable"),
+      );
+      expect(await jobsOf(saleId)).toEqual(jobs);
+    },
+  );
 
   it("emails a duplicate once the email original was sent, and once a paper original printed", async () => {
     const v = await venue();
@@ -2079,7 +2122,7 @@ describe("POST /api/sales/:id/deliveries/:deliveryId/retry (email again)", () =>
     expect(await deliveryRows(a4Sale.saleId)).toHaveLength(1);
     const simplified = await invoice(v, false);
     expect(await retry(v, simplified.orderId, randomUUID())).toEqual(
-      refusal(409, "invoice_delivery.full_invoice_required"),
+      refusal(404, "invoice_delivery.not_found"),
     );
   });
 

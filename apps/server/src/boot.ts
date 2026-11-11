@@ -260,7 +260,7 @@ import { mountPrintApi } from "./print-api.js";
 import { createPageTestPages } from "./page-test-pages.js";
 import { configureDemoPrinter, demoPrinterJob } from "./demo-printer.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
-import { readInvoiceDocument } from "./invoice-document.js";
+import { readInvoiceDocument, readReceiptEmailDocument } from "./invoice-document.js";
 import { createRoutedInvoiceEmailSender, readInvoiceEmailPrivacy } from "./invoice-email.js";
 import { runInvoiceEmailLoop } from "./invoice-email-worker.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
@@ -2597,7 +2597,7 @@ async function bootServer(
       signal: invoiceEmailController.signal,
       isPrimary: () => holders.singletonRole.current === "primary",
       readDocument: (tx, delivery) =>
-        readInvoiceDocument(nodeBackend, tx, tradingContext, delivery.saleId),
+        readReceiptEmailDocument(nodeBackend, tx, tradingContext, delivery.saleId),
       readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(nodeBackend, tx, delivery.saleId),
       send: createRoutedInvoiceEmailSender({ db, ring, config }),
       onError: (error) =>

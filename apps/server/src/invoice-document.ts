@@ -28,11 +28,30 @@ import { resolvePrintedLogo } from "./receipt-venue-logo.js";
 import { readBillTenderLines, readTenderBlock, receiptQr } from "./till-sale.js";
 import { VENUE_SERVICE } from "./modules.js";
 
-export async function readInvoiceDocument(
+export function readInvoiceDocument(
   backend: FiscalBackend,
   tx: Transaction,
   cfg: TradingContext,
   saleId: string,
+): Promise<ReceiptDocumentInput> {
+  return readDocument(backend, tx, cfg, saleId, true);
+}
+
+export function readReceiptEmailDocument(
+  backend: FiscalBackend,
+  tx: Transaction,
+  cfg: TradingContext,
+  saleId: string,
+): Promise<ReceiptDocumentInput> {
+  return readDocument(backend, tx, cfg, saleId, false);
+}
+
+async function readDocument(
+  backend: FiscalBackend,
+  tx: Transaction,
+  cfg: TradingContext,
+  saleId: string,
+  fullInvoiceOnly: boolean,
 ): Promise<ReceiptDocumentInput> {
   const [issued] = await tx
     .select({ sale: sales, code: invoiceSeries.code })
@@ -41,7 +60,7 @@ export async function readInvoiceDocument(
     .where(eq(sales.id, saleId));
   if (issued === undefined) throw new AppError("invoice_delivery.not_found", {});
   const { sale } = issued;
-  if (sale.counterpartyTaxId === null)
+  if (fullInvoiceOnly && sale.counterpartyTaxId === null)
     throw new AppError("invoice_delivery.full_invoice_required", {});
   const rows = await tx
     .select()
@@ -131,18 +150,22 @@ export async function readInvoiceDocument(
       ...(sale.workingOrderId === null
         ? { orderLabel: null, orderNumber: 0 }
         : await readReceiptOrder(tx, sale.workingOrderId)),
-      invoiceType: "F1",
+      invoiceType: sale.counterpartyTaxId === null ? "F2" : "F1",
       issuer,
-      recipient: {
-        taxId: sale.counterpartyTaxId,
-        ...storedRecipientIdentifier(
-          sale.counterpartyIdentifierType,
-          sale.counterpartyIdentifierCountryCode,
-        ),
-        legalName: sale.counterpartyLegalName!,
-        countryCode: sale.counterpartyCountryCode!,
-        address: sale.counterpartyAddress!,
-      },
+      ...(sale.counterpartyTaxId === null
+        ? {}
+        : {
+            recipient: {
+              taxId: sale.counterpartyTaxId,
+              ...storedRecipientIdentifier(
+                sale.counterpartyIdentifierType,
+                sale.counterpartyIdentifierCountryCode,
+              ),
+              legalName: sale.counterpartyLegalName!,
+              countryCode: sale.counterpartyCountryCode!,
+              address: sale.counterpartyAddress!,
+            },
+          }),
       locale: sale.locale,
       namesLocale: sale.invoiceLocales[0]!,
       invoiceNumber: formatInvoiceNumber(issued.code, sale.invoiceNumber),

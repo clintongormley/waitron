@@ -40,6 +40,7 @@ import {
 import {
   readInvoiceDeliveries,
   readInvoiceDeliveriesFor,
+  readReceiptEmailDeliveries,
   type InvoiceDeliverySale,
   type OfferedPrinter,
 } from "./invoice-delivery-status.js";
@@ -1019,6 +1020,27 @@ describe("readInvoiceDeliveries", () => {
     await receiptJob(saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
 
     expect(await read(saleId)).toBeNull();
+  });
+
+  it("offers simplified-receipt email separately from full-invoice delivery", async () => {
+    const v = await venue();
+    const saleId = await invoice(v.nodeId, false);
+    await receiptJob(saleId, { status: "done" });
+    const status = await withTransaction(suite.db, (tx) =>
+      readReceiptEmailDeliveries(tx, saleId, { emailAvailable: true }),
+    );
+    expect(status.originalCompleted).toBe(true);
+    expect(status.actions.email).toEqual({ designation: "duplicate" });
+    expect(status.actions.print).toBeNull();
+    expect(status.actions.receiptInstead).toBeNull();
+    expect(await read(saleId)).toBeNull();
+    expect(
+      (
+        await withTransaction(suite.db, (tx) =>
+          readReceiptEmailDeliveries(tx, saleId, { emailAvailable: false }),
+        )
+      ).actions.email,
+    ).toBeNull();
   });
 
   it("refuses an unknown sale", async () => {

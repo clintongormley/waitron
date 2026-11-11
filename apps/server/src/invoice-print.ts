@@ -32,8 +32,26 @@ export async function resendInvoicePrintJob(
     .from(printJobs)
     .innerJoin(sales, eq(sales.id, printJobs.saleId))
     .where(eq(printJobs.id, jobId));
-  if (invoice === undefined || invoice.recipient === null) return resendPrintJob(tx, jobId);
+  if (invoice === undefined) return resendPrintJob(tx, jobId);
   await expireInvoiceDeliveryClaims(tx, now);
+  if (invoice.recipient === null) {
+    const emails = await tx
+      .select({ status: invoiceDeliveries.status, designation: invoiceDeliveries.designation })
+      .from(invoiceDeliveries)
+      .where(
+        and(eq(invoiceDeliveries.saleId, invoice.saleId), eq(invoiceDeliveries.medium, "email")),
+      );
+    if (
+      emails.some(
+        (email) =>
+          email.status === "queued" ||
+          email.status === "sending" ||
+          (email.designation === "original" && email.status === "sent"),
+      )
+    )
+      throw new AppError("print_job.not_resendable", { id: jobId });
+    return resendPrintJob(tx, jobId);
+  }
   const retry = await resendPrintJob(tx, jobId);
   try {
     await reserveInvoiceDelivery(tx, invoice.saleId, {

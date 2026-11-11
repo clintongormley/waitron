@@ -131,10 +131,24 @@ export async function readInvoiceDeliveriesFor(
   return new Map([...states].map(([id, state]) => [id, state?.status ?? null]));
 }
 
+export async function readReceiptEmailDeliveries(
+  tx: Transaction,
+  saleId: string,
+  options: InvoiceDeliveryReadOptions,
+): Promise<InvoiceDeliveryStatus> {
+  const state = (await readStates(tx, [saleId], options, true)).get(saleId);
+  if (state == null) throw new AppError("invoice_delivery.not_found", {});
+  return {
+    ...state.status,
+    actions: { ...state.status.actions, print: null, receiptInstead: null },
+  };
+}
+
 async function readStates(
   tx: Transaction,
   saleIds: readonly string[],
   options: InvoiceDeliverySaleReadOptions,
+  includeSimplifiedEmail = false,
 ): Promise<Map<string, InvoiceDeliveryState | null>> {
   const { emailAvailable, printers: offer = async () => [] } = options;
   const ids = [...saleIds];
@@ -171,13 +185,13 @@ async function readStates(
   const jobsOf = bySale(jobs);
   const states = new Map<string, InvoiceDeliveryState | null>();
   for (const sale of found) {
-    if (sale.recipient === null) {
+    if (sale.recipient === null && !includeSimplifiedEmail) {
       states.set(sale.id, null);
       continue;
     }
     const receipt = receipts.get(sale.id)!;
     const offeredSale = { id: sale.id };
-    const printers = await offer(offeredSale);
+    const printers = sale.recipient === null ? [] : await offer(offeredSale);
     const emailable =
       typeof emailAvailable === "boolean" ? emailAvailable : await emailAvailable(offeredSale);
     const saleRows = rowsOf.get(sale.id) ?? [];

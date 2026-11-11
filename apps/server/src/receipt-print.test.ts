@@ -2902,6 +2902,42 @@ describe("automatic F1 receipt delivery enrollment", () => {
     expect(await suite.db.select().from(drawerOpens)).toEqual([]);
   });
 
+  it.each(["queued", "sending", "sent"] as const)(
+    "keeps the simplified receipt's original with an email that is %s",
+    async (status) => {
+      const { cfg, saleId, ticket, personId } = await issued(true, false);
+      const email = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, saleId, {
+          medium: "email",
+          requestKey: randomUUID(),
+          personId,
+          recipient: "guest@example.test",
+        }),
+      );
+      await suite.db
+        .update(invoiceDeliveries)
+        .set({ status })
+        .where(eq(invoiceDeliveries.id, email.id));
+      const print = () =>
+        withTransaction(suite.db, (tx) =>
+          enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+        );
+      if (status === "sent") {
+        await print();
+        const jobs = await suite.db.select().from(printJobs);
+        expect(jobs).toHaveLength(1);
+        expect(jobs[0]).toMatchObject({ kind: "document", receiptCopy: true });
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain(
+          receiptLabelsFor(LOCALE).duplicate,
+        );
+      } else {
+        await expect(print()).rejects.toMatchObject({ code: "invoice_delivery.active" });
+        expect(await suite.db.select().from(printJobs)).toEqual([]);
+      }
+      expect(await suite.db.select().from(drawerOpens)).toEqual([]);
+    },
+  );
+
   it("propagates an engine rollback and reports no successful optional rollback", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
