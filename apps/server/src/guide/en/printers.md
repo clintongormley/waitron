@@ -60,3 +60,11 @@ In **Printers**, open **Print Agents** and choose **Delete** in the agent's menu
 To use an agent you still trust, choose **Add an agent** and **Add** beside its saved name, including the agent on this box. Jobs still queued for it may print when it returns.
 
 To add a different agent, follow the setup steps in **Add an agent** and match its number. After pairing a new agent, find and add its A4 printers again.
+
+## Card readers {#card-readers}
+
+In **Card payments**, open **Card readers** and choose **Delete** in the reader's menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
+
+To use the reader again, choose **Add reader** for its provider. A recognised registration shows its saved name and print settings: choose **Add**, then assign it to devices and profiles again. Otherwise, pair it using the provider's normal steps.
+
+Choose **Unpair from …** to remove only its provider registration while keeping it listed in Waitron. You will need to add or pair it again before using it.

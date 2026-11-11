@@ -106,12 +106,9 @@ describe("Card payments tabs", () => {
     expect(location.pathname).toBe("/manage/payments/view/readers");
   });
 
-  it("switches the visible panel and keeps the reader filter and table mounted", async () => {
+  it("switches the visible panel and keeps the reader table mounted", async () => {
     const { el, tabs } = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table");
-    const filter = el.shadowRoot!.querySelector("wt-combobox")!;
-    filter.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "disabled" } }));
-    await el.updateComplete;
     await page.getByRole("tab", { name: "Providers", exact: true }).click();
     await el.updateComplete;
     expect(selected(tabs)).toBe("providers");
@@ -120,9 +117,6 @@ describe("Card payments tabs", () => {
     await el.updateComplete;
     expect(selected(tabs)).toBe("readers");
     expect(el.shadowRoot!.querySelector("wt-data-table")).toBe(table);
-    expect(el.shadowRoot!.querySelector("wt-combobox")).toBe(filter);
-    expect(filter.getAttribute("name")).toBe("reader-status-filter");
-    expect((filter as HTMLElement & { value: string }).value).toBe("disabled");
   });
 
   it("does not replace a chosen tab when live data adds or removes readers", async () => {

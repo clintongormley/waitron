@@ -354,8 +354,8 @@ describe("the Rename reader dialog's Save", () => {
       api,
       panels: [],
     });
-    await vi.waitFor(() => expect(q(el, "wt-combobox[name=reader-status-filter]")).not.toBeNull());
-    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+    await vi.waitFor(() => expect(q(el, "wt-data-table")).not.toBeNull());
+
     await vi.waitFor(() => expect(q(el, "[data-test=unpair-r-1]")).not.toBeNull());
     await openReader(el, "unpair");
     const unpair = await state(el, "confirm-unpair");

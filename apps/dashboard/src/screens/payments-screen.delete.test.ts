@@ -86,7 +86,6 @@ function client(overrides: Partial<DashboardApi> = {}) {
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     listHeldPayments: vi.fn().mockResolvedValue([]),
-    enableReader: vi.fn().mockResolvedValue(undefined),
     saveReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([]),
     getReaderDeleteImpact: vi.fn(async (id: string) =>
@@ -138,8 +137,8 @@ async function mount(api = client()) {
       },
     ],
   });
-  await vi.waitFor(() => expect(q(el, "wt-combobox[name=reader-status-filter]")).not.toBeNull());
-  await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "all");
+  await vi.waitFor(() => expect(q(el, "wt-data-table")).not.toBeNull());
+
   await vi.waitFor(() => expect(cell(el, "[data-test=details-counter]")).not.toBeNull());
   return el;
 }
@@ -162,9 +161,8 @@ function focused(): Element | null {
   return at;
 }
 
-function statusFilterFocused(el: PaymentsScreen): boolean {
-  const filter = q(el, "wt-combobox[name=reader-status-filter]")!;
-  return filter.shadowRoot!.contains(focused());
+function headingFocused(el: PaymentsScreen): boolean {
+  return q(el, "h1") === focused();
 }
 
 beforeEach(() => {
@@ -180,8 +178,8 @@ describe("Deleting a card reader", () => {
   it("offers Delete last in the row menu of an active, a disabled and an unpaired reader", async () => {
     const el = await mount();
     for (const { id, before } of [
-      { id: "counter", before: ["disable-counter"] },
-      { id: "terrace", before: ["enable-terrace", "unpair-terrace"] },
+      { id: "counter", before: ["unpair-counter"] },
+      { id: "terrace", before: ["unpair-terrace"] },
       { id: "loose", before: [] },
     ]) {
       const del = cell(el, `[data-test=delete-${id}]`);
@@ -199,9 +197,11 @@ describe("Deleting a card reader", () => {
 
   it("the row menu's Delete is quiet and unpressable while another reader action is sent", async () => {
     const enabling = deferred<void>();
-    const api = client({ enableReader: vi.fn(() => enabling.promise) });
+    const api = client({ unpairReader: vi.fn(() => enabling.promise) });
     const el = await mount(api);
-    cell(el, "[data-test=enable-terrace]")!.click();
+    cell(el, "[data-test=unpair-terrace]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-unpair]")!.click();
     await flush(el);
     const del = cell(el, "[data-test=delete-counter]")!;
     expect(del.getAttribute("variant")).toBe("secondary");
@@ -493,7 +493,7 @@ describe("Deleting a card reader", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
   });
 
-  it("an unpair the provider refused keeps the dialog with its message and Delete usable, and the list shows the reader disabled", async () => {
+  it("an unpair the provider refused keeps the dialog with its message and Delete usable, and the list shows the reader unavailable", async () => {
     const deleteReader = vi.fn().mockRejectedValueOnce(coded("reader.unpair_failed"));
     const api = client({ deleteReader });
     const el = await mount(api);
@@ -511,7 +511,7 @@ describe("Deleting a card reader", () => {
     // (`startCardReaderDelete`, apps/server/src/card-reader-delete.ts); the change feed reports it.
     api.liveData!.invalidate([{ type: "card_readers", id: "counter" }]);
     await vi.waitFor(() =>
-      expect(cell(el, "[data-test=reader-status-counter]")?.textContent).toBe("Disabled"),
+      expect(cell(el, "[data-test=reader-status-counter]")?.textContent).toBe("Unavailable"),
     );
     await flush(el);
     expect(dialogOf(el)!.open).toBe(true);
@@ -561,7 +561,7 @@ describe("Deleting a card reader", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("a delete that succeeds closes the dialog and the row, and focus lands on the Status filter", async () => {
+  it("a delete that succeeds closes the dialog and the row, and focus lands on the Payments heading", async () => {
     const api = client();
     const el = await mount(api);
     const reads = vi.mocked(api.listReaders).mock.calls.length;
@@ -574,11 +574,11 @@ describe("Deleting a card reader", () => {
 
     expect(cell(el, "[data-test=delete-counter]")).toBeNull();
     expect(api.listReaders).toHaveBeenCalledTimes(reads + 1);
-    await expect.poll(() => statusFilterFocused(el)).toBe(true);
+    await expect.poll(() => headingFocused(el)).toBe(true);
   });
 
   it.each(["the delete", "the impact read"] as const)(
-    "when %s answers not-found, the row menu is gone and focus lands on the Status filter",
+    "when %s answers not-found, the row menu is gone and focus lands on the Payments heading",
     async (which) => {
       const read = deferred<DeleteImpact>();
       const api =
@@ -598,11 +598,11 @@ describe("Deleting a card reader", () => {
       await expect.poll(() => dialogOf(el)!.open).toBe(false);
       await flush(el);
       expect(cell(el, "[data-test=delete-counter]")).toBeNull();
-      await expect.poll(() => statusFilterFocused(el)).toBe(true);
+      await expect.poll(() => headingFocused(el)).toBe(true);
     },
   );
 
-  it("an active reader dropped by a live re-read while its dialog is open leaves focus on the Status filter", async () => {
+  it("an active reader dropped by a live re-read while its dialog is open leaves focus on the Payments heading", async () => {
     const api = client();
     const el = await mount(api);
     await openDelete(el, "counter");
@@ -610,10 +610,10 @@ describe("Deleting a card reader", () => {
     api.liveData!.invalidate([{ type: "card_readers", id: "counter" }]);
     await expect.poll(() => dialogOf(el)!.open).toBe(false);
     await flush(el);
-    await expect.poll(() => statusFilterFocused(el)).toBe(true);
+    await expect.poll(() => headingFocused(el)).toBe(true);
   });
 
-  it("a delete answered not-found while the first status reads are out leaves focus on the Status filter after they answer", async () => {
+  it("a delete answered not-found while the first status reads are out leaves focus on the Payments heading after they answer", async () => {
     const statuses = deferred<{ online: boolean; printsOwnSlipAutomatically: boolean }>();
     const api = client({
       readerStatus: vi.fn(() => statuses.promise),
@@ -625,13 +625,13 @@ describe("Deleting a card reader", () => {
     confirmOf(el).click();
     await expect.poll(() => dialogOf(el)!.open).toBe(false);
     await flush(el);
-    await expect.poll(() => statusFilterFocused(el)).toBe(true);
+    await expect.poll(() => headingFocused(el)).toBe(true);
     statuses.resolve({ printsOwnSlipAutomatically: false, online: true });
     await flush(el);
-    expect(statusFilterFocused(el)).toBe(true);
+    expect(headingFocused(el)).toBe(true);
   });
 
-  it("a delete whose list re-read leaves another active reader still being asked leaves focus on the Status filter", async () => {
+  it("a delete whose list re-read leaves another active reader still being asked leaves focus on the Payments heading", async () => {
     const api = client();
     const el = await mount(api);
     const other: ReaderRow = { ...counter, id: "other", name: "Other" };
@@ -644,13 +644,13 @@ describe("Deleting a card reader", () => {
     await flush(el);
     const refresh = q(el, "[data-test=refresh-readers]")!;
     expect(refresh.hasAttribute("disabled")).toBe(true);
-    await expect.poll(() => statusFilterFocused(el)).toBe(true);
+    await expect.poll(() => headingFocused(el)).toBe(true);
     statuses.resolve({ printsOwnSlipAutomatically: false, online: true });
     await expect.poll(() => refresh.hasAttribute("disabled")).toBe(false);
-    expect(statusFilterFocused(el)).toBe(true);
+    expect(headingFocused(el)).toBe(true);
   });
 
-  it("a successful delete whose list re-read answers after the dialog closed leaves focus on the Status filter", async () => {
+  it("a successful delete whose list re-read answers after the dialog closed leaves focus on the Payments heading", async () => {
     const api = client();
     const el = await mount(api);
     const other: ReaderRow = { ...counter, id: "other", name: "Other" };
@@ -666,10 +666,10 @@ describe("Deleting a card reader", () => {
       .poll(() => q(el, "[data-test=refresh-readers]")!.hasAttribute("disabled"))
       .toBe(false);
     await flush(el);
-    expect(statusFilterFocused(el), String(focused()?.outerHTML.slice(0, 60))).toBe(true);
+    expect(headingFocused(el), String(focused()?.outerHTML.slice(0, 60))).toBe(true);
   });
 
-  it("a not-found delete whose list re-read answers after the first status reads leaves focus on the Status filter", async () => {
+  it("a not-found delete whose list re-read answers after the first status reads leaves focus on the Payments heading", async () => {
     const statuses = deferred<{ online: boolean; printsOwnSlipAutomatically: boolean }>();
     const reread = deferred<ReaderRow[]>();
     const other: ReaderRow = { ...counter, id: "other", name: "Other" };
@@ -696,7 +696,7 @@ describe("Deleting a card reader", () => {
       .poll(() => q(el, "[data-test=refresh-readers]")!.hasAttribute("disabled"))
       .toBe(false);
     await flush(el);
-    expect(statusFilterFocused(el), String(focused()?.outerHTML.slice(0, 60))).toBe(true);
+    expect(headingFocused(el), String(focused()?.outerHTML.slice(0, 60))).toBe(true);
   });
 
   it("a reload that fails after the delete shows the failed read and offers no second Delete", async () => {

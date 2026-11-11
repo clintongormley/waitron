@@ -89,8 +89,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
       .fn()
       .mockResolvedValue({ printsOwnSlipAutomatically: false, online: true } as ReaderStatusView),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
-    disableReader: vi.fn().mockResolvedValue(undefined),
-    enableReader: vi.fn().mockResolvedValue(undefined),
     unpairReader: vi.fn().mockResolvedValue(undefined),
     saveReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([]),
@@ -319,7 +317,15 @@ describe("payments-screen", () => {
     expect(body.textContent).toContain("Bar till, Terrace till");
     expect(api.readerStatus).toHaveBeenCalledWith("r-1");
     expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toContain("Online");
-    expect(qCell(el, "[data-test=disable-r-1]")).not.toBeNull();
+    expect(qCell(el, "[data-test=unpair-r-1]")).not.toBeNull();
+  });
+
+  it("offers Unpair directly and removes Disable, Enable and the status filter", async () => {
+    const { el } = await mount();
+    expect(qCell(el, "[data-test=unpair-r-1]")).not.toBeNull();
+    expect(qCell(el, "[data-test=disable-r-1]")).toBeNull();
+    expect(qCell(el, "[data-test=enable-r-1]")).toBeNull();
+    expect(q(el, "wt-combobox[name=reader-status-filter]")).toBeNull();
   });
 
   it("offers the reader columns but the name and the actions in a translated column chooser, and remembers a hidden one", async () => {
@@ -363,16 +369,15 @@ describe("payments-screen", () => {
     });
   });
 
-  it("confirms a local disable from its row menu and reloads", async () => {
+  it("confirms Unpair from its row menu and reloads", async () => {
     const { el, api } = await mount();
     vi.mocked(api.listReaders).mockClear();
-    qCell(el, "[data-test=disable-r-1]")!.click();
+    qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
-    expect(api.disableReader).not.toHaveBeenCalled();
-    q(el, "[data-test=confirm-disable]")!.click();
-    await flush(el);
-    expect(api.disableReader).toHaveBeenCalledWith("r-1");
     expect(api.unpairReader).not.toHaveBeenCalled();
+    q(el, "[data-test=confirm-unpair]")!.click();
+    await flush(el);
+    expect(api.unpairReader).toHaveBeenCalledWith("r-1");
     expect(api.listReaders).toHaveBeenCalled();
   });
 
@@ -441,9 +446,9 @@ describe("payments-screen", () => {
         ),
       }),
     );
-    qCell(el, "[data-test=disable-other]")!.click();
+    qCell(el, "[data-test=unpair-other]")!.click();
     await flush(el);
-    q(el, "[data-test=confirm-disable]")!.click();
+    q(el, "[data-test=confirm-unpair]")!.click();
     await flush(el);
     expect(qCell(el, "[data-test=reader-battery-r-1]")!.textContent).toBe("90%");
     if (outcome === "success")
@@ -454,7 +459,7 @@ describe("payments-screen", () => {
     expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Online");
   });
 
-  it("does not offer Enable for an unpaired reader", async () => {
+  it("keeps an unpaired reader listed without Unpair", async () => {
     const { el } = await mount(
       stubApi({
         listReaders: vi
@@ -462,25 +467,17 @@ describe("payments-screen", () => {
           .mockResolvedValue([{ ...READERS[0], active: false, canEnable: false }]),
       }),
     );
-    const filter = q(el, "wt-combobox[name=reader-status-filter]")!;
-    await chooseOption(filter, "disabled");
     await flush(el);
-    expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Disabled");
-    expect(qCell(el, "[data-test=enable-r-1]")).toBeNull();
+    expect(qCell(el, "[data-test=reader-status-r-1]")!.textContent).toBe("Unpaired");
+    expect(qCell(el, "[data-test=unpair-r-1]")).toBeNull();
   });
 
-  it("says the dashboard's one no-matches sentence when the status filter hides every reader, and its own sentence when there are none", async () => {
+  it("shows its empty-reader message when there are none", async () => {
     const sentence = async (el: PaymentsScreen) => {
       const table = q(el, "wt-data-table") as HTMLElement & { updateComplete: Promise<unknown> };
       await table.updateComplete;
       return table.shadowRoot!.querySelector(".empty .message")!.textContent;
     };
-    const { el } = await mount();
-    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
-    await flush(el);
-    expect(qCell(el, "tbody")).toBeNull();
-    expect(await sentence(el)).toBe(tableNoMatches());
-
     const none = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([]) }));
     expect(await sentence(none.el)).toBe(t("payments.readers_empty"));
   });
@@ -636,14 +633,14 @@ async function openRename(el: PaymentsScreen) {
 }
 
 describe("reader discovery and status", () => {
-  it("offers editable names, Enable and already added rows", async () => {
+  it("offers new names, Add for retained readers and already added rows", async () => {
     const { el, api } = await mount(
       stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
     await openAdd(el);
     expect(api.availableReaders).toHaveBeenCalledWith("acme");
     expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("123");
-    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Enable");
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Add");
     expect(q(el, "[data-test=adopt-v-3]")).toBeNull();
     expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("Already added");
     const input = q(el, "[data-test=name-v-1]")!;
@@ -833,86 +830,17 @@ describe("reader discovery and status", () => {
     expect(api.readerStatus).toHaveBeenCalledExactlyOnceWith("r-1");
   });
 
-  it("words a reader's Disable, Enable and Disabled status in Spanish", async () => {
+  it("words Add for a retained reader in Spanish without a name field", async () => {
     setLocale("es-ES");
     const { el } = await mount(
-      stubApi({
-        listReaders: vi
-          .fn()
-          .mockResolvedValue([...READERS, { ...READERS[0], id: "disabled", active: false }]),
-        availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS),
-      }),
-    );
-    expect(qCell(el, "[data-test=disable-r-1]")!.textContent!.trim()).toBe("Deshabilitar");
-    const filter = q(el, "wt-combobox[name=reader-status-filter]") as HTMLElement & {
-      options: { value: string; label: string }[];
-    };
-    expect(filter.options.map((option) => option.label)).toEqual([
-      "Activos",
-      "Deshabilitados",
-      "Todos los lectores",
-    ]);
-    await chooseOption(filter, "disabled");
-    await flush(el);
-    expect(qCell(el, "[data-test=enable-disabled]")!.textContent!.trim()).toBe("Habilitar");
-    expect(qCell(el, "[data-test=reader-status-disabled]")!.textContent!.trim()).toBe(
-      "Deshabilitado",
+      stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
     await openAdd(el);
-    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Habilitar");
-    expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("Deshabilitado");
-    expect(q(el, "[data-test=reader-discovery]")!.textContent).not.toContain("Volver a añadir");
-  });
-
-  it("filters readers by status from a labelled dropdown showing Active first", async () => {
-    const { el } = await mount(
-      stubApi({
-        listReaders: vi
-          .fn()
-          .mockResolvedValue([...READERS, { ...READERS[0], id: "disabled", active: false }]),
-      }),
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Añadir");
+    expect(q(el, "[data-test=name-v-2]")).toBeNull();
+    expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain(
+      "Nombre y ajustes de impresión guardados",
     );
-    const filter = q(el, "wt-combobox[name=reader-status-filter]") as HTMLElement & {
-      options: { value: string; label: string }[];
-      value: string;
-      label: string;
-      search: string;
-    };
-    expect(filter.label).toBe(t("payments.reader_col_status"));
-    expect(filter.search).toBe("auto");
-    expect(filter.options).toEqual([
-      { value: "active", label: t("payments.filter_active") },
-      { value: "disabled", label: t("payments.filter_disabled") },
-      { value: "all", label: t("payments.filter_all") },
-    ]);
-    expect(filter.value).toBe("active");
-    await chooseOption(filter, "disabled");
-    await flush(el);
-    expect(qCell(el, "[data-test=reader-status-r-1]")).toBeNull();
-    expect(qCell(el, "[data-test=reader-status-disabled]")).not.toBeNull();
-  });
-
-  it("filters active, disabled and all readers and enables a disabled row", async () => {
-    const { el, api } = await mount(
-      stubApi({
-        listReaders: vi
-          .fn()
-          .mockResolvedValue([...READERS, { ...READERS[0], id: "disabled", active: false }]),
-      }),
-    );
-    expect(qCell(el, "[data-test=reader-status-disabled]")).toBeNull();
-    const filter = q(el, "wt-combobox[name=reader-status-filter]")!;
-    await chooseOption(filter, "disabled");
-    await flush(el);
-    expect(qCell(el, "[data-test=reader-status-r-1]")).toBeNull();
-    expect(qCell(el, "[data-test=reader-status-disabled]")!.textContent).toBe("Disabled");
-    qCell(el, "[data-test=enable-disabled]")!.click();
-    await flush(el);
-    expect(api.enableReader).toHaveBeenCalledWith("disabled");
-    await chooseOption(filter, "all");
-    await flush(el);
-    expect(qCell(el, "[data-test=reader-status-r-1]")).not.toBeNull();
-    expect(qCell(el, "[data-test=reader-status-disabled]")).not.toBeNull();
   });
 
   it("shows reported details and restores focus to the row menu", async () => {
@@ -1035,7 +963,7 @@ describe("reader discovery and status", () => {
     const { el, api } = await mount(
       stubApi({ listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }),
     );
-    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+
     await flush(el);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
@@ -1050,7 +978,7 @@ describe("reader discovery and status", () => {
         listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]),
       }),
     );
-    await chooseOption(q(other.el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+
     await flush(other.el);
     expect(qCell(other.el, "[data-test=unpair-r-1]")).toBeNull();
   });
@@ -1060,7 +988,7 @@ describe("reader discovery and status", () => {
       stubApi({ listReaders: vi.fn().mockResolvedValue([{ ...READERS[0]!, active: false }]) }),
       { panels: [fakePanel("acme", "test.pattern.name")] },
     );
-    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+
     await flush(el);
     const unpair = t("payments.unpair").split("{provider}").join("Pay $&");
     expect(qCell(el, "[data-test=unpair-r-1]")!.textContent!.trim()).toBe(unpair);
@@ -1071,7 +999,7 @@ describe("reader discovery and status", () => {
     );
   });
 
-  it("puts a provider name holding a replacement pattern into discovery and Disable as written", async () => {
+  it("puts a provider name holding a replacement pattern into discovery as written", async () => {
     const { el } = await mount(stubApi(), { panels: [fakePanel("acme", "test.pattern.name")] });
     await openAdd(el);
     expect(q(el, "[data-test=reader-discovery] p")!.textContent!.trim()).toBe(
@@ -1079,11 +1007,6 @@ describe("reader discovery and status", () => {
     );
     q(el, "[data-test=cancel-discovery]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=reader-discovery]")).toBeNull());
-    qCell(el, "[data-test=disable-r-1]")!.click();
-    await flush(el);
-    expect(q(el, "label.unpair-choice")!.textContent!.trim()).toBe(
-      t("payments.also_unpair").split("{provider}").join("Pay $&"),
-    );
   });
 });
 
@@ -1143,7 +1066,7 @@ describe("reader dialog request lifetime", () => {
           .mockResolvedValue(undefined),
       }),
     );
-    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
+
     await flush(el);
     qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
@@ -1291,24 +1214,24 @@ describe("payments-screen remaining edges", () => {
     expect(bodyRowNames(el)).toEqual(["Bar", "Counter"]);
   });
 
-  it("disables a reader once when its Disable is pressed twice before the first answer", async () => {
+  it("unpairs a reader once when Unpair is pressed twice before the first answer", async () => {
     let release!: () => void;
     const pending = new Promise<void>((resolve) => {
       release = resolve;
     });
     const { el, api } = await mount(
-      stubApi({ disableReader: vi.fn().mockReturnValueOnce(pending) }),
+      stubApi({ unpairReader: vi.fn().mockReturnValueOnce(pending) }),
     );
-    qCell(el, "[data-test=disable-r-1]")!.click();
+    qCell(el, "[data-test=unpair-r-1]")!.click();
     await flush(el);
-    const disable = q(el, "[data-test=confirm-disable]")!;
+    const disable = q(el, "[data-test=confirm-unpair]")!;
 
     disable.click();
     disable.click();
     release();
     await flush(el);
 
-    expect(api.disableReader).toHaveBeenCalledTimes(1);
+    expect(api.unpairReader).toHaveBeenCalledTimes(1);
   });
 
   it("renames once when Save is pressed twice before the first answer", async () => {
@@ -1369,12 +1292,12 @@ describe("payments-screen remaining edges", () => {
     );
   });
 
-  it("enables a disabled reader again under its existing provider reference", async () => {
+  it("adds a retained reader under its existing provider reference", async () => {
     const { el, api } = await mount(
       stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
     await openAdd(el);
-    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Enable");
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Add");
 
     q(el, "[data-test=adopt-v-2]")!.click();
 
@@ -2412,12 +2335,12 @@ describe("the readers' status reads", () => {
       stubApi({
         listReaders: vi.fn().mockResolvedValue(readers(1)),
         readerStatus: held.readerStatus,
-        disableReader: vi.fn().mockReturnValueOnce(pending),
+        unpairReader: vi.fn().mockReturnValueOnce(pending),
       }),
     );
     await waitForReaderStatusCalls(held.readerStatus, 1);
     expect(held.readerStatus).toHaveBeenCalledTimes(1);
-    qCell(el, "[data-test=disable-r-1]")!.click();
+    qCell(el, "[data-test=unpair-r-1]")!.click();
 
     host.remove();
     release();

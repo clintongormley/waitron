@@ -57,7 +57,7 @@ import "./errors.js";
 
 /**
  * The card-provider and card-reader management routes: the `hardware.manage` gate, credential
- * sealing, and reader add/adopt/enable/unpair against fake provider seats.
+ * sealing, and reader add/adopt/unpair against fake provider seats.
  */
 const noopLog: Logger = () => {};
 
@@ -280,6 +280,13 @@ async function addReader(
     cookie: venue.managerCookie,
     body: { providerId: "stripe", name, reference: ref },
   });
+}
+
+async function switchOffReader(id: string): Promise<void> {
+  await suite.db
+    .update(cardReaders)
+    .set({ active: false, disabledAt: nowIso() })
+    .where(eq(cardReaders.id, id));
 }
 
 async function sealedStripe(): Promise<Record<string, string> | null> {
@@ -950,7 +957,7 @@ describe("an injected fetch is threaded to the seat", () => {
     return app;
   }
 
-  it("connects, adds, reads status and disables with fetch supplied", async () => {
+  it("connects, adds and reads status with fetch supplied", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountAppWithFetch(venue);
     expect((await connectStripe(app, venue)).status).toBe(200);
@@ -966,13 +973,7 @@ describe("an injected fetch is threaded to the seat", () => {
         })
       ).status,
     ).toBe(200);
-    expect(
-      (
-        await send(app, "POST", `/management-api/payments/readers/${readerId}/disable`, {
-          cookie: venue.managerCookie,
-        })
-      ).status,
-    ).toBe(204);
+    await switchOffReader(readerId);
   });
 });
 
@@ -995,15 +996,7 @@ describe("disconnect", () => {
       (await inUse.json()) as { error: { code: string; params: { activeReaders: number } } },
     ).toMatchObject({ error: { code: "payment.provider_in_use", params: { activeReaders: 1 } } });
 
-    const disabled = await send(
-      app,
-      "POST",
-      `/management-api/payments/readers/${readerId}/disable`,
-      {
-        cookie: venue.managerCookie,
-      },
-    );
-    expect(disabled.status).toBe(204);
+    await switchOffReader(readerId);
 
     const gone = await send(app, "POST", "/management-api/payments/providers/stripe/disconnect", {
       cookie: venue.managerCookie,
@@ -1342,7 +1335,7 @@ describe("reader adoption and local management", () => {
   };
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
-  it("defaults automatic slips off and retains the saved setting through rename, enable and adoption", async () => {
+  it("defaults automatic slips off and retains the saved setting through rename and adoption", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
@@ -1384,12 +1377,10 @@ describe("reader adoption and local management", () => {
         })
       ).status,
     ).toBe(204);
-    for (const action of ["disable", "enable", "disable"]) {
-      expect((await send(app, "POST", `${base}/readers/${id}/${action}`, opts)).status).toBe(204);
-      expect(await saved()).toEqual([
-        expect.objectContaining({ id, name: "Terrace", printsOwnSlipAutomatically: true }),
-      ]);
-    }
+    await switchOffReader(id);
+    expect(await saved()).toEqual([
+      expect.objectContaining({ id, name: "Terrace", printsOwnSlipAutomatically: true }),
+    ]);
     const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(await adopted.json()).toEqual({ id, status: "paired" });
     expect(await saved()).toEqual([
@@ -1494,8 +1485,8 @@ describe("reader adoption and local management", () => {
         })
       ).status,
     ).toBe(204);
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
-    expect(await available()).toEqual([{ ...vendor, status: "disabled" }]);
+    await switchOffReader(id);
+    expect(await available()).toEqual([{ ...vendor, name: "Counter", status: "disabled" }]);
     // `dated` is derived in JavaScript: `disabled_at is not null` in SQL would come back as 0/1.
     const disabled = (
       await suite.db
@@ -1517,7 +1508,7 @@ describe("reader adoption and local management", () => {
         disabledAt: cardReaders.disabledAt,
       })
       .from(cardReaders);
-    expect(stored).toEqual([{ id, name: "Terrace", active: true, disabledAt: null }]);
+    expect(stored).toEqual([{ id, name: "Counter", active: true, disabledAt: null }]);
     expect(await (await send(app, "GET", `${base}/devices/${device}/reader`, opts)).json()).toEqual(
       { readerId: id },
     );
@@ -1627,59 +1618,38 @@ describe("reader adoption and local management", () => {
     await suite.db
       .delete(deviceProfileCardReaders)
       .where(eq(deviceProfileCardReaders.readerId, id));
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
+    await switchOffReader(id);
     const again = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(await again.json()).toEqual({ id, status: "paired" });
     expect(await listsOf(p.till)).toEqual([{ readerId: p.r0, position: 0, isDefault: true }]);
     expect(await listsOf(p.handheld)).toEqual([]);
   });
 
-  it("adopting a deleted reader's provider id creates a new reader and leaves the deleted row as it was", async () => {
+  it("Delete then provider-verified Add restores the saved reader without its assignments", async () => {
     const venue = await seedVenueWithStaff();
-    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
+    const p = await seededProfiles();
+    const seat = { ...stripeSeat, readers: { ...stripeSeat.readers, list: async () => [vendor] } };
+    const app = mountApp(venue, [seat]);
     await connectStripe(app, venue);
     const opts = { cookie: venue.managerCookie };
     const first = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(first.status).toBe(201);
-    const { id: oldId } = (await first.json()) as { id: string };
+    const { id } = (await first.json()) as { id: string };
     await suite.db
       .update(cardReaders)
-      .set({ active: false, deletedAt: "2026-10-10T10:00:00.000Z" })
-      .where(eq(cardReaders.id, oldId));
-    const before = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, oldId));
+      .set({ printsOwnSlipAutomatically: true })
+      .where(eq(cardReaders.id, id));
+    const before = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id));
+    expect((await send(app, "DELETE", `${base}/readers/${id}`, opts)).status).toBe(200);
     const again = await send(app, "POST", `${base}/readers/adopt`, {
       ...opts,
-      body: { ...adoption, name: "Terrace" },
+      body: { ...adoption, name: "Provider name" },
     });
     expect(again.status).toBe(201);
-    const { id: newId } = (await again.json()) as { id: string };
-    expect(newId).not.toBe(oldId);
-    expect(await suite.db.select().from(cardReaders).where(eq(cardReaders.id, oldId))).toEqual(
-      before,
-    );
-    expect(
-      await suite.db
-        .select({ name: cardReaders.name, active: cardReaders.active })
-        .from(cardReaders)
-        .where(eq(cardReaders.id, newId)),
-    ).toEqual([{ name: "Terrace", active: true }]);
-  });
-
-  it("drizzle 0.45 prints a conflict target's targetWhere before do update", async () => {
-    await withTransaction(suite.db, async (tx) => {
-      const statement = tx
-        .insert(cardReaders)
-        .values({ provider: "stripe", providerRef: "tmr_x", name: "Counter" })
-        .onConflictDoUpdate({
-          target: [cardReaders.provider, cardReaders.providerRef],
-          targetWhere: isNull(cardReaders.deletedAt),
-          set: { name: "Counter", active: true, disabledAt: null, unpairedAt: null },
-        });
-      expect(statement.toSQL().sql).toContain(
-        'on conflict ("card_readers"."provider", "card_readers"."provider_ref") ' +
-          'where "card_readers"."deleted_at" is null do update set',
-      );
-    });
+    expect(await again.json()).toEqual({ id, status: "paired" });
+    expect(await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id))).toEqual(before);
+    expect(await listsOf(p.till)).toEqual([{ readerId: p.r0, position: 0, isDefault: true }]);
+    expect(await listsOf(p.handheld)).toEqual([]);
   });
 
   it("refuses an unlisted reference without inserting or removing anything", async () => {
@@ -1706,7 +1676,7 @@ describe("reader adoption and local management", () => {
     expect(removed).toEqual([]);
   });
 
-  it("renames, disables and enables locally, while unpair alone calls the vendor", async () => {
+  it("renames locally, while unpair alone calls the vendor", async () => {
     const venue = await seedVenueWithStaff();
     const removed: string[] = [];
     const app = mountApp(venue, [
@@ -1726,8 +1696,6 @@ describe("reader adoption and local management", () => {
       (await send(app, "PATCH", `${base}/readers/${id}`, { ...opts, body: { name: "Terrace" } }))
         .status,
     ).toBe(204);
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
-    expect((await send(app, "POST", `${base}/readers/${id}/enable`, opts)).status).toBe(204);
     expect(
       await suite.db
         .select({
@@ -1749,7 +1717,7 @@ describe("reader adoption and local management", () => {
     ).toEqual([{ active: false }]);
   });
 
-  it("refuses local enable after unpair until the provider lists the reader for adoption again", async () => {
+  it("refuses Add after unpair until the provider lists the reader again", async () => {
     const venue = await seedVenueWithStaff();
     let paired = true;
     let listings = 0;
@@ -1770,13 +1738,12 @@ describe("reader adoption and local management", () => {
     };
     const opts = { cookie: venue.managerCookie };
     expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
-    const enabled = await send(app, "POST", `${base}/readers/${id}/enable`, opts);
+    const enabled = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(enabled.status).toBe(422);
     expect(await enabled.json()).toEqual({
       error: { code: "reader.not_listed", params: { providerId: "stripe" } },
     });
-    expect(listings).toBe(0);
+    expect(listings).toBe(1);
     expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
       {
         id,
@@ -1792,14 +1759,12 @@ describe("reader adoption and local management", () => {
     paired = true;
     const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(await adopted.json()).toEqual({ id, status: "paired" });
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
-    expect((await send(app, "POST", `${base}/readers/${id}/enable`, opts)).status).toBe(204);
-    expect(listings).toBe(1);
+    expect(listings).toBe(2);
     expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
       {
         id,
         provider: "stripe",
-        name: "Counter",
+        name: "Barra 1",
         printsOwnSlipAutomatically: false,
         active: true,
         canEnable: true,
@@ -1807,51 +1772,6 @@ describe("reader adoption and local management", () => {
         deviceNames: [],
       },
     ]);
-  });
-
-  it("does not enable across a committed unpair the request never saw", async () => {
-    // The enable is issued while the unpair's write transaction is still open, so it is serialised
-    // behind it and must read the committed `unpaired_at`. This pins the outcome, not an overlap.
-    const venue = await seedVenueWithStaff();
-    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
-    await connectStripe(app, venue);
-    const { id } = (await (await addReader(app, venue, vendor.providerRef)).json()) as {
-      id: string;
-    };
-    let release!: () => void;
-    let updated!: () => void;
-    const hold = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const ready = new Promise<void>((resolve) => {
-      updated = resolve;
-    });
-    const unpairWrite = withTransaction(suite.db, async (tx) => {
-      const unpaired = nowIso();
-      await tx.execute(
-        sql`update card_readers set active = false, disabled_at = ${unpaired}, unpaired_at = ${unpaired} where id = ${id}`,
-      );
-      updated();
-      await hold;
-    });
-    try {
-      await ready;
-      const enabling = send(app, "POST", `${base}/readers/${id}/enable`, {
-        cookie: venue.managerCookie,
-      });
-      release();
-      await unpairWrite;
-      expect((await enabling).status).toBe(422);
-      expect(
-        await suite.db
-          .select({ active: cardReaders.active })
-          .from(cardReaders)
-          .where(eq(cardReaders.id, id)),
-      ).toEqual([{ active: false }]);
-    } finally {
-      release();
-      await unpairWrite;
-    }
   });
 
   it.each(["adopt", "rename"] as const)(
@@ -1944,7 +1864,7 @@ describe("reader adoption and local management", () => {
       ["GET", `${base}/providers/stripe/available-readers`],
       ["POST", `${base}/readers/adopt`],
       ["PATCH", `${base}/readers/${id}`],
-      ...["disable", "enable", "unpair"].map((a) => ["POST", `${base}/readers/${id}/${a}`]),
+      ...["unpair"].map((a) => ["POST", `${base}/readers/${id}/${a}`]),
     ] as const;
     for (const [method, path] of routes) {
       const response = await send(app, method as "GET" | "POST" | "PATCH", path!, {
@@ -1954,29 +1874,6 @@ describe("reader adoption and local management", () => {
       expect(response.status, path).toBe(403);
     }
     expect([listed, removed]).toEqual([0, 0]);
-  });
-
-  it("refuses enabling a disabled reader after disconnecting its provider", async () => {
-    const venue = await seedVenueWithStaff();
-    const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
-    await connectStripe(app, venue);
-    const opts = { cookie: venue.managerCookie };
-    const added = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
-    const { id } = (await added.json()) as { id: string };
-    expect((await send(app, "POST", `${base}/readers/${id}/disable`, opts)).status).toBe(204);
-    expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
-    const response = await send(app, "POST", `${base}/readers/${id}/enable`, opts);
-    expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({
-      error: { code: "reader.provider_disconnected", params: { providerId: "stripe" } },
-    });
-    const stored = (
-      await suite.db
-        .select({ active: cardReaders.active, disabledAt: cardReaders.disabledAt })
-        .from(cardReaders)
-        .where(eq(cardReaders.id, id))
-    ).map(({ active, disabledAt }) => ({ active, dated: disabledAt !== null }));
-    expect(stored).toEqual([{ active: false, dated: true }]);
   });
 
   it.each(["available-readers", "adopt"])(
@@ -2053,8 +1950,7 @@ describe("screens and unknown ids", () => {
 
   it.each([
     ["PATCH", "", { name: "Nuevo" }],
-    ["POST", "/disable", undefined],
-    ["POST", "/enable", undefined],
+
     ["POST", "/unpair", undefined],
     ["GET", "/status", undefined],
   ] as const)(
@@ -2200,13 +2096,7 @@ describe("screens and unknown ids", () => {
       error: { code: "reader.not_found", params: { id: unknownReader } },
     });
 
-    expect(
-      (
-        await send(app, "POST", `/management-api/payments/readers/${readerId}/disable`, {
-          cookie: venue.managerCookie,
-        })
-      ).status,
-    ).toBe(204);
+    await switchOffReader(readerId);
     const disabled = await put(device, { readerId });
     expect(disabled.status).toBe(400);
     expect(await disabled.json()).toEqual({
@@ -2318,9 +2208,7 @@ describe("reader delete", () => {
   async function disconnectedReader(app: Hono, venue: Venue) {
     const paired = await pairedReader(app, venue);
     const opts = { cookie: venue.managerCookie };
-    expect((await send(app, "POST", `${base}/readers/${paired.id}/disable`, opts)).status).toBe(
-      204,
-    );
+    await switchOffReader(paired.id);
     expect((await send(app, "POST", `${base}/providers/stripe/disconnect`, opts)).status).toBe(204);
     return paired;
   }
@@ -2731,7 +2619,7 @@ describe("reader delete", () => {
     expect(removed).toEqual([ref]);
   });
 
-  it("refuses Enable, Unpair, a second Delete and adopting its provider id while a delete is unpairing the reader; a failed unpair leaves it switched off", async () => {
+  it("refuses Unpair, a second Delete and adopting its provider id while a delete is unpairing the reader; a failed unpair leaves it switched off", async () => {
     const venue = await seedVenueWithStaff();
     const refused: { request: string; status: number; body: unknown }[] = [];
     let activeDuringCall: boolean | undefined;
@@ -2739,7 +2627,6 @@ describe("reader delete", () => {
       if (removed.length > 1) return;
       activeDuringCall = (await readerRow(id)).active;
       for (const [method, path, body] of [
-        ["POST", `${base}/readers/${id}/enable`, undefined],
         ["POST", `${base}/readers/${id}/unpair`, undefined],
         ["DELETE", `${base}/readers/${id}`, undefined],
         [
@@ -2774,7 +2661,6 @@ describe("reader delete", () => {
     expect(activeDuringCall).toBe(false);
     const inProgress = { error: { code: "reader.unpair_in_progress", params: { readerId: id } } };
     expect(refused).toEqual([
-      { request: `POST ${base}/readers/${id}/enable`, status: 409, body: inProgress },
       { request: `POST ${base}/readers/${id}/unpair`, status: 409, body: inProgress },
       { request: `DELETE ${base}/readers/${id}`, status: 409, body: inProgress },
       { request: `POST ${base}/readers/adopt`, status: 409, body: inProgress },
@@ -2790,11 +2676,14 @@ describe("reader delete", () => {
         .where(eq(cardReaders.providerRef, ref)),
     ).toEqual([{ id }]);
 
-    // The failed delete let go of the reader: Enable is served again.
     expect(
-      (await send(app, "POST", `${base}/readers/${id}/enable`, { cookie: venue.managerCookie }))
-        .status,
-    ).toBe(204);
+      (
+        await send(app, "POST", `${base}/readers/adopt`, {
+          cookie: venue.managerCookie,
+          body: { providerId: "stripe", providerRef: ref, name: "Again" },
+        })
+      ).status,
+    ).toBe(201);
     expect((await readerRow(id)).active).toBe(true);
   });
 
@@ -2910,7 +2799,7 @@ describe("reader delete", () => {
       return { id, ref, row: await readerRow(id) };
     }
 
-    it("answers reader.not_found to rename, disable, enable, unpair and status, calling no provider and changing nothing", async () => {
+    it("answers reader.not_found to rename, unpair and status, calling no provider and changing nothing", async () => {
       const venue = await seedVenueWithStaff();
       const spies = spySeat();
       const app = mountApp(venue, [spies.seat]);
@@ -2918,8 +2807,7 @@ describe("reader delete", () => {
 
       for (const [method, path, body] of [
         ["PATCH", `${base}/readers/${id}`, { name: "Terrace" }],
-        ["POST", `${base}/readers/${id}/disable`, undefined],
-        ["POST", `${base}/readers/${id}/enable`, undefined],
+
         ["POST", `${base}/readers/${id}/unpair`, undefined],
         ["GET", `${base}/readers/${id}/status`, undefined],
       ] as const) {
@@ -2998,9 +2886,7 @@ describe("reader delete", () => {
       const { id: deleted } = await deletedReader(app, venue, spies);
       const added = await addReader(app, venue, nextRef(), "Terraza");
       const { id: disabled } = (await added.json()) as { id: string };
-      expect((await send(app, "POST", `${base}/readers/${disabled}/disable`, opts)).status).toBe(
-        204,
-      );
+      await switchOffReader(disabled);
 
       const list = (await (await send(app, "GET", `${base}/readers`, opts)).json()) as {
         id: string;
@@ -3075,7 +2961,7 @@ describe("reader delete", () => {
       ]);
     });
 
-    it("deleted in Waitron only while disconnected, is offered by discovery as new once connected again", async () => {
+    it("deleted in Waitron only while disconnected, is offered with saved settings once connected again", async () => {
       const venue = await seedVenueWithStaff();
       let listed: string[] = [];
       const spies = spySeat(() => listed);
@@ -3088,14 +2974,21 @@ describe("reader delete", () => {
       listed = [ref];
 
       const available = await send(app, "GET", `${base}/providers/stripe/available-readers`, opts);
-      expect(await available.json()).toEqual([{ ...vendorOf(ref), status: "available" }]);
+      expect(await available.json()).toEqual([
+        { ...vendorOf(ref), name: "Barra 1", status: "disabled" },
+      ]);
       const adopted = await send(app, "POST", `${base}/readers/adopt`, {
         ...opts,
         body: { providerId: "stripe", providerRef: ref, name: "Counter" },
       });
       expect(adopted.status).toBe(201);
-      expect(((await adopted.json()) as { id: string }).id).not.toBe(id);
-      expect(await readerRow(id)).toEqual(row);
+      expect(((await adopted.json()) as { id: string }).id).toBe(id);
+      expect(await readerRow(id)).toEqual({
+        ...row,
+        active: true,
+        deletedAt: null,
+        disabledAt: null,
+      });
       expect(row.unpairedAt).toBeNull();
       expect(spies.removed).toEqual([]);
     });
