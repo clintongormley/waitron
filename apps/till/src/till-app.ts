@@ -14805,8 +14805,12 @@ export class TillApp extends LitElement {
         )
           this.errorKey = read === "read" ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
       } else {
-        this.errorKey = "adjust.unconfirmed";
         await this.#rereadAmounts(open.billId, open.visit);
+        if (
+          this.#cancellationCurrent(open) &&
+          (this.errorKey === undefined || this.errorKey === "table.reread_failed")
+        )
+          this.errorKey = "adjust.unconfirmed";
       }
     } else {
       const field = refusalField(code, "cancel", open.unitPrecision === 0);

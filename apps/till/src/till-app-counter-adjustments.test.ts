@@ -2139,6 +2139,28 @@ describe("till-app: comping a stored counter order", () => {
     expect(open()).toBeNull();
   });
 
+  it("rereads the Counter bill after an invoice refusal while keeping its cancellation refusal", async () => {
+    const consent = counterCancellationRead();
+    const el = await retrieved({
+      getCancellation: vi.fn().mockResolvedValue(consent),
+      cancelItem: vi.fn().mockRejectedValue({ code: "product.unavailable", status: 409 }),
+    });
+    await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+    const dialog = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
+    emit(dialog, "cancel-item-choice", {
+      lineId: "l-1",
+      quantity: "2",
+      outcome: "remove_charge",
+      consent,
+    });
+    await flush(el, 8);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(counter(el).store.revision).toBe(5);
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(
+      codeMessage("product.unavailable"),
+    );
+  });
+
   it("carries the party revision when a table bill is cancelled from Counter", async () => {
     const expectedEdit = { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null };
     const consent = counterCancellationRead(9);
