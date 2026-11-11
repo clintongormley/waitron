@@ -1493,7 +1493,7 @@ describe("ordering extras and options — parent + child lines", () => {
     expect(child.quantity).toBe(6000);
   });
 
-  /** The six frozen strings one answer to "Tamaño" carries, under the venue's default content
+  /** The six frozen strings one answer to the size option carries, under the venue's default content
    *  language. Every name differs, so an assertion cannot pass while the wrong one was copied. */
   const largeSnapshot = (defaultLanguage: string) => ({
     listName: { [defaultLanguage]: "Size staff" },
