@@ -3,6 +3,7 @@ import { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import {
+  balanceOf,
   emit,
   flush,
   invoiceOf,
@@ -131,3 +132,78 @@ it("clears another sale's print status before opening an orderless correction", 
   expect(ticket.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   expect(api.getReceiptPrintStatus).toHaveBeenCalledOnce();
 });
+
+it.each([
+  ["refused retry", { code: "working_order.not_open", status: 409 }],
+  ["lost reply", new TypeError("Failed to fetch")],
+])("recovers the settled line edit invoice after a %s", async (_reason, failure) => {
+  const api = stubApi({
+    updateOrderLine: vi.fn().mockRejectedValue(failure),
+    getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
+    getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  const order = await openTable(el);
+  vi.mocked(api.getBillBalance).mockResolvedValue(
+    balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
+  );
+  emit(order, "change-line", {
+    lineNo: 1,
+    lineName: "Dish",
+    patch: { quantity: "1" },
+    revision: 0,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
+  );
+  expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+  expect(el.result?.invoiceNumber).toBe("F-0007");
+});
+
+it.each(["party.out_of_date", "bill.paid"])(
+  "recovers the source invoice after moving dishes is refused with %s",
+  async (code) => {
+    const api = stubApi({
+      moveDishes: vi.fn().mockRejectedValue({ code, status: 409 }),
+      getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    vi.mocked(api.getBillBalance).mockResolvedValue(
+      balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
+    );
+    emit(order, "move-dishes", { lineIds: ["line-1"], toBillId: null });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
+    );
+    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+    expect(el.result?.invoiceNumber).toBe("F-0007");
+  },
+);
+
+it.each(["open", "invoice read fails"])(
+  "keeps line-edit refusal recovery when the bill is %s",
+  async (state) => {
+    const api = stubApi({
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "working_order.not_open", status: 409 }),
+      getFiledTicket: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    const order = await openTable(el);
+    if (state !== "open")
+      vi.mocked(api.getBillBalance).mockResolvedValue(
+        balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
+      );
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Dish",
+      patch: { quantity: "1" },
+      revision: 0,
+    });
+    await vi.waitFor(() => expect(el.errorKey).toBeDefined());
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+    if (state === "open") expect(api.getFiledTicket).not.toHaveBeenCalled();
+    else expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+  },
+);

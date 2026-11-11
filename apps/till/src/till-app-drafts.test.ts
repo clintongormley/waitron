@@ -1,3 +1,4 @@
+import { balanceOf, invoiceOf } from "../test/bill-pay-app.js";
 import {
   current,
   currentGroup,
@@ -11391,4 +11392,28 @@ describe("native app phone order view with mixed dish families", () => {
           }
         });
       }
+});
+
+it("recovers the invoice after a draft save is refused because its bill is paid", async () => {
+  const previousLocale = currentLocale();
+  try {
+    const { el } = await mountApp({
+      saveDraft: vi.fn().mockRejectedValue({ code: "bill.paid", status: 409 }),
+      getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    await openTable(el);
+    api.getBillBalance.mockResolvedValue(
+      balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
+    );
+    press(el, "Beer");
+    await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalled());
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
+    );
+    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+    expect(el.result?.invoiceNumber).toBe("F-0007");
+  } finally {
+    setLocale(previousLocale);
+  }
 });

@@ -167,6 +167,7 @@ export interface DraftSyncOptions {
   /** The server's draft has replaced what the store held. */
   onReplaced?: () => void;
   onSaved?: (snapshot: BillDraftSnapshot) => void;
+  onSaveFailed?: (error: unknown) => void;
   /** How long one read or save may stay out before it is cut off. */
   requestLimitMs: number;
   candidates?: Map<string, RetainedDraftCandidate>;
@@ -969,7 +970,11 @@ export class DraftSync {
       );
     } catch (error) {
       if (this.#ended) return "failed";
-      if (!this.#invalidateSave(expectedEdit)) return await this.#refused(error);
+      if (!this.#invalidateSave(expectedEdit)) {
+        const outcome = await this.#refused(error);
+        this.#options.onSaveFailed?.(error);
+        return outcome;
+      }
       const refusal = asRefusal(error);
       return refusal?.refused === SESSION_PERSON_REFUSAL ? refusal : "failed";
     } finally {

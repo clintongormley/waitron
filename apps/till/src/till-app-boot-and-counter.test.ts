@@ -3437,6 +3437,37 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
   });
 
+  it("recovers a held save's invoice after its reply was lost and the retry is refused", async () => {
+    const { el } = await mountApp({
+      updateWorkingOrder: vi
+        .fn()
+        .mockRejectedValue({ code: "working_order.not_open", status: 409 }),
+      getBillBalance: vi.fn().mockResolvedValue({
+        status: "settled",
+        outstanding: "0.00",
+        received: "3.00",
+        total: "3.00",
+        reserved: "0.00",
+        tips: "0.00",
+        payments: [],
+        paidLines: [],
+      }),
+      getFiledTicket: vi.fn().mockResolvedValue(saleResult),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.markPersisted();
+    c.store.setLineQuantity(0, "2");
+    const billId = c.store.id;
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
+    );
+    expect(api.getFiledTicket).toHaveBeenCalledWith(billId);
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(el.result?.invoiceNumber).toBe("F-0001");
+  });
+
   it.each(["en-GB", "es-ES"])(
     "a retrieved order's save refused for too many portions at once says so when parked or paid (%s)",
     async (locale) => {

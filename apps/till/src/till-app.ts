@@ -7744,6 +7744,7 @@ export class TillApp extends LitElement {
         await this.#reloadChangedOrder(id);
         return false;
       }
+      if (await this.#recoverSettlingEdit(id, error, "counter", () => !movedOn())) return false;
       if (code !== "working_order.not_open") throw error;
       return true;
     }
@@ -12043,6 +12044,14 @@ export class TillApp extends LitElement {
         }
         this.requestUpdate();
       },
+      onSaveFailed: (error) => {
+        void this.#recoverSettlingEdit(
+          billId,
+          error,
+          "table",
+          () => sync === this.#draftSync && this.activeTabId === billId,
+        );
+      },
       onReplaced: () => {
         if (sync !== this.#draftSync) return;
         this.#draftRefreshDue = true;
@@ -15371,6 +15380,39 @@ export class TillApp extends LitElement {
     this.#closeApprovers();
   }
 
+  async #recoverSettlingEdit(
+    billId: string,
+    error: unknown,
+    surface: "counter" | "table",
+    current: () => boolean,
+  ): Promise<boolean> {
+    const code = (error as { code?: string } | undefined)?.code;
+    if (
+      !isNetworkFailure(error) &&
+      code !== "working_order.not_open" &&
+      code !== "bill.paid" &&
+      code !== "party.out_of_date"
+    )
+      return false;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const still = () =>
+      this.isConnected && this.api === api && this.#operatorSession === session && current();
+    if (!still()) return false;
+    try {
+      const balance = await api.getBillBalance(billId);
+      if (!still() || balance.status !== "settled") return false;
+      const invoice = await api.getFiledTicket(billId);
+      if (!still()) return false;
+      this.result = invoice;
+      this.errorKey = { code: "bill.paid" };
+      this.#showTicket(billId, true, { surface, cashChange: null });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async #onChangeLine(event: Event): Promise<void> {
     const change = (event as CustomEvent<ChangeLineDetail>).detail;
     const { lineNo, lineName, patch, revision } = change;
@@ -15437,6 +15479,16 @@ export class TillApp extends LitElement {
       return;
     }
     const code = (outcome.error as { code?: string } | undefined)?.code;
+    if (
+      !left() &&
+      (await this.#recoverSettlingEdit(
+        orderId,
+        outcome.error,
+        "table",
+        () => identity() && !left(),
+      ))
+    )
+      return;
     if (left()) {
       const table = this.tables.find((each) => each.id === tableId);
       const tableLabel = table === undefined ? undefined : shownUnder(table);
@@ -17265,6 +17317,16 @@ export class TillApp extends LitElement {
       }
     } catch (error) {
       if (!this.#billCompositionCurrent(asked)) return;
+      if (
+        await this.#recoverSettlingEdit(
+          asked.billId,
+          error,
+          "table",
+          () =>
+            this.#billCompositionCurrent(asked) && !this.#hasLeftOrder(asked.billId, asked.visit),
+        )
+      )
+        return;
       const code = (error as { code?: string } | undefined)?.code;
       if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
       else if (code === "tab.line_not_found" || code === "tab.not_open") {
