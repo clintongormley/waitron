@@ -119,7 +119,9 @@ it("frames a page from another origin, which it cannot reach into, without an er
   try {
     const el = await mount(released);
     const frame = frames(el)[0]!;
-    const loaded = new Promise((resolve) => frame.addEventListener("load", resolve, { once: true }));
+    const loaded = new Promise((resolve) =>
+      frame.addEventListener("load", resolve, { once: true }),
+    );
     frame.src = "data:text/html,<p>Elsewhere</p>";
     await loaded;
     expect(frame.contentDocument).toBeNull();

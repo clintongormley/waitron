@@ -53,6 +53,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     }),
     getMe: vi.fn().mockResolvedValue({ ...meResponse }),
     getVenueTheme: vi.fn().mockResolvedValue(FIXTURE_ANSWER),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getDiskStop: async () => ({ stopped: false, deleted: null }),

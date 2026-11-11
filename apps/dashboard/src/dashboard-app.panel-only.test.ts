@@ -88,6 +88,7 @@ function stubApi(modules: string[]): DashboardApi {
       .fn()
       .mockResolvedValue({ defaultProductVatClass: "reduced", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),

@@ -11,23 +11,30 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-const answers: Record<string, LegalAbout> = {
+const answers: Record<string, LegalAbout | null> = {
   release: { release: { version: "1.2.3", releasedOn: "2026-10-22" }, build: "b" },
   "no release": { release: null, build: "abc123" },
+  "read failed": null,
 };
 
-it.each(
-  (["light", "dark"] as const).flatMap((theme) =>
-    Object.keys(answers).map((answer) => [theme, answer] as const),
+const cases = (["light", "dark"] as const).flatMap((theme) =>
+  ["en-GB", "es"].flatMap((locale) =>
+    Object.keys(answers).map((answer) => ({ theme, locale, answer })),
   ),
-)("the open About window has no axe violations (%s, %s)", async (theme, answer) => {
-  const { el } = await mountWidget<AboutDialog>(
-    "dashboard-about-dialog",
-    { open: true, about: answers[answer]! },
-    theme,
-  );
-  const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal")!;
-  await modal.updateComplete;
-  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-  await expectNoA11yViolations(el);
-});
+);
+
+it.each(cases)(
+  "the open About window has no axe violations: $answer, $locale, $theme",
+  async ({ theme, locale, answer }) => {
+    setLocale(locale);
+    const { el } = await mountWidget<AboutDialog>(
+      "dashboard-about-dialog",
+      { open: true, about: answers[answer] ?? null },
+      theme,
+    );
+    const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    await expectNoA11yViolations(el);
+  },
+);

@@ -201,6 +201,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue([]),
     getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
@@ -10038,5 +10039,25 @@ describe("dashboard-app: About Waitron", () => {
     await flush(el);
     expect(aboutDialog(el).open).toBe(true);
     expect(aboutDialog(el).about).toBeNull();
+  });
+
+  it("opening the window after a failed read asks /legal/about again", async () => {
+    const api = signedOut({
+      getLegalAbout: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValueOnce(released),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(api.getLegalAbout).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(foot(el)!.textContent!.trim()).toBe(t("about.title"));
+    foot(el)!.click();
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(true);
+    await vi.waitFor(() => expect(aboutDialog(el).about).toEqual(released));
+    expect(api.getLegalAbout).toHaveBeenCalledTimes(2);
+    expect(foot(el)!.textContent!.trim()).toBe(fill("about.foot", { version: "1.2.3" }));
   });
 });

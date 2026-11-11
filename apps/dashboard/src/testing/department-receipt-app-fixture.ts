@@ -100,6 +100,7 @@ export async function mountReceiptApp(
         venueName: "Casa SL",
       },
       "/management-api/google/config": { configured: false },
+      "/legal/about": { release: null, build: "test" },
       "/api/content-languages": { defaultLanguage: "es", languages: ["es", "ca"] },
       "/management-api/reports/overdue-orders": { orders: [] },
       "/management-api/reports/overview": {

@@ -128,6 +128,7 @@ async function mount(
         }),
         getGoogleConfig: async () => ({ configured: false }),
         getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+        getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
         getStaffRoster: async () => [{ personId: "p1", displayName: "Ada" }],
         listMyShifts: async () => [],

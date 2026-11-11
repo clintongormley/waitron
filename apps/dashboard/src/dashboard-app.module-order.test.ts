@@ -54,6 +54,7 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),

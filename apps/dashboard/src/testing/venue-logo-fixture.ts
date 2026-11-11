@@ -44,6 +44,7 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
         })
       : vi.fn().mockRejectedValue({ code: "management_session.required" }),
     getVenueTheme: vi.fn().mockResolvedValue(FIXTURE_ANSWER),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getDiskStop: async () => ({ stopped: false, deleted: null }),
