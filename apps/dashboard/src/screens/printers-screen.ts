@@ -1187,6 +1187,7 @@ export class PrintersScreen extends LitElement {
 
   #stopAgentModal(): void {
     if (!this.addingAgent) return;
+    this.errorKey = null;
     this.addingAgent = false;
     this.#agentEpoch++;
     this.#agentReadInFlight = false;
@@ -1290,7 +1291,7 @@ export class PrintersScreen extends LitElement {
     this.submitting = true;
     await this.#mutate(async () => {
       await this.api.revokeAgent(id);
-      await this.#closeModal("delete-agent-modal");
+      this.deletingAgent = null;
     });
     this.submitting = false;
     if (this.deletingAgent === null) {
@@ -2388,37 +2389,26 @@ export class PrintersScreen extends LitElement {
   #renderDeleteAgent(): TemplateResult | typeof nothing {
     if (this.deletingAgent === null) return nothing;
     const agent = this.deletingAgent;
-    return html`<wt-modal
-      size="compact"
+    return html`<wt-delete-dialog
       data-test="delete-agent-modal"
-      heading=${fill("printers.delete_agent_heading", { name: agent.name })}
       .open=${true}
-      .dismissible=${!this.submitting}
+      .impact=${{ target: { id: agent.id, name: agent.name }, refusals: [], ends: [], removes: [] }}
+      .submitting=${this.submitting}
+      .readError=${this.refreshErrorKey ? codeMessage(this.refreshErrorKey) : ""}
+      .actionError=${this.errorKey ? codeMessage(this.errorKey) : ""}
+      .copy=${{ ...printerDeleteCopy(), heading: fill("printers.delete_agent_heading", { name: agent.name }), irreversible: t("printers.delete_agent_hint") }}
       .opener=${this.#agentDeleteOpener}
+      @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
+        event.stopPropagation();
+        void this.#revokeAgent(event.detail.id);
+      }}
+      @wt-delete-retry=${() => void this.#load()}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.deletingAgent = null;
+        this.errorKey = null;
       }}
-    >
-      ${this.#renderRefreshError()}
-      <p>${t("printers.delete_agent_hint")}</p>
-      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.errorKey))}>
-        <wt-button
-          slot="cancel"
-          data-test="cancel-delete-agent"
-          ?disabled=${this.submitting}
-          @click=${() => void this.#closeModal("delete-agent-modal")}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          variant="danger"
-          data-test="confirm-delete-agent"
-          ?disabled=${this.submitting}
-          @click=${() => void this.#revokeAgent(agent.id)}
-          >${t("action.delete")}</wt-button
-        >
-      </wt-form-actions>
-    </wt-modal>`;
+    ></wt-delete-dialog>`;
   }
 
   #renderEditAgent(): TemplateResult | typeof nothing {

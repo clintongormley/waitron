@@ -753,7 +753,6 @@ export const en = {
   "printers.pending_jobs": "Pending jobs",
   "printers.last_print": "Last print time",
   "printers.status_disabled": "Disabled",
-  "printers.filter_all": "All printers",
   "printers.enable": "Enable",
   "printers.add_again_hint": "Add this printer again to use it.",
   "printers.used_by": "Used by",
@@ -1632,7 +1631,6 @@ export const en = {
   "devices.join_pick_station": "Choose a station",
   "devices.join_match_prompt": "Tap the number showing on the device",
   "devices.join_choice_label": "Number {number}",
-  "printers.disable": "Disable",
   "devices.delete_heading": "Delete device?",
   "devices.delete_refusals": "Why it can't be deleted",
   "devices.delete_ends": "Work that ends",
@@ -1690,7 +1688,7 @@ export const en = {
     "Add only an agent you still trust. Adding it again may print queued jobs.",
   "printers.delete_agent_heading": "Delete {name}?",
   "printers.delete_agent_hint":
-    "This agent cannot take new print jobs. Its printers stay listed. Adding this same agent again may print queued jobs.",
+    "Printers reached only through this agent cannot print until you add it again. They stay listed. Adding this same agent again may print queued jobs.",
   "printers.agent_setup_hint":
     "Use a separate print agent to reach printers connected to another computer.",
   "printers.title": "Printer configuration",
@@ -4596,7 +4594,6 @@ export const es: Record<StringKey, string> = {
   "printers.pending_jobs": "Trabajos pendientes",
   "printers.last_print": "Última impresión",
   "printers.status_disabled": "Deshabilitada",
-  "printers.filter_all": "Todas las impresoras",
   "printers.enable": "Habilitar",
   "printers.add_again_hint": "Vuelve a añadir esta impresora para usarla.",
   "printers.used_by": "Se usa en",
@@ -5492,7 +5489,6 @@ export const es: Record<StringKey, string> = {
   "devices.join_pick_station": "Elige una estación",
   "devices.join_match_prompt": "Pulsa el número que aparece en el dispositivo",
   "devices.join_choice_label": "Número {number}",
-  "printers.disable": "Deshabilitar",
   "devices.delete_heading": "¿Eliminar el dispositivo?",
   "devices.delete_refusals": "Por qué no se puede eliminar",
   "devices.delete_ends": "Trabajo que finaliza",
@@ -5550,7 +5546,7 @@ export const es: Record<StringKey, string> = {
     "Añade solo un agente en el que sigas confiando. Al añadirlo de nuevo pueden imprimirse trabajos pendientes.",
   "printers.delete_agent_heading": "¿Eliminar {name}?",
   "printers.delete_agent_hint":
-    "Este agente no puede recibir nuevos trabajos de impresión. Sus impresoras siguen en la lista. Al añadir este mismo agente de nuevo pueden imprimirse trabajos pendientes.",
+    "Las impresoras accesibles solo a través de este agente no pueden imprimir hasta que lo añadas de nuevo. Siguen en la lista. Al añadir este mismo agente de nuevo pueden imprimirse trabajos pendientes.",
   "printers.agent_setup_hint":
     "Usa otro agente de impresión para acceder a las impresoras conectadas a otro ordenador.",
   "printers.title": "Configuración de impresoras",

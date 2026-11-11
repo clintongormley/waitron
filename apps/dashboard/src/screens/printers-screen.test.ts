@@ -1985,9 +1985,11 @@ describe("printers-screen", () => {
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
     expect(api.revokeAgent).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=delete-agent-modal]")!.textContent).toContain("pendientes");
-    expect(q(el, "[data-test=cancel-delete-agent]")).not.toBeNull();
-    q(el, "[data-test=confirm-delete-agent]")!.click();
+    expect(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!.textContent).toContain(
+      "pendientes",
+    );
+    expect(q(el, "[data-test=delete-cancel]")).not.toBeNull();
+    q(el, "[data-test=delete-confirm]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=delete-agent-modal]")).toBeNull());
     expect(api.revokeAgent).toHaveBeenCalledExactlyOnceWith("a1");
     await vi.waitFor(() => expect(q(el, "[data-test=agent-row-a1]")).toBeNull());
@@ -2019,8 +2021,10 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=revoke-agent-a1]")).toBe(del);
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=delete-agent-modal]")!.getAttribute("heading")).toBe(title);
-    await clickAndAwaitClose(el, "delete-agent-modal", "cancel-delete-agent");
+    expect(deepQuery(q(el, "[data-test=delete-agent-modal]")!.shadowRoot!, "h2")!.textContent).toBe(
+      title,
+    );
+    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
     expect(text(el, "[data-test=allow-agent-a2]")).toBe(add);
@@ -2032,7 +2036,7 @@ describe("printers-screen", () => {
     await flush(el);
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
-    await clickAndAwaitClose(el, "delete-agent-modal", "cancel-delete-agent");
+    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
     expect(api.revokeAgent).not.toHaveBeenCalled();
     expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
   });
@@ -2044,16 +2048,20 @@ describe("printers-screen", () => {
 
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
-    q(el, "[data-test=confirm-delete-agent]")!.click();
+    q(el, "[data-test=delete-confirm]")!.click();
     await flush(el);
 
     expect(q(el, "[data-test=delete-agent-modal]")).not.toBeNull();
     expect(q(el, "[data-test=agent-row-a1]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
     const message = await formMessageOf(
-      q(el, "[data-test=delete-agent-modal] wt-form-actions")! as WtFormActions,
+      q(el, "[data-test=delete-agent-modal]")!.shadowRoot!.querySelector<WtFormActions>(
+        "wt-form-actions",
+      )!,
     );
     expect(message?.textContent).toContain(codeMessage("agent.not_found", "es-ES"));
+    await clickAndAwaitClose(el, "delete-agent-modal", "delete-cancel");
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
   });
 
   it("marks a self-enrolled agent (node id present) and not a manually-enrolled one", async () => {
@@ -2095,18 +2103,34 @@ describe("printers-screen", () => {
     expect(getComputedStyle(hostCell).fontSize).not.toBe(small);
   });
 
-  it("Adds this box's retained agent from Add print agent", async () => {
-    const api = stubApi();
+  it("Adds this box's retained agent and closes before its list reload finishes", async () => {
+    let finishReload!: (rows: PrintAgentRow[]) => void;
+    const reload = new Promise<PrintAgentRow[]>((resolve) => {
+      finishReload = resolve;
+    });
+    const api = stubApi({
+      listAgents: vi.fn().mockResolvedValueOnce(agents).mockReturnValueOnce(reload),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
     expect(text(el, "[data-test=retained-agent-a2]")).toContain(t("printers.provenance_self"));
     expect(q(el, "[data-test=allow-agent-a1]")).toBeNull();
-    q(el, "[data-test=allow-agent-a2]")!.click();
-    await flush(el);
-    expect(api.allowAgent).toHaveBeenCalledExactlyOnceWith("a2");
-    expect(api.listAgents).toHaveBeenCalledTimes(2);
+    try {
+      let didClose = false;
+      const closed = dialogClosed(q(el, "[data-test=new-agent-modal]")!).then(() => {
+        didClose = true;
+      });
+      q(el, "[data-test=allow-agent-a2]")!.click();
+      await vi.waitFor(() => expect(api.listAgents).toHaveBeenCalledTimes(2));
+      expect(didClose).toBe(true);
+      await closed;
+      expect(q(el, "[data-test=new-agent-modal]")).toBeNull();
+      expect(api.allowAgent).toHaveBeenCalledExactlyOnceWith("a2");
+    } finally {
+      finishReload(agents);
+    }
   });
 
   it("shows an error and keeps the list when an agent's Add is rejected", async () => {
@@ -2119,8 +2143,13 @@ describe("printers-screen", () => {
     q(el, "[data-test=allow-agent-a2]")!.click();
     await flush(el);
     expect(q(el, "[data-test=retained-agent-a2]")).not.toBeNull();
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
+    const message = await formMessageOf(
+      q(el, "[data-test=new-agent-modal] wt-form-actions")! as WtFormActions,
+    );
+    expect(message?.textContent).toContain(codeMessage("agent.not_found", "es-ES"));
+    await clickAndAwaitClose(el, "new-agent-modal", "cancel-new-agent");
+    expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
   });
 
   // ── Printers: discovered-device registration ───────────────────────────────────────────────────────

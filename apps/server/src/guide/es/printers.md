@@ -48,7 +48,7 @@ Después de importar una configuración, busca sus impresoras A4 con **Añadir i
 
 ## Cola de impresión {#print-queue}
 
-Abre **Cola de impresión** para ver por qué espera un trabajo. Si ningún agente ve una impresora
+Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o eliminar un ordenador que imprime, consulta [Agentes de impresión](printers.md#print-agents). Si ningún agente ve una impresora
 USB o Bluetooth, comprueba la conexión de la impresora y su agente de impresión. El mensaje de
 conexión puede aparecer junto al último error de impresión comunicado.
 
@@ -58,8 +58,8 @@ el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
 ## Agentes de impresión {#print-agents}
 
-En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente. El agente deja de recibir trabajos de impresión; sus impresoras siguen en la lista.
+En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente. Las impresoras accesibles solo a través de este agente no pueden imprimir hasta que lo añadas de nuevo; siguen en la lista.
 
-Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente de este servidor. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
+Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente marcado como **En esta caja**. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
 
 Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Tras vincular un agente nuevo, busca y añade de nuevo sus impresoras A4.

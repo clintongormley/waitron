@@ -55,7 +55,7 @@ reported, check whether the drawer opened before opening it again.
 
 ## Print agents {#print-agents}
 
-In **Printers**, open **Print Agents** and choose **Delete** in the agent's menu. The agent no longer takes print jobs; its printers stay listed.
+In **Printers**, open **Print Agents** and choose **Delete** in the agent's menu. Printers reached only through this agent cannot print until you add it again; they stay listed.
 
 To use an agent you still trust, choose **Add an agent** and **Add** beside its saved name, including the agent on this box. Jobs still queued for it may print when it returns.
 
