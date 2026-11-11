@@ -54,7 +54,7 @@ async function change(value: Partial<import("./service-settings-fields.js").Serv
   );
   await el.updateComplete;
 }
-it("shows only inherited placeholders, clears to null and saves all four settings once", async () => {
+it("shows only inherited placeholders, clears to null and saves the service settings once", async () => {
   await mount("z3");
   const writes: unknown[] = [];
   el.api = settingsApi((async (path, method, body) => {
@@ -75,18 +75,16 @@ it("shows only inherited placeholders, clears to null and saves all four setting
   });
   await fields().updateComplete;
   const combos = [...fields().shadowRoot!.querySelectorAll("wt-combobox")];
-  expect(combos.map((c) => c.value)).toEqual(["", "", "", ""]);
+  expect(combos.map((c) => c.value)).toEqual(["", "", ""]);
   expect(combos.map((c) => c.placeholder)).toEqual([
     "Table service",
     "Paid before preparation",
     "Don't print",
-    "Always",
   ]);
   expect(combos.map((c) => c.options[0]!.label)).toEqual([
     "Same as department (Table service)",
     "Same as department (Paid before preparation)",
     "Same as department (Don't print)",
-    "Same as department (Always)",
   ]);
   expect(button("save-editor").disabled).toBe(false);
   expect(button("save-editor").variant).toBe("primary");
@@ -109,7 +107,7 @@ it("shows only inherited placeholders, clears to null and saves all four setting
   button("save-editor").click();
   expect(writes).toHaveLength(1);
 });
-it("renders inherited On request and Print from a refreshed department", async () => {
+it("renders inherited Print from a refreshed department", async () => {
   await mount();
   el.model!.salePolicies.departments[0]!.receiptPrintMode = "on_request";
   el.model!.salePolicies.departments[0]!.collectionNumber = "numbered";
@@ -121,11 +119,7 @@ it("renders inherited On request and Print from a refreshed department", async (
       "[name=collectionNumber]",
     )!.placeholder,
   ).toBe("Print");
-  expect(
-    fields().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-      "[name=receiptPrintMode]",
-    )!.placeholder,
-  ).toBe("On request");
+  expect(fields().shadowRoot!.querySelector("[name=receiptPrintMode]")).toBeNull();
 });
 it("a deleted zone is absent and has no Enable action", async () => {
   await mount("z1");
@@ -234,7 +228,6 @@ it.each([
   ["orderStart", "counter", "paidWhen", "ticket_then_pay"],
   ["paidWhen", "ticket_then_pay", "collectionNumber", "numbered"],
   ["collectionNumber", "numbered", "paidWhen", "ticket_then_pay"],
-  ["receiptPrintMode", "auto", "paidWhen", "ticket_then_pay"],
 ] as const)(
   "a refused %s survives a different service edit until its own value changes",
   async (refused, corrected, other, value) => {
@@ -275,7 +268,6 @@ it.each([
   ["orderStart", "table", "counter"],
   ["paidWhen", "prepay", "ticket_then_pay"],
   ["collectionNumber", "none", "numbered"],
-  ["receiptPrintMode", "auto", "on_request"],
 ] as const)(
   "native %s edits during Save remain dirty against the submitted zone snapshot",
   async (kind, submitted, newer) => {
@@ -414,7 +406,6 @@ it.each([
 it.each([
   ["paidWhen", "ticket_then_pay"],
   ["collectionNumber", "numbered"],
-  ["receiptPrintMode", "on_request"],
 ] as const)(
   "a refused zone %s clears back to inheritance without another write",
   async (name, changed) => {

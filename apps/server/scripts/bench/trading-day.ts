@@ -321,6 +321,7 @@ export async function tradeDay(
         .where(eq(workingOrders.id, bill.tabId!));
       if (order?.status !== "settled")
         throw new Error(`bench: bill ${bill.tabId} is ${order?.status} after ${plan.route}`);
+      await call(cookie, "POST", `/api/sales/${bill.tabId!}/receipt`, {});
       routes[plan.route] += 1;
     } else {
       const expectedEdits = await withTransaction(venue.db, async (tx) => {

@@ -77,8 +77,9 @@ it("a live policy and receipt read preserves the host-supplied editor's authored
     .toBe(2);
   await expect.poll(() => receiptField(el, "operationDescription").value).toBe("New elsewhere");
   expect(receiptField(el, "email").value).toBe("draft@example.com");
+  expect(receiptRoot(el).querySelector("[name=receiptPrintMode]")).toBeNull();
   expect(
-    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=receiptPrintMode]")!
+    receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>("[name=printTradingName]")!
       .checked,
   ).toBe(false);
   expect(receiptSave(el).disabled).toBe(false);

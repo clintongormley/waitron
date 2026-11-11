@@ -17442,7 +17442,8 @@ export class TillApp extends LitElement {
   }
 
   async #readAfterFinishRefused(visit: number): Promise<void> {
-    if (this.activeTabId !== undefined) await this.#rereadAmounts(this.activeTabId, visit);
+    if (this.settlementDocument?.surface === "table" && this.activeTabId !== undefined)
+      await this.#rereadAmounts(this.activeTabId, visit);
     else await this.#loadPartyBills();
   }
 
@@ -21541,7 +21542,7 @@ export class TillApp extends LitElement {
                       (event.detail.role === "invoice" && this.result?.invoiceType === "F1")) &&
                     this.capabilities.includes("print-receipt") &&
                     this.ticketWorkingOrderId !== undefined &&
-                    this.drill?.kind === "ticket"
+                    (this.settlementDocument !== null || this.drill?.kind === "ticket")
                   )
                     void this.#chooseInvoicePrinter(event.detail);
                   else void this.#onEquipmentChange(event);
@@ -21608,6 +21609,7 @@ export class TillApp extends LitElement {
           this.settlementDocument === null
             ? nothing
             : html`<till-settlement-document-dialog
+                .simulated=${this.onboardingIntent === "prepare"}
                 .result=${this.result!}
                 .cashChange=${this.settlementDocument.cashChange}
                 .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}

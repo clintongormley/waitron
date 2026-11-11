@@ -127,7 +127,6 @@ describe.each(["light", "dark"] as const)("department phone bounds (%s)", (theme
           "orderStart",
           "paidWhen",
           "collectionNumber",
-          "receiptPrintMode",
         ]);
         for (const field of controls) inside(field, bounds);
         for (const action of el.shadowRoot!.querySelector("wt-form-actions")!.children)

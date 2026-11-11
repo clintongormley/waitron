@@ -46,6 +46,7 @@ import {
   partyRevisionOf,
 } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
+import { printSaleReceipt } from "./till-sale.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -2008,6 +2009,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
         ["cash", 2000],
       ].sort(),
     );
+    await printSaleReceipt({ db: venue.db, backend: venue.backend }, venue.cfg, billId, false);
     const tickets = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
       .map((job) => printedLines(job.payload).map((line) => line.trim().replace(/\s+/g, " ")))

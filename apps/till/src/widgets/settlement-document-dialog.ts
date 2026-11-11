@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { TillTicketView } from "../screens/till-ticket-view.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { formatMoney } from "@waitron/shared";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { trackDialog } from "./track-dialog.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -35,6 +36,13 @@ export class TillSettlementDocumentDialog extends TillTicketView {
         this.#close();
       }}
     >
+      ${
+        this.simulated
+          ? html`<p class="simulation-notice" data-test="simulation-notice">
+              ${receiptLabelsFor(this.result.locale ?? this.invoiceLocale).practice.replace(" - ", " — ")}
+            </p>`
+          : nothing
+      }
       ${
         this.cashChange !== null && this.cashChange !== "0.00"
           ? html`<p data-settlement-change>

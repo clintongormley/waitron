@@ -5388,7 +5388,7 @@ describe("till-app: paying a bill by its state", () => {
       { billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null },
     );
     expect(api.recordSale).not.toHaveBeenCalled();
-    emit(el.shadowRoot!.querySelector("till-ticket-view")!, "new-sale");
+    emit(el.shadowRoot!.querySelector("till-settlement-document-dialog")!, "settlement-close");
     await flush(el);
     emit(shell(el), "screen-select", { screen: "floor" });
     await flush(el);
@@ -5514,7 +5514,7 @@ describe("till-app: paying a bill by its state", () => {
     expect(api.collectOrder).toHaveBeenCalledOnce();
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { originalReceiptAvailable: boolean }>(
-        "till-ticket-view",
+        "till-settlement-document-dialog",
       )!.originalReceiptAvailable,
     ).toBe(offered);
   });

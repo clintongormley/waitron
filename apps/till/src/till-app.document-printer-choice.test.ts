@@ -36,7 +36,10 @@ const delivered: InvoiceDeliveryStatus = {
   history: [],
   actions: { print: null, retryOriginal: null, receiptInstead: null, email: null },
 };
-const ticket = (el: TillApp) => el.shadowRoot!.querySelector<TillTicketView>("till-ticket-view")!;
+const ticket = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTicketView>(
+    "till-ticket-view, till-settlement-document-dialog",
+  )!;
 const part = (el: TillApp, key: string) =>
   ticket(el).shadowRoot!.querySelector<HTMLElement>(`[data-test=${key}]`)!;
 const press = async (el: TillApp, key: string) => {
@@ -101,8 +104,8 @@ async function sold(invoiceType = "F1", overrides: Record<string, unknown> = {})
   const id = counter.store.id;
   emit(counter, "confirm-payment", { method: "cash", amount: "12.00" });
   await flush(el);
-  await press(el, "document-print-toggle");
-  if (invoiceType === "F1") await press(el, "document-receipt");
+  expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+  await press(el, "invoice-printer-toggle");
   return { el, api, id };
 }
 
@@ -188,7 +191,7 @@ it.each([false, true])(
         .mockResolvedValue({ ...invoiceOf("12.00"), invoiceType: "F1" }),
     });
     if (historical) {
-      emit(ticket(el), "new-sale");
+      emit(ticket(el), "settlement-close");
       await flush(el);
       emit(shell(el), "find-bill");
       await flush(el);
@@ -276,8 +279,10 @@ it("Back from a refused Receipt choice lets staff use the saved Invoice printer"
     );
   await flush(el);
   expect(part(el, "print-receipt").hasAttribute("disabled")).toBe(true);
-  await press(el, "document-back");
-  await press(el, "document-invoice");
+  await userEvent.click(
+    ticket(el).shadowRoot!.querySelector<HTMLElement>("[data-settlement-choice=invoice]")!,
+  );
+  await flush(el);
   expect(ticket(el).shadowRoot!.querySelector("wt-combobox")!.value).toBe("office");
   expect(part(el, "print-invoice").hasAttribute("disabled")).toBe(false);
 });

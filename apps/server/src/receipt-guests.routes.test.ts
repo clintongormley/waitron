@@ -186,6 +186,7 @@ async function venue(db: Database): Promise<Venue> {
         formFactor: "till",
         capabilities: [
           ...BASIC_ACTIONS,
+          "print-receipt",
           "open-cash-drawer",
           "take-cash",
           "integrated-card-payment",
@@ -319,6 +320,15 @@ describe("/api/sales keeps the guests its receipt prints", () => {
     const sale = await sell(v, { guestCount: 5 });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, sale.id)).toEqual([{ guests: 5 }]);
+    expect(
+      (
+        await v.app.request(`/api/sales/${sale.id}/receipt`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: v.till },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
     const [receipt] = await receipts(suite.db);
     expect(receipt).toContain("5 comensales · por persona");
     expect(receipt).toContain("2,40 €");
@@ -329,6 +339,15 @@ describe("/api/sales keeps the guests its receipt prints", () => {
     const sale = await sell(v, { guestCount: null });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, sale.id)).toEqual([{ guests: null }]);
+    expect(
+      (
+        await v.app.request(`/api/sales/${sale.id}/receipt`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: v.till },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
     const [receipt] = await receipts(suite.db);
     expect(receipt).not.toContain("comensal");
   });
@@ -405,6 +424,15 @@ describe("/api/sales on a party's bill tells a chosen no line from the default",
     const sale = await sell(v, { lines: [], guestCount: null }, { id: billId });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
+    expect(
+      (
+        await v.app.request(`/api/sales/${billId}/receipt`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: v.till },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
     const [receipt] = await receipts(suite.db);
     expect(receipt).not.toContain("comensal");
   });
@@ -553,6 +581,15 @@ describe("/api/pay keeps the guests its receipt prints", () => {
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await storedGuests(suite.db, pay.id)).toEqual([{ guests: 5 }]);
+    expect(
+      (
+        await v.app.request(`/api/sales/${pay.id}/receipt`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: v.till },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
     const [receipt] = await receipts(suite.db);
     expect(receipt).toContain("5 comensales · por persona");
     expect(receipt).toContain("2,40 €");
@@ -615,6 +652,15 @@ describe("/api/pay keeps the guests its receipt prints", () => {
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await paymentsOf(suite.db, id)).toHaveLength(1);
     expect(await storedGuests(suite.db, id)).toEqual([{ guests: 3 }]);
+    expect(
+      (
+        await v.app.request(`/api/sales/${id}/receipt`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: v.till },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
     const [receipt] = await receipts(suite.db);
     expect(receipt).toContain("3 comensales · por persona");
   });
@@ -779,6 +825,15 @@ describe("/payments keeps the guests of the payment that completes the bill", ()
     expect(last.status).toBe(200);
     expect(last.body.invoice).toBeDefined();
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 3 }]);
+    expect(
+      (
+        await v.app.request(`/api/sales/${billId}/receipt`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: v.till },
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
     const [receipt] = await receipts(suite.db);
     expect(receipt).toContain("3 comensales · por persona");
     expect(receipt).toContain("7,00 €");

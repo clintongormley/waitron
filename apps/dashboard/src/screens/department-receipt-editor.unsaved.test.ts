@@ -41,7 +41,7 @@ it("pending Save blocks a duplicate request", async () => {
   await editReceipt(el, "email", "sent@example.com");
   await clickReceiptSave(el);
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
-  for (const name of ["receiptPrintMode", "printTradingName"]) {
+  for (const name of ["printTradingName"]) {
     const toggle = receiptRoot(el).querySelector<HTMLElementTagNameMap["wt-switch"]>(
       `[name=${name}]`,
     )!;

@@ -370,7 +370,8 @@ const tableOrder = (el: TillApp) =>
   tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ??
   null;
 const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
-const ticket = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
+const ticket = (el: TillApp) =>
+  el.shadowRoot!.querySelector("till-ticket-view, till-settlement-document-dialog");
 
 async function logIn(el: TillApp): Promise<void> {
   await flush(el);

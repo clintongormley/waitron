@@ -725,7 +725,7 @@ describe("a pay refused because the menu changed", () => {
       [{ menuItemId: "offer-lemonade", menuVersionId: "v1", quantity: "1", makeAt: null }],
       [{ menuItemId: "offer-lemonade", menuVersionId: "v2", quantity: "1", makeAt: null }],
     ]);
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   });
 
   it("retries only once: a second refusal is shown in the menu-change words", async () => {
@@ -798,7 +798,7 @@ describe("the other counter requests refused because the menu changed", () => {
     await flush(el);
 
     expect(api.pay.mock.calls.map((call) => call[0].lines[0].menuVersionId)).toEqual(["v1", "v2"]);
-    expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
   });
 
   it("keeps the pay card waiting on the reader through the retry, and puts its choices back when the retry is refused", async () => {
