@@ -453,6 +453,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       }),
     ),
     getInvoiceDeliveries: vi.fn().mockResolvedValue(null),
+    getReceiptEmailDeliveries: vi.fn().mockResolvedValue(null),
     getRefundableTenders: vi.fn().mockResolvedValue([]),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" }),
@@ -5173,6 +5174,7 @@ describe("till-app", () => {
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
     expect(getReceiptPrintStatus).toHaveBeenCalledExactlyOnceWith(c.store.id);
+    expect(ticket(el)!.deliveriesReadFailed).toBe(false);
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
   });
 
