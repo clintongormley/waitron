@@ -123,7 +123,8 @@ waiter, and none of it for an Admin. Managers keep setting PINs directly, becaus
 no email. Requires `person.admin`. Self-service flows (your own email, password or passkeys) are
 unchanged.
 
-**Kept: the venue always has a usable Admin.** At least one active person holding Admin with a
+**Kept: the venue always has a usable Admin** (approved 2026-10-22; today's code counts active
+admins only, so the "usable dashboard sign-in" half is new code). At least one active person holding Admin with a
 usable dashboard sign-in method must remain after every change. That covers removing a role,
 suspending someone, resetting an account to pending, removing a sign-in method, deleting a role,
 and import. A change that would leave none is refused. PIN-only, pending and suspended people do
@@ -131,8 +132,8 @@ not count.
 
 **Links are checked when used, not cancelled by a role change** (7 November design §5, approved).
 This changes today's code, which cancels a person's outstanding links when they gain or lose Admin
-(`invalidatePersonAccountActions` and `revokePersonAccess` in `packages/identity/src/staff.ts`).
-Cancelling on an email or status change stays. When a link is redeemed, current roles and status
+(`invalidatePersonAccountActions` in `packages/identity/src/staff.ts`). Cancelling on an email or
+status change (`revokePersonAccess`) stays. When a link is redeemed, current roles and status
 decide, and for a link an administrator sent, so does Rule 2 against the sender's current
 permissions. That needs the sender recorded on the account-action row (an `issued_by` person id,
 null for self-service). Today's `management_account_actions` table has no such column.
