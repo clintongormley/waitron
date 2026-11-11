@@ -498,6 +498,10 @@ export const ALERT_WORDS: Readonly<
         en: "alert emails to managers",
         es: "los correos de aviso a los responsables",
       },
+      "box.name_tag": {
+        en: "updating the venue name on the disk",
+        es: "la actualización del nombre del local en el disco",
+      },
       "menu.activation": {
         en: "putting scheduled menus live",
         es: "la publicación de las cartas programadas",
