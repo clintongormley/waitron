@@ -118,8 +118,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Termina la restauración de la instantánea aprobada de Cloud en este servidor y comunícala antes de solicitar la reconexión.",
   },
   "cloud.replacement_state_invalid": {
-    en: "The saved Cloud reconnection request is damaged. This is a fault in Waitron; reconnection cannot continue.",
-    es: "La solicitud guardada de reconexión con Cloud está dañada. Es un fallo de Waitron; la reconexión no puede continuar.",
+    en: "The saved Cloud reconnection request on this box cannot be used, so reconnection cannot continue.",
+    es: "No se puede usar la solicitud guardada de reconexión con Cloud de este equipo, por lo que la reconexión no puede continuar.",
   },
   "cloud.replacement_refused": {
     en: "Cloud refused the replacement request. Check the approved recovery and old installation in Cloud, then check reconnection here.",

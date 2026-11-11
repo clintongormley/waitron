@@ -164,13 +164,13 @@ it("shows owner approval when registration import is still pending", async () =>
 it.each([
   [
     "en",
-    "The saved Cloud reconnection request is damaged. This is a fault in Waitron; reconnection cannot continue.",
+    "The saved Cloud reconnection request on this box cannot be used, so reconnection cannot continue.",
   ],
   [
     "es",
-    "La solicitud guardada de reconexión con Cloud está dañada. Es un fallo de Waitron; la reconexión no puede continuar.",
+    "No se puede usar la solicitud guardada de reconexión con Cloud de este equipo, por lo que la reconexión no puede continuar.",
   ],
-])("shows a saved reconnection fault in %s", async (locale, message) => {
+])("shows a saved reconnection refusal in %s", async (locale, message) => {
   const previous = currentLocale();
   onTestFinished(() => setLocale(previous));
   setLocale(locale);
