@@ -290,14 +290,12 @@ it("a bill change during a draft read queues a fresh read", async () => {
   expect(api.listDrafts).toHaveBeenCalledTimes(before + 2);
 });
 
-it("a change during a timer-started draft read queues a fresh read while connected", async () => {
+it("a change during a focus-started draft read queues a fresh read while connected", async () => {
   const stream = liveReadFixture();
   const { el } = await mountApp({ readLiveEvents: stream.read });
   await openTable(el);
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  el.api = { ...api } as unknown as import("./api/client.js").TillApi;
-  await vi.advanceTimersByTimeAsync(0);
-  await el.updateComplete;
+  stream.event("ready");
+  await flush(el);
   const answer = await api.listDrafts!.mock.results.at(-1)!.value;
   let release!: (value: typeof answer) => void;
   api.listDrafts!.mockImplementationOnce(
@@ -307,14 +305,13 @@ it("a change during a timer-started draft read queues a fresh read while connect
       }),
   );
   const before = api.listDrafts!.mock.calls.length;
-  await vi.advanceTimersByTimeAsync(15_000);
+  window.dispatchEvent(new Event("focus"));
+  await flush(el);
   expect(api.listDrafts).toHaveBeenCalledTimes(before + 1);
-  stream.event("ready");
-  await vi.advanceTimersByTimeAsync(0);
   stream.event("change", '[{"type":"working_orders"}]');
-  await vi.advanceTimersByTimeAsync(0);
+  await flush(el);
   expect(api.listDrafts).toHaveBeenCalledTimes(before + 1);
   release(answer);
-  await vi.advanceTimersByTimeAsync(0);
+  await flush(el);
   expect(api.listDrafts).toHaveBeenCalledTimes(before + 2);
 });

@@ -104,7 +104,7 @@ it("a disconnected stream wakes a quiet timer immediately", async () => {
   expect(run).toHaveBeenCalledTimes(2);
 });
 
-it("queues one fresh read behind a running event read and drops queued work at stop", async () => {
+it("queues one fresh read behind a running event read and detaches at stop", async () => {
   const live = liveConnectionFixture();
   let release!: () => void;
   const run = vi
