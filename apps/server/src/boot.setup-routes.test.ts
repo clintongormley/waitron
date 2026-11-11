@@ -1755,10 +1755,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       { venue: { taxId: "60000011A" } },
     ],
     [
-      "imports the export of a box with bookings switched off, leaving bookings on and empty",
+      "imports an export with workforce-es and staffing off, leaving both on and empty",
       () =>
         venueModuleConfig(
-          parseModuleConfig({ modules: { bookings: false } }, ALL_MODULES),
+          parseModuleConfig({ modules: { "workforce-es": false, staffing: false } }, ALL_MODULES),
           "ES-common",
         ),
       200,
@@ -1837,7 +1837,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             expect(staged.status).toBe(status);
             if (
               !enabledModules(ALL_MODULES, sourceModules()).some(
-                (module) => module.name === "bookings",
+                (module) => module.name === "staffing",
               )
             ) {
               const provisioned = await post("/setup-api/provision", {
@@ -1858,8 +1858,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
                 enabledModules(ALL_MODULES, await readModuleConfig(stateDir)).map(
                   (module) => module.name,
                 ),
-              ).toContain("bookings");
-              expect(target.store.venue.all(sql`select * from bookings`)).toEqual([]);
+              ).toEqual(expect.arrayContaining(["workforce-es", "staffing"]));
+              expect(target.store.venue.all(sql`select * from convenio_config`)).toEqual([]);
+              expect(target.store.venue.all(sql`select * from staff_roles`)).toEqual([]);
+              expect(target.store.venue.all(sql`select * from staffing_days`)).toEqual([]);
             }
           },
         );

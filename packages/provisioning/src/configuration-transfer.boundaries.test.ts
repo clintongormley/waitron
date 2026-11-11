@@ -273,7 +273,7 @@ it.each([
   expect(() =>
     validateConfigurationBundle(
       bundle as never,
-      [{ ...moduleWith([{ name: "zz_parents", omit: ["private"] }]), tier: "toggleable" }],
+      [moduleWith([{ name: "zz_parents", omit: ["private"] }])],
       { "synthetic-transfer": 1 },
     ),
   ).toThrow(expect.objectContaining(invalid(field)));
@@ -343,25 +343,56 @@ it.each(["mandatory", "provision-only"] as const)("refuses missing %s set", (tie
   );
 });
 
-it("imports an absent optional set as empty, including a module sharing its set", async () => {
-  await applyVenue(planVenue(gbVenue, []), { db: suite.db, modules: [] });
-  await scratch(async (tx) => {
-    await tx.execute(sql`create table zz_parents (id text primary key)`);
-    await tx.execute(sql`create table zz_children (id text primary key)`);
-    await tx.execute(sql`insert into zz_parents values ('seeded')`);
-    await tx.execute(sql`insert into zz_children values ('seeded')`);
-    const modules = [
-      { ...moduleWith([{ name: "zz_parents" }]), tier: "toggleable" as const },
-      fakeSetlessModule("synthetic-child", "synthetic-transfer", {
-        configurationTransfer: { kind: "tables", tables: [{ name: "zz_children" }] },
-      }),
-    ];
-    await importConfigurationTables(tx, configurationBundle(), modules, {
-      "synthetic-transfer": 1,
+it.each([false, true])(
+  "imports absent optional tables as empty with their host set present: %s",
+  async (hostPresent) => {
+    await applyVenue(planVenue(gbVenue, []), { db: suite.db, modules: [] });
+    await scratch(async (tx) => {
+      await tx.execute(sql`create table zz_parents (id text primary key)`);
+      await tx.execute(sql`create table zz_children (id text primary key)`);
+      await tx.execute(sql`insert into zz_parents values ('seeded')`);
+      await tx.execute(sql`insert into zz_children values ('seeded')`);
+      const modules = [
+        { ...moduleWith([{ name: "zz_parents" }]), tier: "toggleable" as const },
+        fakeSetlessModule("synthetic-child", "synthetic-transfer", {
+          configurationTransfer: { kind: "tables", tables: [{ name: "zz_children" }] },
+        }),
+      ];
+      await importConfigurationTables(
+        tx,
+        {
+          ...configurationBundle(),
+          ...(hostPresent
+            ? { modules: { "synthetic-transfer": 1 }, tables: { zz_parents: [] } }
+            : {}),
+        },
+        modules,
+        { "synthetic-transfer": 1 },
+      );
+      expect((await tx.execute(sql`select * from zz_parents`)).rows).toEqual([]);
+      expect((await tx.execute(sql`select * from zz_children`)).rows).toEqual([]);
     });
-    expect((await tx.execute(sql`select * from zz_parents`)).rows).toEqual([]);
-    expect((await tx.execute(sql`select * from zz_children`)).rows).toEqual([]);
-  });
+  },
+);
+
+it("refuses a partially missing optional module even when its host set is present", () => {
+  const modules = [
+    moduleWith([]),
+    fakeSetlessModule("synthetic-child", "synthetic-transfer", {
+      configurationTransfer: {
+        kind: "tables",
+        tables: [{ name: "zz_parents" }, { name: "zz_children" }],
+      },
+    }),
+  ];
+  const bundle = {
+    ...configurationBundle(),
+    modules: { "synthetic-transfer": 1 },
+    tables: { zz_parents: [] },
+  };
+  expect(() => validateConfigurationBundle(bundle, modules, { "synthetic-transfer": 1 })).toThrow(
+    expect.objectContaining(invalid("table:zz_children")),
+  );
 });
 
 it("refuses table rows from an optional set whose version is absent", () => {

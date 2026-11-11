@@ -662,8 +662,11 @@ function checkedRows(
   const emptyTables = new Set(
     modules.flatMap((module) =>
       module.tier === "toggleable" &&
-      bundle.modules[migrationSetOf(module)] === undefined &&
-      module.configurationTransfer?.kind === "tables"
+      module.configurationTransfer?.kind === "tables" &&
+      (bundle.modules[migrationSetOf(module)] === undefined ||
+        module.configurationTransfer.tables.every(
+          (table) => bundle.tables[table.name] === undefined,
+        ))
         ? module.configurationTransfer.tables.map((table) => table.name)
         : [],
     ),
