@@ -3327,12 +3327,6 @@ describe("combined settings operations", () => {
         "printTradingName",
         false,
       );
-      await settingsOperations.setDepartmentSalePolicyField(
-        tx,
-        department.id,
-        "collectionNumber",
-        "numbered",
-      );
       expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
         departmentId: department.id,
@@ -3436,12 +3430,6 @@ describe("combined settings operations", () => {
         department.id,
         "printTradingName",
         true,
-      );
-      await settingsOperations.setDepartmentSalePolicyField(
-        tx,
-        department.id,
-        "collectionNumber",
-        "numbered",
       );
       await settingsOperations.saveDepartmentEditSettings(tx, department.id, {
         name: "Restaurant",

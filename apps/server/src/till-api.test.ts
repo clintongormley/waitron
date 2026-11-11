@@ -2201,7 +2201,9 @@ describe("zone-offer catalogue routes", () => {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body.context).not.toHaveProperty("receiptPrintMode");
+    expect(body).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
       zones: [{ id: counterZoneId, name: "Counter" }],
       offers: [{ id: waterOfferId, grossPrice: "1.75" }],
@@ -2258,7 +2260,9 @@ describe("zone-offer catalogue routes", () => {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body.context).not.toHaveProperty("receiptPrintMode");
+    expect(body).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
       defaultMenuId: waterProduct.catalogueId,
       menus: [{ id: waterProduct.catalogueId, name: "Carta", isDefault: true }],

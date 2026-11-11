@@ -136,11 +136,6 @@ const PRINT_JOB_STATUS_NAMES: NameTable = {
   failed: { en: "Failed", es: "Fallido" },
 };
 
-const PRINT_MODE_NAMES: NameTable = {
-  auto: { en: "Always", es: "Siempre" },
-  on_request: { en: "On request", es: "Bajo petición" },
-};
-
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(ROLE_NAMES, value, locale);
 }
@@ -158,10 +153,6 @@ export function transportName(value: string, locale: string = currentLocale()): 
 
 export function jobStatusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PRINT_JOB_STATUS_NAMES, value, locale);
-}
-
-export function printModeName(value: string, locale: string = currentLocale()): string {
-  return resolveNameTable(PRINT_MODE_NAMES, value, locale);
 }
 
 export function breachKindName(kind: string, locale: string = currentLocale()): string {

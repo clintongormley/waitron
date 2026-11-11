@@ -7,7 +7,6 @@ import {
   breachKindName,
   homeDeviceName,
   jobStatusName,
-  printModeName,
   regimeName,
   roleName,
   rolesByName,
@@ -173,14 +172,6 @@ it("resolves a print-job-status token to Spanish and English, unknown value raw"
   expect(jobStatusName("failed", "es")).toBe("Fallido");
   expect(jobStatusName("failed", "en")).toBe("Failed");
   expect(jobStatusName("paused", "es")).toBe("paused");
-});
-
-it("resolves a receipt-print-mode token to Spanish and English, unknown value raw", () => {
-  expect(printModeName("auto", "es")).toBe("Siempre");
-  expect(printModeName("on_request", "es")).toBe("Bajo petición");
-  expect(printModeName("never", "es")).toBe("never");
-  expect(printModeName("auto", "en")).toBe("Always");
-  expect(printModeName("sometimes", "es")).toBe("sometimes");
 });
 
 it("resolves a purchase-VAT-kind token to Spanish and English, unknown value raw", () => {

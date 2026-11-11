@@ -5154,8 +5154,7 @@ You choose how orders start separately from when a counter order is paid.
 `department_sale_policies.order_start` holds `table` or `counter`;
 `zone_sale_policies.order_start` is nullable, with null following the department.
 The same zone-first resolution applies to paid-when and collection tickets.
-The stored receipt-print field still holds `auto` or `on_request`, but no longer controls
-order-linked receipt delivery. A739 cut 7(c) removes the stored field; 7(b) removes its controls.
+The receipt-print field and its controls are retired. Printing is explicit.
 
 `resolveZoneContext` and the order-context writers in
 `packages/venue-service/src/operations.ts` work out an order's flow as `table_tab` for table
@@ -5163,9 +5162,9 @@ service, otherwise its effective paid-when (`prepay` or `ticket_then_pay`). The 
 `order_service_contexts.service_mode` keeps those three values. Splitting the recorded fact
 is [future work](../backlog/service-periods.md#split-an-orders-recorded-service-mode-into-two-facts).
 
-The department editor saves its name, trading name, service settings and transfers while receipt
-printing policy is saved by the receipt editor. The zone editor saves its name and four nullable
-service overrides in one transaction. Moving a zone changes its department while keeping those
+The department editor saves its name, trading name, service settings and transfers. The receipt
+editor saves receipt details and whether to print the trading name. The zone editor saves its name
+and nullable service overrides in one transaction. Moving a zone changes its department while keeping those
 overrides; its inherited values then follow the destination. Real-row preservation checks are in
 `packages/venue-service/src/routes.test.ts`; order-flow checks are in
 `packages/venue-service/src/operations.test.ts` and
