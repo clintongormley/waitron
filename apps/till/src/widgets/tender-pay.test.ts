@@ -245,6 +245,7 @@ describe("till-tender-pay", () => {
     el.held = true;
     await el.updateComplete;
     expect((old as HTMLElementTagNameMap["wt-button"]).loading).toBe(false);
+    expect(old.shadowRoot!.querySelector("button")!.disabled).toBe(true);
     el.held = false;
     el.busy = false;
     el.confirmation = {

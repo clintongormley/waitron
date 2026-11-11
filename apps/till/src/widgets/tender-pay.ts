@@ -1307,6 +1307,7 @@ export class TillTenderPay extends LitElement {
           variant="primary"
           size="lg"
           .loading=${this.busy && !this.held}
+          ?disabled=${this.busy}
           @click=${() => this.#retryConfirmation(confirmation)}
           >${t("action.confirm_payment")}</wt-button
         >
