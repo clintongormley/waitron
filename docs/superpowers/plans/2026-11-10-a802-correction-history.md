@@ -339,6 +339,18 @@ that disagrees.
    sale, whose fix then changes its VAT split, stays out of balance at AEAT and nothing repairs
    it.**
 
+   **The same harm the other way round, a gate on switching the fix screens on** (second read,
+   2026-11-11, finding 1; older than slice 3b; the watcher took option (b) and the owner is asked
+   whether it is right). An order cancelled after AEAT refused its invoice but before a fix is
+   accepted files a credit at the old split: with nothing accepted the cancellation measures
+   against the stored figures, and a refused newest version does not wait. A fix accepted later
+   then leaves both rates wrong at AEAT (measured by the second reader on the real backend: 10%
+   +11.00/+1.10, 21% −10.00/−2.10). Refunds are protected, because the preview asks whether the
+   invoice may be corrected and a refused filing answers no; the cancellation never asks. Dormant
+   until the fix screens are switched on (`ENABLED_REMEDIES` is empty). Before they are, one of:
+   the till refuses such a cancellation, or the fix screen warns that a cancellation credit at the
+   old split exists.
+
 **Slice 3 after this clearance.** `previewCorrectionAmounts`: substitution check → admission (as
 built) → read the earlier correctives' ids → `filedFiguresFor` for the invoice and each corrective
 → any id absent or `readable: false` refuses `sale.correction_not_admitted { reason:
