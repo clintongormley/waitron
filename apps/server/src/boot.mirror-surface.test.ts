@@ -276,6 +276,7 @@ const MIRROR_WRITES: Record<string, Answer> = {
     code: "authorization.not_permitted",
   },
   [`/api/node/handover/${MADE_UP}/activate`]: { status: 403, code: "authorization.not_permitted" },
+  "/api/node/handover/emergency/declare": { status: 403, code: "authorization.not_permitted" },
   "/setup-api/connection/repair": { status: 403, code: "connection.refused" },
   "/setup-api/connection/continue": { status: 403, code: "connection.refused" },
 };
