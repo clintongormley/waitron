@@ -364,6 +364,10 @@ removed after; CLAUDE.md §4 "Measure the old version in a throwaway worktree"):
   one. Not chosen: delete the flow and fail the start once, as today's request does; that drops a
   pending first start.
 
+**2026-11-11 amendment — watcher clearance at 16:05 and 16:11 in Lane H questions.md:**
+A failed publication removes only its own unpublished scratch folder immediately, preserving the
+previously published flow and the existing post-rename sync-failure disarm. The size stop is 1,565 additions.
+
 ## After the tasks
 
 `/finish-branch` with this plan as its note, then hand the pull request to the owner to land.

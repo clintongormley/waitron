@@ -37,17 +37,21 @@ export async function publishRestoreFlow(
 ): Promise<void> {
   const staged = join(stateDir, SCRATCH_DIR, `restore-flow-${randomUUID()}`);
   await mkdirDurable(staged, 0o700);
-  // Attachment writers flush their files before the record can publish them.
-  await attach(staged);
-  await writeFileDurable(join(staged, "record.json"), JSON.stringify(record), 0o600);
-  await mkdirDurable(join(stateDir, FLOWS_DIR), 0o700);
-  await endRestoreFlow(stateDir);
-  await rename(staged, join(stateDir, RESTORE_FLOW_DIR));
   try {
-    await syncFolderHolding(join(stateDir, RESTORE_FLOW_DIR));
-  } catch (error) {
+    // Attachment writers flush their files before the record can publish them.
+    await attach(staged);
+    await writeFileDurable(join(staged, "record.json"), JSON.stringify(record), 0o600);
+    await mkdirDurable(join(stateDir, FLOWS_DIR), 0o700);
     await endRestoreFlow(stateDir);
-    throw error;
+    await rename(staged, join(stateDir, RESTORE_FLOW_DIR));
+    try {
+      await syncFolderHolding(join(stateDir, RESTORE_FLOW_DIR));
+    } catch (error) {
+      await endRestoreFlow(stateDir);
+      throw error;
+    }
+  } finally {
+    await rm(staged, { recursive: true, force: true });
   }
 }
 

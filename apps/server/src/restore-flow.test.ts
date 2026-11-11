@@ -45,7 +45,10 @@ it("publishes the record and its attachments together", async () => {
   expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
 });
 
-it("leaves a failed attachment in scratch and publishes no restore", async () => {
+it("cleans a failed attachment without replacing the waiting restore", async () => {
+  await publishRestoreFlow(stateDir, staged, async (folder) => {
+    await writeFile(join(folder, "key"), "old key");
+  });
   const failure = new Error("attachment failed");
   await expect(
     publishRestoreFlow(stateDir, staged, async (folder) => {
@@ -53,10 +56,20 @@ it("leaves a failed attachment in scratch and publishes no restore", async () =>
       throw failure;
     }),
   ).rejects.toBe(failure);
-  expect(await readRestoreFlow(stateDir)).toBeNull();
-  const scratch = await readdir(join(stateDir, "scratch"));
-  expect(scratch).toHaveLength(1);
-  expect(await readFile(join(stateDir, "scratch", scratch[0]!, "key"), "utf8")).toBe("partial key");
+  expect(await readRestoreFlow(stateDir)).toEqual(staged);
+  expect(await readFile(attachmentPath(stateDir, "key"), "utf8")).toBe("old key");
+  expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
+});
+
+it("removes private staging files when the flows folder cannot be created", async () => {
+  await writeFile(join(stateDir, "flows"), "unusable folder");
+  await expect(
+    publishRestoreFlow(stateDir, staged, async (folder) => {
+      await writeFile(join(folder, "key"), "private key");
+      await writeFile(join(folder, "node-key"), "private node key");
+    }),
+  ).rejects.toMatchObject({ code: "EEXIST" });
+  expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
 });
 
 it("replaces a waiting restore without retaining its old attachments", async () => {
