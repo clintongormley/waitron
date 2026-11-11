@@ -21645,14 +21645,18 @@ export class TillApp extends LitElement {
                     void this.#chooseInvoicePrinter(this.#invoicePrinterChoice);
                 }}
                 @settlement-close=${() => {
-                  if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
-                  else {
-                    this.settlementDocument = null;
-                    this.#onNewSale();
-                  }
-                  this.#receiptPrintVisit++;
-                  this.ticketWorkingOrderId = undefined;
-                  this.invoiceEmailOpen = false;
+                  const close = () => {
+                    if (this.settlementDocument?.surface === "table") void this.#onBackToTable();
+                    else {
+                      this.settlementDocument = null;
+                      this.#onNewSale();
+                    }
+                    this.#receiptPrintVisit++;
+                    this.ticketWorkingOrderId = undefined;
+                    this.invoiceEmailOpen = false;
+                  };
+                  if (this.settlementDocument?.surface === "table") close();
+                  else this.#replaceBasket(close);
                 }}
               ></till-settlement-document-dialog>`
         }
