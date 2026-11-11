@@ -21,6 +21,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
+import { inspectReturnedPayments } from "./handover-return.js";
 import { listFilingCases } from "./filing-cases.js";
 import { appendToChain } from "./chain.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
@@ -732,6 +733,76 @@ it("stops when both boxes independently settled the same sale", async () => {
     { id: "receiver-settlement" },
   ]);
   expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
+
+  const inspect = inspectReturnedPayments;
+  const [clash] = await inspect(receiver.db, source.nodeId, returned);
+  expect(clash).toMatchObject({
+    saleId: source.saleId,
+    eligible: true,
+    outstanding: [
+      { table: "tenders", id: "source-tender" },
+      { table: "sale_settlements", id: "source-settlement" },
+    ],
+    incoming: { tenders: returned.tenders, settlements: returned.settlements, refunds: [] },
+    held: {
+      tenders: [expect.objectContaining({ id: "receiver-tender" })],
+      settlements: [expect.objectContaining({ id: "receiver-settlement" })],
+      refunds: [],
+    },
+  });
+  const receive = (batch = returned) =>
+    withTransaction(receiver.db, (tx) =>
+      receiveReturnedOriginals(tx, source.nodeId, batch, now, [clash!.fingerprint]),
+    );
+  expect(await receive()).toEqual({ complete: true });
+  expect(receiver.db.all<{ id: string }>(sql`select id from tenders`)).toEqual([
+    { id: "receiver-tender" },
+  ]);
+  expect(receiver.db.all<{ id: string }>(sql`select id from sale_settlements`)).toEqual([
+    { id: "receiver-settlement" },
+  ]);
+  const changed = structuredClone(returned);
+  changed.tenders[0]!.amount = 201;
+  expect(await receive(changed)).toEqual({ complete: false });
+  const unrelated = structuredClone(returned);
+  unrelated.voids.push({ id: "missing-void", sale_id: "missing-sale" });
+  expect(await receive(unrelated)).toEqual({ complete: false });
+  const changedSale = structuredClone(returned);
+  changedSale.sales[0]!.total = 999;
+  expect(await receive(changedSale)).toEqual({ complete: false });
+  const changedRecord = structuredClone(returned);
+  changedRecord.records[0]!.offset_minutos = 60;
+  expect(await receive(changedRecord)).toEqual({ complete: false });
+  const pending = structuredClone(returned);
+  pending.refunds.push({ id: "pending", sale_id: source.saleId, state: "pending" });
+  expect((await inspect(receiver.db, source.nodeId, pending))[0]!.eligible).toBe(false);
+  const withCapture = structuredClone(returned);
+  withCapture.captures.push({ id: "capture", sale_id: source.saleId });
+  expect((await inspect(receiver.db, source.nodeId, withCapture))[0]!.eligible).toBe(false);
+  await receiver.db.insert(tenderRefunds).values({
+    id: "new-held-refund",
+    saleId: source.saleId,
+    tenderId: "receiver-tender",
+    submissionId: "new-refund",
+    fingerprint: "new-refund",
+    appliedAmount: 0,
+    tipAmount: 1,
+    reason: "Returned tip",
+    authorizedBy: "manager",
+    requestedBy: "operator",
+    source: "device",
+    deviceId: source.deviceId,
+    nodeId: source.nodeId,
+    locationId: receiver.db.all<{ location_id: string }>(
+      sql`select location_id from nodes where id = ${source.nodeId}`,
+    )[0]!.location_id,
+    method: "cash",
+    state: "pending",
+    createdAt: now.toISOString(),
+  });
+  expect((await inspect(receiver.db, source.nodeId, returned))[0]!.eligible).toBe(false);
+  expect(await receive()).toEqual({ complete: false });
+  expect(await withTransaction(receiver.db, listFilingCases)).toEqual([]);
 });
 
 it("preflights a different-id record clash before importing its orphan sale", async () => {
@@ -1274,5 +1345,17 @@ it.each([
     expect(receiver.db.all<{ id: string }>(sql`select id from tender_refunds order by id`)).toEqual(
       complete ? [{ id: "receiver-refund" }, { id: "source-refund" }] : [{ id: "receiver-refund" }],
     );
+    if (!complete) {
+      const [clash] = await inspectReturnedPayments(receiver.db, source.nodeId, returned);
+      expect(clash!.eligible).toBe(true);
+      expect(
+        await withTransaction(receiver.db, (tx) =>
+          receiveReturnedOriginals(tx, source.nodeId, returned, now, [clash!.fingerprint]),
+        ),
+      ).toEqual({ complete: true });
+      expect(
+        receiver.db.all<{ id: string }>(sql`select id from tender_refunds order by id`),
+      ).toEqual([{ id: "receiver-refund" }]);
+    }
   },
 );

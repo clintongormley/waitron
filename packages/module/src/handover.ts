@@ -5,16 +5,33 @@ import type { BackupQuery } from "@waitron/store";
 import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
+export interface ReturnDiscrepancy {
+  saleId: string;
+  fingerprint: string;
+  outstanding: CanonicalValue;
+  eligible: boolean;
+  original: CanonicalValue;
+  incoming: CanonicalValue;
+  held: CanonicalValue;
+}
+
 /** What a module vouches for, and checks, in a copy of the venue database handed to another box. */
 export interface ModuleHandoverContribution {
   summarise(query: BackupQuery): Promise<CanonicalValue>;
   returnRecords?: {
     read(tx: Transaction, sourceNodeId: string): Promise<CanonicalValue[]>;
+    acceptPermission?: string;
+    inspect?(
+      tx: Transaction,
+      sourceNodeId: string,
+      batch: CanonicalValue,
+    ): Promise<ReturnDiscrepancy[]>;
     receive(
       tx: Transaction,
       sourceNodeId: string,
       batch: CanonicalValue,
       now: Date,
+      accepted?: readonly string[],
     ): Promise<boolean>;
   };
   checkCopy?(query: BackupQuery): Promise<"ok" | "broken">;

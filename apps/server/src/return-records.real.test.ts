@@ -167,6 +167,37 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   });
   expect(await send()).toBe("clash");
   expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const token = await withTransaction(current.db, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Administrator", role: "admin" })
+      .returning();
+    const session = await startManagementSession(tx, { personId: person!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
+  });
+  const listed = await app.request("/management-api/return-clashes", {
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+  });
+  expect(listed.status).toBe(200);
+  const listing = (await listed.json()) as { clashes: { clashId: string; eligible: boolean }[] };
+  expect(listing.clashes).toHaveLength(1);
+  expect(listing.clashes[0]!.eligible).toBe(true);
+  const acceptedClash = await app.request(
+    `/management-api/return-clashes/${listing.clashes[0]!.clashId}/accept`,
+    {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ actionKey: "payment-clash", reason: "Keep the main's payment facts" }),
+    },
+  );
+  expect(acceptedClash.status, await acceptedClash.clone().text()).toBe(200);
+  expect(await send()).toBe("confirmed");
+  expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
+  expect(
+    current.db.all<{ amount: number }>(sql`select amount from tenders where id = 'late-payment'`),
+  ).toEqual([{ amount: 300 }]);
   const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
   aeat.reject(`${identity!.nif}|Source/1|20-07-2026`, 1161, "Wrong detail");
   const filed = await drain(
@@ -184,18 +215,8 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
 
   const [filingCase] = await withTransaction(current.db, listFilingCases);
   expect(filingCase).toMatchObject({ cause: "fiscal.registro_rechazado", status: "open" });
-  expect(await send()).toBe("clash");
+  expect(await send()).toBe("confirmed");
   expect(await withTransaction(current.db, listFilingCases)).toEqual([filingCase]);
-  registerModulePermissions(FISCAL_PERMISSIONS);
-  const token = await withTransaction(current.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
-    const session = await startManagementSession(tx, { personId: person!.id });
-    await setFreshManagementSignIn(tx, session.token);
-    return session.token;
-  });
   const remedies = new Hono();
   mountRecordRemedies(
     remedies,
@@ -234,7 +255,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       status: "resolved",
     }),
   ]);
-  expect(await send()).toBe("clash");
+  expect(await send()).toBe("confirmed");
   expect(await withTransaction(current.db, listFilingCases)).toEqual(settled);
   expect(
     current.db.all<ReturnRow>(

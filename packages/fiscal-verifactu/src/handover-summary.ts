@@ -1,8 +1,10 @@
+import { FISCAL_REMEDY } from "./permissions.js";
 import { createHash } from "node:crypto";
 import type { CanonicalValue } from "@waitron/membership";
 import type { ModuleHandoverContribution } from "@waitron/module";
 import {
   makeReturnedBatches,
+  inspectReturnedPayments,
   readReturnedOriginals,
   receiveReturnedOriginals,
   readReturnedBatch,
@@ -124,7 +126,11 @@ export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
   returnRecords: {
     read: async (tx, source) =>
       makeReturnedBatches(await readReturnedOriginals(tx, source)) as unknown as CanonicalValue[],
-    receive: async (tx, source, batch, now) =>
-      (await receiveReturnedOriginals(tx, source, readReturnedBatch(batch), now)).complete,
+    acceptPermission: FISCAL_REMEDY,
+    inspect: async (tx, source, batch) =>
+      inspectReturnedPayments(tx, source, readReturnedBatch(batch)),
+    receive: async (tx, source, batch, now, accepted) =>
+      (await receiveReturnedOriginals(tx, source, readReturnedBatch(batch), now, accepted))
+        .complete,
   },
 };

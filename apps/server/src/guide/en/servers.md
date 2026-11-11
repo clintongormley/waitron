@@ -43,14 +43,19 @@ If the page offers **Progress**, use it to finish the handover on the spare.
 
 Keep this box running while it returns its invoice records to the main box. Refresh the page to
 check progress. Card refunds still in progress go with their original payments so the main box
-can check their outcome. Once it confirms the returned invoice and payment records, filing with
-the tax agency continues there.
+can check their outcome. Filing with the tax agency continues on the main box. Confirmation means
+every returned fact was either received or covered by a specifically accepted payment difference;
+for an accepted difference, the main box keeps its own payment facts.
 Resetting the old box deletes its venue data, including sale lines and local backups. Those are
 not included in this return; keep the old box's data if you need them.
 
 If the return stops because invoice or payment facts differ, keep both boxes running with their
-data intact. Recovery from these differences is not available yet. Records after a clashing
-invoice may still be waiting on this box; do not reset it.
+data intact. An administrator can inspect and accept an eligible payment difference through the
+main box's internal API; there is no screen for this yet. After acceptance, switch the stopped box
+off and on to retry. Repeat if a later batch stops on another payment difference.
+Invoice, chain-position and correction clashes still only warn and cannot be accepted yet.
+Records after a clashing invoice may still be waiting on this box. Reset remains available, but
+it deletes this box's venue data before the return is confirmed.
 
 If the page reports a clock difference, check the clocks on both boxes and keep both running
 while the return retries. Do not reset the old box.

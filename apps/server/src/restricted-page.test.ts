@@ -1,3 +1,4 @@
+import { escapeHtml } from "./recovery-surface.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -382,4 +383,20 @@ it("explains reset data loss in Spanish after confirmation", async () => {
     "Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales",
   );
   expect(html).not.toContain("Puedes restablecer este equipo");
+});
+
+it("distinguishes accepted payment differences from imported facts in both languages", async () => {
+  await handOver(await seedSuccessor("Main box"));
+  for (const language of ["en-GB", "es-ES"] as const) {
+    const clash = await (await request(language, suite.db, "clash")).text();
+    const confirmed = await (await request(language, suite.db, "confirmed")).text();
+    expect(clash).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].clash));
+    expect(confirmed).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].confirmed));
+    expect(RESTRICTED_RETURN_WORDS[language].clash).toContain(
+      language === "en-GB" ? "specifically accepted" : "aceptadas expresamente",
+    );
+    expect(RESTRICTED_RETURN_WORDS[language].confirmed).toContain(
+      language === "en-GB" ? "kept its own payment facts" : "conservado sus propios datos de pago",
+    );
+  }
 });

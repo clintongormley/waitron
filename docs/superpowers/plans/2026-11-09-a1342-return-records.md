@@ -121,3 +121,5 @@ takings or tenders. A retry preserves the receiver’s later refund outcome. Exi
 reviews and the new-part read stand; no further review round. The incremental estimate is 212
 changed lines, with an outside opinion before the combined change exceeds 3,743. The owner or
 watcher still lands this fiscal PR.
+
+**2026-11-11 PR2:** The watcher cleared the payment-only [exact-clash acceptance plan](2026-11-11-a1342-clash-acceptance.md) at 16:59. It uses separate signed handover records and venue activity history; the filing-case sketch above is superseded. Invoice, chain-position and correction acceptance remains open. The owner's 16:25 decision keeps reset available with data-loss and unconfirmed-return warnings.
