@@ -28,8 +28,7 @@
 
 The rest of the sweep (5e) can then be landed by the lane.
 
-**Pull request's first line:** "Every venue is reset: core; backups and exports from before this
-cannot be restored or imported." Second line: "Owner: this changes five set-up lines of the fiscal
+**Pull request's first line:** "Every venue is reset: core; backups from before this cannot be restored." Configuration exports remain version 17 with the same venue fields and older exports still import (watcher, 2026-11-11 08:57, Lane H questions.md). Second line: "Owner: this changes five set-up lines of the fiscal
 pair's `write-path.e2e.test.ts` (line 32 and lines 552–555); no assertion changes."
 
 **Needs before it:** 5c.
