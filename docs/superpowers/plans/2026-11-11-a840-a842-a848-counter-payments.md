@@ -9,7 +9,9 @@ clearance of this revised plan is pending; no owner design approval is claimed.
 **Finish line:** remove the obsolete counter cancellation entry, keep the pressed
 payment action coloured and spinning during sending, and explain an empty-order
 refusal in EN/ES. Reuse the existing widgets, refusal mappers, code table and test
-fixtures. No table, migration, fiscal writer, payment protocol or hardware gate.
+fixtures. No table, migration, protected fiscal writer or hardware gate. The watcher added
+R3 Important 2 on 11 November 17:55, quoting the owner’s 17:50 “yes” to one
+Cancel item path for every sent dish, including whole-order cancellation.
 
 1. **A840: prove the closed-party boundary, then delete the counter entry.**
    Production sale writers settle in the same transaction (`till-sale.ts:1064`,
@@ -46,12 +48,36 @@ fixtures. No table, migration, fiscal writer, payment protocol or hardware gate.
    if that real flow exposes one. Do not enable controls or add server checks
    just to manufacture a refusal; report any unworded ordinary flow to the watcher.
 
+4. **R3 Important 2 joins A840's cancellation boundary.** A840 retires the
+   unreachable invoiced-counter entry, not cancellation of an ordinary placed
+   counter order. Reuse Cancel item's A758 §3.3 rules for each sent dish before
+   whole-order cancellation; retain the order's own reason. A fired dish asks
+   whether preparation started; a started/served one offers still charge / don't
+   charge with the existing reason/permission rules. Reuse the current dialog,
+   cancellation-context read and server operation, extending their party-only
+   scope to an explicitly checked counter bill; keep the table wrapper.
+   Whole cancellation must not abandon a bill with a retained charge. Keep it
+   payable after a still-charge choice; only close once its remaining charge is
+   removed or paid. Do not silently choose an outcome. Give a plain Cancel order
+   entry for non-invoiced waiting orders, separate from retired Cancel and credit.
+   Check `abandonHeldOrder` too: unsent-only discard stays simple; sent dishes
+   must go through the same per-dish choices before a whole discard.
+   Before implementation, reproduce lane M's `reports/r3/2.patch` failure;
+   adapt its request to the explicit A758 choice without weakening notice/slip
+   assertions. Server cases own fired/started/served decisions and kitchen
+   notice/slip/report effects; one app journey owns the per-dish choices and
+   retained-charge result. The subsequent R3-owner item reuses this counter
+   Cancel item support for basket ✕; Recall removal remains in that item.
+
 **Files/tests:** `apps/till/src/till-app.ts`, `i18n/{codes,strings}.ts`,
 `widgets/{counter-waiting,tender-pay,cancel-credit-dialog}.ts` and their sibling
 tests; `till-app-counter-cancel-credit.test.ts` retires; `till-app-parties.test.ts`
 owns the table journey, `till-app-move-dishes.test.ts` the empty move observation.
 Include `counter-waiting.a11y.test.ts`, `cancel-credit-dialog.test.ts`,
-`test-durations.json` and the one server route test. No server production changes.
+`test-durations.json` and the one server route test. R3 also touches server `working-order.ts`, `line-cancel{,-context,-api}.ts`,
+their existing support and focused tests, the till client and cancellation
+state/dialog wiring. Preserve protected fiscal writers and issued-invoice
+behaviour; stop and ask the watcher if fulfilling this needs their alteration.
 
 **Verification/documentation:** failing behavioural test before each fix; run every
 changed test file and the one route case. Inspect changed surfaces in EN/ES,
@@ -61,6 +87,10 @@ counter notes. Update staff guides only where staff instructions change. A739's
 physical checks stay in the existing real-box session. Normal hook, required
 Claude run-it review(s), one fix-read, current-head CI, then authorised landing.
 
-**Forecast:** production +65/-150; tests +140/-850; support +0/-1 (duration entry);
+**Forecast with R3:** production +350/-170; tests +550/-850; support +0/-1 (duration entry);
 documentation about +40/-30. Count additions/removals separately; watcher review
 before growth past 1.5 times this forecast or a new behaviour beyond these asks.
+
+The R3 extension is a proposed implementation of the new ask, not clearance to
+build. Its second Claude plan read must challenge the added route/UI scope and
+the shared cancellation boundary before the watcher settles it.
