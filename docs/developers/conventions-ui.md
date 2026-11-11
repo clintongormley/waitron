@@ -1975,7 +1975,7 @@ before their item and printer loops; whole-portion corrections share the languag
 for notice folding. The collection path reads after its policy and printer gates.
 They need no browser refresh or server restart. A language save enqueues nothing.
 
-New reprints use current frame words and the matching frozen allergy translation while keeping
+New reprints use current frame words, the current declared allergens of each dish and extra and the matching frozen allergy translation while keeping
 recorded names and instructions. Outbox resends to the job's own printer reuse the saved payload; on another printer a kitchen ticket keeps its words and is only centred. Unit-map selection keeps
 `cfg.locale`, the venue's display language (`readVenueLocale`); card-slip words, dates and amounts use the saved sale's receipt language. Boundary
 checks live in `kitchen-print.language.test.ts` and `kitchen-language.boundaries.test.ts`.

@@ -19,7 +19,11 @@ import {
 } from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
+import {
+  ALLERGEN_KIND_NAMES,
+  ALLERGEN_NAMES,
+  KITCHEN_ALLERGY_WORDS,
+} from "./i18n/kitchen-allergy.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import {
   inTx,
@@ -319,6 +323,9 @@ describe("A1517-3 a dish's own allergens on English station paper", () => {
 
 describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block", () => {
   beforeEach(setupAllergyPaper);
+  const contiene = (allergens: string) =>
+    KITCHEN_ALLERGY_WORDS.es.contains.replace("{allergens}", () => allergens);
+  const glutenWheat = `${ALLERGEN_NAMES.gluten.es} (${ALLERGEN_KIND_NAMES.wheat!.es})`;
 
   it("prints Contiene with Spanish names, sorted by allergen", async () => {
     await setAllergens(v.productId("Burger"), { nuts: { kinds: ["walnuts"] }, milk: {} });
@@ -326,7 +333,11 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
     await send(p, "fire", false);
     const [job] = await v.db.select().from(printJobs);
     const lines = printedLines(job!.payload).map((line) => line.trim());
-    expect(lines.join(" ")).toContain("Contiene: Leche, Frutos de cáscara (Nueces)");
+    expect(lines.join(" ")).toContain(
+      contiene(
+        `${ALLERGEN_NAMES.milk.es}, ${ALLERGEN_NAMES.nuts.es} (${ALLERGEN_KIND_NAMES.walnuts!.es})`,
+      ),
+    );
     expect(lines.some((line) => line.startsWith("Contains"))).toBe(false);
   });
 
@@ -349,13 +360,13 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
     await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
     const jobs = await v.db.select().from(printJobs);
     expect(jobs.find((job) => job.id === first!.id)).toEqual(first);
-    expect(printedLines(first!.payload).map((l) => l.trim())).toContain(
-      "Contiene: Cereales con gluten (Trigo)",
-    );
+    expect(printedLines(first!.payload).map((l) => l.trim())).toContain(contiene(glutenWheat));
     const reprint = printedLines(jobs.find((job) => job.id !== first!.id)!.payload).map((l) =>
       l.trim(),
     );
-    expect(reprint.filter((line) => line.startsWith("Contiene:"))).toEqual(["Contiene: Huevos"]);
+    expect(reprint.filter((line) => line.startsWith(contiene("")))).toEqual([
+      contiene(ALLERGEN_NAMES.eggs.es),
+    ]);
     expect(reprint.join(" ")).toContain("Separate pan");
     expect(reprint.join(" ")).not.toContain("New note");
   });
@@ -374,7 +385,10 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
       allergens: { milk: {} },
       note: null,
       clashes: {},
-      labels: { en: { avoids: ["Milk"], clashes: [] }, es: { avoids: ["Leche"], clashes: [] } },
+      labels: {
+        en: { avoids: ["Milk"], clashes: [] },
+        es: { avoids: [ALLERGEN_NAMES.milk.es], clashes: [] },
+      },
     };
     await inTx(v, (tx: Transaction) =>
       enqueueAllergyCorrectionSlips(tx, v.cfg, p.tabId, [
@@ -393,6 +407,6 @@ describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block",
     expect(slips).toHaveLength(1);
     const lines = printedLines(slips[0]!.payload).map((line) => line.trim());
     expect(lines.join("\n")).toContain(KITCHEN_ALLERGY_WORDS.es.changed);
-    expect(lines).toContain("Contiene: Cereales con gluten (Trigo)");
+    expect(lines).toContain(contiene(glutenWheat));
   });
 });

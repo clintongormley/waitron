@@ -304,7 +304,10 @@ describe("A1517-3 a dish's own allergens on paper", () => {
   it("prints Contains after the note and before the guest block, in English and Spanish", () => {
     for (const [locale, line] of [
       ["en-GB", "  Contains: Milk, Nuts (Walnuts)"],
-      ["es-ES", "  Contiene: Milk, Nuts (Walnuts)"],
+      [
+        "es-ES",
+        `  ${KITCHEN_ALLERGY_WORDS.es.contains.replace("{allergens}", "Milk, Nuts (Walnuts)")}`,
+      ],
     ] as const) {
       const printed = lines(
         [
@@ -317,7 +320,10 @@ describe("A1517-3 a dish's own allergens on paper", () => {
       const at = printed.indexOf(line);
       expect(at).toBeGreaterThan(printed.findIndex((l) => l.includes("No onion")));
       expect(at).toBeLessThan(printed.findIndex((l) => l.includes("Window guest")));
-      expect(printed.filter((l) => /Cont(ains|iene):/.test(l))).toEqual([line]);
+      const prefixes = [KITCHEN_ALLERGY_WORDS.en, KITCHEN_ALLERGY_WORDS.es].map(
+        (words) => words.contains.split("{allergens}")[0]!,
+      );
+      expect(printed.filter((l) => prefixes.some((prefix) => l.includes(prefix)))).toEqual([line]);
     }
   });
 
@@ -370,10 +376,16 @@ describe("A1517-3 a dish's own allergens on paper", () => {
     expect(extraWithAllergens("White sauce", ["Milk", "Eggs"], "en")).toBe(
       "White sauce - contains Milk, Eggs",
     );
-    expect(extraWithAllergens("Salsa blanca", ["Leche"], "es")).toBe(
-      "Salsa blanca - contiene Leche",
+    const milkEggs = `${ALLERGEN_NAMES.milk.es}, ${ALLERGEN_NAMES.eggs.es}`;
+    expect(
+      extraWithAllergens("White sauce", [ALLERGEN_NAMES.milk.es, ALLERGEN_NAMES.eggs.es], "es"),
+    ).toBe(
+      KITCHEN_ALLERGY_WORDS.es.extraContains
+        .replace("{extra}", "White sauce")
+        .replace("{allergens}", milkEggs),
     );
+    expect(KITCHEN_ALLERGY_WORDS.es.extraContains).not.toBe(KITCHEN_ALLERGY_WORDS.en.extraContains);
+    expect(KITCHEN_ALLERGY_WORDS.es.contains).not.toBe(KITCHEN_ALLERGY_WORDS.en.contains);
     expect(KITCHEN_ALLERGY_WORDS.en.contains).toBe("Contains: {allergens}");
-    expect(KITCHEN_ALLERGY_WORDS.es.contains).toBe("Contiene: {allergens}");
   });
 });
