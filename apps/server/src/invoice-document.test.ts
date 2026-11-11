@@ -31,7 +31,7 @@ import {
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
-import { readInvoiceDocument } from "./invoice-document.js";
+import { readInvoiceDocument, readReceiptEmailDocument } from "./invoice-document.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 
 import { completeBillPayment } from "./bill-payments.js";
@@ -468,6 +468,28 @@ describe("stored invoice document projection", () => {
     });
     await expect(read(backend, randomUUID())).rejects.toMatchObject({
       code: "invoice_delivery.not_found",
+    });
+  });
+  it("projects a simplified receipt for email without enabling its full-invoice document", async () => {
+    const backend = none();
+    const sale = await issue(backend, false);
+    const document = await withTransaction(suite.db, (tx) =>
+      readReceiptEmailDocument(backend, tx, venue.cfg, sale.saleId),
+    );
+    expect(document.result).toMatchObject({
+      invoiceType: "F2",
+      total: "7.58",
+      issuedAt: "2026-10-06T22:34:00.000Z",
+      issuedOffsetMinutes: 120,
+      vatBreakdown: [
+        { rate: "21", base: "5.00", tax: "1.05" },
+        { rate: "10", base: "1.39", tax: "0.14" },
+      ],
+    });
+    expect(document.result.recipient).toBeUndefined();
+    expect(document.result.lines).toHaveLength(2);
+    await expect(read(backend, sale.saleId)).rejects.toMatchObject({
+      code: "invoice_delivery.full_invoice_required",
     });
   });
 });

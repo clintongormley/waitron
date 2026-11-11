@@ -26,7 +26,6 @@ export interface InvoiceEmailRefusal {
   field?: string;
 }
 
-/** Asks for the customer's address to email a full invoice to; the owner sends it. */
 @customElement("till-invoice-email-dialog")
 export class TillInvoiceEmailDialog extends LitElement {
   static override styles = [

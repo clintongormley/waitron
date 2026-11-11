@@ -664,6 +664,9 @@ export class TillTicketView extends LitElement {
 
   protected receiptDesignation(): "original" | "duplicate" | null {
     if (this.result.invoiceType !== "F1") {
+      const attempt = this.deliveries?.current?.status;
+      if (attempt === "queued" || attempt === "sending") return null;
+      if (this.deliveries?.originalCompleted) return "duplicate";
       if (this.historical && !this.historicalDelivery) return "duplicate";
       if (this.originalReceiptReadFailed) return null;
       const status = this.originalReceiptPrint?.status;
@@ -1061,7 +1064,9 @@ export class TillTicketView extends LitElement {
         (this.result.invoiceType === "F1" && (!this.historical || this.historicalDelivery)) ||
         (this.result.invoiceType !== "F1" &&
           (includeRetry || this.historicalDelivery) &&
-          (this.originalReceiptReadFailed ||
+          (this.deliveries != null ||
+            this.deliveriesReadFailed ||
+            this.originalReceiptReadFailed ||
             (this.originalReceiptPrint !== undefined && !notQueued)))
           ? html`<section class="original-delivery" data-test="original-delivery">
               ${
@@ -1326,7 +1331,7 @@ export class TillTicketView extends LitElement {
 
       ${this.renderOriginalDelivery()}
       ${
-        r.invoiceType === "F1" && this.emailOpen && this.canPrintReceipt
+        this.emailOpen && this.canPrintReceipt
           ? html`<till-invoice-email-dialog
               .copy=${this.deliveries?.actions.email?.designation === "duplicate"}
               .busy=${this.deliveryBusy}

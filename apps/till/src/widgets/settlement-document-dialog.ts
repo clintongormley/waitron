@@ -100,7 +100,7 @@ export class TillSettlementDocumentDialog extends TillTicketView {
       }
       ${this.renderOriginalDelivery(true)} ${this.renderDrawer()}
       ${
-        this.result.invoiceType === "F1" && this.emailOpen && this.canPrintReceipt
+        this.emailOpen && this.canPrintReceipt
           ? html`<till-invoice-email-dialog
               .copy=${this.deliveries?.actions.email?.designation === "duplicate"}
               .busy=${this.deliveryBusy}

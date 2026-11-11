@@ -60,6 +60,7 @@ import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { freePorts } from "./testing/free-ports.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { savePrivacyContact } from "@waitron/provisioning";
 
 vi.mock("@hono/node-server", async () => {
@@ -199,6 +200,8 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     WAITRON_ONBOARDING_INTENT: "demo",
   };
   return {
+    backend,
+    clock,
     paper,
     jobId,
     identity,
@@ -470,6 +473,66 @@ function textPart(message: string) {
 }
 
 describe("invoice email worker at trading boot", () => {
+  it("sends a queued simplified receipt through the real boot worker", async () => {
+    const ctx = await fixture();
+    const smtp = await smtpFixture();
+    let server: StartedServer | undefined;
+    try {
+      const email = await withTransaction(suite.db, async (tx) => {
+        const [series] = await tx
+          .insert(invoiceSeries)
+          .values({ nodeId: ctx.node, code: "S", purpose: "standard" })
+          .returning();
+        const sale = await recordSale(tx, ctx.backend, {
+          origin: jobOrigin("operator_script"),
+          nodeId: ctx.node,
+          seriesId: seriesId(series!.id),
+          locale: "es-ES",
+          invoiceLocales: ["es-ES"],
+          total: "1.00",
+          clock: ctx.clock,
+          lines: [
+            {
+              lineNo: 1,
+              name: "Coffee",
+              descriptions: { "en-GB": "Coffee" },
+              quantity: "1",
+              unitPrice: "1.00",
+              vatRate: "0",
+              lineTotal: "1.00",
+            },
+          ],
+          settlement: { kind: "deferred" },
+        });
+        await putCredential(tx, loadKeyRing(ctx.env), { purpose: "email.smtp", value: smtp.smtp });
+        return reserveInvoiceDelivery(tx, sale.saleId, {
+          medium: "email",
+          requestKey: randomUUID(),
+          personId: "staff-one",
+          recipient: "guest@example.test",
+        });
+      });
+      ctx.env.WAITRON_ONBOARDING_INTENT = "prepare";
+      server = await startServer(ctx.env);
+      await vi.waitFor(
+        async () => expect(await delivery(email.id)).toMatchObject({ status: "sent", attempts: 1 }),
+        { timeout: 5_000 },
+      );
+      expect(smtp.messages).toHaveLength(1);
+      expect(textPart(smtp.messages[0]!)).toBe(
+        `${receiptLabelsFor("es-ES").simplifiedInvoice} S/1`,
+      );
+      expect(smtp.messages[0]).toContain("filename=receipt.pdf");
+      const text = await pdfText(smtp.messages[0]!);
+      expect(text).toContain("S/1");
+      expect(text).toContain("1,00");
+      expect(text).not.toContain("Saved customer");
+    } finally {
+      await server?.close();
+      await smtp.close();
+    }
+  });
+
   it("sends the invoice customers' privacy notice in the text, read from the stored values", async () => {
     const ctx = await fixture();
     await withTransaction(suite.db, async (tx) => {

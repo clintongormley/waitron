@@ -9740,7 +9740,6 @@ export class TillApp extends LitElement {
 
   async #refreshReceiptPrint(): Promise<void> {
     const id = this.ticketWorkingOrderId;
-    const full = this.result?.invoiceType === "F1";
     if (id === undefined || this.originalReceiptBusy) return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
@@ -9748,7 +9747,7 @@ export class TillApp extends LitElement {
     try {
       await Promise.all([
         this.#readReceiptPrint(id, session, visit),
-        ...(full ? [this.#readInvoiceDeliveries(id, session, visit)] : []),
+        this.#readInvoiceDeliveries(id, session, visit),
       ]);
     } finally {
       if (this.#ticketIsCurrent(id, session, visit)) this.originalReceiptBusy = false;
@@ -9769,7 +9768,9 @@ export class TillApp extends LitElement {
   async #readInvoiceDeliveries(id: string, session: number, visit: number): Promise<void> {
     const read = ++this.#invoiceDeliveryReads;
     try {
-      const status = await this.api.getInvoiceDeliveries(id);
+      const status = await (this.result?.invoiceType === "F1"
+        ? this.api.getInvoiceDeliveries(id)
+        : this.api.getReceiptEmailDeliveries(id));
       if (!this.#ticketIsCurrent(id, session, visit) || read !== this.#invoiceDeliveryReads) return;
       this.invoiceDeliveries = status;
       this.invoiceDeliveriesReadFailed = false;
@@ -9948,8 +9949,7 @@ export class TillApp extends LitElement {
     send: (requestKey: string) => Promise<unknown>,
     on: { sent?: () => void; refused?: (refusal: InvoiceEmailRefusal) => void } = {},
   ): Promise<void> {
-    if (this.result?.invoiceType !== "F1" || this.invoiceDeliveryBusy || this.originalReceiptBusy)
-      return;
+    if (!this.result || this.invoiceDeliveryBusy || this.originalReceiptBusy) return;
     const session = this.#operatorSession;
     const visit = this.#receiptPrintVisit;
     this.invoiceDeliveryBusy = true;
@@ -10033,7 +10033,7 @@ export class TillApp extends LitElement {
       this.originalReceiptPrint = undefined;
       await Promise.all([
         this.#readReceiptPrint(id, session, visit),
-        ...(full ? [this.#readInvoiceDeliveries(id, session, visit)] : []),
+        this.#readInvoiceDeliveries(id, session, visit),
       ]);
     } catch {
       if (this.#ticketIsCurrent(id, session, visit)) this.errorKey = "receipt.error";

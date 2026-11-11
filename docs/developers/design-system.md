@@ -6497,7 +6497,9 @@ Counter bills use the same window for their first and remaining payments.
 
 Final payment and an initiating edit that settles a bill open a transient document dialog with
 Receipt selected, Full invoice and None. Print names the chosen printer; selecting a document
-prints nothing. An existing F1 keeps its recorded recipient and offers Email separately. F2's
+prints nothing. An existing F1 keeps its recorded recipient. Both receipt and full-invoice delivery
+offer Email separately when available, using the existing address form and Send action. An email
+original in progress holds paper delivery; after email succeeds, paper is a copy. F2's
 Full invoice choice explains that replacement is unavailable and retains the Receipt actions.
 Cash change stays beside the document choice. Failed originals keep Retry and Check; a completed F1
 keeps Confirm handover. None, closing or disconnecting dismisses the choice; table closure remains

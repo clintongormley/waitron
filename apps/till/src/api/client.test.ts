@@ -1698,6 +1698,15 @@ describe("TillApi", () => {
     });
   });
 
+  it("reads receipt email status separately from full-invoice printer choices", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(null));
+    expect(await new TillApi("", fetchStub).getReceiptEmailDeliveries("wo1")).toBeNull();
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith("/api/sales/wo1/deliveries?medium=email", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
   it("asks for a print on the printer it is given, under the request key it is given", async () => {
     const attempt = { id: "d1", medium: "a4", status: "queued" };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(attempt));

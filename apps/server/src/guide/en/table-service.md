@@ -16,8 +16,12 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 After the final payment, choose **Receipt**, **Full invoice** or **None**. An edit that finishes
 paying the bill offers the same choice. To print, wait for **Print on {printer}** to name your
-destination, then press it. A full invoice keeps its recorded customer; its **Email** action is
-separate from **Print**.
+destination, then press it. A full invoice keeps its recorded customer.
+
+When **Send by email** is offered, you can send a receipt or full invoice as a PDF. Enter the customer's
+email address and press **Send**. Printing and email are separate actions; after either delivers
+the original, the next delivery is a copy. If sending fails, use **Send the email again** to retry the
+same address, or choose another address.
 
 Choose **None** or close the window to carry on without printing. You close the table separately.
 For a document later, open the sale and choose **Print/Reprint**.

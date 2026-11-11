@@ -260,6 +260,7 @@ import { mountTransferCloseApi } from "./transfer-close-api.js";
 import {
   readInvoiceDeliveries,
   readInvoiceDeliveryState,
+  readReceiptEmailDeliveries,
   type OfferedPrinter,
 } from "./invoice-delivery-status.js";
 import {
@@ -2478,6 +2479,11 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const status = await withTransaction(deps.db, async (tx) => {
         const saleId = await zonedSale(tx, session, id);
         await expireInvoiceDeliveryClaims(tx);
+        if (c.req.query("medium") === "email") {
+          return readReceiptEmailDeliveries(tx, saleId, {
+            emailAvailable: await canEmailInvoice(tx, saleId, transport),
+          });
+        }
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) => canEmailInvoice(tx, sale.id, transport),
           printers: () => tillInvoicePrinters(tx, session),

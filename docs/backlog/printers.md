@@ -115,7 +115,7 @@ A840/A842/A848 follow as one change.
 
 Today’s orderless path prints Receipt copies but has no Invoice delivery route. A later small slice
 extends that sale-id path using existing delivery actions; it does not add another protocol.
-F2 A4/email remain absent. F2-to-F1 replacement remains separate fiscal work.
+F2 A4 remains unavailable; A739 supplies order-linked Receipt Email. F2-to-F1 replacement remains separate fiscal work.
 
 The payment-time mixed-printer choice remains in A790: a printed full invoice should offer the
 profile's Invoice list, including receipt-paper printers, using the device's saved choice and then

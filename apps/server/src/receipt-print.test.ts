@@ -7,6 +7,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { recordSale } from "@waitron/core";
 import { reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { resendInvoicePrintJob } from "./invoice-print.js";
 import { reserveStagedInvoiceDelivery } from "./invoice-choice-delivery.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
@@ -2901,6 +2902,58 @@ describe("automatic F1 receipt delivery enrollment", () => {
     ]);
     expect(await suite.db.select().from(drawerOpens)).toEqual([]);
   });
+
+  it.each(["queued", "sending", "sent"] as const)(
+    "keeps the simplified receipt's original with an email that is %s",
+    async (status) => {
+      const { cfg, saleId, ticket, personId } = await issued(true, false);
+      const email = await withTransaction(suite.db, (tx) =>
+        reserveInvoiceDelivery(tx, saleId, {
+          medium: "email",
+          requestKey: randomUUID(),
+          personId,
+          recipient: "guest@example.test",
+        }),
+      );
+      await suite.db
+        .update(invoiceDeliveries)
+        .set({ status })
+        .where(eq(invoiceDeliveries.id, email.id));
+      const print = () =>
+        withTransaction(suite.db, (tx) =>
+          enqueueOriginalReceipt(tx, cfg, ticket, saleId, undefined, personId),
+        );
+      if (status === "sent") {
+        await print();
+        const jobs = await suite.db.select().from(printJobs);
+        expect(jobs).toHaveLength(1);
+        expect(jobs[0]).toMatchObject({ kind: "document", receiptCopy: true });
+        expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain(
+          receiptLabelsFor(LOCALE).duplicate,
+        );
+        await suite.db
+          .update(printJobs)
+          .set({ status: "done" })
+          .where(eq(printJobs.id, jobs[0]!.id));
+        const resent = await withTransaction(suite.db, (tx) =>
+          resendInvoicePrintJob(tx, jobs[0]!.id, personId),
+        );
+        const [copy] = await suite.db
+          .select()
+          .from(printJobs)
+          .where(eq(printJobs.id, resent.jobId));
+        expect(copy).toMatchObject({
+          receiptCopy: true,
+          resendOf: jobs[0]!.id,
+          payload: jobs[0]!.payload,
+        });
+      } else {
+        await expect(print()).rejects.toMatchObject({ code: "invoice_delivery.active" });
+        expect(await suite.db.select().from(printJobs)).toEqual([]);
+      }
+      expect(await suite.db.select().from(drawerOpens)).toEqual([]);
+    },
+  );
 
   it("propagates an engine rollback and reports no successful optional rollback", async () => {
     const warning = vi.spyOn(console, "warn").mockImplementation(() => {});

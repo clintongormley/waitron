@@ -3,6 +3,7 @@ import {
   deviceProfiles,
   devices,
   drawerOpens,
+  invoiceDeliveries,
   printers,
   printJobs,
   readTenant,
@@ -516,12 +517,22 @@ export async function enqueueOriginalReceipt(
     .limit(1);
   // A failed original is retried through its existing job, preserving its bytes and history.
   if (original !== undefined) return;
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false, printers);
+  let duplicate = false;
+  if (ticket.invoiceType !== "F1") {
+    const emails = await tx
+      .select({ status: invoiceDeliveries.status, designation: invoiceDeliveries.designation })
+      .from(invoiceDeliveries)
+      .where(and(eq(invoiceDeliveries.saleId, saleId), eq(invoiceDeliveries.medium, "email")));
+    if (emails.some((email) => email.status === "queued" || email.status === "sending"))
+      throw new AppError("invoice_delivery.active", {});
+    duplicate = emails.some((email) => email.designation === "original" && email.status === "sent");
+  }
+  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, duplicate, printers);
   if (resolved === undefined) return;
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
     venueId: await printers.venueId(),
     saleId,
-    receiptCopy: false,
+    receiptCopy: duplicate,
   });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
 }

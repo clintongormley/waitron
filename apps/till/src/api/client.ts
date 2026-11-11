@@ -3077,6 +3077,13 @@ export class TillApi {
     );
   }
 
+  getReceiptEmailDeliveries(workingOrderId: string): Promise<InvoiceDeliveryStatus | null> {
+    return this.#request<InvoiceDeliveryStatus | null>(
+      `/api/sales/${workingOrderId}/deliveries?medium=email`,
+      "GET",
+    );
+  }
+
   /** Prints the full invoice on `printerId`, which must be the device's invoice printer. */
   requestPrintDelivery(
     workingOrderId: string,
