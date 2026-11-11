@@ -1851,8 +1851,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   box builds pairing and machine requests through the database-free workspace package `@waitron/contract`,
   which also supplies the access-lease format. The box still reads leases through its own saved-state adapter.
   The UI publisher now checks and uploads both packages, including `@waitron-io/contract`.
-  Private signing release `0.2.9` is verified; Cloud’s own-token installation/adoption remains open, then the sign-in rules (with A1437 and Cloud's D608), then the
-  message list and texts (with Cloud's D610 and the email relay). Roles, storage, sessions and
+  Cloud installs private signing release `0.2.9` with its workflow token. Remaining: the sign-in
+  rules (with A1437 and Cloud's D608), then the message list and texts (with Cloud's D610 and the
+  email relay). Roles, storage, sessions and
   screens stay apart. [Plan](superpowers/plans/2026-11-09-a1438-code-shared-with-cloud.md).
 
 - **Everything needing a third box or a Cloud peer** (bundle of 8, 1 important, size L, waits for another entry). Holds A1205, A1275, A1276. [Detail](backlog/replication-cloud.md#bundle-everything-needing-a-third-box-or-a-cloud-peer)
