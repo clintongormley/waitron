@@ -11394,48 +11394,56 @@ describe("native app phone order view with mixed dish families", () => {
       }
 });
 
-it("recovers the invoice after a reducing draft save is refused and ends further saves", async () => {
-  const previousLocale = currentLocale();
-  try {
-    const { el } = await mountApp({
-      getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
-      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
-    });
-    await openTable(el);
-    press(el, "Beer");
-    await vi.waitFor(() => expect(server.drafts[0]?.lines).toHaveLength(1));
-    api.saveDraft.mockRejectedValue({ code: "bill.paid", status: 409 });
-    api.getBillBalance.mockResolvedValue(
-      balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
-    );
-    api.getPartyBills.mockResolvedValue([
-      partyBillOf("v1", "wo-4", 1, {
-        status: "settled",
-        total: "120.00",
-        outstanding: "0.00",
-        hasPayments: true,
-      }),
-    ]);
-    draft(el).removeLine(0);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
-    );
-    expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
-    expect(el.result?.invoiceNumber).toBe("F-0007");
-    expect(el.errorKey).toEqual({ code: "bill.paid" });
-    expect(draft(el).editsLocked).toBe(true);
-    el.shadowRoot!.querySelector("till-settlement-document-dialog")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!
-      .click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
-    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
-    expect(api.getFiledTicket).toHaveBeenCalledOnce();
-    expect(api.saveDraft).toHaveBeenCalledTimes(2);
-  } finally {
-    vi.useRealTimers();
-    setLocale(previousLocale);
-  }
-});
+it.each(["reducing", "adding"])(
+  "recovers the invoice after a %s draft save is refused and ends further saves",
+  async (kind) => {
+    const previousLocale = currentLocale();
+    try {
+      const { el } = await mountApp({
+        getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
+        getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+      });
+      await openTable(el);
+      press(el, "Beer");
+      await vi.waitFor(() => expect(server.drafts[0]?.lines).toHaveLength(1));
+      api.saveDraft.mockRejectedValue({ code: "bill.paid", status: 409 });
+      api.getBillBalance.mockResolvedValue(
+        balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
+      );
+      api.getPartyBills.mockResolvedValue([
+        partyBillOf("v1", "wo-4", 1, {
+          status: "settled",
+          total: "120.00",
+          outstanding: "0.00",
+          hasPayments: true,
+        }),
+      ]);
+      if (kind === "reducing") draft(el).removeLine(0);
+      else press(el, "Beer");
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
+      );
+      expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
+      expect(el.result?.invoiceNumber).toBe("F-0007");
+      expect(el.errorKey).toEqual({ code: "bill.paid" });
+      expect(draft(el).editsLocked).toBe(true);
+      el.shadowRoot!.querySelector("till-settlement-document-dialog")!
+        .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!
+        .click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+      expect(banner(el)?.textContent).toContain(codeMessage("bill.paid"));
+      expect(draft(el).lines.map((line) => line.quantity)).toEqual(
+        kind === "reducing" ? [] : ["2"],
+      );
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+      expect(api.getFiledTicket).toHaveBeenCalledOnce();
+      expect(api.saveDraft).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      setLocale(previousLocale);
+    }
+  },
+);

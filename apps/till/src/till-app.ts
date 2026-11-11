@@ -20430,7 +20430,13 @@ export class TillApp extends LitElement {
     this.settlementDocument = null;
     const next = this.#otherBillsToPay()[0];
     const visit = this.#orderVisit;
-    this.errorKey = undefined;
+    if (
+      !this.#draftSync?.ownEditWaiting ||
+      typeof this.errorKey !== "object" ||
+      !("code" in this.errorKey) ||
+      this.errorKey.code !== "bill.paid"
+    )
+      this.errorKey = undefined;
     const moved = next !== undefined && (await this.#switchToBill(next.workingOrderId));
     if (this.activeTabId === undefined) await this.#loadPartyBills();
     else if (moved)
