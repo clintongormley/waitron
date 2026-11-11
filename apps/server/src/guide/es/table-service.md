@@ -529,6 +529,9 @@ que la zona se abre igual la próxima vez, y cambiar una zona no cambia las dem�
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
 tiene ninguna.
 
+Si **Separar mesas…** indica que otra persona ha cambiado la mesa, vuelve a cargar el plano y
+elige de nuevo las mesas que quieres separar.
+
 ## Restablecer una zona al plano de hoy {#zone-reset}
 
 Para deshacer los cambios de hoy en una zona, abre su menú ⋮, elige **Volver al plano …** con el nombre del plano que aparece y confirma **Restablecer**.

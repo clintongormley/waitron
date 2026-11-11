@@ -886,14 +886,14 @@ const ROUTES: readonly Row[] = [
     "POST /api/tables/:id/today/split-off (table)",
     "POST",
     (x) => `/api/tables/${x.deliTable}/today/split-off`,
-    (x) => ({ partIds: [x.restFreeTable], zoneRevision: 0 }),
+    (x) => ({ expectedParties: [], partIds: [x.restFreeTable], zoneRevision: 0 }),
     deliTableZone,
   ],
   [
     "POST /api/tables/:id/today/split-off (part)",
     "POST",
     (x) => `/api/tables/${x.restFreeTable}/today/split-off`,
-    (x) => ({ partIds: [x.deliTable], zoneRevision: 0 }),
+    (x) => ({ expectedParties: [], partIds: [x.deliTable], zoneRevision: 0 }),
     deliTableZone,
   ],
   [

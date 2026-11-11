@@ -4720,7 +4720,11 @@ export class TillApi {
    * a group. `seats` is left out when unset: the server refuses a null. */
   splitOffToday(
     tableId: string,
-    split: { partIds: string[]; seats?: number },
+    split: {
+      partIds: string[];
+      seats?: number;
+      expectedParties: Pick<TableParty, "id" | "revision">[];
+    },
     zoneRevision: number,
   ): Promise<FloorAnswer> {
     return this.#todayChange(
@@ -4728,6 +4732,7 @@ export class TillApi {
       "split-off",
       {
         partIds: split.partIds,
+        expectedParties: split.expectedParties,
         ...(split.seats === undefined ? {} : { seats: split.seats }),
       },
       zoneRevision,

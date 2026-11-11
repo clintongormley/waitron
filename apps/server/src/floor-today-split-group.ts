@@ -23,6 +23,7 @@ import {
   leaveForClearing,
   partiesHoldingOnly,
   partyRevision,
+  refuseMovedParty,
 } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
 import { joinedPlaceAfter, partPlaces } from "./joined-split-layout.js";
@@ -33,9 +34,9 @@ interface SplitArgs {
   tableId: string;
   partIds: string[];
   seats: number | null;
+  expectedParties: { id: string; revision: number }[];
 }
 
-/** Split tables… on `tableId`: a joined table with tables still joined splits as one, else a table in a group splits the group, else the joined table's split answers. */
 export async function splitOff(
   tx: Transaction,
   cfg: TradingContext,
@@ -45,8 +46,33 @@ export async function splitOff(
 ): Promise<void> {
   const today = await todayOf(tx, args.tableId);
   const parts = await partsOf(tx, args.tableId);
-  if (today.merge !== null && !parts.some((part) => part.stillJoined)) {
-    return splitGroup(tx, cfg, removals, now, { zoneId: today.zoneId, merge: today.merge }, args);
+  const group = today.merge !== null && !parts.some((part) => part.stillJoined);
+  const members = group
+    ? today.merge!.members.map((member) => member.tableId)
+    : parts.filter((part) => part.stillJoined).map((part) => part.tableId);
+  if (group || parts.length > 0) {
+    for (const partId of args.partIds) {
+      if (!members.includes(partId))
+        throw new AppError(group ? "merge.member_invalid" : "joined_table.part_invalid", {
+          tableId: partId,
+          field: "partIds",
+        });
+    }
+  }
+  const holding = new Set(
+    (await holdersOf(tx, group ? args.partIds : [...args.partIds, args.tableId])).values(),
+  );
+  const expected = new Map(args.expectedParties.map((party) => [party.id, party.revision]));
+  for (const partyId of holding) {
+    if (!expected.has(partyId)) await refuseMovedParty(tx, partyId);
+  }
+  for (const [partyId, sent] of expected) {
+    if (!holding.has(partyId)) await refuseMovedParty(tx, partyId);
+    const revision = await partyRevision(tx, partyId);
+    if (revision !== sent) throw new AppError("party.out_of_date", { partyId, revision });
+  }
+  if (group) {
+    return splitGroup(tx, cfg, removals, now, { zoneId: today.zoneId, merge: today.merge! }, args);
   }
   return splitJoinedTable(tx, cfg, args, { today, parts });
 }
@@ -77,14 +103,9 @@ async function splitGroup(
   removals: readonly TableRemoval[],
   now: Date,
   { zoneId, merge }: { zoneId: string; merge: Merge },
-  { tableId, partIds, seats }: SplitArgs,
+  { tableId, partIds, seats, expectedParties }: SplitArgs,
 ): Promise<void> {
   const members = merge.members.map((member) => member.tableId);
-  for (const partId of partIds) {
-    if (!members.includes(partId)) {
-      throw new AppError("merge.member_invalid", { tableId: partId, field: "partIds" });
-    }
-  }
   const ticked = new Set(partIds);
   const staying = merge.members.filter((member) => !ticked.has(member.tableId));
   if (staying.length === 0) throw new AppError("merge.split_all", { tableId, field: "partIds" });
@@ -111,7 +132,12 @@ async function splitGroup(
     async () => {
       if (rejoin === null) {
         for (const partyId of losing) {
-          await checkAndBumpParty(tx, partyId, await partyRevision(tx, partyId), "open");
+          await checkAndBumpParty(
+            tx,
+            partyId,
+            expectedParties.find((party) => party.id === partyId)!.revision,
+            "open",
+          );
         }
         if (leaving.length > 0) await leaveForClearing(tx, leaving, nowIso());
         await leaveAsGroup(tx, merge.joinId, partIds, staying.length >= 2 ? seats : null);

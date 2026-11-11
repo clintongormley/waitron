@@ -191,6 +191,7 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
       "long",
       {
         partIds: ["c5"],
+        expectedParties: [],
         seats: 8,
       },
       0,
@@ -216,7 +217,11 @@ describe("till-floor-screen: splitting tables off a joined table", () => {
     send(await openSplit(el), "split-joined-confirm", { partIds: ["c4", "c5"], seats: null });
     await settle(el);
 
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c4", "c5"] }, 0);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "long",
+      { partIds: ["c4", "c5"], expectedParties: [] },
+      0,
+    );
     expect(windowOf(el)).not.toBeNull();
     expect(windowOf(el)!.busy).toBe(true);
     expect(refreshes.count).toBe(0);
@@ -468,7 +473,11 @@ describe("till-floor-screen: Split tables… and the room's revision", () => {
     send(opened, "split-joined-confirm", { partIds: ["c5"], seats: null });
     await settle(el);
 
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("long", { partIds: ["c5"] }, 8);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "long",
+      { partIds: ["c5"], expectedParties: [] },
+      8,
+    );
   });
 });
 
@@ -525,6 +534,38 @@ const seatedAt = (tables: TableState[], ...ids: string[]) =>
   );
 
 describe("till-floor-screen: Split tables… on a group", () => {
+  it("sends each observed party once from the ticked group tables", async () => {
+    const api = stubApi();
+    const el = await mount(seatedAt(groupFloor(), "bar", "c3", "c4", "c5"), api);
+    send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["c3", "c5"], seats: 6 });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "bar",
+      {
+        partIds: ["c3", "c5"],
+        seats: 6,
+        expectedParties: [{ id: "p1", revision: 1 }],
+      },
+      7,
+    );
+  });
+
+  it("includes the observed joined parent when its parts are free", async () => {
+    const api = stubApi();
+    const el = await mount(seatedAt(floor(), "long"), api);
+    send(await openSplit(el), "split-joined-confirm", { partIds: ["c5"], seats: 6 });
+    await settle(el);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "long",
+      {
+        partIds: ["c5"],
+        seats: 6,
+        expectedParties: [{ id: "p1", revision: 1 }],
+      },
+      0,
+    );
+  });
+
   it("opens the window on Bar listing the group's four tables under the group's name", async () => {
     const el = await mount(groupFloor(), stubApi());
     const opened = await openSplit(el, "bar");
@@ -542,7 +583,11 @@ describe("till-floor-screen: Split tables… on a group", () => {
     const refreshes = countRefreshes(el);
     send(await openSplit(el, "bar"), "split-joined-confirm", { partIds: ["bar"], seats: null });
     await settle(el);
-    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith("bar", { partIds: ["bar"] }, 7);
+    expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
+      "bar",
+      { partIds: ["bar"], expectedParties: [] },
+      7,
+    );
     expect(windowOf(el)).toBeNull();
     expect(refreshes.count).toBe(1);
   });
@@ -554,7 +599,7 @@ describe("till-floor-screen: Split tables… on a group", () => {
     await settle(el);
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
       "bar",
-      { partIds: ["c5"], seats: 8 },
+      { partIds: ["c5"], expectedParties: [], seats: 8 },
       7,
     );
   });
@@ -686,7 +731,7 @@ describe("till-floor-screen: Split tables… on a group", () => {
     await settle(el);
     expect(api.splitOffToday).toHaveBeenCalledExactlyOnceWith(
       "long",
-      { partIds: ["c3"], seats: 6 },
+      { partIds: ["c3"], expectedParties: [], seats: 6 },
       7,
     );
   });

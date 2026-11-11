@@ -53,6 +53,7 @@ import {
   giveKeptSize,
   plannedZone,
   withRevision,
+  withSplitPartyReads,
   withZoneRevision,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
@@ -156,7 +157,7 @@ async function post(path: string, body: unknown): Promise<void> {
   const answer = await app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify(body),
+    body: JSON.stringify(await withSplitPartyReads(v, path, body)),
   });
   expect(answer.status, await answer.clone().text()).toBe(200);
 }

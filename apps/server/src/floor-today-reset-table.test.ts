@@ -51,6 +51,7 @@ import {
   type PlannedEntry,
   todayRow,
   zoneRevisionOf,
+  withSplitPartyReads,
 } from "./testing/floor-today-venue.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import "./errors.js";
@@ -137,7 +138,12 @@ async function post(path: string, revisionAt: string, body: Record<string, unkno
   return app.request(path, {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ zoneRevision: await readRevision(revisionAt), ...body }),
+    body: JSON.stringify(
+      await withSplitPartyReads(v, path, {
+        zoneRevision: await readRevision(revisionAt),
+        ...body,
+      }),
+    ),
   });
 }
 

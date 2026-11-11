@@ -228,12 +228,26 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
   });
   tableRoute("split-off", (body) => {
     const { partIds, seats } = partsBody(body);
+    if (!Array.isArray(body.expectedParties)) throw invalid("expectedParties");
+    const expectedParties = body.expectedParties.map((raw: unknown) => {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+        throw invalid("expectedParties");
+      const { id, revision } = raw as Record<string, unknown>;
+      if (typeof id !== "string" || !isUuid(id)) throw invalid("expectedParties");
+      return {
+        id: id.toLowerCase(),
+        revision: whole(revision, "expectedParties", 0, Number.MAX_SAFE_INTEGER),
+      };
+    });
+    if (new Set(expectedParties.map(({ id }) => id)).size !== expectedParties.length)
+      throw invalid("expectedParties");
     return {
       write: (tx, pathId) =>
         splitOff(tx, deps.cfg, removals, deps.clock.now().instant, {
           tableId: pathId,
           partIds,
           seats,
+          expectedParties,
         }),
       others: partIds,
     };
