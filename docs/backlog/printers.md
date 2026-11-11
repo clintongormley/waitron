@@ -163,18 +163,6 @@ chosen destination.
   the agent has joined and is not out of touch, `/status.json` answers only loopback callers
   (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
-## Unpair can come back for a short while after a successful unpairing
-
-- **Unpair can come back for a short while after a successful unpairing** (found in C103's review,
-  read, not run). The server calls a Bluetooth device paired while the agent's last "paired" report
-  is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while a discovery
-  window is open, 15 otherwise), and a later report that the device is no longer paired keeps the
-  old `pairedAt`. So for up to that long after an Unpair a device can read as paired again. Pair
-  again (A405, #2678) opens a discovery window, so pressed within 45 seconds of an Unpair it can
-  find the printer still paired and switch it on without pairing it. Clearing
-  `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end
-  it; the owner was asked (questions.md, C103).
-
 ## An agent compares the server's discovery deadline with its own clock
 
 - **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
@@ -657,9 +645,8 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 
 ## Bundle: Bluetooth pairing commands
 
-5 entries, size M.
+4 entries, size M.
 
-- **Unpair can come back for a short while after a successful unpairing** — found in C103's review, read, not run. Clearing `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end it; the owner was asked (questions.md, C103). [Detail](printers.md#unpair-can-come-back-for-a-short-while-after-a-successful-unpairing)
 - **A command queued behind a slow pair can run out of time.** A second command waiting behind that
   pair can therefore expire on the server before it runs; its outcome is then ignored and the screen
   says "No answer from the print agent — try again" whatever actually happened.

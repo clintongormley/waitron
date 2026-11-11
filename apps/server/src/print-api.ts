@@ -661,6 +661,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const unpaired = bluetoothCommands.unpaired(agentId, bluetoothOutcomes);
 
       const now = Date.now();
+      // A succeeded unpairing ends this agent's earlier paired report, so the device is no longer
+      // listed as paired nor offered Forget; one this same pull still lists as paired is stamped below.
+      for (const address of unpaired) {
+        const key = keyOf(agentId, "bluetooth", address);
+        const prior = discovered.get(key);
+        if (prior !== undefined)
+          discovered.set(key, { ...prior, pairedAt: undefined, pairedPrinterLike: undefined });
+      }
       // A visible or scanned report replaces the description, never another kind of report's stamp;
       // a visible report carries no printer mark, so it keeps the one already held.
       const descriptionsBefore = new Map<string, ReturnType<typeof description>>();

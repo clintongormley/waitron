@@ -4481,6 +4481,46 @@ describe("Bluetooth Pair and Forget commands", () => {
       });
     });
 
+    it("no longer lists the device as paired, nor lets it be unpaired again, once the agent reports the unpairing succeeded", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      await registerBluetooth(app, mac);
+      const id = await queueUnpair(app, agentId, token, mac);
+
+      await pull(app, token, {
+        visible: [{ transport: "bluetooth", localKey: mac }],
+        bluetoothOutcomes: [{ id, ok: true }],
+        pairedBluetooth: [],
+      });
+
+      const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+      expect(row).toBeDefined();
+      expect(row).not.toHaveProperty("paired");
+      const res = await command(app, agentId, "forget", { address: mac });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "printer.bluetooth_not_paired", params: { address: mac } },
+      });
+    });
+
+    it("still lists the device as paired when the pull reporting the unpairing also reports it paired", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      await registerBluetooth(app, mac);
+      const id = await queueUnpair(app, agentId, token, mac);
+
+      await pull(app, token, {
+        bluetoothOutcomes: [{ id, ok: true }],
+        pairedBluetooth: [{ localKey: mac }],
+      });
+
+      expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
+        paired: true,
+      });
+    });
+
     it("leaves the printer switched on when the unpairing failed", async () => {
       const app = mountApp();
       const { agentId, token } = await joinAndAccept(app);
