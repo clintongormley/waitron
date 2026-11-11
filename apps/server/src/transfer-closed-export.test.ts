@@ -143,6 +143,29 @@ describe("listTransferClosedInvoices", () => {
       ["F2", days.closedLater],
     ]);
   });
+
+  // The file's last sale: its clock is ahead of every other case's, so no later case may file one.
+  // A fixed year would fall behind the chain once real time passes it (`clock.behind_chain`).
+  it("dates the invoice by the venue's local day, not the UTC one", async () => {
+    const year = new Date(Math.max(Date.now(), t.latestRecordMs())).getUTCFullYear() + 1;
+    const clock = t.venue.clock;
+    t.venue.clock = clockAt(Date.parse(`${year}-01-01T23:30:00.000Z`));
+    let bill: string;
+    try {
+      bill = await t.counterOrder("placed", true);
+      await t.close(await t.requestFor(bill, "18.00", null));
+    } finally {
+      t.venue.clock = clock;
+    }
+    const [sale] = t.venue.db.all<{ at: string; offset: number }>(
+      sql`select issued_at as at, issued_offset_minutes as offset from sales where working_order_id = ${bill}`,
+    );
+    expect(sale).toEqual({ at: `${year}-01-01T23:30:00.000Z`, offset: 60 });
+
+    expect(await list(`${year}-01-01`, `${year}-01-02`)).toEqual([
+      expect.objectContaining({ issueDate: `${year}-01-02`, closedOn: `${year}-01-01` }),
+    ]);
+  });
 });
 
 const F2_ROW: TransferClosedInvoice = {
@@ -210,7 +233,7 @@ describe("renderTransferClosedCsv", () => {
   });
 });
 
-describe("GET /management-api/reports/closed-by-transfer", () => {
+describe("POST /management-api/reports/closed-by-transfer", () => {
   const app = new Hono();
   const mounted = () => {
     if (app.routes.length === 0)
@@ -221,8 +244,9 @@ describe("GET /management-api/reports/closed-by-transfer", () => {
       );
     return app;
   };
-  const get = (cookie: string, day: string) =>
+  const send = (cookie: string, day: string, method = "POST") =>
     mounted().request(`/management-api/reports/closed-by-transfer?from=${day}&to=${day}`, {
+      method,
       headers: { cookie },
     });
   const downloads = () =>
@@ -237,7 +261,7 @@ describe("GET /management-api/reports/closed-by-transfer", () => {
 
   it("answers a manager with the venue-language file and records the download", async () => {
     const day = days.closedLater!;
-    const res = await get(manager.cookie, day);
+    const res = await send(manager.cookie, day);
 
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/csv; charset=utf-8");
@@ -261,10 +285,40 @@ describe("GET /management-api/reports/closed-by-transfer", () => {
   });
 
   it("refuses a supervisor, who may view reports but not export them", async () => {
-    const res = await get(supervisorCookie, days.closedLater!);
+    const res = await send(supervisorCookie, days.closedLater!);
 
     expect(res.status).toBe(403);
     expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await downloads()).toHaveLength(1);
+  });
+
+  it("serves no file to a GET or HEAD, which a page on another port can make the browser send", async () => {
+    for (const method of ["GET", "HEAD"]) {
+      const res = await send(manager.cookie, days.closedLater!, method);
+
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).not.toContain("text/csv");
+    }
+    expect(await downloads()).toHaveLength(1);
+  });
+
+  it("gives no file when the download cannot be recorded", async () => {
+    await t.venue.db.execute(
+      sql.raw(
+        `create trigger test_download_refused before insert on activity_log when new.kind = 'transfer_export.downloaded'
+         begin select raise(abort, 'test: download record refused'); end`,
+      ),
+    );
+    let res: Response;
+    try {
+      res = await send(manager.cookie, days.closedLater!);
+    } finally {
+      await t.venue.db.execute(sql.raw("drop trigger test_download_refused"));
+    }
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get("content-type")).not.toContain("text/csv");
+    expect(await res.json()).toEqual({ error: { code: "server.internal" } });
     expect(await downloads()).toHaveLength(1);
   });
 });

@@ -54,17 +54,19 @@ import type { Logger } from "./logger.js";
 
 /**
  * On a mirror the data node is the ORIGIN recorded in node.db's `node_mirror_link`, not the
- * mirror's own id. Per-node reports use it; the overview and modelo 303 aggregate every node.
+ * mirror's own id. Per-node reports use it; the overview, modelo 303 and the transfer file read
+ * every node.
  */
 export interface ReportApiDeps {
   db: Database;
   cfg: { nodeId: string };
-  /** The printed page's language when neither the person nor the browser names one. */
+  /** The printed page's language when neither the person nor the browser names one, and always the
+   * transfer file's. */
   venueLocale: SupportedLocale;
 }
 
-/** Two distinct seams: viewing the takings dashboard is not exporting the fiscal file (a supervisor
- * holds `report.view` but not `report.export`). */
+/** Two distinct seams: viewing the takings dashboard is not exporting the accountant's files (modelo
+ * 303 and the transfer file); a supervisor holds `report.view` but not `report.export`. */
 const REPORT_EXPORT_PERMISSION: Permission = "report.export";
 const REPORT_VIEW_PERMISSION: Permission = "report.view";
 
@@ -352,8 +354,8 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
   );
 
   // The accountant's file of invoices whose bills were closed by transfer on a business day in an
-  // inclusive range, venue-wide; each download is recorded.
-  app.get("/management-api/reports/closed-by-transfer", (c) =>
+  // inclusive range, venue-wide. A POST because each download writes its activity entry.
+  app.post("/management-api/reports/closed-by-transfer", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const { from, to } = requireRange(c.req.query("from"), c.req.query("to"));
