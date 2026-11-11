@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import type { DiskFullState } from "./disk-full-state.js";
-import type { startFreeSpaceWatch } from "./free-space-watch.js";
+import type { freeSpaceJob } from "./free-space-watch.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import type { Alert } from "@waitron/module";
@@ -24,26 +24,23 @@ const GIB = 1024 ** 3;
 
 const holder = vi.hoisted(() => ({
   free: 0,
-  deps: undefined as Parameters<typeof startFreeSpaceWatch>[0] | undefined,
-  armed: [] as (() => void)[],
+  deps: undefined as Parameters<typeof freeSpaceJob>[0] | undefined,
+  check: undefined as (() => Promise<unknown>) | undefined,
 }));
 
-// Boot has no free-space seam; keep its real watch and the state and stop boot hands it, and
-// replace only the filesystem reading and the timer.
+// Keep the real job and the state and stop boot hands it; replace only the filesystem read.
 vi.mock("./free-space-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./free-space-watch.js")>();
   return {
     ...actual,
-    startFreeSpaceWatch: (deps: Parameters<typeof actual.startFreeSpaceWatch>[0]) => {
+    freeSpaceJob: (deps: Parameters<typeof actual.freeSpaceJob>[0]) => {
       holder.deps = deps;
-      return actual.startFreeSpaceWatch({
+      const job = actual.freeSpaceJob({
         ...deps,
         statfs: async () => ({ bavail: holder.free, frsize: 1 }),
-        timer: (_ms, fn) => {
-          holder.armed.push(fn);
-          return { cancel: () => {} };
-        },
       });
+      holder.check = () => job.pass({ now: deps.now(), signal: new AbortController().signal });
+      return job;
     },
   };
 });
@@ -52,9 +49,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
 async function tick(): Promise<void> {
-  const n = holder.armed.length;
-  holder.armed.at(-1)!();
-  await vi.waitFor(() => expect(holder.armed.length).toBe(n + 1));
+  await holder.check!();
 }
 
 async function bootServer(
@@ -97,7 +92,7 @@ async function bootServer(
   } finally {
     if (server !== undefined) await server.close();
     holder.deps = undefined;
-    holder.armed.length = 0;
+    holder.check = undefined;
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
   }
 }
@@ -208,7 +203,7 @@ describe("the running server's free-space watch", () => {
     } finally {
       if (server !== undefined) await server.close();
       holder.deps = undefined;
-      holder.armed.length = 0;
+      holder.check = undefined;
       if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     }
   });

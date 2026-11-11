@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
-import { runCloudWorker } from "./cloud-worker.js";
+import { runCloudConnectionForTest } from "./testing/cloud-connection-job.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -266,7 +266,7 @@ it("clears a revocation learned by another call even when this box is not primar
     await f.client.report([]);
     expect((await stat(f.peer)).isFile()).toBe(true);
     const requests = f.requests.length;
-    await runCloudWorker({
+    await runCloudConnectionForTest({
       connection: f.client,
       signal: controller.signal,
       isPrimary: () => false,

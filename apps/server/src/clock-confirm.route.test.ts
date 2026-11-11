@@ -27,7 +27,7 @@ import {
 } from "./box-health.js";
 import { readOpenEmailedIncidents } from "./box-alert-email.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { createClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_CLOCK_HEADER } from "./device-session.js";
@@ -316,10 +316,8 @@ async function watchChecks(
   checks: number,
   readAuthorityTime: FiscalBackend["readAuthorityTime"] = async () => null,
 ): Promise<void> {
-  let fire = (): void => {};
-  let armed = 0;
   let steadyMs = 0;
-  const watch = startClockWatch({
+  const watch = createClockWatch({
     backend: Object.create(venue.backend, {
       readAuthorityTime: { value: readAuthorityTime },
     }) as FiscalBackend,
@@ -333,20 +331,13 @@ async function watchChecks(
     transaction: (fn) => withTransaction(venue.db, fn),
     filesRecords: () => true,
     isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
     log: () => {},
-    timer: (_ms, fn) => {
-      fire = fn;
-      armed += 1;
-      return { cancel: () => {} };
-    },
   });
   for (let check = 1; check <= checks; check += 1) {
     steadyMs += MINUTE;
-    fire();
-    await vi.waitFor(() => expect(armed).toBe(check + 1));
+    await watch.check();
   }
-  await watch.stop();
+  watch.halt();
 }
 
 function ask(stop: Stop, cookie: string | undefined) {

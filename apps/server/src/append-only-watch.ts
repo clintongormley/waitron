@@ -6,7 +6,7 @@ import { appendOnlyTriggerFaults } from "@waitron/store";
 import "./errors.js";
 import type { Logger } from "./logger.js";
 import { refusedWhileRunning, updateRecoveryState, type RecoveryStore } from "./recovery-state.js";
-import { unrefTimer, type Timer } from "./unref-timer.js";
+import type { JobDefinition } from "./job-runner.js";
 
 type Faults = ReturnType<typeof appendOnlyTriggerFaults>;
 
@@ -75,44 +75,33 @@ export function refuseTrading(deps: RefuseTradingDeps): (faults: Faults) => Prom
   };
 }
 
-/**
- * Re-reads `tables`' append-only triggers every `intervalMs`, first one interval after start (boot
- * has just checked). A fault stops the checking and goes to `refuse`; a read that throws is logged
- * and tried again next interval.
- */
-export function startAppendOnlyWatch(deps: {
+export function tamperWatchJob(deps: {
   db: Database;
   tables: readonly string[];
   intervalMs: number;
   refuse: (faults: Faults) => Promise<void>;
   log: Logger;
-  timer?: (ms: number, fn: () => void) => Timer;
-}): { stop: () => void } {
-  const timer = deps.timer ?? unrefTimer;
-  let stopped = false;
-  let armed = timer(deps.intervalMs, check);
-
-  function check(): void {
-    if (stopped) return;
-    let faults: Faults;
-    try {
-      faults = appendOnlyTriggerFaults(deps.db, deps.tables);
-    } catch (error) {
-      deps.log("warn", "append_only.check_failed", { errorCode: codeOf(error) });
-      armed = timer(deps.intervalMs, check);
-      return;
-    }
-    if (faults.missing.length > 0 || faults.altered.length > 0) {
-      void deps.refuse(faults);
-      return;
-    }
-    armed = timer(deps.intervalMs, check);
-  }
-
+}): JobDefinition {
   return {
-    stop: () => {
-      stopped = true;
-      armed.cancel();
+    name: "fiscal.tamper_watch",
+    applies: () => true,
+    firstPassAfterMs: deps.intervalMs,
+    minSleepMs: deps.intervalMs,
+    maxSleepMs: deps.intervalMs,
+    backoff: { firstMs: deps.intervalMs, maxMs: deps.intervalMs },
+    async pass() {
+      let faults: Faults;
+      try {
+        faults = appendOnlyTriggerFaults(deps.db, deps.tables);
+      } catch (error) {
+        deps.log("warn", "append_only.check_failed", { errorCode: codeOf(error) });
+        throw error;
+      }
+      if (faults.missing.length > 0 || faults.altered.length > 0) {
+        await deps.refuse(faults);
+        return { nextDueAt: null, finished: true };
+      }
+      return { nextDueAt: null };
     },
   };
 }

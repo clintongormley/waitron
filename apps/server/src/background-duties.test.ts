@@ -26,18 +26,12 @@ const CLOSERS = [
   "certificateDiagnosis",
   "invoiceEmailLoop",
   "mailLoop",
-  "cloudWorker",
   "cloudSnapshots",
-  "suggestionLoop",
   "unsubscribeFromChanges",
-  "appendOnlyWatch",
-  "freeSpaceWatch",
   "boxEmails",
   "liveEvents",
   "loop",
   "backupSupervisor",
-  "demoPrinterLoop",
-  "clockWatch",
   "handoverDestinationDuty",
   "chartPost",
   "jobRunnerServices",
@@ -73,9 +67,7 @@ function recordingHandles(
     certificateDiagnosis: stopper("certificateDiagnosis"),
     invoiceEmailLoop: awaited("invoiceEmailLoop"),
     mailLoop: awaited("mailLoop"),
-    cloudWorker: awaited("cloudWorker"),
     cloudSnapshots: awaited("cloudSnapshots"),
-    suggestionLoop: awaited("suggestionLoop"),
     unsubscribeFromChanges: () => void calls.push("call unsubscribeFromChanges"),
     jobRunner: {
       signalStepdown: () => void calls.push("abort jobRunner"),
@@ -86,14 +78,10 @@ function recordingHandles(
         calls.push("stop jobRunner");
       },
     },
-    appendOnlyWatch: stopper("appendOnlyWatch"),
-    freeSpaceWatch: stopper("freeSpaceWatch"),
     boxEmails: stopper("boxEmails"),
     liveEvents: { close: () => void calls.push("close liveEvents") },
     loop: awaited("loop"),
     backupSupervisor: stopper("backupSupervisor"),
-    demoPrinterLoop: stopper("demoPrinterLoop"),
-    clockWatch: stopper("clockWatch"),
     handoverDestinationDuty: stopper("handoverDestinationDuty"),
     chartPost: stopper("chartPost"),
     ...overrides,
@@ -120,18 +108,12 @@ describe("background duties", () => {
       "stop certificateDiagnosis",
       "await invoiceEmailLoop",
       "await mailLoop",
-      "await cloudWorker",
       "await cloudSnapshots",
-      "await suggestionLoop",
       "call unsubscribeFromChanges",
-      "stop appendOnlyWatch",
-      "stop freeSpaceWatch",
       "stop boxEmails",
       "close liveEvents",
       "await loop",
       "stop backupSupervisor",
-      "stop demoPrinterLoop",
-      "stop clockWatch",
       "stop handoverDestinationDuty",
       "stop chartPost",
       "stop jobRunnerServices",
@@ -144,14 +126,13 @@ describe("background duties", () => {
       certificateReminderController: undefined,
       attendanceLoop: undefined,
       certificateDiagnosis: undefined,
-      suggestionLoop: undefined,
-      demoPrinterLoop: undefined,
+      handoverDestinationDuty: undefined,
     });
     await stopBackgroundDuties(backgroundDuties(handles));
     expect(calls).not.toContain("abort certificateReminderController");
     expect(calls).not.toContain("await attendanceLoop");
     expect(calls).not.toContain("stop certificateDiagnosis");
-    expect(calls).not.toContain("stop demoPrinterLoop");
+    expect(calls).not.toContain("stop handoverDestinationDuty");
     expect(calls.at(-1)).toBe("stop jobRunnerServices");
   });
 
@@ -168,11 +149,11 @@ describe("background duties", () => {
           throw first;
         },
       },
-      clockWatch: { stop: () => Promise.reject(new Error("clock watch failed")) },
+      boxEmails: { stop: () => Promise.reject(new Error("box email failed")) },
     });
     await expect(stopBackgroundDuties(backgroundDuties(handles))).rejects.toBe(first);
     expect(calls.at(-1)).toBe("stop jobRunnerServices");
-    expect(calls).toContain("stop appendOnlyWatch");
+    expect(calls).toContain("stop handoverDestinationDuty");
   });
 
   it("carries on past a failing abort to every other abort and closer, then rejects with the first failure", async () => {
@@ -192,7 +173,7 @@ describe("background duties", () => {
         },
       },
       loop: running,
-      clockWatch: { stop: () => Promise.reject(new Error("clock watch failed")) },
+      boxEmails: { stop: () => Promise.reject(new Error("box email failed")) },
     });
 
     let settled = false;
@@ -231,7 +212,7 @@ describe("background duties", () => {
     const stopping = stopBackgroundDuties(duties).then(() => (done = true));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(done).toBe(false);
-    expect(calls).not.toContain("stop demoPrinterLoop");
+    expect(calls).not.toContain("stop handoverDestinationDuty");
 
     finish();
     await stopping;
@@ -244,7 +225,7 @@ describe("background duties", () => {
     const failure = new Error("stop failed");
     const duties = backgroundDuties(
       recordingHandles([], {
-        clockWatch: {
+        boxEmails: {
           stop: () => {
             stops += 1;
             throw failure;
@@ -252,7 +233,7 @@ describe("background duties", () => {
         },
       }),
     );
-    const closer = duties.closers.find((c) => c.name === "clockWatch")!;
+    const closer = duties.closers.find((c) => c.name === "boxEmails")!;
     expect(() => closer.close()).toThrow(failure);
     expect(() => closer.close()).toThrow(failure);
     expect(stops).toBe(1);

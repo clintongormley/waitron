@@ -1,4 +1,4 @@
-import { setTimeout as delay } from "node:timers/promises";
+import type { JobDefinition } from "./job-runner.js";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { hasCode, isAppError, type ErrorCode } from "@waitron/shared";
 import {
@@ -63,8 +63,6 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
   const now = deps.now ?? (() => new Date());
   const { translation } = deps.connection;
   const record = (fn: (tx: Transaction) => Promise<void>) => withTransaction(deps.db, fn);
-  let woken = false;
-  let interruptIdle: AbortController | undefined;
 
   /** Ends an open job; a finished one only needs its release recorded. */
   async function close(
@@ -180,51 +178,37 @@ export function createContentSuggestionRunner(deps: ContentSuggestionRunnerDeps)
       : release(job, job.cloudJobId, signal);
   }
 
-  async function run(
-    signal: AbortSignal,
-    options: {
-      sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-      onError?: (error: unknown) => void;
-    } = {},
-  ): Promise<void> {
-    const sleep =
-      options.sleep ?? ((ms: number, s: AbortSignal) => delay(ms, undefined, { signal: s }));
-    let backoff = FIRST_BACKOFF_MS;
-    const pause = async (ms: number, wakeable: boolean) => {
-      const interrupt = new AbortController();
-      if (wakeable) interruptIdle = interrupt;
-      try {
-        await sleep(ms, wakeable ? AbortSignal.any([signal, interrupt.signal]) : signal);
-      } catch (error) {
-        if (!signal.aborted && !interrupt.signal.aborted) throw error;
-      } finally {
-        if (wakeable) interruptIdle = undefined;
-      }
-    };
-    while (!signal.aborted) {
-      woken = false;
-      let next: RunnerStep;
-      try {
-        next = await step(signal);
-        backoff = FIRST_BACKOFF_MS;
-      } catch (error) {
-        if (signal.aborted) return;
-        options.onError?.(error);
-        await pause(backoff, false);
-        backoff = Math.min(backoff * 2, LAST_BACKOFF_MS);
-        continue;
-      }
-      if (next === "wait") await pause(POLL_MS, false);
-      else if (next === "idle" && !woken) await pause(IDLE_MS, true);
-    }
-  }
+  return { step };
+}
 
+export type ContentSuggestionRunner = ReturnType<typeof createContentSuggestionRunner>;
+
+export function suggestionsJob(
+  runner: ContentSuggestionRunner,
+  isPrimary: () => boolean,
+  onError?: (error: unknown) => void,
+): JobDefinition {
   return {
-    step,
-    run,
-    wake(): void {
-      woken = true;
-      interruptIdle?.abort();
+    name: "cloud.suggestions",
+    applies: isPrimary,
+    minSleepMs: 0,
+    maxSleepMs: IDLE_MS,
+    backoff: { firstMs: FIRST_BACKOFF_MS, maxMs: LAST_BACKOFF_MS },
+    async pass({ now, signal }) {
+      try {
+        const next = await runner.step(signal);
+        return {
+          nextDueAt: new Date(
+            now.getTime() + (next === "again" ? 0 : next === "wait" ? POLL_MS : IDLE_MS),
+          ),
+        };
+      } catch (error) {
+        if (!signal.aborted) {
+          onError?.(error);
+          throw error;
+        }
+        return { nextDueAt: null };
+      }
     },
   };
 }

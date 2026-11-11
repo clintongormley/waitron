@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AuthorityTimeSample,
   BootReading,
@@ -10,7 +10,18 @@ import type {
 } from "@waitron/fiscal";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
+
+import { createJobRunner, type JobRunner } from "./job-runner.js";
+import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
+const runners: JobRunner[] = [];
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+});
+afterEach(async () => {
+  await Promise.all(runners.splice(0).map((runner) => runner.stopJobs()));
+  vi.useRealTimers();
+});
 
 const TX = { fake: "tx" } as unknown as Transaction;
 const START_MS = Date.parse("2026-07-20T18:00:00.000Z");
@@ -65,7 +76,7 @@ function harness(
 ) {
   let wallMs = START_MS;
   let monoMs = 1_000;
-  const timers: { ms: number; fn: () => void; cancelled: boolean }[] = [];
+
   const logs: { level: string; event: string; fields: unknown }[] = [];
   const sample: AuthorityTimeSample = {
     authorityMs: START_MS,
@@ -118,11 +129,11 @@ function harness(
   const transaction = vi.fn(async (fn: (tx: Transaction) => Promise<unknown>) => fn(TX));
   const files = { current: options.files ?? true };
   const primary = { current: options.primary ?? true };
-  const watch = startClockWatch({
+  const watch = createClockWatch({
     backend:
       options.seat === "empty"
         ? { assertRecordableAt: () => {} }
-        : (backend as unknown as Parameters<typeof startClockWatch>[0]["backend"]),
+        : (backend as unknown as Parameters<typeof createClockWatch>[0]["backend"]),
     store,
     clock: {
       now: () => ({ instant: new Date(wallMs), offsetMinutes: 120 }) as never,
@@ -135,28 +146,26 @@ function harness(
     transaction: transaction as never,
     filesRecords: () => files.current,
     isPrimary: () => primary.current,
-    intervalMs: CLOCK_WATCH_MS,
     log: (level, event, fields) => logs.push({ level, event, fields }),
-    timer: (ms, fn) => {
-      const timer = { ms, fn, cancelled: false };
-      timers.push(timer);
-      return {
-        cancel: () => {
-          timer.cancelled = true;
-        },
-      };
-    },
   });
+  const runner = createJobRunner({
+    now: () => new Date(),
+    log: () => {},
+    delay: fakeTimerDelay,
+    subscribe: () => () => {},
+  });
+  runners.push(runner);
+  runner.add(clockWatchJob(watch, CLOCK_WATCH_MS));
+  const stop = () => runner.stopJobs();
+  const fire = () => vi.advanceTimersByTimeAsync(CLOCK_WATCH_MS);
 
   /** Moves both clocks, fires the armed timer and waits for the next one to be armed. */
   async function tick(advance: { wallMs?: number; monoMs?: number } = {}) {
     const steady = advance.monoMs ?? CLOCK_WATCH_MS;
     monoMs += steady;
     wallMs += advance.wallMs ?? steady;
-    const armed = timers.at(-1)!;
-    const count = timers.length;
-    armed.fn();
-    await vi.waitFor(() => expect(timers.length).toBe(count + 1));
+    await fire();
+    await vi.waitFor(() => expect(runner.views()["clock.watch"]?.state).toBe("waiting"));
   }
 
   return {
@@ -166,12 +175,13 @@ function harness(
     read,
     transaction,
     logs,
-    timers,
+    runner,
+    fire,
     state,
     files,
     primary,
     sample,
-    watch,
+    watch: Object.assign(watch, { stop }),
     tick,
     wall: () => wallMs,
     move: (by: { wallMs: number; monoMs: number }) => {
@@ -191,12 +201,22 @@ function authority(boxAtMs: number, offsetMs: number): ClockWitness {
   };
 }
 
-describe("startClockWatch", () => {
-  it("arms its first check 15 seconds after start", () => {
+describe("createClockWatch", () => {
+  it("arms its first check 15 seconds after start", async () => {
     const h = harness();
-    expect(h.timers).toHaveLength(1);
-    expect(h.timers[0]!.ms).toBe(15_000);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(h.read).not.toHaveBeenCalled();
     expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborting the job halts the watch before the abort returns", async () => {
+    const h = harness();
+    await h.tick();
+    h.store.takeNewAuthority.mockReturnValueOnce([authority(START_MS, 3_600_000)]);
+    h.runner.signalStepdown();
+    await expect(h.watch.stepComing()).rejects.toThrow("clock_watch.stopped");
   });
 
   it("reads AEAT's time during a stop on a filing primary, again a minute later, and notes the sample", async () => {
@@ -455,7 +475,7 @@ describe("startClockWatch", () => {
         }),
     );
     h.move({ wallMs: 121_000, monoMs: 60_000 });
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1));
     const stopping = h.watch.stop();
     release();
@@ -474,7 +494,7 @@ describe("startClockWatch", () => {
           release = () => resolve({ recorded: [], unused: [], held: [] });
         }),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1));
     const stopping = h.watch.stop();
     release();
@@ -526,17 +546,17 @@ describe("startClockWatch", () => {
     h.backend.readAuthorityTime.mockImplementationOnce(
       () => new Promise<AuthorityTimeSample>((resolve) => (release = resolve)),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1));
     let stopped = false;
     const stopping = h.watch.stop().then(() => (stopped = true));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.advanceTimersByTimeAsync(10);
     expect(stopped).toBe(false);
     release(h.sample);
     await stopping;
-    expect(h.timers.every((timer, index) => index === 0 || timer.cancelled)).toBe(true);
-    for (const timer of h.timers) timer.fn();
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(h.runner.views()["clock.watch"]?.state).toBe("stopped");
+    await vi.advanceTimersByTimeAsync(CLOCK_WATCH_MS * 2);
+    await vi.advanceTimersByTimeAsync(10);
     expect(h.backend.clockStopState).toHaveBeenCalledTimes(1);
     expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1);
     expect(h.backend.noteClockProvedWrong).not.toHaveBeenCalled();
@@ -548,14 +568,14 @@ describe("startClockWatch", () => {
     h.backend.clockStopState.mockImplementationOnce(
       () => new Promise<ClockStopState>((resolve) => (release = resolve)),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.clockStopState).toHaveBeenCalledTimes(1));
     const stopping = h.watch.stop();
     release(STOPPED);
     await stopping;
     expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
     expect(h.store.takeNewAuthority).not.toHaveBeenCalled();
-    expect(h.timers).toHaveLength(1);
+    expect(h.runner.views()["clock.watch"]?.state).toBe("stopped");
   });
 
   it("opens a check, in a transaction, at each look during a stop with the reading, the boot reading and the node, and logs a check once", async () => {
@@ -709,7 +729,7 @@ describe("startClockWatch", () => {
     h.backend.openClockCheck!.mockImplementationOnce(
       () => new Promise((resolve) => (release = resolve)),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.openClockCheck).toHaveBeenCalledTimes(1));
     const stopping = h.watch.stop();
     release({ id: "check-1" });
@@ -724,16 +744,16 @@ describe("startClockWatch", () => {
     h.backend.confirmClockStop!.mockImplementationOnce(
       () => new Promise((resolve) => (release = resolve)),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.confirmClockStop).toHaveBeenCalledTimes(1));
     let stopped = false;
     const stopping = h.watch.stop().then(() => (stopped = true));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.advanceTimersByTimeAsync(10);
     expect(stopped).toBe(false);
     release({ confirmation: CONFIRMATION });
     await stopping;
     expect(h.backend.readAuthorityTime).not.toHaveBeenCalled();
-    expect(h.timers).toHaveLength(1);
+    expect(h.runner.views()["clock.watch"]?.state).toBe("stopped");
   });
 
   it("closes a waiting check at a look with no stop, on the reading, the boot reading and the witnesses, logs it and clears the store", async () => {
@@ -827,7 +847,7 @@ describe("startClockWatch", () => {
     h.backend.waitingClockCheck!.mockImplementationOnce(
       () => new Promise((resolve) => (release = resolve)),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.waitingClockCheck).toHaveBeenCalledTimes(1));
     const stopping = h.watch.stop();
     release(WAITING);
@@ -842,7 +862,7 @@ describe("startClockWatch", () => {
     h.backend.readAuthorityTime.mockImplementationOnce(
       () => new Promise((resolve) => (release = resolve)),
     );
-    h.timers.at(-1)!.fn();
+    await h.fire();
     await vi.waitFor(() => expect(h.backend.readAuthorityTime).toHaveBeenCalledTimes(1));
     const stopping = h.watch.stop();
     release(h.sample);
@@ -852,7 +872,7 @@ describe("startClockWatch", () => {
   });
 
   it("runs on the real clocks and timer when none are given", async () => {
-    const watch = startClockWatch({
+    const watch = createClockWatch({
       backend: { assertRecordableAt: () => {} },
       store: {
         noteAuthority: vi.fn(),
@@ -868,9 +888,12 @@ describe("startClockWatch", () => {
       transaction: (fn) => fn(TX),
       filesRecords: () => true,
       isPrimary: () => true,
-      intervalMs: CLOCK_WATCH_MS,
       log: () => {},
     });
-    await expect(watch.stop()).resolves.toBeUndefined();
+    vi.useRealTimers();
+    const runner = createJobRunner({ now: () => new Date(), log: () => {} });
+    runners.push(runner);
+    runner.add(clockWatchJob(watch, CLOCK_WATCH_MS));
+    await expect(runner.stopJobs()).resolves.toBeUndefined();
   });
 });

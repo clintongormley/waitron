@@ -1,3 +1,6 @@
+import { beforeEach, afterEach } from "vitest";
+import { createJobRunner, type JobRunner } from "./job-runner.js";
+import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -12,7 +15,7 @@ import {
   FREE_SPACE_CHECK_MS,
   SPACE_LOW_BYTES,
   SPACE_OK_BYTES,
-  startFreeSpaceWatch,
+  freeSpaceJob,
   type FreeSpaceState,
 } from "./free-space-watch.js";
 import type { Logger, LogLevel } from "./logger.js";
@@ -129,7 +132,15 @@ describe("createFreeSpaceState", () => {
   });
 });
 
-describe("startFreeSpaceWatch", () => {
+describe("freeSpaceJob", () => {
+  const runners: JobRunner[] = [];
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date", "performance"] });
+  });
+  afterEach(async () => {
+    await Promise.all(runners.splice(0).map((runner) => runner.stopJobs()));
+    vi.useRealTimers();
+  });
   function watch(
     options: {
       disk?: Pick<DiskFullState, "noted" | "full">;
@@ -141,7 +152,7 @@ describe("startFreeSpaceWatch", () => {
   ) {
     const spy = logSpy();
     const log = options.log ?? spy.log;
-    const armed: { ms: number; fn: () => void; cancelled: boolean }[] = [];
+
     const seen: string[] = [];
     const reading = { free: 10 * GIB };
     const now = at(30);
@@ -152,29 +163,47 @@ describe("startFreeSpaceWatch", () => {
         seen.push(dir);
         return { bavail: reading.free, frsize: 1 };
       });
-    const handle = startFreeSpaceWatch({
-      dir: DIR,
-      state,
-      disk: options.disk ?? { noted: () => false, full: async () => false },
-      intervalMs: FREE_SPACE_CHECK_MS,
-      now: () => now,
-      log,
-      statfs,
-      ...(options.restoreSpare ? { restoreSpare: options.restoreSpare } : {}),
-      ...(options.freeOldBackups ? { freeOldBackups: options.freeOldBackups } : {}),
-      timer: (ms, fn) => {
-        const entry = { ms, fn, cancelled: false };
-        armed.push(entry);
-        return { cancel: () => (entry.cancelled = true) };
-      },
+    const runner = createJobRunner({
+      now: () => new Date(),
+      log: () => {},
+      delay: fakeTimerDelay,
+      subscribe: () => () => {},
     });
+    runners.push(runner);
+    runner.add(
+      freeSpaceJob({
+        dir: DIR,
+        state,
+        disk: options.disk ?? { noted: () => false, full: async () => false },
+        intervalMs: FREE_SPACE_CHECK_MS,
+        now: () => now,
+        log,
+        statfs,
+        ...(options.restoreSpare ? { restoreSpare: options.restoreSpare } : {}),
+        freeOldBackups: async (signal) => {
+          await Promise.resolve();
+          await options.freeOldBackups?.(signal);
+        },
+      }),
+    );
+    let first = true;
     const tick = async () => {
-      const n = armed.length;
-      armed.at(-1)!.fn();
-      // A reading may write and sync the 8 MiB spare file, which took over a second on a CI runner.
-      await vi.waitFor(() => expect(armed.length).toBe(n + 1), { timeout: 30_000 });
+      await vi.advanceTimersByTimeAsync(first ? 0 : FREE_SPACE_CHECK_MS);
+      first = false;
+      await vi.waitFor(() => expect(runner.views()["storage.free_space"]?.state).toBe("waiting"), {
+        timeout: 30_000,
+      });
     };
-    return { handle, armed, seen, reading, now, state, tick, ...spy };
+    return {
+      runner,
+      handle: { stop: () => runner.stopJobs() },
+      seen,
+      reading,
+      now,
+      state,
+      tick,
+      ...spy,
+    };
   }
 
   function realStop(free: { value: number | Promise<number> }) {
@@ -190,14 +219,15 @@ describe("startFreeSpaceWatch", () => {
   }
 
   it("reads at once, then a minute after each reading", async () => {
+    const began = Date.now();
     const w = watch();
-    expect(w.armed).toEqual([{ ms: 0, fn: expect.any(Function), cancelled: false }]);
     await w.tick();
-    expect(w.armed).toHaveLength(2);
-    expect(w.armed[1]!.ms).toBe(60_000);
+    expect(w.seen).toEqual([DIR]);
+    await vi.advanceTimersByTimeAsync(59_999 - (Date.now() - began));
+    expect(w.seen).toEqual([DIR]);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(w.seen).toHaveLength(2));
     await w.tick();
-    await w.tick();
-    expect(w.armed.map((entry) => entry.ms)).toEqual([0, 60_000, 60_000, 60_000]);
     expect(w.seen).toEqual([DIR, DIR, DIR]);
   });
 
@@ -247,18 +277,19 @@ describe("startFreeSpaceWatch", () => {
 
   it("stop cancels the armed timer, and a reading whose free-space read is in flight records and arms nothing", async () => {
     const first = watch();
-    first.handle.stop();
-    expect(first.armed[0]!.cancelled).toBe(true);
+    await first.handle.stop();
+    await vi.advanceTimersByTimeAsync(FREE_SPACE_CHECK_MS);
+    expect(first.seen).toEqual([]);
 
     let release!: (free: number) => void;
     const held = new Promise<number>((resolve) => (release = resolve));
     const w = watch({ statfs: async () => ({ bavail: await held, frsize: 1 }) });
-    w.armed[0]!.fn();
+    await vi.advanceTimersByTimeAsync(0);
     w.handle.stop();
     release(GIB);
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
-    expect(w.armed).toHaveLength(1);
+    expect(w.runner.views()["storage.free_space"]?.state).toBe("stopped");
     expect(w.state.current().freeBytes).toBeNull();
     expect(w.events("storage.space_low")).toHaveLength(0);
   });
@@ -269,11 +300,11 @@ describe("startFreeSpaceWatch", () => {
     const stop = realStop({ value: held });
     const w = watch({ disk: stop.disk });
     stop.disk.noteRefused();
-    w.armed[0]!.fn();
+    await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => expect(stop.diskStatfs).toHaveBeenCalled());
     stop.disk.noteRefused();
     release(FULL_DISK_BYTES);
-    await vi.waitFor(() => expect(w.armed).toHaveLength(2));
+    await vi.waitFor(() => expect(w.runner.views()["storage.free_space"]?.state).toBe("waiting"));
     expect(stop.disk.noted()).toBe(true);
     expect(stop.events("storage.disk_space_back")).toHaveLength(0);
   });
@@ -338,7 +369,7 @@ describe("startFreeSpaceWatch", () => {
       await held;
     };
     const w = watch({ restoreSpare });
-    w.armed[0]!.fn();
+    await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => expect(restoring).toBe(true));
     let stopped = false;
     const stopping = w.handle.stop().then(() => (stopped = true));
@@ -346,7 +377,7 @@ describe("startFreeSpaceWatch", () => {
     expect(stopped).toBe(false);
     release();
     await stopping;
-    expect(w.armed).toHaveLength(1);
+    expect(w.runner.views()["storage.free_space"]?.state).toBe("stopped");
     expect(w.state.current().freeBytes).toBeNull();
   });
 
@@ -355,10 +386,10 @@ describe("startFreeSpaceWatch", () => {
       void w.handle.stop();
     };
     const w = watch({ restoreSpare });
-    w.armed[0]!.fn();
+    await vi.advanceTimersByTimeAsync(0);
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
-    expect(w.armed).toHaveLength(1);
+    expect(w.runner.views()["storage.free_space"]?.state).toBe("stopped");
     expect(w.state.current().freeBytes).toBeNull();
   });
 
@@ -433,7 +464,7 @@ describe("startFreeSpaceWatch", () => {
     const w = watch({
       freeOldBackups: () => new Promise<void>((_, reject) => (fail = reject)),
     });
-    w.armed[0]!.fn();
+    await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
     const stopping = w.handle.stop();
     fail(new Error("stopping"));
@@ -466,7 +497,7 @@ describe("startFreeSpaceWatch", () => {
       await held;
     };
     const w = watch({ freeOldBackups });
-    w.armed[0]!.fn();
+    await vi.advanceTimersByTimeAsync(0);
     await vi.waitFor(() => expect(given).toBeDefined());
     expect(given!.aborted).toBe(false);
     let stopped = false;
@@ -476,7 +507,7 @@ describe("startFreeSpaceWatch", () => {
     expect(stopped).toBe(false);
     release();
     await stopping;
-    expect(w.armed).toHaveLength(1);
+    expect(w.runner.views()["storage.free_space"]?.state).toBe("stopped");
     expect(w.state.current().freeBytes).toBeNull();
   });
 
@@ -494,6 +525,7 @@ describe("startFreeSpaceWatch", () => {
       "storage.free_space_check_failed",
       { errorCode: "unknown" },
     ]);
-    expect(w.armed[1]!.ms).toBe(60_000);
+    await w.tick();
+    expect(w.events("storage.free_space_check_failed")).toHaveLength(2);
   });
 });

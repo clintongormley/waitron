@@ -1,3 +1,4 @@
+import { createJobRunner } from "./job-runner.js";
 import { existsSync } from "node:fs";
 import { cp, lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -19,11 +20,11 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
-import { startFreeSpaceWatch } from "./free-space-watch.js";
+import { freeSpaceJob } from "./free-space-watch.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
-import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
+import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { withCapturedStdout, waitForEvent } from "./testing/boot-harness.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -83,7 +84,7 @@ vi.mock("./low-space-backups.js", async (original) => {
 });
 vi.mock("./free-space-watch.js", async (original) => {
   const actual = await original<typeof import("./free-space-watch.js")>();
-  return { ...actual, startFreeSpaceWatch: vi.fn(actual.startFreeSpaceWatch) };
+  return { ...actual, freeSpaceJob: vi.fn(actual.freeSpaceJob) };
 });
 vi.mock("./cloud-snapshot-worker.js", async (original) => {
   const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
@@ -91,25 +92,34 @@ vi.mock("./cloud-snapshot-worker.js", async (original) => {
 });
 
 // The loop lingers after its abort, so a close() that did not await it would resolve first.
-const loop = vi.hoisted(() => ({ lingerMs: 500, ended: false }));
+const loop = vi.hoisted(() => ({
+  lingerMs: 500,
+  ended: false,
+  signal: undefined as AbortSignal | undefined,
+}));
+vi.mock("./job-runner.js", async (original) => {
+  const actual = await original<typeof import("./job-runner.js")>();
+  return { ...actual, createJobRunner: vi.fn(actual.createJobRunner) };
+});
 vi.mock("./content-suggestion-runner.js", async (original) => {
   const actual = await original<typeof import("./content-suggestion-runner.js")>();
   return {
     ...actual,
-    createContentSuggestionRunner: vi.fn(
-      (...args: Parameters<typeof actual.createContentSuggestionRunner>) => {
-        const runner = actual.createContentSuggestionRunner(...args);
-        return {
-          ...runner,
-          run: vi.fn(async (...run: Parameters<typeof runner.run>) => {
-            await runner.run(...run);
-            await new Promise((resolve) => setTimeout(resolve, loop.lingerMs));
-            loop.ended = true;
-          }),
-          wake: vi.fn(runner.wake),
-        };
-      },
-    ),
+    createContentSuggestionRunner: vi.fn(actual.createContentSuggestionRunner),
+    suggestionsJob: vi.fn((...args: Parameters<typeof actual.suggestionsJob>) => {
+      const job = actual.suggestionsJob(...args);
+      return {
+        ...job,
+        pass: (ctx: Parameters<typeof job.pass>[0]) => {
+          loop.signal = ctx.signal;
+          return job.pass(ctx);
+        },
+        onStop: async () => {
+          await new Promise((resolve) => setTimeout(resolve, loop.lingerMs));
+          loop.ended = true;
+        },
+      };
+    }),
   };
 });
 vi.mock("./content-suggestions-api.js", async (original) => {
@@ -296,7 +306,7 @@ describe("boot's authority clock wiring", () => {
       // as every run, on the disk the watch reads.
       expect(lowSpaceBackupDeletion).toHaveBeenCalledOnce();
       const [stepDeps] = vi.mocked(lowSpaceBackupDeletion).mock.calls[0]!;
-      const [watchDeps] = vi.mocked(startFreeSpaceWatch).mock.calls[0]!;
+      const [watchDeps] = vi.mocked(freeSpaceJob).mock.calls[0]!;
       expect(stepDeps.dir).toBe(watchDeps.dir);
       expect(stepDeps.staging).toBe(clocks.archive!.stagingTurn);
       expect(stepDeps.installationStartedAt).toBe(hooks.readInstallationStart);
@@ -432,18 +442,18 @@ describe("boot's authority clock wiring", () => {
       expect((await readTranslations()).rows[0]!.cells[0]!.text).toBe("Customer coffee");
 
       expect(createContentSuggestionRunner).toHaveBeenCalledOnce();
-      const runner = vi.mocked(createContentSuggestionRunner).mock.results[0]!.value as ReturnType<
-        typeof createContentSuggestionRunner
-      >;
-      expect(runner.run).toHaveBeenCalledOnce();
-      const [signal, options] = vi.mocked(runner.run).mock.calls[0]!;
+      expect(suggestionsJob).toHaveBeenCalledOnce();
+      const [, , onError] = vi.mocked(suggestionsJob).mock.calls[0]!;
+      const signal = loop.signal!;
       expect(signal.aborted).toBe(false);
+      const runner = vi.mocked(createJobRunner).mock.results[0]!.value;
+      const wake = vi.spyOn(runner, "wake");
       const deps = vi.mocked(mountContentSuggestionsApi).mock.calls[0]![1];
-      expect(runner.wake).not.toHaveBeenCalled();
+      expect(wake).not.toHaveBeenCalled();
       deps.wake();
-      expect(runner.wake).toHaveBeenCalledOnce();
+      expect(wake).toHaveBeenCalledExactlyOnceWith("cloud.suggestions");
       const logged = await withCapturedStdout(async (lines) => {
-        options!.onError!(new AppError("cloud.unavailable", {}));
+        onError!(new AppError("cloud.unavailable", {}));
         return waitForEvent(lines, "content.suggestion_runner_failed");
       });
       expect(logged).toMatchObject({ errorCode: "cloud.unavailable" });

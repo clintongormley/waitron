@@ -12,6 +12,7 @@ const base: BoxStatusReaders = {
   backup: undefined,
   stream: () => ({ state: "off" }),
   duties: () => ({ "fiscal.drain": { stale: false } }),
+  jobs: () => ({}),
 };
 
 describe("collectBoxStatus", () => {
@@ -28,7 +29,30 @@ describe("collectBoxStatus", () => {
       backup: { configured: false },
       stream: { state: "off" },
       duties: { "fiscal.drain": { stale: false } },
+      jobs: {},
     });
+  });
+
+  it("carries the full runner job view including its last error and own failure alert", async () => {
+    const jobs = {
+      "mail.send": {
+        kind: "job" as const,
+        detail: null,
+        state: "waiting" as const,
+        judged: false,
+        lastTurnAt: null,
+        lastRunAt: null,
+        lastOkAt: null,
+        consecutiveFailures: 3,
+        failingSince: "2026-08-29T09:00:00Z",
+        throwsSinceClean: 3,
+        throwingSince: "2026-08-29T09:00:00Z",
+        lastErrorCode: "mail.send_failed",
+        nextDueAt: null,
+        ownFailureAlert: "mail.unavailable",
+      },
+    };
+    expect((await collectBoxStatus({ ...base, jobs: () => jobs })).jobs).toEqual(jobs);
   });
 
   it("passes the bucket copy through from its reader", async () => {

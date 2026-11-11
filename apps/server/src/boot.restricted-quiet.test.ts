@@ -66,11 +66,12 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-watch.js")>();
   return {
     ...actual,
-    startClockWatch: (...args: Parameters<typeof actual.startClockWatch>) => {
+    clockWatchJob: (watch: Parameters<typeof actual.clockWatchJob>[0]) =>
+      actual.clockWatchJob(watch, 200),
+    createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) => {
       const [deps] = args;
-      return actual.startClockWatch({
+      return actual.createClockWatch({
         ...deps,
-        intervalMs: 200,
         // A proxy, not a spread: the backend is a class instance whose methods a spread drops.
         backend: new Proxy(deps.backend, {
           get: (target, key) => {

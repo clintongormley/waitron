@@ -1,3 +1,6 @@
+import type { JobDefinition } from "./job-runner.js";
+import type { Logger } from "./logger.js";
+import { codeOf } from "@waitron/server-kit";
 // The registry of `printer.not_found`, which `routeToDemoPrinter` throws.
 import "@waitron/printing";
 import { and, eq, isNull } from "drizzle-orm";
@@ -171,32 +174,26 @@ export async function deliverDemoPrinterJobs(
   return delivered;
 }
 
-export function startDemoPrinterLoop(
+export function demoPrinterJob(
   db: Database,
   identity: DemoPrinterIdentity,
-  intervalMs = 500,
-  onError: (error: unknown) => void = () => {},
-): { stop(): Promise<void> } {
-  let stopped = false;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let inFlight: Promise<void> = Promise.resolve();
-  const tick = () => {
-    inFlight = deliverDemoPrinterJobs(db, identity)
-      .then(() => {})
-      .catch(onError)
-      .finally(() => {
-        if (!stopped) {
-          timer = setTimeout(tick, intervalMs);
-          timer.unref();
-        }
-      });
-  };
-  tick();
+  log: Logger,
+): JobDefinition {
   return {
-    async stop() {
-      stopped = true;
-      if (timer !== undefined) clearTimeout(timer);
-      await inFlight;
+    name: "demo.printer",
+    applies: () => true,
+    wakeOn: ["print_jobs"],
+    minSleepMs: 500,
+    maxSleepMs: 60_000,
+    backoff: { firstMs: 500, maxMs: 60_000 },
+    async pass() {
+      try {
+        await deliverDemoPrinterJobs(db, identity);
+      } catch (error) {
+        log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) });
+        throw error;
+      }
+      return { nextDueAt: null };
     },
   };
 }

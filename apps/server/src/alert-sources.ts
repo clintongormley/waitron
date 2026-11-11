@@ -27,6 +27,7 @@ import {
   type ReaderStatus,
 } from "@waitron/payments";
 import type { StreamView } from "@waitron/stream";
+import type { JobView } from "./job-runner.js";
 import type { BackupStatus } from "./backup-status.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
@@ -868,6 +869,40 @@ export function contentSuggestionsAlertSource(): AlertSource {
           ? { ...shared, code: "content.suggestions_ready" }
           : { ...shared, code: "content.suggestions_ready_partly" },
       ];
+    },
+  };
+}
+
+export const JOB_FAILING_MIN_FAILURES = 3;
+export const JOB_FAILING_MIN_MS = 600_000;
+
+export function jobFailingAlertSource(deps: {
+  views: () => Readonly<Record<string, JobView>>;
+  now: () => Date;
+}): AlertSource {
+  return {
+    area: "box",
+    permission: "system.manage",
+    async read(): Promise<readonly OngoingAlert[]> {
+      return Object.entries(deps.views()).flatMap(([name, view]): OngoingAlert[] => {
+        if (
+          view.ownFailureAlert !== null ||
+          view.throwsSinceClean < JOB_FAILING_MIN_FAILURES ||
+          view.throwingSince === null ||
+          deps.now().getTime() - Date.parse(view.throwingSince) < JOB_FAILING_MIN_MS
+        )
+          return [];
+        return [
+          {
+            key: `job.failing:${name}`,
+            code: "job.failing",
+            params: { job: name },
+            severity: view.judged ? "error" : "warning",
+            since: view.throwingSince,
+            screen: "box-status",
+          },
+        ];
+      });
     },
   };
 }

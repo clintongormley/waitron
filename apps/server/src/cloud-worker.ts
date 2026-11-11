@@ -1,42 +1,41 @@
-import { setTimeout as delay } from "node:timers/promises";
 import type { CloudConnection } from "./cloud-client.js";
-/** Machine activity never extends a person's management session. */
-export async function runCloudWorker(options: {
+import type { JobDefinition } from "./job-runner.js";
+
+export function cloudConnectionJob(options: {
   connection: CloudConnection;
-  signal: AbortSignal;
   isPrimary: () => boolean;
   onError?: (error: unknown) => void;
   staffHostname?: string;
-  onStaffCertificate?: () => unknown;
-  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
-}): Promise<void> {
-  const sleep = options.sleep ?? ((ms, signal) => delay(ms, undefined, { signal }));
-  while (!options.signal.aborted) {
-    try {
-      if (options.isPrimary()) {
-        const status = await options.connection.refresh(options.signal);
-        if (
-          options.staffHostname &&
-          status.installation?.state === "active" &&
-          !options.signal.aborted &&
-          options.isPrimary()
-        ) {
-          const ready = await options.connection.staffCertificate(
-            options.staffHostname,
-            options.signal,
-          );
-          if (ready && !options.signal.aborted && options.isPrimary())
-            await options.onStaffCertificate?.();
+  onStaffCertificate?: (signal: AbortSignal) => unknown;
+}): JobDefinition {
+  return {
+    name: "cloud.connection",
+    applies: () => true,
+    minSleepMs: 60_000,
+    maxSleepMs: 60_000,
+    backoff: { firstMs: 60_000, maxMs: 60_000 },
+    async pass({ signal }) {
+      try {
+        if (options.isPrimary()) {
+          const status = await options.connection.refresh(signal);
+          if (
+            options.staffHostname &&
+            status.installation?.state === "active" &&
+            !signal.aborted &&
+            options.isPrimary()
+          ) {
+            const ready = await options.connection.staffCertificate(options.staffHostname, signal);
+            if (ready && !signal.aborted && options.isPrimary())
+              await options.onStaffCertificate?.(signal);
+          }
+        } else await options.connection.syncTunnel();
+      } catch (error) {
+        if (!signal.aborted) {
+          options.onError?.(error);
+          throw error;
         }
-      } else await options.connection.syncTunnel();
-    } catch (error) {
-      if (!options.signal.aborted) options.onError?.(error);
-    }
-    if (options.signal.aborted) return;
-    try {
-      await sleep(60000, options.signal);
-    } catch (error) {
-      if (!options.signal.aborted) throw error;
-    }
-  }
+      }
+      return { nextDueAt: null };
+    },
+  };
 }

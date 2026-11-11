@@ -25,7 +25,7 @@ import {
   assertAppendOnlyIntact,
   missingBeforeMigration,
   refuseTrading,
-  startAppendOnlyWatch,
+  tamperWatchJob,
 } from "./append-only-watch.js";
 import {
   createAuthorityClockStatus,
@@ -38,9 +38,9 @@ import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { uploadCloudCaptureFile } from "./cloud-backup-upload.js";
 import { mountCloudPublic, startStaffListener } from "./cloud-remote.js";
-import { runCloudWorker } from "./cloud-worker.js";
+import { cloudConnectionJob } from "./cloud-worker.js";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
-import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
+import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
 import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
@@ -178,6 +178,7 @@ import {
   passScreenAlertSource,
   printingAlertSource,
   contentSuggestionsAlertSource,
+  jobFailingAlertSource,
   stationOutputAlertSource,
   storageAlertSource,
 } from "./alert-sources.js";
@@ -209,11 +210,7 @@ import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { mountDiskStopApi } from "./disk-stop-api.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
-import {
-  createFreeSpaceState,
-  FREE_SPACE_CHECK_MS,
-  startFreeSpaceWatch,
-} from "./free-space-watch.js";
+import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
 import { restrictedPageRoute } from "./restricted-page.js";
 import { mountHandoverPage } from "./handover-page-mount.js";
@@ -256,7 +253,7 @@ import { mountJoinApi } from "./join-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPageTestPages } from "./page-test-pages.js";
-import { configureDemoPrinter, startDemoPrinterLoop } from "./demo-printer.js";
+import { configureDemoPrinter, demoPrinterJob } from "./demo-printer.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { createRoutedInvoiceEmailSender, readInvoiceEmailPrivacy } from "./invoice-email.js";
@@ -383,7 +380,7 @@ import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { mountBoxHostApi } from "./box-host-api.js";
 import { clockCheckWaitingReader, clockStopReader, collectBoxHealth } from "./box-health.js";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
 import { clockCorrection, latestClockStepFor } from "./clock-correction.js";
 import { clockSyncAlertSource } from "./clock-sync-alert.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
@@ -2514,7 +2511,6 @@ async function bootServer(
     },
     log,
   );
-  let demoPrinterLoop: { stop(): Promise<void> } | undefined;
   // Outside the block below so the alert sources have it on every node.
   const testPages = createPageTestPages(now);
   const mailController = new AbortController();
@@ -2649,10 +2645,7 @@ async function bootServer(
     }
     const demoPrinter = await configureDemoPrinter(db, tradingContext.practiceMode === true);
     if (demoPrinter !== null) {
-      demoPrinterLoop = startDemoPrinterLoop(db, demoPrinter, 500, (error) =>
-        log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
-      );
-      undoOnFailure.push(() => demoPrinterLoop!.stop());
+      jobRunner.add(demoPrinterJob(db, demoPrinter, log));
     }
     // ONE pairing window for the venue: every surface that has a knock shares this holder. In memory,
     // so a restart or a promotion starts SHUT — a node that has just taken over must not inherit an
@@ -3100,29 +3093,30 @@ async function bootServer(
     now,
     readStream: () => streamHost.status(),
   });
-  const freeSpaceWatch = startFreeSpaceWatch({
-    dir: config.venueDir,
-    state: freeSpace,
-    disk: diskFull,
-    intervalMs: seams.freeSpaceWatch?.intervalMs ?? FREE_SPACE_CHECK_MS,
-    now,
-    log,
-    restoreSpare,
-    freeOldBackups: lowSpaceBackupDeletion({
+  jobRunner.add(
+    freeSpaceJob({
       dir: config.venueDir,
-      staging: stagingTurn,
-      backends: () => runningLocalBackends(backupSupervisor.current()),
-      installationStartedAt: backupRoom.readInstallationStart,
-      latestClockStep,
-      retainDays: () => backupSupervisor.current().retention?.days,
-      onArchivesDeleted: backupRoom.recordArchivesDeleted,
+      state: freeSpace,
+      disk: diskFull,
+      intervalMs: seams.freeSpaceWatch?.intervalMs ?? FREE_SPACE_CHECK_MS,
       now,
       log,
+      restoreSpare,
+      freeOldBackups: lowSpaceBackupDeletion({
+        dir: config.venueDir,
+        staging: stagingTurn,
+        backends: () => runningLocalBackends(backupSupervisor.current()),
+        installationStartedAt: backupRoom.readInstallationStart,
+        latestClockStep,
+        retainDays: () => backupSupervisor.current().retention?.days,
+        onArchivesDeleted: backupRoom.recordArchivesDeleted,
+        now,
+        log,
+        ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
+      }),
       ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
     }),
-    ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
-  });
-  undoOnFailure.push(async () => freeSpaceWatch.stop());
+  );
   const emailNoticeLog = createStaffNoticeLog(log);
   const emailNoticeSources = enabledStaffNoticeSources(setsToMigrate);
   const boxEmails = startBoxEmailDuty({
@@ -3176,7 +3170,7 @@ async function bootServer(
       timeHealthCache.clear();
     },
   });
-  const clockWatch = startClockWatch({
+  const clockWatch = createClockWatch({
     backend: nodeBackend,
     store: clockWitnesses,
     clock: tillClock,
@@ -3188,12 +3182,12 @@ async function bootServer(
     startUp: clockStart,
     filesRecords,
     isPrimary: () => holders.singletonRole.current === "primary",
-    intervalMs: CLOCK_WATCH_MS,
     log,
   });
-  undoOnFailure.push(() => clockWatch.stop());
+  jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
   correction.addAnchor(clockWatch);
   const serverAlertSources: AlertSource[] = [
+    jobFailingAlertSource({ views: () => jobRunner.views(), now }),
     clockSyncAlertSource({
       status: readClockService,
       production: config.environment === "production",
@@ -3258,6 +3252,7 @@ async function bootServer(
       readSingletonRole: () => holders.singletonRole.current,
       readTime: readTimeHealth,
       readAwaitingFiscalCertificate: () => awaitingFiscalCert.current,
+      readJobs: () => jobRunner.views(),
     },
     log,
   );
@@ -3447,7 +3442,7 @@ async function bootServer(
       context: translationContext,
       managementOrigin: config.managementOrigin,
       isPrimary: cloudPrimary,
-      wake: () => suggestionRunner?.wake(),
+      wake: () => jobRunner.wake("cloud.suggestions"),
     },
     log,
   );
@@ -3688,20 +3683,21 @@ async function bootServer(
     mountSpa(app, { root: config.tillAppDir, basePath: "", navigationPath: "/tabs" }, log);
   }
 
-  const appendOnlyWatch = startAppendOnlyWatch({
-    db,
-    tables: appendOnlyTables,
-    intervalMs: seams.appendOnlyWatch?.intervalMs ?? APPEND_ONLY_CHECK_MS,
-    refuse: refuseTrading({
-      stateDir: config.stateDir,
-      now,
+  jobRunner.add(
+    tamperWatchJob({
+      db,
+      tables: appendOnlyTables,
+      intervalMs: seams.appendOnlyWatch?.intervalMs ?? APPEND_ONLY_CHECK_MS,
+      refuse: refuseTrading({
+        stateDir: config.stateDir,
+        now,
+        log,
+        kill: () => process.kill(process.pid, "SIGTERM"),
+        store: { lock: withRecoveryLock, read: readRecoveryState, write: writeRecoveryState },
+      }),
       log,
-      kill: () => process.kill(process.pid, "SIGTERM"),
-      store: { lock: withRecoveryLock, read: readRecoveryState, write: writeRecoveryState },
     }),
-    log,
-  });
-  undoOnFailure.push(async () => appendOnlyWatch.stop());
+  );
 
   // A mirror's ambient administrator session must stay off the staff entrance.
   const waitingForStaffCertificate =
@@ -3928,34 +3924,25 @@ async function bootServer(
   undoOnFailure.push(() => mdns.stop());
   const cloudController = new AbortController();
   undoOnFailure.push(async () => cloudController.abort());
-  const cloudWorker = cloudConnection
-    ? runCloudWorker({
+  if (cloudConnection)
+    jobRunner.add(
+      cloudConnectionJob({
         connection: cloudConnection,
-        signal: cloudController.signal,
         isPrimary: cloudPrimary,
         ...(config.staff && config.environment !== "production"
           ? {
               staffHostname: new URL(config.staff.origin).hostname,
-              onStaffCertificate: async () => {
-                if (
-                  cloudController.signal.aborted ||
-                  !cloudPrimary() ||
-                  staffListener?.isListening()
-                )
-                  return;
+              onStaffCertificate: async (signal) => {
+                if (signal.aborted || !cloudPrimary() || staffListener?.isListening()) return;
                 await staffListener?.close();
-                if (!cloudController.signal.aborted && cloudPrimary())
+                if (!signal.aborted && cloudPrimary())
                   staffListener = startStaffListener(config, app, log);
               },
             }
           : {}),
         onError: (error) => log("error", "cloud.refresh_failed", { errorCode: codeOf(error) }),
-      })
-    : undefined;
-  undoOnFailure.push(async () => {
-    cloudController.abort();
-    await cloudWorker;
-  });
+      }),
+    );
   const cloudSnapshots = cloudConnection
     ? runCloudSnapshotLoop({
         signal: cloudController.signal,
@@ -3993,14 +3980,14 @@ async function bootServer(
     cloudController.abort();
     await cloudSnapshots;
   });
-  const suggestionLoop = suggestionRunner?.run(cloudController.signal, {
-    onError: (error) =>
-      log("error", "content.suggestion_runner_failed", { errorCode: codeOf(error) }),
-  });
-  undoOnFailure.push(async () => {
-    cloudController.abort();
-    await suggestionLoop;
-  });
+  if (suggestionRunner)
+    jobRunner.add(
+      suggestionsJob(suggestionRunner, cloudPrimary, (error) =>
+        log("error", "content.suggestion_runner_failed", { errorCode: codeOf(error) }),
+      ),
+    );
+  undoOnFailure.splice(undoOnFailure.indexOf(stopJobRunner), 1);
+  undoOnFailure.push(stopJobRunner);
   const duties = backgroundDuties({
     controller,
     pendingCardController,
@@ -4018,19 +4005,13 @@ async function bootServer(
     fiscalReconciliation,
     invoiceEmailLoop,
     mailLoop,
-    cloudWorker,
     cloudSnapshots,
-    suggestionLoop,
     unsubscribeFromChanges,
     jobRunner,
-    appendOnlyWatch,
-    freeSpaceWatch,
     boxEmails,
     liveEvents,
     loop,
     backupSupervisor,
-    demoPrinterLoop,
-    clockWatch,
     handoverDestinationDuty,
     chartPost,
   });
@@ -4042,9 +4023,8 @@ async function bootServer(
       stopWork: () =>
         closeAll([
           async () => {
-            cloudController.abort();
             try {
-              await cloudWorker;
+              await jobRunner.stopJobs();
             } finally {
               await staffListener?.close();
             }

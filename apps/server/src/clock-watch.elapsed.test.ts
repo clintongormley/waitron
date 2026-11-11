@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Transaction } from "@waitron/db";
-import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
+import { createClockWatch } from "./clock-watch.js";
 
 // The clocks the watch reads when none is injected: Linux's /proc/uptime (the boot-time clock,
 // which counts a suspend) and performance.now() (which, on Linux, does not). Both are replaced so
@@ -51,10 +51,9 @@ function watched(initial: { uptimeS: number | null; perfMs: number; uptimeText?:
     return `${clocks.uptimeS.toFixed(2)} 1234.56\n`;
   };
   vi.spyOn(performance, "now").mockImplementation(() => clocks.perfMs);
-  const timers: (() => void)[] = [];
   const note = vi.fn(async () => ({ recorded: [], unused: [], held: [] }));
   const clockStopState = vi.fn(async () => null);
-  startClockWatch({
+  const watch = createClockWatch({
     backend: { assertRecordableAt: () => {}, clockStopState, noteClockProvedWrong: note },
     store: {
       noteAuthority: vi.fn(),
@@ -71,12 +70,7 @@ function watched(initial: { uptimeS: number | null; perfMs: number; uptimeText?:
     transaction: (fn) => fn(TX),
     filesRecords: () => true,
     isPrimary: () => true,
-    intervalMs: CLOCK_WATCH_MS,
     log: () => {},
-    timer: (_ms, fn) => {
-      timers.push(fn);
-      return { cancel: () => {} };
-    },
   });
 
   /** Moves the clocks by the given amounts, runs one check and waits for it to finish. */
@@ -84,9 +78,7 @@ function watched(initial: { uptimeS: number | null; perfMs: number; uptimeText?:
     clocks.wallMs += by.wallMs;
     if (clocks.uptimeS !== null) clocks.uptimeS += by.uptimeMs / 1000;
     clocks.perfMs += by.perfMs;
-    const count = timers.length;
-    timers.at(-1)!();
-    await vi.waitFor(() => expect(timers.length).toBe(count + 1));
+    await watch.check();
   }
 
   return { clocks, note, clockStopState, tick };

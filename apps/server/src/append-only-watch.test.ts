@@ -1,3 +1,6 @@
+import { beforeEach, vi } from "vitest";
+import { createJobRunner, type JobRunner } from "./job-runner.js";
+import { fakeTimerDelay } from "./testing/fake-timer-delay.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,11 +11,7 @@ import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
 import { installAppendOnlyTriggers } from "@waitron/store";
-import {
-  missingBeforeMigration,
-  refuseTrading,
-  startAppendOnlyWatch,
-} from "./append-only-watch.js";
+import { missingBeforeMigration, refuseTrading, tamperWatchJob } from "./append-only-watch.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
@@ -86,95 +85,110 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const UPDATE = "sales_append_only_update";
 const DELETE = "sales_append_only_delete";
 
-describe("startAppendOnlyWatch", () => {
-  afterEach(() => {
+describe("tamperWatchJob", () => {
+  let runner: JobRunner;
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(async () => {
+    await runner?.stopJobs();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
     suite.db.run(sql.raw(`drop trigger if exists "${UPDATE}"`));
     suite.db.run(sql.raw(`drop trigger if exists "${DELETE}"`));
     installAppendOnlyTriggers(suite.db, ["sales"]);
   });
 
   function watch(db: Database = suite.db) {
-    const armed: { ms: number; fn: () => void; cancelled: boolean }[] = [];
     const refused: unknown[] = [];
     const lines: { level: LogLevel; event: string; fields?: Record<string, unknown> }[] = [];
     const log: Logger = (level, event, fields) => lines.push({ level, event, fields });
-    const handle = startAppendOnlyWatch({
-      db,
-      tables: ["sales"],
-      intervalMs: 10_000,
-      refuse: async (faults) => {
-        refused.push(faults);
-      },
-      log,
-      timer: (ms, fn) => {
-        const entry = { ms, fn, cancelled: false };
-        armed.push(entry);
-        return { cancel: () => (entry.cancelled = true) };
-      },
+    const read = vi.spyOn(db, "execute");
+    runner = createJobRunner({
+      now: () => new Date(),
+      log: () => {},
+      delay: fakeTimerDelay,
+      subscribe: () => () => {},
     });
-    const tick = () => armed.at(-1)!.fn();
-    return { handle, armed, refused, lines, tick };
+    runner.add(
+      tamperWatchJob({
+        db,
+        tables: ["sales"],
+        intervalMs: 10_000,
+        refuse: async (faults) => {
+          refused.push(faults);
+        },
+        log,
+      }),
+    );
+    const tick = () => vi.advanceTimersByTimeAsync(10_000);
+    return { runner, read, refused, lines, tick };
   }
 
-  it("keeps trading over three ticks of an untouched box, first reading one interval after start", () => {
+  it("keeps trading over three ticks of an untouched box, first reading one interval after start", async () => {
     const w = watch();
-    expect(w.armed).toEqual([{ ms: 10_000, fn: expect.any(Function), cancelled: false }]);
-    w.tick();
-    w.tick();
-    w.tick();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(w.read).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await w.tick();
+    await w.tick();
     expect(w.refused).toEqual([]);
-    expect(w.armed).toHaveLength(4);
+    expect(w.read).toHaveBeenCalledTimes(3);
     expect(w.lines).toEqual([]);
   });
 
-  it("refuses once, and arms no further tick, when a trigger is dropped", () => {
+  it("refuses once, and arms no further tick, when a trigger is dropped", async () => {
     suite.db.run(sql.raw(`drop trigger "${UPDATE}"`));
     const w = watch();
-    w.tick();
+    await w.tick();
     expect(w.refused).toEqual([{ missing: [UPDATE], altered: [] }]);
-    expect(w.armed).toHaveLength(1);
+    await w.tick();
+    expect(w.read).toHaveBeenCalledTimes(1);
+    expect(w.runner.views()["fiscal.tamper_watch"]?.state).toBe("stopped");
   });
 
-  it("finds the triggers restored after a case that tampered with them", () => {
+  it("finds the triggers restored after a case that tampered with them", async () => {
     const w = watch();
-    w.tick();
+    await w.tick();
     expect(w.refused).toEqual([]);
   });
 
-  it("refuses once with the trigger altered when it is replaced", () => {
+  it("refuses once with the trigger altered when it is replaced", async () => {
     suite.db.run(sql.raw(`drop trigger "${UPDATE}"`));
     suite.db.run(
       sql.raw(`create trigger "${UPDATE}" before update on "sales" begin select 1; end`),
     );
     const w = watch();
-    w.tick();
+    await w.tick();
     expect(w.refused).toEqual([{ missing: [], altered: [UPDATE] }]);
-    expect(w.armed).toHaveLength(1);
+    await w.tick();
+    expect(w.read).toHaveBeenCalledTimes(1);
   });
 
-  it("stop() cancels the armed tick, and a tick that fires anyway does nothing", () => {
+  it("stopJobs cancels the armed check, and time passing afterwards does nothing", async () => {
     suite.db.run(sql.raw(`drop trigger "${UPDATE}"`));
     const w = watch();
-    w.handle.stop();
-    expect(w.armed[0]!.cancelled).toBe(true);
-    w.tick();
+    const stopping = w.runner.stopJobs();
+    await w.tick();
     expect(w.refused).toEqual([]);
-    expect(w.armed).toHaveLength(1);
+    expect(w.read).not.toHaveBeenCalled();
+    await stopping;
   });
 
-  it("logs a read that throws and checks again next interval, never refusing for it", () => {
+  it("logs a read that throws and checks again next interval, never refusing for it", async () => {
     const broken = {
       execute: () => {
         throw new Error("SQLITE_IOERR");
       },
     } as unknown as Database;
     const w = watch(broken);
-    w.tick();
+    await w.tick();
     expect(w.refused).toEqual([]);
     expect(w.lines).toEqual([
       { level: "warn", event: "append_only.check_failed", fields: { errorCode: "unknown" } },
     ]);
-    expect(w.armed).toHaveLength(2);
+    await w.tick();
+    expect(w.read).toHaveBeenCalledTimes(2);
   });
 });
 

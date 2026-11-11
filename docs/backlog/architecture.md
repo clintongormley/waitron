@@ -1056,7 +1056,10 @@ product failures.
   menu activation, the sealed-key copy and public `/health` reports. The bucket copy runs as a
   service; close stops runner jobs first and the bucket copy last.
   [A1279](replication-cloud.md#a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself) owns immediate role wiring and the real promotion test, including a mirror, if its live-promotion path gains a production caller. Codex attached this to A1279 after the watcher deferred immediate wiring on 2026-11-11 at 05:18.
-  The other jobs still need moving onto the runner.
+  The six watches (append-only protections, clock, free space, Cloud connection, translation
+  suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
+  alert per job after ten minutes and three failures; the manager’s box-status read includes the
+  complete job views. The remaining jobs still need moving onto the runner.
   Management and device events share one loop with read-only wake checks; device events carry types
   only. Browser adoption of the device stream remains for jr13/jr14. 111 product
   environment variables become 51. There is one state-folder layout. It keeps

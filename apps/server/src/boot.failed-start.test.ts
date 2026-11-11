@@ -20,15 +20,15 @@ import {
 } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { appendOnlyTriggerFaults } from "@waitron/store";
-import { startAppendOnlyWatch } from "./append-only-watch.js";
-import { startFreeSpaceWatch } from "./free-space-watch.js";
+import { tamperWatchJob } from "./append-only-watch.js";
+import { freeSpaceJob } from "./free-space-watch.js";
 import { startBoxEmailDuty } from "./box-alert-email.js";
 import { StreamHost } from "./stream-host.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
-import { runCloudWorker } from "./cloud-worker.js";
+import { cloudConnectionJob } from "./cloud-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { LiveEvents } from "./live-api.js";
@@ -78,7 +78,7 @@ vi.mock("./box-reach.js", async (importOriginal) => {
 });
 vi.mock("./cloud-worker.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./cloud-worker.js")>();
-  return { ...actual, runCloudWorker: vi.fn(actual.runCloudWorker) };
+  return { ...actual, cloudConnectionJob: vi.fn(actual.cloudConnectionJob) };
 });
 vi.mock("./content-suggestion-runner.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./content-suggestion-runner.js")>();
@@ -98,12 +98,12 @@ vi.mock("./job-runner.js", async (importOriginal) => {
 
 vi.mock("./append-only-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./append-only-watch.js")>();
-  return { ...actual, startAppendOnlyWatch: vi.fn(actual.startAppendOnlyWatch) };
+  return { ...actual, tamperWatchJob: vi.fn(actual.tamperWatchJob) };
 });
 
 vi.mock("./free-space-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./free-space-watch.js")>();
-  return { ...actual, startFreeSpaceWatch: vi.fn(actual.startFreeSpaceWatch) };
+  return { ...actual, freeSpaceJob: vi.fn(actual.freeSpaceJob) };
 });
 
 vi.mock("./box-alert-email.js", async (importOriginal) => {
@@ -160,11 +160,11 @@ afterEach(async () => {
   vi.mocked(startMdnsResponder).mockReset();
   vi.mocked(listBoxIpv4).mockReset();
   vi.mocked(subscribeToChanges).mockReset();
-  vi.mocked(runCloudWorker).mockClear();
+  vi.mocked(cloudConnectionJob).mockClear();
   vi.mocked(createContentSuggestionRunner).mockClear();
   vi.mocked(runCloudSnapshotLoop).mockClear();
   vi.mocked(createJobRunner).mockClear();
-  vi.mocked(startAppendOnlyWatch).mockClear();
+  vi.mocked(tamperWatchJob).mockClear();
   vi.mocked(runTenderRefundRecoveryLoop).mockReset();
   vi.mocked(runPendingCardLoop).mockReset();
   for (const dir of cleanup.splice(0)) await rm(dir, { recursive: true, force: true });
@@ -175,6 +175,9 @@ afterAll(async () => {
     if (dir !== undefined) await rm(dir, { recursive: true, force: true });
   }
 });
+
+const { cloudConnectionJob: realCloudJob } =
+  await vi.importActual<typeof import("./cloud-worker.js")>("./cloud-worker.js");
 
 /** Spies on the stop of the next job runner boot starts. */
 async function spyOnJobRunnerStop() {
@@ -191,26 +194,30 @@ async function spyOnJobRunnerStop() {
 
 /** Spies on the stop of the next append-only watch boot starts. */
 async function spyOnAppendOnlyWatchStop() {
-  const { startAppendOnlyWatch: realStart } =
+  const { tamperWatchJob: realStart } =
     await vi.importActual<typeof import("./append-only-watch.js")>("./append-only-watch.js");
   const stop = vi.fn<() => void>();
-  vi.mocked(startAppendOnlyWatch).mockImplementationOnce((deps) => {
-    const watch = realStart(deps);
-    stop.mockImplementation(() => watch.stop());
-    return { stop };
+  vi.mocked(tamperWatchJob).mockImplementationOnce((deps) => {
+    const job = realStart(deps);
+    return {
+      ...job,
+      onStop: async () => {
+        stop();
+      },
+    };
   });
   return stop;
 }
 
 /** Spies on the stop of the next free-space watch boot starts. */
 async function spyOnFreeSpaceWatchStop() {
-  const { startFreeSpaceWatch: realStart } =
+  const { freeSpaceJob: realStart } =
     await vi.importActual<typeof import("./free-space-watch.js")>("./free-space-watch.js");
   const stop = vi.fn<() => Promise<void>>();
-  vi.mocked(startFreeSpaceWatch).mockImplementationOnce((deps) => {
-    const watch = realStart(deps);
-    stop.mockImplementation(() => watch.stop());
-    return { stop };
+  vi.mocked(freeSpaceJob).mockImplementationOnce((deps) => {
+    const job = realStart(deps);
+    stop.mockResolvedValue(undefined);
+    return { ...job, onStop: stop };
   });
   return stop;
 }
@@ -428,12 +435,20 @@ describe("a start that fails after the venue folder is opened gives the folder b
         await mkdir(join(state, "cloud"), { recursive: true });
         await writeFile(join(state, "cloud/staff.crt"), material.serverCertPem);
       };
-      let workerOptions: Parameters<typeof runCloudWorker>[0] | undefined;
-      vi.mocked(runCloudWorker).mockImplementationOnce(async (options) => {
+      let workerOptions: Parameters<typeof cloudConnectionJob>[0] | undefined;
+      let workerSignal!: AbortSignal;
+      vi.mocked(cloudConnectionJob).mockImplementationOnce((options) => {
         workerOptions = options;
-        await new Promise<void>((resolve) =>
-          options.signal.addEventListener("abort", () => resolve(), { once: true }),
-        );
+        return {
+          ...realCloudJob(options),
+          pass: async ({ signal }) => {
+            workerSignal = signal;
+            await new Promise<void>((resolve) =>
+              signal.addEventListener("abort", () => resolve(), { once: true }),
+            );
+            return { nextDueAt: null };
+          },
+        };
       });
       const blocker = createNetServer();
       let refused = () => {};
@@ -479,19 +494,19 @@ describe("a start that fails after the venue folder is opened gives the folder b
           await bindAndRelease(staffPort);
           await install();
           expect(workerOptions?.staffHostname).toBe("staff.example.test");
-          await workerOptions?.onStaffCertificate?.();
+          await workerOptions?.onStaffCertificate?.(workerSignal);
           await vi.waitFor(async () => {
             await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
           });
         } else if (mode === "busy") {
           await refusal;
           await new Promise<void>((resolve) => blocker.close(() => resolve()));
-          await workerOptions!.onStaffCertificate!();
+          await workerOptions!.onStaffCertificate!(workerSignal);
           await vi.waitFor(async () => {
             await expect(bindAndRelease(staffPort)).rejects.toMatchObject({ code: "EADDRINUSE" });
           });
           const calls = vi.mocked(startStaffListener).mock.calls.length;
-          await workerOptions!.onStaffCertificate!();
+          await workerOptions!.onStaffCertificate!(workerSignal);
           expect(vi.mocked(startStaffListener).mock.calls.length).toBe(calls);
         } else {
           await install();
@@ -500,7 +515,7 @@ describe("a start that fails after the venue folder is opened gives the folder b
               "./background-duties.js",
             );
           vi.mocked(stopBackgroundDuties).mockImplementationOnce(async (duties) => {
-            await workerOptions!.onStaffCertificate!();
+            await workerOptions!.onStaffCertificate!(workerSignal);
             await actual.stopBackgroundDuties(duties);
           });
         }
@@ -682,7 +697,9 @@ describe("a start that fails after the venue folder is opened gives the folder b
     expect(unsubscribe).toHaveBeenCalledOnce();
     expect(events).toContain("loop.stopped");
     expect(mdnsStop).toHaveBeenCalledOnce();
-    expect(vi.mocked(runCloudWorker).mock.calls.at(-1)![0].signal.aborted).toBe(true);
+    expect(
+      vi.mocked(createJobRunner).mock.results.at(-1)!.value.views()["cloud.connection"].state,
+    ).toBe("stopped");
     expect(vi.mocked(runCloudSnapshotLoop).mock.calls.at(-1)![0].signal.aborted).toBe(true);
   }, 60_000);
 
@@ -757,22 +774,26 @@ describe("a start that fails after the venue folder is opened gives the folder b
     let workerSignal: AbortSignal | undefined;
     let workerStopped = false;
     let release!: () => void;
-    vi.mocked(runCloudWorker).mockImplementationOnce(({ signal }) => {
-      workerSignal = signal;
-      return new Promise<void>((resolve) => {
-        release = resolve;
-        signal.addEventListener(
-          "abort",
-          () => {
-            setImmediate(() => {
-              workerStopped = true;
-              resolve();
-            });
-          },
-          { once: true },
-        );
-      });
-    });
+    vi.mocked(cloudConnectionJob).mockImplementationOnce((options) => ({
+      ...realCloudJob(options),
+      pass: async ({ signal }) => {
+        workerSignal = signal;
+        await new Promise<void>((resolve) => {
+          release = resolve;
+          signal.addEventListener(
+            "abort",
+            () => {
+              setImmediate(() => {
+                workerStopped = true;
+                resolve();
+              });
+            },
+            { once: true },
+          );
+        });
+        return { nextDueAt: null };
+      },
+    }));
     vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(() => {
       throw failure;
     });
@@ -796,14 +817,12 @@ describe("a start that fails after the venue folder is opened gives the folder b
     };
     const failure = new Error("interfaces unreadable");
     failLandingAfterMdns(failure);
-    vi.mocked(runCloudWorker).mockImplementationOnce(
-      ({ signal }) =>
-        new Promise<void>((_resolve, reject) => {
-          signal.addEventListener("abort", () => reject(new Error("cloud worker stop failed")), {
-            once: true,
-          });
-        }),
-    );
+    vi.mocked(cloudConnectionJob).mockImplementationOnce((options) => ({
+      ...realCloudJob(options),
+      onStop: async () => {
+        throw new Error("cloud worker stop failed");
+      },
+    }));
     let snapshotStopped = false;
     vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(
       ({ signal }) =>
@@ -841,12 +860,12 @@ describe("a start that fails after the venue folder is opened gives the folder b
     let runSignal: AbortSignal | undefined;
     vi.mocked(createContentSuggestionRunner).mockImplementationOnce((deps) => ({
       ...realCreate(deps),
-      // Like the real loop, this returns only once its signal aborts.
-      run: (signal) => {
+      step: async (signal) => {
         runSignal = signal;
-        return new Promise<void>((resolve) => {
-          signal.addEventListener("abort", () => resolve(), { once: true });
+        await new Promise<void>((resolve) => {
+          signal!.addEventListener("abort", () => resolve(), { once: true });
         });
+        return "idle";
       },
     }));
     const deadline = new AbortController();
@@ -1098,7 +1117,7 @@ describe("which starts watch the append-only triggers", () => {
   it("a trading start does", async () => {
     const venueDir = await seededVenueDir();
     await startAndClose(await tradingEnv(venueDir, await stateDir(undefined, { leaf: true })));
-    expect(startAppendOnlyWatch).toHaveBeenCalledOnce();
+    expect(tamperWatchJob).toHaveBeenCalledOnce();
   }, 60_000);
 
   it("a start waiting on an adoption does not", async () => {
@@ -1106,7 +1125,7 @@ describe("which starts watch the append-only triggers", () => {
     const state = await stateDir(undefined, { leaf: true });
     await writeFile(join(state, PENDING_ADOPTION_FILE), "{}");
     await startAndClose(await tradingEnv(venueDir, state));
-    expect(startAppendOnlyWatch).not.toHaveBeenCalled();
+    expect(tamperWatchJob).not.toHaveBeenCalled();
   }, 60_000);
 
   it("a setup start does not", async () => {
@@ -1119,7 +1138,7 @@ describe("which starts watch the append-only triggers", () => {
       WAITRON_HTTP_PORT: String(httpPort),
       WAITRON_HTTP_LANDING_PORT: "0",
     });
-    expect(startAppendOnlyWatch).not.toHaveBeenCalled();
+    expect(tamperWatchJob).not.toHaveBeenCalled();
   }, 60_000);
 });
 
@@ -1162,7 +1181,7 @@ describe("closing a started server", () => {
     expect(stop).not.toHaveBeenCalled();
 
     await server.close();
-    expect(stop).toHaveBeenCalledOnce();
+    expect(stop).toHaveBeenCalledTimes(2);
     expect(readVenueHolder(venueDir)).toBeNull();
   }, 60_000);
 

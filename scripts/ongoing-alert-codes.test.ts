@@ -4,7 +4,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ALERT_MESSAGES } from "../apps/dashboard/src/i18n/alert-messages.js";
+import { JOB_NAMES } from "../apps/server/src/job-catalogue.js";
+import { ALERT_MESSAGES, ALERT_WORDS } from "../apps/dashboard/src/i18n/alert-messages.js";
 
 const root = join(import.meta.dirname, "..");
 
@@ -30,6 +31,14 @@ function ongoingCodes(): string[] {
 }
 
 describe("ongoing alert codes reach the dashboard", () => {
+  it("every job in the catalogue has English and Spanish words", () => {
+    expect(
+      JOB_NAMES.filter(
+        (name) => !(ALERT_WORDS.job_name?.words[name]?.en && ALERT_WORDS.job_name.words[name]?.es),
+      ),
+    ).toEqual([]);
+  });
+
   it("finds the ongoing codes it is meant to guard", () => {
     expect(ongoingCodes().length).toBeGreaterThanOrEqual(9);
   });

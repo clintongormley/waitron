@@ -4,6 +4,16 @@ import { ALERT_MESSAGES, ALERT_WORDS } from "./alert-messages.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { t } from "./t.js";
 
+it.each([
+  ["en-GB", "The box keeps failing at checking the box's clock. It keeps trying by itself."],
+  [
+    "es-ES",
+    "El servidor sigue fallando en la comprobación del reloj del servidor. Lo sigue intentando por sí solo.",
+  ],
+])("words a failing clock check without promising sales can continue (%s)", (locale, expected) => {
+  expect(alertMessage("job.failing", { job: "clock.watch" }, locale)).toBe(expected);
+});
+
 it("registers the dashboard's alert wording on import", () => {
   expect(hasAlertMessage("payment.refund_unresolved")).toBe(true);
   expect(alertMessage("payment.refund_unresolved", { amount: "12.50" }, "en")).toBe(

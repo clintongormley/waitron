@@ -30,6 +30,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The server's last clock comparison with AEAT differed by {seconds} seconds. Check its date and time; you can continue selling.",
     es: "La última comparación del reloj del servidor con la AEAT mostró una diferencia de {seconds} segundos. Comprueba su fecha y hora; puedes seguir vendiendo.",
   },
+  "job.failing": {
+    en: "The box keeps failing at {job:job_name}. It keeps trying by itself.",
+    es: "El servidor sigue fallando en {job:job_name}. Lo sigue intentando por sí solo.",
+  },
   "alert.source_unavailable": {
     en: "One of Waitron's checks could not run. It will try again in a minute.",
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",
@@ -467,6 +471,72 @@ export const ALERT_WORDS: Readonly<
     }
   >
 > = {
+  job_name: {
+    words: {
+      "fiscal.drain": {
+        en: "sending invoices to the tax agency",
+        es: "el envío de facturas a la Agencia Tributaria",
+      },
+      "payments.reconcile": {
+        en: "checking card payouts",
+        es: "la comprobación de los abonos de tarjeta",
+      },
+      "card.follow_up": {
+        en: "following up card payments and refunds",
+        es: "el seguimiento de pagos y devoluciones con tarjeta",
+      },
+      "attendance.end_of_day": {
+        en: "closing staff working days",
+        es: "el cierre de las jornadas del personal",
+      },
+      "mail.send": { en: "sending emails", es: "el envío de correos" },
+      "fiscal.certificate_reminders": {
+        en: "reminders about the tax certificate",
+        es: "los avisos sobre el certificado digital",
+      },
+      "box.alert_mail": {
+        en: "alert emails to managers",
+        es: "los correos de aviso a los responsables",
+      },
+      "menu.activation": {
+        en: "putting scheduled menus live",
+        es: "la publicación de las cartas programadas",
+      },
+      "fiscal.tamper_watch": {
+        en: "checking the invoice record's protections",
+        es: "la comprobación de las protecciones del registro de facturas",
+      },
+      "clock.watch": {
+        en: "checking the box's clock",
+        es: "la comprobación del reloj del servidor",
+      },
+      "storage.free_space": {
+        en: "checking disk space",
+        es: "la comprobación del espacio en disco",
+      },
+      "backups.scheduled": { en: "scheduled backups", es: "las copias de seguridad programadas" },
+      "backups.sealed_state": {
+        en: "saving the box's locked keys with its data",
+        es: "el guardado de las claves cifradas del servidor con sus datos",
+      },
+      stream: { en: "the bucket copy", es: "la copia en el bucket" },
+      "cloud.connection": {
+        en: "the connection to Waitron Cloud",
+        es: "la conexión con Waitron Cloud",
+      },
+      housekeeping: { en: "the daily tidy-up", es: "la limpieza diaria" },
+      "cloud.suggestions": {
+        en: "translation suggestions from Waitron Cloud",
+        es: "las sugerencias de traducción de Waitron Cloud",
+      },
+      "demo.printer": { en: "the practice printer", es: "la impresora de prácticas" },
+      "fiscal.reconciliation": {
+        en: "checking what the tax agency holds",
+        es: "la comprobación de lo que tiene la Agencia Tributaria",
+      },
+    },
+    otherwise: { en: "one of its background tasks", es: "una de sus tareas de fondo" },
+  },
   card_provider: {
     words: { stripe: { en: "Stripe", es: "Stripe" }, sumup: { en: "SumUp", es: "SumUp" } },
     otherwise: { en: "Card provider", es: "Proveedor de pagos" },
