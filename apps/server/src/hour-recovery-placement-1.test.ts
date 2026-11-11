@@ -602,7 +602,9 @@ describe("selected-hour admission before archive placement", () => {
     expect(await readFile(join(f.roots.stateDir, "trading.env.replaced"), "utf8")).toBe(
       oldIdentity,
     );
-    expect(await readdir(f.roots.stateDir)).not.toContain("rebuild-first-start.json");
+    await expect(
+      readFile(join(f.roots.stateDir, "flows/restore/record.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
     const placed = await openVenueDatabase(f.roots.venueDir);
     try {
       expect(
@@ -772,9 +774,9 @@ describe("selected-hour admission before archive placement", () => {
     });
     expect(response.status).toBe(202);
     const marker = JSON.parse(
-      await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8"),
+      await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8"),
     );
-    expect(marker).toHaveProperty("recoveryContext", context);
+    expect(marker.request).toHaveProperty("recoveryContext", context);
     expect(JSON.stringify(marker)).not.toContain(key.secret);
     agreeInternet();
     expect(await runStagedRestore(f.restore)).toBe(true);
@@ -815,7 +817,9 @@ describe("selected-hour admission before archive placement", () => {
     expect(await response.json()).toMatchObject({
       error: { code: "setup.request_invalid", params: { field: "recoveryContext" } },
     });
-    expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+    await expect(
+      readFile(join(f.roots.stateDir, "flows/restore/record.json")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
     expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
   });
 
@@ -834,10 +838,15 @@ describe("selected-hour admission before archive placement", () => {
           },
         }),
       ).toBe(true);
-      expect(await readdir(f.roots.stateDir)).toContain("restore-request.json");
       expect(
-        JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
-      ).toMatchObject({ placementStarted: true, managedCloud: { pointId: managed.pointId } });
+        JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+      ).toHaveProperty("request");
+      expect(
+        JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+      ).toMatchObject({
+        phase: "placing",
+        request: { managedCloud: { pointId: managed.pointId } },
+      });
       const placed = await openVenueDatabase(f.roots.venueDir);
       let rows;
       let allocations;
@@ -855,7 +864,9 @@ describe("selected-hour admission before archive placement", () => {
           onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
         }),
       ).toBe(true);
-      expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+      expect(
+        JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+      ).not.toHaveProperty("request");
       expect(await managed.client().replacementIdentity()).toMatchObject({
         phase: "restored",
         pointId: managed.pointId,
@@ -947,8 +958,8 @@ describe("selected-hour admission before archive placement", () => {
         ),
         { signal: "SIGKILL", stdout: "activation-writes-before-commit\n" },
       );
-      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
-      expect(JSON.parse(marker)).toMatchObject({ placementStarted: true });
+      const marker = await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8");
+      expect(JSON.parse(marker)).toMatchObject({ phase: "placing" });
       expect(await readdir(f.roots.stateDir)).not.toContain("trading.env");
       const destination = await openVenueDatabase(f.roots.venueDir);
       let rows;
@@ -973,9 +984,12 @@ describe("selected-hour admission before archive placement", () => {
       agreeInternet();
       await expect(runStagedRestore(f.restore)).resolves.toBe(true);
       expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
-      const files = await readdir(f.roots.stateDir);
-      expect(files).not.toContain("restore-request.json");
-      expect(files).not.toContain("restore-request.node-key");
+      expect(
+        JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+      ).not.toHaveProperty("request");
+      await expect(
+        readFile(join(f.roots.stateDir, "flows/restore/node-key")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
       expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(node.nodeId);
       const retained = await openVenueDatabase(f.roots.venueDir);
       try {

@@ -969,7 +969,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         const body = (await response.json()) as { error?: { code: string } };
         expect(response.status).toBe(422);
         expect(body.error?.code).toBe("recovery.passphrase_invalid");
-        await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+        await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
           code: "ENOENT",
         });
         expect(kills).toEqual([]);
@@ -1142,10 +1142,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(response.status).toBe(202);
         expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
         expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
-        expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(artifact);
-        expect(await readFile(join(stateDir, "restore-request.key"), "utf8")).toBe(
-          "validation-key",
-        );
+        expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(artifact);
+        expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe("validation-key");
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });
@@ -1211,9 +1209,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(await response.json()).toMatchObject({
             error: { code: "backup.stream_request_failed", params: { name: "TimedOut" } },
           });
-          await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
-            code: "ENOENT",
-          });
+          await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
+            {
+              code: "ENOENT",
+            },
+          );
           expect(kills).toEqual([]);
         });
       });
@@ -1278,7 +1278,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             expect(JSON.parse(await restore("AccessDenied"))).toMatchObject({
               error: { params: { status: 403, name: "AccessDenied" } },
             });
-            await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+            await expect(
+              readFile(join(stateDir, "flows/restore/record.json")),
+            ).rejects.toMatchObject({
               code: "ENOENT",
             });
             expect(kills).toEqual([]);
@@ -1382,7 +1384,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               });
               for (const raw of [...raws, "elsewhere"]) expect(body).not.toContain(raw);
             }
-            await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
+            await expect(
+              readFile(join(stateDir, "flows/restore/record.json")),
+            ).rejects.toMatchObject({
               code: "ENOENT",
             });
             expect(kills).toEqual([]);
@@ -1485,9 +1489,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(await response.json()).toEqual({
             error: { code: "restore.stream_source_unchecked", params: { reason: "bucket" } },
           });
-          await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
-            code: "ENOENT",
-          });
+          await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
+            {
+              code: "ENOENT",
+            },
+          );
           expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
           expect(kills).toEqual([]);
         });

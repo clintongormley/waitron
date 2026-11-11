@@ -262,7 +262,9 @@ it("the real setup listener previews the selected copy without restarting or pub
       taxpayer: { legalName: "Old venue", taxId: "89890001K" },
     });
     const stateFiles = await readdir(stateDir);
-    expect(stateFiles).not.toContain("restore-request.json");
+    await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(stateFiles).not.toContain("trading.env");
     const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, client.via);
     expect(status.status).toBe(200);
@@ -379,10 +381,12 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
   };
   const credential = { recoveryOperation, nodeRecoverySecret: "synthetic staged node key" };
   await stageStreamRestore({ ...selection, ...credential, venueConfirmed: "89890001K" });
-  expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(
+  expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
     "synthetic staged node key",
   );
-  expect(JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"))).toMatchObject({
+  expect(
+    JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).request,
+  ).toMatchObject({
     recoveryOperation,
     nodeRecoveryKey: true,
   });
@@ -426,7 +430,9 @@ it("the real setup listener reaches both private download previews without stagi
     });
     expect(cloud.status).toBe(500);
     expect((await cloud.json()).error.code).toBe("server.internal");
-    expect(await readdir(stateDir)).not.toContain("restore-request.json");
+    await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     expect(await readFile(join(scratch, "remote-logs/waitron.log"), "utf8")).not.toContain(
       "synthetic-invalid-private-kit",
     );

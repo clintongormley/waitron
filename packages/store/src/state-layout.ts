@@ -10,8 +10,6 @@ export const SPARE_SPACE_FILE = "spare-space";
 export const SPARE_SPACE_RELEASED_FILE = "spare-space.released";
 export const BACKUP_ROOM_NOTE_FILE = "backup-room-note.json";
 export const BACKUP_ROOM_START_DELETED_FILE = "backup-room-start-deleted.json";
-export const RESTORE_REQUEST_FILE = "restore-request.json";
-export const REBUILD_MARKER = "rebuild-first-start.json";
 export const RESET_REQUEST_FILE = "reset-request.json";
 export const PENDING_ADOPTION_FILE = "pending-adoption.json";
 export const RECOVERY_LOCK_FILE = "recovery.lock";
@@ -41,12 +39,6 @@ export const SETUP_OPERATION_LOCK_FILE = "setup-operation.lock";
 export const CONFIGURATION_IMPORT_FILE = "configuration-import.json";
 export const CONFIGURATION_IMPORT_ARTIFACT = "configuration-import.artifact";
 export const CONFIGURATION_IMPORT_KEY = "configuration-import.key";
-export const RESTORE_REQUEST_ARTIFACT = "restore-request.artifact";
-export const RESTORE_REQUEST_KEY = "restore-request.key";
-export const RESTORE_REQUEST_DB = "restore-request.db";
-export const RESTORE_REQUEST_ENTRIES = "restore-request.entries";
-export const RESTORE_REQUEST_PLACEMENT = "restore-request.placement.db";
-export const RESTORE_REQUEST_NODE_KEY = "restore-request.node-key";
 export const STREAM_DIR = "stream";
 export const HANDOVER_DIR = "handover";
 export const TLS_DIR = "tls";
@@ -105,18 +97,6 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Records backup cleanup performed at start.",
-  },
-  {
-    name: RESTORE_REQUEST_FILE,
-    kind: "file",
-    reset: "deleted",
-    why: "Hands a restore to the next start.",
-  },
-  {
-    name: REBUILD_MARKER,
-    kind: "file",
-    reset: "deleted",
-    why: "Hands a rebuild to the next start.",
   },
   {
     name: RESET_REQUEST_FILE,
@@ -244,37 +224,6 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "Import secrets stay outside database backups.",
-  },
-  {
-    name: RESTORE_REQUEST_ARTIFACT,
-    kind: "file",
-    reset: "deleted",
-    why: "Staged restore attachment.",
-  },
-  {
-    name: RESTORE_REQUEST_KEY,
-    kind: "file",
-    reset: "deleted",
-    why: "Restore secrets stay outside database backups.",
-  },
-  { name: RESTORE_REQUEST_DB, kind: "file", reset: "deleted", why: "Staged restore database." },
-  {
-    name: RESTORE_REQUEST_ENTRIES,
-    kind: "file",
-    reset: "deleted",
-    why: "Staged restore attachments.",
-  },
-  {
-    name: RESTORE_REQUEST_PLACEMENT,
-    kind: "file",
-    reset: "deleted",
-    why: "Staged restore placement database.",
-  },
-  {
-    name: RESTORE_REQUEST_NODE_KEY,
-    kind: "file",
-    reset: "deleted",
-    why: "Restore signing secrets stay outside database backups.",
   },
   { name: STREAM_DIR, kind: "folder", reset: "deleted", why: "Owned by Litestream." },
   {

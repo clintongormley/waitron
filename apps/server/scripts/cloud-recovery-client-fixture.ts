@@ -97,7 +97,9 @@ else if (request.command === "stage") {
   };
 } else if (request.command === "restore") {
   assert(request.expectedVenue && request.expectedSourceNodeId && request.expectedModules);
-  const marker = JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"));
+  const marker = JSON.parse(
+    await readFile(join(stateDir, "flows/restore/record.json"), "utf8"),
+  ).request;
   if (request.expectedPointId) assert.equal(marker.managedCloud.pointId, request.expectedPointId);
   assert.equal(await exists(join(venueDir, "venue.db")), false);
   const hooks: string[] = [];

@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -132,9 +132,10 @@ it("binary change after approval prevents staging without touching existing file
   f.running.mockReturnValue(target("f".repeat(40)));
   await expect(stageRestoreRequest(f.stateDir, f.request)).rejects.toThrow(unavailable);
   expect(await f.evidence()).toEqual(before);
-  expect(await readdir(f.stateDir)).toEqual(
-    expect.not.arrayContaining(["flows/restore/record.json", "flows/restore/artifact"]),
-  );
+  for (const name of ["record.json", "artifact"])
+    await expect(readFile(join(f.stateDir, "flows/restore", name))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 });
 
 it("target is rechecked after asynchronous staging validation", async () => {

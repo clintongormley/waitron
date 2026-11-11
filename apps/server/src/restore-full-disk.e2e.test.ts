@@ -14,7 +14,6 @@ import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { formatEnvFile } from "./env-file.js";
 import { ALL_MODULES } from "./modules.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { restoreFromArtifact } from "./restore.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 
@@ -132,7 +131,7 @@ async function expectOldBox(box: Box): Promise<void> {
   expect(await readFile(join(box.stateDir, "trading.env"), "utf8")).toBe(OLD_IDENTITY);
   expect(await readFile(join(box.stateDir, "secrets.env"), "utf8")).toBe(OLD_SECRET);
   expect(existsSync(join(box.stateDir, "trading.env.replaced"))).toBe(false);
-  expect(existsSync(join(box.stateDir, REBUILD_MARKER))).toBe(false);
+  expect(existsSync(join(box.stateDir, "flows/restore/record.json"))).toBe(false);
   const working = [
     ...(await readdir(box.stateDir, { recursive: true })),
     ...(await readdir(box.venueDir, { recursive: true })),
@@ -153,7 +152,7 @@ it("a disk too full for the secrets refuses before anything is replaced", async 
   const openedPaths: string[] = [];
   const realOpen = nativeFs.open;
   const spy = vi.spyOn(nativeFs, "open").mockImplementation(async (...args) => {
-    openedPaths.push(String(args[0]));
+    if (args[1] === "w") openedPaths.push(String(args[0]));
     return realOpen(...args);
   });
   syncBuiltinESMExports();

@@ -220,5 +220,3 @@ export async function readBucketPointerTerm(
   if (read === TIMED_OUT) throw new AppError("restore.pointer_unreadable", {});
   return read === null ? null : read.pointer.body.term;
 }
-
-export { REBUILD_MARKER } from "@waitron/store";

@@ -219,11 +219,11 @@ function signedPaperInput(f: Awaited<ReturnType<typeof stage>>) {
   };
 }
 async function refuseLegacyInput(f: Awaited<ReturnType<typeof stage>>, input: unknown) {
-  const markerPath = join(f.stateDir, "restore-request.json");
+  const markerPath = join(f.stateDir, "flows/restore/record.json");
   const original = await readFile(markerPath, "utf8");
   const marker = JSON.parse(original);
-  Reflect.deleteProperty(marker, "recoveryContext");
-  marker.recoveryOperation = { binding: f.binding, input };
+  Reflect.deleteProperty(marker.request, "recoveryContext");
+  marker.request.recoveryOperation = { binding: f.binding, input };
   await writeFile(markerPath, JSON.stringify(marker));
   try {
     await expect(f.run()).rejects.toMatchObject({
@@ -274,12 +274,12 @@ it.each(["archive", "stream"] as const)(
 it("requires the selected copy's node key even when a valid consumed Cloud receipt is supplied", async () => {
   const f = await stage("archive");
   const destination = await f.seedDestination();
-  const markerPath = join(f.stateDir, "restore-request.json");
+  const markerPath = join(f.stateDir, "flows/restore/record.json");
   const marker = JSON.parse(await readFile(markerPath, "utf8"));
-  Reflect.deleteProperty(marker, "recoveryContext");
-  marker.recoveryOperation = { binding: f.binding, input: signedCloudInput(f) };
+  Reflect.deleteProperty(marker.request, "recoveryContext");
+  marker.request.recoveryOperation = { binding: f.binding, input: signedCloudInput(f) };
   await writeFile(markerPath, JSON.stringify(marker));
-  await writeFile(join(f.stateDir, "restore-request.node-key"), "wrong node recovery key");
+  await writeFile(join(f.stateDir, "flows/restore/node-key"), "wrong node recovery key");
   const retained = f.journal();
   await expect(f.run()).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(destination.bytes);

@@ -352,8 +352,14 @@ export async function runStagedRestore(
     deps.log("error", "restore.flow_unreadable", {});
     return false;
   }
-  if (phase === null || phase === "first-start") {
-    await dropAttachments(deps.stateDir);
+  if (phase === null) return false;
+  if (phase === "first-start") {
+    const hold = await lockRestoreTarget(deps.venueDir);
+    try {
+      await dropAttachments(deps.stateDir);
+    } finally {
+      hold.release();
+    }
     return false;
   }
   const raw = await readFile(join(deps.stateDir, RESTORE_FLOW_DIR, "record.json"), "utf8");

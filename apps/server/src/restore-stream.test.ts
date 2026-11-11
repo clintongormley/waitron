@@ -40,7 +40,6 @@ import {
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { formatEnvFile } from "./env-file.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import type { ValidatedArtifact } from "./restore.js";
 import {
   LIVE_WINDOW_MS,
@@ -68,7 +67,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       if (
         bulkReadGuard.stateDir !== "" &&
         path.startsWith(`${bulkReadGuard.stateDir}/`) &&
-        (path.endsWith("/venue.db") || path.endsWith("/restore-request.db"))
+        path.endsWith("/venue.db")
       ) {
         throw new Error("database-wide read forbidden");
       }
@@ -1111,10 +1110,9 @@ describe("restoreFromStream (the command line's whole path)", () => {
       "WAITRON_CREDENTIALS_KEY=deadbeef\n",
     );
     expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
-    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
-      version: 1,
-      source: "stream",
-    });
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")),
+    ).toEqual({ version: 1, phase: "first-start", firstStart: { source: "stream" } });
     expect(
       (await readdir(deps.stateDir)).filter(
         (name) => name.startsWith("stream-restore") || name.startsWith("archive-validate"),
@@ -1158,10 +1156,9 @@ describe("restoreFromStream (the command line's whole path)", () => {
     } finally {
       await placed.close();
     }
-    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
-      version: 1,
-      source: "stream",
-    });
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")),
+    ).toEqual({ version: 1, phase: "first-start", firstStart: { source: "stream" } });
     expect(
       (await readdir(deps.stateDir)).filter(
         (name) => name.startsWith("stream-restore") || name.startsWith("archive-validate"),
@@ -1215,10 +1212,9 @@ describe("restoreFromStream (the command line's whole path)", () => {
       await placed.close();
     }
     expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
-    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
-      version: 1,
-      source: "stream",
-    });
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")),
+    ).toEqual({ version: 1, phase: "first-start", firstStart: { source: "stream" } });
     expect(
       (await readdir(deps.stateDir)).filter((name) => name.startsWith("stream-restore")),
     ).toEqual([]);
@@ -1313,7 +1309,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
 });
 
 describe("stageStreamRestore (the setup wizard's path)", () => {
-  const STAGED = ["restore-request.db", "restore-request.entries", "restore-request.json"];
+  const STAGED = ["flows/restore/entries", "flows/restore/record.json", "flows/restore/venue.db"];
 
   async function stageDeps(
     overrides: Partial<PrepareStreamDeps> & { venueConfirmed?: string | null } = {},
@@ -1329,29 +1325,44 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     };
   }
 
-  const leftovers = async (stateDir: string) =>
-    (await readdir(stateDir)).filter(
-      (name) => name.startsWith("stream-restore") || name.startsWith("restore-request"),
-    );
+  const leftovers = async (stateDir: string) => {
+    const names = (await readdir(stateDir)).filter((name) => name.startsWith("stream-restore"));
+    try {
+      const attachments = (await readdir(join(stateDir, "flows/restore"))).filter(
+        (name) => name !== "record.json",
+      );
+      const record = JSON.parse(
+        await readFile(join(stateDir, "flows/restore/record.json"), "utf8"),
+      );
+      return [
+        ...names,
+        ...attachments.map((name) => `flows/restore/${name}`),
+        ...(record.phase === "first-start" ? [] : ["flows/restore/record.json"]),
+      ];
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      return names;
+    }
+  };
 
   it("stages real SQLite without reading its database into memory", async () => {
     const deps = await stageDeps();
     bulkReadGuard.stateDir = deps.stateDir;
     await stageStreamRestore(deps);
-    const staged = new DatabaseSync(join(deps.stateDir, "restore-request.db"));
+    const staged = new DatabaseSync(join(deps.stateDir, "flows/restore/venue.db"));
     try {
       expect(staged.prepare("select tax_id from tenants").all()).toEqual([{ tax_id: "89890001K" }]);
     } finally {
       staged.close();
     }
     expect((await leftovers(deps.stateDir)).sort()).toEqual(STAGED);
-    expect(JSON.parse(await readFile(join(deps.stateDir, "restore-request.json"), "utf8"))).toEqual(
-      {
-        version: 1,
-        environment: "preproduction",
-        kind: "stream",
-      },
-    );
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")).request,
+    ).toEqual({
+      version: 1,
+      environment: "preproduction",
+      kind: "stream",
+    });
   });
 
   it("runs the staged real SQLite through default placement with database-wide reads forbidden", async () => {
@@ -1379,17 +1390,16 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
       "WAITRON_CREDENTIALS_KEY=deadbeef\n",
     );
     expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toContain(T.nodeId);
-    expect(JSON.parse(await readFile(join(deps.stateDir, REBUILD_MARKER), "utf8"))).toEqual({
-      version: 1,
-      source: "stream",
-    });
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")),
+    ).toEqual({ version: 1, phase: "first-start", firstStart: { source: "stream" } });
     expect(await leftovers(deps.stateDir)).toEqual([]);
   });
 
   it("a real busy lock retains the staged database and retry then restores it", async () => {
     const deps = await stageDeps();
     await stageStreamRestore(deps);
-    const source = join(deps.stateDir, "restore-request.db");
+    const source = join(deps.stateDir, "flows/restore/venue.db");
     const original = await stat(source);
     const venueDir = await fresh("waitron-busy-staged-venue-");
     await writeFile(join(venueDir, "venue.db"), "previous database");
@@ -1437,9 +1447,9 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
   it("stages the copy the owner confirmed by its tax id, and removes the download's folder", async () => {
     const deps = await stageDeps();
     await stageStreamRestore(deps);
-    expect(JSON.parse(await readFile(join(deps.stateDir, "restore-request.json"), "utf8"))).toEqual(
-      { version: 1, environment: "preproduction", kind: "stream" },
-    );
+    expect(
+      JSON.parse(await readFile(join(deps.stateDir, "flows/restore/record.json"), "utf8")).request,
+    ).toEqual({ version: 1, environment: "preproduction", kind: "stream" });
     expect((await leftovers(deps.stateDir)).sort()).toEqual(STAGED);
   });
 

@@ -1,4 +1,4 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { Agent } from "undici";
@@ -76,7 +76,11 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
           headers: { "Content-Type": "application/json", Origin: origin, ...headers },
           body: JSON.stringify(body),
         } as RequestInit);
-      await writeFile(join(f.stateDir, "restore-request.json"), "retired restore must not run");
+      await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+      await writeFile(
+        join(f.stateDir, "flows/restore/record.json"),
+        "retired restore must not run",
+      );
       await writeFile(join(f.stateDir, "reset-request.json"), "retired reset must not run");
       const fresh = await (await get("/setup-api/first-setup/resolution")).json();
       const ids = {
@@ -96,13 +100,13 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       });
       expect(waiting.status).toBe(503);
       expect(await waiting.json()).toMatchObject({ error: { code: "setup.not_ready" } });
-      expect(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).toBe(
+      expect(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")).toBe(
         "retired restore must not run",
       );
       expect(await readFile(join(f.stateDir, "reset-request.json"), "utf8")).toBe(
         "retired reset must not run",
       );
-      await rm(join(f.stateDir, "restore-request.json"));
+      await rm(join(f.stateDir, "flows/restore/record.json"));
       await rm(join(f.stateDir, "reset-request.json"));
       // Removing the waiting requests changes the state a Start again must match, so read it again.
       const cleared = await (await get("/setup-api/first-setup/resolution")).json();

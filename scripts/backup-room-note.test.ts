@@ -48,6 +48,7 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
     "reads the live database; removes only its staging folder",
   "apps/server/src/reset-request.ts":
     "checks venue.db exists; removes its own marker and state files",
+  "apps/server/src/restore-flow.ts": "removes only restore attachments under flows/restore",
   "apps/server/src/restore-request.ts":
     "removes and renames its own request files in the state folder",
   "apps/server/src/restore-stream.ts": "restores into a scratch folder it removes",

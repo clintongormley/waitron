@@ -47,7 +47,8 @@ async function torn() {
   await mkdir(stateDir);
   await mkdir(venueDir);
   await writeFile(join(venueDir, "first-setup-claim.json"), "{}");
-  await writeFile(join(stateDir, "restore-request.json"), "retained restore");
+  await mkdir(join(stateDir, "flows/restore"), { recursive: true });
+  await writeFile(join(stateDir, "flows/restore/record.json"), "retained restore");
   await writeFile(join(stateDir, "reset-request.json"), "retained reset");
   return { root, stateDir, venueDir };
 }
@@ -89,7 +90,9 @@ it("direct entry serves resolution before strict boot or creating a missing data
   ])
     expect((await app!.request(path, { method: "POST" })).status).toBe(404);
   await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).toBe("retained restore");
+  expect(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")).toBe(
+    "retained restore",
+  );
 });
 
 it.each([FRESH, { ...FRESH, level: "recovery" as const, failures: 3 }])(

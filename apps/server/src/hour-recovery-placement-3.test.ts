@@ -22,7 +22,6 @@ import { Agent } from "undici";
 import { loadKeyRing } from "@waitron/credentials";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
 import { copyFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -143,7 +142,7 @@ describe("selected-hour admission before archive placement", () => {
       );
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
       await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
-      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      const marker = await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8");
       for (let attempt = 0; attempt < 2; attempt++) {
         await expect(runStagedRestore({ ...f.restore })).rejects.toMatchObject({
           code: refusal === "key" ? "promotion.break_glass_invalid" : "sif.allocation_invalid",
@@ -151,7 +150,9 @@ describe("selected-hour admission before archive placement", () => {
             ? { params: { reason: "outside_confirmation_missing" } }
             : {}),
         });
-        expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+        expect(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")).toBe(
+          marker,
+        );
         expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
           "original destination database",
         );
@@ -179,7 +180,7 @@ describe("selected-hour admission before archive placement", () => {
       );
       await writeFile(join(f.roots.venueDir, "venue.db"), "original destination database");
       await writeFile(join(f.roots.stateDir, "trading.env"), "original destination identity");
-      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      const marker = await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8");
       const source = `
         import { runStagedRestore } from ${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)};
         try {
@@ -203,7 +204,9 @@ describe("selected-hour admission before archive placement", () => {
           { timeout: 45_000 },
         );
         expect(JSON.parse(result.stdout)).toEqual({ code: "promotion.break_glass_invalid" });
-        expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+        expect(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")).toBe(
+          marker,
+        );
         expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe(
           "original destination database",
         );
@@ -368,7 +371,9 @@ describe("selected-hour admission before archive placement", () => {
       if (source === "stream")
         await writeStreamRestore({ ...restore, databasePath: f.database, entries: f.entries });
       else await restoreFromArtifact(restore);
-      expect(await readdir(f.roots.stateDir)).toContain(REBUILD_MARKER);
+      expect(
+        await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8"),
+      ).toBeTruthy();
       const snapshot = async () => {
         const placed = await openVenueDatabase(f.roots.venueDir);
         try {
@@ -448,7 +453,9 @@ describe("selected-hour admission before archive placement", () => {
           await agent?.close();
           await server?.close();
         }
-        expect(await readdir(f.roots.stateDir)).not.toContain(REBUILD_MARKER);
+        await expect(
+          readFile(join(f.roots.stateDir, "flows/restore/record.json")),
+        ).rejects.toMatchObject({ code: "ENOENT" });
         expect(await snapshot()).toEqual(before);
         expect(
           await readFile(join(f.roots.stateDir, "module-preparation-state.json"), "utf8"),
@@ -651,7 +658,8 @@ describe("selected-hour admission before archive placement", () => {
     });
     expect(response.status).toBe(202);
     expect(
-      JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
+      JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8"))
+        .request,
     ).toHaveProperty("recoveryContext", context);
     agreeInternet();
     expect(await runStagedRestore(f.restore)).toBe(true);
@@ -677,7 +685,8 @@ describe("selected-hour admission before archive placement", () => {
     const f = await archiveHost();
     const managed = await managedHttp(f);
     expect(
-      JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
+      JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8"))
+        .request,
     ).toHaveProperty("recoveryContext", managed.context);
     agreeInternet();
     expect(
@@ -686,7 +695,9 @@ describe("selected-hour admission before archive placement", () => {
         onManagedCloudRestored: (binding) => managed.client().markRestored(binding),
       }),
     ).toBe(true);
-    expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+    expect(
+      JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+    ).not.toHaveProperty("request");
     expect(await managed.client().replacementIdentity()).toMatchObject({
       phase: "restored",
       pointId: managed.pointId,
@@ -739,11 +750,15 @@ describe("selected-hour admission before archive placement", () => {
       code: "sif.allocation_invalid",
       params: { reason: "second_clock_missing" },
     });
-    expect(await readdir(f.roots.stateDir)).toContain("restore-request.json");
+    expect(
+      await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8"),
+    ).toBeTruthy();
     agreeInternet();
     expect(await runStagedRestore(options)).toBe(true);
     expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
-    expect(await readdir(f.roots.stateDir)).not.toContain("restore-request.json");
+    expect(
+      JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+    ).not.toHaveProperty("request");
   });
 
   it("interactive recovery is wired through the real setup boot and a certificate-verified HTTPS connection", async () => {

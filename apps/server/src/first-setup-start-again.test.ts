@@ -1336,7 +1336,7 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
   ...[
     "trading.env",
     "setup-operation.json",
-    "restore-request.json",
+    "flows/restore/record.json",
     "reset-request.json",
     "modules.json",
     "cloud/replacement.json",
@@ -1344,7 +1344,13 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
     `state/${name}`,
     async (f) => {
       await mkdir(join(f.stateDir, "cloud"), { recursive: true });
-      await writeFile(join(f.stateDir, name), "X=1\n");
+      await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+      await writeFile(
+        join(f.stateDir, name),
+        name === "flows/restore/record.json"
+          ? JSON.stringify({ version: 1, phase: "staged", request: {} })
+          : "X=1\n",
+      );
     },
   ]),
   ["venue/.venue.db-litestream/", (f) => mkdir(join(f.venueDir, ".venue.db-litestream"))],
@@ -1592,9 +1598,10 @@ const incomplete = { code: "setup.start_again_incomplete" };
 
 type Pending = Awaited<ReturnType<typeof pendingDeletion>>;
 const restoreStaging = async ({ f }: Pending) => {
+  await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
   await writeFile(
-    join(f.stateDir, "restore-request.json"),
-    JSON.stringify({ version: 1, kind: "stream" }),
+    join(f.stateDir, "flows/restore/record.json"),
+    JSON.stringify({ version: 1, phase: "staged", request: { version: 1, kind: "stream" } }),
   );
   const restore = vi.fn(async () => {});
   await expect(
@@ -1605,7 +1612,7 @@ const restoreStaging = async ({ f }: Pending) => {
     ),
   ).rejects.toMatchObject(incomplete);
   expect(restore).not.toHaveBeenCalled();
-  await rm(join(f.stateDir, "restore-request.json"));
+  await rm(join(f.stateDir, "flows"), { recursive: true });
 };
 const restoreCommand = async ({ f }: Pending) => {
   const source = join(f.stateDir, "..", "archive");
@@ -1808,9 +1815,14 @@ it.each([
     if (placed) await expect(run).resolves.toBe(true);
     else await expect(run).rejects.toThrow("refused placement");
     expect(restore).toHaveBeenCalledOnce();
-    await expect(access(join(folders.stateDir, "restore-request.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    if (placed)
+      expect(
+        JSON.parse(await readFile(join(folders.stateDir, "flows/restore/record.json"), "utf8")),
+      ).not.toHaveProperty("request");
+    else
+      await expect(
+        access(join(folders.stateDir, "flows/restore/record.json")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
     expect(await kept.bytes()).toEqual(kept.before);
   },
 );

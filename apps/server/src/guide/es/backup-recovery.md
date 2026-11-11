@@ -188,6 +188,8 @@ página que dice que no pudo crear sus nuevas series de facturas, conéctalo a i
 
 ## Si una recuperación se interrumpe {#resume}
 
+Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.
+
 Hasta que eliges el botón de restaurar, la página conserva lo que introdujiste solo mientras sigue
 abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y al recargar se abre
 la primera pantalla de la página; desde ahí elige **Unirse o recuperar** y empieza de nuevo la

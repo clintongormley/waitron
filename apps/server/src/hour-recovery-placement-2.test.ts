@@ -90,10 +90,12 @@ describe("selected-hour admission before archive placement", () => {
     await expect(
       runStagedRestore({ ...f.restore, withModuleOperations: wrong.runner(f.outcome.input) }),
     ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-    await expect(readFile(join(f.roots.stateDir, "restore-request.json"))).rejects.toMatchObject({
+    await expect(
+      readFile(join(f.roots.stateDir, "flows/restore/record.json")),
+    ).rejects.toMatchObject({
       code: "ENOENT",
     });
-    await expect(readFile(join(f.roots.stateDir, "restore-request.key"))).rejects.toMatchObject({
+    await expect(readFile(join(f.roots.stateDir, "flows/restore/key"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -429,7 +431,7 @@ describe("selected-hour admission before archive placement", () => {
       await writeFile(join(f.roots.stateDir, "trading.env"), "staged destination identity");
       const previous = await suite.db.select().from(invoiceSeries);
       const allocations = await suite.db.select().from(fiscalAllocations);
-      const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
+      const marker = await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8");
       const journal = await readModulePreparationHistory(f.roots, binding.module);
       if (reason !== "offline")
         external.internet.mockImplementation(async () => ({
@@ -456,7 +458,9 @@ describe("selected-hour admission before archive placement", () => {
         expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
           "staged destination identity",
         );
-        expect(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")).toBe(marker);
+        expect(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")).toBe(
+          marker,
+        );
         expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual(journal);
         expect(
           (
@@ -535,8 +539,8 @@ describe("selected-hour admission before archive placement", () => {
         { signal: "SIGKILL" },
       );
       expect(
-        JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
-      ).toMatchObject({ placementStarted: true });
+        JSON.parse(await readFile(join(f.roots.stateDir, "flows/restore/record.json"), "utf8")),
+      ).toMatchObject({ phase: "placing" });
       const restored = await openVenueDatabase(f.roots.venueDir);
       let rows;
       let allocations;
