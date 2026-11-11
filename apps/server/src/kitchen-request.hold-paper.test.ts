@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -42,7 +43,6 @@ import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-l
 import {
   moveDishesToStation,
   recallLines,
-  updateHeldOrder,
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -794,9 +794,9 @@ describe("A773 hold paper: edits", () => {
     });
   });
 
-  it("removing a Requested burger's line in an edit cancels it on the HOLD paper where it printed", async () => {
+  it("Cancel item removing a Requested burger's line cancels it on the HOLD paper where it printed", async () => {
     const venue = await fresh();
-    const { kept, removedId, revision, expected } = await withTransaction(db, async (tx) => {
+    const { removedId, expected } = await withTransaction(db, async (tx) => {
       await firedFromHold(tx, venue, false, [burger(venue, false), burger(venue, false)]);
       const lines = await tx
         .select({ id: workingOrderLines.id })
@@ -805,25 +805,15 @@ describe("A773 hold paper: edits", () => {
         .orderBy(workingOrderLines.lineNo);
       expect(lines).toHaveLength(2);
       return {
-        kept: lines[0]!.id,
         removedId: lines[1]!.id,
-        revision: await revisionOf(tx, venue),
         expected: await slips(tx, venue),
       };
     });
     vi.setSystemTime(new Date(LATER));
 
-    await updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, venue.party.tabId, {
-      revision,
-      operatorId: OPERATOR,
-      lines: [
-        {
-          workingOrderLineId: kept,
-          menuItemId: venue.tables.offerFor(venue.products.burger),
-          quantity: "1",
-        },
-      ],
-    });
+    await withTransaction(db, (tx) =>
+      cancelItemForTest(tx, venue.cfg, venue.party.tabId, 2, undefined, OPERATOR),
+    );
 
     await withTransaction(db, async (tx) => {
       const after = await slips(tx, venue);

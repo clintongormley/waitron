@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { abandonHeldOrder } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
@@ -450,11 +451,12 @@ describe("pay, then order dessert", () => {
     }
   });
 
-  it("keeps the party seated when its tab is abandoned, and the next round lands on the next bill the test helper makes", async () => {
+  it("keeps the party seated after Cancel item empties its tab and Forget abandons it, and the next round lands on a new bill", async () => {
     const table24 = await v.table("Table 24");
     const { partyId, tabId } = await seat(v, table24);
     await order(v, tabId, "Burger");
 
+    await inTx(v, (tx) => cancelItemForTest(tx, v.cfg, tabId, 1, undefined, OPERATOR));
     await abandonHeldOrder({ db: v.db }, v.cfg, tabId);
 
     expect((await partyRow(v, partyId)).state).toBe("open");

@@ -41,6 +41,7 @@ import { enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
 import {
   assertTabOpen,
+  captureOrderEdit,
   refusePaymentInFlight,
   removeFromLine,
   removePortions,
@@ -284,6 +285,16 @@ export async function cancelItem(
               taken.map(({ dish }) => targetOf(dish)),
               operatorId,
               at,
+            );
+          if (attendance !== undefined)
+            await captureOrderEdit(
+              tx,
+              attendance,
+              bill!.id,
+              operatorId,
+              await readOrderRevision(tx, bill!.id),
+              "adjustment",
+              at?.at,
             );
           invoice = await policy.completeAdjustment?.(bill!.id);
           return { revision: await revisionOf(), ...(invoice ? { invoice } : {}) };

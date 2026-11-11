@@ -103,7 +103,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
-import { cancelLine } from "./testing/cancel-line.js";
+import { cancelItemForTest, cancelLine } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 const LOCALE = "es-ES";
@@ -3240,7 +3240,7 @@ describe("edits inside groups (D19)", () => {
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
   });
 
-  it("removes a held group whose only line a whole-order save leaves out, naming the editor", async () => {
+  it("removes a held group whose only line Cancel item removes, naming the editor", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const fishOnly = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]))
@@ -3248,12 +3248,7 @@ describe("edits inside groups (D19)", () => {
     const [fish] = await linesIn(s.partyId, fishOnly);
     const revision = await revisionOf(s.partyId);
 
-    await saveWhole(
-      v,
-      s.tabId,
-      (await keptLines(v, s.tabId)).filter((kept) => kept.workingOrderLineId !== fish!.id),
-      MIA,
-    );
+    await inTx((tx) => cancelItemForTest(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
 
     expect((await groupRow(fishOnly)).state).toBe("removed");
     expect((await eventsOf(s.partyId)).at(-1)).toMatchObject({
@@ -4569,7 +4564,7 @@ describe("advance HOLD tickets (Task 6)", () => {
   });
 
   describe("setting on", () => {
-    it("sends held quantity changes and cancellation from order edits to a second printer on the station", async () => {
+    it("sends held quantity edits and Cancel item corrections to a second printer on the station", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const secondPrinter = await inTx(async (tx) => {
@@ -4601,12 +4596,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       expect(changed).toHaveLength(1);
       expect(changed[0]).toContain("HOLD CHANGED");
       expect(changed[0]).toContain("K-STEAK");
-      await saveWhole(
-        v,
-        s.tabId,
-        (await keptLines(v, s.tabId)).filter((line) => line.workingOrderLineId !== fish.id),
-        MIA,
-      );
+      await inTx((tx) => cancelItemForTest(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
       const cancelled = (await secondPaper()).slice(before + changed.length);
       expect(cancelled).toHaveLength(1);
       expect(cancelled[0]).toContain("HOLD CANCELLED");
@@ -5078,18 +5068,13 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
     });
 
-    it("prints a HOLD cancellation for a held line a whole-order save leaves out", async () => {
+    it("prints a HOLD cancellation for a held line Cancel item removes", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const s = await specExample(v);
       const fish = await lineOf(s, s.mains, "fish", v);
 
-      await saveWhole(
-        v,
-        s.tabId,
-        (await keptLines(v, s.tabId)).filter((kept) => kept.workingOrderLineId !== fish.id),
-        MIA,
-      );
+      await inTx((tx) => cancelItemForTest(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
 
       expect(await printedSince(v, 5)).toEqual([
         [

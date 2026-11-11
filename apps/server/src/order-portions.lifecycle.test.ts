@@ -19,7 +19,7 @@ import { saveDraft, splitDraft, submitDraft, type BillEditExpected } from "./ord
 import { expandPortionRows, registerPortions, type PortionRef } from "./order-portions.js";
 import { partyRevision, seatTable } from "./parties.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
-import { cancelLine, cancelReasonId } from "./testing/cancel-line.js";
+import { cancelItemForTest, cancelLine, cancelReasonId } from "./testing/cancel-line.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { createTable } from "./testing/live-table.js";
 import { addPortionRound } from "./testing/portion-bill.js";
@@ -403,6 +403,27 @@ describe("A803 portion lifecycle: cancellations", () => {
           },
         ],
       },
+    );
+    expect(bindingOf(first!.lineId)).toEqual([]);
+    expect(registryHas(first!.portionId)).toBe(true);
+    expect(bindingOf(second!.lineId)).toEqual([{ portion_id: second!.portionId }]);
+    expect(eventsOf(p.portions)).toEqual([
+      {
+        portion_id: first!.portionId,
+        kind: "cancelled",
+        from_order_id: p.billId,
+        to_order_id: null,
+        actor_id: venue.adminId,
+      },
+    ]);
+  });
+
+  it("Cancel item removing a portion records a cancelled event and drops its binding", async () => {
+    const p = await fixture();
+    const [first, second] = p.portions;
+    const firstLine = (await linesOf(p.billId)).find((line) => line.id === first!.lineId)!;
+    await inTx(venue, (tx) =>
+      cancelItemForTest(tx, venue.cfg, p.billId, firstLine.lineNo, undefined, venue.adminId),
     );
     expect(bindingOf(first!.lineId)).toEqual([]);
     expect(registryHas(first!.portionId)).toBe(true);

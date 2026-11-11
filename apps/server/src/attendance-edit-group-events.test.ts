@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { updateHeldOrder, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
@@ -146,13 +147,13 @@ async function command(
         attendance,
       ),
     );
-  const lines: UpdateHeldOrderRequest["lines"] = rows
-    .filter((row) => action !== "remove-group" || row.lineNo !== 1)
-    .map((row) => ({
-      workingOrderLineId: row.id,
-      menuItemId: v.offerFor(row.lineNo === 1 ? "House salad" : "Tarta"),
-      quantity: "1",
-    }));
+  if (action === "remove-group")
+    return run((tx) => cancelItemForTest(tx, v.cfg, p.tabId, 1, "1", v.operatorId, attendance));
+  const lines: UpdateHeldOrderRequest["lines"] = rows.map((row) => ({
+    workingOrderLineId: row.id,
+    menuItemId: v.offerFor(row.lineNo === 1 ? "House salad" : "Tarta"),
+    quantity: "1",
+  }));
   if (action === "add-group") lines.push({ menuItemId: v.offerFor("Octopus"), quantity: "1" });
   return updateHeldOrder(
     { admission: testTradingAdmission(), db: suite.db },

@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -232,7 +233,7 @@ describe("A773 requested lifecycle: edit", () => {
     });
   });
 
-  it("puts a party edit's new dish in a new fired group as Requested, even when the edit removes its course's last Requested dish", async () => {
+  it("puts a party edit's new dish in a new fired group as Requested after Cancel item removes its course's last Requested dish", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     const { starters, mains } = await withTransaction(db, async (tx) => {
@@ -258,8 +259,9 @@ describe("A773 requested lifecycle: edit", () => {
     );
     const kept = before.rows.find((row) => row.courseId === starters.id)!;
     const removed = before.rows.find((row) => row.courseId === mains.id)!;
+    await withTransaction(db, (tx) => cancelItemForTest(tx, venue.cfg, id, 2, undefined, OPERATOR));
     await updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, id, {
-      revision: before.currentRevision,
+      revision: await withTransaction(db, (tx) => revision(tx, id)),
       operatorId: OPERATOR,
       lines: [{ ...line(venue, "burger"), workingOrderLineId: kept.lineId }, line(venue, "burger")],
     });

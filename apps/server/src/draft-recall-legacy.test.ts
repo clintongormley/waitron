@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { readBillEditState } from "./bill-editing.js";
 import { takeOverDraft } from "./order-drafts.js";
 import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
@@ -125,12 +126,21 @@ const edits = {
       revision: p.revision,
       note: "Bypass",
     }),
-  "basket edit": (p: Fixture) =>
+  "basket edit": async (p: Fixture) =>
     call("PUT", `/api/working-orders/${p.tabId}`, {
       revision: p.revision,
-      lines: [
-        { workingOrderLineId: p.line.id, menuItemId: venue.offerFor("Tarta"), quantity: "3" },
-      ],
+      lines: (
+        await venue.db
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, p.tabId))
+      )
+        .filter((line) => line.parentLineId === null)
+        .map((line) => ({
+          workingOrderLineId: line.id,
+          menuItemId: venue.offerFor("Tarta"),
+          quantity: "3",
+        })),
     }),
   "basket omission": (p: Fixture) =>
     call("PUT", `/api/working-orders/${p.tabId}`, {
@@ -199,6 +209,16 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
   )("still serves %s on a bill without a recalled source", async (operation) => {
     // A move of both Tartas: grouped, as an order stored before portions.
     const p = await setup(false, "hold", operation === "group move" ? "grouped" : undefined);
+    if (operation === "abandon bill") {
+      await inTx(venue, async (tx) => {
+        const rows = await tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, p.tabId));
+        for (const row of rows)
+          await cancelItemForTest(tx, venue.cfg, p.tabId, row.lineNo, undefined, venue.operatorId);
+      });
+    }
     const answer = await edits[operation](p);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     if (operation === "line edit") {

@@ -507,7 +507,10 @@ describe("a receipt-language change while orders are open", () => {
     );
     expect(split.status).toBe(200);
     const billId = split.json.billId as string;
-    expect((await till("DELETE", `/api/working-orders/${billId}`)).status).toBe(200);
+    expect((await till("POST", `/api/working-orders/${billId}/place`)).status).toBe(200);
+    expect(
+      (await till("POST", `/api/working-orders/${billId}/cancel`, { reason: "Guest left" })).status,
+    ).toBe(200);
     expect(statusOf(billId)).toBe("abandoned");
     const [line] = dishLines(billId);
     expect(line!.sent_at).not.toBeNull();

@@ -11,6 +11,11 @@ import {
 import { withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
+import { thousandthsToDecimal } from "@waitron/shared";
+import { cancelItem, type CancelItemAsk } from "../line-cancel.js";
+import { readCancellationContext } from "../line-cancel-context.js";
+import { partyRevision } from "../parties.js";
+import type { OrderAttendance } from "../working-order.js";
 import { applyAdjustment } from "../adjustments-apply.js";
 import type { TradingContext } from "../trading-context.js";
 import { send, type BillVenue } from "./bill-venue.js";
@@ -193,4 +198,49 @@ export async function compWholeBill(
     { ...body, lineId: null, reasonId, action: "discount_percent", percentBp },
   );
   expect(comped.status).toBe(200);
+}
+
+export async function observedCancelItem(
+  tx: Transaction,
+  orderId: string,
+  lineNo: number,
+  quantity?: string,
+) {
+  const { lineId, revision } = await lineAndRevision(tx, orderId, lineNo);
+  const [line] = await tx.select().from(workingOrderLines).where(eq(workingOrderLines.id, lineId));
+  const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, orderId));
+  const target = bill!.partyId ?? { billId: orderId };
+  const body: CancelItemAsk = {
+    expectedEdit: await readBillEditState(tx, orderId),
+    expectedBillRevision: revision,
+    ...(bill!.partyId === null
+      ? {}
+      : { expectedPartyRevision: await partyRevision(tx, bill!.partyId) }),
+    expectedContext: await readCancellationContext(tx, target, lineId),
+    quantity: quantity ?? thousandthsToDecimal(line!.quantity),
+    outcome: "remove_charge",
+    submissionId: randomUUID(),
+  };
+  return { target, lineId, body };
+}
+
+export async function cancelItemForTest(
+  tx: Transaction,
+  cfg: TradingContext,
+  orderId: string,
+  lineNo: number,
+  quantity?: string,
+  operatorId?: string,
+  attendance?: OrderAttendance,
+) {
+  const { target, lineId, body } = await observedCancelItem(tx, orderId, lineNo, quantity);
+  return cancelItem(
+    tx,
+    cfg,
+    target,
+    lineId,
+    { ...body, admission: testTradingAdmission() },
+    await ensureOperator(tx, operatorId ?? OPERATOR),
+    attendance,
+  );
 }

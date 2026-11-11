@@ -1,3 +1,4 @@
+import { cancelItemForTest } from "./testing/cancel-line.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
@@ -112,16 +113,9 @@ async function edit(
   );
 }
 async function removeFirst(venue: Venue) {
-  const id = venue.party.tabId;
-  const { rows, currentRevision } = await withTransaction(db, async (tx) => ({
-    rows: (await state(tx, id)).lines.filter((row) => row.parentLineId === null),
-    currentRevision: await revision(tx, id),
-  }));
-  return updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, id, {
-    revision: currentRevision,
-    operatorId: OPERATOR,
-    lines: [{ ...line(venue, "water"), workingOrderLineId: rows[1]!.id }],
-  });
+  return withTransaction(db, (tx) =>
+    cancelItemForTest(tx, venue.cfg, venue.party.tabId, 1, undefined, OPERATOR),
+  );
 }
 
 describe("editing split-off extras", () => {

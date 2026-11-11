@@ -1,3 +1,5 @@
+import { observedCancelItem } from "./testing/cancel-line.js";
+import { cancelItem } from "./line-cancel.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
@@ -436,7 +438,7 @@ it.each(["save", "line", "split", "adjustment"] as const)(
   },
 );
 
-it.each(["save", "line", "split", "adjustment", "auto-issue", "departure", "credit"] as const)(
+it.each(["cancel", "line", "split", "adjustment", "auto-issue", "departure", "credit"] as const)(
   "%s dates one new fiscal record in the venue zone at night",
   async (operation) => {
     const { id: originalId, line } = await held();
@@ -463,18 +465,24 @@ it.each(["save", "line", "split", "adjustment", "auto-issue", "departure", "cred
     const actor = await operator();
     const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
     const authority = { admission: ready, operatorId: venue.adminId, expectedEdit: null };
-    if (operation === "save") {
-      await updateHeldOrder(
-        deps,
-        venue.cfg,
-        id,
-        {
-          ...authority,
-          revision: 0,
-          lines: [{ workingOrderLineId: line.id, menuItemId: offer, quantity: "1" }],
-        },
-        { fiscal: deps, saleCfg: venue.cfg },
-      );
+    if (operation === "cancel") {
+      await withTransaction(venue.db, async (tx) => {
+        const { target, lineId, body } = await observedCancelItem(tx, id, line.lineNo, "1");
+        await cancelItem(
+          tx,
+          venue.cfg,
+          target,
+          lineId,
+          { ...body, admission: ready },
+          venue.adminId,
+          undefined,
+          {
+            venueLocale: venue.cfg.locale,
+            completeAdjustment: (billId) =>
+              issueIfFullyPaid(tx, deps, venue.cfg, billId, venue.adminId),
+          },
+        );
+      });
     } else
       await withTransaction(venue.db, async (tx) => {
         if (operation === "departure") {
