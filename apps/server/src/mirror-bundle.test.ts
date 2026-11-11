@@ -28,6 +28,7 @@ import {
   takenOverSeries,
 } from "./testing/allocated-contract.js";
 import { nodeId } from "@waitron/shared";
+import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 
 // A mutable copy, so one case can add a module for its own duration.
 vi.mock("./modules.js", async (importOriginal) => {
@@ -111,21 +112,13 @@ async function setupVenue(): Promise<AdoptResult> {
   return designated;
 }
 
-const PAIR_STORE = {
-  accessKeyId: "waitron0123456789abcdef",
-  secretAccessKey: "ab".repeat(32),
-  venueId: "pair-venue",
-};
-
 function baseDeps() {
   return {
     appDb: db,
     node: suite.node,
     ring: RING,
     stateDir,
-    relayUrl: "https://relay.test:9000/",
-    primaryUrl: "https://box.deli.test",
-    store: PAIR_STORE,
+    ...PAIR_BUNDLE_FIELDS,
     boxHostname: "waitron.local",
     accountKey: Buffer.alloc(32, 9).toString("base64"),
   };
@@ -171,7 +164,6 @@ describe("assembleMirrorBundle (primary side)", () => {
     expect(bundle.environment).toBe("preproduction");
     expect(bundle.boxHostname).toBe("waitron.local");
     expect(bundle.boxCaPem).toContain("BEGIN CERTIFICATE");
-    expect(bundle.relayUrl).toBe("https://relay.test:9000/");
     expect("rows" in bundle).toBe(false);
     expect("syncToken" in bundle).toBe(false);
 
@@ -286,14 +278,13 @@ describe("assembleMirrorBundle (primary side)", () => {
     }
   });
 
-  it("carries the main box's own address and the pair's key, and a relay only when one is given", async () => {
-    const { bundle } = await allocatedBundle(
-      { nodeId: crypto.randomUUID(), publicKey: STANDBY_PUB },
-      { relayUrl: undefined },
-    );
+  it("carries the main box's own address and the pair's key", async () => {
+    const { bundle } = await allocatedBundle({
+      nodeId: crypto.randomUUID(),
+      publicKey: STANDBY_PUB,
+    });
     expect(bundle.primaryUrl).toBe("https://box.deli.test");
     expect(bundle.store).toEqual(PAIR_STORE);
-    expect("relayUrl" in bundle).toBe(false);
   });
 
   it("carries a WireGuard public key when one is provided, and omits it otherwise (swap S2)", async () => {

@@ -41,6 +41,7 @@ import {
   type BoxServer,
   type SilentServer,
 } from "./testing/box-authority.js";
+import { PAIR_STORE } from "./testing/pair-bundle.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
@@ -54,13 +55,8 @@ const SAMPLE_BUNDLE: MirrorBundle = {
   environment: "preproduction",
   boxHostname: "waitron.local",
   boxCaPem: "-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----\n",
-  relayUrl: "https://relay.example/abc",
   primaryUrl: "https://box-4444.waitron.local",
-  store: {
-    accessKeyId: "waitron0123456789abcdef",
-    secretAccessKey: "ab".repeat(32),
-    venueId: "pair-venue",
-  },
+  store: PAIR_STORE,
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {
@@ -165,16 +161,6 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         standbyAt: STANDBY.at,
       }),
     });
-  });
-
-  it("accepts a bundle carrying no relay address", async () => {
-    const noRelay: MirrorBundle = { ...SAMPLE_BUNDLE };
-    delete noRelay.relayUrl;
-    const app = new Hono();
-    app.post("/management-api/mirror-bundle", (c: Context) => c.json(noRelay));
-    const base = await startServer(app);
-
-    expect(await fetchMirrorBundle(base, CREDENTIAL, STANDBY)).toEqual(noRelay);
   });
 
   it("accepts a bundle carrying the main box's backup settings", async () => {
@@ -383,7 +369,6 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     ["null module overrides", { ...SAMPLE_BUNDLE, moduleOverrides: null }],
     ["no main box public key", { ...SAMPLE_BUNDLE, primaryPublicKey: undefined }],
     ["no main box address", { ...SAMPLE_BUNDLE, primaryUrl: undefined }],
-    ["a numeric relay address", { ...SAMPLE_BUNDLE, relayUrl: 42 }],
     ["no pair key", { ...SAMPLE_BUNDLE, store: undefined }],
     ["a null pair key", { ...SAMPLE_BUNDLE, store: null }],
     [

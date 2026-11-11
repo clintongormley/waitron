@@ -256,7 +256,6 @@ async function boot(
       node: suite.node,
       ring,
       stateDir: dir,
-      relayUrl: "https://relay.example",
       boxHostname: "waitron.local",
       advertisedOrigin: OWN_URL,
       designated: { nodeId },

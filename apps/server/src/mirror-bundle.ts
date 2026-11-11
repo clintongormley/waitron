@@ -68,8 +68,6 @@ export interface MirrorBundle {
   environment: "production" | "preproduction";
   boxHostname: string;
   boxCaPem: string;
-  /** Carried only when a tunnel is configured. */
-  relayUrl?: string;
   /** The main box's own contact URL. */
   primaryUrl: string;
   store: PairStoreKey;
@@ -108,7 +106,6 @@ export interface AssembleDeps {
   node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
-  relayUrl?: string;
   primaryUrl: string;
   store: PairStoreKey;
   boxHostname: string;
@@ -236,7 +233,6 @@ export async function assembleMirrorBundle(deps: AssembleDeps): Promise<MirrorBu
     environment,
     boxHostname: deps.boxHostname,
     boxCaPem,
-    ...(deps.relayUrl === undefined ? {} : { relayUrl: deps.relayUrl }),
     primaryUrl: deps.primaryUrl,
     store: deps.store,
     accountKey: deps.accountKey,

@@ -3620,8 +3620,6 @@ async function bootServer(
         node: store.node,
         ring,
         stateDir: config.stateDir,
-        // Staff access carries no standby protocol, and joining needs no relay.
-        relayUrl: undefined,
         boxHostname: BOX_HOSTNAME,
         advertisedOrigin: config.advertisedOrigin,
         designated: config.node,

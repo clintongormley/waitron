@@ -48,7 +48,7 @@ import "./errors.js";
 
 /**
  * What adopt deletes, per node.db table, of rows keyed by any node id but the one it adopts under:
- * an earlier join that stopped after its node transaction left them under the id it drew (A1280).
+ * an earlier join that stopped after its node transaction left them under the id it drew.
  */
 const ABANDONED_ROW_SWEEPS: Readonly<
   Record<string, (tx: NodeTransaction, nodeId: string) => Promise<void>>

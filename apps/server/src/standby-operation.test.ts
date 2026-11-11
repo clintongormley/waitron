@@ -36,6 +36,7 @@ import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -100,13 +101,7 @@ function bundleDeps() {
     node: suite.node,
     ring: RING,
     stateDir: stateDir!,
-    relayUrl: "https://relay.test",
-    primaryUrl: "https://box.deli.test",
-    store: {
-      accessKeyId: "waitron0123456789abcdef",
-      secretAccessKey: "ab".repeat(32),
-      venueId: "pair-venue",
-    },
+    ...PAIR_BUNDLE_FIELDS,
     boxHostname: "waitron.local",
     accountKey: "public-test",
     designated: { nodeId: PRIMARY },

@@ -262,6 +262,15 @@ function optionalPositiveInt(env: Env, variable: string): number | undefined {
   return parsePositiveInt(env, variable);
 }
 
+/** A port a listener binds: `1..MAX_HTTP_PORT`. */
+function listeningPort(env: Env, variable: string, fallback: number): number {
+  const port = positiveInt(env, variable, fallback);
+  if (port > MAX_HTTP_PORT) {
+    throw new AppError("server.config_invalid", { variable, reason: "port_out_of_range" });
+  }
+  return port;
+}
+
 /** A port in `0..MAX_HTTP_PORT`, where `0` means "disabled", so not `positiveInt`. */
 function boundedPort(env: Env, variable: string, fallback: number): number {
   const raw = env[variable];
@@ -395,20 +404,8 @@ export function loadConfig(
       reason: "above_max_tick",
     });
   }
-  const httpPort = positiveInt(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
-  if (httpPort > MAX_HTTP_PORT) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_HTTP_PORT",
-      reason: "port_out_of_range",
-    });
-  }
-  const spareStorePort = positiveInt(env, "WAITRON_SPARE_STORE_PORT", DEFAULT_SPARE_STORE_PORT);
-  if (spareStorePort > MAX_HTTP_PORT) {
-    throw new AppError("server.config_invalid", {
-      variable: "WAITRON_SPARE_STORE_PORT",
-      reason: "port_out_of_range",
-    });
-  }
+  const httpPort = listeningPort(env, "WAITRON_HTTP_PORT", DEFAULT_HTTP_PORT);
+  const spareStorePort = listeningPort(env, "WAITRON_SPARE_STORE_PORT", DEFAULT_SPARE_STORE_PORT);
   const migrationsDir = env.WAITRON_MIGRATIONS_DIR;
   const stateDir = env.WAITRON_STATE_DIR;
   // Computed once so `venueDir` and `logDir` default under the returned `stateDir`.

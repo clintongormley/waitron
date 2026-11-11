@@ -35,6 +35,7 @@ import { writeTradingEnv } from "./trading-config.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { runEntry } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -89,13 +90,7 @@ const BUNDLE: MirrorBundle = {
   environment: "preproduction",
   boxHostname: "waitron.local",
   boxCaPem: MAIN_AUTHORITY.caCertPem,
-  relayUrl: "https://relay.example/",
-  primaryUrl: "https://box.deli.test",
-  store: {
-    accessKeyId: "waitron0123456789abcdef",
-    secretAccessKey: "ab".repeat(32),
-    venueId: "pair-venue",
-  },
+  ...PAIR_BUNDLE_FIELDS,
   accountKey: Buffer.alloc(32, 9).toString("base64"),
   reservedIdentity: {
     modules: {

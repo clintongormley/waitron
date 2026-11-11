@@ -48,6 +48,7 @@ import { runStagedReset, stageResetRequest } from "./reset-request.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { readBackupSettings, readOfferSettings } from "./handover-manifest.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -107,13 +108,7 @@ function makeBundle(over: Partial<MirrorBundle> = {}): MirrorBundle {
     environment: "preproduction",
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
-    relayUrl: "https://relay.test:9000/",
-    primaryUrl: "https://box.deli.test",
-    store: {
-      accessKeyId: "waitron0123456789abcdef",
-      secretAccessKey: "ab".repeat(32),
-      venueId: "pair-venue",
-    },
+    ...PAIR_BUNDLE_FIELDS,
     accountKey: Buffer.alloc(32, 9).toString("base64"),
     reservedIdentity: RESERVED,
     moduleOverrides: {},
@@ -414,8 +409,8 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       peerNodeId: DESIGNATED.nodeId,
       peerPublicKey: PRIMARY_KEYS.publicKey,
       storeUrl: "https://standby.deli.test:7443",
-      venueId: "pair-venue",
-      accessKeyId: "waitron0123456789abcdef",
+      venueId: PAIR_STORE.venueId,
+      accessKeyId: PAIR_STORE.accessKeyId,
       ringVersion: BUNDLE_RING.version,
     });
     expect(

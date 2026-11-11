@@ -66,8 +66,6 @@ export interface MirrorBundleApiDeps {
   node: NodeDatabase;
   ring: KeyRing;
   stateDir: string;
-  /** Carried in the bundle only when a tunnel is configured; joining does not need one. */
-  relayUrl: string | undefined;
   boxHostname: string;
   /** This box's `advertisedOrigin`; its own chart row carries `ownContactUrl` of it. */
   advertisedOrigin: string;
@@ -174,7 +172,6 @@ export function mountMirrorBundleApi(
           node: deps.node,
           ring: deps.ring,
           stateDir: deps.stateDir,
-          relayUrl: deps.relayUrl,
           primaryUrl: ownContactUrl(deps.advertisedOrigin, deps.designated.nodeId),
           store,
           boxHostname: deps.boxHostname,

@@ -26,7 +26,6 @@ import {
   mintSessionToken,
   hashSessionToken,
   resolveManagementSession,
-  hashPassword,
 } from "@waitron/identity";
 import { drain } from "@waitron/fiscal-verifactu";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -431,49 +430,6 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       sql`select estado from envios where registro_id = ${seeded.registroId}`,
     );
     expect(afterPrimary.rows[0]?.estado).toBe("pendiente");
-  }, 60_000);
-
-  it("a real primary with the retired relay settings set takes a join past where the relay refusal stood", async () => {
-    beforeServerStarts();
-    const personId = "88888888-8888-4888-8888-888888888888";
-    await withTransaction(db.primary, async (tx) => {
-      await tx.insert(persons).values({
-        id: personId,
-        displayName: "Standby administrator",
-        role: "admin",
-        passwordHash: hashPassword("Standby fixture password"),
-      });
-    });
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_VENUE_DIR: venueDir.primary,
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_TUNNEL_RELAY_URL: "tcp://127.0.0.1:1",
-      WAITRON_TUNNEL_BOX_ID: "retired-box",
-      WAITRON_TUNNEL_TOKEN: "retired-fixture-token",
-    });
-    try {
-      const reply = await fetch(`http://127.0.0.1:${httpPort()}/management-api/mirror-bundle`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          personId,
-          password: "Standby fixture password",
-          standbyNodeId: "99999999-9999-4999-8999-999999999999",
-          standbyPublicKey: "standby-fixture-key",
-          standbyContactUrl: "https://spare.deli.test",
-          standbyStoreUrl: "https://spare.deli.test:7443",
-          standbyAt: Date.now(),
-        }),
-      });
-      // The relay was checked before the main box's own key is read; this fixture box holds no key.
-      expect(reply.status).toBe(400);
-      expect(await reply.json()).toEqual({
-        error: { code: "credentials.missing", params: { purpose: "membership.node_key" } },
-      });
-    } finally {
-      await server.close();
-    }
   }, 60_000);
 
   it("primary boot of the same identity mounts the mirror-bundle endpoint + operational groups (control: the mirror's absence is real)", async () => {

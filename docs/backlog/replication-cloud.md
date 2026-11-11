@@ -393,8 +393,8 @@ that slice 3 has to restore:
   in slice 3 has to close this.
 
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
-  wizard still offers the option. The A951-S private build removes the old relay: the primary
-  refuses the request, and the adopting server stays in setup. Its role, connect and refusal
+  wizard still offers the option. The primary accepts the join without a relay, and the joining
+  server then waits, since nothing copies the restaurant's data to it until 3b-6. Its role, connect and refusal
   wording now points to restore instead of promising a restart or suggesting another attempt.
   Removing or disabling the option until slice 3
   lands the replacement is a product call, not a wording one. Whoever takes it should decide for
@@ -1280,14 +1280,6 @@ handle a started server carries (`makeStartedServer`, `apps/server/src/boot.ts`)
 tests. Decide its trust set if it gains a caller. That same slice owns the immediate runner role
 notifications and a real promotion test including a mirror. Codex attached that follow-through
 here after the watcher deferred immediate wiring from A1308 jr2 on 2026-11-11 at 05:18.
-
-## A1280: a retried join leaves the abandoned node id's node.db rows
-
-Left open by A947 slice 3a. A join retried after a failure under a new node id leaves the first
-attempt's `node_signing_key`, `node_mode` and `node_mirror_link` rows for an id nothing else names
-(a probe case added to `apps/server/src/adopt.test.ts` in the slice's Task 10 review, then
-removed). Nothing reads a row by any id but its own, and a rotation re-seals the key, but it is a
-private key for an identity the main box endorsed. Wanted: remove them when a new attempt starts.
 
 ## A1282: browser trust after a connection repair replaces the certificate authority
 

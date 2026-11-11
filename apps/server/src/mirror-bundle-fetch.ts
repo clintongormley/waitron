@@ -50,7 +50,6 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
       "primaryPublicKey",
       "boxCaKeyPem",
     ]) ||
-    (value.relayUrl !== undefined && typeof value.relayUrl !== "string") ||
     !isRecord(value.store) ||
     !hasStrings(value.store, ["accessKeyId", "secretAccessKey", "venueId"]) ||
     !isEncodedKeyRing(value.credentialsRing) ||

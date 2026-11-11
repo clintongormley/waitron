@@ -188,7 +188,6 @@ async function bundleApp() {
     node: suite.node,
     ring: RING,
     stateDir: stateDir!,
-    relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     advertisedOrigin: "https://box.test",
     designated: { nodeId: PRIMARY },

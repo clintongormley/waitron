@@ -42,6 +42,7 @@ import { promoteMirrorToPrimary } from "./promote.js";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -200,13 +201,7 @@ async function reserve(standby = generateStandbyIdentity()) {
       node: primary.node,
       ring: RING,
       stateDir: stateDir!,
-      relayUrl: "https://relay.test",
-      primaryUrl: "https://box.deli.test",
-      store: {
-        accessKeyId: "waitron0123456789abcdef",
-        secretAccessKey: "ab".repeat(32),
-        venueId: "pair-venue",
-      },
+      ...PAIR_BUNDLE_FIELDS,
       boxHostname: "waitron.local",
       accountKey: "test-account-key",
       designated: { nodeId: PRIMARY },
@@ -475,14 +470,8 @@ it("a refused public adoption retains its independently signed reservation witho
               appDb: primary.db,
               node: primary.node,
               ring: RING,
-              primaryUrl: "https://box.deli.test",
-              store: {
-                accessKeyId: "waitron0123456789abcdef",
-                secretAccessKey: "ab".repeat(32),
-                venueId: "pair-venue",
-              },
+              ...PAIR_BUNDLE_FIELDS,
               stateDir: stateDir!,
-              relayUrl: "https://relay.test",
               boxHostname: "waitron.local",
               accountKey: "test-account-key",
               designated: { nodeId: PRIMARY },

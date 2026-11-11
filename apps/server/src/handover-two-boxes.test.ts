@@ -147,7 +147,6 @@ async function joined() {
     node: mainBox.node,
     ring: RING,
     stateDir: mainState,
-    relayUrl: "https://relay.test",
     boxHostname: "waitron.local",
     advertisedOrigin: MAIN_URL,
     designated,

@@ -1996,9 +1996,6 @@ outstanding on code that exists.
   code paths, a second HTTPS client, a second durable-write helper.
   [Detail](backlog/replication-cloud.md#a1296-code-quality-follow-ups-from-a947-slice-3as-finish-review)
 
-- **A1280: a retried join leaves the abandoned node id's node.db rows.**
-  [Detail](backlog/replication-cloud.md#a1280-a-retried-join-leaves-the-abandoned-node-ids-nodedb-rows)
-
 - **A1282: browser trust after a connection repair replaces the certificate authority.** The browser
   check refused Servers, alerts and disk-stop reads with `ERR_CERT_AUTHORITY_INVALID`.
   [Detail](backlog/replication-cloud.md#a1282-browser-trust-after-a-connection-repair-replaces-the-certificate-authority)

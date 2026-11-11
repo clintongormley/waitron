@@ -40,6 +40,7 @@ import { keyRingEnv, type EncodedKeyRing } from "./box-secrets.js";
 import { createDeploymentHolders, refreshDeploymentHolders } from "./deployment-holders.js";
 import { finishPromotedRole } from "./promoted-role.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 // No module reserves anything for the standby, so A's bundle needs no module operation.
 vi.mock("./modules.js", () => ({ ALL_MODULES: [] }));
@@ -154,13 +155,7 @@ beforeAll(async () => {
           node: aStore.node,
           ring: RING_A,
           stateDir: aState,
-          relayUrl: "https://relay.test",
-          primaryUrl: "https://box.deli.test",
-          store: {
-            accessKeyId: "waitron0123456789abcdef",
-            secretAccessKey: "ab".repeat(32),
-            venueId: "pair-venue",
-          },
+          ...PAIR_BUNDLE_FIELDS,
           boxHostname: "waitron.local",
           accountKey: "test-account-key",
           designated: { nodeId: aId },

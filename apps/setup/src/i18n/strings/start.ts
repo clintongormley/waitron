@@ -29,7 +29,7 @@ export const startEn = {
 
   "connect.heading": "Connect to the primary",
   "connect.intro":
-    "Adding a mirror is unavailable in this version. The primary refuses the request and this server stays in setup. Choose Back to restore a backup instead.",
+    "Adding a standby is not finished in this version: this server can join the primary, but it does not yet receive the restaurant's data, so it stays waiting and cannot take over. Choose Back to restore a backup instead.",
   "connect.primary_url.label": "Primary server address",
   "connect.primary_url.error": "Check the primary server address.",
   "connect.primary_url.hint": "Full HTTPS address of the primary server",
@@ -158,7 +158,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
 
   "connect.heading": "Conectar con el servidor principal",
   "connect.intro":
-    "Añadir una réplica no está disponible en esta versión. El servidor principal rechaza la solicitud y este servidor sigue en el asistente de configuración. Elige Volver para restaurar una copia de seguridad.",
+    "Añadir un servidor en espera aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que se queda esperando y no puede sustituirlo. Elige Volver para restaurar una copia de seguridad.",
   "connect.primary_url.label": "Dirección del servidor principal",
   "connect.primary_url.error": "Revisa la dirección del servidor principal.",
   "connect.primary_url.hint": "Dirección HTTPS completa del servidor principal",

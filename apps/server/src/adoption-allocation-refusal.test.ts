@@ -24,6 +24,7 @@ import {
 import { mountSetup } from "./setup-api.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { MAIN_AUTHORITY } from "./testing/main-authority.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
@@ -59,13 +60,7 @@ function bundle(): MirrorBundle {
     environment: "preproduction",
     boxHostname: "waitron.local",
     boxCaPem: MAIN_AUTHORITY.caCertPem,
-    relayUrl: "https://relay.test/",
-    primaryUrl: "https://box.deli.test",
-    store: {
-      accessKeyId: "waitron0123456789abcdef",
-      secretAccessKey: "ab".repeat(32),
-      venueId: "pair-venue",
-    },
+    ...PAIR_BUNDLE_FIELDS,
     accountKey: Buffer.alloc(32, 3).toString("base64"),
     reservedIdentity: {
       modules: { "fiscal-verifactu": { version: 1, evidence: {} } },

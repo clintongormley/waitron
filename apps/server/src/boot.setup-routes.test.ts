@@ -81,6 +81,7 @@ import {
 } from "./testing/boot-harness.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
 import * as bootHarness from "./testing/boot-harness.js";
+import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -1597,13 +1598,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       environment: "preproduction",
       boxHostname: "waitron.local",
       boxCaPem: "fixture-ca",
-      relayUrl: "https://relay.example",
-      primaryUrl: "https://box.deli.test",
-      store: {
-        accessKeyId: "waitron0123456789abcdef",
-        secretAccessKey: "ab".repeat(32),
-        venueId: "pair-venue",
-      },
+      ...PAIR_BUNDLE_FIELDS,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       reservedIdentity: {
         modules: {},
