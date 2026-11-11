@@ -171,6 +171,12 @@ export interface CloseCounts {
   voids: number;
 }
 
+/** Bills whose order was settled in the business day; `total` sums their invoices as issued. */
+export interface ClosedBills {
+  count: number;
+  total: Decimal;
+}
+
 export interface DailyClose {
   /** The first box in `DailyCloseInput.nodeIds`, or omitted for a venue-wide close. */
   nodeId?: NodeId;

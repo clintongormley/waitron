@@ -50,6 +50,7 @@ export type {
 export type {
   CashUp,
   CloseCounts,
+  ClosedBills,
   DailyClose,
   DailyCloseInput,
   InputVatRateLine,

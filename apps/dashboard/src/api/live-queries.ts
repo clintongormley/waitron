@@ -232,7 +232,8 @@ export const QUERY_DEPENDENCIES = {
     "bill_payment_refunds",
     "working_orders",
     "sale_settlements",
-
+    // `namedCashUp` labels the per-device takings from `devices`.
+    "devices",
     "day_cutover_changes",
   ],
   getSalesPeriod: [

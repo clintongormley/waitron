@@ -136,6 +136,7 @@ it.each([
   ["getDailyClose", ["2026-09-11"], "bill_payment_refunds"],
   ["getSalesOverview", [], "bill_payments"],
   ["getSalesOverview", [], "bill_payment_refunds"],
+  ["getDailyClose", ["2026-09-11"], "devices"],
   ["getSalesPeriod", ["2026-09-01", "2026-09-11"], "sale_substitutions"],
   ["getPlannedVsActual", ["2026-09-01", "2026-09-11"], "roster_versions"],
   ["listAlerts", [], "incidents"],
