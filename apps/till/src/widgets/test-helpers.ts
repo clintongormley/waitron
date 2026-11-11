@@ -72,15 +72,13 @@ export interface Mounted<T extends HTMLElement> {
 export function idleLiveReadFor<T extends object>(api: T): T {
   if (!("readLiveEvents" in api))
     Object.assign(api, {
-      readLiveEvents: (
-        _types: readonly string[],
-        _onEvent: unknown,
-        options: { signal?: AbortSignal } = {},
-      ) =>
-        new Promise<void>((resolve) => {
-          if (options.signal?.aborted) resolve();
-          else options.signal?.addEventListener("abort", () => resolve(), { once: true });
-        }),
+      readLiveEvents: vi.fn(
+        (_types: readonly string[], _onEvent: unknown, options: { signal?: AbortSignal } = {}) =>
+          new Promise<void>((resolve) => {
+            if (options.signal?.aborted) resolve();
+            else options.signal?.addEventListener("abort", () => resolve(), { once: true });
+          }),
+      ),
     });
   return api;
 }

@@ -5,7 +5,7 @@ import { TillApi } from "./client.js";
 const connections: TillLiveConnection[] = [];
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
-  for (const connection of connections.splice(0)) connection.stop();
+  for (const connection of connections.splice(0)) connection?.stop();
   vi.useRealTimers();
 });
 

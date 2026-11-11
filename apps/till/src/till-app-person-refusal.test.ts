@@ -227,6 +227,15 @@ function tillServer() {
     const key = `${method} ${url.pathname}`;
     const refused = refusals.get(key);
     if (refused !== undefined) return errorResponse(refused);
+    if (key === "GET /api/live/events") {
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener("abort", () => controller.close(), { once: true });
+          },
+        }),
+      );
+    }
     const answer = answers.get(key);
     if (answer === undefined) {
       unserved.push(key);
