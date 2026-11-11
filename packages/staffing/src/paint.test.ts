@@ -13,7 +13,6 @@ import {
   floorZones,
   catalogues,
   kitchenStations,
-  locations,
   withTransaction,
   type Transaction,
 } from "@waitron/db";

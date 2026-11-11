@@ -30,7 +30,6 @@ const suite = useVenueDb({
 });
 it("an admitted future cutover change does not block activity on its already discovered preceding day", async () => {
   const venue = await setupVenue(suite.db);
-  venue.cfg.locationId;
   await (async () => {
     await seedBusinessDay(suite.db, { dayCutover: "04:00:00" });
     await suite.db.run(
@@ -120,7 +119,6 @@ it("an admitted future cutover change does not block activity on its already dis
 
 it("a Save that moves today's end makes attendance evaluate today up to the new end", async () => {
   const venue = await setupVenue(suite.db);
-  venue.cfg.locationId;
   await (async () => {
     await seedBusinessDay(suite.db, { dayCutover: "04:00:00" });
     await suite.db.run(

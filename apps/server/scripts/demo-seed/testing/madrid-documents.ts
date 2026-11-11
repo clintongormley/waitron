@@ -87,7 +87,10 @@ export function madridWithDocument(
   }
   if (metadata.mode === "business-day") {
     const old = result.tables.location_day_cutover_changes!;
-    const starts = Object.values(old.rows).map(({ location_id: _location, ...row }) => row);
+    const starts = Object.values(old.rows).map((row) => ({
+      effective_business_day: row.effective_business_day,
+      day_cutover: row.day_cutover,
+    }));
     if (rows.length === 1)
       starts.unshift({
         effective_business_day: FIRST_DAY_START,

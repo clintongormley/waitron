@@ -25,8 +25,6 @@ import {
   constraintTarget,
   isUniqueViolation,
   invoiceSeries,
-  locations,
-  nodes,
   saleLines,
   saleSettlements,
   sales,
@@ -43,7 +41,6 @@ import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let locationId: string;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
@@ -55,7 +52,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -244,10 +241,6 @@ describe("recordSale — the sale's origin", () => {
   });
 
   it("describes a sale with no device from the venue", async () => {
-    const [node] = await suite.db
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, nodeId));
     await suite.db.run(
       sql`update settings set doc = json_set(doc, '$.operationDescription', ${"Counter service"}) where module = 'venue'`,
     );

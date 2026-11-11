@@ -6558,10 +6558,6 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const sourceVenueId = await venueLocationId(suite.db);
-  {
-    locationId: sourceVenueId;
-  }
   const original = await withTransaction(suite.db, async (tx) => {
     await seedBusinessDay(tx, { dayCutover: "04:30:00" });
     const department = await createDepartment(tx, {

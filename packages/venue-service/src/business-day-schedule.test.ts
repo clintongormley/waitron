@@ -514,7 +514,7 @@ describe("service boundaries remain chronological", () => {
 });
 
 describe("every time writer stays open while a change waits", () => {
-  async function pending(_v: Awaited<ReturnType<typeof fixture>>) {
+  async function pending() {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -527,7 +527,7 @@ describe("every time writer stays open while a change waits", () => {
   }
   it("accepts normal and special-day menu ranges and an equivalent week", async () => {
     const v = await fixture([range("09:00", "17:00")], { date: "2026-12-25" });
-    await pending(v);
+    await pending();
     await expect(
       paintDate(v, "menu", "2026-12-26", [range("09:00", "18:00")], at, 2),
     ).resolves.toBeUndefined();
@@ -545,7 +545,7 @@ describe("every time writer stays open while a change waits", () => {
   });
   it("accepts a name and colour change", async () => {
     const v = await fixture([range("09:00", "17:00")]);
-    await pending(v);
+    await pending();
     await expect(
       withTransaction(suite.db, (tx) =>
         updateMenuPeriod(tx, v.periodId, {
@@ -557,7 +557,7 @@ describe("every time writer stays open while a change waits", () => {
   });
   it("accepts zone closed weeks and dates", async () => {
     const v = await fixture([range("09:00", "10:00")], { zone: true, date: "2026-12-25" });
-    await pending(v);
+    await pending();
     await expect(
       withTransaction(suite.db, (tx) =>
         replaceZoneClosedWeek(
@@ -1310,7 +1310,7 @@ describe("inForceClock", () => {
 
 describe("undated hours are checked against the start in force", () => {
   /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28. */
-  async function hoursBack(_v: { cfg: { locationId: string } }) {
+  async function hoursBack() {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1329,7 +1329,7 @@ describe("undated hours are checked against the start in force", () => {
     });
   }
   /** 05:00, then 03:00 from 2026-10-21. */
-  async function startMovedBack(_v: { cfg: { locationId: string } }) {
+  async function startMovedBack() {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1366,28 +1366,28 @@ describe("undated hours are checked against the start in force", () => {
   /** A Wednesday night to 04:30: it fits 05:00, and crossed 03:00 while that start was in force. */
   async function nightAcrossEarlierStart() {
     const v = await fixture([range("22:00", "04:30")]);
-    await hoursBack(v);
+    await hoursBack();
     return v;
   }
 
   it("accepts a menu week fitting the start in force though it crossed an earlier start", async () => {
     const v = await fixture([]);
-    await hoursBack(v);
+    await hoursBack();
     await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
   });
   it("accepts a whole day from the start in force", async () => {
     const v = await fixture([]);
-    await hoursBack(v);
+    await hoursBack();
     await expect(writeWeek(v, [range("05:00", "05:00")])).resolves.toBeUndefined();
   });
   it("accepts a night fitting every start", async () => {
     const v = await fixture([]);
-    await hoursBack(v);
+    await hoursBack();
     await expect(writeWeek(v, [range("22:00", "02:30")])).resolves.toBeUndefined();
   });
   it("refuses a menu week crossing the start in force while the earlier start is in force", async () => {
     const v = await fixture([]);
-    await hoursBack(v);
+    await hoursBack();
     await expect(writeWeek(v, [range("22:00", "04:30")], whileThreeInForce)).rejects.toMatchObject({
       code: "menu_timetable.invalid",
       params: { reason: "order" },
@@ -1395,7 +1395,7 @@ describe("undated hours are checked against the start in force", () => {
   });
   it("accepts a zone week fitting the start in force though it crossed an earlier start", async () => {
     const v = await fixture([], { zone: true });
-    await hoursBack(v);
+    await hoursBack();
     await expect(
       withTransaction(suite.db, (tx) =>
         replaceZoneClosedWeek(tx, v.zoneId!, zoneWeek([range("22:00", "04:30")]), 2, at),
@@ -1404,7 +1404,7 @@ describe("undated hours are checked against the start in force", () => {
   });
   it("accepts season weeks fitting the start in force though they crossed an earlier start", async () => {
     const v = await fixture([], { zone: true });
-    await hoursBack(v);
+    await hoursBack();
     await expect(
       saveSeasonWeek(v, {
         departments: [
@@ -1467,7 +1467,7 @@ describe("undated hours are checked against the start in force", () => {
   });
   it("leaves a past one-off date to its own start when another week is saved", async () => {
     const v = await fixture([]);
-    await hoursBack(v);
+    await hoursBack();
     await paintDate(v, "menu", "2026-10-23", [range("03:00", "04:30")], whileThreeInForce, 2);
     await paintDate(v, "menu", "2026-10-24", [range("05:00", "06:00")], whileThreeInForce, 2);
     const monday = Array.from({ length: 7 }, (_, weekday) => ({
@@ -1480,7 +1480,7 @@ describe("undated hours are checked against the start in force", () => {
   });
   it("leaves the weekly ranges out beside a past one-off date when the week is saved", async () => {
     const v = await fixture([]);
-    await hoursBack(v);
+    await hoursBack();
     await paintDate(v, "menu", "2026-10-22", [range("03:00", "04:00")], whileThreeInForce, 2);
     await expect(writeWeek(v, [range("22:00", "04:30")])).resolves.toBeUndefined();
   });
@@ -1519,7 +1519,7 @@ describe("undated hours are checked against the start in force", () => {
         },
       ]);
     });
-    await startMovedBack(v);
+    await startMovedBack();
     await withTransaction(suite.db, (tx) => deletePeriod(tx, other, v.periodId, at, 2));
     const rows = await withTransaction(suite.db, (tx) =>
       tx
@@ -1563,7 +1563,7 @@ it("hours models carry the baseline timeline, revision and pending status across
 });
 
 describe("schedule authoring retains date-specific starts", () => {
-  async function activated(_v: Awaited<ReturnType<typeof fixture>>) {
+  async function activated() {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1577,7 +1577,7 @@ describe("schedule authoring retains date-specific starts", () => {
   const after = new Date("2026-11-05T12:00:00Z");
   it("checks a normal menu week against the 07:00 start in force", async () => {
     const v = await fixture([]);
-    await activated(v);
+    await activated();
     const week = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
       slots: weekday === 3 ? [{ periodId: v.periodId, ...range("06:00", "08:00") }] : [],
@@ -1588,7 +1588,7 @@ describe("schedule authoring retains date-specific starts", () => {
   });
   it("checks a normal zone week against the 07:00 start in force", async () => {
     const v = await fixture([], { zone: true });
-    await activated(v);
+    await activated();
     const week = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
       ranges: weekday === 3 ? [range("06:00", "08:00")] : [],
@@ -1599,21 +1599,21 @@ describe("schedule authoring retains date-specific starts", () => {
   });
   it("accepts a one-off menu day under its own 07:00 start", async () => {
     const v = await fixture([]);
-    await activated(v);
+    await activated();
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 2),
     ).resolves.toBeUndefined();
   });
   it("accepts a one-off zone day under its own 07:00 start", async () => {
     const v = await fixture([], { zone: true });
-    await activated(v);
+    await activated();
     await expect(
       paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 2),
     ).resolves.toBeUndefined();
   });
   it("checks annual menu ranges against the start in force", async () => {
     const v = await fixture([]);
-    await activated(v);
+    await activated();
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 2, true),
     ).resolves.toBeUndefined();
@@ -1623,7 +1623,7 @@ describe("schedule authoring retains date-specific starts", () => {
   });
   it("checks annual zone ranges against the start in force", async () => {
     const v = await fixture([], { zone: true });
-    await activated(v);
+    await activated();
     await expect(
       paintDate(v, "zone", "2026-12-25", [range("07:00", "07:00")], after, 2, true),
     ).resolves.toBeUndefined();
@@ -1638,7 +1638,7 @@ describe("schedule authoring retains date-specific starts", () => {
 
 describe("dated calendar authoring after activation", () => {
   const after = new Date("2026-11-05T12:00:00Z");
-  async function activated(_v: Awaited<ReturnType<typeof fixture>>) {
+  async function activated() {
     await withTransaction(suite.db, async (tx) => {
       await tx
         .update(businessDaySettingsTable)
@@ -1651,7 +1651,7 @@ describe("dated calendar authoring after activation", () => {
   }
   it("allows a one-off all-day range under its own start", async () => {
     const v = await fixture([]);
-    await activated(v);
+    await activated();
     await expect(
       paintDate(v, "menu", "2026-12-25", [range("07:00", "07:00")], after, 2),
     ).resolves.toBeUndefined();
