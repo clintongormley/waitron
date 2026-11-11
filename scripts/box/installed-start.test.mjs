@@ -295,9 +295,9 @@ describe("installed startup", () => {
       encoding: "utf8",
       timeout: 5000,
     });
+    expect(readFileSync(writes, "utf8")).toBe("");
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("start.refused:disk-key");
-    expect(readFileSync(writes, "utf8")).toBe("");
   });
   it("refuses the wrong mounted root before Docker starts", () => {
     const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
