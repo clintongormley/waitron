@@ -54,7 +54,10 @@ export interface StreamApiDeps {
   probe: (bucket: BucketConfig, signal: AbortSignal) => Promise<ProbeResult>;
   /** Replaces {@link PROBE_LIMIT_MS}. Tests only. */
   probeLimitMs?: number;
-  /** Throws when the bucket gives no answer at all, a cancelled `signal` included. */
+  /**
+   * Throws when the bucket gives no answer at all, or when `signal` ends before the check has its
+   * answer.
+   */
   prepareEncryption: (bucket: BucketConfig, signal: AbortSignal) => Promise<ProbeResult>;
   /** Shared with the backup routes, which also read and then write the key in `backup.env`. */
   turns: Turns;

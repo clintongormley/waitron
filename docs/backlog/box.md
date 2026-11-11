@@ -1568,9 +1568,10 @@ providers, and larger or busier buckets, were not measured; and the idle limit's
 handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
 The settings screen's bucket Test, and Save's bucket and customer-key checks together, end after
 a minute or when the browser drops the request (`PROBE_LIMIT_MS`, `apps/server/src/stream-api.ts`).
-A check that ends this way leaves its one test object under `waitron-probe/` in the bucket, since
-its clean-up runs under the same signal (`probeBucket`, `packages/stream/src/probe.ts`;
-`prepareBucketEncryption`, `packages/stream/src/sse-c.ts`).
+A check cut off this way, even during its clean-up, can leave its one test object in the bucket,
+under `waitron-probe/` inside the configured prefix, since its clean-up runs under the same signal
+(`probeBucket`, `packages/stream/src/probe.ts`; `prepareBucketEncryption`,
+`packages/stream/src/sse-c.ts`).
 
 ### Quiet-box backup read limits
 

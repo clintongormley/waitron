@@ -69,10 +69,7 @@ export async function verifyStreamKey(
   }
 }
 
-/**
- * A failed settings read must never be followed by replacing unknown bucket rules. A cancelled
- * `call` throws `backup.stream_request_failed` with no status.
- */
+/** A failed settings read must never be followed by replacing unknown bucket rules. */
 export async function prepareBucketEncryption(
   bucket: BucketConfig,
   clientFor: typeof createBucketClient = createBucketClient,
@@ -176,7 +173,7 @@ export async function prepareBucketEncryption(
     if (statusOf(error) === null) throw requestFailed(operation, requestedKey, null, nameOf(error));
     return unavailable();
   } finally {
-    // Under `call`'s signal too, so a cancelled check leaves its object behind.
+    // Under `call`'s signal too, so a cancelled check can leave its object behind.
     try {
       if (wrote) {
         await client.send(new DeleteObjectCommand({ Bucket: bucket.bucket, Key: key }), sent);
