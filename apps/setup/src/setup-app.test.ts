@@ -1890,14 +1890,14 @@ describe("setup-app", () => {
   it.each([
     [
       "en-GB",
-      "The primary couldn't supply a mirror setup. Go back and press Connect again, or choose Restore a backup or Restore from my bucket.",
+      "The primary couldn't supply a mirror setup. Enter a new authenticator code if you use one, and press Connect to try again, or choose Back to restore a backup instead.",
     ],
     [
       "es-ES",
-      "El servidor principal no ha podido proporcionar la configuración de una réplica. Vuelve y pulsa Conectar otra vez, o elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
+      "El servidor principal no ha podido proporcionar la configuración de una réplica. Introduce un nuevo código del autenticador si usas uno y pulsa Conectar para volver a intentarlo, o elige Volver para restaurar una copia de seguridad.",
     ],
   ] as const)(
-    "says the primary could not supply a mirror setup and offers Connect again or a restore, naming no refused login (%s)",
+    "says the primary could not supply a mirror setup and offers a new code with Connect, or Back to restore, naming no refused login (%s)",
     async (locale, sentence) => {
       try {
         const adopt = vi
@@ -1985,11 +1985,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server copies the restaurant's data to its own storage bucket, and it can copy to only one place at a time. This version of Waitron cannot yet pass that copy on from this server to the bucket, so joining now would end the restaurant's offsite copy. Nothing was changed on either server. To join anyway, stop the bucket copy in the primary's dashboard under Backups — the restaurant then has no offsite copy — and press Connect again. To keep the bucket copy, press Back: nothing changes, and this server can join later.",
+        "The primary server copies the restaurant's data to its own storage bucket, and it can copy to only one place at a time. This version of Waitron cannot yet pass that copy on from this server to the bucket, so joining now would end the restaurant's offsite copy. Nothing was changed on either server. To join anyway, turn off the bucket copy in the primary's dashboard under Backups — the restaurant then has no offsite copy — enter a new authenticator code if you use one, and press Connect again. To keep the bucket copy, press Back: nothing changes, and this server can join later.",
       ],
       [
         "es-ES",
-        "El servidor principal copia los datos del restaurante en su propio bucket de almacenamiento, y solo puede copiar en un sitio a la vez. Esta versión de Waitron aún no puede pasar esa copia desde este servidor al bucket, así que unirlo ahora acabaría con la copia externa del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para unirlo de todos modos, detén la copia al bucket en el panel del servidor principal, en Copias de seguridad —el restaurante se queda entonces sin copia externa— y vuelve a pulsar Conectar. Para conservar la copia al bucket, pulsa Volver: no cambia nada, y este servidor puede unirse más adelante.",
+        "El servidor principal copia los datos del restaurante en su propio bucket de almacenamiento, y solo puede copiar en un sitio a la vez. Esta versión de Waitron aún no puede pasar esa copia desde este servidor al bucket, así que unirlo ahora acabaría con la copia externa del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para unirlo de todos modos, desactiva la copia al bucket en el panel del servidor principal, en Copias de seguridad —el restaurante se queda entonces sin copia externa—, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar. Para conservar la copia al bucket, pulsa Volver: no cambia nada, y este servidor puede unirse más adelante.",
       ],
     ] as const)(
       "shows the bucket refusal's words with both choices (%s)",
@@ -2008,11 +2008,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "This server picked a name another server of the restaurant already uses. Nothing was changed on either server. Press Connect again: it picks a new name.",
+        "This server picked a name another server of the restaurant already uses. Nothing was changed on either server. Enter a new authenticator code if you use one, and press Connect again: it picks a new name.",
       ],
       [
         "es-ES",
-        "Este servidor eligió un nombre que ya usa otro servidor del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Vuelve a pulsar Conectar: elegirá un nombre nuevo.",
+        "Este servidor eligió un nombre que ya usa otro servidor del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar: elegirá un nombre nuevo.",
       ],
     ] as const)(
       "shows the name refusal and leaves Connect working (%s)",
@@ -2066,11 +2066,11 @@ describe("setup-app", () => {
     it.each([
       [
         "en-GB",
-        "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Choose Back to set this server up for another restaurant instead, or leave it switched off.",
+        "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Choose Back to restore another restaurant onto this server or, from there, Back again to set up a new restaurant. You can also leave it switched off.",
       ],
       [
         "es-ES",
-        "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para configurar este servidor para otro restaurante, o déjalo apagado.",
+        "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Elige Volver para restaurar otro restaurante en este servidor o, desde ahí, Volver otra vez para configurar un restaurante nuevo. También puedes dejarlo apagado.",
       ],
     ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
       try {
@@ -2086,18 +2086,19 @@ describe("setup-app", () => {
     const standbyAt = "2026-11-10T08:55:00.000Z";
     const shown = (iso: string, locale: string) =>
       new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
-    it.each([
+    const CLOCKS = [
       [
         "en-GB",
         (standby: string, primary: string) =>
-          `This server's clock and the primary server's are 10 minutes or more apart: this server reads ${standby}, the primary reads ${primary}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then press Connect again.`,
+          `This server's clock and the primary server's are 10 minutes or more apart: this server reads ${standby}, the primary reads ${primary}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then enter a new authenticator code if you use one, and press Connect again.`,
       ],
       [
         "es-ES",
         (standby: string, primary: string) =>
-          `El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca ${standby} y el principal marca ${primary}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj y vuelve a pulsar Conectar.`,
+          `El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca ${standby} y el principal marca ${primary}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj, introduce un nuevo código del autenticador si usas uno y vuelve a pulsar Conectar.`,
       ],
-    ] as const)("shows the clocks refusal with both times (%s)", async (locale, sentence) => {
+    ] as const;
+    it.each(CLOCKS)("shows the clocks refusal with both times (%s)", async (locale, sentence) => {
       try {
         const { connect, control } = await refusedJoin("mirror.clocks_apart", locale, {
           primaryAt,
@@ -2115,6 +2116,38 @@ describe("setup-app", () => {
 
     it("words the clocks refusal's times in the browser's language", () => {
       expect(shown(primaryAt, "es-ES")).not.toBe(shown(primaryAt, "en-GB"));
+    });
+
+    it("rewords the clocks refusal's times when the language changes after it", async () => {
+      try {
+        const { el, connect } = await refusedJoin("mirror.clocks_apart", "en-GB", {
+          primaryAt,
+          standbyAt,
+        });
+        setLocale("es-ES");
+        await flush(el);
+        await (connect as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(await bottomOf(connect)).toBe(
+          CLOCKS[1][1](shown(standbyAt, "es-ES"), shown(primaryAt, "es-ES")),
+        );
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+
+    it("shows a clocks refusal's time as sent when it is not a time", async () => {
+      const { connect } = await refusedJoin("mirror.clocks_apart", "en-GB", {
+        primaryAt,
+        standbyAt: "not a time",
+      });
+      expect(await bottomOf(connect)).toBe(CLOCKS[0][1]("not a time", shown(primaryAt, "en-GB")));
+    });
+
+    it("shows the generic join failure for a clocks refusal missing a time", async () => {
+      const { connect } = await refusedJoin("mirror.clocks_apart", "en-GB", { primaryAt });
+      expect(await bottomOf(connect)).toBe(
+        "Couldn't connect to the primary. Check the address and login, then try again.",
+      );
     });
   });
 
