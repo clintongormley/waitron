@@ -225,7 +225,7 @@ retry record or previous attempt is uncertainty: routing still checks other read
 
 The hosted queue watchdog reads its configured families in pages of 30, allowing ten
 seconds for each complete read. It waits up to five minutes, with at most ten ordinary polls.
-An invalid final inventory gets one immediate complete reread, sharing the existing
+After ordinary polling ends, an invalid final inventory gets one complete reread, sharing the existing
 200-call cap and outer deadline. Failed page reads report their poll, page, endpoint and
 exit status, with the captured error or exhausted deadline. Structural failures name their reason.
 Reads require complete family membership, unique job IDs and matching run, metadata attempt and head.

@@ -800,6 +800,7 @@ exit "$status"
       { SLEEP_OVERRUN: "0" },
     );
     expect(result.status, result.output).toBe(0);
+    expect(result.output).toContain("invalid response shape");
     expect(result.calls.some((args) => args.some((arg) => arg.endsWith("&page=2")))).toBe(true);
     expect(recoveryDispatches(result)).toEqual([]);
   });
@@ -852,6 +853,7 @@ exit "$status"
     if (fault === "changing total") listing[1].total_count++;
     const result = runWatch({ polls: [listing] });
     expect(result.status, result.output).not.toBe(0);
+    if (fault === "changing total") expect(result.output).toContain("total changed");
     expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("refuses more than thirty records in one API page", () => {
@@ -861,6 +863,7 @@ exit "$status"
     });
     const result = runWatch({ polls: [[{ total_count: entries.length, jobs: entries }]] });
     expect(result.status, result.output).not.toBe(0);
+    expect(result.output).toContain("invalid page size");
     expect(recoveryDispatches(result)).toHaveLength(1);
   });
   it("uses the remainder of one ten-second budget for subsequent pages", () => {
@@ -962,6 +965,31 @@ exit "$status"
     expect(result.output).toMatch(/[Dd]eadline/);
     expect(result.output).toContain("page=2");
     expect(result.output).not.toContain("stale stderr marker");
+  });
+  it("stops after one final invalid inventory without another sleep", () => {
+    const result = runWatch({ jobsError: true }, { FREEZE_CLOCK: "true" });
+    expect(result.status).toBe(1);
+    expect(result.calls.filter((args) => args.some((arg) => arg.includes("/jobs?")))).toHaveLength(
+      11,
+    );
+    expect(result.sleeps).toEqual(Array(10).fill("30"));
+  });
+  it("caps the final inventory read at the remaining outer deadline", () => {
+    const ready = inventory((rows) => {
+      Object.assign(rows[0], { status: "in_progress", runner_id: 9 });
+    });
+    const result = runWatch(
+      { polls: [[{ status: 1, error: "HTTP 502" }], pages(ready)] },
+      { SLEEP_OVERRUN: "1225" },
+    );
+    expect(result.status, result.output).toBe(0);
+    expect(result.deadlines).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining(
+          "-k 1s 5 gh api repos/o/r/actions/runs/1234/attempts/1/jobs?per_page=30&page=1",
+        ),
+      ]),
+    );
   });
   it("makes no more than ten ordinary inventory polls even when the clock does not advance", () => {
     const result = runWatch({}, { FREEZE_CLOCK: "true" });
