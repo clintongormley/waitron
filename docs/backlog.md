@@ -2085,6 +2085,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
 
+- **A1398-2. Finish the four-minute target for dashboard and till jobs.** The first cut advances selected draft autosave waits. The remaining causes are till shard 2’s tests, shard 5’s install and the dashboard’s slow files. Measure each before choosing the next cut. [Detail](backlog/ci.md#a1398-2-slow-browser-test-files).
+
 - **One repeated-run rig, then each named test** (bundle of 7, size M). [Detail](backlog/ci.md#bundle-one-repeated-run-rig-then-each-named-test)
 
 - **apps/server's test speed: restart tests, measured speed-ups, fixed PINs** (bundle of 3, size L). [Detail](backlog/ci.md#bundle-appsservers-test-speed-restart-tests-measured-speed-ups-fixed-pins)

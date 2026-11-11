@@ -402,6 +402,17 @@ fixture must abort and await that call during teardown. Those runs did not estab
 sends any further requests after the fake printer closes or retains a live resource; do not
 infer either from the missing outcome alone.
 
+## A1398-2: slow browser test files
+
+Keep the four-minute goal open after the selected draft autosave waits are advanced.
+The watcher's 2026-11-11 16:38 cut targets the drafts file in till shard 1 only.
+The coverage-on baseline run 43034947887 recorded shard 1 at 266 s, shard 2 at
+253 s (215 s of tests), and shard 5 at 250 s (59 s installing dependencies).
+Dashboard's menus, product editor and product list also retain measured costs.
+Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
+PR timings with those coverage-on timings as a measured speed gain. Bring the next
+cause and its measurement to the watcher before splitting files or changing capacity.
+
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
 1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
