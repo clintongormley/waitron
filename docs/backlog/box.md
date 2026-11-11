@@ -1555,8 +1555,9 @@ once released. Belongs with A1016.
 
 ### The bucket client's limits (A44, #676)
 
-Recorded as limits (watcher, 2026-11-11, A1508). `createS3ObjectStore` gives a request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-`packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
+Recorded as limits by the campaign watcher on 2026-11-11 (A1508), open to the owner.
+`createS3ObjectStore` gives a request up when it has had no reply 30 seconds after it started
+(`BUCKET_IDLE_MS`, `packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
 body then stalls is not bounded by that limit, only by its caller cancelling the call
 (`packages/stream/src/s3-store.cancel.test.ts`), so a call nobody cancels can still wait on it;
 the idle limit is per request, not per call, so a listing of many pages, or a bucket
@@ -1564,7 +1565,12 @@ answering each request just inside the limit, can take longer; a bucket that tak
 seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off;
 Amazon S3 answered one delete of 1,000 tiny keys in 1,040 ms on 2026-10-14 (A538-10), and other
 providers, and larger or busier buckets, were not measured; and the idle limit's tests run the
-handler's below-6,000 ms path, while its production path was measured by hand, not by a test. The settings screen's bucket Test and Save end after a minute or when the browser drops the request (`PROBE_LIMIT_MS`, `apps/server/src/stream-api.ts`).
+handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
+The settings screen's bucket Test, and Save's bucket and customer-key checks together, end after
+a minute or when the browser drops the request (`PROBE_LIMIT_MS`, `apps/server/src/stream-api.ts`).
+A check that ends this way leaves its one test object under `waitron-probe/` in the bucket, since
+its clean-up runs under the same signal (`probeBucket`, `packages/stream/src/probe.ts`;
+`prepareBucketEncryption`, `packages/stream/src/sse-c.ts`).
 
 ### Quiet-box backup read limits
 
