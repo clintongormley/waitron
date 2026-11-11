@@ -1,25 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { declarationSource as source, testProducer as producer } from "../../test/declaration.js";
 import { declarationBlocks, fillProducer, renderDeclaration } from "./render.js";
-import { declarationItems, prepareDeclarationSource } from "./source.js";
-
-const template = readFileSync(new URL("../../declarations/template.md", import.meta.url), "utf8");
-const functions = readFileSync(new URL("../../declarations/functions.md", import.meta.url), "utf8");
-
-const source = prepareDeclarationSource({
-  template,
-  functions,
-  version: "1.2.3",
-  libraryVersion: "0.2.1",
-  date: "2026-10-22",
-  place: "Elche",
-});
-
-const producer = {
-  name: "PRODUCER PERSON",
-  taxId: "00000000T",
-  address: "1 Example Street, 00000 Nowhere (Province), Spain",
-};
+import { declarationItems } from "./source.js";
 
 describe("renderDeclaration", () => {
   it("renders the real template as text and HTML with the producer's values", () => {

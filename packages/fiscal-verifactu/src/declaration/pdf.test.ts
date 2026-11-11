@@ -1,26 +1,7 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { declarationSource as source, testProducer as producer } from "../../test/declaration.js";
 import { renderDeclarationPdf } from "./pdf.js";
-import { prepareDeclarationSource } from "./source.js";
-
-const template = readFileSync(new URL("../../declarations/template.md", import.meta.url), "utf8");
-const functions = readFileSync(new URL("../../declarations/functions.md", import.meta.url), "utf8");
-
-const source = prepareDeclarationSource({
-  template,
-  functions,
-  version: "1.2.3",
-  libraryVersion: "0.2.1",
-  date: "2026-10-22",
-  place: "Elche",
-});
-
-const producer = {
-  name: "PRODUCER PERSON",
-  taxId: "00000000T",
-  address: "1 Example Street, 00000 Nowhere (Province), Spain",
-};
 
 async function pages(bytes: Uint8Array) {
   const task = getDocument({
