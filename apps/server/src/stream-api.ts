@@ -54,7 +54,8 @@ export interface StreamApiDeps {
   probe: (bucket: BucketConfig, signal: AbortSignal) => Promise<ProbeResult>;
   /** Replaces {@link PROBE_LIMIT_MS}. Tests only. */
   probeLimitMs?: number;
-  prepareEncryption: (bucket: BucketConfig) => Promise<ProbeResult>;
+  /** Throws when the bucket gives no answer at all, a cancelled `signal` included. */
+  prepareEncryption: (bucket: BucketConfig, signal: AbortSignal) => Promise<ProbeResult>;
   /** Shared with the backup routes, which also read and then write the key in `backup.env`. */
   turns: Turns;
 }
@@ -98,9 +99,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_request_failed": 502,
 };
 
-// The dashboard sets no limit of its own on a POST or PUT
-// (packages/dashboard-kit/src/request.ts:109-111), so this is the person's whole wait; a minute
-// leaves a slow bucket room for the check's dozen requests.
+// The dashboard sets no time limit on a POST or PUT (`READ_TIME_LIMIT_MS` in
+// `packages/dashboard-kit/src/request.ts` covers GETs only), so nothing else ends a check whose
+// answer stalls after its headers. The minute was not measured.
 const PROBE_LIMIT_MS = 60_000;
 
 export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): void {
@@ -122,11 +123,9 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     streamSettingsPayload({ venueId: deps.venueId, bucket });
     return bucket;
   };
-  const probeOrRefuse = async (c: Context, bucket: BucketConfig): Promise<void> => {
-    const signal = AbortSignal.any([
-      c.req.raw.signal,
-      AbortSignal.timeout(deps.probeLimitMs ?? PROBE_LIMIT_MS),
-    ]);
+  const bucketWait = (c: Context): AbortSignal =>
+    AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(deps.probeLimitMs ?? PROBE_LIMIT_MS)]);
+  const probeOrRefuse = async (bucket: BucketConfig, signal: AbortSignal): Promise<void> => {
     const result = await deps.probe(bucket, signal);
     if (!result.ok) throw new AppError("backup.stream_test_failed", { reason: result.reason });
   };
@@ -227,7 +226,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       const bucket = await readBucketBody(c);
-      await probeOrRefuse(c, bucket);
+      await probeOrRefuse(bucket, bucketWait(c));
       return c.json({ ok: true });
     }),
   );
@@ -244,8 +243,9 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);
-      await probeOrRefuse(c, bucket);
-      const encryption = await deps.prepareEncryption(bucket);
+      const signal = bucketWait(c);
+      await probeOrRefuse(bucket, signal);
+      const encryption = await deps.prepareEncryption(bucket, signal);
       if (!encryption.ok) {
         throw new AppError("backup.stream_test_failed", { reason: encryption.reason });
       }

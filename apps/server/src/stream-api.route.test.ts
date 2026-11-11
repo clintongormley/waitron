@@ -381,7 +381,7 @@ describe("stream settings routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
     expect(signals).toHaveLength(1);
     expect(signals[0]!.aborted).toBe(true);
-  }, 10_000);
+  });
 
   it("Save ends a check that outlasts the time limit and stores nothing", async () => {
     await clearBucket();
@@ -396,7 +396,25 @@ describe("stream settings routes", () => {
     expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
-  }, 10_000);
+  });
+
+  it("Save ends an encryption check that outlasts the time limit and stores nothing", async () => {
+    await clearBucket();
+    const probe = vi.fn<StreamApiDeps["probe"]>(async () => ({ ok: true }));
+    const { probe: prepareEncryption, signals } = stalledProbe();
+    const { app, deps, reload } = harness({ probe, prepareEncryption, probeLimitMs: 20 });
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
+    // One deadline for the whole of Save's wait on the bucket, not one per check.
+    expect(probe.mock.calls[0]![1]).toBe(signals[0]);
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
 
   it("Test stops checking the bucket when the browser drops the request", async () => {
     const { probe, signals, running } = stalledProbe();
@@ -413,7 +431,7 @@ describe("stream settings routes", () => {
     dropped.abort();
     await pending;
     expect(signals[0]!.aborted).toBe(true);
-  }, 10_000);
+  });
 
   it("refuses a missing required field by name, before any probe", async () => {
     const { app, deps } = harness();
@@ -521,7 +539,7 @@ describe("stream settings routes", () => {
       expect(await res.json()).toEqual({
         error: { code: "backup.stream_test_failed", params: { reason } },
       });
-      expect(deps.prepareEncryption).toHaveBeenCalledWith(BUCKET);
+      expect(deps.prepareEncryption).toHaveBeenCalledWith(BUCKET, expect.any(AbortSignal));
       expect(order).toEqual([]);
       expect(await storedBucket()).toBeNull();
     },
