@@ -119,3 +119,29 @@ describe("collectSearchDestinations", () => {
       expect(() => collectSearchDestinations({ ...input(), declarations: invalid })).toThrow();
   });
 });
+
+it("searches card providers under Modules without offering the removed Card payments tabs", () => {
+  const value = input();
+  value.pages = [
+    { screen: "payments", label: "Card payments", heading: "Settings" },
+    { screen: "modules", label: "Modules", heading: "Settings" },
+  ];
+  expect(collectSearchDestinations(value)).toEqual([
+    {
+      id: "modules:card-providers",
+      screen: "modules",
+      label: "modules.providers",
+      pageLabel: "Modules",
+      heading: "Settings",
+      href: "/manage/modules/view/card-providers/state/all",
+    },
+    {
+      id: "payments:readers",
+      screen: "payments",
+      label: "payments.readers_heading",
+      pageLabel: "Card payments",
+      heading: "Settings",
+      href: "/manage/payments",
+    },
+  ]);
+});

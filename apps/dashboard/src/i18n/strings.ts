@@ -1093,6 +1093,7 @@ export const en = {
   "demo_printer.refresh": "Refresh printed jobs",
   "demo_printer.empty": "Nothing has printed yet.",
   "demo_printer.drawer_opened": "The cash drawer opened.",
+  "nav.modules": "Modules",
   "nav.payments": "Card payments",
   "nav.email": "Email",
   "email.title": "Email",
@@ -2708,7 +2709,6 @@ export const en = {
   "payments.state.simulator": "Simulator",
   "payments.simulator_banner":
     "This venue is running in demo mode — card payments are simulated and no real cards are charged.",
-  "payments.connect": "Connect",
   "payments.disconnect": "Disconnect",
   "payments.disconnect_confirm": "Disconnect this provider?",
   "payments.no_providers": "No payment providers are available.",
@@ -4970,6 +4970,7 @@ export const es: Record<StringKey, string> = {
   "demo_printer.refresh": "Actualizar trabajos impresos",
   "demo_printer.empty": "Todavía no se ha impreso nada.",
   "demo_printer.drawer_opened": "Se abrió el cajón de efectivo.",
+  "nav.modules": "Módulos",
   "nav.payments": "Pagos con tarjeta",
   "nav.email": "Correo",
   "email.title": "Correo",
@@ -6615,7 +6616,6 @@ export const es: Record<StringKey, string> = {
   "payments.state.simulator": "Simulador",
   "payments.simulator_banner":
     "Este local funciona en modo de demostración: los pagos con tarjeta se simulan y no se cobra ninguna tarjeta real.",
-  "payments.connect": "Conectar",
   "payments.disconnect": "Desconectar",
   "payments.disconnect_confirm": "¿Desconectar este proveedor?",
   "payments.no_providers": "No hay proveedores de pago disponibles.",

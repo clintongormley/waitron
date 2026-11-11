@@ -158,29 +158,19 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it.each([
-    ["en", "providers"],
-    ["en", "readers"],
-    ["es-ES", "providers"],
-    ["es-ES", "readers"],
-  ])("renders the %s %s tab accessibly", async (locale, view) => {
-    setLocale(locale);
-    const { el, host } = await mountWidget<PaymentsScreen>(
-      "dashboard-payments-screen",
-      { api: stubApi(), panels: PANELS },
-      theme,
-    );
-    await flush(el);
-    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
-    await tabs.updateComplete;
-    tabs.shadowRoot!.querySelector<HTMLElement>(`[data-key=${view}]`)!.click();
-    await flush(el);
-    await tabs.updateComplete;
-    expect(
-      tabs.shadowRoot!.querySelector<HTMLElement>("[role=tab][aria-selected=true]")?.dataset.key,
-    ).toBe(view);
-    await expectNoA11yViolations(host);
-  });
+  it.each(["en", "es-ES"])(
+    "renders the %s provider and reader sections accessibly",
+    async (locale) => {
+      setLocale(locale);
+      const { el, host } = await mountWidget<PaymentsScreen>(
+        "dashboard-payments-screen",
+        { api: stubApi(), panels: PANELS },
+        theme,
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it("renders the providers and readers accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
@@ -382,23 +372,6 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
       if (!label?.shadowRoot?.querySelector("[data-test=equipment-label-qr]"))
         throw new Error("label");
     });
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders an open connect form accessibly", async () => {
-    const { el, host } = await mountWidget<PaymentsScreen>(
-      "dashboard-payments-screen",
-      {
-        api: stubApi(),
-        request: vi.fn() as unknown as PaymentsScreen["request"],
-        panels: PANELS,
-        mode: "live",
-      },
-      theme,
-    );
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=connect-zeta]")!.click();
-    await flush(el);
     await expectNoA11yViolations(host);
   });
 

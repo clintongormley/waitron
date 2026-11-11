@@ -206,3 +206,47 @@ it("refuses to start when a further screen repeats another screen's id", async (
     report.id = "widget-report";
   }
 });
+
+it("opens the core Modules catalogue for hardware managers without relying on enabled contributions", async () => {
+  history.replaceState(null, "", "/manage/modules/view/card-providers/state/all");
+  const api = stubApi();
+  vi.mocked(api.getMe).mockResolvedValue({
+    ...(await api.getMe()),
+    permissions: ["hardware.manage"],
+    modules: [],
+  });
+  Object.assign(api, {
+    listModules: async () => [{ id: "stripe", category: "card-provider", enabled: true }],
+    listPaymentProviders: async () => [
+      { providerId: "stripe", state: "not_connected", canUnpair: false },
+    ],
+  });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api,
+    request: async () => [] as never,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull(),
+  );
+  expect(navItem(el, "modules")).not.toBeNull();
+  expect(location.pathname).toBe("/manage/modules/view/card-providers/state/all");
+});
+
+it("redirects the old provider setup address to all card providers", async () => {
+  history.replaceState(null, "", "/manage/payments/view/providers");
+  const api = stubApi();
+  vi.mocked(api.getMe).mockResolvedValue({
+    ...(await api.getMe()),
+    permissions: ["hardware.manage"],
+    modules: [],
+  });
+  Object.assign(api, { listModules: async () => [], listPaymentProviders: async () => [] });
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+    api,
+    request: async () => [] as never,
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("dashboard-modules-screen")).not.toBeNull(),
+  );
+  expect(location.pathname).toBe("/manage/modules/view/card-providers/state/all");
+});

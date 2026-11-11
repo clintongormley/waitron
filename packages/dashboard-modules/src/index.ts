@@ -45,3 +45,5 @@ export type {
   ManagerAttendanceExportSelection,
   AttendanceExportOptions,
 } from "@waitron/workforce/attendance-contract";
+
+export { MODULE_LABEL_KEYS } from "./i18n/module-labels.js";

@@ -15,6 +15,7 @@ export const SUMUP_PANEL: CardProviderPanel = {
     return html`<sumup-connect-form
       .request=${ctx.request}
       .onConnected=${ctx.onConnected}
+      .actions=${ctx.actions}
     ></sumup-connect-form>`;
   },
   renderAddReader(ctx) {

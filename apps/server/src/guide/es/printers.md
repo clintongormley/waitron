@@ -74,7 +74,7 @@ Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba s
 
 ## Lectores de tarjetas {#card-readers}
 
-En **Pagos con tarjeta**, abre **Lectores de tarjetas** y elige **Eliminar** en el menú del lector. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
+En **Pagos con tarjeta**, busca el lector en **Lectores de tarjetas** y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
 
 Para volver a usar el lector, elige **Añadir lector** en su proveedor. Si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir** y vuelve a asignarlo a dispositivos y perfiles. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
 

@@ -112,6 +112,7 @@ import "./screens/cloud-services-screen.js";
 import "./screens/email-screen.js";
 import "./screens/demo-printer-screen.js";
 import "./screens/payments-screen.js";
+import "./screens/modules-screen.js";
 import "./screens/alerts-screen.js";
 import "./widgets/alerts-bell.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
@@ -169,6 +170,7 @@ const CORE_SCREENS = [
   "email",
   "demo-printer",
   "payments",
+  "modules",
   "alerts",
 ] as const;
 type CoreScreen = (typeof CORE_SCREENS)[number];
@@ -292,6 +294,7 @@ const NAV_GROUPS: NavGroup[] = [
       },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
+      { screen: "modules", labelKey: "nav.modules", requiresPermission: "hardware.manage" },
       { screen: "payments", labelKey: "nav.payments", requiresManager: true },
       { screen: "email", labelKey: "nav.email", requiresManager: true },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
@@ -2444,6 +2447,10 @@ export class DashboardApp extends LitElement {
       this.screen = "zone-repair";
       return;
     }
+    if (requested === "payments" && this.#url.read("view") === "providers") {
+      this.#url.write({ dashboard: "modules", view: "card-providers", state: "all" }, true);
+      requested = "modules";
+    }
     if (requested === "printing-rules") {
       const destination = this.#permittedScreen("prep-stations");
       this.#url.write(
@@ -3076,6 +3083,11 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-demo-printer-screen
           .api=${this.api}
         ></dashboard-demo-printer-screen>`;
+      case "modules":
+        return html`<dashboard-modules-screen
+          .api=${this.api}
+          .request=${this.request}
+        ></dashboard-modules-screen>`;
       case "payments":
         return html`<dashboard-payments-screen
           .api=${this.api}

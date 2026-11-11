@@ -27,6 +27,7 @@ export const GUIDE_FRAME_WORDS: { en: GuideWords; es: GuideWords & { missingTwin
     trail: "Waitron guide",
     names: {
       products: "Products",
+      modules: "Modules",
       modifiers: "Modifiers",
       "content-and-images": "Languages and photos",
       "kitchen-service": KITCHEN_ALLERGY_WORDS.en.guideTitle,
@@ -54,6 +55,7 @@ export const GUIDE_FRAME_WORDS: { en: GuideWords; es: GuideWords & { missingTwin
     trail: "Guía de Waitron",
     names: {
       products: "Productos",
+      modules: "Módulos",
       modifiers: "Modificadores",
       "content-and-images": "Idiomas y fotos",
       "kitchen-service": KITCHEN_ALLERGY_WORDS.es.guideTitle,

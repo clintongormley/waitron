@@ -14,7 +14,8 @@ import {
 } from "@waitron/db";
 import { setNodeMode, setSingletonRoleTx, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+import { persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { jobOrigin } from "@waitron/shared";
@@ -82,6 +83,12 @@ for (const enabled of [true, false]) {
     async function prepared() {
       beforeServerStarts();
       const venue = await createClockVenue(suite.db, () => new Date(), modules);
+      const administrator = (await suite.db.select().from(persons)).find(
+        (person) => person.role === "admin",
+      )!;
+      const management = await withTransaction(suite.db, (tx) =>
+        startManagementSession(tx, { personId: administrator.id }),
+      );
       const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-attendance-"));
       await copyMigrationsRoot(join(scratch, "migrations"));
       await writeFile(
@@ -92,6 +99,7 @@ for (const enabled of [true, false]) {
       const [port] = await freePorts(1);
       return {
         venue,
+        managementCookie: `${MANAGEMENT_COOKIE}=${management.token}`,
         scratch,
         port,
         env: {
@@ -171,6 +179,12 @@ for (const enabled of [true, false]) {
           expect(started.error).toBeNull();
           server = started.server!;
           await awaitListening(httpPort());
+          const catalogue = await fetch(`http://127.0.0.1:${httpPort()}/management-api/modules`, {
+            headers: { cookie: f.managementCookie },
+          });
+          expect(catalogue.status).toBe(200);
+          const moduleRows = (await catalogue.json()) as { id: string; enabled: boolean }[];
+          expect(moduleRows.find((row) => row.id === "workforce")?.enabled).toBe(enabled);
           expect(loopSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           expect(mailSpy).toHaveBeenCalledTimes(1);
           expect(

@@ -3,7 +3,7 @@ import type { DashboardRequest } from "./request.js";
 
 /**
  * The browser twin of a card provider's server seat (`@waitron/payments`'s `CardProviderContribution`):
- * one provider's UI for the generic Payments screen — its connect form and its add-reader dialog, plus
+ * one provider's UI for Modules and Card payments — its connect form and its add-reader dialog, plus
  * the `en`/`es` strings those two register. The generic screen (`apps/dashboard`) mounts a panel without
  * naming a provider, exactly as it mounts module screens through `@waitron/dashboard-modules`.
  *
@@ -19,7 +19,16 @@ export interface CardProviderPanel {
   /** The panel's own UI strings, merged into the shared catalogue when the screen mounts it. */
   strings: { en: Record<string, string>; es: Record<string, string> };
   /** The connect form. On a successful connect it calls `onConnected` so the screen refreshes. */
-  renderConnectForm(ctx: { request: DashboardRequest; onConnected: () => void }): TemplateResult;
+  renderConnectForm(ctx: {
+    request: DashboardRequest;
+    onConnected: () => void;
+    actions?: {
+      saveLabel: string;
+      cancelLabel: string;
+      onCancel: () => void;
+      onBusy: (busy: boolean) => void;
+    };
+  }): TemplateResult;
   /** The add-reader dialog — SumUp shows the pairing countdown, Stripe a reference field. `onAdded`
    * fires once the reader is saved; `onClose` when the operator dismisses the dialog. */
   renderAddReader(ctx: {

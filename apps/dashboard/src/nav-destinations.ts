@@ -22,15 +22,18 @@ const coreDestinations: readonly DashboardSearchDestination[] = [
     labelKey: labelKey!,
     path: `/manage/printers/view/${view}`,
   })),
-  ...[
-    ["providers", "payments.providers_heading"],
-    ["readers", "payments.readers_heading"],
-  ].map(([view, labelKey]) => ({
-    id: `payments:${view}`,
+  {
+    id: "modules:card-providers",
+    screen: "modules",
+    labelKey: "modules.providers",
+    path: "/manage/modules/view/card-providers/state/all",
+  },
+  {
+    id: "payments:readers",
     screen: "payments",
-    labelKey: labelKey!,
-    path: `/manage/payments/view/${view}`,
-  })),
+    labelKey: "payments.readers_heading",
+    path: "/manage/payments",
+  },
 ];
 
 export function collectSearchDestinations(input: {

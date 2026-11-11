@@ -2142,6 +2142,12 @@ export interface StreamBucketBody {
 
 // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
 
+export interface ModuleRow {
+  id: string;
+  category: "module" | "card-provider";
+  enabled: boolean;
+}
+
 export interface PaymentProviderRow {
   providerId: string;
   state: "connected" | "not_connected";
@@ -4731,6 +4737,10 @@ export class DashboardApi {
   }
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
+
+  listModules(): Promise<ModuleRow[]> {
+    return this.#request<ModuleRow[]>("/management-api/modules", "GET");
+  }
 
   listPaymentProviders(): Promise<PaymentProviderRow[]> {
     return this.#request<PaymentProviderRow[]>("/management-api/payments/providers", "GET");

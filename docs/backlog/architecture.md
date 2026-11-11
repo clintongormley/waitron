@@ -6,7 +6,7 @@ their full text.
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
-  [Plan](../superpowers/plans/2026-11-07-a646-modules-page.md) written 2026-11-07 after Claude review and the watcher's 21:38 storage reconciliation. The watcher's scope read (2026-11-11) cut it to the module list and the card providers; lane D replans and builds.
+  [Plan](../superpowers/plans/2026-11-11-a646-modules-and-card-providers.md), Claude-read and cleared by the watcher on 2026-11-11. Modules lists optional modules and hosts provider configuration windows; Card payments links to all card providers. Provider On/Off is still to build. A483 blocks switching the other five optional modules (workforce, workforce-es, payments, bookings and staffing), so A646 stays OPEN after the provider switches land.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
   [switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
@@ -19,13 +19,13 @@ their full text.
   the every-administrator check before switching it off) are withdrawn.
   The agreed revision uses one complete optional catalogue, initially Enabled; Add a module filters
   that same list to Disabled. Category is independent, and Card payments links to Card providers
-  with All states. Row kebabs offer Configure plus Enable/Disable, with persistent red reasons
+  with All states. Rows offer Configure where settings exist (watcher, 2026-11-11 17:15), plus Enable/Disable when switching is available, with persistent red reasons
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
   separate confirmation and server checks. Stripe/SumUp remain Payments
   contributions. Other optional modules are listed but cannot be switched. Reuse provider
   connect/disconnect checks; Off blocks new collections while refunds and checks remain available.
   Cut live module-code switching, pending-operation records and rerouting every `modules.json` reader
-  (watcher, 2026-11-11 14:54). The revised plan needs one re-read before the page build.
+  (watcher, 2026-11-11 14:54).
   **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”. Configuration import accepts missing optional sets and wholly absent optional-module tables (including Staffing in Workforce’s set), empties those configuration tables and still refuses partial tables, rows naming an absent set, and missing mandatory or provision-only sets; the boundary tests and `boot.setup-routes.test.ts` cover this.
   **Watcher, 2026-11-07 21:38:** the later 4 November rationalisation wins: applied module state in shared settings. The older design's separate applied-state tables and sealed ID are superseded.
 
