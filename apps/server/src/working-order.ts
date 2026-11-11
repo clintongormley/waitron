@@ -196,6 +196,7 @@ import {
   parties,
   ticketItemMoves,
   partyTableLabels,
+  transferClosures,
   withTransaction,
   workingLinePortions,
   workingOrderLines,
@@ -7731,6 +7732,8 @@ export interface CounterWaitingOrder {
   movableDishes: { lineId: string; stationId: string }[];
   /** {@link readFormerNumbers}; absent when there are none. */
   formerNumbers?: number[];
+  /** Only on a settled order closed to be paid later by transfer. */
+  closedByTransfer?: true;
 }
 
 /**
@@ -7809,6 +7812,16 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
               ),
             )
             .orderBy(workingOrderLines.lineNo);
+    const byTransfer = new Set(
+      settledIds.length === 0
+        ? []
+        : (
+            await tx
+              .select({ id: transferClosures.workingOrderId })
+              .from(transferClosures)
+              .where(inArray(transferClosures.workingOrderId, settledIds))
+          ).map((row) => row.id),
+    );
     const former = await readFormerNumbers(
       tx,
       rows.map((row) => row.id),
@@ -7854,6 +7867,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
         movableDishes: movable.get(row.id) ?? [],
         ...optional("formerNumbers", former.get(row.id)),
+        ...(byTransfer.has(row.id) ? { closedByTransfer: true as const } : {}),
       });
     }
     return waiting;

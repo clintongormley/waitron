@@ -39,6 +39,7 @@ import { readIssuedSales } from "./sale-due.js";
 import { assignProductUnit, setProductVariants, units } from "@waitron/catalogue";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
+import { transferCloseKit } from "./testing/transfer-close-fixture.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -379,6 +380,20 @@ describe("Find Bills SQL paging", () => {
     await expect(inTx(venue, (tx) => readFindBill(tx, issued))).rejects.toMatchObject({
       code: "working_order.not_found",
     });
+  });
+  it("leaves out a counter bill closed by transfer while its kitchen ticket waits, never as paid", async () => {
+    const kit = transferCloseKit(venue, venue.counterZone);
+    const byTransfer = await placedIssuedBill(venue, "Tarta");
+    await kit.close(await kit.requestFor(byTransfer, "18.00", null));
+    const paid = await placedIssuedBill(venue, "Croquetas");
+    expect((await collect(venue, paid, "10.00")).status).toBe(200);
+    expect(
+      venue.db.all(sql`select id from ticket_items where working_order_id = ${byTransfer}`),
+    ).not.toEqual([]);
+
+    const found = await list();
+    expect(found.rows.map((r) => r.workingOrderId)).toEqual([paid]);
+    expect(found.openCount).toBe(1);
   });
   it("derives net applied payments, tips and completed refunds from the same balance facts", async () => {
     const id = (await seatedWith(venue, "Tarta")).tabId;

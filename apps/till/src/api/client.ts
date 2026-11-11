@@ -1322,6 +1322,8 @@ export interface CounterWaitingOrder {
   /** The numbers the order's dishes were sent under before they moved to it, lowest first;
    *  absent when there are none. */
   formerNumbers?: number[];
+  /** Only on a settled order closed to be paid later by transfer. */
+  closedByTransfer?: true;
 }
 
 /**
