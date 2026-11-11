@@ -34,6 +34,7 @@ export function boxNameTagJob(deps: {
           : tag !== null && accepted.name === tag.name && accepted.live === tag.live)
       )
         return { nextDueAt };
+      accepted = undefined;
       const answer = await deps.host.tagWrite(tag);
       if (!answer.available) {
         if (answer.reason === "missing" || answer.reason === "unsupported")

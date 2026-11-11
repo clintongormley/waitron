@@ -161,3 +161,30 @@ it("skips the host after an unrelated commit or an unchanged timer pass", async 
     await job.onStop?.();
   }
 });
+it("retries when a lost write may have replaced an earlier accepted tag", async () => {
+  await seedTenant(fx.db);
+  const tagWrite = vi
+    .fn<BoxHostRequests["tagWrite"]>()
+    .mockResolvedValueOnce({ available: true, tag: "written" })
+    .mockResolvedValueOnce({ available: false, reason: "lost" })
+    .mockResolvedValueOnce({ available: true, tag: "written" });
+  const { job } = duty(tagWrite);
+  try {
+    await job.pass(context);
+    await withTransaction(fx.db, (tx) =>
+      tx.update(tenants).set({ legalName: "New Harbour Ltd" }).where(eq(tenants.id, 1)),
+    );
+    await expect(job.pass(context)).rejects.toMatchObject({ code: "box_host.failed" });
+    await withTransaction(fx.db, (tx) =>
+      tx.update(tenants).set({ legalName: "Test SL" }).where(eq(tenants.id, 1)),
+    );
+    await job.pass(context);
+    expect(tagWrite.mock.calls).toEqual([
+      [{ name: "Test SL", live: false }],
+      [{ name: "New Harbour Ltd", live: false }],
+      [{ name: "Test SL", live: false }],
+    ]);
+  } finally {
+    await job.onStop?.();
+  }
+});
