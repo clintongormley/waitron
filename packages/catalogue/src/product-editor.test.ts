@@ -1,3 +1,4 @@
+import type { ProductEditorSaveBody } from "@waitron/shared";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -1150,4 +1151,69 @@ describe("optional product customer translations", () => {
       });
     },
   );
+});
+
+it("preserves later dish and variant availability during an unrelated editor save", async () => {
+  const loaded = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...input, available: true }, "en"),
+  );
+  await withTransaction(fx.db, async (tx) => {
+    await updateProduct(tx, loaded.id, { available: false });
+    await updateProduct(tx, loaded.variants[0]!.id, { available: false });
+  });
+  const body: ProductEditorSaveBody = { ...loaded };
+  delete body.available;
+  const variants: ProductEditorSaveBody["variants"] = structuredClone(loaded.variants);
+  for (const variant of variants) delete variant.available;
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, loaded.id, catalogueId, { ...body, unitPrice: "10.00", variants }, "en"),
+  );
+  expect(saved.unitPrice).toBe("10.00");
+  expect(saved.available).toBe(false);
+  expect(saved.variants.map((v) => [v.id, v.available])).toEqual([
+    [loaded.variants[0]!.id, false],
+    [loaded.variants[1]!.id, true],
+  ]);
+  const restored = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(
+      tx,
+      loaded.id,
+      catalogueId,
+      { ...body, available: true, variants: variants.map((v) => ({ ...v, available: true })) },
+      "en",
+    ),
+  );
+  expect(restored.available).toBe(true);
+  expect(restored.variants.map((v) => v.available)).toEqual([true, true]);
+});
+it("preserves a variant's later availability on its own page and restores it explicitly", async () => {
+  const parent = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, input, "en"),
+  );
+  const loaded = await withTransaction(fx.db, (tx) =>
+    readProductEditor(tx, parent.variants[0]!.id),
+  );
+  await withTransaction(fx.db, (tx) => updateProduct(tx, loaded.id, { available: false }));
+  const body: ProductEditorSaveBody = { ...loaded };
+  delete body.available;
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, loaded.id, catalogueId, { ...body, unitPrice: "4.00" }, "en"),
+  );
+  expect(saved.unitPrice).toBe("4.00");
+  expect(saved.available).toBe(false);
+  const restored = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, loaded.id, catalogueId, { ...body, available: true }, "en"),
+  );
+  expect(restored.available).toBe(true);
+});
+it("creates available products and variants when their save flags are absent", async () => {
+  const body: ProductEditorSaveBody = { ...input };
+  delete body.available;
+  const variants: ProductEditorSaveBody["variants"] = structuredClone(input.variants);
+  for (const variant of variants) delete variant.available;
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...body, variants }, "en"),
+  );
+  expect(saved.available).toBe(true);
+  expect(saved.variants.map((v) => v.available)).toEqual([true, true]);
 });

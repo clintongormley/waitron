@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { TillProduct } from "../api/client.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from "./test-helpers.js";
 import { TillProductInfo } from "./product-info.js";
@@ -93,3 +94,61 @@ describe.each(["light", "dark"] as Theme[])("product information in %s", (theme)
     },
   );
 });
+
+it.each([
+  [
+    "light",
+    "product.not_found",
+    "This dish or size is no longer offered here. Close this window and choose another dish or size.",
+  ],
+  ["dark", "product.not_found", codeMessage("product.not_found", "es-ES")],
+  [
+    "light",
+    "product.archived",
+    "This dish or size has been archived. Close this window and choose another dish or size.",
+  ],
+  ["dark", "product.archived", codeMessage("product.archived", "es-ES")],
+] as const)(
+  "availability controls, sending and refusal are accessible in %s for %s",
+  async (theme, code, expected) => {
+    setLocale(theme === "dark" ? "es-ES" : "en-GB");
+    let reject!: (error: unknown) => void;
+    const change = vi.fn(
+      () =>
+        new Promise<void>((_resolve, no) => {
+          reject = no;
+        }),
+    );
+    const product = {
+      ...base,
+      productId: "soup",
+      available: false,
+      variants: [
+        {
+          ...base,
+          id: "cup",
+          name: "Cup",
+          unitPrice: "2.00",
+          unitPriceDifference: null,
+          available: false,
+        },
+      ],
+    };
+    const { el, host } = await mountWidget<TillProductInfo>(
+      "till-product-info",
+      { product, changeAvailability: change },
+      theme,
+    );
+    const dish = el.shadowRoot!.querySelector<HTMLElement>('[data-availability="soup"]')!;
+    expect(dish).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-availability="cup"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+    await userEvent.click(dish);
+    expect(change).toHaveBeenCalledExactlyOnceWith("soup", true);
+    expect((dish as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    reject({ code });
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(expected);
+    await expectNoA11yViolations(host);
+  },
+);

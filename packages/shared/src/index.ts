@@ -418,6 +418,7 @@ export type {
   ProductEditorInput,
   ProductRouting,
   ProductEditorBody,
+  ProductEditorSaveBody,
   InheritedValues,
   ProductEditorValue,
 } from "./menu-document/product-types.js";

@@ -259,7 +259,10 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
     await el.updateComplete;
     el.shadowRoot!.querySelector("dashboard-product-editor")!.dispatchEvent(
       new CustomEvent("wt-submit", {
-        detail: { value: { name: "Ham croquettes" } as ProductEditorInput },
+        detail: {
+          value: { name: "Ham croquettes" } as ProductEditorInput,
+          body: { name: "Ham croquettes" },
+        },
         bubbles: true,
         composed: true,
       }),

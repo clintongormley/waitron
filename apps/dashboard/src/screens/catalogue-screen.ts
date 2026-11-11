@@ -1,3 +1,4 @@
+import type { ProductEditorSaveBody } from "@waitron/shared";
 import type { CatalogueSettings } from "../api/client.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -455,7 +456,9 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
-  async #save(event: CustomEvent<{ value: ProductEditorDraft }>): Promise<void> {
+  async #save(
+    event: CustomEvent<{ value: ProductEditorDraft; body: ProductEditorSaveBody }>,
+  ): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
@@ -465,8 +468,8 @@ export class CatalogueScreen extends LitElement {
     try {
       let created: ProductEditorValue | null = null;
       if (this.editorValue === null)
-        created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
-      else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
+        created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.body);
+      else await this.api.updateProductEditor(this.editorValue.id, event.detail.body);
       written = true;
       this.#editor()?.closeSaved(event.detail.value);
       this.#closeEditor();
@@ -784,7 +787,7 @@ export class CatalogueScreen extends LitElement {
         .optionLists=${this.optionLists}
         .courses=${this.courses}
         .api=${this.api}
-        @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft }>) => void this.#save(event)}
+        @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft; body: ProductEditorSaveBody }>) => void this.#save(event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();

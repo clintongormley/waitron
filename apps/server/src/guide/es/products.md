@@ -427,7 +427,7 @@ declaración. Los extras mantienen su propia información nutricional separada d
 no tiene una pantalla de Alérgenos aparte ni una hoja de alérgenos impresa.
 
 Mayús+F10 o la tecla de menú contextual abre la misma ventana de información para un producto
-enfocado. Intro sigue seleccionando el plato.
+enfocado. Intro selecciona un plato disponible; toca o pulsa Intro sobre uno agotado para abrir su información.
 
 ## Guarda la respuesta sobre alergias con los platos de la mesa {#table-allergies}
 
@@ -459,3 +459,13 @@ volver a marcarla.
 Cocina conserva su primera copia de alergias con cada plato. Un cambio posterior llega en un
 aviso aparte que debe confirmarse. Consulta cómo las
 [copias de alergias y sus correcciones](kitchen-service.md#allergy-copies) acompañan al trabajo.
+
+## Marca un plato como agotado durante el servicio {#sold-out}
+
+Cuando se agote un plato, mantén pulsado su botón en Mostrador o en el pedido de una mesa.
+Envía o marcha las raciones ya pedidas antes de marcar el plato como agotado.
+Elige **Marcar como agotado** para el plato o un tamaño. Debes haber iniciado sesión en un
+dispositivo que tome pedidos. El cambio afecta a todas las cartas del local. El plato sigue visible en gris.
+
+Elige **Volver a poner a la venta** cuando esté listo; el interruptor no se restablece al día siguiente.
+Al recuperar el plato, los tamaños marcados individualmente como agotados siguen sin estar a la venta.

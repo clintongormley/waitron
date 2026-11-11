@@ -671,6 +671,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That reason no longer exists. Reload and choose another",
     es: "Ese motivo ya no existe. Vuelve a cargar y elige otro",
   },
+  "product.archived": {
+    en: "This dish or size has been archived. Close this window and choose another dish or size.",
+    es: "Este plato o tamaño se ha archivado. Cierra esta ventana y elige otro plato o tamaño.",
+  },
+  "product.not_found": {
+    en: "This dish or size is no longer offered here. Close this window and choose another dish or size.",
+    es: "Este plato o tamaño ya no se ofrece aquí. Cierra esta ventana y elige otro plato o tamaño.",
+  },
   "product.unavailable": {
     en: "An item on this order has sold out. Remove it and try again",
     es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",

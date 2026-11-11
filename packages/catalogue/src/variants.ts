@@ -40,7 +40,8 @@ export type { ProductVariant, ProductVariantInput } from "@waitron/shared";
  * the editor body always carries, with `active` optional for a caller in code — absent creates a new
  * variant Active and leaves one sent by `id` Active or Inactive as it already is. */
 export type VariantWrite = Omit<ProductVariantInput, "active"> & { active?: boolean };
-type EditorVariantWrite = Omit<VariantWrite, "customerName"> & {
+type EditorVariantWrite = Omit<VariantWrite, "customerName" | "available"> & {
+  available?: boolean;
   customerName?: Record<string, string> | null;
 };
 
@@ -63,7 +64,7 @@ function validatePrice(price: string | null, field: string): Decimal | null {
   return toScale(decimal(price), 2);
 }
 
-function validateFlag(value: boolean, field: string): void {
+function validateFlag(value: unknown, field: string): void {
   if (typeof value !== "boolean") throw new AppError("product.variant_invalid", { field });
 }
 
@@ -209,7 +210,7 @@ async function writeProductVariants(
       if (seen.has(input.id)) throw new AppError("product.variant_invalid", { field: "id" });
       seen.add(input.id);
     }
-    validateFlag(input.available, "available");
+    if (checkNames || input.available !== undefined) validateFlag(input.available, "available");
     if (input.active !== undefined) validateFlag(input.active, "active");
     const price = validatePrice(input.unitPrice, "unitPrice");
     checked.push({ ...input, cents: price === null ? null : decimalToCents(price) });
@@ -219,7 +220,7 @@ async function writeProductVariants(
   const current = await listProductVariants(tx, productId);
   const currentById = new Map(current.map((variant) => [variant.id, variant]));
   const currentActive = new Map(current.map((variant) => [variant.id, variant.active]));
-  const normalized: (VariantWrite & { active: boolean; cents: number | null })[] = [];
+  const normalized: (EditorVariantWrite & { active: boolean; cents: number | null })[] = [];
   for (const input of checked) {
     const active =
       input.active ?? (input.id === undefined ? true : (currentActive.get(input.id) ?? true));
@@ -275,7 +276,7 @@ async function writeProductVariants(
       kitchenName: input.kitchenName,
       image: input.image,
       unitPrice: input.cents,
-      available: input.available,
+      ...(input.available === undefined ? {} : { available: input.available }),
       active: input.active,
       variantOrder: index,
       updatedAt: now(),
@@ -283,6 +284,7 @@ async function writeProductVariants(
     if (input.id === undefined) {
       await tx.insert(products).values({
         ...values,
+        available: input.available ?? true,
         parentId: productId,
         catalogueId: parent.catalogueId,
         ordering: "public",

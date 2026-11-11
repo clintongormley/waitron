@@ -1,3 +1,4 @@
+import type { ProductEditorSaveBody } from "@waitron/shared";
 import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import { LitElement, html } from "lit";
@@ -327,6 +328,10 @@ async function productTable(el: CatalogueScreen) {
   return table;
 }
 function emit(source: Element, type: string, detail: unknown): void {
+  if (source.localName === "dashboard-product-editor" && type === "wt-submit") {
+    const submitted = detail as { value: unknown; body?: unknown };
+    detail = { body: submitted.value, ...submitted };
+  }
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 /** One change in the open editor, so its Save has something to send. */
@@ -1028,6 +1033,20 @@ describe("catalogue-screen", () => {
     // The course travels in the same product write.
     expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", routed);
     expect(api.createProductEditor).not.toHaveBeenCalled();
+  });
+
+  it("sends the save body without untouched availability, keeping the complete editor value", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    const body: ProductEditorSaveBody = { ...value };
+    delete body.available;
+    emit(editor(el), "wt-submit", { value, body });
+    await flush(el);
+    expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", body);
+    expect(editor(el).open).toBe(false);
   });
 
   it("loads both kinds of modifier list and hands them to the product editor", async () => {

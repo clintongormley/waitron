@@ -16,8 +16,7 @@ import {
 import { isProductPrice } from "./modifier-limits.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import { isModifierListKind } from "./product-modifiers.js";
-import type { ProductVariantInput } from "./variants.js";
-import type { ProductEditorInput, ProductModifierRef } from "@waitron/shared";
+import type { ProductEditorSaveBody, ProductModifierRef } from "@waitron/shared";
 export type { ProductEditorInput } from "@waitron/shared";
 import "./errors.js";
 
@@ -126,7 +125,7 @@ function emptyOnVariant<T>(values: T[], field: string, isVariant: boolean): T[] 
 export function parseProductEditorInput(
   value: unknown,
   { isVariant }: { isVariant: boolean },
-): ProductEditorInput {
+): ProductEditorSaveBody {
   const body = object(value, "product");
   const parentId =
     body.parentId === undefined ? {} : { parentId: nullableId(body.parentId, "parentId") };
@@ -165,7 +164,7 @@ export function parseProductEditorInput(
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);
   const seen = new Set<string>();
-  const variants = listed.map((value, index): ProductVariantInput => {
+  const variants = listed.map((value, index): ProductEditorSaveBody["variants"][number] => {
     const field = `variants.${index}`;
     const variant = object(value, field);
     const variantId = variant.id === undefined ? undefined : id(variant.id, `${field}.id`);
@@ -181,7 +180,9 @@ export function parseProductEditorInput(
       image: nullableText(variant.image, `${field}.image`),
       // Every listed entry is a variant, so a blank price follows the product's.
       unitPrice: inheritable(variant.unitPrice, `${field}.unitPrice`, true, price),
-      available: boolean(variant.available, `${field}.available`),
+      ...(variant.available === undefined
+        ? {}
+        : { available: boolean(variant.available, `${field}.available`) }),
       active: boolean(variant.active, `${field}.active`),
     };
   });
@@ -205,7 +206,7 @@ export function parseProductEditorInput(
     unitId,
     unitPrice: inheritable(body.unitPrice, "unitPrice", isVariant, price),
     active: boolean(body.active, "active"),
-    available: boolean(body.available, "available"),
+    ...(body.available === undefined ? {} : { available: boolean(body.available, "available") }),
     vatClass: tax,
     variants,
     primaryCategoryId,

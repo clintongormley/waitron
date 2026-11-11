@@ -1,3 +1,4 @@
+import type { ChangeAvailability } from "../widgets/product-info.js";
 import type { PartyAllergyRead } from "@waitron/module";
 import { allergyGuestId, allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
@@ -597,6 +598,7 @@ const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
 
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
+  @property({ attribute: false }) changeAvailability?: ChangeAvailability;
   @property({ attribute: false }) allergyView: PartyAllergyRead | null = null;
 
   #allergy(): PartyAllergyRead | null {
@@ -2944,6 +2946,7 @@ export class TillTableOrderScreen extends LitElement {
       : shownMenu(this.menus, this.selectedMenuId);
     if (this.menuSelectionRequired && menu === undefined) return html``;
     return html`<till-menu-browser
+      .changeAvailability=${this.changeAvailability}
       class="round-control"
       ?inert=${store.sending || store.editsLocked || !this.orderingAllowed}
       .menu=${menu}

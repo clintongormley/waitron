@@ -1,3 +1,4 @@
+import type { ChangeAvailability } from "./product-info.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { orderableMenus } from "../menu-filter.js";
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
@@ -298,7 +299,7 @@ export class TillMenuBrowser extends LitElement {
         color: var(--tile-ink);
       }
 
-      .tile[data-painted]::part(button):hover:not(:disabled) {
+      .tile[data-painted]:not([data-sold-out])::part(button):hover:not(:disabled) {
         border-color: var(--tile-ink);
       }
 
@@ -310,8 +311,7 @@ export class TillMenuBrowser extends LitElement {
         color: inherit;
       }
 
-      /* In place of wt-button's disabled fade; the button stays disabled. A ::part() rule from
-         outside wt-button wins over wt-button's own. */
+      /* Sold-out dishes still open information. */
       .tile[data-sold-out]::part(button) {
         opacity: 1;
         background: var(--wt-color-surface-sunken);
@@ -383,6 +383,7 @@ export class TillMenuBrowser extends LitElement {
 
   /** The menu as a zone-offers body serves it: its structure and its Device Home Page. Nothing
    * renders until it is set. */
+  @property({ attribute: false }) changeAvailability?: ChangeAvailability;
   @property({ attribute: false }) menu?: TillZoneMenu;
 
   /** This menu's offers as till products. */
@@ -672,7 +673,6 @@ export class TillMenuBrowser extends LitElement {
       style=${paint ?? nothing}
       ?data-painted=${paint !== undefined}
       ?data-sold-out=${!sellable}
-      ?disabled=${!sellable}
       ?data-nutrition=${marked}
       ?data-counted=${this.inOrder !== undefined}
       ?data-in-order=${inOrder > 0}
@@ -689,7 +689,10 @@ export class TillMenuBrowser extends LitElement {
         this.#suppressClick = false;
       }}
       @click=${(event: MouseEvent) => {
-        if (event.detail === 0 || !this.#suppressClick) onTap();
+        if (event.detail === 0 || !this.#suppressClick) {
+          if (!sellable) this.infoProduct = product;
+          else onTap();
+        }
       }}
     >
       ${marked ? html`<wt-icon class="nutrition-mark" name="allergies"></wt-icon>` : nothing}
@@ -910,6 +913,7 @@ export class TillMenuBrowser extends LitElement {
         this.infoProduct
           ? html`<till-product-info
               .product=${this.infoProduct}
+              .changeAvailability=${this.changeAvailability}
               @close-info=${(event: Event) => {
                 event.stopPropagation();
                 this.infoProduct = undefined;

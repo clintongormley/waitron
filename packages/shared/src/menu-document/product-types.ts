@@ -142,9 +142,9 @@ export interface Product {
 }
 
 /**
- * The product-editor write body's product half, as `parseProductEditorInput` validates it. The kitchen
+ * The complete product-editor values. The kitchen
  * routing (`courseId`) is NOT here — it rides in {@link ProductRouting} and the two combine
- * as {@link ProductEditorBody}, the complete body the editor sends.
+ * as {@link ProductEditorBody}. Saves use {@link ProductEditorSaveBody}.
  *
  * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value.
  * On a product with no parent, `unitPrice`, `vatClass`
@@ -155,7 +155,7 @@ export interface ProductEditorInput {
   parentId?: string | null;
   name: string;
   customerName: Record<string, string> | null;
-  /** Who may order the product on its own. Required in the editor body, like `available` — the
+  /** Who may order the product on its own. Required in the editor body — the
    * parser refuses a body that omits it rather than defaulting. */
   ordering: ProductOrdering;
   description: Record<string, string> | null;
@@ -165,7 +165,7 @@ export interface ProductEditorInput {
    * and clears a unit the variant still stores. */
   unitId: string | null;
   unitPrice: string | null;
-  /** Writes `products.active`; Delete sends false and Restore true. Required, like `available`. */
+  /** Writes `products.active`; Archive sends false. Required. */
   active: boolean;
   /** Writes `products.available`: "sold out for now". */
   available: boolean;
@@ -194,6 +194,12 @@ export interface ProductRouting {
 /** The complete product-editor write body: the product fields plus the kitchen course, saved on one
  * transaction. */
 export type ProductEditorBody = ProductEditorInput & ProductRouting;
+
+/** Omitted availability preserves an existing row; new rows default to available. */
+export type ProductEditorSaveBody = Omit<ProductEditorBody, "available" | "variants"> & {
+  available?: boolean;
+  variants: (Omit<ProductVariantInput, "available"> & { available?: boolean })[];
+};
 
 export interface InheritedValues {
   /** The parent's staff name, for the variant editor heading. */

@@ -78,6 +78,7 @@ import type {
 } from "./product-editor-model.js";
 import {
   comparablePrice,
+  productEditorSaveBody,
   modifierKey,
   modifierListName,
   modifierListNames,
@@ -908,7 +909,11 @@ export class ProductEditor extends LitElement {
     this.submitted = true;
     const value = this.submissionValue(this.currentValue);
     this.dispatchEvent(
-      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+      new CustomEvent("wt-submit", {
+        detail: { value, body: productEditorSaveBody(value, this.#baseline) },
+        bubbles: true,
+        composed: true,
+      }),
     );
   }
   private submissionValue(draft: ProductEditorDraft): ProductEditorDraft {

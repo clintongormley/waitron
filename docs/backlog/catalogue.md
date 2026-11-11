@@ -1139,13 +1139,10 @@ What the design has to settle:
 
 ## A1516. Mark a dish sold out from the till
 
-**Go-live (owner, 2026-11-11). [Delivery plan](../superpowers/plans/2026-11-11-a1516-till-sold-out.md); not built.** Owner choices, recorded by the watcher at 21:58:
-anyone signed in on a device that takes orders may change availability, with no new permission.
-Restore availability by hand, never automatically the next day.
-
-Delivery 1 adds dishes and variants on Counter/table ordering, and fixes a dashboard save of
-unrelated fields overwriting a later availability change. Delivery 2 adds extras and option
-choices. Reuse the existing available flag, menu refresh and server refusals; do not archive.
+**Go-live (owner, 2026-11-11). [Delivery 2](../superpowers/plans/2026-11-11-a1516-till-sold-out.md).**
+Extend the till information controls to extras and option choices. Preserve stored defaults and the
+last-choice refusal. The owner choices recorded by the watcher at 21:58 still apply: anyone signed
+in on a device that takes orders, no new permission, and manual restoration, never a next-day reset.
 A running-down quantity (“only 5 left”) stays parked.
 
 ## A1517. Allergen points to revisit before go-live

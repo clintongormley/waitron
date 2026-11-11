@@ -1,3 +1,4 @@
+import { updateProduct } from "@waitron/catalogue";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
@@ -671,6 +672,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 export const run = createErrorBoundary(STATUS, "till.failed");
+const runAvailability = createErrorBoundary({ ...STATUS, "product.not_found": 404 }, "till.failed");
 const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 const runSaveDraft = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 const runDeadEndsOrder = createErrorBoundary(
@@ -1593,6 +1595,34 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         };
       });
       return c.json(result);
+    }),
+  );
+
+  app.put("/api/service-zones/:zoneId/products/:productId/availability", (c) =>
+    runAvailability(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
+      const productId = requireUuidParam(c.req.param("productId"), "ProductId");
+      const body = await readJsonBody<{ available: unknown }>(c);
+      if (typeof body.available !== "boolean")
+        throw new AppError("product.invalid", { field: "available" });
+      const available = body.available;
+      await withTransaction(deps.db, async (tx) => {
+        const device = await currentZoneDevice(tx, session);
+        assertProfileAction(device, "take-orders");
+        await checkZones(tx, { device }, [{ zoneId }]);
+        const { offers } = await VENUE_SERVICE.listZoneOffers(tx, zoneId, { withDefault: false });
+        if (
+          !offers.some(
+            (offer) =>
+              offer.productId === productId ||
+              offer.variants.some((variant) => variant.id === productId),
+          )
+        )
+          throw new AppError("product.not_found", { productId });
+        await updateProduct(tx, productId, { available });
+      });
+      return c.json({ available });
     }),
   );
 

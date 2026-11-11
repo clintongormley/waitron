@@ -358,3 +358,72 @@ it("keeps incomplete allergen kinds dirty for Save and variant Open until revert
   expect(await saveState(el)).toEqual(quiet);
   expect(table.openBlocked).toBe(false);
 });
+
+it.each([full, variantPage])(
+  "omits unchanged availability from Save while keeping the full draft ($name)",
+  async (value) => {
+    const el = await mount(value);
+    const submit = submissions(el);
+    await type(el, "name", "New name");
+    await press(el);
+    const detail = submit.mock.calls[0]![0].detail;
+    expect(detail.value.available).toBe(true);
+    expect(detail.body).not.toHaveProperty("available");
+    expect(detail.body.variants.map((v: Record<string, unknown>) => v.available)).toEqual(
+      value.variants.map(() => undefined),
+    );
+    expect(detail.value.variants).toEqual(value.variants);
+  },
+);
+it.each([false, true])(
+  "sends only the changed flag after variant reorder (dish available %s)",
+  async (available) => {
+    const initial = { ...full, variants: full.variants.map((v) => ({ ...v, active: true })) };
+    const el = await mount(initial);
+    const submit = submissions(el);
+    await type(el, "name", "New name");
+    const flag = el.shadowRoot!.querySelector('wt-switch[name="available"]')!;
+    for (const checked of [false, available]) {
+      flag.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+    }
+    const table = el.shadowRoot!.querySelector("dashboard-variant-table")!;
+    table.dispatchEvent(
+      new CustomEvent("wt-reorder", { detail: { from: 0, to: 1 }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    table.dispatchEvent(
+      new CustomEvent("wt-toggle-available", {
+        detail: { index: 0, available: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    await press(el);
+    const { value, body } = submit.mock.calls[0]![0].detail;
+    expect(value.available).toBe(available);
+    expect(body.available).toBe(available ? undefined : false);
+    expect(
+      body.variants.map((v: { id: string; available?: boolean }) => [v.id, v.available]),
+    ).toEqual([
+      ["large", true],
+      ["small", undefined],
+    ]);
+    expect(value.variants.map((v: { available: boolean }) => v.available)).toEqual([true, true]);
+  },
+);
+it("sends availability for a new product and a new variant", async () => {
+  const el = await mount({
+    ...full,
+    id: undefined,
+    variants: [{ ...full.variants[0]!, id: undefined }],
+  });
+  const submit = submissions(el);
+  await type(el, "name", "New name");
+  await press(el);
+  expect(submit.mock.calls[0]![0].detail.body.available).toBe(true);
+  expect(submit.mock.calls[0]![0].detail.body.variants[0].available).toBe(true);
+});
