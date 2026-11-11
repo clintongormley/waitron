@@ -18,6 +18,7 @@ import {
   installedFailures,
   rigLine,
   installSucceeded,
+  bootstrapSucceeded,
 } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
@@ -258,26 +259,29 @@ async function installedRun() {
   const tpmRoot = join(process.env.XDG_RUNTIME_DIR || "/run", `waitron-b3-tpm-${process.pid}`);
   await mkdir(tpmRoot, { mode: 0o700 });
   const tpmSocket = join(tpmRoot, "control.sock");
-  const tpm = spawn(
-    "swtpm",
-    [
-      "socket",
-      "--tpm2",
-      "--tpmstate",
-      `dir=${tpmRoot}`,
-      "--ctrl",
-      `type=unixio,path=${tpmSocket}`,
-      "--flags",
-      "not-need-init,startup-clear",
-    ],
-    { stdio: ["ignore", "ignore", "pipe"] },
-  );
-  tpm.stderr.on("data", (bytes) => appendFileSync(join(runDir, "tpm.log"), bytes));
+  let tpm;
   const stopTpm = () => {
-    if (tpm.exitCode === null && tpm.signalCode === null) tpm.kill("SIGTERM");
+    if (tpm && tpm.exitCode === null && tpm.signalCode === null) tpm.kill("SIGTERM");
   };
-  process.once("exit", stopTpm);
-  try {
+  async function startTpm() {
+    stopTpm();
+    if (tpm && tpm.exitCode === null && tpm.signalCode === null)
+      await new Promise((done) => tpm.once("exit", done));
+    tpm = spawn(
+      "swtpm",
+      [
+        "socket",
+        "--tpm2",
+        "--tpmstate",
+        `dir=${tpmRoot}`,
+        "--ctrl",
+        `type=unixio,path=${tpmSocket}`,
+        "--flags",
+        "not-need-init,startup-clear",
+      ],
+      { stdio: ["ignore", "ignore", "pipe"] },
+    );
+    tpm.stderr.on("data", (bytes) => appendFileSync(join(runDir, "tpm.log"), bytes));
     await new Promise((done, reject) => {
       tpm.once("error", reject);
       tpm.once("exit", (code) => reject(new Error(`TPM exited ${code}`)));
@@ -293,14 +297,18 @@ async function installedRun() {
       };
       void check();
     });
-    await installedDiskRun(resolve(argument), tpmRoot, tpmSocket);
+    return tpmSocket;
+  }
+  process.once("exit", stopTpm);
+  try {
+    await installedDiskRun(resolve(argument), tpmRoot, startTpm);
   } finally {
     stopTpm();
     process.removeListener("exit", stopTpm);
   }
 }
 
-async function installedDiskRun(stick, tpmRoot, tpmSocket) {
+async function installedDiskRun(stick, tpmRoot, startTpm) {
   const output = dirname(stick);
   const target = join(runDir, "target.img");
   await writeFile(target, "");
@@ -336,7 +344,7 @@ async function installedDiskRun(stick, tpmRoot, tpmSocket) {
     const loop = execFileSync("losetup", ["--find", "--show", "--partscan", target], {
       encoding: "utf8",
     }).trim();
-    const mapping = `waitron-k-b315-${process.pid}`;
+    const mapping = `waitron-b3-proof-${process.pid}`;
     let proofMounted = false,
       opened = false,
       dataMounted = false;
@@ -384,6 +392,7 @@ async function installedDiskRun(stick, tpmRoot, tpmSocket) {
   const bootRead =
     'echo B3_MEASURED:$(sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI | sha256sum | cut -d" " -f1)';
   async function boot(name, source, marker, deadline) {
+    const tpmSocket = await startTpm();
     const phaseStarted = Date.now();
     const monitor = join(runDir, `${name}-monitor.sock`);
     const args = [
@@ -554,10 +563,7 @@ async function installedDiskRun(stick, tpmRoot, tpmSocket) {
       throw new Error("install service did not report success");
     const bootstrap = await boot("bootstrap", false, "B3_DISK_START:", 300000);
     await bootstrap.finish();
-    if (
-      !bootstrap.serial.includes('"action":"restart"') ||
-      /Starting Docker|Started Docker|B3_INSTALLED:/.test(bootstrap.serial)
-    )
+    if (!bootstrapSucceeded(bootstrap.serial))
       throw new Error("bootstrap did not restart without Docker");
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
     const { chromium } = require("playwright");

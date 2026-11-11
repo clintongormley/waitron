@@ -123,7 +123,8 @@ Guest package notices are kept under `/app/third-party`.
 
 Both routes are development rehearsals in QEMU with Secure Boot off. The original
 `recipe-setup` still supplies a temporary startup unit and boots its kernel directly.
-Use only disposable disks with no venue data: a broken seal has no supported recovery in this cut.
+Use only disposable disks with no venue data: a broken seal or interrupted enrollment can cause repeated
+reboots, with no supported recovery in this cut; reinstall the disk.
 Virtual TPM startup is a development check. Signed boot/Secure Boot, another-stick refusal,
 missing-container/no-console behavior, the failure page, recovery screen and key sheets,
 update resealing, kiosk and physical box/stick/Android qualification remain release gates.

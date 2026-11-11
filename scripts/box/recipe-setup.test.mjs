@@ -25,6 +25,21 @@ const complete = {
   },
 };
 
+it.each([
+  ['B3_DISK_START:{"action":"restart"}\n', true],
+  ['B3_DISK_START:{"action":"ready"}\n', false],
+  ...[
+    "Starting docker.service - Docker Application Container Engine...",
+    "Started docker.service - Docker Application Container Engine.",
+    "Starting docker.socket - Docker Socket for the API...",
+    "Listening on docker.socket - Docker Socket for the API.",
+    "Starting \u001b[0;1;39mdocker.service\u001b[0m - Docker Application Container Engine...",
+  ].map((line) => [`${line}\nB3_DISK_START:{"action":"restart"}\n`, false]),
+])("checks the bootstrap restart without Docker (%j)", async (serial, expected) => {
+  const { bootstrapSucceeded } = await import("./recipe-setup.mjs");
+  expect(bootstrapSucceeded(serial)).toBe(expected);
+});
+
 describe("recipe boot evidence", () => {
   it.each(["", undefined])(
     "names a missing image setting before using a path (%s)",

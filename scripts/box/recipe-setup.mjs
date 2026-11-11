@@ -1,4 +1,15 @@
 import { WAITRON_LAYOUTS } from "./disk-state.mjs";
+import { stripVTControlCharacters } from "node:util";
+
+export function bootstrapSucceeded(serial) {
+  const plain = stripVTControlCharacters(serial);
+  return (
+    plain.includes('"action":"restart"') &&
+    !/(?:Starting|Started|Listening on)[^\r\n]*docker\.(?:service|socket)\b|B3_INSTALLED:/.test(
+      plain,
+    )
+  );
+}
 
 /** Compare the artifact and guest evidence before accepting a recipe boot. */
 export function recipeFailures(expected, observed) {

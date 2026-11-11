@@ -386,9 +386,13 @@ describe("installed startup", () => {
 });
 
 describe("the startup-image unlock", () => {
-  it.each([0, 1])(
-    "records the chip result and extends once before fallback (chip exit %s)",
-    (chipExit) => {
+  it.each([
+    { chipExit: 0, extendExit: 0, status: 0, markerText: "chip\n", fallback: 0, reboots: 0 },
+    { chipExit: 1, extendExit: 0, status: 0, markerText: "bootstrap\n", fallback: 1, reboots: 0 },
+    { chipExit: 0, extendExit: 1, status: 1, markerText: "failed\n", fallback: 0, reboots: 1 },
+  ])(
+    "records the opening and stops after an extension failure (%j)",
+    ({ chipExit, extendExit, status, markerText, fallback, reboots }) => {
       const folder = mkdtempSync(join(scratch, "unlock-"));
       mkdirSync(join(folder, "devices"));
       writeFileSync(join(folder, "devices", "test-luks"), "");
@@ -404,24 +408,26 @@ describe("the startup-image unlock", () => {
       writeFileSync(bashEnv, 'getarg() { echo "test-luks"; }\n');
       const writes = join(folder, "writes");
       writeFileSync(writes, "");
-      const result = spawnSync("bash", ["-c", '. "$1"; . "$1"', "hook", script], {
+      const result = spawnSync("bash", ["-ec", '. "$1"; . "$1"', "hook", script], {
         env: {
           ...process.env,
           PATH: `${scratch}:${process.env.PATH}`,
           BASH_ENV: bashEnv,
           WRITES: writes,
           CHIP_EXIT: String(chipExit),
+          EXTEND_EXIT: String(extendExit),
           B3_OPEN_MARKER: marker,
         },
         encoding: "utf8",
         timeout: 5000,
       });
-      expect(result.status).toBe(0);
+      expect(result.status).toBe(status);
       const calls = readFileSync(writes, "utf8").trim().split("\n");
       expect(calls.slice(0, 2)).toEqual(["chip", `extend:${chipExit === 0 ? "chip" : "failed"}`]);
       expect(calls.filter((line) => line.startsWith("extend:"))).toHaveLength(1);
-      expect(calls.filter((line) => line.startsWith("cryptsetup open"))).toHaveLength(chipExit);
-      expect(readFileSync(marker, "utf8")).toBe(chipExit === 0 ? "chip\n" : "bootstrap\n");
+      expect(calls.filter((line) => line.startsWith("cryptsetup open"))).toHaveLength(fallback);
+      expect(calls.filter((line) => line === "reboot")).toHaveLength(reboots);
+      expect(readFileSync(marker, "utf8")).toBe(markerText);
     },
   );
 });
