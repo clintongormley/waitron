@@ -382,6 +382,19 @@ describe("tagRelease", () => {
     expect(error?.message).toBe(`${push} exited with status 1`);
     expect(calls).toEqual([...tagPath(), ["git", "tag", "-d", "v1.0.0"]]);
   });
+
+  it("keeps the push's message and says the tag is still here when deleting it also fails", async () => {
+    const push = "git push origin v1.0.0";
+    const remove = "git tag -d v1.0.0";
+    const { calls, error } = await tag({
+      [push]: new Error(`${push} exited with status 1`),
+      [remove]: new Error("git tag exited with status 1"),
+    });
+    expect(error?.message).toBe(
+      `${push} exited with status 1; v1.0.0 is still on this machine: delete it with git tag -d v1.0.0 before trying again`,
+    );
+    expect(calls).toEqual([...tagPath(), ["git", "tag", "-d", "v1.0.0"]]);
+  });
 });
 
 describe("main", () => {

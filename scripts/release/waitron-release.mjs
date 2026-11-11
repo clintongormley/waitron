@@ -152,13 +152,19 @@ export async function tagRelease({ version, run }) {
   try {
     run("git", ["push", "origin", tag], SHOWN);
   } catch (error) {
-    run("git", ["tag", "-d", tag]);
+    try {
+      run("git", ["tag", "-d", tag]);
+    } catch {
+      throw new Error(
+        `${error.message}; ${tag} is still on this machine: delete it with git tag -d ${tag} before trying again`,
+        { cause: error },
+      );
+    }
     throw error;
   }
 }
 
-// The step is the command's words before its first option, after pnpm's `--filter <package>`, so
-// no option's value (a pull request's body, a place) reaches a message.
+// No option's value (a pull request's body, a place) may reach a message.
 function stepName(file, args) {
   const words = args[0] === "--filter" ? args.slice(2) : args;
   const end = words.findIndex((word) => word.startsWith("-"));
