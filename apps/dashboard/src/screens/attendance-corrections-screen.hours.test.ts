@@ -192,7 +192,7 @@ it.each(["light", "dark"] as const)(
       const m = await mountManagerHours({ live: true, theme });
       m.host.style.width = "310px";
       m.data.hours.people[0]!.displayName =
-        "Diego Molina de los Olivos y Fernández — Turno de terraza";
+        "Diego Molina de los Olivos y Fernández — Terrace service shift";
       m.liveData!.invalidate([{ type: "time_entries" }]);
       await openDay(m.root);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));

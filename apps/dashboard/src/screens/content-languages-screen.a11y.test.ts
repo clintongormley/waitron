@@ -267,7 +267,7 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
         {
           language: "ca",
           gaps: [
-            { kind: "product", id: "prod-1", name: "STAFF Pan", reason: "partial" },
+            { kind: "product", id: "prod-1", name: "STAFF Bread", reason: "partial" },
             {
               kind: "section",
               id: "section-1",
@@ -279,7 +279,7 @@ describe.each(["light", "dark"] as const)("content-languages-screen a11y (%s the
         },
         {
           language: "en",
-          gaps: [{ kind: "unit", id: "unit-1", name: "ración", reason: "partial" }],
+          gaps: [{ kind: "unit", id: "unit-1", name: "portion", reason: "partial" }],
         },
       ],
     ],

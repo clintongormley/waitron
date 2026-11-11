@@ -72,7 +72,7 @@ describe.each(["light", "dark"] as const)("add to menus (%s)", (theme) => {
       "dashboard-add-to-menus",
       {
         open: true,
-        productName: "Croquetas",
+        productName: "Croquette",
         menus:
           state === "loading" || state === "load-error" ? null : placementMenus(menus, structures),
         loadError: state === "load-error" ? "The server could not do that." : null,
@@ -105,7 +105,7 @@ describe.each(["light", "dark"] as const)("add to menus (%s)", (theme) => {
 async function mountOpen(theme: "light" | "dark") {
   const { el, host } = await mountWidget<AddToMenus>(
     "dashboard-add-to-menus",
-    { open: true, productName: "Croquetas", menus: placementMenus(menus, structures) },
+    { open: true, productName: "Croquette", menus: placementMenus(menus, structures) },
     theme,
   );
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;

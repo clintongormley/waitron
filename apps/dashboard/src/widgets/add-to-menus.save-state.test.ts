@@ -60,7 +60,7 @@ const structures: MenuStructure[] = [
 async function mount() {
   const { el, host } = await mountWidget<AddToMenus>("dashboard-add-to-menus", {
     open: true,
-    productName: "Croquetas",
+    productName: "Croquette",
     menus: placementMenus(menus, structures),
   });
   await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;

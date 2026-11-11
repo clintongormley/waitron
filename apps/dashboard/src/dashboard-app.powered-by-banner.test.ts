@@ -23,7 +23,7 @@ import { en, es } from "./i18n/strings.js";
 import { nextLogoLoad, png, stubShellApi, type ShellLocale } from "./testing/venue-logo-fixture.js";
 
 const LIGHT = png(120, 40);
-const LONG_NAME = "Restaurantes y Hostelería del Mediterráneo Occidental Sociedad Limitada";
+const LONG_NAME = "Western Mediterranean Restaurant and Hospitality Services Limited Company";
 const never = () => new Promise<Response>(() => {});
 
 function store(answer: unknown): void {

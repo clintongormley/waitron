@@ -1808,7 +1808,7 @@ it.each([
               ...cooked.labels[0]!,
               name: "Rare, seared hard on the outside and left cool and red in the middle",
             },
-            { ...cooked.labels[1]!, name: "Alpuntoperoconelcentrotodavíarosadoyjugoso" },
+            { ...cooked.labels[1]!, name: "Mediumandstillpinkandjuicythroughitscentre" },
             wellDone,
           ],
         },

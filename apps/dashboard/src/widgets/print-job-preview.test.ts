@@ -9,10 +9,10 @@ import { PrintJobPreviewDialog } from "./print-job-preview.js";
 const preview: PrintJobPreview = {
   widthDots: 512,
   columns: 42,
-  text: "Café <img src=x onerror=alert(1)>\nTotal 12.50\n",
+  text: "Coffee <img src=x onerror=alert(1)>\nTotal 12.50\n",
   qrData: ["javascript:alert(1)"],
   blocks: [
-    { kind: "text", text: "Café <img src=x onerror=alert(1)>\nTotal 12.50\n" },
+    { kind: "text", text: "Coffee <img src=x onerror=alert(1)>\nTotal 12.50\n" },
     { kind: "image", width: 8, height: 2, data: "gAE=", qrData: "javascript:alert(1)" },
     { kind: "feed", lines: 5 },
     { kind: "cut" },

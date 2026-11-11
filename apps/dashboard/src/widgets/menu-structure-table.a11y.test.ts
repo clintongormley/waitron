@@ -259,7 +259,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
 
   it("renders accessibly with colour swatches, a product's own, its category's and none, and a section's", async () => {
     const categories: CategorySummary[] = [
-      { id: "c-drinks", name: "Bebidas", parentId: null, color: "#256bb1" },
+      { id: "c-drinks", name: "Drinks", parentId: null, color: "#256bb1" },
     ];
     const painted = [
       { ...product("p-lager", "Lager"), color: null, categoryId: "c-drinks" },

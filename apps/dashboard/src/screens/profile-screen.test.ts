@@ -342,12 +342,12 @@ describe("your profile", () => {
     const { el, api } = await mount();
     const profile = await api.getProfile();
     Object.assign(el, {
-      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], name: "Portátil $&" }] },
+      profile: { ...profile, passkeys: [{ ...profile.passkeys[0], name: "Laptop $&" }] },
     });
     await flush(el);
     expect(
       el.shadowRoot!.querySelector("[data-test=remove-passkey]")!.getAttribute("aria-label"),
-    ).toBe(t("profile.remove_passkey_name").split("{name}").join("Portátil $&"));
+    ).toBe(t("profile.remove_passkey_name").split("{name}").join("Laptop $&"));
   });
   it("writes a passkey's date in the dashboard's language, not the browser's", async () => {
     const createdAt = "2026-09-29T12:00:00Z";

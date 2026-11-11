@@ -285,7 +285,7 @@ describe("dashboard attendance corrections", () => {
       await page.viewport(390, 950);
       try {
         const m = await mount({
-          workerName: "Diego Molina de los Olivos y Fernández — Turno de terraza",
+          workerName: "Diego Molina de los Olivos y Fernández — Terrace service shift",
         });
         m.host.setAttribute("data-theme", theme);
         m.host.style.width = "310px";
