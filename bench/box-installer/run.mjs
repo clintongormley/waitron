@@ -520,7 +520,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       );
       args.push(
         "-smbios",
-        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-disk-start.service=${Buffer.from(diskUnit + `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}; ${bootRead}'\n`).toString("base64")}`,
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-disk-start.service=${Buffer.from(diskUnit + `\n[Service]\nExecStartPre=/bin/sh -ec '${pcrRead}; ${bootRead}; echo B3_RETURN_FIRMWARE:$(efibootmgr -v | base64 -w0); echo B3_RETURN_ROOT:$(findmnt -n -o UUID /)'\n`).toString("base64")}`,
       );
     }
     if (!source || returning) {
@@ -535,9 +535,13 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const deny = `const net=require("node:net");const c=net.connect("/run/waitron-box/box.sock");c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>{c.destroy();process.exitCode=1});c.on("error",e=>{if(e.code!=="EACCES")throw e;console.log("B3_SOCKET_DENIED:EACCES")})`;
       const probe = (code, denied = false) =>
         `printf %%s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
-      const checks = caseName === "existing-stick" ? `; ${probe(clock)}; ${probe(deny, true)}` : "";
+      const stayed = `const fs=require("node:fs");const until=Date.now()+180000;let last="not read";function poll(){try{last=fs.readFileSync("/var/lib/docker/volumes/waitron_state/_data/recovery.json","utf8");const state=JSON.parse(last);if(state.failures===0&&state.level==="normal"){console.log("B3_STAYED_UP:"+last.trim());return;}}catch(e){last=e.message;}if(Date.now()>=until)throw Error("startup counter did not clear: "+last);setTimeout(poll,250);}poll();`;
+      const checks =
+        caseName === "existing-stick"
+          ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayed)}` : ""}`
+          : "";
       const returned =
-        "echo B3_RETURN_FIRMWARE:$(efibootmgr -v | base64 -w0); echo B3_RETURN_ROOT:$(findmnt -n -o UUID /); curl -kfsS --max-time 10 https://127.0.0.1/health >/run/b3-health.json; echo B3_RETURN_HEALTH:$(cat /run/b3-health.json); echo B3_RETURN_READY";
+        "curl -kfsS --max-time 10 https://127.0.0.1/health >/run/b3-health.json; echo B3_RETURN_HEALTH:$(cat /run/b3-health.json); echo B3_RETURN_READY";
       args.push(
         "-smbios",
         `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${returning ? returned : `${copy}${checks}`}'\n`).toString("base64")}`,
@@ -756,7 +760,12 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
     const require = createRequire(new URL("../../apps/setup/package.json", import.meta.url));
     const { chromium } = require("playwright");
     async function inspect(name) {
-      const guest = await boot(name, false, "B3_INSTALLED:", 300000);
+      const guest = await boot(
+        name,
+        false,
+        "B3_INSTALLED:",
+        caseName === "existing-stick" && name === "again" ? 480000 : 300000,
+      );
       try {
         const observed = JSON.parse(rigLine(guest.serial, "B3_INSTALLED:"));
         if (caseName === "existing-stick") {
@@ -846,6 +855,13 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
                 throw new Error(`tag writer deadline: ${JSON.stringify(body)}`);
               await new Promise((done) => setTimeout(done, 200));
             }
+            const clearedBy = Date.now() + 200000;
+            while (!rigLine(guest.serial, "B3_STAYED_UP:")) {
+              if (Date.now() >= clearedBy)
+                throw new Error("guest did not report its cleared startup counter");
+              await new Promise((done) => setTimeout(done, 100));
+            }
+            observed.stayedUp = JSON.parse(rigLine(guest.serial, "B3_STAYED_UP:"));
           }
           await writeFile(join(runDir, `${name}-observed.json`), JSON.stringify(observed, null, 2));
         } finally {
