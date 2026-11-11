@@ -84,20 +84,30 @@ Mantén este equipo encendido mientras devuelve sus registros de facturación al
 Actualiza la página para comprobar el progreso. Los reembolsos con tarjeta en curso se devuelven
 con sus pagos originales para que el principal pueda comprobar su resultado. El envío a Hacienda
 continúa en el principal. La confirmación significa que cada dato devuelto se ha recibido o se ha
-cubierto mediante una diferencia de pago aceptada expresamente; para una diferencia aceptada, el
-principal conserva sus propios datos de pago. Restablecer el equipo anterior borra sus datos del
+cubierto mediante una diferencia de factura o pago aceptada expresamente; para una diferencia aceptada, el
+principal conserva su propio registro de factura o datos de pago. Restablecer el equipo anterior borra sus datos del
 local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen
 en esta devolución; conserva los datos del equipo anterior si los necesitas.
 
 Si la devolución se detiene porque hay diferencias en los datos de facturación o de pago, mantén
-ambos equipos encendidos y conserva sus datos. Una persona administradora puede consultar y
-aceptar una diferencia de pago admisible mediante la API interna del principal; aún no hay una
-pantalla para hacerlo. Después, apaga y enciende el equipo detenido para reintentarlo. Repite si
-otro lote se detiene por una diferencia de pago.
-Las diferencias de factura, posición en la cadena y corrección siguen siendo avisos y aún no se
-pueden aceptar. Los registros posteriores a una factura con diferencias pueden seguir pendientes
-en este equipo. Puedes restablecerlo, pero eso borra sus datos del local sin que la devolución esté
-confirmada.
+ambos equipos encendidos y conserva sus datos. Una persona administradora puede consultar las
+diferencias admisibles con GET `/management-api/return-clashes` en el principal. Aún no hay una
+pantalla para hacerlo.
+
+Antes de aceptar una diferencia de factura, descarga ambas versiones con GET
+`/management-api/return-clashes/:clashId/download`. El archivo de texto tiene etiquetas en inglés
+y conserva los valores fiscales originales. Comprueba el estado de envío, el CSV y el error de
+cada versión. La versión anterior puede haberse enviado ya; el principal no enviará esa versión
+en conflicto. Conserva la descarga para gestionarla manualmente: las pruebas locales sobreviven
+al reinicio, pero no se incluyen en las copias de seguridad del local ni en el próximo traspaso.
+
+Acepta una diferencia admisible con POST `/management-api/return-clashes/:clashId/accept`, indicando
+`actionKey` y `reason`. Después, apaga y enciende el equipo detenido para reintentarlo. Los registros
+posteriores pueden seguir bloqueados y los lotes posteriores no se han descargado; repite para
+cada diferencia posterior admisible. Es una protección ante un fallo, un disco dañado o una
+manipulación: un traspaso normal inicia una nueva serie de facturas y cadena. Puedes restablecer
+el equipo, pero se borran sus datos del local, incluidos los registros aún pendientes. Descargar
+un lote no guarda esos registros posteriores.
 
 Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos equipos y manténlos
 encendidos mientras se vuelve a intentar la devolución. No restablezcas el equipo anterior.

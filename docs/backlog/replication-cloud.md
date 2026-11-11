@@ -529,10 +529,13 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
-Invoice, chain-position and correction clashes still stop the return; their acceptance rule
-awaits the owner's answer. They warn and never prevent reset. Eligible payment clashes can be
-inspected and specifically accepted through the current main's internal API, with no screen yet.
-The stopped box must be switched off and on to retry; later clashing batches need separate decisions.
+Eligible invoice, chain-position and correction clashes can be downloaded as readable text and
+specifically accepted through the current main's internal API, alongside payment clashes. There
+is no screen yet. The download shows both versions and their filing status; the new main does not
+submit the discarded version, which may already have an AEAT answer. Later missing records stay
+blocked after an accepted record clash; later batches have not been downloaded. Reset warns and
+remains available. Keep the file: node-local evidence survives restart but not venue backup or the
+next handover. The stopped box must be switched off and on to retry.
 Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain open.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
@@ -1000,6 +1003,12 @@ acceptance rule in fiscal-verifactu”; `filing-cases.ts` remains untouched. The
 payment-only [PR2 plan](../superpowers/plans/2026-11-11-a1342-clash-acceptance.md) at 16:59 on
 11 November. Node-local signed evidence and decisions drive retry; venue activity history retains
 who accepted which clash across backup and handover, without deciding product behaviour.
+
+**2026-11-12, A1342-3:** The watcher cleared the [record-clash plan](../superpowers/plans/2026-11-11-a1342-3-record-clash-acceptance.md)
+at 23:21 on 11 November, inside the owner's acceptance and download ask. Option B keeps an
+already-answered old record eligible, shows its status and warns that the new main will not submit
+it. An accepted clash never allows a missing suffix to be inserted. Evidence and decisions reuse
+PR2's node-local events; downloading is not an extra acknowledgement or permission gate.
 
 The owner said at 16:25 on 11 November, recorded by the watcher in Lane J's `questions.md`:
 “i don't think we should refuse, just warn. It may be impossible to transfer the data for some

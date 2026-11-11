@@ -76,18 +76,28 @@ If the page offers **Progress**, use it to finish the handover on the spare.
 Keep this box running while it returns its invoice records to the main box. Refresh the page to
 check progress. Card refunds still in progress go with their original payments so the main box
 can check their outcome. Filing with the tax agency continues on the main box. Confirmation means
-every returned fact was either received or covered by a specifically accepted payment difference;
-for an accepted difference, the main box keeps its own payment facts.
+every returned fact was either received or covered by a specifically accepted invoice or payment difference;
+for an accepted difference, the main box keeps its own invoice record or payment facts.
 Resetting the old box deletes its venue data, including sale lines and local backups. Those are
 not included in this return; keep the old box's data if you need them.
 
 If the return stops because invoice or payment facts differ, keep both boxes running with their
-data intact. An administrator can inspect and accept an eligible payment difference through the
-main box's internal API; there is no screen for this yet. After acceptance, switch the stopped box
-off and on to retry. Repeat if a later batch stops on another payment difference.
-Invoice, chain-position and correction clashes still only warn and cannot be accepted yet.
-Records after a clashing invoice may still be waiting on this box. Reset remains available, but
-it deletes this box's venue data before the return is confirmed.
+data intact. An administrator can inspect eligible differences with GET
+`/management-api/return-clashes` on the main box. There is no screen for this yet.
+
+Before accepting an invoice difference, download both versions with GET
+`/management-api/return-clashes/:clashId/download`. The text file has English labels and preserves
+the original fiscal values. Check each version's filing status, tax-agency receipt and error.
+The old version may already have been submitted; the new main will not submit that conflicting
+version. Keep the download for manual handling: the local evidence survives a restart, but is not
+included in venue backups or the next handover.
+
+Accept an eligible difference with POST `/management-api/return-clashes/:clashId/accept`, giving
+`actionKey` and `reason`. Then switch the stopped box off and on to retry. Later records may stay
+blocked and later batches have not been downloaded; repeat for any later eligible difference.
+This is a safety net for a bug, damaged disk or tampering: normal takeover starts a new invoice
+series and chain. Reset remains available, but deletes this box's venue data, including any
+records still waiting. Downloading one batch does not save those later records.
 
 If the page reports a clock difference, check the clocks on both boxes and keep both running
 while the return retries. Do not reset the old box.

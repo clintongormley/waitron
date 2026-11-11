@@ -1,5 +1,9 @@
 # A1342 PR2: accept an exact returned-payment clash
 
+**2026-11-12:** A1342-3 extends this payment-only cut with invoice/position/correction downloads
+and acceptance. Its [watcher-cleared plan](2026-11-11-a1342-3-record-clash-acceptance.md) supersedes
+the remaining-clashes limitation below; missing suffix records still prevent confirmation.
+
 **Watcher-cleared 2026-11-11 16:59**, with the changes below; separate Sol/high draft checked by Codex, Claude read 341 seconds, all ten findings accepted. PR2 remains **owner-landed**, with three active hours to open its PR. Authority: Lane J `questions.md`, WATCHER 2026-11-10 21:41 records owner choice “1”: a signed record of who accepted which clash, checked against signed return evidence, outside the filing-case slot. The 19:30 split also says “no new acceptance rule in fiscal-verifactu”: `filing-cases.ts` stays untouched. The owner’s “1” authorises this signed-record shape; the watcher cleared this plan’s details, not the owner.
 
 **Usable finish.** An administrator inspects/accepts an exact payment discrepancy through the current main’s internal API, then switches the stopped box off and on to retry. Later AEAT rejection stays correctable. No screen; Lane L owns fiscal case UI. PR1 is already on main at `f0ccb1afba`.

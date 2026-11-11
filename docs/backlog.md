@@ -1870,10 +1870,9 @@ Not in any track until the standalone primary is done.
   plan yet builds its path, including whose invoice series the new main box takes. A947 3b's table
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
-- **A1342: remaining returned-record clashes and facts.** Invoice, chain-position and correction
-  clashes still need an acceptance rule, pending the owner's answer. Exact payment-clash acceptance
-  is an internal API; sale lines, reprints, the returned-invoices reporting marker and real-box
-  qualification remain open. A filing result held only by the old box is not applied to a record
+- **A1342: remaining returned-record facts and qualification.** Exact invoice/position/correction
+  clash download and acceptance, like payment-clash acceptance, are internal APIs without a screen.
+  Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain open. A filing result held only by the old box is not applied to a record
   already on the new main; a late payment on an older box's chain is not included in this return.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 

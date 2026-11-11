@@ -543,7 +543,7 @@ it("downloads current readable record evidence with permission before lookup, wi
       headers: { cookie: session.cookie },
     });
     const { clashes } = (await listing.json()) as {
-      clashes: { clashId: string; downloadUrl: string; readable?: string }[];
+      clashes: { clashId: string; downloadUrl: string; readable?: string; next: string }[];
     };
     const clash = clashes[0]!;
     expect(clash.readable).toBeUndefined();
@@ -552,6 +552,8 @@ it("downloads current readable record evidence with permission before lookup, wi
       sql`select detail from node_handover_events where kind = 'return-clash-evidence'`,
     );
     expect(retained.map((row) => row.detail).join("")).not.toContain('"readable"');
+    expect(clash.next).toContain("Download both versions");
+    expect(clash.next).toContain("Later batches have not been downloaded");
     readable = "Old-box record\nInvoice: old/1\nFiling status: Accepted\nCSV: current-csv";
     const response = await reader.request(clash.downloadUrl, {
       headers: { cookie: session.cookie },
@@ -564,6 +566,19 @@ it("downloads current readable record evidence with permission before lookup, wi
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(await response.text()).toBe(readable);
+    await database.withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, session.cookie));
+    const accepted = await app.request(`/management-api/return-clashes/${clash.clashId}/accept`, {
+      method: "POST",
+      headers: { cookie: session.cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        actionKey: "record-clash",
+        reason: "Handle the old invoice manually",
+      }),
+    });
+    expect(accepted.status).toBe(200);
+    const decision = (await accepted.json()) as { next: string };
+    expect(decision.next).toContain("Later records may remain blocked");
+    expect(decision.next).toContain("Resetting");
     inspect.mockResolvedValue([]);
     const stale = await reader.request(clash.downloadUrl, { headers: { cookie: session.cookie } });
     expect(stale.status).toBe(409);

@@ -10,6 +10,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import type { BackupQuery } from "@waitron/store";
+import { inspectReturnedRecords, recordCounterparts } from "./handover-return-clashes.js";
 import { checkFiscalChains } from "./handover-chain-check.js";
 import { openFilingCase, openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { AppError } from "@waitron/shared";
@@ -230,45 +231,45 @@ export async function receiveReturnedOriginals(
     if (Date.parse(recordAt) > now.getTime() + CLOCK_BEHIND_MARGIN_MS)
       throw new AppError("fiscal.return_clock_ahead", { recordAt, clockAt: now.toISOString() });
   }
+  const acceptedRecords = new Set(
+    (accepted.length ? inspectReturnedRecords(tx, sourceNodeId, returned) : [])
+      .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
+      .map((clash) => (clash.incoming as ReturnRow).id),
+  );
   const allowed: ReturnRow[] = [];
   let blocked = false;
+  let skippedRecord = false;
   for (const record of [...returned.records].sort(
     (a, b) => Number(a.secuencia) - Number(b.secuencia),
   )) {
     if (blocked) continue;
-    const own = held(tx, "registros_facturacion", record.id);
-    const [collision] = tx.all<ReturnRow>(sql`select * from registros_facturacion where
-      (node_id = ${record.node_id} and secuencia = ${record.secuencia}) or
-      (${record.corrects_registro_id} is not null and corrects_registro_id = ${record.corrects_registro_id}) or
-      (${record.corrects_registro_id} is null and corrects_registro_id is null and
-        id_emisor_factura = ${record.id_emisor_factura} and num_serie_factura = ${record.num_serie_factura}
-        and fecha_expedicion_factura = ${record.fecha_expedicion_factura}
-        and tipo_registro = ${record.tipo_registro}) limit 1`);
-    const conflict = own
-      ? canonicalize(own) !== canonicalize(record)
-        ? own
-        : undefined
-      : collision;
-    if (conflict) {
+    const counterparts = recordCounterparts(tx, record);
+    const exact = counterparts.some((own) => canonicalize(own) === canonicalize(record));
+    if (acceptedRecords.has(record.id)) {
+      skippedRecord = true;
+    } else if ((skippedRecord && !exact) || (counterparts.length > 0 && !exact)) {
       blocked = true;
     } else allowed.push(record);
   }
-  const needed = new Set(allowed.map((row) => row.sale_id));
-  function includeParent(id: ReturnRow[string]) {
-    const sale = returned.sales.find((row) => row.id === id);
-    const parents = [
-      sale?.corrects_sale_id,
-      ...returned.substitutions
-        .filter((row) => row.substitution_sale_id === id)
-        .map((row) => row.substituted_sale_id),
-    ];
-    for (const parent of parents)
-      if (parent && !needed.has(parent)) {
-        needed.add(parent);
-        includeParent(parent);
-      }
+  function saleDependencies(records: ReturnRow[]) {
+    const ids = new Set(records.map((row) => row.sale_id));
+    for (const id of ids) {
+      const sale = returned.sales.find((row) => row.id === id);
+      if (sale?.corrects_sale_id) ids.add(sale.corrects_sale_id);
+      for (const row of returned.substitutions)
+        if (row.substitution_sale_id === id) ids.add(row.substituted_sale_id);
+    }
+    return ids;
   }
-  for (const id of needed) includeParent(id);
+  const needed = saleDependencies(allowed);
+  const keptSales = saleDependencies(
+    returned.records.filter((row) => !acceptedRecords.has(row.id)),
+  );
+  const discardedSales = new Set(
+    [...saleDependencies(returned.records.filter((row) => acceptedRecords.has(row.id)))].filter(
+      (id) => !keptSales.has(id) && !held(tx, "sales", id),
+    ),
+  );
   for (const device of returned.devices) {
     if (held(tx, "devices", device.id)) continue;
     const [profile] = tx.all<ReturnRow>(sql`select id from device_profiles order by id limit 1`);
@@ -455,6 +456,16 @@ export async function receiveReturnedOriginals(
       if (
         ["tenders", "tender_refunds", "sale_settlements"].includes(table) &&
         acceptedSales.has(String(row.sale_id))
+      )
+        continue;
+      if (
+        (table === "registros_facturacion" && acceptedRecords.has(row.id)) ||
+        (table === "sales" && discardedSales.has(row.id)) ||
+        (table !== "registros_facturacion" &&
+          table !== "sales" &&
+          discardedSales.has(
+            table === "sale_substitutions" ? row.substitution_sale_id : row.sale_id,
+          ))
       )
         continue;
       const own = held(tx, table, row.id);

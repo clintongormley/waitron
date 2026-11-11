@@ -30,6 +30,9 @@ import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./members
 import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-records.js";
 import "./errors.js";
 
+const RECORD_WARNING =
+  "The new main will not submit the old box's conflicting record. Check its filing status and tax-agency receipt; it may already have been submitted. Later records may remain blocked. Later batches have not been downloaded. Resetting the old box deletes those records too, including sale lines and local backups.";
+
 type Deps = ReturnRecordsDeps & { requireWritable(): void };
 export function refuseReturn(reason: string): never {
   throw new AppError("handover.return_refused", { reason });
@@ -279,6 +282,7 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
               ...(clash.kind === "record"
                 ? {
                     downloadUrl: `/management-api/return-clashes/${clashId}/download`,
+                    next: `Download both versions before accepting. ${RECORD_WARNING}`,
                   }
                 : {}),
               eligible: evidence.current.some(
@@ -322,6 +326,7 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
     run(c, log, async () => {
       const token = requireManagementSession(c);
       const raw = await readJsonBody<unknown>(c);
+      let next = "Restart the stopped box; repeat for any later clashing batch.";
       const result = await withNodeTransaction(deps.node, async (node) => {
         const decision = await withTransaction(deps.db, async (tx) => {
           const personId = await authorize(tx, token);
@@ -347,6 +352,8 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
           );
           if (!group) throw new AppError("handover.return_clash_not_found", { clashId });
           const evidence = await readEvidence(deps, group, tx);
+          if (group.clashes.some((clash) => clash.clashId === clashId && clash.kind === "record"))
+            next = `Keep the download for manual handling. Restart the stopped box to retry; the return may stay unconfirmed. ${RECORD_WARNING}`;
           for (const event of await events(deps, "return-clash-acceptance", node)) {
             const prior = await decisionBody(deps, event);
             if (prior.body.actionKey === raw.actionKey || prior.body.evidenceDigest === clashId) {
@@ -399,7 +406,7 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
       c.header("Cache-Control", "no-store");
       return c.json({
         decision: result,
-        next: "Restart the stopped box; repeat for any later clashing batch.",
+        next,
       });
     }),
   );
