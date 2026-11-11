@@ -301,6 +301,9 @@ it("waits for a complete serial record before parsing its JSON", async () => {
   expect(rigLine('kernel boot\nB3_INSTALLED:{"uuid":"root"}\r\n', "B3_INSTALLED:")).toBe(
     '{"uuid":"root"}',
   );
+  expect(rigLine('\u001b[?25hB3_INSTALLED:{"uuid":"root"}\r\n', "B3_INSTALLED:")).toBe(
+    '{"uuid":"root"}',
+  );
 });
 
 it.each([

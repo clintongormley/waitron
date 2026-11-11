@@ -101,7 +101,7 @@ export function installedFailures(expected, installedUuid, first, again) {
 }
 
 export function rigLine(serial, prefix) {
-  return serial
+  return stripVTControlCharacters(serial)
     .split(/\r?\n/)
     .slice(0, -1)
     .find((line) => line.startsWith(prefix))
