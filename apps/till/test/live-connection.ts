@@ -5,6 +5,7 @@ export function liveReadFixture() {
     types: readonly string[];
     receive: (name: string, data: string) => void;
     signal?: AbortSignal;
+    end(): void;
   }[] = [];
   return {
     reads,
@@ -13,10 +14,10 @@ export function liveReadFixture() {
       receive: (name: string, data: string) => void,
       options: { signal?: AbortSignal } = {},
     ) {
-      reads.push({ types, receive, signal: options.signal });
-      return new Promise<void>((resolve) =>
-        options.signal?.addEventListener("abort", () => resolve(), { once: true }),
-      );
+      return new Promise<void>((resolve) => {
+        reads.push({ types, receive, signal: options.signal, end: resolve });
+        options.signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
     },
     event(name: string, data = "{}") {
       reads.at(-1)!.receive(name, data);
