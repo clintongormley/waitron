@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PAIRING_HOLD_MS, createPairingMode } from "./pairing-mode.js";
+import { LiveEvents } from "./live-api.js";
 
 function atClock() {
   let t = 1_000;
@@ -11,6 +12,48 @@ const ids = () => {
 };
 
 describe("createPairingMode", () => {
+  it("publishes opening, renewal, claims and release to the live bus", () => {
+    const bus = new LiveEvents();
+    const seen: string[] = [];
+    bus.subscribe((event) => {
+      if (event.kind === "change") seen.push(...event.change.resources.map((r) => r.type));
+    });
+    const mode = createPairingMode({
+      changed: () => bus.publish({ resources: [{ type: "pairing" }] }),
+    });
+    const { holdId } = mode.open();
+    expect(seen).toEqual(["pairing"]);
+    mode.renew(holdId);
+    mode.claim("request-1", { holdId, sessionKey: "key", personName: "Alex" });
+    expect(seen).toEqual(["pairing", "pairing", "pairing"]);
+    mode.release(holdId);
+    mode.dropClaim("request-1");
+    expect(seen).toEqual(["pairing", "pairing", "pairing", "pairing", "pairing"]);
+  });
+
+  it("publishes a hold's lapse without waiting for a reader", async () => {
+    vi.useFakeTimers();
+    const bus = new LiveEvents();
+    const seen: string[] = [];
+    bus.subscribe((event) => {
+      if (event.kind === "change") seen.push(...event.change.resources.map((r) => r.type));
+    });
+    const mode = createPairingMode({
+      holdMs: 1000,
+      changed: () => bus.publish({ resources: [{ type: "pairing" }] }),
+    });
+    try {
+      mode.open();
+      await vi.advanceTimersByTimeAsync(999);
+      expect(seen).toEqual(["pairing"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(seen).toEqual(["pairing", "pairing"]);
+      expect(mode.isOpen()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("is shut on a fresh holder — a restart never inherits an open door", () => {
     const mode = createPairingMode();
     expect(mode.isOpen()).toBe(false);
