@@ -276,20 +276,6 @@ carry none.
   `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
   reaching `refused`.
 
-## The bucket client's limits (A44, #676) — what is still open
-
-`createS3ObjectStore` gives a
-request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-`packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
-body then stalls is not bounded by that limit, only by its caller cancelling the call
-(`packages/stream/src/s3-store.cancel.test.ts`), so a call nobody cancels can still wait on it;
-the idle limit is per request, not per call, so a listing of many pages, or a bucket
-answering each request just inside the limit, can take longer; a bucket that takes more than 30
-seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off;
-Amazon S3 answered one delete of 1,000 tiny keys in 1,040 ms on 2026-10-14 (A538-10), and other
-providers, and larger or busier buckets, were not measured; and the idle limit's tests run the
-handler's below-6,000 ms path, while its production path was measured by hand, not by a test.
-
 ## The status and `errorName` on the stream's log lines other than the pause check's 403 were shown by reading
 
 - On 2026-10-14 Amazon S3's 403 to the paused supervisor's listing was logged as
@@ -1556,19 +1542,6 @@ once released. Belongs with A1016.
 - **The recovery page says the start "deleted what it could make again"; the Box status page says
   "files the box no longer needs".** One wording for the same set. Left open by A798-B slice 7.
 
-## Bundle: Bucket calls always end
-
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **`S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s**
-  (`packages/stream/src/s3-store.ts`) with different error codes, and only the file store's refuses
-  a repeated key or bad size and counts `NoSuchKey` as deleted; share them, deciding whether the
-  bucket stream takes those checks too. Left open by A538.
-- **The bucket client's limits (A44, #676) — what is still open.** `createS3ObjectStore` gives a
-  request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
-  `packages/stream/src/s3-client.ts`).
-  [Detail](box.md#the-bucket-clients-limits-a44-676--what-is-still-open)
-
 ## Bundle: Refuse folders that cannot be safe
 
 1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
@@ -1579,6 +1552,19 @@ once released. Belongs with A1016.
   stack during A538-6's visual check). That line came in with #1628 (A538-4).
 
 ## Decisions and deliberate limits
+
+### The bucket client's limits (A44, #676)
+
+Recorded as limits (watcher, 2026-11-11, A1508). `createS3ObjectStore` gives a request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
+`packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
+body then stalls is not bounded by that limit, only by its caller cancelling the call
+(`packages/stream/src/s3-store.cancel.test.ts`), so a call nobody cancels can still wait on it;
+the idle limit is per request, not per call, so a listing of many pages, or a bucket
+answering each request just inside the limit, can take longer; a bucket that takes more than 30
+seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off;
+Amazon S3 answered one delete of 1,000 tiny keys in 1,040 ms on 2026-10-14 (A538-10), and other
+providers, and larger or busier buckets, were not measured; and the idle limit's tests run the
+handler's below-6,000 ms path, while its production path was measured by hand, not by a test. The settings screen's bucket Test and Save end after a minute or when the browser drops the request (`PROBE_LIMIT_MS`, `apps/server/src/stream-api.ts`).
 
 ### Quiet-box backup read limits
 
