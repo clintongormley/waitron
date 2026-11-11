@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { sales, tenderRefunds } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  invoiceCorrections,
+  sales,
+  tenderRefunds,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -13,6 +20,15 @@ import { parkOrder } from "./working-order.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import {
+  watchDerivationsAndLock,
+  watchedDerivationCount,
+  watchedOrder,
+} from "./testing/watched-scrypt.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 let venue: BillVenue;
 let reasonId: string;
@@ -156,6 +172,48 @@ describe("POST /api/transactions/:saleId/corrections", () => {
       json: { ...first.json, replayed: true },
     });
     expect(counts()).toEqual(after);
+  });
+
+  it("checks the supervisor's PIN once, before the write lock", async () => {
+    const saleId = await sold(["10.00"]);
+    watchDerivationsAndLock(venue.db, supervisor().pin, () =>
+      withTransaction(venue.db, (tx) => tx.execute(sql`select 1`)),
+    );
+    const answer = await correct(saleId, body());
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(watchedDerivationCount()).toBe(1);
+  });
+
+  it("refuses a till whose profile cannot take cash, writing nothing, and corrects once it can", async () => {
+    const saleId = await sold(["10.00"]);
+    const [till] = await venue.db
+      .select({ profileId: deviceProfiles.id, capabilities: deviceProfiles.capabilities })
+      .from(devices)
+      .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+      .where(eq(devices.id, venue.deviceId));
+    const capabilities = till!.capabilities as string[];
+    const setCapabilities = (to: string[]) =>
+      venue.db
+        .update(deviceProfiles)
+        .set({ capabilities: to })
+        .where(eq(deviceProfiles.id, till!.profileId));
+    const corrections = () => venue.db.select().from(invoiceCorrections).all().length;
+    const before = { ...counts(), corrections: corrections() };
+    await setCapabilities(capabilities.filter((entry) => entry !== "take-cash"));
+    try {
+      expect(await correct(saleId, body())).toEqual({
+        status: 403,
+        json: { code: "device.cash_not_allowed", params: {} },
+      });
+      expect({ ...counts(), corrections: corrections() }).toEqual(before);
+    } finally {
+      await setCapabilities(capabilities);
+    }
+    expect(await correct(saleId, body())).toMatchObject({
+      status: 200,
+      json: { replayed: false, refunds: [{ appliedAmount: "5.00" }] },
+    });
   });
 
   it("refuses a reused submission id and an unknown sale", async () => {

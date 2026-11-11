@@ -15,6 +15,7 @@ import {
 import type { Logger } from "./logger.js";
 import { requestCfg } from "./request-config.js";
 import { checkAccess, overrideOf, pathId } from "./tender-refund-api.js";
+import { withCheck } from "./pin-check-ahead.js";
 import { withTenderRefundAuthorization } from "./tender-refund-authorization.js";
 import { overridePinAttempts, STATUS, type TillApiDeps } from "./till-api.js";
 import { requireEconomicWrite } from "./trading-admission.js";
@@ -111,7 +112,7 @@ export function mountInvoiceCorrectionApi(
           sessionId: session.sessionId,
           attempts: overridePinAttempts(pinThrottle, session.deviceId),
         },
-        async (tx, authorization) => {
+        async (tx, authorization, checked) => {
           await requireEconomicWrite(tx, cfg, deps.admission);
           return acceptInvoiceCorrection(
             tx,
@@ -121,10 +122,7 @@ export function mountInvoiceCorrectionApi(
             request,
             {
               personId: session.personId,
-              authz: {
-                sessionId: session.sessionId,
-                ...(override === undefined ? {} : { override }),
-              },
+              authz: { sessionId: session.sessionId, override: withCheck(override, checked) },
               authorization,
             },
           );

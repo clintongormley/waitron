@@ -14,6 +14,7 @@ import {
   verifyThrottledCredential,
   type Authorization,
   type PinAttempts,
+  type SecretCheck,
 } from "@waitron/identity";
 import { MANUAL_PROVIDER, payments } from "@waitron/payments";
 import { AppError, centsToDecimal } from "@waitron/shared";
@@ -70,13 +71,19 @@ async function refundTenderKind(
 
 // The command body shares its authorization's transaction. The earlier PIN verdict grants no
 // authority: session, profile, source zones and permission are read again after queued writes.
+// `body` is handed that verdict so a second check of the same PIN in its transaction need not
+// derive the key again.
 export async function withTenderRefundAuthorization<T>(
   db: Database,
   cfg: DeviceRequestConfig,
   saleId: string,
   request: TenderRefundRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  body: (tx: Transaction, authorization: Authorization) => Promise<T>,
+  body: (
+    tx: Transaction,
+    authorization: Authorization,
+    checked: SecretCheck | undefined,
+  ) => Promise<T>,
 ): Promise<T> {
   const confirmsManual =
     request.override !== undefined &&
@@ -139,7 +146,7 @@ export async function withTenderRefundAuthorization<T>(
           authorization = { ...authorization, authorizedBy: override.personId, viaOverride: true };
         }
       }
-      return body(tx, authorization);
+      return body(tx, authorization, checked);
     }),
   );
 }
