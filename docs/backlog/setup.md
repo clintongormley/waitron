@@ -315,7 +315,7 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
 
 Left open by A1384 (#2527). The recovery page's operator texts
 (`apps/server/src/i18n/recovery-page.ts`: most codes' actions, among them
-`provisioning.database_ahead`, `provisioning.schema_mismatch`, `holderStalledText` and the generic
+`provisioning.database_ahead`, `provisioning.schema_mismatch` and the generic
 fallback, English and Spanish, plus the `forInstaller` heading "For whoever installed this box")
 send the person to whoever installed the box. CLAUDE.md §3's first rule (owner, 2026-10-25) names that as
 no remedy; `apps/server/src/recovery-surface.test.ts` still requires it beside a restore action,

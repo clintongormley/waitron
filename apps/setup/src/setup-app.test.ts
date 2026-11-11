@@ -2789,7 +2789,7 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     expect((await screenText(el, "reset", "[data-test=outcome]"))?.replace(/\s+/g, " ")).toBe(
-      "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
+      "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
     );
     expect(await screenText(el, "reset", "[data-test=reload]")).toBe("Reload");
   });

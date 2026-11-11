@@ -59,6 +59,22 @@ describe("recovery page wording", () => {
     );
   });
 
+  it.each(["server", "restore", "rejoin", "provisioning", "script", undefined] as const)(
+    "tells the person to switch the box off and on when a stalled holder (%s) outlasts Retry, and names nobody to ask",
+    (kind) => {
+      const text = holderStalledText(kind);
+      expect(text["en-GB"].action).toContain(
+        "If it fails again, switch the box off and on: that ends any program holding the database.",
+      );
+      expect(text["es-ES"].action).toContain(
+        "Si vuelve a fallar, apaga y enciende el equipo: así se cierra cualquier programa que tenga ocupada la base de datos.",
+      );
+      for (const lang of ["en-GB", "es-ES"] as const) {
+        expect(text[lang].action, lang).not.toMatch(/whoever installed|quien instaló/i);
+      }
+    },
+  );
+
   // Reads the module's source as text; it does not observe what loads at runtime.
   it("imports only types", () => {
     const source = readFileSync(new URL("./recovery-page.ts", import.meta.url), "utf8");

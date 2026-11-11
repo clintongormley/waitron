@@ -107,7 +107,7 @@ export const shellEn = {
     "The server rejected the details. Check the admin person ID and password, then try again.",
   "shell.reset.generic": "The server could not be reset. Check the connection and try again.",
   "shell.reset.resetting":
-    "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
+    "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: press Reset this server again.",
   "shell.reset.unavailable":
     "There is no half-finished join to reset on this server. Reload to start setup again.",
   "shell.throttle": "Too many attempts. Wait a few minutes, then try again.",
@@ -310,7 +310,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.reset.generic":
     "No se ha podido restablecer el servidor. Comprueba la conexión e inténtalo de nuevo.",
   "shell.reset.resetting":
-    "El servidor se está restableciendo y se reiniciará. Espera un minuto y recarga esta página para volver a empezar la configuración. Si al unirlo de nuevo se indica que la unión anterior se detuvo a medias, el restablecimiento no se ha hecho: contacta con soporte.",
+    "El servidor se está restableciendo y se reiniciará. Espera un minuto y recarga esta página para volver a empezar la configuración. Si al unirlo de nuevo se indica que la unión anterior se detuvo a medias, el restablecimiento no se ha hecho: vuelve a pulsar Restablecer este servidor.",
   "shell.reset.unavailable":
     "No hay ninguna unión a medias que restablecer en este servidor. Recarga para volver a empezar la configuración.",
   "shell.throttle": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
