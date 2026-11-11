@@ -112,7 +112,7 @@ beforeAll(() => {
   });
 });
 
-/** Park + place a two-line order (café, agua) so both lines FIRE to the default station, returning the
+/** Park + place a two-line order (coffee, water) so both lines FIRE to the default station, returning the
  *  ticket item ids in `line_no` order. The per-line bump / foreign-station targets. */
 async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string[] }> {
   const orderId = randomUUID();

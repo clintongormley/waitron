@@ -484,7 +484,7 @@ describe("device made-here stations", () => {
           workingOrderId: orderId,
           lineNo: 1,
           productId: venue.coffeeId,
-          name: "Café",
+          name: "Coffee",
           descriptions: { "es-ES": "Café" },
           quantity: 1000,
           unitPriceGross: 150,
