@@ -125,15 +125,47 @@ it("explains dishes waiting for the pass at a closed station in English and Span
   );
 });
 
-it("marks every amount slot in the alert wording as money", () => {
-  const unmarked = Object.entries(ALERT_MESSAGES).flatMap(([code, entry]) =>
-    [entry, entry.one, ...Object.values(entry.variants ?? {})]
+// Slots shown as the param is. Never money: an amount is written `{name:money}`.
+const UNMARKED_SLOTS: readonly string[] = [
+  "agent",
+  "anchorAgeSeconds",
+  "codigo",
+  "count",
+  "days",
+  "destination",
+  "device",
+  "dishes",
+  "externalRef",
+  "failed",
+  "hostEnvironment",
+  "hours",
+  "invoice",
+  "mensaje",
+  "minutes",
+  "numSerieFactura",
+  "orderNumber",
+  "paymentRef",
+  "percent",
+  "person",
+  "printer",
+  "reader",
+  "recordEnvironment",
+  "seconds",
+  "station",
+  "timeZone",
+  "wallClockDeltaSeconds",
+];
+
+it("marks every amount slot :money; any other new unmarked slot must be added to UNMARKED_SLOTS", () => {
+  const unmarked = new Set(
+    Object.values(ALERT_MESSAGES)
+      .flatMap((entry) => [entry, entry.one, entry.items, ...Object.values(entry.variants ?? {})])
       .flatMap((words) => (words ? [words.en, words.es] : []))
-      .flatMap((text) =>
-        [...text.matchAll(/\{(amount|captured|expected)\}/g)].map((m) => `${code}: ${m[0]}`),
-      ),
+      .flatMap((text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1])),
   );
-  expect(unmarked).toEqual([]);
+  expect([...unmarked].sort()).toEqual([...UNMARKED_SLOTS].sort());
+  for (const money of ["amount", "captured", "expected"])
+    expect(UNMARKED_SLOTS).not.toContain(money);
 });
 
 it("names the undelivered full invoice, and says how to hand an unclaimed one to an agent", () => {
@@ -259,7 +291,7 @@ describe("an invoice the office printer is holding", () => {
 
 it("names only registered word lists in its word-list slots, variants and words for one included", () => {
   const unknown = Object.entries(ALERT_MESSAGES).flatMap(([code, entry]) =>
-    [entry, entry.one, ...Object.values(entry.variants ?? {})]
+    [entry, entry.one, entry.items, ...Object.values(entry.variants ?? {})]
       .flatMap((words) => (words ? [words.en, words.es] : []))
       .flatMap((text) =>
         [...text.matchAll(/\{[A-Za-z0-9_]+:([a-z_]+)\}/g)]

@@ -56,20 +56,28 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 /** Records an incident with an arbitrary code; the registry is what is under test, not the code. */
+function incidentOn(
+  tx: Transaction,
+  v: { deviceId: DeviceId },
+  code: string,
+  severity: "warning" | "error",
+  detectedAt: Date,
+): Promise<void> {
+  return recordIncident(tx, {
+    origin: deviceOrigin(v.deviceId),
+    error: new AppError(code as never, {} as never),
+    severity,
+    detectedAt,
+  });
+}
+
 function raise(
   v: { deviceId: DeviceId },
   code: string,
   severity: "warning" | "error",
   detectedAt: Date,
 ): Promise<void> {
-  return asApp((tx) =>
-    recordIncident(tx, {
-      origin: deviceOrigin(v.deviceId),
-      error: new AppError(code as never, {} as never),
-      severity,
-      detectedAt,
-    }),
-  );
+  return asApp((tx) => incidentOn(tx, v, code, severity, detectedAt));
 }
 
 describe("claims", () => {
@@ -355,8 +363,6 @@ describe("readOpenAlerts", () => {
     const failing: AlertSource = {
       area: "backup",
       permission: "system.manage",
-      // A failed QUERY, not just a throw: a source that dies in the database, not in JavaScript,
-      // is the case `readOpenAlerts` wraps each source for.
       read: async ({ tx }) => {
         await tx.execute(sql`select * from no_such_table`);
         return [];
@@ -433,6 +439,35 @@ describe("readOpenAlerts", () => {
       "alert.source_unavailable:backup",
       "printing.jobs_waiting:p1",
     ]);
+  });
+
+  it("drops the writes of a source that writes and then fails, and keeps a later source's", async () => {
+    const v = await seedVenueWithTill();
+    const writesThenFails: AlertSource = {
+      area: "backup",
+      permission: "system.manage",
+      read: async ({ tx }) => {
+        await incidentOn(tx, v, "test.failed_source", "warning", NOW);
+        throw new AppError("server.internal", {});
+      },
+    };
+    const writesThenAnswers: AlertSource = {
+      area: "printing",
+      permission: "system.manage",
+      read: async ({ tx }) => {
+        await incidentOn(tx, v, "test.healthy_source", "warning", NOW);
+        return [];
+      },
+    };
+    const r = createAlertRegistry({ claims: [], sources: [writesThenFails, writesThenAnswers] });
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
+    );
+    expect(alerts.map((a) => a.key)).toEqual(["alert.source_unavailable:backup"]);
+    const committed = await asApp(async (tx) =>
+      (await listOpenIncidents(tx)).map((i) => i.code).sort(),
+    );
+    expect(committed).toEqual(["test.healthy_source"]);
   });
 
   it("merges the alerts of two sources sharing an area", async () => {

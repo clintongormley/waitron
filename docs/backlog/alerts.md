@@ -3,18 +3,6 @@
 The open entries are listed in [the backlog](../backlog.md), under "Alerts, logging and diagnostics". This file holds
 their full text.
 
-## The alert registry's per-source savepoint has no test that fails without it
-
-Found by A798-B slice 4 (#1958). `readOpenAlerts` (`apps/server/src/alerts.ts`) asks
-each source inside a savepoint so a failed source's writes go with it, but removing the savepoint
-left every test file that reaches `readOpenAlerts` passing: their failing
-sources fail a query or throw before writing anything, so nothing is left for the savepoint to
-undo. A failing source that writes before it throws would pin it, as
-`apps/server/src/staff-notices.test.ts` does. It also reads each source's answer after the
-savepoint closes, so an answer that throws part way keeps the alerts before the bad one beside
-`alert.source_unavailable`, and a `null` becomes `{ kind, area }`; `readStaffNotices` reads its
-answer inside the savepoint.
-
 ## Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
 
 [Design](../superpowers/specs/2026-08-31-logging-diagnostics-foundation-design.md). Eventual vendor destination
@@ -124,19 +112,3 @@ by version to catch a bad release (design section 10).
   [Detail](alerts.md#the-alerts-table-makes-long-station-warnings-hard-to-read-on-a-phone)
 - **The alert pop-up can split a written time across two lines.** Left open by A798-B slice 9
   (#2025). [Detail](alerts.md#the-alert-pop-up-can-split-a-written-time-across-two-lines)
-
-## Bundle: Alert registry tests
-
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
-
-- **The alert registry's per-source savepoint has no test that fails without it.** Removing the savepoint in
-  `readOpenAlerts` (`apps/server/src/alerts.ts`) left every test that reaches it passing, and it reads each
-  source's answer after the savepoint closes. Found by A798-B slice 4 (#1958).
-  [Detail](alerts.md#the-alert-registrys-per-source-savepoint-has-no-test-that-fails-without-it)
-- **No test fails if `boot.ts` stops registering the dark pass screen alert** — left open by A451
-  (#1486). `passScreenAlertSource` is tested on its own (`apps/server/src/station-outputs-down.test.ts`),
-  but its registration in `apps/server/src/boot.ts` is checked by nothing that review found; the
-  other sources registered beside it were not looked at.
-- **The alert check that every money slot is marked looks only at slots named `amount`, `captured`
-  and `expected`, so a new money slot under another name is unseen.** Left open by C43 (money in
-  the dashboard shows its currency sign, #830).

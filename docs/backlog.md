@@ -1515,8 +1515,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/alerts.md).
 
-- **Alert registry tests** (bundle of 3, size S). [Detail](backlog/alerts.md#bundle-alert-registry-tests)
-
 - **Still not built: a standby that has fallen behind** — left open by "Dashboard alerts and the
   incidents surface" (A5, LANDED #363/#368/#371).
 

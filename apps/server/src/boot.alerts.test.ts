@@ -19,6 +19,8 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { recordSyntheticInvoice } from "./testing/synthetic-invoice.js";
+import { kitchenScreenDevice, profile } from "./testing/kitchen-screen-device.js";
+import { waitingDish } from "./testing/waiting-dish.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -62,7 +64,7 @@ async function withServer(venue: Venue, use: (base: string) => Promise<void>): P
   let scratch: string | undefined;
   let server: StartedServer | undefined;
   try {
-    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-invoice-alert-"));
+    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-alerts-"));
     const migrationsRoot = join(scratch, "migrations");
     for (const [index, set] of manifestSets().entries()) {
       await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
@@ -97,13 +99,13 @@ async function withServer(venue: Venue, use: (base: string) => Promise<void>): P
   }
 }
 
-async function invoiceAlerts(base: string, venue: Venue): Promise<Alert[]> {
+async function alertsIn(base: string, venue: Venue, area: string): Promise<Alert[]> {
   const response = await fetch(`${base}/management-api/alerts`, {
     headers: { cookie: venue.managerCookie },
   });
   expect(response.status).toBe(200);
   const body = (await response.json()) as { alerts: Alert[] };
-  return body.alerts.filter((alert) => alert.area === "invoice_delivery");
+  return body.alerts.filter((alert) => alert.area === area);
 }
 
 describe("the running server's undelivered invoice alert", () => {
@@ -125,7 +127,7 @@ describe("the running server's undelivered invoice alert", () => {
     });
 
     await withServer(venue, async (base) => {
-      expect(await invoiceAlerts(base, venue)).toEqual([
+      expect(await alertsIn(base, venue, "invoice_delivery")).toEqual([
         {
           key: `invoice_delivery.undelivered:${saleId}`,
           code: "invoice_delivery.failed",
@@ -211,7 +213,7 @@ describe("the running server's undelivered invoice alert", () => {
       });
       expect(queued.status).toBe(204);
 
-      expect(await invoiceAlerts(base, venue)).toEqual([
+      expect(await alertsIn(base, venue, "invoice_delivery")).toEqual([
         {
           key: `invoice_delivery.undelivered:${saleId}`,
           code: "invoice_delivery.queued_behind_hold",
@@ -221,6 +223,41 @@ describe("the running server's undelivered invoice alert", () => {
           screen: "orders",
           kind: "ongoing",
           area: "invoice_delivery",
+        },
+      ]);
+    });
+  });
+});
+
+describe("the running server's dark pass screen alert", () => {
+  it("reports a pass screen unseen for ten minutes with a dish waiting", async () => {
+    const venue = await setupVenue(suite.db);
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+    beforeServerStarts();
+    await waitingDish(suite.db, venue, venue.defaultStationId, tenMinutesAgo, new Date());
+    const pass = await kitchenScreenDevice(
+      suite.db,
+      {
+        locationId: venue.cfg.locationId,
+        deviceProfileId: await profile(suite.db, "kds"),
+        label: "Pass",
+        tokenHash: "hash",
+        lastSeenAt: tenMinutesAgo,
+      },
+      { kind: "pass", stationIds: null, zoneIds: null },
+    );
+
+    await withServer(venue, async (base) => {
+      expect(await alertsIn(base, venue, "kitchen")).toEqual([
+        {
+          key: `kitchen_screen.pass_dark:${pass}`,
+          code: "kitchen_screen.pass_dark",
+          params: { device: "Pass" },
+          severity: "warning",
+          since: tenMinutesAgo,
+          screen: "devices",
+          kind: "ongoing",
+          area: "kitchen",
         },
       ]);
     });
