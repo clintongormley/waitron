@@ -319,7 +319,7 @@ Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.p
 
 ## A275. Invoice a bill paid later by transfer (full or simplified invoice) — DESIGN NOW (2026-10-17)
 
-**Design approved; reviewed plan published, build pending (2026-10-22).** Owner, 2026-10-22 15:55:
+**Design approved; reviewed plan published (2026-10-22).** Owner, 2026-10-22 15:55:
 “A275 looks fine”. This approves the revised minimal design and authorises plan authoring,
 fresh-context review and docs-only publication. The build retains its separate gates.
 

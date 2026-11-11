@@ -1,7 +1,8 @@
 # A275 Task 5: a day's reports show a bill closed by transfer once, apart from money received
 
-**Status: proposed 2026-11-11, for the watcher; built on `feat/a275-closed-bills` (off `main` at
-`69a65a106a`).** Every `file:line` below was read at that commit.
+**Status: built 2026-11-11 on `feat/a275-closed-bills`; cleared by the watcher 2026-11-11 09:08
+with the five defaults; the one-total-per-day departure from design §4 is for the owner at
+landing.** Every `file:line` below was read at `69a65a106a`.
 
 **When this lands, a manager can:** open the dashboard's overview (today) or its Sales report for
 any one business day and see a bill closed "to be paid by transfer" exactly once: on its own **To be
@@ -117,7 +118,7 @@ totals as issued, tips not included. Export it from `index.ts`.
    `getSalesOverview` (`:183`) lists them, so both lists gain both tables. Both names are already
    known sources (`live-queries.ts:135–136`), so `scripts/live-subscriptions.test.ts` (which checks
    only that a name is known, `:10–33`) passes as it is.
-7. Docs: the A275 lines in `docs/backlog.md` and `docs/backlog/fiscal.md` say Tasks 0–5 are built; a
+7. Docs: the A275 lines in `docs/backlog.md` and `docs/backlog/fiscal.md` say Task 5 is built; a
    dated note under the master plan's Task 5 points here.
 
 **Overlap with Task 4 (#2797, not landed):** it also edits `apps/dashboard/src/api/client.ts`

@@ -1478,7 +1478,6 @@ export interface SalesCounts {
   voids: number;
 }
 
-/** Bills closed in the day, and the tender split into what a transfer still owes and money received. */
 export interface ClosureSummaryDto {
   billsClosed: { count: number; total: string };
   toBePaidByTransfer: string;

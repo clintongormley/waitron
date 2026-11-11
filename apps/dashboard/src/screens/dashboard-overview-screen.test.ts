@@ -98,7 +98,7 @@ describe("dashboard-overview-screen", () => {
     expect(cells("seller-row-0-variant-1")).toEqual(["8", "€14.00"]);
   });
 
-  it("shows bills closed and the transfer still owed apart from the money received", async () => {
+  it("shows bills closed and the amount to be paid by transfer apart from the money received", async () => {
     setLocale("en-GB");
     const api = stubApi({
       getSalesOverview: vi.fn().mockResolvedValue({
