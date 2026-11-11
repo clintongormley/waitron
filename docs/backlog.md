@@ -2303,6 +2303,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A976. Finish the server's English test-venue defaults.**
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   The `floor-today-*` route suites use Anna as their staff sample.
+  Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
   Many server fixtures still use Administradora, among them the backup, stream and shared-helper fixtures.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,

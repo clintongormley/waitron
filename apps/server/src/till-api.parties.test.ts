@@ -64,7 +64,7 @@ const suite = useVenueDb({
     const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
-      .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
+      .values({ displayName: "Anna", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = {

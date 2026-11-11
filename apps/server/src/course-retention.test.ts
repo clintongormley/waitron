@@ -84,7 +84,7 @@ async function setup() {
   const [ana, sam] = await db
     .insert(persons)
     .values([
-      { displayName: "Ana", pinHash: hashPin("5555"), role: "staff" },
+      { displayName: "Anna", pinHash: hashPin("5555"), role: "staff" },
       { displayName: "Sam", pinHash: hashPin("6666"), role: "staff" },
     ])
     .returning();
