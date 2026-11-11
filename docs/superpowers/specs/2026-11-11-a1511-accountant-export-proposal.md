@@ -20,9 +20,11 @@ AEAT also publishes a common XLSX invoice-book design [P8], already related to t
 
 Include invoice identity/number, issue and operation/receipt dates, recorded counterparty identity, type, signed corrective amounts and original reference, VAT bases/rates/amounts and gross total once per invoice. Purchases retain regime, deductible proportion and ordinary/capital classification. Start with individual tickets; ask whether the accountant wants daily ticket grouping later, without assuming it is suitable.
 
-**Source-checked, not executed:** reuse the existing [export permission, attachment and activity pattern](../../../apps/server/src/report-api.ts#L374), not the [deferred-transfer selection and flattened VAT](../../../apps/server/src/transfer-closed-export.ts#L30). The [purchase reader](../../../packages/purchasing/src/operations.ts#L254) already supplies headers and VAT lines; sales need a period reader from [core invoice facts](../../../packages/db/src/schema/sales.ts#L66). Select sales by stored-offset issue date and purchases by receipt date, with explicit boundaries. Keep ordinary sales and signed corrections in the first cut. Do not add void/replacement operations or use VeriFactu-only records to classify generic sales.
+**Source-checked, not executed:** reuse the existing [export permission, attachment and activity pattern](../../../apps/server/src/report-api.ts#L374), not the [deferred-transfer selection and flattened VAT](../../../apps/server/src/transfer-closed-export.ts#L30). The [purchase reader](../../../packages/purchasing/src/operations.ts#L254) already supplies headers and VAT lines; sales need a period reader from [core invoice facts](../../../packages/db/src/schema/sales.ts#L66). Select sales by stored-offset issue date and purchases by receipt date, with explicit boundaries. Keep ordinary sales and signed corrections. Exclude F3 replacements so their original tickets count once ([existing report selection](../../../packages/reporting/src/business-day.ts#L206)); flag recorded voids with their [void dates](../../../packages/db/src/schema/sale-voids.ts#L18) for accountant handling. Add no void/replacement operations and read no VeriFactu-only records.
 
 **Purchase caveat:** the [API accepts negative gross totals](../../../apps/server/src/purchasing-api.ts#L81), while [VAT lines must be non-negative](../../../packages/purchasing/src/operations.ts#L121). Export the entered gross total unchanged and flag negative or unreconciled rows for separate accountant handling; do not infer credit VAT from their positive lines. The [supplier-invoice design bundle](../../backlog/back-office.md#bundle-one-design-for-supplier-invoices-and-credit-notes) remains open. Purchases can also be edited/deleted without history, so repeating a download can change it. This is recorded data, not complete books.
+
+The existing delivery writes CSV; XLSX encoding needs a new writer. That is additional work, not an existing export format.
 
 ## Your choice
 
@@ -35,7 +37,7 @@ All accessed **2026-11-11**. Quotations precede their English reading. Import su
 | Source and date | Short quotation; supported reading |
 | --- | --- |
 | [P1], El Español, 2025-03-22 | “entre el 60% y el 70% de los clientes de Adiss”; one vendor’s clients, not national sampling. |
-| [P2], Javier D., April 2024 | “Software DELSOL” … “han disminuido en su uso”; named among community respondents, with no representative denominator. |
+| [P2], Javier D., April 2024 | “Software DELSOL”; named among community respondents, with no representative denominator. |
 | [P3], Wolters Kluwer, undated | “selecciona el fichero Excel”; “facturas expedidas, facturas recibidas, asientos y plan contable”; Excel categories include both invoice directions. |
 | [P4], Wolters Kluwer, undated | “Longitud de los registros ..................256 Bytes”; this variant prescribes fixed records. |
 | [P5], Sage verified support, date unavailable | “importar excel con información, ya sean movimientos bancarios o facturas”; invoices/bank data need configured guides. |
