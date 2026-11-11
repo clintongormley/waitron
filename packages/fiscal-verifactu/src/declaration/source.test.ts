@@ -114,5 +114,19 @@ describe("spanishDate", () => {
   it("writes the date with the Spanish month name", () => {
     expect(spanishDate("2026-03-01")).toBe("1 de marzo de 2026");
     expect(spanishDate("2026-10-22")).toBe("22 de octubre de 2026");
+    expect(spanishDate("2028-02-29")).toBe("29 de febrero de 2028");
+  });
+
+  it.each([
+    "2026-02-29",
+    "2026-02-30",
+    "2026-13-01",
+    "22/10/2026",
+    "2026-10-22T00:00",
+    " 2026-10-22",
+  ])("refuses %j, which is not a calendar date written YYYY-MM-DD", (date) => {
+    expect(() => spanishDate(date)).toThrow(
+      expect.objectContaining({ code: "declaration.date_invalid", params: { date } }),
+    );
   });
 });

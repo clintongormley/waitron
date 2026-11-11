@@ -75,8 +75,50 @@ describe("renderDeclaration", () => {
     ).toBe("‹NIF›");
   });
 
+  it("writes a producer's values literally, never reading them as markup", () => {
+    const odd = {
+      name: "**Unpaired",
+      taxId: "<!-- 0 --> - 1",
+      address: "Example Street **Door 2**",
+    };
+    const { text, html } = renderDeclaration(source, odd);
+    const lines = text.split("\n");
+    for (const value of Object.values(odd)) {
+      expect(lines.filter((line) => line.endsWith(`responsable: ${value}`))).toHaveLength(1);
+    }
+    expect(html).toContain("</strong> **Unpaired</p>");
+    expect(html).toContain("</strong> &lt;!-- 0 --&gt; - 1</p>");
+    expect(html).toContain("</strong> Example Street **Door 2**</p>");
+    const strong = (output: string) => output.split("<strong>").length;
+    expect(strong(html)).toBe(strong(renderDeclaration(source, producer).html));
+  });
+
+  it.each([
+    ["name", "LF", "\n"],
+    ["taxId", "U+2028", "\u2028"],
+    ["address", "U+2029", "\u2029"],
+    ["address", "U+0085", "\u0085"],
+    ["address", "VT", "\v"],
+    ["address", "FF", "\f"],
+    ["address", "TAB", "\t"],
+    ["address", "NUL", "\u0000"],
+  ] as const)("refuses a producer's %s holding %s", (field, _label, character) => {
+    const odd = { ...producer, [field]: `1 Example Street${character}Nowhere` };
+    for (const render of [renderDeclaration, declarationBlocks, fillProducer]) {
+      expect(() => render(source, odd)).toThrow(
+        expect.objectContaining({ code: "declaration.producer_invalid", params: { field } }),
+      );
+    }
+  });
+
   it("refuses a source still holding a release slot", () => {
     expect(() => renderDeclaration("**1.c) Versión:** ‹versión›\n", producer)).toThrow(
+      expect.objectContaining({
+        code: "declaration.slot_unfilled",
+        params: { slot: "‹versión›" },
+      }),
+    );
+    expect(() => fillProducer("**1.c) Versión:** ‹versión›\n", producer)).toThrow(
       expect.objectContaining({
         code: "declaration.slot_unfilled",
         params: { slot: "‹versión›" },
@@ -87,7 +129,7 @@ describe("renderDeclaration", () => {
 
 describe("declarationBlocks", () => {
   it("reads a list item's continuation and keeps a backslash as an ordinary character", () => {
-    expect(declarationBlocks("Título\n\n**A)** x\\y\n\n- uno\n  dos\n- tres\n")).toEqual([
+    expect(declarationBlocks("Título\n\n**A)** x\\y\n\n- uno\n  dos\n- tres\n", producer)).toEqual([
       { kind: "title", lines: [[{ bold: false, text: "Título" }]] },
       {
         kind: "paragraph",
@@ -101,6 +143,26 @@ describe("declarationBlocks", () => {
       {
         kind: "list",
         lines: [[{ bold: false, text: "uno dos" }], [{ bold: false, text: "tres" }]],
+      },
+    ]);
+  });
+
+  it("puts a producer's value into the run its slot sits in, as it is", () => {
+    expect(
+      declarationBlocks("Título\n\n**1.j)** ‹dirección›\n", {
+        ...producer,
+        address: "Example Street **Door 2**",
+      }),
+    ).toEqual([
+      { kind: "title", lines: [[{ bold: false, text: "Título" }]] },
+      {
+        kind: "paragraph",
+        lines: [
+          [
+            { bold: true, text: "1.j)" },
+            { bold: false, text: " Example Street **Door 2**" },
+          ],
+        ],
       },
     ]);
   });

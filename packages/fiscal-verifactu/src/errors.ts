@@ -462,5 +462,9 @@ declare module "@waitron/shared" {
     "declaration.disagrees": { item: string };
     /** A `- ` line of `declarations/functions.md` has no ` — ` route; `line` is 1-based. */
     "declaration.functions_malformed": { line: number };
+    /** A declaration's signing date is not a calendar date written `YYYY-MM-DD`; `date` is as given. */
+    "declaration.date_invalid": { date: string };
+    /** A producer value given to the declaration holds a line break or control character; `field` names it, never its value. */
+    "declaration.producer_invalid": { field: "name" | "taxId" | "address" };
   }
 }

@@ -204,6 +204,7 @@ export function parseFunctions(markdown: string): string[];
 export function releaseBlockers(source: string): string[];
 export function declarationItems(source: string): ReadonlyMap<string, string>; // "1.a" → value
 export function spanishDate(isoDate: string): string; // "2026-10-22" → "22 de octubre de 2026"
+// spanishDate refuses anything but a real calendar date as YYYY-MM-DD: declaration.date_invalid { date }
 ```
 
 **The template.** Copy §4's text (design lines 449–540) with the `> ` prefixes removed and `\*`
@@ -275,7 +276,7 @@ export interface DeclarationBlock {
   lines: { bold: boolean; text: string }[][]; // a line (or list item) is a run of bold/plain parts
 }
 export function fillProducer(source: string, producer: DeclarationProducer): string;
-export function declarationBlocks(filled: string): DeclarationBlock[];
+export function declarationBlocks(source: string, producer: DeclarationProducer): DeclarationBlock[];
 export function renderDeclaration(
   source: string, producer: DeclarationProducer,
 ): { text: string; html: string };
@@ -285,7 +286,11 @@ The format is our own subset, nothing more: blank lines separate blocks; a block
 start `- ` (continuations indented two spaces) is a list; `<!-- … -->` lines are dropped; the
 first block is the title; `**` toggles bold; nothing else is markup, and a `\` is an ordinary
 character. `fillProducer` refuses (`declaration.slot_unfilled`) when any slot other than the three
-is present, then fills the three in one pass. Text: bold markers removed, a paragraph on one line,
+is present, then fills the three in one pass. (Changed in review, 2026-11-11: `declarationBlocks`
+takes the producer and reads the structure before writing the values into its runs as plain text,
+so a value holding `**` is never read as markup; `fillProducer`'s string serves `declarationItems`
+only. Both refuse a value holding a line break or control character with
+`declaration.producer_invalid { field }`.) Text: bold markers removed, a paragraph on one line,
 a list item on one line starting `- `, blocks separated by one blank line. HTML: a whole document,
 `lang="es"`, UTF-8, the title in `<h1>`, paragraphs in `<p>` with `<strong>`, lists in
 `<ul><li>`, every text run escaped (`&`, `<`, `>`, `"`, `'`); no styles, scripts or links outside
@@ -370,7 +375,7 @@ backlog files' A940 lines (part 2a landed; 2b next) and runs `/finish-branch`.
 
 **Produces:** `renderDeclarationPdf(source: string, producer: DeclarationProducer, loadFont?:
 () => Promise<Uint8Array>): Promise<Uint8Array>` — default `loadRecoveryFont`; it draws
-`declarationBlocks(fillProducer(source, producer))`. Plain A4, the title centred, one block per
+`declarationBlocks(source, producer)`. Plain A4, the title centred, one block per
 paragraph, no logo (design §12). **Disclosed:** the package has one font file, so the item
 headings are drawn in the same face as the text beside them and look like body text; only the
 title stands apart, by being centred. A bold face would need a second font file and its licence

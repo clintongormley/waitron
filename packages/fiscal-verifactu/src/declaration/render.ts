@@ -1,11 +1,8 @@
 import "../errors.js";
 import { AppError } from "@waitron/shared";
+import { PRODUCER_SLOTS, SLOT } from "./source.js";
 
-export interface DeclarationProducer {
-  readonly name: string;
-  readonly taxId: string;
-  readonly address: string;
-}
+export type DeclarationProducer = { readonly [Field in keyof typeof PRODUCER_SLOTS]: string };
 
 export interface DeclarationRun {
   bold: boolean;
@@ -18,30 +15,52 @@ export interface DeclarationBlock {
   lines: DeclarationRun[][];
 }
 
-const SLOT = /‹[^›\n]*›/g;
+// `readSoftwareProducer` refuses only CR and LF. Unicode also ends a line at VT, FF, NEL, U+2028 and
+// U+2029, so a reader that honours them would see a paragraph of the text broken in two.
+const BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/u;
 
-export function fillProducer(source: string, producer: DeclarationProducer): string {
-  const values: Record<string, string> = {
-    "‹nombre y apellidos›": producer.name,
-    "‹NIF›": producer.taxId,
-    "‹dirección›": producer.address,
-  };
-  for (const [slot] of source.matchAll(SLOT)) {
-    if (values[slot] === undefined) throw new AppError("declaration.slot_unfilled", { slot });
+/** Each producer slot's value, once the source is known to hold no other slot. */
+function producerValues(source: string, producer: DeclarationProducer): Map<string, string> {
+  const fields = Object.keys(PRODUCER_SLOTS) as (keyof DeclarationProducer)[];
+  for (const field of fields) {
+    if (BREAK_OR_CONTROL.test(producer[field])) {
+      throw new AppError("declaration.producer_invalid", { field });
+    }
   }
+  const values = new Map<string, string>(
+    fields.map((field) => [PRODUCER_SLOTS[field], producer[field]]),
+  );
+  for (const [slot] of source.matchAll(SLOT)) {
+    if (!values.has(slot)) throw new AppError("declaration.slot_unfilled", { slot });
+  }
+  return values;
+}
+
+function filled(text: string, values: Map<string, string>): string {
   // One pass: a producer's value is never read again as a slot.
-  return source.replace(SLOT, (slot) => values[slot]!);
+  return text.replace(SLOT, (slot) => values.get(slot)!);
 }
 
-function runs(line: string): DeclarationRun[] {
-  return line
-    .split("**")
-    .map((text, index) => ({ bold: index % 2 === 1, text }))
-    .filter((run) => run.text !== "");
+/**
+ * The source with the producer's values written in as plain text, for reading items by their
+ * text (`declarationItems`). Render through `declarationBlocks`, which never reads a value as markup.
+ */
+export function fillProducer(source: string, producer: DeclarationProducer): string {
+  return filled(source, producerValues(source, producer));
 }
 
-export function declarationBlocks(filled: string): DeclarationBlock[] {
-  const lines = filled.split("\n").filter((line) => !/^<!--.*-->$/.test(line.trim()));
+/** The source's structure, read before the producer's values go into its runs as plain text. */
+export function declarationBlocks(
+  source: string,
+  producer: DeclarationProducer,
+): DeclarationBlock[] {
+  const values = producerValues(source, producer);
+  const runs = (line: string): DeclarationRun[] =>
+    line
+      .split("**")
+      .map((text, index) => ({ bold: index % 2 === 1, text: filled(text, values) }))
+      .filter((run) => run.text !== "");
+  const lines = source.split("\n").filter((line) => !/^<!--.*-->$/.test(line.trim()));
   const blocks = lines
     .join("\n")
     .split(/\n\s*\n/)
@@ -94,7 +113,7 @@ export function renderDeclaration(
   source: string,
   producer: DeclarationProducer,
 ): { text: string; html: string } {
-  const blocks = declarationBlocks(fillProducer(source, producer));
+  const blocks = declarationBlocks(source, producer);
   const text = blocks
     .map((block) =>
       block.lines
