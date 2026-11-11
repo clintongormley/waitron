@@ -839,7 +839,9 @@ product failures.
 
 ## A976. Finish the server's English test-venue defaults.
 
-- **A976. Finish the server's English test-venue defaults.** Remaining local venue seeds,
+- **A976. Finish the server's English test-venue defaults.**
+  Many server fixtures still use Administradora, among them the backup, stream and shared-helper fixtures.
+  Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
   Current-order, order-group, order-draft, served, certificate, backup-settings and backup-room
