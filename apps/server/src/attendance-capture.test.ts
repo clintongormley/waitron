@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  dayCutoverChanges,
-  type Transaction,
-  venueLocationId,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, dayCutoverChanges, type Transaction, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -43,7 +37,7 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  await venueLocationId(suite.db);
+
   const people = await suite.db
     .insert(persons)
     .values([

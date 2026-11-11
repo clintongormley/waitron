@@ -4,7 +4,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -114,7 +114,7 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  await venueLocationId(suite.db);
+
   await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)

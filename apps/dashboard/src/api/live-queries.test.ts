@@ -795,7 +795,7 @@ it("subscribes catalogue defaults to their stored settings", async () => {
   expect(await query.read()).toEqual({ defaultProductVatClass: "reduced" });
 });
 
-it("subscribes the venue defaults to the location, venue document and catalogue settings", () => {
+it("subscribes the venue defaults to the venue documents, venue document and catalogue settings", () => {
   const api = new DashboardApi("", async () => new Response("{}"));
   expect(dashboardQuery(api, "getVenueDefaults", []).dependencies).toEqual([
     { type: "settings.business_day" },
@@ -1399,4 +1399,11 @@ it("refreshes device join claims passively when pairing changes", async () => {
   } finally {
     observed.unsubscribe();
   }
+});
+
+it("subscribes the sales overview to the clock document once", () => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), "getSalesOverview", []);
+  expect(query.dependencies.filter(({ type }) => type === "settings.business_day")).toEqual([
+    { type: "settings.business_day" },
+  ]);
 });

@@ -9,7 +9,6 @@ export const QUERY_DEPENDENCIES = {
     "persons",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
   ],
   entries: [
@@ -20,7 +19,6 @@ export const QUERY_DEPENDENCIES = {
     "persons",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
   ],
 } as const;

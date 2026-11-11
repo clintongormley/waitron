@@ -529,7 +529,7 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    await venueLocationId(db);
+
     const [fiesta, date, day] = [randomUUID(), randomUUID(), randomUUID()];
     await withTransaction(db, async (tx) => {
       await tx.execute(sql`insert into special_days (id, name, repeats_yearly)
@@ -655,7 +655,7 @@ it("refuses setup/configuration replacement of a venue with dated history withou
     { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
     request,
   );
-  await venueLocationId(db);
+
   await seedBusinessDay(db, { dayCutover: "03:00:00" });
   await db
     .insert(dayCutoverChanges)

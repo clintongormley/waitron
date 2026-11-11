@@ -201,7 +201,6 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "settings.business_day",
     "settings.venue",
-    "settings.business_day",
     "day_cutover_changes",
   ],
   getOverdueOrders: [
@@ -381,7 +380,6 @@ export const QUERY_DEPENDENCIES = {
     "station_day_states",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
     "menu_periods",
     "menu_period_staff_menus",

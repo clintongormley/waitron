@@ -5352,7 +5352,7 @@ describe("venue detail edits and configuration boundaries", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await venueLocationId(suite.db);
+
     await seedBusinessDay(suite.db, { dayCutover: "04:30:00" });
     const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
     const saved = await withTransaction(suite.db, (tx) =>
@@ -6833,7 +6833,7 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
   });
-  await venueLocationId(targetSuite.db);
+
   const imported = await withTransaction(targetSuite.db, async (tx) => {
     const rows = await tx.select().from(departments);
     const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
@@ -7554,7 +7554,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await venueLocationId(suite.db);
+
     await withTransaction(suite.db, async (tx) => {
       const department = await createDepartment(tx, {
         name: "Clock service",
@@ -7658,7 +7658,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await venueLocationId(suite.db);
+
     await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "03:00:00",
@@ -7693,7 +7693,7 @@ describe("dated business-day configuration transfer", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await venueLocationId(suite.db);
+
     await suite.db.insert(dayCutoverChanges).values({
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",

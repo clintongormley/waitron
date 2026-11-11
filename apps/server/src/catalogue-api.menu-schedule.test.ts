@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -42,7 +42,7 @@ const suite = useVenueDb({
       operationDescription: "Venta",
       timeZone: "Europe/Madrid",
     });
-    await venueLocationId(db);
+
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await tx
         .insert(persons)

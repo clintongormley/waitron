@@ -222,9 +222,12 @@ describe("core backup source binding", () => {
       db.run(
         sql`insert into tenants (id, country, tax_id, legal_name, created_at) values (1, 'GB', 'fixture-id', 'Fixture company', '2026-10-20T00:00:00Z')`,
       );
-      db.run(sql`insert into locations (id, operation_description) values ('venue', 'Restaurant')`);
+      db.run(sql`insert into locations (id) values ('venue')`);
       db.run(
-        sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
+        sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
+      );
+      db.run(
+        "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
       );
       db.run(
         sql`insert into nodes (id, location_id, name, created_at) values ('source', 'venue', 'Source node', '2026-10-20T00:00:00Z')`,
@@ -306,9 +309,7 @@ describe("core backup source binding", () => {
   it("refuses a copy with two venue rows", async () => {
     seed();
     for (const db of [before.db, after.db])
-      db.run(
-        sql`insert into locations (id, operation_description) values ('second-venue', 'Restaurant')`,
-      );
+      db.run(sql`insert into locations (id) values ('second-venue')`);
     expect(await verify()).toBe(false);
   });
 
@@ -669,11 +670,12 @@ describe("backup membership private/public identity", () => {
   const publicKey = pair.publicKey.export({ format: "der", type: "spki" }).toString("base64");
   function seed(key: string | null = publicKey) {
     for (const suite of [before, after]) {
+      suite.db.run(sql`insert into locations (id) values ('venue')`);
       suite.db.run(
-        sql`insert into locations (id, operation_description) values ('venue', 'Restaurant')`,
+        sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null,"fiscalTerritory":"ES-common","operationDescription":"Restaurant"}', '2026-10-20T00:00:00Z'), ('business_day', 1, 1, '{"timeZone":"Europe/Madrid"}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
       );
       suite.db.run(
-        sql`insert into settings (module, version, revision, doc, updated_at) values ('venue', 1, 1, '{"name":"Fixture venue","addressLine1":null,"addressLine2":null,"postalCode":null,"city":null,"province":null,"invoiceLocales":["en"],"contentLanguages":null,"defaultContentLanguage":null,"holidayArea":null}', '2026-10-20T00:00:00Z') on conflict (module) do nothing`,
+        "insert into day_cutover_changes (effective_business_day, day_cutover) values ('2000-01-01', '06:00:00') on conflict (effective_business_day) do nothing",
       );
       suite.db.run(
         sql`insert into nodes (id,location_id,name,public_key,created_at) values ('source','venue','Source',${key},'2026-10-20T00:00:00Z')`,

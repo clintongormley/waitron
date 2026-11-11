@@ -310,17 +310,23 @@ describe("direct action country zone preflight", () => {
     async (timeZone) => {
       const actions = planVenue(request(), []);
       await applyDirectVenue(actions, { db: suite.db, modules: [] });
-      await venueLocationId(suite.db);
+
       await withTransaction(suite.db, async (tx) => {
         await tx.execute(
           sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
         );
       });
       const before = (await suite.db.execute(sql`select * from locations`)).rows;
+      const clockBefore = (
+        await suite.db.execute(sql`select * from settings where module = 'business_day'`)
+      ).rows;
       const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [] }).catch(
         (error: unknown) => error,
       );
       expect((await suite.db.execute(sql`select * from locations`)).rows).toEqual(before);
+      expect(
+        (await suite.db.execute(sql`select * from settings where module = 'business_day'`)).rows,
+      ).toEqual(clockBefore);
       expect(refusal).toMatchObject({
         code: "venue.time_zone_invalid",
         params: { reason: "invalid" },
@@ -351,7 +357,7 @@ it("rechecks saved zone inside the transaction after outside preparation", async
           db: suite.db,
           modules: [],
         });
-        await venueLocationId(suite.db);
+
         await withTransaction(suite.db, async (tx) => {
           await tx.execute(
             sql`update settings set doc = json_set(doc, '$.timeZone', 'Invalid/Zone') where module = 'business_day'`,
@@ -390,7 +396,7 @@ it.each(["Europe/London", "US/Eastern"])(
   async (timeZone) => {
     const actions = planVenue(request(), []);
     await applyDirectVenue(actions, { db: suite.db, modules: [] });
-    await venueLocationId(suite.db);
+
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(
         sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,

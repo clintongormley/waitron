@@ -150,7 +150,6 @@ export const QUERY_DEPENDENCIES = {
     "station_day_states",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
     "routing_cell_periods",
     "menu_periods",
@@ -173,7 +172,6 @@ export const QUERY_DEPENDENCIES = {
     "tenants",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
     "seasons",
     "department_days",
@@ -188,7 +186,6 @@ export const QUERY_DEPENDENCIES = {
     "tenants",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
     "seasons",
     "department_days",
@@ -211,7 +208,6 @@ export const QUERY_DEPENDENCIES = {
     "special_day_dates",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
   ],
   "opening-hours": [
@@ -221,7 +217,6 @@ export const QUERY_DEPENDENCIES = {
     "catalogues",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
     "zone_service_policies",
     "floor_zones",
@@ -243,7 +238,6 @@ export const QUERY_DEPENDENCIES = {
     "tenants",
     "settings.business_day",
     "settings.venue",
-
     "day_cutover_changes",
     "departments",
     "zone_service_policies",

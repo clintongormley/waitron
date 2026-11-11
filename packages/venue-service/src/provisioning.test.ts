@@ -145,7 +145,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
     it("adds no courses when promoting a department already authored by the venue", async () => {
       await seedVenue(db, { invoiceLocales: ["en-GB"] });
-      await venueLocationId(db);
+
       await db.insert(departments).values({ name: "Dining", tradingName: "Dining" });
       const node = { nodeId: await seedNode(db) };
       await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));

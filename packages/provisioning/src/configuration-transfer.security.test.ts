@@ -59,7 +59,7 @@ function seed() {
 
 it("exports the current business-day cutover without retaining an obsolete setting", async () => {
   const target = await seed();
-  await venueLocationId(suite.db);
+
   await withTransaction(suite.db, (tx) =>
     tx.execute(sql`insert into day_cutover_changes
       ( effective_business_day, day_cutover)
@@ -73,7 +73,7 @@ it("exports the current business-day cutover without retaining an obsolete setti
 
 it("refuses export while a future cutover change would be lost", async () => {
   const target = await seed();
-  await venueLocationId(suite.db);
+
   await withTransaction(suite.db, (tx) =>
     tx.execute(sql`insert into day_cutover_changes
       ( effective_business_day, day_cutover)

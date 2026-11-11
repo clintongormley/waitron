@@ -396,7 +396,7 @@ describe("applyVenue: the one taxpayer row", () => {
       db: suite.db,
       modules: ALL_MODULES,
     });
-    await venueLocationId(suite.db);
+
     await suite.db.run(sql`PRAGMA ignore_check_constraints = on`);
     try {
       await suite.db.run(
@@ -1143,7 +1143,7 @@ it("reuses the current dated start without clearing the location timeline", asyn
     db: suite.db,
     modules: ALL_MODULES,
   });
-  await venueLocationId(suite.db);
+
   await seedBusinessDay(suite.db, { dayCutover: "07:00:00" });
   await suite.db
     .insert(dayCutoverChanges)
