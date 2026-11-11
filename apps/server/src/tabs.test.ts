@@ -144,7 +144,7 @@ async function setupVenue(): Promise<Seeded> {
     tableId,
     offers,
   } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: "Daily menu" });
     const drinks = await createCategory(tx, { name: "ES drinks" });
     const coffeeProduct = await createProduct(tx, {
       catalogueId: cat.id,
