@@ -344,5 +344,19 @@ export function placedSpareFixture(boxes: {
     };
   }
 
-  return { setupBoxes, placeRealCopy, stoppedBeforePlacing };
+  async function placeEmergencyCopy(): Promise<PlacedSpare> {
+    const keys = await setupBoxes();
+    const { spareVenue } = dirs();
+    mainBox.db.run(sql`vacuum into ${join(spareVenue, "venue.db")}`);
+    spareBefore.node.run(sql`vacuum into ${join(spareVenue, "node.db")}`);
+    const opened = await openVenueDatabase(spareVenue);
+    return {
+      venue: opened.venue,
+      node: opened.node,
+      close: () => opened.close(),
+      relinquishment: null,
+      ...keys,
+    };
+  }
+  return { setupBoxes, placeRealCopy, stoppedBeforePlacing, placeEmergencyCopy };
 }

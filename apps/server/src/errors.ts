@@ -255,6 +255,9 @@ declare module "@waitron/shared" {
     "handover.copy_mismatch": Record<string, never>;
     /** The copy a spare received fails the database's own integrity check. */
     "handover.copy_damaged": Record<string, never>;
+    "handover.source_still_answering": Record<string, never>;
+    "handover.source_not_established": Record<string, never>;
+    "handover.controlled_unresolved": Record<string, never>;
     /** `module`'s records in the copy a spare received fail that module's own check. */
     "handover.chain_broken": { module: string };
     /** The old box's retained selections and the spare's own would leave their file too little room. */

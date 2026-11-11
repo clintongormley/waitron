@@ -17,7 +17,9 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { registroSif } from "@waitron/fiscal-verifactu/src/schema/sif.js";
-import { handoverActivations } from "@waitron/handover";
+import { handoverActivations, verifyEnvelope } from "@waitron/handover";
+import { nodeSigningPublicKey } from "@waitron/credentials";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashPassword, managementSessions, persons } from "@waitron/identity";
 import { signDocumentBody, type MembershipNode } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -25,6 +27,7 @@ import { readHandoverEvent, readHandoverOperation, readNodeMode } from "@waitron
 import { createPasswordThrottle, createFirstSetupCoordinator } from "@waitron/provisioning";
 import { createDeploymentHolders } from "./deployment-holders.js";
 import { mountHandoverActivationApi, type HandoverActivationDeps } from "./handover-activation.js";
+import { mountHandoverEmergencyApi, type EmergencyHandover } from "./handover-emergency-api.js";
 import { handoverPromotionContext, mountHandoverPreparationApi } from "./handover-preparation.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
@@ -110,7 +113,11 @@ function serviceFor(store: Store) {
 }
 
 /** The real promotion and both real routes, with the restart a thing the case can read. */
-function spareOn(store: Store, service: Service = serviceFor(store)) {
+function spareOn(
+  store: Store,
+  service: Service = serviceFor(store),
+  emergency?: EmergencyHandover,
+) {
   const holders = createDeploymentHolders("mirror", "secondary");
   const steps: string[] = [];
   const run: HandoverActivationDeps["run"] = async (attestation, runner, beforeRestart) => {
@@ -151,13 +158,17 @@ function spareOn(store: Store, service: Service = serviceFor(store)) {
     passwordThrottle: createPasswordThrottle(),
   };
   mountHandoverPreparationApi(app, { ...common, requestFromBox: () => false });
-  mountHandoverActivationApi(app, { ...common, run });
+  mountHandoverActivationApi(app, {
+    ...common,
+    run,
+    ...(emergency === undefined ? {} : { emergency }),
+  });
   return { app, service, steps, run };
 }
 
 async function request(
   app: Hono,
-  step: "preparation" | "activate",
+  step: "preparation" | "activate" | "declare",
   body: unknown,
   { operationId = OPERATION, base = "https://box.test", headers = {} } = {},
 ): Promise<Answer> {
@@ -229,6 +240,83 @@ const operationRow = (store: Store) => readHandoverOperation(store.node, standby
 const allocations = (store: Store) => store.venue.select().from(fiscalAllocations);
 const activations = (store: Store) => store.venue.select().from(handoverActivations);
 const sifRows = (store: Store) => store.venue.select().from(registroSif);
+
+async function emergencySpare(gate = true) {
+  placed = await fixture.placeEmergencyCopy();
+  vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
+  await seedWorkingOrder(placed.venue, { openedAt: "2026-10-16T12:00:00Z" });
+  const declarationApp = new Hono();
+  const exchange = vi.fn(async () => {
+    throw Object.assign(new Error("source off"), { code: "ECONNREFUSED" });
+  });
+  const emergency = mountHandoverEmergencyApi(declarationApp, {
+    db: placed.venue,
+    node: placed.node,
+    nodeId: standby.nodeId,
+    ring,
+    venueDir: dirs().spareVenue,
+    modules: fiscalModules,
+    origin: "https://box.test",
+    credentialKeyRing: TOTP_KEY_RING,
+    fetch: exchange,
+  });
+  const declarationBody = {
+    operationId: OPERATION,
+    signIn,
+    statements: { sourceSwitchedOff: true, noParallelRecovery: true, missingTailAccepted: true },
+    reason: "Source stopped",
+    locale: "en",
+  };
+  const declared = await request(declarationApp, "declare", declarationBody, {
+    operationId: "emergency",
+  });
+  expect(declared.status, JSON.stringify(declared.body)).toBe(200);
+  return {
+    store: placed,
+    ...spareOn(placed, serviceFor(placed), gate ? emergency : undefined),
+    declared: declared.body as unknown as { declaration: unknown },
+    repeat: () => request(declarationApp, "declare", declarationBody, { operationId: "emergency" }),
+    exchange,
+  };
+}
+
+describe("emergency activation on a real copy", () => {
+  it("commits the spare's signed interval evidence after clock sign-ins, with a version-one offline approval and safe replay", async () => {
+    const s = await emergencySpare();
+    const { input } = await selectName(s.app);
+    expect((await s.repeat()).body).toEqual(s.declared);
+    const before = Date.now();
+    expect((await activate(s.app, input)).body).toEqual({ activated: true, restarting: true });
+    expect(Date.now()).toBe(before);
+    const rows = await activations(s.store);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.evidence).toEqual(s.declared.declaration);
+    const verified = verifyEnvelope<{ lastCopy: { lastChangeAtMs: number } }>(
+      rows[0]!.evidence,
+      "declaration",
+      () => nodeSigningPublicKey(s.store.spareKey),
+    );
+    expect(verified.valid).toBe(true);
+    if (!verified.valid) throw new Error("unverified declaration");
+    expect(verified.body.lastCopy.lastChangeAtMs).toBe(1792152000000);
+    const own = (await allocations(s.store)).filter((row) => row.nodeId === standby.nodeId);
+    expect(own).toHaveLength(1);
+    expect(own[0]!.approval).toMatchObject({ version: 1, oldMachineOffline: true });
+    expect(own[0]!.approval).not.toHaveProperty("oldMachineRelinquished");
+    expect(s.exchange).toHaveBeenCalledTimes(2);
+    expect((await activate(s.app, input)).body).toEqual({ activated: true, restarting: false });
+    expect(await allocations(s.store)).toHaveLength(2);
+    expect(s.exchange).toHaveBeenCalledTimes(2);
+  }, 60_000);
+
+  it("refuses emergency activation without this process's copy mark", async () => {
+    const s = await emergencySpare(false);
+    const { input } = await selectName(s.app);
+    expect((await activate(s.app, input)).body.error?.code).toBe("handover.copy_mismatch");
+    expect(await activations(s.store)).toHaveLength(0);
+    expect((await readNodeMode(s.store.node, standby.nodeId)).mode).toBe("mirror");
+  }, 60_000);
+});
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "handover-activation-"));

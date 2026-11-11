@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { firstCodeInCauseChain } from "@waitron/shared";
 import {
   HANDOVER_STATES,
   initialState,
@@ -248,9 +249,17 @@ export function persistingAccept(deps: {
 
 /** Why an ask has no answer to judge; logged by node id, never with the answer's contents. */
 export type SilentReason =
-  "unreachable" | "refused" | "not_json" | "not_verified" | "wrong_signer" | "wrong_nonce";
+  | "unreachable"
+  | "not_established"
+  | "refused"
+  | "not_json"
+  | "not_verified"
+  | "wrong_signer"
+  | "wrong_nonce";
 
 export interface AskPeerStatusDeps {
+  /** This server's origin, when the caller must refuse its own address before asking. */
+  ownOrigin?: string;
   /** Signs a query envelope with this box's node key (`signAsThisBox(deps, "query", body)`). */
   sign: (body: PeerQueryBody & CanonicalValue) => Promise<SignedHandoverEnvelope<unknown>>;
   /**
@@ -304,7 +313,7 @@ export function isOperationStatus(value: unknown): value is PeerOperationStatus 
   );
 }
 
-function isRestriction(value: unknown): boolean {
+export function isRestriction(value: unknown): value is PeerStatusBody["restriction"] {
   if (value === null) return true;
   if (!isRecord(value)) return false;
   return (
@@ -344,28 +353,33 @@ export async function postToBox(
   body: string,
 ): Promise<{ status: number; text: string }> {
   const signal = AbortSignal.timeout(deps.timeoutMs);
-  if (deps.fetch !== undefined) {
-    const res = await deps.fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body,
-      signal,
-    });
-    return { status: res.status, text: await res.text() };
+  try {
+    if (deps.fetch !== undefined) {
+      const res = await deps.fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+        signal,
+      });
+      return { status: res.status, text: await res.text() };
+    }
+    const ca = deps.authorityOf?.(nodeId);
+    return await boxExchange(
+      new URL(url),
+      {
+        method: "POST",
+        // Unchecked without a pinned authority: only an answer whose signed envelope verifies can be
+        // taken as a yes.
+        trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
+        signal,
+        body,
+      },
+      MAX_STATUS_BYTES,
+    );
+  } catch (error) {
+    if (signal.aborted) throw signal.reason;
+    throw error;
   }
-  const ca = deps.authorityOf?.(nodeId);
-  return boxExchange(
-    new URL(url),
-    {
-      method: "POST",
-      // Unchecked without a pinned authority: only an answer whose signed envelope verifies can be
-      // taken as a yes.
-      trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
-      signal,
-      body,
-    },
-    MAX_STATUS_BYTES,
-  );
 }
 
 /**
@@ -384,18 +398,33 @@ export function askPeerStatus(
       deps.onSilent?.(peer.nodeId, reason);
       return null;
     };
+    if (
+      peer.url === "" ||
+      (deps.ownOrigin !== undefined && originOf(peer.url) === originOf(deps.ownOrigin))
+    ) {
+      return silent("not_established");
+    }
     const nonce = nonceOf();
+    let query: SignedHandoverEnvelope<unknown>;
+    try {
+      query = await deps.sign({ nonce, atMs: now(), ...deps.query });
+    } catch {
+      return silent("not_established");
+    }
     let answer: { status: number; text: string };
     try {
-      const query = await deps.sign({ nonce, atMs: now(), ...deps.query });
       answer = await postToBox(
         { ...deps, timeoutMs },
         peer.nodeId,
         `${peer.url.replace(/\/+$/, "")}/api/node/peer-status`,
         JSON.stringify(query),
       );
-    } catch {
-      return silent("unreachable");
+    } catch (error) {
+      const code = firstCodeInCauseChain(error, () => true);
+      const unreachable =
+        ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "ETIMEDOUT"].includes(code ?? "") ||
+        (error instanceof DOMException && error.name === "TimeoutError");
+      return silent(unreachable ? "unreachable" : "not_established");
     }
     if (answer.status < 200 || answer.status > 299) return silent("refused");
     let raw: unknown;

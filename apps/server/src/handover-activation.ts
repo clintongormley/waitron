@@ -19,6 +19,7 @@ import {
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { oldBoxStillMain } from "./handover-chart.js";
+import type { EmergencyHandover } from "./handover-emergency-api.js";
 import { usableBase } from "./handover-destination-duty.js";
 import {
   assertBindingNamesOperation,
@@ -46,6 +47,7 @@ export interface HandoverActivationDeps {
   appDb: Database;
   nodePreparation: ReturnType<typeof createNodeOperationPreparation>;
   passwordThrottle?: PasswordThrottle;
+  emergency?: EmergencyHandover;
   run: (
     attestation: FenceAttestation,
     operation: PromotionOperationRunner,
@@ -61,6 +63,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "handover.operation_unknown": 404,
   "handover.step_out_of_order": 409,
   "handover.source_no_longer_main": 409,
+  "handover.copy_mismatch": 409,
+  "handover.source_still_answering": 409,
+  "handover.source_not_established": 409,
   "module.operation_invalid": 400,
   "promotion.node_fenced": 409,
   "promotion.membership_superseded": 409,
@@ -112,8 +117,12 @@ async function activate(
       moduleOperation,
       credentials,
       handoverPromotionContext(operation),
-      (_modules, runner) =>
-        deps.run(
+      async (_modules, runner) => {
+        if (!committed && operation.scenario === "emergency") {
+          if (deps.emergency === undefined) throw new AppError("handover.copy_mismatch", {});
+          await deps.emergency.assertMayActivate(operation);
+        }
+        return deps.run(
           { oldNodeNeutralised: true },
           (context, consume) =>
             runner(context, async (tx, operations) => {
@@ -134,7 +143,8 @@ async function activate(
           // Venue first, node after: a repeat finishes this record from the committed row, and no record
           // can claim a promotion that did not commit.
           () => advanceHandover(deps, operationId, "activated", {}),
-        ),
+        );
+      },
       // The password check takes long enough for the operation to move on.
       async () => {
         await readOperationReadyToPromote(deps, operationId);

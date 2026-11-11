@@ -1297,19 +1297,79 @@ describe("askPeerStatus", () => {
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
 
+  it.each<[string, Error, "unreachable" | "not_established"]>([
+    ["a refused connection", Object.assign(new Error(), { code: "ECONNREFUSED" }), "unreachable"],
+    ["no network route", Object.assign(new Error(), { code: "ENETUNREACH" }), "unreachable"],
+    ["no host route", Object.assign(new Error(), { code: "EHOSTUNREACH" }), "unreachable"],
+    ["a connection timeout", Object.assign(new Error(), { code: "ETIMEDOUT" }), "unreachable"],
+    [
+      "a refused connection wrapped by fetch",
+      new TypeError("fetch failed", {
+        cause: Object.assign(new Error(), { code: "ECONNREFUSED" }),
+      }),
+      "unreachable",
+    ],
+    ["an unexplained transport failure", new TypeError("fetch failed"), "not_established"],
+  ])("distinguishes %s from a verified answer", async (_label, error, reason) => {
+    const onSilent = vi.fn();
+    const fetchFn = vi.fn(async () => {
+      throw error;
+    });
+    expect(await realAsk({ fetch: fetchFn, onSilent })(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, reason);
+  });
+
+  it("a signing fault cannot establish that the peer is silent, even with a connection error code", async () => {
+    const onSilent = vi.fn();
+    const fetchFn = vi.fn();
+    const real = realAsk({
+      sign: async () => {
+        throw Object.assign(new Error("signing failed"), { code: "ECONNREFUSED" });
+      },
+      fetch: fetchFn,
+      onSilent,
+    });
+    expect(await real(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it.each(["", "https://this-box.local/"])(
+    "an empty or own address %j cannot establish that the peer is silent",
+    async (url) => {
+      const onSilent = vi.fn();
+      const { fetchFn } = answerWith((q) => sign(body(q.nonce)));
+      const signer = vi.fn<Parameters<typeof askPeerStatus>[0]["sign"]>(async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      );
+      const real = realAsk({
+        ownOrigin: "https://this-box.local",
+        sign: signer,
+        fetch: fetchFn,
+        onSilent,
+      });
+      expect(await real({ ...PEER, url })).toBeNull();
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+      expect(signer).not.toHaveBeenCalled();
+      expect(fetchFn).not.toHaveBeenCalled();
+    },
+  );
+
   it("a body that is not JSON is null", async () => {
     const fetchFn = vi.fn(async () => new Response("<html>", { status: 200 }));
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
 
   it("a peer that does not answer within the time limit is null", async () => {
+    const onSilent = vi.fn();
     const fetchFn = vi.fn(
       (_url: string | URL | Request, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
         }),
     );
-    expect(await ask(fetchFn, 20)(PEER)).toBeNull();
+    expect(await realAsk({ fetch: fetchFn, timeoutMs: 20, onSilent })(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "unreachable");
   });
 
   describe("over HTTPS to a box serving a leaf from its own authority", () => {
@@ -1328,9 +1388,11 @@ describe("askPeerStatus", () => {
 
     it("with the authority pinned, a box presenting another authority's leaf is refused before the query is sent", async () => {
       const server = await statusServer(authorityY, (q) => sign(body(q.nonce)));
-      const real = realAsk({ authorityOf: () => authorityX.caPem });
+      const onSilent = vi.fn();
+      const real = realAsk({ authorityOf: () => authorityX.caPem, onSilent });
       expect(await real({ ...PEER, url: server.url })).toBeNull();
       expect(server.requests).toHaveLength(0);
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
     });
 
     it("with no authority known, an unsigned answer is still null", async () => {
