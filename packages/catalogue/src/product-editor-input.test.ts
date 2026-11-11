@@ -1,3 +1,4 @@
+import type { ProductEditorSaveBody } from "@waitron/shared";
 import { expect, it } from "vitest";
 import { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
 
@@ -139,7 +140,8 @@ it.each([true, false])(
   },
 );
 it("keeps omitted availability absent on the product and its listed variants", () => {
-  const { available: _available, ...body } = input;
+  const body: ProductEditorSaveBody = { ...input };
+  delete body.available;
   const variant = {
     name: "Small",
     customerName: null,

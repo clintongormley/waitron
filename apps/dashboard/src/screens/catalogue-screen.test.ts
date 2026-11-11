@@ -1,3 +1,4 @@
+import type { ProductEditorSaveBody } from "@waitron/shared";
 import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import { LitElement, html } from "lit";
@@ -1040,7 +1041,8 @@ describe("catalogue-screen", () => {
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
-    const { available: _available, ...body } = value;
+    const body: ProductEditorSaveBody = { ...value };
+    delete body.available;
     emit(editor(el), "wt-submit", { value, body });
     await flush(el);
     expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", body);

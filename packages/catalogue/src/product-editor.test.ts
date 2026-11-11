@@ -1,3 +1,4 @@
+import type { ProductEditorSaveBody } from "@waitron/shared";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -1160,8 +1161,10 @@ it("preserves later dish and variant availability during an unrelated editor sav
     await updateProduct(tx, loaded.id, { available: false });
     await updateProduct(tx, loaded.variants[0]!.id, { available: false });
   });
-  const { available: _available, ...body } = loaded;
-  const variants = loaded.variants.map(({ available: _flag, ...variant }) => variant);
+  const body: ProductEditorSaveBody = { ...loaded };
+  delete body.available;
+  const variants: ProductEditorSaveBody["variants"] = structuredClone(loaded.variants);
+  for (const variant of variants) delete variant.available;
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, loaded.id, catalogueId, { ...body, unitPrice: "10.00", variants }, "en"),
   );
@@ -1191,7 +1194,8 @@ it("preserves a variant's later availability on its own page and restores it exp
     readProductEditor(tx, parent.variants[0]!.id),
   );
   await withTransaction(fx.db, (tx) => updateProduct(tx, loaded.id, { available: false }));
-  const { available: _available, ...body } = loaded;
+  const body: ProductEditorSaveBody = { ...loaded };
+  delete body.available;
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, loaded.id, catalogueId, { ...body, unitPrice: "4.00" }, "en"),
   );
@@ -1203,8 +1207,10 @@ it("preserves a variant's later availability on its own page and restores it exp
   expect(restored.available).toBe(true);
 });
 it("creates available products and variants when their save flags are absent", async () => {
-  const { available: _available, ...body } = input;
-  const variants = input.variants.map(({ available: _flag, ...variant }) => variant);
+  const body: ProductEditorSaveBody = { ...input };
+  delete body.available;
+  const variants: ProductEditorSaveBody["variants"] = structuredClone(input.variants);
+  for (const variant of variants) delete variant.available;
   const saved = await withTransaction(fx.db, (tx) =>
     saveProductEditor(tx, null, catalogueId, { ...body, variants }, "en"),
   );
