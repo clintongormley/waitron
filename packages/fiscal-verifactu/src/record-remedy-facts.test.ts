@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -16,6 +16,7 @@ import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { mountRecordRemedies } from "./record-remedy-routes.js";
+import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
@@ -539,3 +540,93 @@ it.each(
     expect(await snapshot()).toEqual(before);
   },
 );
+
+describe("a fix never changes the invoice's amounts", () => {
+  const twelveTen = [
+    {
+      Impuesto: "01",
+      ClaveRegimen: "01",
+      CalificacionOperacion: "S1",
+      TipoImpositivo: "21.00",
+      BaseImponibleOimporteNoSujeto: "10.00",
+      CuotaRepercutida: "2.10",
+    },
+  ] as const;
+
+  async function refusedTwelveTenInvoice() {
+    const saleId = await seedSale(suite.db, node, 2);
+    return withTransaction(suite.db, async (tx) => {
+      const pending = altaFor(node, saleId, 2, 2, "preproduction");
+      const original = await appendToChain(tx, node.nodeId, {
+        ...pending,
+        input: {
+          ...pending.input,
+          Desglose: [...twelveTen],
+          CuotaTotal: "2.10",
+          ImporteTotal: "12.10",
+        },
+      });
+      await tx
+        .insert(envios)
+        .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
+      const filingCase = await openFilingCase(tx, {
+        registroId: original.id,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: 1161, mensaje: null, csv: null },
+        now: NOW,
+      });
+      return { caseId: filingCase.id, registroId: original.id };
+    });
+  }
+
+  function fix(target: { caseId: string; registroId: string }, facts: unknown) {
+    return withTransaction(suite.db, (tx) =>
+      applyCorrectedRecordFacts(
+        tx,
+        {
+          nodeId: node.nodeId,
+          environment: "preproduction",
+          clock: { ...steadyClock, now: () => ({ ...steadyClock.now(), instant }) },
+          requireWritable() {},
+        },
+        token,
+        new Set(["record-correction"]),
+        { ...body, ...target, actionKey: "twelve-ten", facts },
+      ),
+    );
+  }
+
+  it("refuses a €12.10 invoice filed at 21% (10.00 + 2.10) re-filed at 10% (11.00 + 1.10)", async () => {
+    const target = await refusedTwelveTenInvoice();
+    const before = await snapshot();
+    await expect(
+      fix(target, {
+        breakdown: [
+          {
+            ...twelveTen[0],
+            TipoImpositivo: "10.00",
+            BaseImponibleOimporteNoSujeto: "11.00",
+            CuotaRepercutida: "1.10",
+          },
+        ],
+        taxTotal: "1.10",
+      }),
+    ).rejects.toMatchObject({ code: "fiscal.remedy_amount_changed" });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("accepts a fix of the same invoice that changes only its description", async () => {
+    const target = await refusedTwelveTenInvoice();
+    const result = await fix(target, { description: "Corrected restaurant service" });
+    const [row] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, result.registroId));
+    expect(row).toMatchObject({
+      descripcionOperacion: "Corrected restaurant service",
+      desglose: twelveTen,
+      cuotaTotal: "2.10",
+      importeTotal: "12.10",
+    });
+  });
+});
