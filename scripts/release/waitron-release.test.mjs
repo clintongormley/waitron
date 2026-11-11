@@ -1,12 +1,15 @@
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtemp, cp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { runDeclarationCommand } from "../../packages/fiscal-verifactu/src/declaration/command.ts";
 import {
+  declarationArgs,
   main,
   madridDate,
   nodeAsk,
@@ -652,5 +655,39 @@ describe("the entry point", () => {
     expect(result.stderr).toBe("release: git push origin v1.0.0 exited with status 1\n");
     expect(result.stdout).toBe("the hook's own words\nFAILED-CALL-OUTPUT\n");
     expect(recorded).toEqual([...argvOnly(tagPath()), ["git", "tag", "-d", "v1.0.0"]]);
+  });
+});
+
+describe("the package command", () => {
+  const PREFIX = ["--filter", "@waitron/fiscal-verifactu", "declaration"];
+  const PRODUCER = {
+    WAITRON_PRODUCER_NAME: "PRODUCER PERSON",
+    WAITRON_PRODUCER_TAX_ID: "00000000T",
+    WAITRON_PRODUCER_ADDRESS: "1 Example Street, 00000 Nowhere (Province), Spain",
+  };
+  const DECLARATIONS = join(import.meta.dirname, "../../packages/fiscal-verifactu/declarations");
+
+  it.each([
+    [declarationArgs("show", "1.0.0", "Elche", "2026-11-11")],
+    [declarationArgs("write", "1.0.0", "Elche", "2026-11-11")],
+    [declarationArgs("check", "1.0.0")],
+  ])("takes %j, refusing it for the template's release blockers only", async (args) => {
+    expect(args.slice(0, 3)).toEqual(PREFIX);
+    const root = await mkdtemp(join(tmpdir(), "waitron-release-declaration-"));
+    try {
+      await cp(DECLARATIONS, join(root, "declarations"), { recursive: true });
+      await cp(join(DECLARATIONS, "template.md"), join(root, "declarations/v1.0.0.md"));
+      let stderr = "";
+      const status = await runDeclarationCommand(args.slice(3), {
+        root,
+        env: PRODUCER,
+        stdout: () => {},
+        stderr: (text) => (stderr += text),
+      });
+      expect(stderr).toMatch(/^declaration\.release_blocked /);
+      expect(status).toBe(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

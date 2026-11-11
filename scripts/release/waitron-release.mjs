@@ -45,7 +45,7 @@ export function madridDate(now) {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-function declarationArgs(subcommand, version, place, date) {
+export function declarationArgs(subcommand, version, place, date) {
   const args = ["--filter", "@waitron/fiscal-verifactu", "declaration", subcommand];
   if (subcommand === "check") return [...args, "--version", version];
   return [...args, "--version", version, "--place", place, "--date", date];
