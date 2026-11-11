@@ -491,13 +491,10 @@ it.each([
       "units",
     ],
   ],
-] as const)(
-  "subscribes %s %j to its live sources",
-  async (name, args, types) => {
-    const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
-    expect(query.dependencies).toEqual(types.map((type) => ({ type })));
-  },
-);
+] as const)("subscribes %s %j to its live sources", async (name, args, types) => {
+  const query = dashboardQuery(new DashboardApi("", vi.fn()), name, [...args]);
+  expect(query.dependencies).toEqual(types.map((type) => ({ type })));
+});
 
 it("refreshes the bucket copy's settings every ten seconds, and depends on `backup_status` alone", () => {
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getStreamSettings", []);
