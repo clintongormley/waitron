@@ -1,7 +1,6 @@
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { LitElement } from "lit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { ServersScreen } from "./servers-screen.js";
 import { DashboardApi, type ServerListing } from "../api/client.js";
@@ -89,37 +88,27 @@ it.each(["source is not primary", "target is not spare", "target has no address"
     expect(q(q(el, "wt-data-table"), '[data-test="handover-new"]')).toBeNull();
   },
 );
-async function open(el: ServersScreen, includeCode = true) {
+async function open(el: ServersScreen) {
   q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
-  await vi.waitFor(() => expect(q(el, "dashboard-fresh-sign-in")).not.toBeNull());
-  const sign = q(el, "dashboard-fresh-sign-in") as LitElement;
-  await vi.waitFor(() => expect(q(sign, '[name="current-password"]')).not.toBeNull());
-  for (const [name, value] of [
-    ["current-password", "secret"],
-    ["totp", "123456"],
-  ]) {
-    if (name === "totp" && !includeCode) continue;
-    const field = q(sign, `[name="${name}"]`) as LitElement;
-    await field.updateComplete;
-    const input = field.shadowRoot!.querySelector("input")!;
-    input.value = value!;
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  }
-  await el.updateComplete;
+  await vi.waitFor(() =>
+    expect(
+      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false),
+  );
 }
-it("asks for fresh password and authenticator before handing over to the selected spare", async () => {
+it("hands over to the selected spare without embedded credentials", async () => {
   const { el, host, start } = await mount();
   const navigate = vi.fn();
   host.addEventListener("handover-open", navigate);
   await open(el);
+  expect(q(el, "dashboard-fresh-sign-in")).toBeNull();
   expect(start).not.toHaveBeenCalled();
   q(el, "[data-test=confirm-handover]").click();
   await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-  expect(start.mock.calls[0]![0]).toMatchObject({
+  expect(start.mock.calls[0]![0]).toEqual({
     destinationNodeId: "new",
-    signIn: { method: "password", password: "secret", totp: "123456" },
+    operationId: expect.stringMatching(/^[0-9a-f-]{36}$/),
   });
-  expect(start.mock.calls[0]![0].operationId).toMatch(/^[0-9a-f-]{36}$/);
   await vi.waitFor(() => expect(navigate).toHaveBeenCalled());
   expect(navigate.mock.calls[0]![0].detail.url).toBe("https://new.example/handover/move");
 });
@@ -133,23 +122,6 @@ it("recovers a lost start answer through the public status with the original ope
   expect(status).toHaveBeenCalledWith(start.mock.calls[0]![0].operationId);
   expect(start).toHaveBeenCalledTimes(1);
 });
-it("refuses a recovery code before it can stop sales", async () => {
-  const { el, start } = await mount();
-  await open(el);
-  const field = q(q(el, "dashboard-fresh-sign-in"), '[name="totp"]') as LitElement;
-  await field.updateComplete;
-  const input = field.shadowRoot!.querySelector("input")!;
-  input.value = "recovery-code";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  q(el, "[data-test=confirm-handover]").click();
-  await vi.waitFor(() =>
-    expect(
-      (q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error,
-    ).toContain("authenticator"),
-  );
-  expect(start).not.toHaveBeenCalled();
-});
-
 it("offers no handover action without node.promote", async () => {
   const { el } = await mount({ permission: false });
   expect(q(el, "wt-data-table").shadowRoot!.querySelector('[data-test="handover-new"]')).toBeNull();
@@ -157,11 +129,10 @@ it("offers no handover action without node.promote", async () => {
 it("a passkey-only account cannot start the handover", async () => {
   const { el, start } = await mount({ password: false });
   q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
-  await vi.waitFor(() => expect(q(el, "dashboard-fresh-sign-in")).not.toBeNull());
   await vi.waitFor(() =>
-    expect(
-      (q(el, "dashboard-fresh-sign-in") as HTMLElement & { ways: unknown }).ways,
-    ).not.toBeNull(),
+    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+      t("servers.handover_password"),
+    ),
   );
   expect(
     (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
@@ -239,27 +210,22 @@ it.each([
   await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
   expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
 });
-it("redraws the action and clears the marked-fields message after the missing code is entered", async () => {
-  const { el, start } = await mount();
-  await open(el, false);
+it("keeps an unproved or cancelled shared sign-in available for retry without polling status", async () => {
+  const { el, start, status } = await mount();
+  start.mockRejectedValue({ code: "management_session.proof_required", status: 400 });
+  await open(el);
   q(el, "[data-test=confirm-handover]").click();
   await vi.waitFor(() =>
-    expect(
-      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
-    ).toBe(true),
+    expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe(
+      codeMessage("management_session.proof_required"),
+    ),
   );
-  const code = q(q(el, "dashboard-fresh-sign-in"), '[name="totp"]') as LitElement;
-  await code.updateComplete;
-  const input = code.shadowRoot!.querySelector("input")!;
-  input.value = "123456";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await vi.waitFor(() =>
-    expect(
-      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
-    ).toBe(false),
-  );
-  expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe("");
-  expect(start).not.toHaveBeenCalled();
+  expect(status).not.toHaveBeenCalled();
+  expect(q(el, "[data-test=stop-handover]").textContent?.trim()).toBe("Stop");
+  start.mockResolvedValue({ handoverPage: "https://new.example/handover/move" });
+  q(el, "[data-test=confirm-handover]").click();
+  await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+  expect(start.mock.calls[1]![0].operationId).toBe(start.mock.calls[0]![0].operationId);
 });
 it("offers Close rather than Stop once a lost request may already have started handover", async () => {
   const { el, status } = await mount({ lost: true });
@@ -300,4 +266,22 @@ it("keeps an early refusal through a lost status read and retries only after unk
   q(el, "[data-test=confirm-handover]").click();
   await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
   expect(start.mock.calls[1]![0].operationId).not.toBe(start.mock.calls[0]![0].operationId);
+});
+
+it("keeps Hand over quiet after a failed passive profile read and retries it", async () => {
+  const { el, start } = await mount();
+  vi.mocked(el.api.getProfile).mockRejectedValueOnce({ code: "connection.failed" });
+  q(q(el, "wt-data-table"), '[data-test="handover-new"]').click();
+  await vi.waitFor(() => expect(q(el, "[data-test=retry-handover-profile]")).not.toBeNull());
+  expect(
+    (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+  ).toBe(true);
+  expect(start).not.toHaveBeenCalled();
+  q(el, "[data-test=retry-handover-profile]").click();
+  await vi.waitFor(() =>
+    expect(
+      (q(el, "[data-test=confirm-handover]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false),
+  );
+  expect((q(el, "[data-test=handover-actions]") as HTMLElement & { error: string }).error).toBe("");
 });

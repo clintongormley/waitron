@@ -1,20 +1,9 @@
 import { guideHref } from "../help-guide.js";
-import type { FreshSignIn, SignInWays } from "../widgets/fresh-sign-in.js";
-import "../widgets/fresh-sign-in.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import {
-  baseStyles,
-  focusFirstInvalid,
-  breakAfterColons,
-  draftScopeFor,
-  type DraftScope,
-  type LeaveCoordinator,
-  type LeaveReason,
-  type DataTableColumn,
-} from "@waitron/ui";
+import { baseStyles, breakAfterColons, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -163,40 +152,38 @@ export class ServersScreen extends LitElement {
   #focusTarget: HTMLElement | null = null;
 
   @state() private handoverTarget: ServerRow | null = null;
-  @state() private handoverWays: SignInWays | null = null;
+  @state() private handoverHasPassword: boolean | null = null;
+  @state() private handoverProfileFailed = false;
   @state() private handoverError = "";
   @state() private handoverBusy = false;
   #operationId = "";
   #handoverSent = false;
   #startRefusal: unknown;
-  #handoverScope?: DraftScope<boolean>;
-  #handoverLeave?: LeaveCoordinator;
-  #signIn(): FreshSignIn | null {
-    return this.renderRoot.querySelector("dashboard-fresh-sign-in");
-  }
   #openHandover(row: ServerRow): void {
     this.handoverTarget = row;
     this.#operationId = crypto.randomUUID();
     this.#handoverSent = false;
     this.#startRefusal = undefined;
-    this.handoverWays = null;
+    this.handoverHasPassword = null;
+    this.handoverProfileFailed = false;
     this.handoverError = "";
-    const { scope, coordinator } = draftScopeFor<boolean>(this, {
-      id: {},
-      current: () => this.#signIn()?.typed ?? false,
-      snapshot: (value) => value,
-      equal: (a, b) => a === b,
-      restore: () => this.#signIn()?.clear(),
-    });
-    this.#handoverScope = scope;
-    this.#handoverLeave = coordinator;
-    scope.commit(false);
+    void this.#readHandoverProfile(row);
+  }
+  async #readHandoverProfile(target: ServerRow): Promise<void> {
+    this.handoverProfileFailed = false;
+    this.handoverError = "";
+    try {
+      const profile = await this.api.background.getProfile();
+      if (this.handoverTarget !== target) return;
+      this.handoverHasPassword = profile.hasPassword;
+      if (!profile.hasPassword) this.handoverError = t("servers.handover_password");
+    } catch (error) {
+      if (this.handoverTarget !== target) return;
+      this.handoverProfileFailed = true;
+      this.handoverError = codeMessage(codeOf(error));
+    }
   }
   #closeHandover(): void {
-    this.#signIn()?.clear();
-    this.#handoverScope?.dispose();
-    this.#handoverScope = undefined;
-    this.#handoverLeave = undefined;
     this.handoverTarget = null;
     this.handoverBusy = false;
   }
@@ -204,16 +191,7 @@ export class ServersScreen extends LitElement {
     this.#closeHandover();
     super.disconnectedCallback();
   }
-  readonly #handoverBeforeClose = async (reason: LeaveReason): Promise<boolean> =>
-    !this.#handoverScope ||
-    !this.#handoverLeave ||
-    (await this.#handoverLeave.request({
-      scopes: [this.#handoverScope.id],
-      reason,
-      proceed() {},
-    })) === "proceeded";
   #openHandoverPage(url: string): void {
-    this.#handoverScope?.commit(false);
     this.#closeHandover();
     this.dispatchEvent(
       new CustomEvent("handover-open", { detail: { url }, bubbles: true, composed: true }),
@@ -221,10 +199,9 @@ export class ServersScreen extends LitElement {
   }
   async #startHandover(): Promise<void> {
     const target = this.handoverTarget;
-    const widget = this.#signIn();
-    if (!target || !widget || this.handoverBusy || !this.canPromote) return;
+    if (!target || this.handoverBusy || !this.canPromote) return;
     this.handoverError = "";
-    if (!this.handoverWays?.password) {
+    if (!this.handoverHasPassword) {
       this.handoverError = t("servers.handover_password");
       return;
     }
@@ -232,26 +209,12 @@ export class ServersScreen extends LitElement {
     this.handoverBusy = true;
     try {
       if (!this.#handoverSent) {
-        const signIn = await widget.signIn("password");
-        if (!signIn) {
-          this.handoverError = widget.notice;
-          this.handoverBusy = false;
-          await this.updateComplete;
-          await widget.updateComplete;
-          await focusFirstInvalid(widget.shadowRoot!);
-          return;
-        }
-        if (signIn.method !== "password" || signIn.recoveryCode !== undefined) {
-          this.handoverError = t("servers.handover_password");
-          return;
-        }
         this.#handoverSent = true;
         this.#startRefusal = undefined;
         try {
           const answer = await this.api.startHandover({
             operationId,
             destinationNodeId: target.nodeId,
-            signIn,
           });
           if (this.handoverTarget !== target) return;
           if (answer.handoverPage) {
@@ -268,7 +231,7 @@ export class ServersScreen extends LitElement {
             [400, 401, 403, 429].includes(Number(error.status))
           ) {
             this.#handoverSent = false;
-            this.handoverError = widget.refuse(error);
+            this.handoverError = codeMessage(codeOf(error));
             return;
           }
         }
@@ -316,7 +279,6 @@ export class ServersScreen extends LitElement {
       heading=${t("servers.hand_over")}
       .open=${this.handoverTarget !== null}
       .dismissible=${!this.handoverBusy}
-      .beforeClose=${this.#handoverBeforeClose}
       @wt-close=${() => this.#closeHandover()}
     >
       ${
@@ -330,29 +292,19 @@ export class ServersScreen extends LitElement {
                   >${t("help.guide_link")}</a
                 >
               </p>
-              <dashboard-fresh-sign-in
-                .api=${this.api.background}
-                .passwordAndCodeOnly=${true}
-                .disabled=${this.handoverBusy || this.#handoverSent}
-                @sign-in-ways=${(event: CustomEvent<SignInWays>) => {
-                  this.handoverWays = event.detail;
-                }}
-                @sign-in-change=${() => {
-                  this.#handoverScope?.changed();
-                  this.handoverError = "";
-                  this.requestUpdate();
-                }}
-                @sign-in-passkey=${() => {
-                  this.handoverError = t("servers.handover_password");
-                }}
-              ></dashboard-fresh-sign-in>`
+              ${
+                this.handoverProfileFailed
+                  ? html`<wt-button
+                      data-test="retry-handover-profile"
+                      variant="secondary"
+                      @click=${() => void this.#readHandoverProfile(this.handoverTarget!)}
+                      >${t("fresh_sign_in.retry")}</wt-button
+                    >`
+                  : nothing
+              }`
           : nothing
       }
-      <wt-form-actions
-        slot="footer"
-        data-test="handover-actions"
-        .error=${[this.handoverError, this.#signIn()?.marked ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
-      >
+      <wt-form-actions slot="footer" data-test="handover-actions" .error=${this.handoverError}>
         <wt-button
           slot="cancel"
           variant="secondary"
@@ -363,9 +315,9 @@ export class ServersScreen extends LitElement {
         >
         <wt-button
           data-test="confirm-handover"
-          variant=${this.handoverWays?.password ? "primary" : "secondary"}
+          variant=${this.handoverHasPassword ? "primary" : "secondary"}
           .loading=${this.handoverBusy}
-          .disabled=${this.handoverBusy || this.handoverWays === null || !this.handoverWays.password || (this.#signIn()?.invalid ?? false)}
+          .disabled=${this.handoverBusy || !this.handoverHasPassword}
           @click=${() => void this.#startHandover()}
           >${t(this.#handoverSent ? "servers.handover_check" : "servers.hand_over")}</wt-button
         >

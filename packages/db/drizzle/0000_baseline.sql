@@ -1738,7 +1738,9 @@ CREATE TABLE `management_sessions` (
 	`last_seen_at` text NOT NULL,
 	`ended_at` text,
 	`proved_at` text,
-	CONSTRAINT "management_sessions_token_hash_ck" CHECK(length("management_sessions"."token_hash") = 64)
+	`proof_method` text,
+	CONSTRAINT "management_sessions_token_hash_ck" CHECK(length("management_sessions"."token_hash") = 64),
+	CONSTRAINT "management_sessions_proof_method_ck" CHECK("management_sessions"."proof_method" in ('password', 'passkey', 'recovery-code'))
 );
 --> statement-breakpoint
 CREATE INDEX `management_sessions_open_idx` ON `management_sessions` (`person_id`);--> statement-breakpoint

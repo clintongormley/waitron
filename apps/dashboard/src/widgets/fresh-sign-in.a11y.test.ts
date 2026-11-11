@@ -32,7 +32,6 @@ function profile(overrides: Partial<OwnProfile>): OwnProfile {
 const STATES: Record<string, { own: Partial<OwnProfile> | "failed"; refusal?: string }> = {
   password: { own: {} },
   "password and code": { own: { hasTotp: true, passkeys: [PASSKEY] } },
-  "password and authenticator only": { own: { hasTotp: true, passkeys: [PASSKEY] } },
   "passkey only": { own: { hasPassword: false, passkeys: [PASSKEY] } },
   "passkey and code": { own: { hasPassword: false, hasTotp: true, passkeys: [PASSKEY] } },
   "no way in": { own: { hasPassword: false, passkeys: [] } },
@@ -58,11 +57,7 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
           : vi.fn().mockResolvedValue(profile(own)),
       freshSignInPasskeyOptions: vi.fn(),
     } as unknown as DashboardApi;
-    const { el, host } = await mountWidget<FreshSignIn>(
-      "dashboard-fresh-sign-in",
-      { api, passwordAndCodeOnly: state === "password and authenticator only" },
-      theme,
-    );
+    const { el, host } = await mountWidget<FreshSignIn>("dashboard-fresh-sign-in", { api }, theme);
     const root = el.shadowRoot!;
     await expect
       .poll(() =>

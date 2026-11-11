@@ -4483,7 +4483,6 @@ export class DashboardApi {
   startHandover(body: {
     operationId: string;
     destinationNodeId: string;
-    signIn: FreshSignInBody;
   }): Promise<{ handoverPage?: string }> {
     return this.#request("/management-api/handover", "POST", body);
   }

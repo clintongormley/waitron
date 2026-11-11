@@ -70,7 +70,11 @@ export async function confirmFreshSignIn(
       }),
       async (tx, input) => {
         const person = await verifyOwnFreshSignIn(tx, input);
-        await recordProof(tx, managementSessionId);
+        await recordProof(
+          tx,
+          managementSessionId,
+          codes.recoveryCode === undefined ? "password" : "recovery-code",
+        );
         return person.id;
       },
     );
@@ -100,7 +104,11 @@ export async function confirmFreshSignIn(
           ...codes,
           keyRing: deps.keyRing,
         });
-        await recordProof(tx, managementSessionId);
+        await recordProof(
+          tx,
+          managementSessionId,
+          codes.recoveryCode === undefined ? "passkey" : "recovery-code",
+        );
         finish("success");
         return personId;
       } catch (error) {
@@ -112,10 +120,14 @@ export async function confirmFreshSignIn(
   throw new AppError("management.request_invalid", { field: "method" });
 }
 
-async function recordProof(tx: Transaction, token: string): Promise<void> {
+async function recordProof(
+  tx: Transaction,
+  token: string,
+  proofMethod: "password" | "passkey" | "recovery-code",
+): Promise<void> {
   const { sessionRowId } = await resolveManagementSession(tx, token);
   await tx
     .update(managementSessions)
-    .set({ provedAt: nowIso() })
+    .set({ provedAt: nowIso(), proofMethod })
     .where(eq(managementSessions.id, sessionRowId));
 }

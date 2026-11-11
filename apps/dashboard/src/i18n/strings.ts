@@ -1209,9 +1209,6 @@ export const en = {
   "profile.password_recovery":
     "To set a password, sign out and choose “I’ve forgotten my password” when logging in.",
   "fresh_sign_in.password": "Password",
-  "fresh_sign_in.authenticator_code": "Authenticator code",
-  "fresh_sign_in.authenticator_hint": "6-digit code from your app",
-  "fresh_sign_in.authenticator_required": "Enter a code from your authenticator app",
   "fresh_sign_in.code": "Authenticator or recovery code",
   "fresh_sign_in.code_hint": "6-digit code from your app, or one of your recovery codes",
   "fresh_sign_in.code_required": "Enter a code from your authenticator app or a recovery code",
@@ -1866,7 +1863,7 @@ export const en = {
   "servers.handover_intro":
     "Sales stop on this box while the final copy moves. On the spare, sign in again, compare clocks and start the venue. Payments already recorded stay in the copy. Keep both boxes connected.",
   "servers.handover_password":
-    "Use an administrator account with a password and its authenticator code. Passkeys and recovery codes cannot start this handover.",
+    "On the spare, you will need your administrator password and current authenticator code, if set up. Have them ready; a passkey or recovery code cannot finish the handover.",
   "servers.handover_reconnect":
     "Could not read handover progress. Keep both boxes connected and check progress again.",
   "servers.handover_check": "Check handover progress",
@@ -5069,9 +5066,6 @@ export const es: Record<StringKey, string> = {
   "profile.password_recovery":
     "Para crear una contraseña, cierra la sesión y elige «¿Has olvidado tu contraseña?» al iniciar sesión.",
   "fresh_sign_in.password": "Contraseña",
-  "fresh_sign_in.authenticator_code": "Código del autenticador",
-  "fresh_sign_in.authenticator_hint": "Código de 6 cifras de tu app",
-  "fresh_sign_in.authenticator_required": "Introduce un código de tu app de autenticación",
   "fresh_sign_in.code": "Código del autenticador o de recuperación",
   "fresh_sign_in.code_hint": "Código de 6 cifras de tu app, o uno de tus códigos de recuperación",
   "fresh_sign_in.code_required":
@@ -5739,7 +5733,7 @@ export const es: Record<StringKey, string> = {
   "servers.handover_intro":
     "Las ventas se detienen en este equipo mientras se mueve la copia final. En el de reserva, identifícate de nuevo, compara los relojes e inicia el local. Los pagos ya registrados se conservan en la copia. Mantén los dos equipos conectados.",
   "servers.handover_password":
-    "Usa una cuenta de administrador con contraseña y su código de autenticador. Las llaves de acceso y los códigos de recuperación no pueden iniciar este traspaso.",
+    "En el equipo de reserva necesitarás tu contraseña de administrador y el código actual del autenticador, si está configurado. Tenlos preparados; una llave de acceso o un código de recuperación no permite completar el traspaso.",
   "servers.handover_reconnect":
     "No se pudo consultar el progreso. Mantén los dos equipos conectados y vuelve a consultarlo.",
   "servers.handover_check": "Consultar el progreso del traspaso",

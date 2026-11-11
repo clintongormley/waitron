@@ -499,6 +499,11 @@ for (const locale of ["en", "es"] as const) {
           null,
         ],
         [
+          "management_sessions",
+          { name: "proof_method", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
+        [
           "kitchen_stations",
           { name: "waits_for_pass", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
           0,

@@ -10,10 +10,11 @@ and data. The spare’s page shows its status; it takes no sales and offers no d
 Use this flow only with a spare that has finished joining the venue.
 
 On the main box, open **Settings → Servers**. Open the spare’s row menu and choose **Hand over the
-venue**. Read the explanation, then enter your administrator password and authenticator code if
-set up. Choose **Stop** to keep the venue on this box, or **Hand over the venue** to stop sales here
-and move the final copy. You need an account with a password; passkeys and recovery codes cannot
-complete this flow.
+venue**. Read the explanation. Choose **Stop** to keep the venue on this box, or **Hand over the
+venue** to stop sales here and move the final copy. If asked, [confirm your sign-in](staff.md#account-access).
+A recent confirmation is reused; a recovery-code confirmation must be replaced with your current
+authenticator code. You need an account with a password, and that password and your current
+authenticator code, if set up, ready to sign in on the spare. A passkey cannot complete that step.
 
 Keep both boxes connected. The handover page opens on the spare and follows the transfer. Once
 the copy is ready, enter the same administrator account, compare the clocks and make the new
