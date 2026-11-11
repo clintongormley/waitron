@@ -85,11 +85,7 @@ else if (request.command === "stage") {
           parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
           request.expectedSourceNodeId,
         );
-      assert(
-        !checked.secretEntries.some(
-          (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
-        ),
-      );
+      assert(!checked.secretEntries.some((entry) => entry.name.startsWith("secrets/cloud/")));
       await stageRestoreRequest(stateDir, candidate);
     } finally {
       await checked.discard();

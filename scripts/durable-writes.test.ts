@@ -14,7 +14,7 @@ const server = Object.fromEntries(
     ["box-tls-repair", "flushes; fl6 owns it"],
     ["box-tls-install", "A947 resumable TLS install"],
     ["cloud-remote", "the staff key's create-only link"],
-    ["cloud-snapshot-worker", "flushes; fl4 moves it"],
+    ["cloud-snapshot-worker", "snapshot state and archives; jr10 owns replacement"],
     ["cloud-tunnel", "tunnel volume outside state"],
     ["handover-acceptance", "A1018 reachDisk"],
     ["handover-place-copy", "A1018 reachDisk"],
