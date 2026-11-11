@@ -32,20 +32,19 @@ export async function recordActivity<K extends ActivityKind>(
   entry: ActivityInput<K>,
 ): Promise<RecordedActivity> {
   const id = entry.id ?? newId();
-  const [row] = await tx
-    .insert(activityLog)
-    .values({
-      id,
-      kind: entry.kind,
-      subjectKind: ACTIVITY_KINDS[entry.kind].subject,
-      subjectId: entry.subjectId,
-      personId: entry.personId,
-      deviceId: entry.deviceId ?? null,
-      data: entry.data,
-      at: entry.at ?? new Date(),
-    })
-    .onConflictDoNothing({ target: activityLog.id })
-    .returning({ id: activityLog.id, at: activityLog.at });
+  const insert = tx.insert(activityLog).values({
+    id,
+    kind: entry.kind,
+    subjectKind: ACTIVITY_KINDS[entry.kind].subject,
+    subjectId: entry.subjectId,
+    personId: entry.personId,
+    deviceId: entry.deviceId ?? null,
+    data: entry.data,
+    at: entry.at ?? new Date(),
+  });
+  const write =
+    entry.id === undefined ? insert : insert.onConflictDoNothing({ target: activityLog.id });
+  const [row] = await write.returning({ id: activityLog.id, at: activityLog.at });
   if (row) return row;
   const [original] = await tx
     .select({ id: activityLog.id, at: activityLog.at })

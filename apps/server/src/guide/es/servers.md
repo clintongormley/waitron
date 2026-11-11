@@ -94,9 +94,9 @@ niega a seguir como principal. Abre el otro equipo con el enlace. Si esa informa
 de continuar, este equipo deja de aceptar ventas. Usa el nuevo equipo principal. Los equipos antiguos
 pueden compartir dirección: comprueba qué equipo has abierto.
 
-Mantén este equipo encendido y conserva sus datos hasta que su página confirme que el principal
-tiene todos los registros de facturación devueltos. No lo restablezcas mientras la devolución esté
-esperando, enviándose o detenida.
+Mantén este equipo encendido y conserva sus datos mientras devuelve los registros. Puedes
+restablecerlo, pero eso borra sus datos del local aunque la devolución se haya detenido o no haya
+terminado.
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 

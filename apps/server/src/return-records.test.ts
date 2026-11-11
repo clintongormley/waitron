@@ -1,10 +1,11 @@
+import * as handover from "@waitron/handover";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { openBackupQuery } from "@waitron/store";
 import * as nodeDatabase from "@waitron/node-db";
 import { dirname, join } from "node:path";
 import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
-import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { eq, sql } from "drizzle-orm";
@@ -113,6 +114,7 @@ beforeEach(async () => {
 function destination(
   requireWritable = () => {},
   handles: Pick<database.VenueDatabase, "node"> & { db: database.Database } = suite,
+  log: Logger = () => {},
 ) {
   const app = new Hono();
   app.use(
@@ -133,7 +135,7 @@ function destination(
       requireWritable,
       wake: () => {},
     },
-    () => {},
+    log,
   );
   return app;
 }
@@ -710,7 +712,14 @@ it("resends after evidence persistence fails and retries a failed decision appen
 
 it("lists current clashes after an old source leaves the chart and refuses an unprivileged reader", async () => {
   accounted = false;
-  const app = destination();
+  const logs: string[] = [];
+  const app = destination(
+    () => {},
+    suite,
+    (_level, event) => {
+      logs.push(event);
+    },
+  );
   expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
   const admin = await acceptanceSession();
   const staff = await acceptanceSession("staff");
@@ -719,6 +728,17 @@ it("lists current clashes after an old source leaves the chart and refuses an un
   });
   expect(refused.status).toBe(403);
   expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  const inspect = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "inspect")
+    .mockRejectedValueOnce(new Error("read failure"));
+  try {
+    expect(
+      (await app.request("/management-api/return-clashes", { headers: { cookie: admin.cookie } }))
+        .status,
+    ).toBe(500);
+  } finally {
+    inspect.mockRestore();
+  }
   const chart = (await database.readNodeMembership(suite.db))!;
   const body = { ...chart.body, nodes: chart.body.nodes.filter((row) => row.nodeId !== source) };
   await writeNodeMembership(suite.db, {
@@ -731,11 +751,13 @@ it("lists current clashes after an old source leaves the chart and refuses an un
   });
   expect(listed.status, await listed.clone().text()).toBe(200);
   expect(await listed.json()).toEqual({ clashes: [], batches: [] });
+  expect(logs).toContain("return-clash.evidence_unreadable");
 });
 
 it("stores a signed batch once and accounts separately for two clashes inside it", async () => {
   const seat = modules[0]!.handover!.returnRecords!;
   let heldVersion = 0;
+  const verify = vi.spyOn(handover, "verifyEnvelope");
   const inspect = vi.spyOn(seat, "inspect").mockImplementation(async (_tx, _source, batch) =>
     ["A", "B"].map((saleId) => ({
       saleId,
@@ -765,7 +787,11 @@ it("stores a signed batch once and accounts separately for two clashes inside it
           })
         ).json()) as { clashes: { clashId: string; accepted: boolean; eligible: boolean }[] }
       ).clashes;
+    inspect.mockClear();
+    verify.mockClear();
     const initial = await list();
+    expect(inspect).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledTimes(1);
     expect(initial).toHaveLength(2);
     expect(
       suite.node.all<{ n: number }>(
@@ -797,5 +823,6 @@ it("stores a signed batch once and accounts separately for two clashes inside it
   } finally {
     inspect.mockRestore();
     receive.mockRestore();
+    verify.mockRestore();
   }
 });

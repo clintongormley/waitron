@@ -252,7 +252,13 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
           try {
             evidence = await readEvidence(deps, group, tx);
           } catch (error) {
-            if (isAppError(error) && error.code === "handover.return_refused") continue;
+            if (isAppError(error) && error.code === "handover.return_refused") {
+              log("warn", "return-clash.evidence_unreadable", {
+                batchId: String(event.detail.batchId),
+                errorCode: error.code,
+              });
+              continue;
+            }
             throw error;
           }
           batches.push({
@@ -336,7 +342,7 @@ export function mountReturnClashAcceptance(app: Hono, deps: Deps, log: Logger) {
             actionKey: raw.actionKey,
           });
           await recordActivity(tx, {
-            id: returnDigest({ clashId, personId, actionKey: raw.actionKey, reason: raw.reason }),
+            id: returnDigest({ clashId, personId, actionKey: raw.actionKey }),
             kind: "handover.return_clash_accepted",
             subjectId: deps.nodeId,
             personId,

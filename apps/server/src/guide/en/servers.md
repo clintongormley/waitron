@@ -84,8 +84,8 @@ If the backup confirms that another box has taken over, this box refuses to carr
 other box using the link. If that evidence appears after you carry on, this box stops taking sales.
 Use the new main box. Older boxes may share an address: check which box you opened.
 
-Keep this box running with its data until its page confirms that the main box holds every
-returned invoice record. Do not reset it while the return is waiting, sending or stopped.
+Keep this box running with its data while it returns records. Reset remains available, but it
+deletes this box's venue data even if the return has stopped or is unfinished.
 
 ## Turn remote staff access on or off {#remote-access}
 
