@@ -124,7 +124,7 @@ it("checks before archive/bucket placement changes either database or host state
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   expect(await readFile(path, "utf8")).toBe("OLD");
   expect(await readFile(source, "utf8")).toBe("NEW");
-  await expect(readFile(join(f.stateDir, "rebuild-first-start.json"))).rejects.toMatchObject({
+  await expect(readFile(join(f.stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
 });
@@ -132,8 +132,12 @@ it.each(["restore", "reset"])(
   "staged %s cannot remove credentials or place files across an unresolved claim",
   async (kind) => {
     const f = await fixture();
-    await writeFile(join(f.stateDir, `${kind}-request.json`), "{}");
-    await writeFile(join(f.stateDir, "restore-request.node-key"), "RECOVERY-SENTINEL");
+    await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+    await writeFile(
+      join(f.stateDir, kind === "restore" ? "flows/restore/record.json" : "reset-request.json"),
+      kind === "restore" ? JSON.stringify({ version: 1, phase: "staged", request: {} }) : "{}",
+    );
+    await writeFile(join(f.stateDir, "flows/restore/node-key"), "RECOVERY-SENTINEL");
     let placements = 0;
     const deps = {
       stateDir: f.stateDir,
@@ -149,7 +153,7 @@ it.each(["restore", "reset"])(
         : runStagedReset(deps),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
     expect(placements).toBe(0);
-    expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(
+    expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(
       "RECOVERY-SENTINEL",
     );
   },

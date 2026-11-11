@@ -248,7 +248,8 @@ export async function stagedHourCrash(
         ? { ...common, artifact, recoveryKey: encryptionKey }
         : { ...common, kind: "stream", databasePath, entries },
     );
-    if (kind === "stream") await copyFile(join(roots.stateDir, "restore-request.db"), databasePath);
+    if (kind === "stream")
+      await copyFile(join(roots.stateDir, "flows/restore/venue.db"), databasePath);
     const nextEvent = async () => {
       const next = createSelectedRecoveryPreparation({
         ...options,

@@ -50,7 +50,7 @@ it.each(["archive", "stream"] as const)(
     expect(retained).not.toContain(f.encryptionKey);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.key.secret);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.encryptionKey);
-    await expect(readFile(join(f.stateDir, "restore-request.node-key"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "flows/restore/node-key"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
@@ -88,7 +88,7 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
 );
 it("refuses the archive encryption key as node authentication before changing the destination", async () => {
   f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
-  await writeFile(join(f.stateDir, "restore-request.node-key"), f.encryptionKey);
+  await writeFile(join(f.stateDir, "flows/restore/node-key"), f.encryptionKey);
   const destination = await f.seedDestination();
   await writeFile(join(f.stateDir, "trading.env"), "untouched identity");
   const retained = f.journal();
@@ -104,12 +104,10 @@ it("refuses the archive encryption key as node authentication before changing th
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toBe("untouched identity");
   expect(f.journal()).toBe(retained);
   expect(refusal).toMatchObject(expectedRefusal);
-  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(
-    f.encryptionKey,
-  );
+  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(f.encryptionKey);
   expect(
-    JSON.parse(await readFile(join(f.stateDir, "restore-request.json"), "utf8")),
-  ).not.toHaveProperty("placementStarted");
+    JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")),
+  ).toHaveProperty("phase", "staged");
   expect(JSON.stringify(log.mock.calls)).not.toContain(f.key.secret);
   expect(JSON.stringify(log.mock.calls)).not.toContain(f.encryptionKey);
 });

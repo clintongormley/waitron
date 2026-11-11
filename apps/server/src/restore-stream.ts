@@ -364,7 +364,7 @@ export interface WriteStreamArgs extends PlacementDeps {
 }
 
 /** The archive restore's own validation and write, over the restored database and the unlocked
- * row's entries, with the first-start marker naming the stream. */
+ * row's entries, with the first-start record naming the stream. */
 export async function writeStreamRestore(
   args: WriteStreamArgs,
   prepareModuleOperations?: (copy: ValidatedArtifact) => Promise<RestoreOperationRunner>,

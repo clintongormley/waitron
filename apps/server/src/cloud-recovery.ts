@@ -1,5 +1,5 @@
-import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
-import { CLOUD_DIR, CLOUD_RECOVERY_FILE, RESTORE_REQUEST_FILE } from "@waitron/store";
+import { mkdirDurable, readRestoreFlowPhase, writeFileDurable } from "@waitron/provisioning";
+import { CLOUD_DIR, CLOUD_RECOVERY_FILE } from "@waitron/store";
 import {
   createHash,
   createPrivateKey,
@@ -8,7 +8,6 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
-import { lstat } from "node:fs/promises";
 import { Agent } from "node:https";
 import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -185,11 +184,9 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
   async function readForSetup(): Promise<SavedState | undefined> {
     const state = await read();
     if (state?.phase === "staged") {
-      try {
-        await lstat(join(options.stateDir, RESTORE_REQUEST_FILE));
-      } catch (error) {
-        if (!record(error) || error.code !== "ENOENT") return unavailable();
-        // A failed cold restore removes its marker. Keep the approved identity for a retry.
+      const phase = await readRestoreFlowPhase(options.stateDir);
+      if (phase === "unreadable") return unavailable();
+      if (phase !== "staged" && phase !== "placing") {
         delete state.phase;
         await save(state);
       }

@@ -21,6 +21,7 @@ const server = Object.fromEntries(
     ["mirror-bundle-fetch", "A1018 reachDisk"],
     ["local-fs-backend", "flushes, keeping cancellation before replacement"],
     ["log-file", "log rotation"],
+    ["restore-flow", "restore folder publication and ending"],
     ["restore-request", "database and secret swaps; fl5 owns it"],
     ["restore-secrets", "database and secret swaps"],
     ["restore", "database and secret swaps"],

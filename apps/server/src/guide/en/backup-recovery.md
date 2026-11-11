@@ -171,6 +171,8 @@ its new invoice series, connect it to the internet and press **Retry a normal bo
 
 ## If a recovery is interrupted {#resume}
 
+If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.
+
 Until you choose the restore button, the page keeps what you entered only while it stays open.
 Changing the file, key or environment discards what it checked, and a reload opens the page's
 first screen; from there choose **Join or recover** and start the restore again. If the box refuses the

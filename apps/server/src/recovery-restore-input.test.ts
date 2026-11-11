@@ -311,8 +311,8 @@ it.each(["archive", "stream"] as const)(
     );
     submitted.binding.eventId = "changed";
     submitted.input.signed = "changed";
-    const marker = JSON.parse(await readFile(join(stateDir, "restore-request.json"), "utf8"));
-    expect(marker.recoveryOperation).toEqual(request);
+    const marker = JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8"));
+    expect(marker.request.recoveryOperation).toEqual(request);
     expect(JSON.stringify(marker)).not.toContain(nodeKey);
     expect(
       await runStagedRestore(
@@ -334,9 +334,9 @@ it.each(["archive", "stream"] as const)(
       ),
     ).toBe(true);
     await restored();
-    await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    expect(
+      JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")),
+    ).toHaveProperty("phase", "first-start");
   },
 );
 
@@ -436,7 +436,7 @@ it.each(["invalid", "wrong-action"])(
       recoveryKey: kit.recoveryKey,
       environment: "preproduction",
     });
-    const previous = await readFile(join(stateDir, "restore-request.json"));
+    const previous = await readFile(join(stateDir, "flows/restore/record.json"));
     const recoveryOperation =
       kind === "invalid"
         ? { ...request, input: undefined }
@@ -452,8 +452,8 @@ it.each(["invalid", "wrong-action"])(
       code: "server.config_invalid",
       params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "invalid_operation" },
     });
-    expect(await readFile(join(stateDir, "restore-request.json"))).toEqual(previous);
-    expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(
+    expect(await readFile(join(stateDir, "flows/restore/record.json"))).toEqual(previous);
+    expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(
       await readFile(archivePath),
     );
   },
@@ -517,7 +517,7 @@ it.each(["archive", "stream"] as const)(
     await restored();
     expect(collected).toBe(true);
     expect(hookEntered).toBe(true);
-    await expect(readFile(join(stateDir, "restore-request.node-key"))).rejects.toMatchObject({
+    await expect(readFile(join(stateDir, "flows/restore/node-key"))).rejects.toMatchObject({
       code: "ENOENT",
     });
     expect(JSON.stringify(log.mock.calls)).not.toContain(nodeKey);
@@ -536,7 +536,7 @@ it.each(["wrong", "outside-refusal"])(
       recoveryOperation: request,
       nodeRecoverySecret: mode === "wrong" ? "wrong-node-key" : nodeKey,
     });
-    const stagedRequest = await readFile(join(stateDir, "restore-request.json"));
+    const stagedRequest = await readFile(join(stateDir, "flows/restore/record.json"));
     if (mode === "outside-refusal")
       modules[0] = {
         ...modules[0]!,
@@ -561,10 +561,10 @@ it.each(["wrong", "outside-refusal"])(
     expect(collected).toBe(mode === "outside-refusal");
     expect(hookEntered).toBe(false);
     await expect(readFile(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
-    expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(
+    expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
       mode === "wrong" ? "wrong-node-key" : nodeKey,
     );
-    expect(await readFile(join(stateDir, "restore-request.json"))).toEqual(stagedRequest);
+    expect(await readFile(join(stateDir, "flows/restore/record.json"))).toEqual(stagedRequest);
   },
 );
 

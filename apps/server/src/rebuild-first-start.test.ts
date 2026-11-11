@@ -43,7 +43,6 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { STREAM_PURPOSE, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import {
-  REBUILD_MARKER,
   assertRestoredMembershipReadable,
   completeRebuild,
   deferFirstStart,
@@ -52,6 +51,8 @@ import {
   type RebuildDeps,
   type RebuildSource,
 } from "./rebuild-first-start.js";
+
+const RESTORE_RECORD = "flows/restore/record.json";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -108,8 +109,13 @@ async function rebuiltStateDir(marker: RebuildSource | false): Promise<string> {
     now: () => NOW,
     listIpv4: () => [OLD_ADDRESS],
   });
+  await mkdir(join(stateDir, "flows/restore"), { recursive: true });
   if (marker !== false) {
-    await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source: marker }));
+    await writeFile(
+      join(stateDir, RESTORE_RECORD),
+      JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: marker } }),
+    );
+    await writeFile(join(stateDir, "trading.env.replaced"), "old identity");
   }
   await seedTermZeroMembership(
     { db: suite.db, node: suite.node, ring: RING },
@@ -163,6 +169,22 @@ async function storedRow(): Promise<unknown> {
 }
 
 describe("completeRebuild", () => {
+  it("finishes a first start while preserving a placing request for its Cloud retry", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    const record = { version: 1, phase: "placing", request: { managedCloud: { pointId: "kept" } } };
+    await writeFile(
+      join(stateDir, RESTORE_RECORD),
+      JSON.stringify({ ...record, firstStart: { source: "archive" } }),
+    );
+    await writeFile(join(stateDir, "flows/restore/key"), "retained key");
+    expect(await completeRebuild(deps(stateDir))).toBe(true);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+    expect(JSON.parse(await readFile(join(stateDir, RESTORE_RECORD), "utf8"))).toEqual(record);
+    expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe("retained key");
+    expect(await completeRebuild(deps(stateDir))).toBe(false);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
+  });
+
   it.each(["archive", "stream"] as const)(
     "after a %s restore, presents a certificate naming THIS machine's addresses, from the same authority",
     async (source) => {
@@ -194,7 +216,10 @@ describe("completeRebuild", () => {
       expect(verifyMembershipDocument(held!, await readMembershipTrustSet(suite.db))).toMatchObject(
         { valid: true },
       );
-      await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({
+      await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({
         code: "ENOENT",
       });
     },
@@ -205,11 +230,11 @@ describe("completeRebuild", () => {
     await expect(completeRebuild(deps(stateDir, { ring: OTHER_RING }))).rejects.toMatchObject({
       code: "credentials.decrypt_failed",
     });
-    await stat(join(stateDir, REBUILD_MARKER));
+    await stat(join(stateDir, RESTORE_RECORD));
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
     // The other direction: the same folder with the right ring completes and removes it.
     expect(await completeRebuild(deps(stateDir))).toBe(true);
-    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does nothing on an ordinary start — the leaf stays byte-for-byte and the term does not move", async () => {
@@ -224,7 +249,7 @@ describe("completeRebuild", () => {
     "runs on a marker whose body names no source (%s), because only a restore writes one",
     async (markerBody) => {
       const stateDir = await rebuiltStateDir(false);
-      await writeFile(join(stateDir, REBUILD_MARKER), markerBody);
+      await writeFile(join(stateDir, RESTORE_RECORD), markerBody);
       const logged: Array<[string, Record<string, unknown> | undefined]> = [];
       expect(
         await completeRebuild(
@@ -245,12 +270,11 @@ describe("completeRebuild", () => {
     expect(logged).toContainEqual(["restore.first_start_done", { term: 1, source: "stream" }]);
   });
 
-  it("fails on a marker it cannot read at all, leaving it for the next start", async () => {
+  it("runs the first start when the restore record cannot be read", async () => {
     const stateDir = await rebuiltStateDir(false);
-    // A directory where the marker file goes: reading it fails with something other than ENOENT.
-    await mkdir(join(stateDir, REBUILD_MARKER));
-    await expect(completeRebuild(deps(stateDir))).rejects.toMatchObject({ code: "EISDIR" });
-    expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+    await mkdir(join(stateDir, RESTORE_RECORD));
+    expect(await completeRebuild(deps(stateDir))).toBe(true);
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
   });
 
   it("repairs a PEM whose certificate and key do not match", async () => {
@@ -376,7 +400,7 @@ describe("completeRebuild", () => {
       expect(await storedRow()).toEqual(before);
       expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
       expect(pointerTerm).not.toHaveBeenCalled();
-      await stat(join(stateDir, REBUILD_MARKER));
+      await stat(join(stateDir, RESTORE_RECORD));
     },
   );
 
@@ -401,7 +425,7 @@ describe("completeRebuild", () => {
       params: { reason: "untrusted_signer" },
     });
     expect(await storedRow()).toEqual(before);
-    await stat(join(stateDir, REBUILD_MARKER));
+    await stat(join(stateDir, RESTORE_RECORD));
   });
 
   // The limit of the check: the keys it trusts come from the same restored copy.
@@ -482,7 +506,7 @@ describe("the term after a restore", () => {
       completeRebuild(deps(stateDir, { pointerTerm: async () => Promise.reject(unreadable) })),
     ).rejects.toBe(unreadable);
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
-    await stat(join(stateDir, REBUILD_MARKER));
+    await stat(join(stateDir, RESTORE_RECORD));
   });
 
   it("reports the re-issue's failure without asking the bucket", async () => {
@@ -709,7 +733,7 @@ describe("runFirstStart", () => {
         errorCode: "server.credential_unusable",
       });
       expect(openStore).not.toHaveBeenCalled();
-      await stat(join(stateDir, REBUILD_MARKER));
+      await stat(join(stateDir, RESTORE_RECORD));
       expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
 
       await withTransaction(suite.db, (tx) =>
@@ -732,7 +756,7 @@ describe("runFirstStart", () => {
         failedSince: null,
       });
       expect(openStore).toHaveBeenCalledTimes(1);
-      await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
     }
@@ -748,12 +772,12 @@ describe("runFirstStart", () => {
     expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
       errorCode: "credentials.decrypt_failed",
     });
-    await stat(join(stateDir, REBUILD_MARKER));
+    await stat(join(stateDir, RESTORE_RECORD));
     await expect(runFirstStart(deps(stateDir))).resolves.toEqual({
       mayStream: true,
       failedSince: null,
     });
-    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("fails, keeps the marker and does not stream, when a bucket is set up but does not answer", async () => {
@@ -788,7 +812,7 @@ describe("runFirstStart", () => {
       expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
         errorCode: "restore.pointer_unreadable",
       });
-      await stat(join(stateDir, REBUILD_MARKER));
+      await stat(join(stateDir, RESTORE_RECORD));
       expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
     } finally {
       await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
@@ -803,7 +827,7 @@ describe("runFirstStart", () => {
       code: "restore.membership_invalid",
     });
     expect(log).not.toHaveBeenCalledWith("error", "restore.first_start_failed", expect.anything());
-    await stat(join(stateDir, REBUILD_MARKER));
+    await stat(join(stateDir, RESTORE_RECORD));
   });
 
   it("streams on an ordinary start", async () => {
@@ -883,14 +907,14 @@ describe("assertRestoredMembershipReadable", () => {
     await expect(assertRestoredMembershipReadable(stateDir, db)).rejects.toBe(failure);
   });
 
-  it("throws on when it cannot tell whether the marker is there", async () => {
+  it("accepts valid membership when the restore record cannot be reached", async () => {
     const dir = await mkdtemp(join(tmpdir(), "waitron-rebuild-"));
     dirs.push(dir);
     const notADirectory = join(dir, "state");
     await writeFile(notADirectory, "");
-    await expect(assertRestoredMembershipReadable(notADirectory, suite.db)).rejects.toMatchObject({
-      code: "ENOTDIR",
-    });
+    await expect(
+      assertRestoredMembershipReadable(notADirectory, suite.db),
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -904,7 +928,7 @@ describe("deferFirstStart", () => {
       failedSince: null,
     });
     expect(log).toHaveBeenCalledWith("warn", "restore.first_start_deferred", {});
-    await stat(join(stateDir, REBUILD_MARKER));
+    await stat(join(stateDir, RESTORE_RECORD));
     expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });

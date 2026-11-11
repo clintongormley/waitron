@@ -52,16 +52,16 @@ it.each(["archive", "stream"] as const)(
     expect(before).not.toContain(f.encryptionKey);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.key.secret);
     expect(JSON.stringify(log.mock.calls)).not.toContain(f.encryptionKey);
-    await expect(readFile(join(f.stateDir, "restore-request.node-key"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "flows/restore/node-key"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   },
 );
 it("rereads the retained selected-hour binding and refuses a changed event before placement", async () => {
   f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
-  const path = join(f.stateDir, "restore-request.json");
+  const path = join(f.stateDir, "flows/restore/record.json");
   const marker = JSON.parse(await readFile(path, "utf8"));
-  marker.recoveryOperation.binding.eventId = "another-recovery";
+  marker.request.recoveryOperation.binding.eventId = "another-recovery";
   await writeFile(path, JSON.stringify(marker));
   const destination = await f.seedDestination();
   await writeFile(join(f.stateDir, "trading.env"), "untouched identity");

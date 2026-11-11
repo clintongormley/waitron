@@ -1,7 +1,11 @@
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isVenueHolderFresh, type VenueHolder, type VenueLock } from "@waitron/db";
-import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/provisioning";
+import {
+  BACKUP_ROOM_NOTE_FILE,
+  BACKUP_ROOM_START_DELETED_FILE,
+  readRestoreFlowPhase,
+} from "@waitron/provisioning";
 import { codeOf } from "@waitron/server-kit";
 import { hasCode, isAppError } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
@@ -27,7 +31,6 @@ import { freeBytes, type Statfs } from "./free-bytes.js";
 import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { RESET_REQUEST_FILE } from "./reset-request.js";
-import { RESTORE_REQUEST_FILE } from "./restore-request.js";
 
 export interface StartBackupRoomDeps {
   stateDir: string;
@@ -113,7 +116,8 @@ async function checks(
   const { note } = read;
   // Either waiting request replaces or removes venue.db, after which these backups would be from
   // before the box's next installation.
-  if (await present(join(deps.stateDir, RESTORE_REQUEST_FILE)))
+  const restorePhase = await readRestoreFlowPhase(deps.stateDir);
+  if (restorePhase === "staged" || restorePhase === "placing")
     return { skipped: "restore_waiting" };
   if (await present(join(deps.stateDir, RESET_REQUEST_FILE))) return { skipped: "reset_waiting" };
   try {

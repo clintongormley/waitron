@@ -174,7 +174,7 @@ it("expires after five elapsed minutes even if the wall clock moves backwards", 
   }
 });
 
-it.each(["restore-request.json", "reset-request.json", "incomplete-operation"])(
+it.each(["staged", "placing", "reset-request.json", "incomplete-operation"])(
   "refuses %s before making a first claim",
   async (existing) => {
     const f = await fixture();
@@ -185,6 +185,12 @@ it.each(["restore-request.json", "reset-request.json", "incomplete-operation"])(
       }).run("adopt", "old-request", async (operation) => {
         await operation.advance("venue_committed");
       });
+    } else if (existing === "staged" || existing === "placing") {
+      await mkdir(join(f.options.stateDir, "flows/restore"), { recursive: true });
+      await writeFile(
+        join(f.options.stateDir, "flows/restore/record.json"),
+        JSON.stringify({ version: 1, phase: existing }),
+      );
     } else {
       await mkdir(f.options.stateDir, { recursive: true });
       await writeFile(join(f.options.stateDir, existing), "{unresolved");
@@ -202,6 +208,11 @@ it("permits a claim after an unrelated operation is durably complete", async () 
   }).run("import", "old-request", async (operation) => {
     await operation.complete();
   });
+  await mkdir(join(f.options.stateDir, "flows/restore"), { recursive: true });
+  await writeFile(
+    join(f.options.stateDir, "flows/restore/record.json"),
+    JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "archive" } }),
+  );
   await expect(f.claim()).resolves.toMatchObject({ ownerGeneration: 1 });
 });
 

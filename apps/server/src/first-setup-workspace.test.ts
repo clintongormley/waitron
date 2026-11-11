@@ -73,8 +73,12 @@ it.each(["restore", "reset"])(
   "staged %s refuses retired roots before reading the staged operation",
   async (kind) => {
     const f = await fixture();
-    await writeFile(join(f.stateDir, `${kind}-request.json`), "{}");
-    await writeFile(join(f.stateDir, "restore-request.node-key"), "retained synthetic secret");
+    await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+    await writeFile(
+      join(f.stateDir, kind === "restore" ? "flows/restore/record.json" : "reset-request.json"),
+      kind === "restore" ? JSON.stringify({ version: 1, phase: "staged", request: {} }) : "{}",
+    );
+    await writeFile(join(f.stateDir, "flows/restore/node-key"), "retained synthetic secret");
     const deps = { ...f, migrationsRoot: null, log: () => {} };
     let placements = 0;
     await expect(
@@ -85,7 +89,7 @@ it.each(["restore", "reset"])(
         : runStagedReset(deps),
     ).rejects.toMatchObject({ code: "setup.workspace_unsupported" });
     expect(placements).toBe(0);
-    expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(
+    expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(
       "retained synthetic secret",
     );
   },

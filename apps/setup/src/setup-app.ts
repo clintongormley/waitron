@@ -1966,7 +1966,9 @@ export class SetupApp extends LitElement {
         } else {
           this.cloudRecoveryError = say(
             (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
-              "shell.cloud.unavailable",
+              (event.detail.action === "restore"
+                ? "shell.cloud.restore_unavailable"
+                : "shell.cloud.unavailable"),
           );
         }
         this.screen = "cloud-restore";

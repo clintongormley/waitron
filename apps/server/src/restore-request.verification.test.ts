@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -109,7 +109,7 @@ async function fixture(artifact: Uint8Array = Buffer.from("archive")) {
     identity: await readFile(join(stateDir, "trading.env"), "utf8"),
     secrets: await readFile(join(stateDir, "secrets.env"), "utf8"),
   });
-  const marker = () => readFile(join(stateDir, "restore-request.json"), "utf8");
+  const marker = () => readFile(join(stateDir, "flows/restore/record.json"), "utf8");
   return {
     root,
     stateDir,
@@ -132,9 +132,10 @@ it("binary change after approval prevents staging without touching existing file
   f.running.mockReturnValue(target("f".repeat(40)));
   await expect(stageRestoreRequest(f.stateDir, f.request)).rejects.toThrow(unavailable);
   expect(await f.evidence()).toEqual(before);
-  expect(await readdir(f.stateDir)).toEqual(
-    expect.not.arrayContaining(["restore-request.json", "restore-request.artifact"]),
-  );
+  for (const name of ["record.json", "artifact"])
+    await expect(readFile(join(f.stateDir, "flows/restore", name))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
 });
 
 it("target is rechecked after asynchronous staging validation", async () => {
@@ -225,7 +226,7 @@ it.each([
 it("matching v2 stages the complete descriptor and fresh request key", async () => {
   const f = await fixture();
   await stageRestoreRequest(f.stateDir, f.request);
-  expect(JSON.parse(await f.marker())).toEqual({
+  expect(JSON.parse(await f.marker()).request).toEqual({
     version: 2,
     environment: "preproduction",
     managedCloud: { requestId, pointId },
@@ -262,7 +263,8 @@ it.each([
 ])("stripped or changed binding cannot downgrade a saved v2 operation: %s", async (fault) => {
   const f = await fixture();
   await stageRestoreRequest(f.stateDir, f.request);
-  const marker = JSON.parse(await f.marker()) as Record<string, unknown>;
+  const record = JSON.parse(await f.marker());
+  const marker = record.request as Record<string, unknown>;
   if (fault === "descriptor") delete marker.snapshotVerification;
   if (fault === "managed") delete marker.managedCloud;
   if (fault === "key") delete marker.snapshotRequestKey;
@@ -292,8 +294,8 @@ it.each([
       JSON.stringify({ ...f.saved, snapshotVerification: undefined }),
     );
   }
-  const raw = JSON.stringify(marker);
-  await writeFile(join(f.stateDir, "restore-request.json"), raw);
+  const raw = JSON.stringify(record);
+  await writeFile(join(f.stateDir, "flows/restore/record.json"), raw);
   const before = await f.evidence();
   const restore = vi.fn(async () => {});
   await expect(runStagedRestore(f.deps, restore)).rejects.toThrow(unavailable);
@@ -306,7 +308,8 @@ it.each(["hash", "size", "point", "request", "missing-descriptor", "stream"])(
   "staging refuses mismatched qualified input before replacing prior request: %s",
   async (fault) => {
     const f = await fixture();
-    await writeFile(join(f.stateDir, "restore-request.json"), "prior marker");
+    await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+    await writeFile(join(f.stateDir, "flows/restore/record.json"), "prior marker");
     if (fault === "hash") f.request.artifact = Buffer.from("changed");
     if (fault === "size") f.request.snapshotVerification = { ...f.verification, archiveBytes: 8 };
     if (fault === "point") f.request.managedCloud = { requestId, pointId: nodeId };
@@ -353,23 +356,25 @@ it.each([
   async (fault) => {
     const f = await fixture();
     await stageRestoreRequest(f.stateDir, f.request);
-    const marker = JSON.parse(await f.marker()) as Record<string, unknown>;
+    const record = JSON.parse(await f.marker());
+    const marker = record.request as Record<string, unknown>;
     if (fault === "unknown") marker.extra = true;
     if (fault === "nested-unknown") marker.managedCloud = { requestId, pointId, extra: true };
     if (fault === "stream") marker.kind = "stream";
     if (fault === "started") {
-      marker.placementStarted = true;
+      record.phase = "placing";
       marker.nodeRecoveryKey = false;
     }
-    let raw = JSON.stringify(marker);
+    let raw = JSON.stringify(record);
     if (fault === "duplicate") raw = raw.replace('"version":2', '"version":1,"version":2');
     if (fault === "malformed") raw = "{";
     if (fault === "changed-artifact")
-      await writeFile(join(f.stateDir, "restore-request.artifact"), "changed");
-    await writeFile(join(f.stateDir, "restore-request.json"), raw);
+      await writeFile(join(f.stateDir, "flows/restore/artifact"), "changed");
+    await writeFile(join(f.stateDir, "flows/restore/record.json"), raw);
     const restore = vi.fn(async () => {});
     const before = await f.evidence();
-    await expect(runStagedRestore(f.deps, restore)).rejects.toThrow(unavailable);
+    if (fault === "malformed") await expect(runStagedRestore(f.deps, restore)).resolves.toBe(false);
+    else await expect(runStagedRestore(f.deps, restore)).rejects.toThrow(unavailable);
     expect(restore).not.toHaveBeenCalled();
     expect(await f.marker()).toBe(raw);
     expect(await f.evidence()).toEqual(before);
@@ -397,8 +402,8 @@ it("target mismatch keeps the node credential and never sets placementStarted", 
   const restore = vi.fn(async () => {});
   await expect(runStagedRestore(f.deps, restore)).rejects.toThrow(unavailable);
   expect(await f.marker()).toBe(marker);
-  expect(JSON.parse(await f.marker())).not.toHaveProperty("placementStarted");
-  expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(
+  expect(JSON.parse(await f.marker()).phase).toBe("staged");
+  expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(
     "disposable node key",
   );
   expect(restore).not.toHaveBeenCalled();
@@ -592,7 +597,7 @@ describe("comparison immediately before real archive placement", () => {
       ),
     ).rejects.toThrow(unavailable);
     expect(await f.marker()).toBe(marker);
-    expect(await readFile(join(f.stateDir, "restore-request.node-key"), "utf8")).toBe(
+    expect(await readFile(join(f.stateDir, "flows/restore/node-key"), "utf8")).toBe(
       "disposable node key",
     );
     expect(await f.evidence()).toEqual(before);

@@ -133,7 +133,10 @@ it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void
   ],
   [
     "a restore request in the state folder",
-    (f) => writeFile(join(f.stateDir, "restore-request.json"), "{}"),
+    async (f) => {
+      await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+      await writeFile(join(f.stateDir, "flows/restore/record.json"), "{}");
+    },
     "setup.not_ready",
   ],
   [

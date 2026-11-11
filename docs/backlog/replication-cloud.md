@@ -730,7 +730,7 @@ in the offer. Left open by A1018 Slice 5 (Ruling R35).
 ## A handover's manifest has no row for the box's other state-folder files.
 
 `recovery.json`,
-`setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud/replacement.json`,
+`setup-operation.json`, `flows/restore/record.json`, `reset-request.json`, `cloud/replacement.json`,
 `backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in
 `packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
 open by A1018 Slice 4 (Slice 4's Ruling R5).

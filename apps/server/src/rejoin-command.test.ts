@@ -16,9 +16,12 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { describe, expect, it, vi } from "vitest";
 import type { RejoinDeps, RejoinResult } from "./rejoin.js";
 import { runRejoin } from "./rejoin-command.js";
-import { completeRebuild, REBUILD_MARKER } from "./rebuild-first-start.js";
+import { completeRebuild } from "./rebuild-first-start.js";
+import { publishRestoreFlow } from "./restore-flow.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
+
+const RESTORE_RECORD = "flows/restore/record.json";
 
 // Named explicitly rather than left to the `<stateDir>/venue` default, so a case that asserts on
 // the directory is asserting on a path this file chose.
@@ -364,7 +367,7 @@ describe("waitron-rejoin rejoin", () => {
 });
 
 describe("waitron-rejoin rejoin — default wiring", () => {
-  it.each([undefined, "archive", "stream"] as const)(
+  it.each([undefined, "archive", "stream", "staged", "placing", "unreadable"] as const)(
     "with nothing injected, wipes a fenced node's real venue, re-migrates it and logs the acknowledged loss (restore source: %s)",
     async (source) => {
       const stateDir = await mkdtemp(join(tmpdir(), "rejoin-defaults-"));
@@ -389,8 +392,23 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         await seeded.close();
         await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
         if (source !== undefined) {
-          await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
+          await publishRestoreFlow(
+            stateDir,
+            source === "staged" || source === "placing"
+              ? { version: 1, phase: source, request: { artifact: "original" } }
+              : {
+                  version: 1,
+                  phase: "first-start",
+                  firstStart: { source: source === "unreadable" ? "archive" : source },
+                },
+            async (dir) => {
+              await writeFile(join(dir, "artifact"), "original archive");
+            },
+          );
         }
+        if (source === "unreadable") await writeFile(join(stateDir, RESTORE_RECORD), "{not json");
+        const pending = source === "staged" || source === "placing";
+        const before = pending ? await readFile(join(stateDir, RESTORE_RECORD)) : null;
 
         const out: string[] = [];
         const code = await runRejoin({
@@ -421,9 +439,16 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         const reopened = await openVenueDatabase(venueDir);
         try {
           expect(await readNodeMembership(reopened.venue)).toBeNull();
-          await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({
-            code: "ENOENT",
-          });
+          if (pending) {
+            expect(await readFile(join(stateDir, RESTORE_RECORD))).toEqual(before);
+            expect(await readFile(join(stateDir, "flows/restore/artifact"), "utf8")).toBe(
+              "original archive",
+            );
+          } else {
+            await expect(stat(join(stateDir, RESTORE_RECORD))).rejects.toMatchObject({
+              code: "ENOENT",
+            });
+          }
           expect(
             await completeRebuild({
               stateDir,
@@ -456,7 +481,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
     },
   );
 
-  it("leaves the venue and trading config intact when the restore marker cannot be removed", async () => {
+  it("leaves the venue and trading config intact when the first-start flow cannot be ended", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "rejoin-marker-refused-"));
     const venueDir = join(stateDir, "venue");
     const held = signedMembershipDoc(3, {
@@ -475,8 +500,15 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         await seeded.close();
       }
       await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
-      await mkdir(join(stateDir, REBUILD_MARKER));
-      await writeFile(join(stateDir, REBUILD_MARKER, "retained"), "keep");
+      await publishRestoreFlow(
+        stateDir,
+        { version: 1, phase: "first-start", firstStart: { source: "archive" } },
+        async (dir) => {
+          await writeFile(join(dir, "retained"), "keep");
+        },
+      );
+      await rm(join(stateDir, "scratch"), { recursive: true, force: true });
+      await writeFile(join(stateDir, "scratch"), "blocked");
       const out: string[] = [];
       expect(
         await runRejoin({
@@ -493,7 +525,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         await reopened.close();
       }
       expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=old\n");
-      expect(await readFile(join(stateDir, REBUILD_MARKER, "retained"), "utf8")).toBe("keep");
+      expect(await readFile(join(stateDir, "flows/restore/retained"), "utf8")).toBe("keep");
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }
@@ -509,7 +541,11 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         { nodeId: NODE, contactUrl: "https://this", standing: "sell-only" },
       ],
     });
-    const marker = JSON.stringify({ version: 1, source: "archive" });
+    const marker = JSON.stringify({
+      version: 1,
+      phase: "first-start",
+      firstStart: { source: "archive" },
+    });
     try {
       await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
       const seeded = await openVenueDatabase(venueDir);
@@ -519,7 +555,8 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         await seeded.close();
       }
       await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
-      await writeFile(join(stateDir, REBUILD_MARKER), marker);
+      await mkdir(join(stateDir, "flows/restore"), { recursive: true });
+      await writeFile(join(stateDir, RESTORE_RECORD), marker);
       // Something at the note's path that no unlink removes.
       await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
       const out: string[] = [];
@@ -531,7 +568,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         }),
       ).toBe(1);
       expect(out.at(-1)).toBe("rejoin failed");
-      expect(await readFile(join(stateDir, REBUILD_MARKER), "utf8")).toBe(marker);
+      expect(await readFile(join(stateDir, RESTORE_RECORD), "utf8")).toBe(marker);
       const reopened = await openVenueDatabase(venueDir);
       try {
         expect(await readNodeMembership(reopened.venue)).toEqual(held);
@@ -550,8 +587,13 @@ describe("waitron-rejoin rejoin — default wiring", () => {
     try {
       await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
 
-      const marker = JSON.stringify({ version: 1, source: "archive" });
-      await writeFile(join(stateDir, REBUILD_MARKER), marker);
+      const marker = JSON.stringify({
+        version: 1,
+        phase: "first-start",
+        firstStart: { source: "archive" },
+      });
+      await mkdir(join(stateDir, "flows/restore"), { recursive: true });
+      await writeFile(join(stateDir, RESTORE_RECORD), marker);
       const out: string[] = [];
       const code = await runRejoin({
         argv: ["rejoin"],
@@ -561,7 +603,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
 
       expect(code).toBe(1);
       expect(out).toEqual(["rejoin failed: rejoin.not_fenced"]);
-      expect(await readFile(join(stateDir, REBUILD_MARKER), "utf8")).toBe(marker);
+      expect(await readFile(join(stateDir, RESTORE_RECORD), "utf8")).toBe(marker);
       await expect(stat(join(venueDir, "venue.db"))).resolves.toBeDefined();
     } finally {
       await rm(stateDir, { recursive: true, force: true });

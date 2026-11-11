@@ -254,9 +254,8 @@ it("places real data and private declared material without hooks, series settlem
     }
     expect((await stat(f.venueDir)).mode & 0o777).toBe(0o700);
     expect((await stat(join(f.venueDir, "venue.db"))).mode & 0o777).toBe(0o600);
-    const names = await readdir(f.stateDir);
-    for (const name of ["backup.env", "rebuild-first-start.json", "trading.env.replaced"]) {
-      expect(names).not.toContain(name);
+    for (const name of ["backup.env", "flows/restore/record.json", "trading.env.replaced"]) {
+      await expect(readFile(join(f.stateDir, name))).rejects.toMatchObject({ code: "ENOENT" });
     }
     expect(await readFile(f.artifactPath)).toEqual(input);
     expect(readDatabase(f.source)).toEqual(before);

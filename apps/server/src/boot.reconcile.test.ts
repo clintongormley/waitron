@@ -1,7 +1,7 @@
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { createServer as createHttpServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,7 +30,6 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -290,9 +289,10 @@ describe("returned-box membership reconciliation at boot", () => {
       now: () => new Date(),
       listIpv4: () => [],
     });
+    await mkdir(join(stateDir, "flows/restore"), { recursive: true });
     await writeFile(
-      join(stateDir, REBUILD_MARKER),
-      JSON.stringify({ version: 1, source: "archive" }),
+      join(stateDir, "flows/restore/record.json"),
+      JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "archive" } }),
     );
     const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
     const dispatcher = new Agent({
@@ -314,7 +314,7 @@ describe("returned-box membership reconciliation at boot", () => {
       expect(node.status).toBe(200);
       expect(await node.json()).toMatchObject({ acceptingSales: false });
       expect((await readNodeMembership(db))?.body.term).toBe(2);
-      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+      expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
       expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
     } finally {
       await server.close();

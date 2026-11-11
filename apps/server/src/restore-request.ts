@@ -1,14 +1,4 @@
-import {
-  SCRATCH_DIR,
-  RESTORE_REQUEST_ARTIFACT,
-  RESTORE_REQUEST_DB,
-  RESTORE_REQUEST_ENTRIES,
-  RESTORE_REQUEST_FILE,
-  RESTORE_REQUEST_KEY,
-  RESTORE_REQUEST_NODE_KEY,
-  RESTORE_REQUEST_PLACEMENT,
-  SETUP_OPERATION_FILE,
-} from "@waitron/store";
+import { SCRATCH_DIR, RESTORE_FLOW_DIR, SETUP_OPERATION_FILE } from "@waitron/store";
 import {
   assertNoStartAgainDeletion,
   assertNotAhead,
@@ -36,7 +26,7 @@ import { join } from "node:path";
 import { AppError, isAppError } from "@waitron/shared";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
-import { stagedPath, writeFileDurable } from "./fs-atomic.js";
+import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
@@ -87,14 +77,23 @@ import {
   type RecoveryEntryContext,
 } from "./recovery-entry.js";
 
-const ARTIFACT = RESTORE_REQUEST_ARTIFACT;
-const KEY = RESTORE_REQUEST_KEY;
-const STREAM_DB = RESTORE_REQUEST_DB;
-const STREAM_ENTRIES = RESTORE_REQUEST_ENTRIES;
-const STREAM_PLACEMENT = RESTORE_REQUEST_PLACEMENT;
-const MARKER = RESTORE_REQUEST_FILE;
+import { readRestoreFlowPhase } from "@waitron/provisioning";
+import {
+  attachmentPath,
+  dropAttachments,
+  endRestoreFlow,
+  publishRestoreFlow,
+  readRestoreFlow,
+  updateRestoreFlow,
+  type RestoreFlowRecord,
+} from "./restore-flow.js";
+const ARTIFACT = "artifact";
+const KEY = "key";
+const STREAM_DB = "venue.db";
+const STREAM_ENTRIES = "entries";
+const STREAM_PLACEMENT = "placement.db";
 const SETUP_OPERATION = SETUP_OPERATION_FILE;
-const NODE_KEY = RESTORE_REQUEST_NODE_KEY;
+const NODE_KEY = "node-key";
 const MAX_NODE_KEY_BYTES = 4096;
 
 async function flushPath(path: string): Promise<void> {
@@ -104,12 +103,6 @@ async function flushPath(path: string): Promise<void> {
   } finally {
     await file.close();
   }
-}
-
-async function clearNodeKey(stateDir: string): Promise<void> {
-  const path = join(stateDir, NODE_KEY);
-  await rm(path, { force: true });
-  await rm(stagedPath(path), { force: true });
 }
 
 function invalidNodeKey(): never {
@@ -152,7 +145,7 @@ function invalidRecoveryContext(): never {
 async function readStagedNodeKey(stateDir: string): Promise<string> {
   let file;
   try {
-    file = await open(join(stateDir, NODE_KEY), "r");
+    file = await open(attachmentPath(stateDir, NODE_KEY), "r");
     if (!(await file.stat()).isFile()) return invalidNodeKey();
     const buffer = Buffer.alloc(MAX_NODE_KEY_BYTES + 1);
     let count = 0;
@@ -195,10 +188,6 @@ export interface StreamRestoreRequest {
 
 export type RestoreRequest = ArchiveRestoreRequest | StreamRestoreRequest;
 
-/**
- * Remove any earlier marker, write the payloads, then the marker last, so the entrypoint never
- * observes a partial request, nor one request's payload beside another's.
- */
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
   request: R,
@@ -252,21 +241,12 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
     );
   }
   const snapshot = await checkSnapshot();
-  await rm(join(stateDir, MARKER), { force: true });
-  await clearNodeKey(stateDir);
-  try {
-    if (request.kind === "stream") {
-      await rename(request.databasePath, join(stateDir, STREAM_DB));
-      await chmod(join(stateDir, STREAM_DB), 0o600);
-      await writeFileDurable(join(stateDir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
-    } else {
-      await writeFileDurable(join(stateDir, ARTIFACT), request.artifact, 0o600);
-      await writeFileDurable(join(stateDir, KEY), request.recoveryKey, 0o600);
-    }
-    if (secret !== undefined) await writeFileDurable(join(stateDir, NODE_KEY), secret, 0o600);
-    await writeFileDurable(
-      join(stateDir, MARKER),
-      JSON.stringify({
+  await publishRestoreFlow(
+    stateDir,
+    {
+      version: 1,
+      phase: "staged",
+      request: {
         version: snapshot ? 2 : 1,
         environment: request.environment,
         ...(request.kind === "stream"
@@ -283,14 +263,21 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
               snapshotVerification: snapshot.verification,
               snapshotRequestKey: snapshot.publicKey,
             }),
-      }),
-      0o600,
-    );
-  } catch (error) {
-    await rm(join(stateDir, MARKER), { force: true });
-    await clearNodeKey(stateDir);
-    throw error;
-  }
+      },
+    },
+    async (dir) => {
+      if (request.kind === "stream") {
+        await rename(request.databasePath, join(dir, STREAM_DB));
+        await chmod(join(dir, STREAM_DB), 0o600);
+        await flushPath(join(dir, STREAM_DB));
+        await writeFileDurable(join(dir, STREAM_ENTRIES), packArchive(request.entries), 0o600);
+      } else {
+        await writeFileDurable(join(dir, ARTIFACT), request.artifact, 0o600);
+        await writeFileDurable(join(dir, KEY), request.recoveryKey, 0o600);
+      }
+      if (secret !== undefined) await writeFileDurable(join(dir, NODE_KEY), secret, 0o600);
+    },
+  );
 }
 
 /**
@@ -353,19 +340,6 @@ export interface StagedRestoreDeps {
 type Restore = (deps: RestoreFileDeps) => Promise<void>;
 type RestoreStream = (args: WriteStreamArgs) => Promise<void>;
 
-async function clearStagedRestore(stateDir: string): Promise<void> {
-  await Promise.all([
-    rm(join(stateDir, MARKER), { force: true }),
-    rm(join(stateDir, SETUP_OPERATION), { force: true }),
-    rm(join(stateDir, ARTIFACT), { force: true }),
-    rm(join(stateDir, KEY), { force: true }),
-    clearNodeKey(stateDir),
-    rm(join(stateDir, STREAM_DB), { force: true }),
-    rm(join(stateDir, STREAM_ENTRIES), { force: true }),
-    rm(join(stateDir, STREAM_PLACEMENT), { force: true }),
-  ]);
-}
-
 /** Run a staged cold restore; the caller runs it before anything in this process opens the venue
  * database. Returns false when no request exists. */
 export async function runStagedRestore(
@@ -373,25 +347,24 @@ export async function runStagedRestore(
   restore: Restore = restoreFromArtifactFile,
   restoreStream: RestoreStream = writeStreamRestore,
 ): Promise<boolean> {
-  let raw: string;
-  try {
-    raw = await readFile(join(deps.stateDir, MARKER), "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      await clearNodeKey(deps.stateDir);
-      return false;
+  const phase = await readRestoreFlowPhase(deps.stateDir);
+  if (phase === "unreadable") {
+    deps.log("error", "restore.flow_unreadable", {});
+    return false;
+  }
+  if (phase === null) return false;
+  if (phase === "first-start") {
+    const hold = await lockRestoreTarget(deps.venueDir);
+    try {
+      await dropAttachments(deps.stateDir);
+    } finally {
+      hold.release();
     }
-    await clearNodeKey(deps.stateDir);
-    throw error;
+    return false;
   }
-  let candidate: Record<string, unknown> = {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed))
-      candidate = parsed as Record<string, unknown>;
-  } catch {
-    // V1 syntax errors use cleanup below; saved v2 requests must refuse before cleanup.
-  }
+  const raw = await readFile(join(deps.stateDir, RESTORE_FLOW_DIR, "record.json"), "utf8");
+  const flow = (await readRestoreFlow(deps.stateDir))!;
+  const candidate = flow.request ?? {};
   const snapshot =
     candidate.version === 1 &&
     candidate.kind === "stream" &&
@@ -416,7 +389,6 @@ export async function runStagedRestore(
         "managedCloud",
         "recoveryOperation",
         "nodeRecoveryKey",
-        "placementStarted",
         "recoveryContext",
         "snapshotVerification",
         "snapshotRequestKey",
@@ -429,16 +401,15 @@ export async function runStagedRestore(
         candidate.snapshotRequestKey !== snapshot.publicKey ||
         (candidate.nodeRecoveryKey !== undefined &&
           (candidate.nodeRecoveryKey !== true || candidate.recoveryOperation === undefined)) ||
-        (candidate.placementStarted !== undefined &&
-          (candidate.placementStarted !== true || candidate.nodeRecoveryKey !== true)) ||
+        (phase === "placing" && candidate.nodeRecoveryKey !== true) ||
         Object.keys(candidate).some((key) => !allowed.includes(key))
       )
         cloudRecoveryUnavailable();
       assertSnapshotRecoveryTarget(snapshot.verification, currentBackupVerificationTarget());
       assertSnapshotRecoveryArchive(
         snapshot.verification,
-        await recoveryArchiveFileSourceId(join(deps.stateDir, ARTIFACT)),
-        (await stat(join(deps.stateDir, ARTIFACT))).size,
+        await recoveryArchiveFileSourceId(attachmentPath(deps.stateDir, ARTIFACT)),
+        (await stat(attachmentPath(deps.stateDir, ARTIFACT))).size,
       );
     } catch {
       cloudRecoveryUnavailable();
@@ -452,7 +423,7 @@ export async function runStagedRestore(
   try {
     if ((await inspectFirstSetupMarker(deps.venueDir)) !== null)
       await assertVenueFirstSetupAllowed(deps.venueDir);
-    return await runHeld(deps, raw, snapshot, restore, restoreStream);
+    return await runHeld(deps, flow, snapshot, restore, restoreStream);
   } finally {
     hold.release();
   }
@@ -497,11 +468,16 @@ async function restartUncommittedPlacement(
 
 async function runHeld(
   deps: StagedRestoreDeps,
-  raw: string,
+  flow: RestoreFlowRecord,
   snapshot: Awaited<ReturnType<typeof readSnapshotRecoveryBinding>>,
   restore: Restore,
   restoreStream: RestoreStream,
 ): Promise<boolean> {
+  let record = flow;
+  const saveRecord = async (next: RestoreFlowRecord) => {
+    await updateRestoreFlow(deps.stateDir, next);
+    record = next;
+  };
   let managedCloud: { requestId: string; pointId: string } | undefined;
   let resuming = false;
   let restartPlacement = false;
@@ -509,20 +485,18 @@ async function runHeld(
   let placed = false;
   let uncommitted = false;
   try {
-    const marker = JSON.parse(raw) as {
+    const marker = (flow.request ?? {}) as {
       version?: unknown;
       environment?: unknown;
       kind?: unknown;
       managedCloud?: unknown;
       recoveryOperation?: unknown;
       nodeRecoveryKey?: unknown;
-      placementStarted?: unknown;
       recoveryContext?: unknown;
     };
     if (
       (marker.version !== 1 && !(marker.version === 2 && snapshot)) ||
-      (marker.placementStarted !== undefined &&
-        (marker.placementStarted !== true || marker.nodeRecoveryKey !== true)) ||
+      (flow.phase === "placing" && marker.nodeRecoveryKey !== true) ||
       (marker.nodeRecoveryKey !== undefined &&
         (marker.nodeRecoveryKey !== true || marker.recoveryOperation === undefined)) ||
       (marker.environment !== "production" && marker.environment !== "preproduction") ||
@@ -541,7 +515,7 @@ async function runHeld(
     ) {
       throw new Error("invalid staged restore request");
     }
-    resuming = marker.placementStarted === true;
+    resuming = flow.phase === "placing";
     const environment: DeploymentEnvironment = marker.environment;
     const operation =
       marker.recoveryOperation === undefined
@@ -558,10 +532,10 @@ async function runHeld(
         operation,
         marker.kind === "stream"
           ? await recoveryStreamSourceId(
-              join(deps.stateDir, STREAM_DB),
-              unpackArchive(await readFile(join(deps.stateDir, STREAM_ENTRIES))),
+              attachmentPath(deps.stateDir, STREAM_DB),
+              unpackArchive(await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES))),
             )
-          : await recoveryArchiveFileSourceId(join(deps.stateDir, ARTIFACT)),
+          : await recoveryArchiveFileSourceId(attachmentPath(deps.stateDir, ARTIFACT)),
       );
     }
     // The file bridges the restart; the selected database and current outside source still
@@ -590,9 +564,9 @@ async function runHeld(
               const discard = () => rm(directory, { recursive: true, force: true });
               try {
                 const databasePath = join(directory, VENUE_FILE);
-                await copyFile(join(deps.stateDir, STREAM_DB), databasePath);
+                await copyFile(attachmentPath(deps.stateDir, STREAM_DB), databasePath);
                 const validated = await validateDatabaseEntries(
-                  unpackArchive(await readFile(join(deps.stateDir, STREAM_ENTRIES))),
+                  unpackArchive(await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES))),
                   databasePath,
                   validation,
                 );
@@ -605,8 +579,8 @@ async function runHeld(
             })()
           : await validateArtifactFile({
               ...validation,
-              artifactPath: join(deps.stateDir, ARTIFACT),
-              recoveryKey: await readFile(join(deps.stateDir, KEY), "utf8"),
+              artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
+              recoveryKey: await readFile(attachmentPath(deps.stateDir, KEY), "utf8"),
             });
       try {
         withModuleOperations = await createRecoveryEntryRunner({
@@ -638,6 +612,9 @@ async function runHeld(
       ...(resuming && !restartPlacement && operation !== undefined
         ? { resumeOperation: operation.binding }
         : {}),
+      recordFirstStart: (source: "archive" | "stream") =>
+        saveRecord({ ...record, firstStart: { source } }),
+      clearFirstStart: () => saveRecord({ ...record, firstStart: undefined }),
       onDatabasePlaced: () => {
         placed = true;
       },
@@ -647,11 +624,11 @@ async function runHeld(
     };
     let run: () => Promise<void>;
     if (marker.kind === "stream") {
-      const packed = await readFile(join(deps.stateDir, STREAM_ENTRIES));
-      let databasePath = join(deps.stateDir, STREAM_DB);
+      const packed = await readFile(attachmentPath(deps.stateDir, STREAM_ENTRIES));
+      let databasePath = attachmentPath(deps.stateDir, STREAM_DB);
       if (marker.nodeRecoveryKey === true && (!resuming || restartPlacement)) {
-        databasePath = join(deps.stateDir, STREAM_PLACEMENT);
-        await copyFile(join(deps.stateDir, STREAM_DB), databasePath);
+        databasePath = attachmentPath(deps.stateDir, STREAM_PLACEMENT);
+        await copyFile(attachmentPath(deps.stateDir, STREAM_DB), databasePath);
         await chmod(databasePath, 0o600);
       }
       run = () =>
@@ -661,11 +638,11 @@ async function runHeld(
           entries: unpackArchive(packed),
         });
     } else {
-      const recoveryKey = await readFile(join(deps.stateDir, KEY), "utf8");
+      const recoveryKey = await readFile(attachmentPath(deps.stateDir, KEY), "utf8");
       run = () =>
         restore({
           ...common,
-          artifactPath: join(deps.stateDir, ARTIFACT),
+          artifactPath: attachmentPath(deps.stateDir, ARTIFACT),
           recoveryKey,
           ...(marker.managedCloud
             ? { managedCloud: marker.managedCloud as { requestId: string; pointId: string } }
@@ -680,14 +657,8 @@ async function runHeld(
     }
     managedCloud = marker.managedCloud as typeof managedCloud;
     if (marker.nodeRecoveryKey === true && !resuming) {
-      if (marker.kind === "stream") await flushPath(join(deps.stateDir, STREAM_DB));
-      await writeFileDurable(
-        join(deps.stateDir, MARKER),
-        JSON.stringify({ ...marker, placementStarted: true }),
-        0o600,
-      );
-      await flushPath(join(deps.stateDir, MARKER));
-      await flushPath(deps.stateDir);
+      if (marker.kind === "stream") await flushPath(attachmentPath(deps.stateDir, STREAM_DB));
+      await saveRecord({ ...record, phase: "placing" });
       markedStarted = true;
     }
     await run();
@@ -696,14 +667,16 @@ async function runHeld(
       // Nothing a module step committed is in the venue folder, so the next start places the
       // archive afresh, as running the restore command again does. Any later failure can follow a
       // committed activation, which only a checked replay finds.
-      await writeFileDurable(join(deps.stateDir, MARKER), raw, 0o600);
+      await saveRecord(flow);
     } else if (
       !resuming &&
       !markedStarted &&
       !(snapshot && error instanceof SnapshotPlacementRefused) &&
       !(isAppError(error) && error.code === "provisioning.database_in_use")
     ) {
-      await clearStagedRestore(deps.stateDir);
+      await endRestoreFlow(deps.stateDir);
+      await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
+      await syncFolderHolding(join(deps.stateDir, SETUP_OPERATION));
     }
     throw error;
   }
@@ -715,8 +688,15 @@ async function runHeld(
       if (markedStarted || resuming) return true;
     }
   }
-  await clearStagedRestore(deps.stateDir);
+  await saveRecord({
+    version: 1,
+    phase: "first-start",
+    firstStart: record.firstStart ?? {
+      source: flow.request?.kind === "stream" ? "stream" : "archive",
+    },
+  });
+  await dropAttachments(deps.stateDir);
+  await rm(join(deps.stateDir, SETUP_OPERATION), { force: true });
+  await syncFolderHolding(join(deps.stateDir, SETUP_OPERATION));
   return true;
 }
-
-export { RESTORE_REQUEST_FILE } from "@waitron/store";

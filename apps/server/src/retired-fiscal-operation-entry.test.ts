@@ -175,7 +175,7 @@ it.each(["archive", "stream"] as const)(
     );
     await writeFile(join(venueDir, "venue.db"), "existing destination database");
     await writeFile(join(stateDir, "trading.env"), "existing trading identity");
-    const marker = await readFile(join(stateDir, "restore-request.json"), "utf8");
+    const marker = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
     const before = await rows();
     for (let attempt = 0; attempt < 2; attempt++) {
       await expect(
@@ -192,8 +192,8 @@ it.each(["archive", "stream"] as const)(
       expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(
         "existing trading identity",
       );
-      expect(await readFile(join(stateDir, "restore-request.json"), "utf8")).toBe(marker);
-      expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(secret);
+      expect(await readFile(join(stateDir, "flows/restore/record.json"), "utf8")).toBe(marker);
+      expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(secret);
       expect(await readFile(currentPath, "utf8")).toBe(current);
       expect(await readdir(outside)).toEqual(["current.json"]);
       expect(await rows()).toEqual(before);

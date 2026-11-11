@@ -7,6 +7,9 @@
 > [recovering a box](../operations/hour-recovery.md). Cloud accounts, backup
 > transport and recovery authentication remain separate from naming authority.
 
+> **File layout update, 2026-11-11:** the staged node credential now lives at
+> `flows/restore/node-key`; `flows/restore/record.json` holds the request and its phase.
+
 # Sign paper allocations outside the venue
 
 A restored venue cannot tell you which paper entries another machine already consumed. Keep one

@@ -3366,7 +3366,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     });
     await flush(el);
     expect(await bottomOf(await screenHost(el, "restore"))).toBe(
-      "The backup could not be staged. Check the connection and try again.",
+      "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     );
   });
 
@@ -4017,7 +4017,7 @@ describe("restore from my bucket", () => {
     [
       "restore.hook_failed",
       { module: "fiscal", code: "x.y" },
-      "The copy could not be restored. (restore.hook_failed)",
+      "The copy could not be restored. (restore.hook_failed) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     ],
   ])("explains %s (%o) and stays on the bucket screen", async (code, params, message) => {
     const screen = await refusedWith({ code, params, status: 400 });
@@ -4162,14 +4162,14 @@ describe("restore from my bucket", () => {
   it("tells the owner to check the connection when nothing answered", async () => {
     const screen = await refusedWith(new TypeError("Failed to fetch"));
     expect(screen.errorMessage).toBe(
-      "The copy could not be restored. Check the connection and try again.",
+      "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     );
   });
 
   it("does not stay on the provisioning screen when the rejection carries nothing", async () => {
     const screen = await refusedWith(undefined);
     expect(screen.errorMessage).toBe(
-      "The copy could not be restored. Check the connection and try again.",
+      "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     );
   });
 
@@ -4408,7 +4408,7 @@ describe("restoring a backup file whose old server may still be running", () => 
     restoreRequest(el, backup);
     await flush(el);
     expect(await bottomOf(await screenHost(el, "restore"))).toBe(
-      "The backup could not be staged. Check the connection and try again.",
+      "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     );
   });
 
@@ -4745,7 +4745,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
         liveUnknown: false,
       });
       expect(screen.errorMessage).toBe(
-        "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
+        "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
       );
     },
   );
@@ -5025,7 +5025,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     cloudRecoveryAction(el, "restore", pointId, false);
     await flush(el);
     expect(await bottomOf(await screenHost(el, "cloud-restore"))).toBe(
-      "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
+      "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
     );
     goto(el, "restore");
     await flush(el);

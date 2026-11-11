@@ -4,6 +4,7 @@ import { createServer } from "node:https";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { publishRestoreFlow, endRestoreFlow } from "./restore-flow.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { S3Client } from "@aws-sdk/client-s3";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -385,31 +386,33 @@ describe("Cloud recovery target", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, 10_000);
-  it("resumes approval after a failed cold restore clears its staged marker", async () => {
-    const f = await fixture();
-    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const stage = vi.fn(async () => {
-      await writeFile(join(f.stateDir, "restore-request.json"), "{}", { mode: 0o600 });
-    });
-    await createCloudRecoveryClient(f.options).restore(stage, point.id);
-    const before = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
-    await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    await expect(createCloudRecoveryClient(f.options).restore(stage, point.id)).rejects.toThrow();
-    expect(stage).toHaveBeenCalledOnce();
-    // runStagedRestore clears this marker after an unsuccessful cold restore.
-    await rm(join(f.stateDir, "restore-request.json"));
-    await createCloudRecoveryClient(f.options).start();
-    expect((await createCloudRecoveryClient(f.options).status()).state).toBe("approved");
-    await createCloudRecoveryClient(f.options).restore(stage, point.id);
-    expect(stage).toHaveBeenCalledTimes(2);
-    const after = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
-    expect([after.requestId, after.privateKey, after.pointId]).toEqual([
-      before.requestId,
-      before.privateKey,
-      before.pointId,
-    ]);
-    expect(f.calls.some((c) => c.action === "restored")).toBe(false);
-  });
+  it.each(["staged", "placing"] as const)(
+    "resumes approval after a failed cold restore ends its %s flow",
+    async (phase) => {
+      const f = await fixture();
+      await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+      const stage = vi.fn(async () => {
+        await publishRestoreFlow(f.stateDir, { version: 1, phase, request: {} }, async () => {});
+      });
+      await createCloudRecoveryClient(f.options).restore(stage, point.id);
+      const before = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
+      await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
+      await expect(createCloudRecoveryClient(f.options).restore(stage, point.id)).rejects.toThrow();
+      expect(stage).toHaveBeenCalledOnce();
+      await endRestoreFlow(f.stateDir);
+      await createCloudRecoveryClient(f.options).start();
+      expect((await createCloudRecoveryClient(f.options).status()).state).toBe("approved");
+      await createCloudRecoveryClient(f.options).restore(stage, point.id);
+      expect(stage).toHaveBeenCalledTimes(2);
+      const after = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
+      expect([after.requestId, after.privateKey, after.pointId]).toEqual([
+        before.requestId,
+        before.privateKey,
+        before.pointId,
+      ]);
+      expect(f.calls.some((c) => c.action === "restored")).toBe(false);
+    },
+  );
 
   it("allows an expired failed restore request to be explicitly replaced", async () => {
     const f = await fixture();

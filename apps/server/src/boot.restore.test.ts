@@ -2,7 +2,7 @@ import { hashPassword, hashPin, persons, startManagementSession } from "@waitron
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { X509Certificate } from "node:crypto";
 import { connect as tlsConnect } from "node:tls";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +28,6 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { unsealNodeState } from "./sealed-state.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -277,9 +276,10 @@ describe("startServer, against a migrated venue directory", () => {
       now: () => new Date(),
       listIpv4: () => ["192.168.1.10"],
     });
+    await mkdir(join(stateDir, "flows/restore"), { recursive: true });
     await writeFile(
-      join(stateDir, REBUILD_MARKER),
-      JSON.stringify({ version: 1, source: "archive" }),
+      join(stateDir, "flows/restore/record.json"),
+      JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "archive" } }),
     );
     const server = await startServer({
       ...KEY_ENV,
@@ -299,7 +299,7 @@ describe("startServer, against a migrated venue directory", () => {
       );
       expect(served.subjectAltName).toContain("IP Address:10.1.2.3");
       expect(served.subjectAltName).not.toContain("192.168.1.10");
-      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(false);
+      expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(false);
       const held = await readNodeMembership(db);
       expect(held!.body.term).toBe(1);
       expect(held!.body.nodes).toEqual([
@@ -359,7 +359,11 @@ describe("startServer, against a migrated venue directory", () => {
         listIpv4: () => ["192.168.1.10"],
       });
       const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
-      await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
+      await mkdir(join(stateDir, "flows/restore"), { recursive: true });
+      await writeFile(
+        join(stateDir, "flows/restore/record.json"),
+        JSON.stringify({ version: 1, phase: "first-start", firstStart: { source } }),
+      );
       try {
         await expect(
           startServer({
@@ -377,7 +381,7 @@ describe("startServer, against a migrated venue directory", () => {
         });
         expect(await readNodeMembership(db)).toEqual(tampered);
         expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
-        expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+        expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
       } finally {
         await venue.store.close();
         await rm(venue.directory, { recursive: true, force: true });
@@ -472,9 +476,10 @@ describe("startServer, against a migrated venue directory", () => {
         listIpv4: () => ["192.168.1.10"],
       });
       const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
+      await mkdir(join(stateDir, "flows/restore"), { recursive: true });
       await writeFile(
-        join(stateDir, REBUILD_MARKER),
-        JSON.stringify({ version: 1, source: "stream" }),
+        join(stateDir, "flows/restore/record.json"),
+        JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "stream" } }),
       );
       try {
         await expect(
@@ -498,7 +503,7 @@ describe("startServer, against a migrated venue directory", () => {
         ).rows;
         expect(row?.document).toBe(stored);
         expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
-        expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+        expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
       } finally {
         await venue.store.close();
         await rm(venue.directory, { recursive: true, force: true });
@@ -536,9 +541,10 @@ describe("startServer, against a migrated venue directory", () => {
       hostnames: ["waitron.local", "localhost"],
       now: () => new Date(),
     });
+    await mkdir(join(stateDir, "flows/restore"), { recursive: true });
     await writeFile(
-      join(stateDir, REBUILD_MARKER),
-      JSON.stringify({ version: 1, source: "stream" }),
+      join(stateDir, "flows/restore/record.json"),
+      JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "stream" } }),
     );
     // A bucket copy set up, and no membership document: a copy that tried to start would read off
     // with the reason `no_membership`, so `first_start_pending` shows it was held first.
@@ -592,7 +598,7 @@ describe("startServer, against a migrated venue directory", () => {
       const body = (await response.json()) as { alerts: { code: string }[] };
       expect(body.alerts.map((alert) => alert.code)).toContain("restore.first_start_failed");
       expect(body.alerts.map((alert) => alert.code)).not.toContain("backup.stream_stopped");
-      expect(existsSync(join(stateDir, REBUILD_MARKER))).toBe(true);
+      expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
     } finally {
       await server.close();
       await close();

@@ -153,7 +153,7 @@ it after an interrupted writer, just as you retain the JSON journal's helper fil
 
 A stopped restore may already have activated its allocation. Replacing its placed database with
 the old backup again would erase the local result needed to recognise that activation. The staged
-archive and prepared-stream paths flush the started-placement marker and its directory before
+archive and prepared-stream paths flush the `placing` phase to `flows/restore/record.json` and sync its folder before
 placement. A stream also flushes its retained source.
 A stream uses a separate placement copy, so leave room for that additional database file.
 
@@ -182,7 +182,8 @@ On the first attempt, an error before the restore hooks' transaction body return
 the original request back. If that write fails or the process stops first, the next start checks the saved activation
 state as above. Errors after the body returns keep the started request and its owner-only key,
 including a failed trading-settings write or outside-result publication after activation commits.
-A refusal while resuming keeps them for another checked attempt. A completed restore removes them.
+A refusal while resuming keeps them for another checked attempt. A completed restore removes its request and attachments, retaining a `first-start` record in
+`flows/restore/`. The first start ends that flow and removes `trading.env.replaced`.
 A venue lock refusal before placement leaves a fresh request.
 
 **2026-11-08 (A1415):** the restart-versus-replay decision above supersedes the earlier requirement

@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ALL_MODULES } from "@waitron/composition";
 import { expect, it } from "vitest";
@@ -136,7 +136,8 @@ it.each([
     }
     if (interrupted === "escalated")
       await writeRecoveryState(f.stateDir, { ...FRESH, failures: 3, level: "recovery" });
-    await writeFile(join(f.stateDir, "restore-request.json"), "retained-restore");
+    await mkdir(join(f.stateDir, "flows/restore"), { recursive: true });
+    await writeFile(join(f.stateDir, "flows/restore/record.json"), "retained-restore");
     await writeFile(join(f.stateDir, "reset-request.json"), "retained-reset");
     const marker = await readFile(join(f.venueDir, "first-setup-claim.json"));
     await ensureBoxSecrets({
@@ -202,7 +203,7 @@ it.each([
       expect(await refused.text()).toBe("404 Not Found");
       await expect(stat(join(f.venueDir, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(await readFile(join(f.venueDir, "first-setup-claim.json"))).toEqual(marker);
-      expect(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).toBe(
+      expect(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")).toBe(
         "retained-restore",
       );
       expect(await readFile(join(f.stateDir, "reset-request.json"), "utf8")).toBe("retained-reset");

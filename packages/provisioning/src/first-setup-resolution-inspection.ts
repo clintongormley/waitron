@@ -6,7 +6,7 @@ import {
   MODULES_FILE,
   MODULE_OPERATION_PUBLIC_FILE,
   RESET_REQUEST_FILE,
-  RESTORE_REQUEST_FILE,
+  RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
   FIRST_FISCAL_DOCUMENTS_DIR,
 } from "@waitron/store";
@@ -289,7 +289,7 @@ export function createFirstSetupResolutionInspection(
         MODULE_OPERATION_PUBLIC_FILE,
         FIRST_SETUP_NODE_KEY_FILE,
         SETUP_OPERATION_FILE,
-        RESTORE_REQUEST_FILE,
+        join(RESTORE_FLOW_DIR, "record.json"),
         RESET_REQUEST_FILE,
         MODULES_FILE,
         CLOUD_REPLACEMENT_FILE,

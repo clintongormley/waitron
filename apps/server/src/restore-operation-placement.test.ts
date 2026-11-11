@@ -32,7 +32,6 @@ import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { withRecoveryKeyOperation } from "./operation-authentication.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { restoreFromArtifactFile, writeValidated, type PlacementDeps } from "./restore.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
@@ -285,7 +284,7 @@ it("refuses a copy holding two venue rows at admission, before anything is place
   await expect(readFile(join(f.deps.venueDir, "venue.db"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  await expect(readFile(join(f.deps.stateDir, REBUILD_MARKER))).rejects.toMatchObject({
+  await expect(readFile(join(f.deps.stateDir, "flows/restore/record.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
   await expect(readFile(join(f.deps.stateDir, "trading.env"))).rejects.toMatchObject({
@@ -495,23 +494,26 @@ it.each(["archive", "stream"] as const)(
             environment: "preproduction",
           },
     );
-    const apply = async (args: {
-      withModuleOperations?: PlacementDeps["withModuleOperations"];
-    }) => {
+    const apply = async (args: Parameters<typeof writeValidated>[1]) => {
       await writeValidated(
         {
           ...f.validated,
           databasePath:
             kind === "stream"
-              ? join(f.deps.stateDir, "restore-request.db")
+              ? join(f.deps.stateDir, "flows/restore/venue.db")
               : f.validated.databasePath,
         },
-        { ...f.deps, withModuleOperations: args.withModuleOperations },
+        {
+          ...f.deps,
+          withModuleOperations: args.withModuleOperations,
+          recordFirstStart: args.recordFirstStart,
+          clearFirstStart: args.clearFirstStart,
+        },
       );
     };
-    expect(await readFile(join(f.deps.stateDir, "restore-request.json"), "utf8")).not.toContain(
-      nodeKey,
-    );
+    expect(
+      await readFile(join(f.deps.stateDir, "flows/restore/record.json"), "utf8"),
+    ).not.toContain(nodeKey);
     expect(
       await runStagedRestore(
         {

@@ -277,7 +277,7 @@ it("default staged archive keeps its payload on a real busy lock, then restores 
     recoveryKey: "key",
     environment: "preproduction",
   });
-  const staged = join(f.stateDir, "restore-request.artifact");
+  const staged = join(f.stateDir, "flows/restore/artifact");
   guard.forbidden.add(staged);
   const before = await stat(staged);
   await mkdir(f.venueDir);
@@ -292,9 +292,9 @@ it("default staged archive keeps its payload on a real busy lock, then restores 
   }
   expect((await stat(staged)).ino).toBe(before.ino);
   expect((await stat(staged)).size).toBe(before.size);
-  expect(JSON.parse(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).version).toBe(
-    1,
-  );
+  expect(
+    JSON.parse(await readFile(join(f.stateDir, "flows/restore/record.json"), "utf8")).version,
+  ).toBe(1);
   expect(await runStagedRestore(f)).toBe(true);
   expect(await runStagedRestore(f)).toBe(false);
   const opened = await openVenueDatabase(f.venueDir);

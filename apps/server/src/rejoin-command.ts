@@ -1,6 +1,6 @@
 import { VENUE_DIR_NAME } from "@waitron/store";
 import { join } from "node:path";
-import { rm } from "node:fs/promises";
+import { readRestoreFlowPhase } from "@waitron/provisioning";
 import {
   lockVenueDatabase,
   openVenueDatabase,
@@ -16,7 +16,7 @@ import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { createLogger } from "./logger.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
-import { REBUILD_MARKER } from "./rebuild-first-start.js";
+import { endRestoreFlow } from "./restore-flow.js";
 import { clearTradingEnv } from "./trading-config.js";
 import { tryLoadNodeIdentity } from "./node-config.js";
 import "./errors.js";
@@ -132,9 +132,9 @@ export async function runRejoin(deps: {
           closed = true;
         }),
       wipeDatabase: async () => {
-        // Before the marker goes, so a note that cannot be deleted leaves the marker in place.
         await deleteBackupRoomNote(stateDir);
-        await rm(join(stateDir, REBUILD_MARKER), { force: true });
+        const phase = await readRestoreFlowPhase(stateDir);
+        if (phase === "first-start" || phase === "unreadable") await endRestoreFlow(stateDir);
         await wipeVenueDatabases(venueDir, stateDir);
         await migrate(venueDir);
         await clearTradingEnv(stateDir);

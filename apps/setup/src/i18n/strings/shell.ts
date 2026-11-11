@@ -115,16 +115,18 @@ export const shellEn = {
   "shell.throttle_wait_one": "Too many attempts. Wait 1 second, then try again.",
 
   "shell.restore.staging_failed":
-    "The backup could not be staged. Check the connection and try again.",
+    "The backup could not be staged. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   "shell.restore.staging_failed_code":
-    "The backup could not be staged. Check the file, key and environment. ({code})",
+    "The backup could not be staged. Check the file, key and environment. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   "shell.restore.environment_mismatch":
     "The backup comes from the other environment. Choose the environment it came from.",
   "shell.restore.other_version":
     "This backup file was made by a different version of Waitron. This server's version cannot restore it. Install that version on this server and try again, or choose another file.",
 
-  "shell.bucket.no_answer": "The copy could not be restored. Check the connection and try again.",
-  "shell.bucket.refused_code": "The copy could not be restored. ({code})",
+  "shell.bucket.no_answer":
+    "The copy could not be restored. Check the connection and try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
+  "shell.bucket.refused_code":
+    "The copy could not be restored. ({code}) If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   "shell.bucket.kit_damaged":
     "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
   "shell.bucket.kit_invalid":
@@ -171,6 +173,8 @@ export const shellEn = {
     "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
   "shell.cloud.unavailable":
     "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
+  "shell.cloud.restore_unavailable":
+    "Cloud recovery is unavailable. Check the connection or request expiry, then try again. If an earlier restore choice is still saved, it will run when the server starts. Choose another restore to replace it.",
   "shell.cloud.request_invalid":
     "The server rejected the details. Check your entries, then try again.",
 
@@ -318,17 +322,18 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.throttle_wait_one": "Demasiados intentos. Espera 1 segundo y vuelve a intentarlo.",
 
   "shell.restore.staging_failed":
-    "No se ha podido preparar la copia de seguridad. Comprueba la conexión e inténtalo de nuevo.",
+    "No se ha podido preparar la copia de seguridad. Comprueba la conexión e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.restore.staging_failed_code":
-    "No se ha podido preparar la copia de seguridad. Revisa el archivo, la clave y el entorno. ({code})",
+    "No se ha podido preparar la copia de seguridad. Revisa el archivo, la clave y el entorno. ({code}) Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.restore.environment_mismatch":
     "La copia viene del otro entorno. Elige el entorno del que viene.",
   "shell.restore.other_version":
     "Este archivo de copia de seguridad se hizo con otra versión de Waitron. La versión de este servidor no puede restaurarlo. Instala en este servidor la versión con la que se hizo y vuelve a intentarlo, o elige otro archivo.",
 
   "shell.bucket.no_answer":
-    "No se ha podido restaurar la copia. Comprueba la conexión e inténtalo de nuevo.",
-  "shell.bucket.refused_code": "No se ha podido restaurar la copia. ({code})",
+    "No se ha podido restaurar la copia. Comprueba la conexión e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
+  "shell.bucket.refused_code":
+    "No se ha podido restaurar la copia. ({code}) Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.bucket.kit_damaged":
     "Este kit de recuperación está incompleto o dañado; quizá se cortó al copiarlo. Elige tu paquete de recuperación o el archivo del kit tal como se guardó, o pega el kit completo.",
   "shell.bucket.kit_invalid":
@@ -376,6 +381,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "Esta instantánea no es de un local de preparación o de demostración, y la recuperación desde Cloud solo restaura esos.",
   "shell.cloud.unavailable":
     "La recuperación desde Cloud no está disponible. Comprueba la conexión o si la solicitud ha caducado, e inténtalo de nuevo.",
+  "shell.cloud.restore_unavailable":
+    "La recuperación desde Cloud no está disponible. Comprueba la conexión o si la solicitud ha caducado, e inténtalo de nuevo. Si sigue guardada una restauración anterior, se ejecutará cuando arranque el servidor. Elige otra restauración para sustituirla.",
   "shell.cloud.request_invalid":
     "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 

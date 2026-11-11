@@ -235,9 +235,10 @@ export {
   setAsideFolderPaths,
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
-
 export {
   beginEnvironmentMove,
   resumeEnvironmentMove,
   finishEnvironmentMove,
 } from "./environment-recovery-move.js";
+
+export { readRestoreFlowPhase, type RestoreFlowPhase } from "./restore-flow-phase.js";

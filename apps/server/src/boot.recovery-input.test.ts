@@ -166,13 +166,13 @@ it.each(["archive", "bucket"])(
       );
       expect(response.status, await response.text()).toBe(202);
       await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
-      const marker = await readFile(join(stateDir, "restore-request.json"), "utf8");
-      expect(JSON.parse(marker)).toMatchObject({
+      const marker = await readFile(join(stateDir, "flows/restore/record.json"), "utf8");
+      expect(JSON.parse(marker).request).toMatchObject({
         recoveryOperation: operation,
         nodeRecoveryKey: true,
       });
       expect(marker).not.toContain("paper-node-key");
-      expect(await readFile(join(stateDir, "restore-request.node-key"), "utf8")).toBe(
+      expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
         "paper-node-key",
       );
       const logs = await readFile(join(scratch, "logs/waitron.log"), "utf8");
