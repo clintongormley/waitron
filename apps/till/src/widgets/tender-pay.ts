@@ -281,7 +281,7 @@ export class TillTenderPay extends LitElement {
    * app's own single-flight flags (`till-app`'s `submitting` and `placing`).
    */
   @property({ type: Boolean }) busy = false;
-  #sendingAction: "cash" | "card" | "pay" | null = null;
+  @property({ attribute: false }) sendingTender: "cash" | "card" | "pay" | null = null;
   /** The pay controls are held while nothing is being sent; read only to draw Cash and Card grey. */
   @property({ type: Boolean }) held = false;
   @property() mode: OrderFlow = "prepay";
@@ -508,7 +508,6 @@ export class TillTenderPay extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("busy") && !this.busy) this.#sendingAction = null;
     if (this.view === "card_outcome" && this.#cardOutcomeOrderId !== this.store.id)
       this.view = "idle";
     if (changed.has("cardOutcome") && this.cardOutcome !== undefined) {
@@ -520,7 +519,6 @@ export class TillTenderPay extends LitElement {
     }
     if (this.#guestsOrderId !== this.store.id) {
       this.printCardSlip = false;
-      if (!this.busy) this.#sendingAction = null;
       this.#guestsOrderId = this.store.id;
       this.#resetGuests();
     }
@@ -777,7 +775,6 @@ export class TillTenderPay extends LitElement {
       amount: this.#enteredDecimal(),
       ...this.#guestsDetail(),
     };
-    this.#sendingAction = "cash";
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail,
@@ -785,7 +782,6 @@ export class TillTenderPay extends LitElement {
         composed: true,
       }),
     );
-    this.#discardUnsentAction();
     this.view = "idle";
     this.entry = "";
   }
@@ -803,7 +799,6 @@ export class TillTenderPay extends LitElement {
     };
     this.view = "idle";
     this.refEntry = "";
-    this.#sendingAction = "card";
     this.dispatchEvent(
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail,
@@ -811,7 +806,6 @@ export class TillTenderPay extends LitElement {
         composed: true,
       }),
     );
-    this.#discardUnsentAction();
   }
 
   @state() private modifierDraft?: { product: TillProduct; quantity: string };
@@ -898,15 +892,8 @@ export class TillTenderPay extends LitElement {
     return this.#renderIdlePay(disabled, this.mode !== "prepay");
   }
 
-  #discardUnsentAction(): void {
-    // The parent's render supplies busy after the event. A prompt or refusal reserves no tender.
-    void this.updateComplete.then(() => {
-      if (!this.busy || this.held) this.#sendingAction = null;
-    });
-  }
-
   #tenderVariant(action: "cash" | "card" | "pay"): "primary" | "secondary" {
-    if (this.busy && this.#sendingAction !== action) return "secondary";
+    if (this.busy && this.sendingTender !== action) return "secondary";
     return this.payQuiet || this.held || (!this.busy && this.store.lineCount === 0)
       ? "secondary"
       : "primary";
@@ -926,7 +913,7 @@ export class TillTenderPay extends LitElement {
       <wt-button
         class="pay-card"
         variant=${this.#tenderVariant("card")}
-        .loading=${this.busy && this.#sendingAction === "card"}
+        .loading=${this.busy && this.sendingTender === "card"}
         size="md"
         ?disabled=${disabled || (this.tipAttempted && this.#tipInvalid()) || this.#guestsHeld()}
         @click=${() => {
@@ -947,16 +934,14 @@ export class TillTenderPay extends LitElement {
       return html`<wt-button
         data-counter-pay
         variant=${this.#tenderVariant("pay")}
-        .loading=${this.busy && this.#sendingAction === "pay"}
+        .loading=${this.busy && this.sendingTender === "pay"}
         size="md"
         ?disabled=${disabled}
         @click=${() =>
           this.#checkBeforeTender(() => {
-            this.#sendingAction = "pay";
             this.dispatchEvent(
               new CustomEvent("counter-bill-pay", { detail: {}, bubbles: true, composed: true }),
             );
-            this.#discardUnsentAction();
           })}
         >${t("action.pay")}</wt-button
       >`;
@@ -970,7 +955,7 @@ export class TillTenderPay extends LitElement {
         <wt-button
           class="pay"
           variant=${this.#tenderVariant("cash")}
-          .loading=${this.busy && this.#sendingAction === "cash"}
+          .loading=${this.busy && this.sendingTender === "cash"}
           size="md"
           ?disabled=${disabled || this.#guestsHeld()}
           @click=${() => {

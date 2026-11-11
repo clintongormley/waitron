@@ -1957,6 +1957,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
       }
       el.addEventListener("confirm-payment", () => {
         el.busy = true;
+        el.sendingTender = method;
       });
       click(el, method === "cash" ? ".pay" : ".pay-card");
       await el.updateComplete;
@@ -1981,6 +1982,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
       expect(active.loading).toBe(true);
       expect(active.variant).toBe("primary");
       el.busy = false;
+      el.sendingTender = null;
       await el.updateComplete;
       expect(active.loading).toBe(false);
       expect(variants(el)).toEqual(["secondary", "secondary"]);
@@ -2016,6 +2018,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
     const { el } = await mountPay(1, { paymentWindow: true });
     el.addEventListener("counter-bill-pay", () => {
       el.busy = true;
+      el.sendingTender = "pay";
     });
     click(el, "[data-counter-pay]");
     await el.updateComplete;
@@ -2023,6 +2026,7 @@ describe("Cash and Card are drawn quiet while they wait for a basket", () => {
     expect(pay.loading).toBe(true);
     expect(pay.variant).toBe("primary");
     el.busy = false;
+    el.sendingTender = null;
     await el.updateComplete;
     expect(pay.loading).toBe(false);
   });

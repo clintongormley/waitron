@@ -3824,6 +3824,7 @@ export class TillApp extends LitElement {
    * feedback.
    */
   @state() private submitting = false;
+  @state() private sendingTender: "cash" | "card" | "pay" | null = null;
   @state() private invoiceRecipientOpen = false;
   @state() private invoiceRecipientRefusal = "";
   @state() private invoiceRecipientRefusalField = "";
@@ -6875,6 +6876,7 @@ export class TillApp extends LitElement {
     const retry = (confirmed: LateSend) => this.#onConfirmPayment(event, false, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
+    this.sendingTender = (event as CustomEvent<ConfirmPaymentDetail>).detail.method;
     this.#counterSends++;
     const session = this.#operatorSession;
     const { guestCount, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
@@ -6961,6 +6963,7 @@ export class TillApp extends LitElement {
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
+      this.sendingTender = null;
     }
     if (session !== this.#operatorSession) return;
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
@@ -7035,6 +7038,7 @@ export class TillApp extends LitElement {
     const retry = (confirmed: LateSend) => this.#onCollectCard(event, confirmed);
     if (this.#askLateSendAtCounter(lateSend, retry)) return;
     this.submitting = true;
+    this.sendingTender = "card";
     this.#counterSends++;
     const session = this.#operatorSession;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
@@ -7154,6 +7158,7 @@ export class TillApp extends LitElement {
       paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
+      this.sendingTender = null;
     }
     if (session !== this.#operatorSession) return;
     if (paid) void this.#refreshListsAfterWrite(session, this.#afterSaleReads(sendsToKitchen));
@@ -18955,6 +18960,7 @@ export class TillApp extends LitElement {
       return false;
     }
     this.submitting = true;
+    this.sendingTender = detail.method;
     const { guestCount, ...tender } = detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
@@ -19027,6 +19033,7 @@ export class TillApp extends LitElement {
         this.errorKey = wholeTabErrorOf(error, { manualCard: detail.method === "card" });
     } finally {
       this.submitting = false;
+      this.sendingTender = null;
     }
     // Another device took a payment on the bill first: read again, the bill offers to take the rest
     // as a bill payment.
@@ -19331,6 +19338,7 @@ export class TillApp extends LitElement {
     let refused = false;
     let deadEnd: string | undefined;
     this.submitting = true;
+    this.sendingTender = "pay";
     try {
       if (!this.#store.persisted) {
         await this.api.parkOrder({
@@ -19383,6 +19391,7 @@ export class TillApp extends LitElement {
         deadEnd = code;
     } finally {
       this.submitting = false;
+      this.sendingTender = null;
     }
     if (refused) {
       if (
@@ -20732,6 +20741,7 @@ export class TillApp extends LitElement {
         .stage=${this.stage}
         .paymentWindow=${this.counterWaiting.some((row) => row.id === this.#store.id && row.invoiceNumber === undefined)}
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading}
+        .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .cardProvider=${this.#cardReader()}
@@ -20863,6 +20873,7 @@ export class TillApp extends LitElement {
       .partyDrafts=${this.#draftSync?.partyDrafts ?? NO_PARTY_DRAFTS}
       .personId=${this.#draftSync?.personId ?? this.#sessionPersonId}
       .busy=${this.submitting || this.invoiceRecipientReading}
+      .sendingTender=${this.sendingTender}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
       .takesCash=${this.#takesCash()}

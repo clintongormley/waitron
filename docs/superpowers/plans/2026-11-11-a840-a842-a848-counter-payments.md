@@ -29,14 +29,14 @@ Reuse current widgets, refusal mappers, cancellation context/operation and
    Keep cancelPlaced's shared invoice-credit/PIN branch and original route,
    financial and clock tests unchanged (watcher18:45). A departed table bill's
    later cancellation still needs correction authority and a credit note.
-   The transfer-close control leaves its party open but settles its bill;
-   cancellation then refuses not_placed without writing.
 2. **A842:** fix retained Cash/Card in `tender-pay`, including the table's
    zero-total fallback (`till-table-order-screen.ts:#paysOnSheet`). Positive
    whole bills already use the shared payment sheet. Remember
    the pressed action: primary/loading while busy, alternative secondary/disabled.
    Also cover Counter Pay preparation and zero-total Cash/Card fallback. Widget
    tests own these transitions/reset.
+   The app supplies the active tender beside busy through existing screen/widget
+   properties, setting/resetting at submitting start/finally (watcher19:03).
    Reuse existing sheet-loading tests; no duplicate shared-button paint tests.
 3. **A848:** Pay and Send already disable at zero lines; preserve that. Reproduce
    a whole-bill Pay refusal after another device empties the bill; map

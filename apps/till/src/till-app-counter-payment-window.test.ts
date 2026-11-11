@@ -88,6 +88,10 @@ it("persists the first Counter payment before opening the window, then offers th
   tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
   await flush(el);
   expect(parkOrder).toHaveBeenCalledTimes(1);
+  const pay =
+    tender.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-counter-pay]")!;
+  expect(pay.loading).toBe(true);
+  expect(pay.variant).toBe("primary");
   expect(dialog(el)).toBeNull();
   finishSave();
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());

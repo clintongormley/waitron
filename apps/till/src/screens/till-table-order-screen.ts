@@ -1402,6 +1402,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Number }) kitchenNoteRevision = 0;
   /** The visible half of the app's single-flight fiscal guard. */
   @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) sendingTender: "cash" | "card" | "pay" | null = null;
   @property({ type: Boolean }) loading = false;
   @property({ attribute: false }) paymentConfirmation?: RetainedTender;
   /** A bill payment on the bill on screen is being sent or got no answer: a tap on a bill-payment
@@ -5133,6 +5134,7 @@ export class TillTableOrderScreen extends LitElement {
         <h2>${t("table.pay_title")}</h2>
         <till-tender-pay
           .store=${this.#payStore}
+          .sendingTender=${this.sendingTender}
           .busy=${this.busy}
           .takesCash=${this.takesCash}
           .fullInvoices=${this.fullInvoices}

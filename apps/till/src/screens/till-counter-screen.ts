@@ -251,6 +251,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) selectedFilters: MenuFilters = EMPTY_MENU_FILTERS;
   /** A sale or order is being sent: the visible half of the app's guard against a second send. */
   @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) sendingTender: "cash" | "card" | "pay" | null = null;
   /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
   @property({ type: Boolean }) payHeld = false;
   /** Outstanding amount offered through the bill-payment flow. */
@@ -413,6 +414,7 @@ export class TillCounterScreen extends LitElement {
           ${this.payRest === null ? nothing : this.#takeRest(this.payRest)}<till-tender-pay
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
+            .sendingTender=${this.sendingTender}
             .busy=${this.busy || this.payHeld}
             .held=${this.payHeld && !this.busy}
             .mode=${this.orderFlow}
