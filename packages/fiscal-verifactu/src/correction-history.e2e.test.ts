@@ -181,7 +181,7 @@ it("files €6.05, €6.02 and €0.03 off a €12.10 dish from its history, the
   expect(await snapshot(saleId)).toEqual(before);
 });
 
-it("refuses an invoice the agency refused, then, once its fix files it at 10%, as moved", async () => {
+it("refuses an invoice the agency refused, and refuses a fix that would move it to 10%", async () => {
   // No line gross, so the history read would refuse: each refusal must come before it.
   const { saleId, before } = await sell(null);
   await suite.db
@@ -252,7 +252,13 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
       },
     }),
   });
-  expect(fixed.status).toBe(200);
+  expect(fixed.status).toBe(400);
+  expect(await fixed.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_amount_changed",
+      params: { registroId: before.registro.id, field: "taxTotal" },
+    },
+  });
 
   expect(refused).toMatchObject({
     code: "sale.correction_not_admitted",
@@ -260,7 +266,7 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
   });
   expect(await captureError(() => preview(saleId, "1.00"))).toMatchObject({
     code: "sale.correction_not_admitted",
-    params: { reason: "filed_figures_changed" },
+    params: { reason: "filing_refused" },
   });
-  expect((await snapshot(saleId)).sale).toEqual(before.sale);
+  expect(await snapshot(saleId)).toEqual(before);
 });

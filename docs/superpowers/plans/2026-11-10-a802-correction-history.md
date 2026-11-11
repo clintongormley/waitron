@@ -508,6 +508,9 @@ invoice…") when slice 3b lands.
 
 - Slice 3 (step R5, in `correction-history.e2e.test.ts`): the real fix route moves a sold
   invoice's split to 10%, then the preview refuses with `filed_figures_changed`.
+  _2026-11-11: the fix route now refuses this request (`fiscal.remedy_amount_changed`, reported on
+  `taxTotal`), so the invoice never moves; the step R5 test asserts that refusal, and that the preview
+  still refuses with `filing_refused`._
 - Slice 3b (`packages/fiscal-verifactu/src/correction-filed-figures.e2e.test.ts`: real core
   writers, the real Veri*Factu backend, the real fix route as `record-remedy-http.test.ts` drives
   it, the library's `validate`), design A:
@@ -653,7 +656,7 @@ every rate ends exact, the agency accepts both, and the alternative reopens two 
   `filed_figures_unreadable`; equal figures preview as today (the existing case).
 - **R3. Finding 6's M2 row.**
 - **R4. Trim** test cases another test covers: at least 60 lines.
-- **R5. End to end:** the real fix route, then the preview's refusal (section A).
+- **R5. End to end:** the real fix route, then the preview's refusal (section A). _2026-11-11: now the fix route's own refusal; see the note under "The tests" above._
 - Then steps 5 and 6 as written, and `/finish-branch`.
 
 Revised size: about 410 code and 1,030 test lines, about 1,440 in all with no plan, past the
