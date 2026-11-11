@@ -1338,7 +1338,7 @@ changed tax number fails the publish unless the repository variable
 the job builds with `load: true`, checks the three values inside the image and runs the server's
 own producer check there, then pushes from the builder's cache, and that sequence has never run on GitHub's runners. The real-fork test (the
 plan's 8g Step 5) is still to do.
-Then slices 1b to 6, and A993's plan. Still needed from outside: the asesor's answer to Q53. The
+Then slices 1b to 6. Still needed from outside: the asesor's answer to Q53. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
 ## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.
@@ -1366,8 +1366,11 @@ upgrade runs again, until the restart-at-boot step the design adds is built. Cho
 on 2026-10-22 (A940's second-revision question 2, about 02:55), with one addition: in that stuck
 case the page the box shows instead of trading also accepts a phone's or a till's clock under
 A947's clock rule, and explains every wait with a countdown (design §5.6, "The stuck page";
-picture 6). A947's slice 4a landed as #1990 and A940's slice 1 as #2000; its plan comes
-after slice 1's, and it lands before the first production venue goes live. A move between fiscal modules stays a refused start
+picture 6). **Built only once a producer change is actually scheduled** (owner, 2026-11-11,
+"Later", after the plan's fresh reader found that every record already names its producer, so
+nothing is lost by waiting): the plan, `docs/superpowers/plans/2026-11-11-a993-identity-change.md`,
+is kept unlanded on branch `docs/a993-identity-change-plan`, and asesor Q53(d)(2) is widened to ask
+whether the new system may cancel or correct the old one's invoices. A move between fiscal modules stays a refused start
 until the first non-Veri\*Factu mode. Since 2026-11-06 the producer is a setting each image
 carries (A940 Task 8), so a start that opened a new installation on any producer difference would
 let a hand override do it with nobody present; Task 8 refuses instead. **Constraint on A993's

@@ -2036,8 +2036,11 @@ be published; the list of functions is filled in per release from what that rele
   (1) may the same two characters continue under the new producer's NIF, or must they change?
   (2) we read the change of producer as making a new system, so every installation then running
   starts a new installation number and a new chain — confirm, and what else it costs (each venue
-  needs its new declaration; anything to notify?). We intend the box to do this automatically
-  whenever the identity it runs under changes.
+  needs its new declaration; anything to notify?), and whether the new system may then record
+  cancellations, corrective invoices and corrections of rejected records for invoices the old
+  system issued, or how those should be made. We intend the box to do this automatically
+  whenever the identity it runs under changes. (Widened 2026-11-11, as the A940 design §5.6 asks;
+  the Spanish batch of 2026-11-05 already asks it.)
 - **(e) Failover between hosting places.** A venue whose server fails over from its own box on site
   to a server hosted in the cloud (or back): the same software, the same producer, the same
   taxpayer; the server that takes over starts its own new installation number and chain (as our
