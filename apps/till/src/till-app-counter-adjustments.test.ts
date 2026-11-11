@@ -992,6 +992,18 @@ describe("till-app: discarding a parked table bill", () => {
     expect(counter(el).heldOrders.map((row) => row.id)).toEqual(["wo-9"]);
   });
 
+  it("opens a held order when Forget requires its sent dishes to go through Cancel item", async () => {
+    const { el, discard } = await parked({
+      abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "ticket.already_fired", status: 409 }),
+    });
+    await userEvent.click(discard);
+    await flush(el, 8);
+    expect(counter(el).store.id).toBe("wo-9");
+    expect(counter(el).store.persisted).toBe(true);
+    expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
   it("sends the table bill's current editor expectation from Discard", async () => {
     const { el, discard } = await parked();
     await userEvent.click(discard);
@@ -2065,21 +2077,83 @@ describe("till-app: comping a stored counter order", () => {
     });
   });
 
-  it("cancels a dish the kitchen has with a reason", async () => {
-    const el = await retrieved();
-
+  it("opens Cancel item for a sent Counter dish, sends nothing on Stop, then refreshes after confirmation", async () => {
+    const context = {
+      billStatus: "open",
+      stage: "not_started",
+      components: [
+        {
+          id: "ticket-1",
+          lineId: "l-1",
+          state: "queued",
+          firedAt: "2026-09-30T09:00:00.000Z",
+          requestedAt: null,
+          stationId: "kitchen",
+          quantity: "2.000",
+          kitchenQuantity: "2.000",
+          servedQuantity: "0.000",
+          cancelledQuantity: "0.000",
+        },
+      ],
+    };
+    const consent = { billId: "wo-9", billRevision: 4, revision: 4, context };
+    const getCancellation = vi.fn().mockResolvedValue(consent);
+    const cancelItem = vi.fn().mockResolvedValue({ revision: 5 });
+    const el = await retrieved({ getCancellation, cancelItem });
+    const open = () => el.shadowRoot!.querySelector("till-cancel-item-dialog");
     await press(el, inBasket(el, '[data-cancel-line="0"]')!);
-    await chooseReason(el, "Mistake");
-    await press(el, inDialog(el, "[data-adjust-continue]"));
-
-    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-9", {
-      expectedRevision: 4,
+    expect(open()).not.toBeNull();
+    expect(getCancellation).toHaveBeenCalledWith({ billId: "wo-9" }, "l-1", expect.anything());
+    expect(counter(el).store.lines).toHaveLength(2);
+    const previous = currentLocale();
+    try {
+      for (const language of ["en", "es"] as const) {
+        emit(open()!, "cancel-item-close");
+        setLocale(language);
+        await flush(el);
+        await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+        for (const theme of ["light", "dark"])
+          for (const width of [390, 1280]) {
+            setLocale(language);
+            el.parentElement!.setAttribute("data-theme", theme);
+            await page.viewport(width, 900);
+            await flush(el);
+            await page.screenshot({
+              path: `__screenshots__/r3-counter-cancel/${language}-${theme}-${width}.png`,
+            });
+          }
+      }
+    } finally {
+      setLocale(previous);
+      await page.viewport(1280, 900);
+    }
+    emit(open()!, "cancel-item-close");
+    await flush(el);
+    expect(cancelItem).not.toHaveBeenCalled();
+    expect(open()).toBeNull();
+    await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+    emit(open()!, "cancel-item-choice", {
       lineId: "l-1",
-      reasonId: "r-mistake",
-      action: "cancel",
-      note: null,
-      expectedEdit: null,
+      quantity: "2",
+      outcome: "remove_charge",
+      consent,
     });
+    await flush(el, 8);
+    expect(cancelItem).toHaveBeenCalledWith(
+      { billId: "wo-9" },
+      "l-1",
+      expect.objectContaining({
+        expectedEdit: null,
+        quantity: "2",
+        outcome: "remove_charge",
+        expectedBillRevision: 4,
+        expectedContext: context,
+      }),
+      expect.anything(),
+    );
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(counter(el).store.revision).toBe(5);
+    expect(open()).toBeNull();
   });
 
   it("asks an approver for their PIN when the reason needs one", async () => {
@@ -3152,20 +3226,37 @@ describe("A1208 actions on a retrieved row of identical portions", () => {
     ]);
   });
 
-  it.each([
-    ["data-comp-line", "Complaint", "comp"],
-    ["data-cancel-line", "Mistake", "cancel"],
-  ] as const)("asks about every caña in the row from %s", async (attribute, reason, action) => {
-    const el = await rowOfThree();
+  it.each([["data-comp-line", "Complaint", "comp"]] as const)(
+    "asks about every caña in the row from %s",
+    async (attribute, reason, action) => {
+      const el = await rowOfThree();
 
-    await press(el, inBasket(el, `[${attribute}="0"]`)!);
-    await chooseReason(el, reason);
-    await press(el, inDialog(el, "[data-adjust-continue]"));
+      await press(el, inBasket(el, `[${attribute}="0"]`)!);
+      await chooseReason(el, reason);
+      await press(el, inDialog(el, "[data-adjust-continue]"));
 
-    expect(api.previewAdjustment).toHaveBeenCalledWith(
-      "wo-9",
-      expect.objectContaining({ action, lineId: "b-1", lineIds: ["b-1", "b-2", "b-3"] }),
+      expect(api.previewAdjustment).toHaveBeenCalledWith(
+        "wo-9",
+        expect.objectContaining({ action, lineId: "b-1", lineIds: ["b-1", "b-2", "b-3"] }),
+      );
+    },
+  );
+
+  it("opens Cancel item over every portion in the Counter row", async () => {
+    const getCancellation = vi.fn().mockResolvedValue({
+      billId: "wo-9",
+      billRevision: 4,
+      revision: 4,
+      context: { billStatus: "open", stage: "not_started", components: [] },
+    });
+    const el = await rowOfThree({ getCancellation });
+    await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+    expect(getCancellation).toHaveBeenCalledWith(
+      { billId: "wo-9" },
+      "b-1",
+      expect.objectContaining({ lineIds: ["b-1", "b-2", "b-3"] }),
     );
+    expect(el.shadowRoot!.querySelector("till-cancel-item-dialog")).not.toBeNull();
   });
 
   it("moves every caña in the row to the chosen station", async () => {

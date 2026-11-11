@@ -52,6 +52,11 @@ it does not send the dishes. Groups belong to the table and can contain dishes f
 A new payment is refused while its bill has unsent dishes: **Send or remove the unsent dishes
 before paying.** Another bill's unsent dishes do not block this payment.
 
+On a saved Counter bill, × removes an unsent dish locally and opens **Cancel item** for a sent
+dish. The row's Cancel action opens the same window. Discard opens a held order whose sent dishes
+still need cancellation; a kept charge remains on the bill to pay. Whole-basket saves refuse to
+remove or reduce sent dishes and their extras.
+
 On a paid bill, **Cancel item…** offers **Refund** only when this device can return an original
 cash or card payment that still has money available toward the bill. The device profile must allow
 that payment method. If you need a different device, the dialog directs you to **Refund a payment**

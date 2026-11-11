@@ -1162,9 +1162,10 @@ interface CounterRelocation {
 }
 
 interface CancellingItem {
-  bill: BillComposition;
+  bill: BillComposition | null;
+  counter?: { load: number; revision: number; expectedEdit: BillEditExpected | null };
   id: number;
-  partyId: string;
+  partyId: string | null;
   billId: string;
   lineId: string;
   /** Every portion of the row the till shows as one, `lineId` among them; absent on one line. */
@@ -3721,15 +3722,10 @@ export class TillApp extends LitElement {
     busy: boolean;
     refusal: string;
   } | null = null;
-  #cancelItemRead?: {
-    partyId: string;
-    billId: string;
-    session: number;
-    visit: number;
-    api: TillApi;
-    bill: BillComposition;
-    controller: AbortController;
-  };
+  #cancelItemRead?: Pick<
+    CancellingItem,
+    "partyId" | "billId" | "session" | "visit" | "api" | "bill" | "counter"
+  > & { controller: AbortController };
   /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
   @state() private adjustApprovers?: StaffMember[];
   @state() private adjustApproverError: string | null = null;
@@ -9509,6 +9505,10 @@ export class TillApp extends LitElement {
       await api.abandonWorkingOrder(id, expectedEdit);
     } catch (error) {
       if (!current()) return;
+      if ((error as { code?: string })?.code === "ticket.already_fired") {
+        this.#replaceBasket(() => this.#onRetrieveOrder(event));
+        return;
+      }
       refused = true;
       this.errorKey = discardError(error);
     }
@@ -14491,15 +14491,23 @@ export class TillApp extends LitElement {
   }
 
   #cancellationCurrent(
-    open: Pick<CancellingItem, "partyId" | "billId" | "session" | "visit" | "api" | "bill">,
+    open: Pick<
+      CancellingItem,
+      "partyId" | "billId" | "session" | "visit" | "api" | "bill" | "counter"
+    >,
   ): boolean {
     return (
       this.isConnected &&
       open.api === this.api &&
-      this.#billCompositionCurrent(open.bill) &&
       open.session === this.#operatorSession &&
-      this.orderParty?.id === open.partyId &&
-      !this.#hasLeftOrder(open.billId, open.visit)
+      (open.counter !== undefined
+        ? this.screen === "counter" &&
+          this.#store.id === open.billId &&
+          this.#store.loadGeneration === open.counter.load
+        : open.bill !== null &&
+          this.#billCompositionCurrent(open.bill) &&
+          this.orderParty?.id === open.partyId &&
+          !this.#hasLeftOrder(open.billId, open.visit))
     );
   }
 
@@ -14674,7 +14682,7 @@ export class TillApp extends LitElement {
     this.cancellingItem = { ...open, busy: true, refusal: "", refusalField: null };
     try {
       const preview = await open.api.previewAdjustment(open.billId, {
-        expectedEdit: open.bill.expectedEdits[0]!,
+        expectedEdit: open.counter?.expectedEdit ?? open.bill?.expectedEdits[0] ?? null,
         expectedRevision: choice.consent.billRevision,
         lineId: open.lineId,
         ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
@@ -14734,7 +14742,12 @@ export class TillApp extends LitElement {
 
   #cancellationReady(open: CancellingItem): boolean {
     if (!this.#itemCancellationShown(open)) return false;
-    if (this.#billCompositionUnchanged(open.bill)) return true;
+    if (
+      open.counter !== undefined
+        ? this.#counterStillAdjustable({ orderId: open.billId, revision: open.counter.revision })
+        : open.bill !== null && this.#billCompositionUnchanged(open.bill)
+    )
+      return true;
     if (this.cancellingItem?.id === open.id)
       this.cancellingItem = {
         ...open,
@@ -14753,7 +14766,7 @@ export class TillApp extends LitElement {
     if (!this.#cancellationReady(open)) return;
     if (choice.outcome === "refund" && !this.#cancellationRefundAvailable(open)) return;
     const command: CancelItemRequest = {
-      expectedEdit: open.bill.expectedEdits[0]!,
+      expectedEdit: open.counter?.expectedEdit ?? open.bill?.expectedEdits[0] ?? null,
       ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
@@ -14761,7 +14774,7 @@ export class TillApp extends LitElement {
       ...(choice.preparationStarted === undefined
         ? {}
         : { preparationStarted: choice.preparationStarted }),
-      expectedPartyRevision: choice.consent.revision,
+      ...(open.counter === undefined ? { expectedPartyRevision: choice.consent.revision } : {}),
       expectedBillRevision: choice.consent.billRevision,
       expectedContext: structuredClone(choice.consent.context),
       submissionId: crypto.randomUUID(),
@@ -14773,18 +14786,25 @@ export class TillApp extends LitElement {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
       const answer = await this.#resend(
-        (signal) => open.api.cancelItem(open.partyId, open.lineId, command, { signal }),
+        (signal) =>
+          open.api.cancelItem(open.partyId ?? { billId: open.billId }, open.lineId, command, {
+            signal,
+          }),
         limit.signal,
         () => this.#cancellationCurrent(open),
       );
       if (!this.#itemCancellationShown(open)) return;
-      this.#notePartyRevision(open.partyId, answer.revision);
+      if (open.partyId !== null) this.#notePartyRevision(open.partyId, answer.revision);
       this.#closeCancelItem();
       if (answer.invoice !== undefined) {
         this.result = answer.invoice;
-        this.#showTicket(open.billId, true, { surface: "table", cashChange: null });
+        this.#showTicket(open.billId, true, {
+          surface: open.counter === undefined ? "table" : "counter",
+          cashChange: null,
+        });
       }
-      await this.#rereadAmounts(open.billId, open.visit);
+      if (open.counter !== undefined) await this.#reloadCounterOrder(open.billId, open.session);
+      else await this.#rereadAmounts(open.billId, open.visit);
       if (choice.outcome === "refund" && this.#cancellationCurrent(open)) {
         await this.updateComplete;
         const fill = this.#cancelRefundFill(open, choice, answer.refundLinks ?? [], approver);
@@ -14851,10 +14871,14 @@ export class TillApp extends LitElement {
     const code = (error as { code?: string } | undefined)?.code ?? "server.internal";
     if (code === "tab.cancel_context_changed") {
       try {
-        const consent = await open.api.getCancellation(open.partyId, open.lineId, {
-          signal,
-          ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
-        });
+        const consent = await open.api.getCancellation(
+          open.partyId ?? { billId: open.billId },
+          open.lineId,
+          {
+            signal,
+            ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
+          },
+        );
         if (!this.#itemCancellationShown(open)) return;
         const refundableTenders = await this.#cancellationTenders(open.api, consent, signal);
         if (!this.#itemCancellationShown(open)) return;
@@ -14898,7 +14922,8 @@ export class TillApp extends LitElement {
       this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };
     } else if (stage !== "preview" && isNetworkFailure(error)) {
       this.#closeCancelItem();
-      await this.#rereadAmounts(open.billId, open.visit);
+      if (open.counter !== undefined) await this.#reloadCounterOrder(open.billId, open.session);
+      else await this.#rereadAmounts(open.billId, open.visit);
       if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
     } else {
       const field = refusalField(code, "cancel", false);
@@ -14921,6 +14946,58 @@ export class TillApp extends LitElement {
     }
   }
 
+  async #openCounterCancellation(target: AdjustTarget): Promise<void> {
+    const billId = this.#store.id;
+    if (!this.#counterStillAdjustable({ orderId: billId, revision: this.#store.revision })) return;
+    const opening = {
+      bill: null,
+      partyId: this.heldOrders.find((order) => order.id === billId)?.partyId ?? null,
+      billId,
+      session: this.#operatorSession,
+      visit: this.#orderVisit,
+      api: this.api,
+      counter: {
+        load: this.#store.loadGeneration,
+        revision: this.#store.revision!,
+        expectedEdit: this.#counterExpectedEdit(billId),
+      },
+      controller: new AbortController(),
+    };
+    this.#cancelItemRead = opening;
+    this.errorKey = undefined;
+    try {
+      const consent = await opening.api.getCancellation(
+        opening.partyId ?? { billId },
+        target.lineId!,
+        {
+          signal: opening.controller.signal,
+          ...(target.lineIds === undefined ? {} : { lineIds: target.lineIds }),
+        },
+      );
+      if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
+      if (consent.billId !== billId) return;
+      this.cancellingItem = {
+        ...opening,
+        id: ++this.#cancelItems,
+        lineId: target.lineId!,
+        ...(target.lineIds === undefined ? {} : { lineIds: target.lineIds }),
+        name: target.name,
+        unitPrecision:
+          this.#basketStoredLines()?.lines.find((line) => line.id === target.lineId)
+            ?.unitPrecision ?? 0,
+        consent,
+        refundableTenders: [],
+        busy: false,
+        refusal: "",
+      };
+    } catch (error) {
+      if (this.#cancelItemRead === opening && this.#cancellationCurrent(opening))
+        this.errorKey = { code: (error as { code?: string })?.code ?? "server.internal" };
+    } finally {
+      if (this.#cancelItemRead === opening) this.#cancelItemRead = undefined;
+    }
+  }
+
   async #onAdjust(event: Event): Promise<void> {
     const { kind, target, counter, combined } = (event as CustomEvent<AdjustDetail>).detail;
     const surface = counter === true ? "counter" : "table";
@@ -14933,6 +15010,17 @@ export class TillApp extends LitElement {
       this.#cancelItemRead !== undefined
     )
       return;
+    if (
+      counter === true &&
+      kind === "cancel" &&
+      target.lineId !== null &&
+      this.#basketStoredLines()?.lines.some(
+        (line) => line.id === target.lineId && line.parentLineNo === null,
+      )
+    ) {
+      await this.#openCounterCancellation(target);
+      return;
+    }
     const partyBill = surface === "table" && this.orderParty !== null;
     const bill = partyBill ? this.#billComposition([orderId]) : null;
     if (partyBill && bill === null) return;

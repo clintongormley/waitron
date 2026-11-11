@@ -811,6 +811,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   4's look, `06` and `08` against `33` in `~/waitron-campaign-c/a789-4-shots/`). I believe it is
   the shared dialog's keyboard-focus style reacting to the Escape key; not checked.
 
+- **R3-owner. Retire Recall and keep Cancel item as the sent-dish removal path.** Counter × and Cancel now share Cancel item; whole-basket saves and Discard protect sent dishes. Recall/table retirement, the public cancel-save refusal and Change dish's remaining count-lowering branch are still open. [Cleared plan](superpowers/plans/2026-11-11-r3-owner-retire-recall.md).
+
 - **The owner's yes-or-no read: built defaults that wait only for a nod** (bundle of 39, 2 important, size M, needs the owner). Holds A723, A762, A1059, A1060, A1063, A1067, A1068, A1080, A1081, A1250, A1253, A893, A936, A900, A923, A1011, A1020, A1031, A924, A925, A952, A953, A954, A956, A957, A958, A959, A909, A292, A575, A856, A859, A841, A841, A841. [Detail](backlog/till.md#bundle-the-owners-yes-or-no-read-built-defaults-that-wait-only-for-a-nod)
 
 

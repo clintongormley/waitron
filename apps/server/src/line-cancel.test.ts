@@ -37,7 +37,14 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { createStation } from "./kitchen.js";
-import { advanceTicketItem, markServed } from "./working-order.js";
+import {
+  parkOrder,
+  fireLines,
+  unsentDishLines,
+  abandonHeldOrder,
+  advanceTicketItem,
+  markServed,
+} from "./working-order.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -51,6 +58,7 @@ import {
   PINS,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 let venue: AdjustmentVenue;
@@ -122,7 +130,7 @@ async function askFor(
   order: Fixture,
   outcome: CancelItemAsk["outcome"] = "keep_charge",
   quantity = "2",
-): Promise<CancelItemAsk> {
+): Promise<CancelItemAsk & { expectedPartyRevision: number }> {
   return inTx(venue, async (tx) => {
     const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, order.billId));
@@ -183,6 +191,93 @@ async function startExtra(order: Fixture) {
 }
 
 describe("Cancel item service command", () => {
+  it.each(["keep_charge", "remove_charge"] as const)(
+    "uses the existing started-dish %s decision on a Counter bill",
+    async (outcome) => {
+      const table = await fixture("fire", "Pizza", "1");
+      const offers = await inTx(venue, (tx) => offerProducts(tx, venue.cfg));
+      const id = randomUUID();
+      await parkOrder({ db: venue.db }, venue.cfg, {
+        id,
+        zoneId: offers.zoneId,
+        lines: [{ menuItemId: offers.offerFor(table.parent.productId!), quantity: "1" }],
+      });
+      const [line] = await venue.db
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      await inTx(venue, async (tx) => fireLines(tx, venue.cfg, id, await unsentDishLines(tx, id)));
+      const [item] = await venue.db
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, line!.id));
+      await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, item!.id, "preparing"));
+      const ask = {
+        admission: testTradingAdmission(),
+        expectedEdit: null,
+        expectedBillRevision: 0,
+        expectedContext: await readCancellationContext(venue.db, { billId: id }, line!.id),
+        submissionId: randomUUID(),
+        quantity: "1",
+        outcome,
+        reasonId: venue.reasonId.houseVoid,
+      };
+      if (outcome === "remove_charge")
+        await expect(
+          inTx(venue, (tx) =>
+            cancelItem(tx, venue.cfg, { billId: id }, line!.id, ask, venue.staffId),
+          ),
+        ).rejects.toMatchObject({ code: "adjustment.approval_required" });
+      const approved = {
+        ...ask,
+        ...(outcome === "remove_charge"
+          ? { approver: { personId: venue.managerId, pin: PINS.manager } }
+          : {}),
+      };
+      const result = await inTx(venue, (tx) =>
+        cancelItem(tx, venue.cfg, { billId: id }, line!.id, approved, venue.staffId),
+      );
+      expect(result.revision).toBe(1);
+      expect(
+        await inTx(venue, (tx) =>
+          cancelItem(tx, venue.cfg, { billId: id }, line!.id, approved, venue.staffId),
+        ),
+      ).toEqual(result);
+      const [record] = await venue.db
+        .select()
+        .from(adjustments)
+        .where(eq(adjustments.workingOrderId, id));
+      expect(record).toMatchObject({ action: "cancel", chargeKept: outcome === "keep_charge" });
+      if (outcome === "keep_charge") {
+        expect(
+          (
+            await venue.db
+              .select()
+              .from(workingOrderLines)
+              .where(eq(workingOrderLines.workingOrderId, id))
+          )[0]!.lineTotal,
+        ).toBe(900);
+        await expect(
+          abandonHeldOrder({ db: venue.db }, venue.cfg, id, {
+            operatorId: venue.staffId,
+            expectedEdit: null,
+          }),
+        ).rejects.toMatchObject({ code: "ticket.already_fired" });
+      } else {
+        expect(
+          await venue.db
+            .select()
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.workingOrderId, id)),
+        ).toEqual([]);
+        await abandonHeldOrder({ db: venue.db }, venue.cfg, id, {
+          operatorId: venue.staffId,
+          expectedEdit: null,
+        });
+      }
+    },
+  );
+
   it("queues VOID then HOLD corrections before changing cancellation or ticket rows", async () => {
     const order = await fixture("hold");
     const stationIds = order.tickets.map((item) => item.stationId);

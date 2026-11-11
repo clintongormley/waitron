@@ -24,7 +24,7 @@ import {
 import { persons, type PinAttempts } from "@waitron/identity";
 import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import type { CancellationContext } from "./line-cancel-context.js";
+import type { CancellationContext, CancellationTarget } from "./line-cancel-context.js";
 import { requireRowCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
 import type { TradingContext } from "./trading-context.js";
@@ -32,7 +32,7 @@ import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustment
 import { invalid } from "./bill-allocation.js";
 import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
-import { requireBillEditor, parseBillEditExpected } from "./bill-editing.js";
+import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { refuseRecalledWrite } from "./draft-source.js";
 import { holdPaperFor } from "./order-groups.js";
@@ -46,6 +46,7 @@ import {
   removePortions,
   quantityOfLine,
   bumpRevision,
+  readOrderRevision,
   type OrderAttendance,
 } from "./working-order.js";
 import {
@@ -56,12 +57,12 @@ import {
 import "./errors.js";
 
 export interface CancelItemAsk {
-  expectedEdit: BillEditExpected;
+  expectedEdit: BillEditExpected | null;
   quantity: string;
   outcome: "remove_charge" | "keep_charge";
   preparationStarted?: boolean;
   refundHandoff?: boolean;
-  expectedPartyRevision: number;
+  expectedPartyRevision?: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;
   /** Every portion line of one till row, `lineId` among them (plan D31). */
@@ -91,7 +92,7 @@ export type CancelItemAnswer = {
 export async function cancelItem(
   tx: Transaction,
   cfg: TradingContext,
-  partyId: string,
+  target: CancellationTarget,
   lineId: string,
   ask: CancelItemAsk & { admission: TradingAdmission },
   operatorId: string,
@@ -111,7 +112,16 @@ export async function cancelItem(
     (!Array.isArray(ask.lineIds) || ask.lineIds.some((id) => typeof id !== "string"))
   )
     throw invalid("lineIds");
-  const expectedEdit = parseBillEditExpected(ask.expectedEdit);
+  const partyId = typeof target === "string" ? target : null;
+  const expectedEdit = partyId === null ? null : parseBillEditExpected(ask.expectedEdit);
+  const scope =
+    typeof target === "string"
+      ? { kind: "party" as const, partyId: target }
+      : { kind: "bill" as const, workingOrderId: target.billId };
+  const revisionOf = () =>
+    scope.kind === "party"
+      ? partyRevision(tx, scope.partyId)
+      : readOrderRevision(tx, scope.workingOrderId);
   const expectedContext = {
     ...ask.expectedContext,
     components: [...ask.expectedContext.components].sort((a, b) => {
@@ -122,7 +132,7 @@ export async function cancelItem(
   };
   return runServiceCommand(
     tx,
-    { kind: "party", partyId },
+    scope,
     ask.submissionId,
     "line.cancel-item",
     {
@@ -144,7 +154,7 @@ export async function cancelItem(
       let invoice: TillSaleResult | null | void = undefined;
       const { context, dishIds } = await requireRowCancellationContext(
         tx,
-        partyId,
+        target,
         lineId,
         ask.expectedContext,
         ask.lineIds,
@@ -155,8 +165,8 @@ export async function cancelItem(
       )
         throw invalid("preparationStarted");
       const started = context.stage === "started" || ask.preparationStarted === true;
-      const revision = await partyRevision(tx, partyId);
-      if (revision !== ask.expectedPartyRevision)
+      const revision = await revisionOf();
+      if (partyId !== null && revision !== ask.expectedPartyRevision)
         throw new AppError("party.out_of_date", { partyId, revision });
       const [line] = await tx
         .select()
@@ -171,7 +181,7 @@ export async function cancelItem(
           workingOrderId: bill!.id,
           revision: bill!.revision,
         });
-      await requireBillEditor(tx, bill!.id, operatorId, expectedEdit);
+      await requireOrderBillEditor(tx, bill!.id, { operatorId, expectedEdit });
       const members = ask.lineIds === undefined ? null : dishIds;
       await refuseRecalledWrite(tx, inArray(workingOrderLines.id, dishIds));
       const dishes =
@@ -276,7 +286,7 @@ export async function cancelItem(
               at,
             );
           invoice = await policy.completeAdjustment?.(bill!.id);
-          return { revision: await partyRevision(tx, partyId), ...(invoice ? { invoice } : {}) };
+          return { revision: await revisionOf(), ...(invoice ? { invoice } : {}) };
         }
         if (typeof ask.reasonId !== "string" || ask.reasonId.length === 0)
           throw invalid("reasonId");
@@ -329,7 +339,8 @@ export async function cancelItem(
             reasonId: ask.reasonId,
             note: ask.note ?? null,
             operatorId,
-            submissionId: ask.submissionId,
+            // Counter cancellation and its adjustment share the bill's command scope.
+            submissionId: partyId === null ? `cancel:${ask.submissionId}` : ask.submissionId,
             approver: ask.approver,
             preparationStarted: ask.preparationStarted,
             recordedPreparationStarted: true,
@@ -492,21 +503,21 @@ export async function cancelItem(
         }
         await writeServiceCancellations(tx, families, operatorId, started);
         await bumpRevision(tx, [bill!.id]);
-        await bumpPartyRevision(tx, partyId);
+        if (partyId !== null) await bumpPartyRevision(tx, partyId);
         await captureKitchenActivity(
           tx,
           attendance,
           operatorId,
           [bill!.id],
-          `party:${partyId}:${ask.submissionId}`,
+          `${partyId === null ? "bill" : "party"}:${partyId ?? bill!.id}:${ask.submissionId}`,
         );
         if (refundHandoff)
           return {
-            revision: await partyRevision(tx, partyId),
+            revision: await revisionOf(),
             refundLinks: [{ lineId: first.id, adjustmentId }],
           };
       }
-      return { revision: await partyRevision(tx, partyId), ...(invoice ? { invoice } : {}) };
+      return { revision: await revisionOf(), ...(invoice ? { invoice } : {}) };
     },
     cfg.madeHereSink,
   );

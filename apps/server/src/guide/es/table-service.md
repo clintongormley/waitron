@@ -133,6 +133,17 @@ Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
 El justificante de devolución usa por defecto el idioma de ticket de la venta original, aunque tu pantalla use otro idioma.
 
+## Cancela un plato de una cuenta guardada del mostrador {#counter-cancel-item}
+
+Usa × para quitar un plato que aún no has enviado. En un plato enviado, × y **Cancelar** abren
+**Cancelar plato**. Elige cuántos cancelar. Si la preparación ha empezado, elige si conservas o
+quitas el cobro y selecciona un motivo. Quitar ese cobro puede requerir el PIN de un supervisor.
+
+**Atrás** deja el plato como está. Tras confirmar, la cesta se actualiza desde la cuenta guardada.
+Si eliges **Descartar** en un pedido aparcado con platos enviados, el terminal abre primero ese
+pedido. Cancela sus platos enviados antes de descartarlo. Si conservas el cobro de un plato
+cancelado, cobra la cuenta.
+
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
 Cuando una mesa ha pagado un plato que no va a llegar, cancélalo para que la cocina deje de

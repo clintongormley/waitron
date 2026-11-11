@@ -54,7 +54,7 @@ function oneOf<T extends string>(value: unknown, choices: readonly T[], field: s
   return value as T;
 }
 
-function parseAsk(body: Record<string, unknown>): CancelItemAsk {
+function parseAsk(body: Record<string, unknown>, counter: boolean): CancelItemAsk {
   const outcome = oneOf(body.outcome, ["remove_charge", "keep_charge"], "outcome");
   if (body.preparationStarted !== undefined && typeof body.preparationStarted !== "boolean")
     throw invalid("preparationStarted");
@@ -95,11 +95,18 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     throw invalid("reasonId");
   return {
     quantity: body.quantity,
-    expectedEdit: parseBillEditExpected(body.expectedEdit),
+    expectedEdit: counter ? null : parseBillEditExpected(body.expectedEdit),
     outcome,
     refundHandoff: body.refundHandoff as boolean | undefined,
     preparationStarted: body.preparationStarted as boolean | undefined,
-    expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
+    ...(counter
+      ? {}
+      : {
+          expectedPartyRevision: requireRevision(
+            body.expectedPartyRevision,
+            "expectedPartyRevision",
+          ),
+        }),
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
     expectedContext,
     ...(lineIds === undefined ? {} : { lineIds }),
@@ -127,18 +134,31 @@ export function mountLineCancelApi(
     clock: deps.clock,
     log,
   };
-  app.get("/api/parties/:id/lines/:lineId/cancellation", (c) =>
+  const cancellationPaths = [
+    "/api/parties/:id/lines/:lineId/cancellation",
+    "/api/working-orders/:id/lines/:lineId/cancellation",
+  ];
+  const cancelItemPaths = [
+    "/api/parties/:id/lines/:lineId/cancel-item",
+    "/api/working-orders/:id/lines/:lineId/cancel-item",
+  ];
+  app.on("GET", cancellationPaths, (c) =>
     run(c, log, async () => {
+      const counter = c.req.path.startsWith("/api/working-orders/");
       const session = await requireSession(deps, c, { action: "take-orders", passive: true });
-      const partyId = requireBodyUuid(c.req.param("id"), "partyId").toLowerCase();
+      const id = requireBodyUuid(
+        c.req.param("id"),
+        counter ? "workingOrderId" : "partyId",
+      ).toLowerCase();
+      const target = counter ? { billId: id } : id;
       const lineId = requireBodyUuid(c.req.param("lineId"), "lineId").toLowerCase();
       const lineIds = c.req
         .queries("lineIds")
         ?.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
       const answer = await withTransaction(deps.db, async (tx) => {
         const current = await admittedSession(tx, session);
-        await checkZones(tx, current, [{ partyId }]);
-        const context = await readCancellationContext(tx, partyId, lineId, lineIds);
+        await checkZones(tx, current, [counter ? { orderId: id } : { partyId: id }]);
+        const context = await readCancellationContext(tx, target, lineId, lineIds);
         const [bill] = await tx
           .select({ id: workingOrders.id, revision: workingOrders.revision })
           .from(workingOrderLines)
@@ -156,7 +176,7 @@ export function mountLineCancelApi(
             : undefined;
         return {
           context,
-          revision: await partyRevision(tx, partyId),
+          revision: counter ? bill!.revision : await partyRevision(tx, id),
           billRevision: bill!.revision,
           billId: bill!.id,
           ...(sale === undefined ? {} : { saleId: sale.id }),
@@ -167,12 +187,17 @@ export function mountLineCancelApi(
     }),
   );
 
-  app.post("/api/parties/:id/lines/:lineId/cancel-item", (c) =>
+  app.on("POST", cancelItemPaths, (c) =>
     run(c, log, async () => {
+      const counter = c.req.path.startsWith("/api/working-orders/");
       const session = await requireSession(deps, c, { action: "take-orders" });
-      const partyId = requireBodyUuid(c.req.param("id"), "partyId").toLowerCase();
+      const id = requireBodyUuid(
+        c.req.param("id"),
+        counter ? "workingOrderId" : "partyId",
+      ).toLowerCase();
+      const target = counter ? { billId: id } : id;
       const lineId = requireBodyUuid(c.req.param("lineId"), "lineId").toLowerCase();
-      const ask = parseAsk(asObject(await readRawJsonBody<unknown>(c)));
+      const ask = parseAsk(asObject(await readRawJsonBody<unknown>(c)), counter);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const [line] = await deps.db
         .select({ billId: workingOrderLines.workingOrderId })
@@ -212,7 +237,7 @@ export function mountLineCancelApi(
           async (tx) => {
             const current = await admittedSession(tx, session);
             const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
-            await checkZones(tx, current, [{ partyId }]);
+            await checkZones(tx, current, [counter ? { orderId: id } : { partyId: id }]);
             const refund =
               ask.refundHandoff === true
                 ? await authorize(
@@ -228,7 +253,7 @@ export function mountLineCancelApi(
             const applied = await cancelItem(
               tx,
               cfg,
-              partyId,
+              target,
               lineId,
               {
                 ...ask,

@@ -42,6 +42,24 @@ const command = {
 };
 
 describe("the cancellation HTTP client", () => {
+  it("targets Counter cancellation by bill and carries no party revision or editor", async () => {
+    const fetcher = vi.fn().mockImplementation(async () => json({ revision: 5 }));
+    const api = new TillApi("", fetcher);
+    await api.getCancellation({ billId: "counter-1" }, "dish-3");
+    await api.cancelItem({ billId: "counter-1" }, "dish-3", {
+      ...command,
+      expectedEdit: null,
+      expectedPartyRevision: undefined,
+    });
+    expect(fetcher.mock.calls[0]![0]).toBe(
+      "/api/working-orders/counter-1/lines/dish-3/cancellation",
+    );
+    expect(fetcher.mock.calls[1]![0]).toBe(
+      "/api/working-orders/counter-1/lines/dish-3/cancel-item",
+    );
+    expect(JSON.parse(fetcher.mock.calls[1]![1].body)).toMatchObject({ expectedEdit: null });
+    expect(JSON.parse(fetcher.mock.calls[1]![1].body)).not.toHaveProperty("expectedPartyRevision");
+  });
   it("declares the preparation answer on the cancellation request", () => {
     expectTypeOf<CancelItemRequest>()
       .toHaveProperty("preparationStarted")

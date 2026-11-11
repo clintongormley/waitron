@@ -183,6 +183,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/parties/:id/split-sources                     | party                  | refuses GET /api/parties/:id/split-sources           |
  * | POST /api/parties/:id/lines/:lineId/recall | party | own refusing row below; allowed: draft-recall.test.ts |
  * | GET /api/parties/:id/lines/:lineId/cancellation; POST /api/parties/:id/lines/:lineId/cancel-item | party, current profile inside the transaction | line-cancel-api.test.ts: "checks the party zone for %s and admits it once allowed" |
+ * | GET /api/working-orders/:id/lines/:lineId/cancellation; POST /api/working-orders/:id/lines/:lineId/cancel-item | bill, current profile inside the transaction | line-cancel-api.test.ts: "checks Counter take-orders, admission and zone for %s before acting" |
  * | POST /api/parties/:id/drafts/:did/discard | party | own refusing row below; allowed: draft-discard.test.ts |
  * | POST /api/parties/:id/drafts/:did/take-over, /submit, /split | party                  | refuses POST /api/parties/:id/drafts/:did/<verb>     |
  * | POST /api/parties/:id/unpaid-departure                  | party                  | refuses POST /api/parties/:id/unpaid-departure       |

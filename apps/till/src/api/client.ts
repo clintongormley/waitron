@@ -4425,7 +4425,7 @@ export class TillApi {
 
   /** With `lineIds`, the read covers every portion of the row the till shows as one. */
   getCancellation(
-    partyId: string,
+    target: string | { billId: string },
     lineId: string,
     options: ReadOptions & { lineIds?: readonly string[] } = {},
   ): Promise<CancellationRead> {
@@ -4434,7 +4434,7 @@ export class TillApi {
         ? ""
         : `?${new URLSearchParams(options.lineIds.map((id) => ["lineIds", id])).toString()}`;
     return this.#request(
-      `/api/parties/${partyId}/lines/${lineId}/cancellation${query}`,
+      `/api/${typeof target === "string" ? `parties/${target}` : `working-orders/${target.billId}`}/lines/${lineId}/cancellation${query}`,
       "GET",
       undefined,
       options.signal,
@@ -4442,13 +4442,13 @@ export class TillApi {
   }
 
   cancelItem(
-    partyId: string,
+    target: string | { billId: string },
     lineId: string,
     command: CancelItemRequest,
     options: ReadOptions = {},
   ): Promise<CancelItemAnswer & { invoice?: TillSaleResult }> {
     return this.#request(
-      `/api/parties/${partyId}/lines/${lineId}/cancel-item`,
+      `/api/${typeof target === "string" ? `parties/${target}` : `working-orders/${target.billId}`}/lines/${lineId}/cancel-item`,
       "POST",
       command,
       options.signal,

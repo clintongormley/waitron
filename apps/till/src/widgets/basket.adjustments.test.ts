@@ -277,11 +277,16 @@ describe("till-basket: a stored counter order", () => {
     await el.updateComplete;
     expect(within(el, 0, "data-move-station")).toBeNull();
   });
-  it("offers Cancel in place of remove and − on the dish the kitchen has, and keeps +", async () => {
+  it("routes sent dish remove through Cancel and keeps +", async () => {
     const el = await mount(storedOrder());
 
     expect(within(el, 0, "data-cancel-line")).not.toBeNull();
-    expect(rows(el)[0]!.querySelector(".remove")).toBeNull();
+    const remove = rows(el)[0]!.querySelector<HTMLElement>(".remove")!;
+    expect(remove).not.toBeNull();
+    const heard = adjustments(el);
+    remove.click();
+    expect(heard).toMatchObject([{ kind: "cancel", counter: true, target: { lineId: "l-1" } }]);
+    expect(el.store.lines).toHaveLength(3);
     expect(rows(el)[0]!.querySelector(".step-dec")).toBeNull();
     expect(rows(el)[0]!.querySelector(".step-inc")).not.toBeNull();
     expect(within(el, 0, "data-cancel-line")!.getAttribute("aria-label")).toBe(

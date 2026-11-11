@@ -7063,6 +7063,32 @@ export async function updateHeldOrder(
         },
       });
     }
+    for (const parent of order.parents) {
+      const sent = [parent, ...parent.children].some(
+        (part) => part.sentAt !== null || part.ticket !== null,
+      );
+      if (!sent) continue;
+      const edit = edits.find((edit) => edit.parent.id === parent.id);
+      if (edit === undefined || compareDecimal(decimal(edit.intent.quantity), parent.quantity) < 0)
+        throw new AppError("ticket.already_fired", { workingOrderId: id });
+      const picks = namedPicks(edit.intent.extras?.set);
+      for (const child of parent.children) {
+        const pick = picks.find(
+          (pick) => pick.listId === child.extraListId && pick.productId === child.productId,
+        );
+        if (
+          compareDecimal(
+            extraQuantityFor(
+              pick?.quantity ?? 0,
+              decimal(edit.intent.quantity),
+              child.priceQuantity,
+            ),
+            child.quantity,
+          ) < 0
+        )
+          throw new AppError("ticket.already_fired", { workingOrderId: id });
+      }
+    }
     const { changed, at } = await applyLineEdits(
       tx,
       cfg,
@@ -7258,6 +7284,9 @@ export async function abandonHeldOrder(
     await refusePaymentInFlight(tx, [id]);
     await refuseBillHoldingMoney(tx, [id]);
     await assertBillHasNoUnsent(tx, id);
+    const lines = await readEditableOrder(tx, id);
+    if (lines.lines.some((line) => line.sentAt !== null || line.ticket !== null))
+      throw new AppError("ticket.already_fired", { workingOrderId: id });
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
     if (locked.partyId !== null && (await ensureFamilyBill(tx, cfg, locked.partyId))) {
       await bumpPartyRevision(tx, locked.partyId);
