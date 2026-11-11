@@ -26,14 +26,21 @@ any "Not reviewed" text (October decision 6, and decision 5's own words).
   `allergenName` and shows nothing when `addAllergens` is `null` or `{}`: no missing-information
   state exists in it. Reusing it gives "existing wording" with nothing new to translate.
 
-## Decision for the watcher (one)
+## Allergens only
 
 `extraNutrition` also draws an extra's dietary badges (Vegan, Vegetarian…) when `suitableFor` is
-set. The ask names allergens only. **Recommended: allergens only** — pass
-`{ addAllergens: item.addAllergens }` so no diet badge appears in the picker. Alternative: pass the
-item whole, so the picker shows exactly the row the basket will show once added (diet badges
-included). Worked example: Tofu, vegan, no allergens — recommended shows nothing beside it; the
-alternative shows "Vegan".
+set. The owner's words name declared allergens only ("declared-allergen labels beside each
+extra"), so the picker passes `{ addAllergens: item.addAllergens }` and draws no diet badge. Tofu,
+vegan with no allergens, shows nothing beside it.
+
+The data reaches the picker on every path (traced in the plan read): the zone offers read
+(`apps/till/src/api/client.ts:2918`), `menuOfferToTillProduct`/`sellableModifiers`
+(`client.ts:442-494`), `till-app.ts:1821`, and `offeredListsOf(this.product)`
+(`modifier-picker.ts:418`); the basket's and sent-order editor's copies keep the same fields
+(`basket.ts:572-600`, `till-table-order-screen.ts:2791-2829`); the server sends them
+(`apps/server/src/till-api.sell-published.test.ts:1025-1041`). Every opener and mode (inline,
+line details, variant dishes, which use the parent's lists) draws rows through `#renderPick` and
+`#renderStepper`, so the one change covers them all.
 
 ## Task 1 — the labels (one implementer, test first)
 
@@ -44,10 +51,13 @@ Files: `apps/till/src/widgets/modifier-picker.ts`, `modifier-picker.test.ts`,
   \`pick-${list.id}-${item.productId}-allergens\`, \`pick-${list.id}-${item.productId}-diet\`)`
   inside the row, after the name, so on the tick-box row it sits inside the `<label>` (tapping it
   ticks the box, and the checkbox's accessible name includes the allergen).
-- Styles: the picker's `static styles` gains the chip and row look the basket uses
-  (`basket.ts:414-441`: `.allergen-chip`, `.extra-nutrition`, `.extra-allergens`), without the
-  basket's indent. The name and its chips stack in one flex column (wrap the name and chips in
-  one `.option-name` span) so the price and stepper stay aligned on the right. Tokens only.
+- Styles: export `extraNutritionStyles` from `diet-badges.ts` (beside `dietBadgeStyles`) holding
+  the chip and row look (`.allergen-chip`, `.extra-nutrition`, `.extra-allergens`) with tokens only
+  (no `em` or `999px` fallbacks), and use it in the picker. The basket, station queue and pass
+  board keep their own copies (no restyle in this change). Keep `.option-name` holding only the
+  name (style tests read it, `modifier-picker.test.ts:867-935`); put the name and the chips in a
+  new wrapper (`.option-label`, a flex column taking `flex: 1`) so price and stepper stay on the
+  right.
 - Tests, failing first (`modifier-picker.test.ts`):
   1. a tick-box extra declaring `{ milk: {} }` shows one chip reading "Milk" inside its label,
      before it is ticked, and the checkbox's accessible name contains "Milk";
@@ -55,25 +65,33 @@ Files: `apps/till/src/widgets/modifier-picker.ts`, `modifier-picker.test.ts`,
      `extraNutrition` sorts);
   3. an extra with `addAllergens: null` and one with `{}` show no chip and no text beyond today's
      (assert the row's text is exactly its name and price) — the no-warning rule;
-  4. in Spanish (`es`), the milk chip reads "Leche";
-  5. an extra declaring nothing but `suitableFor: ["vegan"]` shows no diet badge (only if the
-     watcher picks "allergens only"; with the alternative, assert the badge instead).
-  Deletion control: remove the call from `#renderPick`; cases 1 and 4 fail; restore.
+  4. in Spanish (`es`), the milk chip reads "Leche" (the case restores the screen language after
+     itself, CLAUDE.md §4);
+  5. an extra declaring `{ milk: {} }` with `suitableFor: ["vegan"]` shows the Milk chip and no
+     "Vegan" badge.
+  Deletion controls: remove the call from `#renderPick` (cases 1 and 4 fail) and, separately, from
+  `#renderStepper` (case 2 fails); restore each.
+- Reuse the existing tests that already fit: `basket.line-details.test.ts:77` (a milk-declaring
+  cheese on a stepper in the line-details window) gains a chip assertion; the A738 overflow check
+  in `modifier-picker.note.test.ts:98-128` (390 and 1280 px, English and Spanish) gains a state
+  whose extra declares sulphites, the longest Spanish name ("Dióxido de azufre y sulfitos").
 - `modifier-picker.a11y.test.ts`: add a state where both extras declare allergens, checked by
   axe in light and dark, as the file's other states are.
-- Run: `pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker` (all its files)
-  and `src/widgets/diet-badges.test.ts`. Look at the window in both themes at phone width
-  (CLAUDE.md §4) on the dev stack or a test screenshot.
+- Run: `pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker` (all its files),
+  `src/widgets/diet-badges.test.ts` and `src/widgets/basket.line-details.test.ts`. Look at the
+  window in both themes at phone width (CLAUDE.md §4): `till-counter-cleanup.look.test.ts:349-350`
+  already captures it with a milk extra.
 
 ## Task 2 — words (same implementer)
 
 - Guide, English `apps/server/src/guide/en/modifiers.md` `{#till}` and Spanish
-  `apps/server/src/guide/es/modifiers.md` `{#till}`: after "with a tick box each, or a stepper
-  where you allowed more than one", one sentence: "Beside each entry are the allergens its product
-  declares." (ES: "Junto a cada entrada aparecen los alérgenos que declara su producto.") Run
-  `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`.
-- `docs/backlog/catalogue.md` A1517: delete point 4; `docs/backlog.md` A1517 line: drop "label
-  extras before selection". `docs/developers/design-system.md`: only if it describes the picker's
+  `apps/server/src/guide/es/modifiers.md` `{#till}`: split the sentence after "with a tick box
+  each, or a stepper where you allowed more than one" and add: "Beside each entry are the
+  allergens its product declares." (ES, which calls each entry "elemento": "Junto a cada elemento
+  aparecen los alérgenos que declara su producto.") Run `apps/server/src/guide-content.test.ts`
+  and `scripts/guide-links.test.ts`.
+- `docs/backlog/catalogue.md` A1517: delete point 4 and correct the count of follow-ups left
+  (line 1157); `docs/backlog.md` A1517 line: drop "label extras before selection". `docs/developers/design-system.md`: only if it describes the picker's
   rows (grep "modifier picker"); otherwise untouched.
 
 ## Size and path
