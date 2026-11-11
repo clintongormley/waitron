@@ -68,7 +68,7 @@ function venueRequest() {
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
-      displayName: "Administradora",
+      displayName: "Administrator",
       pinHash: "x",
       passwordHash: "y",
       email: "owner@example.test",

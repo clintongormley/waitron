@@ -31,7 +31,7 @@ async function seedAdmin(status: "active" | "suspended" = "active"): Promise<str
     const [person] = await tx
       .insert(persons)
       .values({
-        displayName: "Administradora",
+        displayName: "Administrator",
         pinHash: hashPin("1234"),
         passwordHash: hashPassword(ADMIN_PASSWORD),
         role: "admin",

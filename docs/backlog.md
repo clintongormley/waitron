@@ -2289,8 +2289,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
   The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
   backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
-  Spanish administrator display-name samples remain in provision-fiscal-slot, promote-api.authenticator
-  and backup-api.settings-evidence.proof, among other suites.
+  The provision-fiscal-slot, promote-api.authenticator and backup-api.settings-evidence.proof
+  suites also use Administrator for local administrator display names. Spanish samples remain
+  in backup-api.route and mirror-bundle-api, among other suites.
   Remaining local venue seeds, including email and the other sale suites, and the boot helper's raw
   location names should use `Main room`, as `setupVenue` does. The till-sale suite uses Main room,
   Administrator, Food and Drinks for its local staff samples; its product and fiscal text remain. Current-order, order-group,
