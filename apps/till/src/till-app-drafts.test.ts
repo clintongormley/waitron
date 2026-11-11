@@ -7618,7 +7618,7 @@ describe("recalled draft source splitting", () => {
     expect(tableOrder(el)!.retainedDraft?.lines[0]!.note).toBe("Keep this unsaved note");
     expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-candidate]")).not.toBeNull();
     expect(draft(el).editsLocked).toBe(true);
-    expect(banner(el)?.textContent).toContain(t("table.draft_save_failed"));
+    await vi.waitFor(() => expect(banner(el)?.textContent).toContain(t("table.draft_save_failed")));
   });
 
   it("Discard closes a refused confirmation when the recovery read also fails", async () => {
@@ -11394,26 +11394,48 @@ describe("native app phone order view with mixed dish families", () => {
       }
 });
 
-it("recovers the invoice after a draft save is refused because its bill is paid", async () => {
+it("recovers the invoice after a reducing draft save is refused and ends further saves", async () => {
   const previousLocale = currentLocale();
   try {
     const { el } = await mountApp({
-      saveDraft: vi.fn().mockRejectedValue({ code: "bill.paid", status: 409 }),
       getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("120.00")),
       getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
     });
     await openTable(el);
+    press(el, "Beer");
+    await vi.waitFor(() => expect(server.drafts[0]?.lines).toHaveLength(1));
+    api.saveDraft.mockRejectedValue({ code: "bill.paid", status: 409 });
     api.getBillBalance.mockResolvedValue(
       balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
     );
-    press(el, "Beer");
-    await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalled());
+    api.getPartyBills.mockResolvedValue([
+      partyBillOf("v1", "wo-4", 1, {
+        status: "settled",
+        total: "120.00",
+        outstanding: "0.00",
+        hasPayments: true,
+      }),
+    ]);
+    draft(el).removeLine(0);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
     );
     expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
     expect(el.result?.invoiceNumber).toBe("F-0007");
+    expect(el.errorKey).toEqual({ code: "bill.paid" });
+    expect(draft(el).editsLocked).toBe(true);
+    el.shadowRoot!.querySelector("till-settlement-document-dialog")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!
+      .click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
+    expect(api.getFiledTicket).toHaveBeenCalledOnce();
+    expect(api.saveDraft).toHaveBeenCalledTimes(2);
   } finally {
+    vi.useRealTimers();
     setLocale(previousLocale);
   }
 });

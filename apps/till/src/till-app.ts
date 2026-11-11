@@ -15404,6 +15404,8 @@ export class TillApp extends LitElement {
       if (!still() || balance.status !== "settled") return false;
       const invoice = await api.getFiledTicket(billId);
       if (!still()) return false;
+      if (surface === "table" && this.#draftSync?.billId === billId)
+        this.#draftSync.billStatus = balance.status;
       this.result = invoice;
       this.errorKey = { code: "bill.paid" };
       this.#showTicket(billId, true, { surface, cashChange: null });
