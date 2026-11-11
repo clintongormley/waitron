@@ -127,7 +127,11 @@ it("disables terminal echo before inviting typing", async () => {
   const f = fixture();
   let rawAtPrompt;
   f.output.on("data", (bytes) => {
-    if (bytes.toString().includes("Press any key")) {
+    const text = bytes.toString();
+    if (
+      rawAtPrompt === undefined &&
+      (text.includes(INSTALLER_WORDS.es.countdown) || text.includes("Press any key"))
+    ) {
       rawAtPrompt = f.input.isRaw;
       f.input.write("immediate typing");
     }
