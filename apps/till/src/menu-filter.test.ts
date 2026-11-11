@@ -197,20 +197,20 @@ describe("A738 menu filters", () => {
         diets: ["vegan", "no-fish"],
         exclude: { nuts: ["walnuts"] },
       }).map((p) => p.id),
-    ).toEqual(["almond", "unreviewed-allergens"]);
+    ).toEqual(["almond"]);
   });
 });
 
 describe("A738 filter combinations", () => {
   it.each(ALLERGEN_CODES)(
-    "A738 excludes declared %s while retaining reviewed-empty and unreviewed snapshots",
+    "A738 excludes declared %s and unreviewed snapshots while retaining reviewed-empty ones",
     (code) => {
       const declared = { ...product("declared"), allergens: { [code]: {} } };
       const clear = { ...product("clear"), allergens: {} };
       const unknown = product("unknown");
       expect(
         visibleProducts([declared, clear, unknown], "", { diets: [], exclude: { [code]: "all" } }),
-      ).toEqual([clear, unknown]);
+      ).toEqual([clear]);
     },
   );
 
@@ -230,6 +230,41 @@ describe("A738 filter combinations", () => {
       }).map((p) => p.id),
     ).toEqual(["rye"]);
     expect(visibleProducts(products, "", { diets: [], exclude: { gluten: [] } })).toEqual(products);
+  });
+
+  it("A1517 keeps an unreviewed dish while no allergen exclusion is active", () => {
+    const unreviewed = product("unreviewed");
+    const products = [unreviewed, { ...product("clear"), allergens: {} }];
+    expect(visibleProducts(products, "", { diets: [], exclude: { gluten: [] } })).toEqual(products);
+    expect(visibleProducts(products, "", EMPTY_MENU_FILTERS)).toEqual(products);
+  });
+
+  it("A1517 keeps a dish whose allergens were entered only on its variants", () => {
+    const variant = (id: string, allergens: TillProduct["allergens"]) => ({
+      id,
+      name: id,
+      pricingUnit: "each" as const,
+      vatClass: "general" as const,
+      category: null,
+      allergens,
+      unitPrice: "1.00",
+      unitPriceDifference: null,
+      available: true,
+    });
+    const reviewedVariants: TillProduct = {
+      ...product("reviewed-variants"),
+      variants: [variant("small", null), variant("large", { nuts: {} })],
+    };
+    const unreviewedVariants: TillProduct = {
+      ...product("unreviewed-variants"),
+      variants: [variant("small", null), variant("large", null)],
+    };
+    expect(
+      visibleProducts([reviewedVariants, unreviewedVariants], "", {
+        diets: [],
+        exclude: { milk: "all" },
+      }).map((p) => p.id),
+    ).toEqual(["reviewed-variants"]);
   });
 
   it("A738 leaves empty filters and unchanged immutable memo inputs stable", () => {

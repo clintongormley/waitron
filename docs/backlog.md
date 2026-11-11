@@ -490,7 +490,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
 - **A1517. Accepted allergen changes before go-live (owner, 2026-11-11): go-live.** The owner accepted
-  the recommendations: hide unchecked dishes while filtering, then filter extras/options; print live
+  the recommendations: filter extras/options; print live
   declarations on kitchen tickets; design A670's guest menu; label extras before selection; preserve
   sent-order declarations. Implementation remains open for the watcher to queue separately.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)

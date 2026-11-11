@@ -60,8 +60,10 @@ export function visibleProducts(
   const byDiet = filters.diets.reduce(filterProductsByDiet, byMenu);
   const exclusions = Object.entries(filters.exclude);
   if (exclusions.length === 0) return byDiet;
-  return byDiet.filter((product) =>
-    exclusions.every(([code, selected]) => {
+  const anyActive = exclusions.some(([, selected]) => selected === "all" || selected.length > 0);
+  return byDiet.filter((product) => {
+    if (anyActive && neverReviewed(product)) return false;
+    return exclusions.every(([code, selected]) => {
       const declaration = product.allergens?.[code];
       if (declaration === undefined) return true;
       if (selected === "all") return false;
@@ -72,7 +74,15 @@ export function visibleProducts(
         declaration.kinds.length > 0 &&
         !selected.some((kind) => declaration.kinds!.includes(kind))
       );
-    }),
+    });
+  });
+}
+
+// A dish whose allergens were entered only on its variants reaches the till with its own `null`.
+function neverReviewed(product: TillProduct): boolean {
+  return (
+    product.allergens === null &&
+    (product.variants ?? []).every((variant) => variant.allergens === null)
   );
 }
 

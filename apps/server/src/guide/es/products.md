@@ -263,6 +263,8 @@ variantes activas cuyos alérgenos están sin revisar. Selecciona un nombre para
 de ese producto. Aun así puedes publicar o programar: el aviso te pide que compruebes las
 declaraciones, no rechaza la publicación. Si cancelas la confirmación de programación, se conservan la
 fecha y la hora que introdujiste.
+Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, los platos marcados
+**Sin revisar** también se ocultan; revisa un plato para que aparezca.
 
 Los datos de compras existentes y los datos registrados de los pedidos siguen disponibles, pero los
 alérgenos y la aptitud dietética vigentes de los productos los gestionas en **Productos**.
