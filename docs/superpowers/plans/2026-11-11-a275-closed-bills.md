@@ -102,11 +102,21 @@ totals as issued, tips not included. Export it from `index.ts`.
    `closureSummary.received`; a new **To be paid by transfer** line; Tips and Gross total unchanged.
 4. Sales report: the per-device table leaves out `transfer` rows, and its **Tender total** shows
    `closureSummary.received` (so the table holds money only); under it, **To be paid by transfer**;
-   in Records, **Bills closed**. All through `renderMetric` (`widgets/metric-row.ts:9`).
+   in Records, **Bills closed** as "{count} · {total}", the same text as the overview. All through
+   `renderMetric` (`widgets/metric-row.ts:9`). **A stated departure from design §4, for the PR to
+   repeat:** §4 asks for the transfer line "by closure business day using the venue's
+   clock/changeover rules and originating node/device scope"; the day and the box are honoured,
+   but the screens show the day's one transfer total, not one per device. The frozen close keeps
+   the per-device line (`cash.byOrigin[].byMethod`), unchanged.
 5. Words, EN and ES: `overview.bills_closed`, `overview.to_be_paid_by_transfer`,
    `sales.bills_closed`, `sales.to_be_paid_by_transfer` — "Bills closed" / "Cuentas cerradas", "To be
    paid by transfer" / "A pagar por transferencia".
-6. `api/live-queries.ts`: `getDailyClose` (`:220`) gains `working_orders`, which the new read uses.
+6. `api/live-queries.ts` (which tables make an open screen read again): `getDailyClose` (`:220`)
+   gains `working_orders`, which the new read uses. A loose end fixed here: the cash-up also reads
+   `bill_payments` and `bill_payment_refunds` (`cash-up.ts:42–56`), and neither `getDailyClose` nor
+   `getSalesOverview` (`:183`) lists them, so both lists gain both tables. Both names are already
+   known sources (`live-queries.ts:135–136`), so `scripts/live-subscriptions.test.ts` (which checks
+   only that a name is known, `:10–33`) passes as it is.
 7. Docs: the A275 lines in `docs/backlog.md` and `docs/backlog/fiscal.md` say Tasks 0–5 are built; a
    dated note under the master plan's Task 5 points here.
 
@@ -127,26 +137,37 @@ rebase after #2797 lands and extend its wording.
   3. A settled bill on a second box: left out for `nodeIds: [first]`, counted venue-wide.
 - `apps/server/src/report-api.transfer-close.test.ts` (new; its own database, because the case
   closes today's bills). `transferCloseVenue` and the admin's management session — the probe showed
-  this pair answers 200. One case: a real close of a placed Counter bill (€18.00), then the overview's
-  `businessDay` equals the close's, its `closureSummary` is
-  `{ billsClosed: { count: 1, total: "18.00" }, toBePaidByTransfer: "18.00", received: "0.00" }`, and
-  `counts.sales` 1 and `takings.grossTotal` "18.00" are unchanged (issued invoices). The daily close for
-  that day has the same summary and only a `transfer` line; the day before reads all zeros. Like
+  this pair answers 200. One case, three €18.00 Counter bills (Tarta): one closed by transfer through
+  the real `closeBillByTransferTx`, one paid in cash and one by card with a €2.00 tip, both through
+  the till's existing pay path (`payWorkingOrder` from `testing/whole-payment-fixture.ts`, as
+  `attendance-whole-payments.test.ts:105` calls it). Then the overview's `businessDay` equals the
+  close's, and its `closureSummary` is
+  `{ billsClosed: { count: 3, total: "54.00" }, toBePaidByTransfer: "18.00", received: "38.00" }`
+  beside `takings.tenderTotal` "56.00": cash 18 + card 20 is received; the bills' total leaves the tip
+  out; dropping the card reads 18, dropping the cash 20, and copying `tenderTotal` 56. `counts.sales`
+  3 and `takings.grossTotal` "54.00" are unchanged (issued invoices). The daily close for that day has
+  the same summary and one `transfer`, one `cash` and one `card` line; the day before reads all
+  zeros. If the pay path takes no tip, pay the card bill without one and the controls still differ
+  (18 vs 36 vs 54). Like
   `report-api.overview.test.ts`, it reads "today", so a run that straddles the day's start time
   fails on the first assertion, plainly.
 - `dashboard-overview-screen.test.ts`: a summary of 2 · €320.00 / €220.00 / €110.00 against
   `takings.tenderTotal` €330.00 shows `bills-closed` "2 · €320.00", `transfer-total` "€220.00" and
   `tender-total` "€110.00".
 - `dashboard-sales-screen.test.ts`: a device with cash €10 and transfer €220 shows no
-  `tender-row-device-1-transfer`, `tender-total` €110.00, `transfer-total` €220.00, and `bills-closed`;
-  one check in Spanish reads "A pagar por transferencia" and "Cuentas cerradas".
+  `tender-row-device-1-transfer`, `tender-total` €110.00, `transfer-total` €220.00, and `bills-closed`
+  "2 · €320.00"; one check in Spanish reads "A pagar por transferencia" and "Cuentas cerradas".
+- `apps/dashboard/src/api/live-queries.test.ts`: five new rows in the existing "refreshes %s when its
+  contributing %s query changes" table (`:95–218`): `getDailyClose` through `working_orders`,
+  `bill_payments` and `bill_payment_refunds`; `getSalesOverview` through the last two.
 - About 14 dashboard test stubs gain `closureSummary` (setup only; each stub's `received` equals its
   `tenderTotal`, so every existing assertion holds unedited). The a11y suites rerun on the same
   `renderMetric` primitive; no new a11y case.
 - Deletion controls, recorded in the PR, not committed: the window on `s.issued_at` (case 2 fails);
-  no node clause (case 3); `received` = `tenderTotal` (server case reads "18.00"); the overview reading
-  `takings.tenderTotal`; the Sales table keeping transfer rows; the Sales footer reading
-  `cash.tenderTotal`.
+  no node clause (case 3); `received` = `tenderTotal` (server case reads "56.00"); `received`
+  leaving out card (reads "18.00"); the overview reading `takings.tenderTotal`; the Sales table
+  keeping transfer rows; the Sales footer reading `cash.tenderTotal`; each new live-refresh table
+  removed again (its row fails).
 - Commands:
   `pnpm --filter @waitron/reporting exec vitest run src/closed-bills.test.ts src/cash-up.test.ts src/record-daily-close.test.ts src/daily-close-hash.test.ts src/verify-daily-close-chain.test.ts`;
   `pnpm --filter @waitron/server exec vitest run src/report-api.transfer-close.test.ts src/report-api.overview.test.ts src/report-api.reports.test.ts src/business-day-history.test.ts src/device-delete.history.test.ts src/venue-details.test.ts src/transfer-close-refusal.test.ts src/transfer-close.replay.test.ts`;
@@ -160,9 +181,10 @@ test; (iii) 5b items 2–7 and the dashboard tests.
 
 ## Size
 
-One PR, about 100 production lines (reader ~30 with its export, API ~25, dashboard types, screens,
-words and live-query line ~45) and about 210 test lines (reporting ~85 with fixtures, server ~60,
-dashboard ~35 plus ~30 of stub setup). Under 150 production lines, so 5a and 5b are two commits, not
+One PR, about 105 production lines (reader ~30 with its export, API ~25, dashboard types, screens,
+words and five live-refresh entries ~50) and about 235 test lines (reporting ~85 with fixtures,
+server ~75 with the cash and card bills, dashboard ~40 plus ~30 of stub setup, live-refresh rows
+~5). Under 150 production lines, so 5a and 5b are two commits, not
 two PRs. Review weight: the API response and its dashboard twin are a contract between packages, so
 the full `/finish-branch` wave.
 
@@ -173,7 +195,12 @@ the full `/finish-branch` wave.
 - **Day-start-time, summer-time, two-box, two-device and failover cases**: no real event makes the
   stored day and the report window differ (see "What changed"); one node today.
 - **A per-device transfer line on screen**: the frozen close keeps one per device; the screens show
-  the day's total.
+  the day's total (the stated departure from §4 under change 4).
+- **The demo seed's sales**: it records sales with no bill behind them
+  (`apps/server/scripts/demo-seed/seed-sales.ts:283–300`, no `workingOrderId`), so a demo stack shows
+  "Bills closed 0 · €0.00" beside hundreds of euros in Tender total. The till's sale path always runs
+  under a bill, minting one when the request names none (`till-sale.ts:2412–2415`; read, not run),
+  so this is not a real-venue event; the seed is not changed, and the PR says so.
 - **New frozen-close race tests**: already tested in Tasks 0–3 (table above).
 - **Top sellers, categories, VAT and period reports**: they count invoices on the day they were
   issued (`business-day.ts:229–233`) and say nothing about money received; nothing to change.
@@ -194,7 +221,9 @@ the full `/finish-branch` wave.
 4. **The new read scans `working_orders` by `settled_at`, which has no index** (`orders.ts:115–116`),
    as the cash-up already scans `tenders` (`sales.ts:289`). Not measured. Default: no index here (it
    is a schema change); add it in A1308's orders-and-sales slice if the bench shows a cost.
+5. **A settled €0.00 bill (everything given away) counts as a closed bill**, so it adds
+   "1 · €0.00". Default: yes, it was closed.
 
 ## For the watcher
 
-Questions 1–4 have defaults; nothing blocks the build. Rebase onto `main` after #2797 lands.
+Questions 1–5 have defaults; nothing blocks the build. Rebase onto `main` after #2797 lands.
