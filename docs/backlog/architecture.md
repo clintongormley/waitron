@@ -843,8 +843,9 @@ product failures.
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   The `floor-today-*` route suites use Anna as their staff sample.
   Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
-  Local provisioning, setup-mode, promotion, break-glass and backup-evidence administrator
-  samples use Administrator. Other local, stream and shared-helper staff samples remain Spanish.
+  The provision, setup-api.throwaway, promote-api.handover, break-glass-command and
+  backup-api.settings-evidence suites use Administrator for their local administrator display-name samples.
+  Other local, stream and shared-helper staff samples remain Spanish.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
   helper's raw `Barra` locations should use `Main room`, as `setupVenue` does.
