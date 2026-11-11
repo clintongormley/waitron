@@ -86,6 +86,7 @@ already approved before this brainstorm:
 | Restarting the box moves from `person.admin` to `system.manage`, which already covers retiring the box | Manager, Admin | owner 2026-11-11 |
 | `fiscal.remedy` assignable like any other | Admin | owner 2026-11-09 13:36 |
 | `sale.discount` retired (no call site) | — | 7 Nov design §2 |
+| New "Change other people's email addresses" — change an EXISTING person's email; setting the email when adding someone stays with `person.admin` | Admin | owner 2026-11-11, after the Fable read (option C) |
 
 **After go-live, a permission added by a later version reaches only Admin on an existing venue.**
 Defaults apply when a venue is set up. A release that adds or splits a permission says in its
@@ -117,12 +118,25 @@ permissions you hold. In practice:
   holds").
 - Doing any of this requires `person.admin`.
 
-**Rule 2 — other people's sign-in.** You may change another person's email, set their PIN,
+**Rule 2 — other people's sign-in.** You may change another person's email, clear their PIN,
 suspend or reactivate them, remove a sign-in method, or send them a password reset or invitation
 only if you hold every permission they hold. The reason is that a Manager who could change an
 Admin's email could then send the password reset to themselves. A Manager can do all of this for a
-waiter, and none of it for an Admin. Managers keep setting PINs directly, because many waiters have
-no email. Requires `person.admin`. Self-service flows (your own email, password or passkeys) are
+waiter, and none of it for an Admin. Requires `person.admin`.
+
+**Changing an existing person's email also needs its own permission**, "Change other people's
+email addresses", Admin-only by default (owner, 2026-11-11, option C). The reason: whoever can
+point someone's email at an address they read can reset that person's password, then collect any
+role the person is later given, or act as an equal. Rule 2 still applies on top (**my call**).
+Managers keep setting the email when they add someone new. Every email change made by someone
+other than the person is logged with who made it, and a notice goes to the old address.
+Accepted gap: a Manager adding a new starter could type an address they read. The real starter
+then never receives the invitation, and would notice.
+
+**PINs and email (owner, 2026-11-11, option A):** no one sets another person's PIN. An
+administrator can clear it and the person chooses their own on their profile, as today. Adding a
+person needs an email address, as today. (This corrects an earlier line here that said Managers
+set PINs directly.) Self-service flows (your own email, password or passkeys) are
 unchanged.
 
 **Kept: the venue always has a usable Admin** (approved 2026-10-22; today's code counts active
@@ -132,13 +146,14 @@ suspending someone, resetting an account to pending, removing a sign-in method, 
 and import. A change that would leave none is refused. PIN-only, pending and suspended people do
 not count.
 
-**Links are checked when used, not cancelled by a role change** (7 November design §5, approved).
-This changes today's code, which cancels a person's outstanding links when they gain or lose Admin
-(`invalidatePersonAccountActions` in `packages/identity/src/staff.ts`). Cancelling on an email or
-status change (`revokePersonAccess`) stays. When a link is redeemed, current roles and status
-decide, and for a link an administrator sent, so does Rule 2 against the sender's current
-permissions. That needs the sender recorded on the account-action row (an `issued_by` person id,
-null for self-service). Today's `management_account_actions` table has no such column.
+**Any change to a person's access roles expires their outstanding invitation and password-reset
+links** (owner, 2026-11-11, after the Fable read). Today's code does this when someone gains or
+loses Admin (`invalidatePersonAccountActions` in `packages/identity/src/staff.ts`); it now applies to
+every access-role change. Cancelling on an email or status change (`revokePersonAccess`) stays.
+**There is no check of who sent a link** (owner, option B): it was planned, but anyone can request a
+fresh senderless invitation from the public "forgot password" page, so it protected nothing. No
+`issued_by` column. This replaces the 7 November design's "links are not cancelled by a role
+change". When a link is used, current status and roles decide, as today.
 
 **Kept: "changed while you were editing."** A save compares the role set or permission set it read
 with what is stored and refuses a difference, keeping the draft. No version counters or hashes.
@@ -192,6 +207,9 @@ limits to it, which requires getting a manager or admin involved."
   limit €0. A waiter comps a €12 staff meal alone. Any complaint comp needs an approver's PIN.
 - Accepted loss: you can no longer say "only Managers, never Supervisors, approve complaints". Every
   reason has the same approvers.
+- Accepted with the starters in view (owner, 2026-11-11, option A): Supervisors hold
+  `adjustment.approve` by default, so a Supervisor alone may now give "On the house", "Discount", a
+  Staff meal over 50% and anything over the bill limit, which need a Manager today.
 
 As a result, device sign-in lists are the only place a role is named outside people's memberships.
 The settings-export work to translate role references inside comp settings (the scope forecast's
@@ -240,11 +258,13 @@ The settings-export work to translate role references inside comp settings (the 
 - The deletion impact preview, and retirement for access roles (§7).
 - Per-reason and bill-limit role lists on comps, and the settings-export remapping they needed (§6).
 - Email for job-role changes (§8).
+- Checking who sent a link when it is used, and the 7 November rule that role changes never cancel
+  links (§4, owner after the Fable read).
 
 **Kept as approved:** several roles per person, combined; no ladder; fixed built-in names; Admin
 always holds everything; one `person.admin` covering roles and other people's sign-in; Manager
-holding it by default; custom names unique and untranslated; copying; the usable-Admin rule;
-links checked when used, never cancelled; ordinary "changed while editing" refusals; activity
+holding it by default (except changing an existing person's email, §4); custom names unique and
+untranslated; copying; the usable-Admin rule; ordinary "changed while editing" refusals; activity
 entries; access-role email through the shared queue; no per-person device exceptions; approval
 records naming people, not their roles; pre-live reset instead of data migration; no tenant
 column; no fiscal behaviour change.
