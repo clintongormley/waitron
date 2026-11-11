@@ -166,7 +166,7 @@ by the answers):
   simplified invoice clears the staged customer (`setOrderInvoiceChoice`,
   `apps/server/src/working-order.ts`). The README says the
   box keeps such details and to ask the venue for them. Waits for the owner's answer below.
-  Receipt Email also keeps the destination in `invoice_deliveries.recipient` for a simplified
+  Separately, Receipt Email keeps the destination in `invoice_deliveries.recipient` for a simplified
   receipt; the tax-identifier-only customer lookup cannot find that address. Include it when
   deciding how this existing download gap is handled, without adding an email search or retention policy in A739.
 - **A supplier found by tax number is not in the invoice customer's download.** A purchase invoice
@@ -215,7 +215,8 @@ by the answers):
 - **S11** — clear a former employee's email a year after she leaves, keeping her name. Adds a
   migration; waits for the labour and privacy specialists (A664 G2, G3).
 - **Receipts and invoices** — a privacy line waits for the specialist's answer to Q59 (design
-  §4.1.1).
+  §4.1.1). Receipt Email omits the existing full-invoice notice; the processing-guide entries also
+  need to cover the receipt customer's stored address and its email-provider recipient when this decision is settled.
 - **Emergency admin recovery keeps its own wipe** — `apps/server/src/break-glass-command.ts` clears
   sign-in details with its own SQL rather than identity's shared helper (left out of S4, #2032),
   and does not delete pending passkey challenges. Next action: route it through the helper, or say

@@ -1836,13 +1836,18 @@ describe("POST /api/sales/:id/deliveries (email)", () => {
     ]);
   });
 
-  it.each(["queued", "sent"] as const)(
+  it.each(["queued", "sending", "sent"] as const)(
     "does not resend a failed simplified-paper original beside an email that is %s",
     async (status) => {
       const v = await venue();
       const { orderId, saleId } = await invoice(v, false);
       await receiptOriginal(v, saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
       expect((await emailIt(v, orderId)).status).toBe(200);
+      if (status === "sending")
+        await suite.db
+          .update(invoiceDeliveries)
+          .set({ status })
+          .where(eq(invoiceDeliveries.saleId, saleId));
       if (status === "sent")
         expect(await emailWorkerPass("sent")).toMatchObject({ processed: true });
       const jobs = await jobsOf(saleId);
