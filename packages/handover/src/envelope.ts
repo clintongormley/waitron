@@ -13,6 +13,7 @@ export const HANDOVER_KINDS = [
   "declaration",
   "return-batch",
   "return-receipt",
+  "return-clash-acceptance",
   "health",
 ] as const satisfies readonly HandoverKind[];
 

@@ -61,7 +61,7 @@ describe("signEnvelope", () => {
     });
   });
 
-  it("lists the ten kinds", () => {
+  it("lists the supported kinds", () => {
     expect(HANDOVER_KINDS).toEqual([
       "query",
       "status",
@@ -72,6 +72,7 @@ describe("signEnvelope", () => {
       "declaration",
       "return-batch",
       "return-receipt",
+      "return-clash-acceptance",
       "health",
     ]);
   });
@@ -98,22 +99,28 @@ describe("verifyEnvelope", () => {
     }
   });
 
-  it("an acceptance never verifies as a relinquishment", () => {
-    const raw = json(signEnvelope("acceptance", body, m2));
-    expect(verifyEnvelope(raw, "relinquishment", publicKeyOf)).toEqual({
-      valid: false,
-      reason: "wrong_purpose",
-    });
-  });
+  it.each(["acceptance", "return-clash-acceptance"] as const)(
+    "a %s never verifies as a relinquishment",
+    (kind) => {
+      const raw = json(signEnvelope(kind, body, m2));
+      expect(verifyEnvelope(raw, "relinquishment", publicKeyOf)).toEqual({
+        valid: false,
+        reason: "wrong_purpose",
+      });
+    },
+  );
 
-  it("the purpose is signed: an acceptance re-labelled as a relinquishment is refused", () => {
-    const envelope = signEnvelope("acceptance", body, m2);
-    const raw = json({ ...envelope, purpose: "waitron.handover.relinquishment.v1" });
-    expect(verifyEnvelope(raw, "relinquishment", publicKeyOf)).toEqual({
-      valid: false,
-      reason: "bad_signature",
-    });
-  });
+  it.each(["acceptance", "return-clash-acceptance"] as const)(
+    "the purpose is signed: a %s re-labelled as a relinquishment is refused",
+    (kind) => {
+      const envelope = signEnvelope(kind, body, m2);
+      const raw = json({ ...envelope, purpose: "waitron.handover.relinquishment.v1" });
+      expect(verifyEnvelope(raw, "relinquishment", publicKeyOf)).toEqual({
+        valid: false,
+        reason: "bad_signature",
+      });
+    },
+  );
 
   it("a body changed after signing is refused", () => {
     const envelope = signEnvelope("acceptance", body, m2);
