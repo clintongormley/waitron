@@ -1,5 +1,5 @@
 import { TillLiveConnection, TILL_LIVE_TYPES } from "./api/live-connection.js";
-import { liveRefresh } from "./state/live-gate.js";
+import { liveRefresh, queuedLiveRefresh } from "./state/live-gate.js";
 import {
   recoveryLink,
   recoveryRefusalOf,
@@ -3002,6 +3002,7 @@ export class TillApp extends LitElement {
   @state() private resolvingDraftCandidate: DraftSync | null = null;
   #billDraftTimer?: ReturnType<typeof setTimeout>;
   #billDraftReading?: DraftSync;
+  #billDraftReadDone?: Promise<void>;
   readonly #candidateOwner = {};
   #candidateScope?: DraftScope<string>;
   #candidateObserved = "[]";
@@ -4779,49 +4780,36 @@ export class TillApp extends LitElement {
           this.#billDraftLive?.stop();
           this.#deliveryLive?.stop();
           const live = this.#live;
-          let billReading = false,
-            billQueued = false;
-          let deliveryReading = false,
-            deliveryQueued = false;
-          this.#billDraftLive = liveRefresh(live, {
+          this.#billDraftLive = queuedLiveRefresh(live, {
             types: TILL_LIVE_TYPES.billDraft!,
-            run: () => {
-              billQueued = true;
-              if (billReading) return;
-              billReading = true;
-              void (async () => {
-                try {
-                  while (billQueued && this.isConnected && this.#live === live) {
-                    billQueued = false;
-                    await Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
-                  }
-                } finally {
-                  billReading = false;
-                }
-              })();
+            beforeRun: () => this.#billDraftReadDone,
+            run: async () => {
+              if (this.isConnected && this.#live === live)
+                await Promise.all([this.#refreshBillDraft(), this.#rereadBillsOnTimer()]);
             },
           });
-          this.#deliveryLive = liveRefresh(live, {
+          this.#deliveryLive = queuedLiveRefresh(live, {
             types: TILL_LIVE_TYPES.deliveries!,
-            run: () => {
-              deliveryQueued = true;
-              if (deliveryReading) return;
-              deliveryReading = true;
-              void (async () => {
-                try {
-                  while (deliveryQueued && this.isConnected && this.#live === live) {
-                    deliveryQueued = false;
-                    const id = this.ticketWorkingOrderId;
-                    if (
-                      id !== undefined &&
-                      this.#ticketIsCurrent(id, this.#operatorSession, this.#receiptPrintVisit)
-                    )
-                      await this.#refreshReceiptPrint();
-                  }
-                } finally {
-                  deliveryReading = false;
-                }
-              })();
+            run: async () => {
+              const id = this.ticketWorkingOrderId;
+              if (
+                this.isConnected &&
+                this.#live === live &&
+                id !== undefined &&
+                this.#ticketIsCurrent(id, this.#operatorSession, this.#receiptPrintVisit)
+              )
+                await Promise.all([
+                  this.#readReceiptPrint(id, this.#operatorSession, this.#receiptPrintVisit),
+                  ...(this.result?.invoiceType === "F1"
+                    ? [
+                        this.#readInvoiceDeliveries(
+                          id,
+                          this.#operatorSession,
+                          this.#receiptPrintVisit,
+                        ),
+                      ]
+                    : []),
+                ]);
             },
           });
           this.#live.start();
@@ -12356,6 +12344,10 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const before = sync.edit;
     this.#billDraftReading = sync;
+    let complete!: () => void;
+    this.#billDraftReadDone = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
     try {
       const loaded = await sync.load(
         this.#draftReadBounds() ?? { waitLimitMs: FLOOR_POLL_LIMIT_MS },
@@ -12382,7 +12374,11 @@ export class TillApp extends LitElement {
       }
       this.requestUpdate();
     } finally {
-      if (this.#billDraftReading === sync) this.#billDraftReading = undefined;
+      if (this.#billDraftReading === sync) {
+        this.#billDraftReading = undefined;
+        this.#billDraftReadDone = undefined;
+      }
+      complete();
     }
   }
 

@@ -5268,6 +5268,7 @@ describe("till-app", () => {
         );
         stream.event("change", '[{"type":"print_jobs"}]');
         await pass(el, 0);
+        expect(ticket(el)!.originalReceiptBusy).toBe(false);
         stream.event("change", '[{"type":"invoice_deliveries"}]');
         await pass(el, 0);
         expect(getInvoiceDeliveries).toHaveBeenCalledTimes(reads + 3);

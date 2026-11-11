@@ -1,5 +1,5 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
-import { liveRefresh } from "../state/live-gate.js";
+import { queuedLiveRefresh } from "../state/live-gate.js";
 import {
   LitElement,
   type PropertyValues,
@@ -434,25 +434,9 @@ export class TillStationScreen extends LitElement {
       void this.#load();
     }
     this.#refreshTimer = setInterval(() => void this.#refresh(), REFRESH_MS);
-    let reading = false,
-      queued = false;
-    this.#liveRefresh = liveRefresh(this.live, {
+    this.#liveRefresh = queuedLiveRefresh(this.live, {
       types: TILL_LIVE_TYPES.station!,
-      run: () => {
-        queued = true;
-        if (reading) return;
-        reading = true;
-        void (async () => {
-          try {
-            while (queued && this.isConnected) {
-              queued = false;
-              await this.#refresh();
-            }
-          } finally {
-            reading = false;
-          }
-        })();
-      },
+      run: () => this.#refresh(),
     });
   }
 

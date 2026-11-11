@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TillLiveConnection } from "../api/live-connection.js";
-import { liveGate } from "./live-gate.js";
+import { liveConnectionFixture } from "../../test/live-connection.js";
+import { liveGate, queuedLiveRefresh } from "./live-gate.js";
 
 const stops: (() => void)[] = [];
 beforeEach(() => vi.useFakeTimers());
@@ -101,4 +102,64 @@ it("a disconnected stream wakes a quiet timer immediately", async () => {
   end();
   await vi.advanceTimersByTimeAsync(0);
   expect(run).toHaveBeenCalledTimes(2);
+});
+
+it("queues one fresh read behind a running event read and drops queued work at stop", async () => {
+  const live = liveConnectionFixture();
+  let release!: () => void;
+  const run = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    )
+    .mockResolvedValue(undefined);
+  const refresh = queuedLiveRefresh(live.connection, { types: ["devices"], run });
+  stops.push(() => {
+    refresh.stop();
+    live.connection.stop();
+  });
+  live.ready();
+  await vi.advanceTimersByTimeAsync(0);
+  live.change("devices");
+  await vi.advanceTimersByTimeAsync(0);
+  live.change("devices");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(run).toHaveBeenCalledOnce();
+  release();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(run).toHaveBeenCalledTimes(2);
+  refresh.stop();
+  live.change("devices");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
+it.each([false, true])("coalesces changes behind an outside read, stopped=%s", async (stop) => {
+  const live = liveConnectionFixture();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const run = vi.fn().mockResolvedValue(undefined);
+  const refresh = queuedLiveRefresh(live.connection, {
+    types: ["devices"],
+    beforeRun: () => pending,
+    run,
+  });
+  stops.push(() => {
+    refresh.stop();
+    live.connection.stop();
+  });
+  live.ready();
+  await vi.advanceTimersByTimeAsync(0);
+  live.change("devices");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(run).not.toHaveBeenCalled();
+  if (stop) refresh.stop();
+  release();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(run).toHaveBeenCalledTimes(stop ? 0 : 1);
 });
