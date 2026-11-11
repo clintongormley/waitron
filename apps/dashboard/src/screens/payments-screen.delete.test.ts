@@ -2,7 +2,6 @@ import { html } from "lit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, registerCatalogue } from "@waitron/dashboard-kit";
 import type { DeleteImpact } from "@waitron/shared";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, ReaderRow } from "../api/client.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -504,7 +503,7 @@ describe("Deleting a card reader", () => {
 
     expect(dialogOf(el)!.open).toBe(true);
     expect(dialogOf(el)!.actionError).toBe(
-      "The provider did not confirm the unpairing. The reader is disabled; try again.",
+      "The provider did not confirm the unpairing. The reader is unavailable; try again.",
     );
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
     // The delete's first transaction switched the reader off before calling the provider

@@ -22,6 +22,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -52,6 +53,7 @@ import type {
   HeldPaymentRow,
 } from "../api/client.js";
 import { dashboardPath } from "../navigation.js";
+import { guideHref } from "../help-guide.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -2289,6 +2291,14 @@ export class PaymentsScreen extends LitElement {
         if (version === this.#discoveryVersion) this.#closeDiscovery();
       }}
     >
+      <wt-help-tooltip
+        slot="help"
+        mode="help-mode"
+        aria-label=${fill("help.badge_label", { part: t("payments.discovery_heading") })}
+        guide-href=${guideHref("payments.card-readers")}
+        guide-label=${t("help.guide_link")}
+        >${t("payments.reader_help")}</wt-help-tooltip
+      >
       <p>
         ${fill("payments.discovery_intro", { provider: this.#providerName(this.discoveringId) })}
       </p>

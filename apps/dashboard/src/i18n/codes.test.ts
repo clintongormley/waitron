@@ -582,7 +582,7 @@ it("says disabled, never deactivated, for a record that is switched off and kept
     "Esta cuenta está deshabilitada. Avisa a un responsable",
   );
   expect(codeMessage("payment.provider_in_use", "es")).toBe(
-    "Deshabilita los lectores de tarjetas de este proveedor antes de desconectarlo",
+    "Elimina o desvincula los lectores de tarjetas de este proveedor antes de desconectarlo",
   );
 });
 
@@ -624,12 +624,12 @@ it.each([
   }
 });
 
-it("says a card reader the provider could not unpair is left disabled, in English and Spanish", () => {
+it("says a card reader the provider could not unpair is left unavailable, in English and Spanish", () => {
   expect(codeMessage("reader.unpair_failed", "en")).toBe(
-    "The provider did not confirm the unpairing. The reader is disabled; try again.",
+    "The provider did not confirm the unpairing. The reader is unavailable; try again.",
   );
   expect(codeMessage("reader.unpair_failed", "es")).toBe(
-    "El proveedor no confirmó la desvinculación. Queda deshabilitado; inténtalo de nuevo.",
+    "El proveedor no confirmó la desvinculación. El lector no está disponible; inténtalo de nuevo.",
   );
 });
 

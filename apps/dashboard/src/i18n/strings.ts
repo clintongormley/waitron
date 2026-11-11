@@ -2695,10 +2695,12 @@ export const en = {
   "payments.add_reader": "Add reader",
   "payments.readers_empty": "No card readers yet.",
   "payments.unpair_failed_unchanged":
-    "The provider did not confirm the unpairing. The reader is still enabled; try again.",
+    "The provider did not confirm the unpairing. The reader is still available; try again.",
   "payments.reader_unavailable": "Unavailable",
   "payments.reader_unpaired": "Unpaired",
   "payments.reader_retained": "Saved name and print settings",
+  "payments.reader_help":
+    "Delete removes a reader from Waitron. Add a recognised reader to keep its name and print settings, then assign it to devices and profiles again.",
   "payments.reader_col_battery": "Battery",
   "payments.refresh": "Refresh",
   "payments.details": "Details",
@@ -6580,10 +6582,12 @@ export const es: Record<StringKey, string> = {
   "payments.add_reader": "Añadir lector",
   "payments.readers_empty": "Todavía no hay lectores de tarjetas.",
   "payments.unpair_failed_unchanged":
-    "El proveedor no confirmó la desvinculación. El lector sigue habilitado; inténtalo de nuevo.",
+    "El proveedor no confirmó la desvinculación. El lector sigue disponible; inténtalo de nuevo.",
   "payments.reader_unavailable": "No disponible",
   "payments.reader_unpaired": "Sin vincular",
   "payments.reader_retained": "Nombre y ajustes de impresión guardados",
+  "payments.reader_help":
+    "Eliminar quita un lector de Waitron. Añade un lector reconocido para conservar su nombre y ajustes de impresión y vuelve a asignarlo a dispositivos y perfiles.",
   "payments.reader_col_battery": "Batería",
   "payments.refresh": "Actualizar",
   "payments.details": "Detalles",

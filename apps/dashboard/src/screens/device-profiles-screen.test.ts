@@ -3135,28 +3135,33 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
     });
   });
 
-  it("marks a listed reader that is switched off, and draws none the reader list did not deliver", async () => {
-    const { el } = await editListed({
-      listReaders: vi.fn().mockResolvedValue([{ ...readers[0]!, active: false }, readers[1]!]),
-      getProfileReaders: vi
-        .fn()
-        .mockResolvedValue({ readerIds: ["r9", "r1"], defaultReaderId: "r1" }),
-    });
-    const switches = [
-      ...el.shadowRoot!.querySelectorAll<HTMLElement & { checked: boolean; label: string }>(
-        "[data-test=profile-readers] wt-switch",
-      ),
-    ];
-    const off = `Front desk (${t("devices.watcher_disabled_mark")})`;
-    expect(switches.map((s) => [s.dataset.test, s.label, s.checked])).toEqual([
-      ["profile-reader-r1", off, true],
-      ["profile-reader-r2", "Patio", false],
-    ]);
-    expect(field(el, "profile-readers-default").options).toEqual([
-      { value: "", label: t("device_profiles.default_none") },
-      { value: "r1", label: off },
-    ]);
-  });
+  it.each([true, false])(
+    "marks a switched-off reader (provider registration retained: %s), and draws none the list did not deliver",
+    async (canEnable) => {
+      const { el } = await editListed({
+        listReaders: vi
+          .fn()
+          .mockResolvedValue([{ ...readers[0]!, active: false, canEnable }, readers[1]!]),
+        getProfileReaders: vi
+          .fn()
+          .mockResolvedValue({ readerIds: ["r9", "r1"], defaultReaderId: "r1" }),
+      });
+      const switches = [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement & { checked: boolean; label: string }>(
+          "[data-test=profile-readers] wt-switch",
+        ),
+      ];
+      const off = `Front desk (${canEnable ? "No disponible" : "Sin vincular"})`;
+      expect(switches.map((s) => [s.dataset.test, s.label, s.checked])).toEqual([
+        ["profile-reader-r1", off, true],
+        ["profile-reader-r2", "Patio", false],
+      ]);
+      expect(field(el, "profile-readers-default").options).toEqual([
+        { value: "", label: t("device_profiles.default_none") },
+        { value: "r1", label: off },
+      ]);
+    },
+  );
 
   it("a duplicate copies the profile's cash drawer list", async () => {
     const withDrawer: DeviceProfile = { ...listedProfile, cashDrawerPrinterIds: ["pr1"] };

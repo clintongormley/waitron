@@ -2,13 +2,7 @@ import { page } from "vitest/browser";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
-import {
-  createRequest,
-  LiveData,
-  registerCatalogue,
-  tableNoMatches,
-  type FetchLike,
-} from "@waitron/dashboard-kit";
+import { createRequest, LiveData, registerCatalogue, type FetchLike } from "@waitron/dashboard-kit";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -20,11 +14,7 @@ import type {
   StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import {
-  chooseOption,
-  expectRowMenusOnScreen,
-  formMessageOf,
-} from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 import { formatEquipmentCode } from "@waitron/shared";
@@ -566,7 +556,7 @@ describe("payments-screen", () => {
     q(el, "[data-test=disconnect-acme]")!.click();
     await flush(el);
 
-    expect(disconnectNotice(el)?.textContent).toContain("Disable");
+    expect(disconnectNotice(el)?.textContent).toContain("Delete or unpair");
     expect(disconnectNotice(el)?.textContent).not.toContain("payment.provider_in_use");
   });
 
@@ -639,6 +629,9 @@ describe("reader discovery and status", () => {
     );
     await openAdd(el);
     expect(api.availableReaders).toHaveBeenCalledWith("acme");
+    expect(q(el, "[data-test=reader-discovery] wt-help-tooltip")?.getAttribute("guide-href")).toBe(
+      "/help/en/printers#card-readers",
+    );
     expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("123");
     expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Add");
     expect(q(el, "[data-test=adopt-v-3]")).toBeNull();

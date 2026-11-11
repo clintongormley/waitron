@@ -1,6 +1,7 @@
 import { currentLocale } from "./i18n/t.js";
 
 export const GUIDE_LINKS = {
+  "payments.card-readers": { page: "printers", section: "card-readers" },
   "servers.handover": { page: "servers", section: "hand-over" },
   "email.set-up": { page: "email", section: "set-up" },
   "email.remove": { page: "email", section: "remove" },

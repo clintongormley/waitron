@@ -1106,7 +1106,7 @@ declare module "@waitron/shared" {
     "receipt.not_printed": Record<string, never>;
     /**
      * A request named equipment the device may not newly choose: unknown, not on its profile's list
-     * for the role, switched off, or a disabled or unpaired reader
+     * for the role, switched off, or an unavailable or unpaired reader
      * (`selectDeviceEquipment`). `field` carries the FIELD NAME only, never the id value.
      */
     "device.binding_invalid": { field: EquipmentField };

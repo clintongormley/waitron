@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, isNull, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import {
@@ -978,7 +978,7 @@ describe("an injected fetch is threaded to the seat", () => {
 });
 
 describe("disconnect", () => {
-  it("refuses payment.provider_in_use while an active reader remains, then disconnects once disabled", async () => {
+  it("refuses payment.provider_in_use while an active reader remains, then disconnects after Delete", async () => {
     const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
@@ -996,7 +996,13 @@ describe("disconnect", () => {
       (await inUse.json()) as { error: { code: string; params: { activeReaders: number } } },
     ).toMatchObject({ error: { code: "payment.provider_in_use", params: { activeReaders: 1 } } });
 
-    await switchOffReader(readerId);
+    expect(
+      (
+        await send(app, "DELETE", `/management-api/payments/readers/${readerId}`, {
+          cookie: venue.managerCookie,
+        })
+      ).status,
+    ).toBe(200);
 
     const gone = await send(app, "POST", "/management-api/payments/providers/stripe/disconnect", {
       cookie: venue.managerCookie,
@@ -2927,7 +2933,7 @@ describe("reader delete", () => {
       expect(spies.removed).toEqual([]);
     });
 
-    it("never shadows a live reader with the same provider id in discovery, whichever row was written first", async () => {
+    it("never shadows a live reader with the same provider id in discovery or Add, whichever row was written first", async () => {
       const venue = await seedVenueWithStaff();
       const [deletedFirst, liveFirst] = [nextRef(), nextRef()];
       const spies = spySeat(() => [deletedFirst, liveFirst]);
@@ -2938,7 +2944,7 @@ describe("reader delete", () => {
         providerRef,
         name: "Old",
         active: false,
-        unpairedAt: "2026-10-10T09:00:00.000Z",
+        unpairedAt: null,
         deletedAt: "2026-10-10T10:00:00.000Z",
       });
       const liveRow = (providerRef: string) => ({ provider: "stripe", providerRef, name: "New" });
@@ -2959,6 +2965,20 @@ describe("reader delete", () => {
         { ...vendorOf(deletedFirst), status: "added" },
         { ...vendorOf(liveFirst), status: "added" },
       ]);
+      for (const providerRef of [deletedFirst, liveFirst]) {
+        const rows = await suite.db
+          .select()
+          .from(cardReaders)
+          .where(eq(cardReaders.providerRef, providerRef));
+        const current = rows.find((row) => row.deletedAt === null)!;
+        const restored = await send(app, "POST", `${base}/readers/adopt`, {
+          cookie: venue.managerCookie,
+          body: { providerId: "stripe", providerRef, name: "Ignored" },
+        });
+        expect(restored.status).toBe(201);
+        expect(await restored.json()).toEqual({ id: current.id, status: "paired" });
+        expect(await readerRow(current.id)).toEqual(current);
+      }
     });
 
     it("deleted in Waitron only while disconnected, is offered with saved settings once connected again", async () => {

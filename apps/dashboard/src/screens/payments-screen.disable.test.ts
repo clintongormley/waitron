@@ -166,13 +166,13 @@ describe("direct provider Unpair", () => {
   });
 
   it.each([
-    ["en", "The provider did not confirm the unpairing. The reader is still enabled; try again."],
+    ["en", "The provider did not confirm the unpairing. The reader is still available; try again."],
     [
       "es",
-      "El proveedor no confirmó la desvinculación. El lector sigue habilitado; inténtalo de nuevo.",
+      "El proveedor no confirmó la desvinculación. El lector sigue disponible; inténtalo de nuevo.",
     ],
   ] as const)(
-    "says in %s that an active reader whose Unpair failed is still enabled",
+    "says in %s that an active reader whose Unpair failed is still available",
     async (locale, text) => {
       setLocale(locale);
       const api = client([reader], true, {

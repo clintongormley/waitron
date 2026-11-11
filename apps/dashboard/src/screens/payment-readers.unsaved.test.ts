@@ -1,5 +1,4 @@
 import { afterEach, expect, it } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons, type WtDialog } from "@waitron/ui";
