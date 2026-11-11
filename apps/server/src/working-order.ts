@@ -7705,7 +7705,7 @@ export function paysAfterSending(mode: string | undefined): boolean {
   return PAY_AFTER_SENDING.has(mode ?? "prepay");
 }
 
-/** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
+/** A counter order the counter is still waiting on: sent and not paid, or settled and not handed over. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
   counts: OrderStateCounts;

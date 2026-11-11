@@ -551,7 +551,6 @@ export const en = {
   "held.empty": "No parked orders",
   "held.retrieve": "Retrieve",
   "held.discard": "Discard",
-  // Counter orders sent and not paid, or paid and not handed over
   "waiting.title": "Waiting orders",
   "waiting.sent_not_paid": "Sent, not paid",
   "waiting.handed_over_not_paid": "Handed over, not paid",

@@ -1295,8 +1295,9 @@ export interface OrderPreviewItem {
 }
 
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
- * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid
- * and not handed over. `canHandOver` says whether {@link TillApi.markCollected} would accept it now. */
+ * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid,
+ * or closed to be paid by transfer (`closedByTransfer`), and not handed over. `canHandOver` says
+ * whether {@link TillApi.markCollected} would accept it now. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
   id: string;
@@ -1316,7 +1317,7 @@ export interface CounterWaitingOrder {
   serviceMode: OrderFlow | "table_tab" | null;
   /** Only on a placed order whose invoice is issued: its number ("A/12"). */
   invoiceNumber?: string;
-  /** A paid order's dishes that can still move to another station, in line order; empty on a
+  /** A settled order's dishes that can still move to another station, in line order; empty on a
    * placed one. */
   movableDishes: { lineId: string; stationId: string }[];
   /** The numbers the order's dishes were sent under before they moved to it, lowest first;
@@ -3720,8 +3721,7 @@ export class TillApi {
     );
   }
 
-  /** The counter orders sent and not paid, or paid and not handed over, oldest first →
-   * `GET /api/orders/counter-waiting`. */
+  /** `GET /api/orders/counter-waiting`, oldest first. */
   listCounterWaiting(options: ReadOptions = {}): Promise<CounterWaitingOrder[]> {
     return this.#request<CounterWaitingOrder[]>(
       "/api/orders/counter-waiting",

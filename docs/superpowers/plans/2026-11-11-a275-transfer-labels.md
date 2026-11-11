@@ -1,6 +1,6 @@
 # A275 Task 4: every screen and document names a transfer-closed bill "To be paid by transfer"
 
-**Status: proposed 2026-11-11 and revised the same day after a fresh-context review; nothing built.** Branch `feat/a275-transfer-labels`.
+**Status: proposed 2026-11-11 and revised the same day after a fresh-context review; cleared by the watcher 2026-11-11 04:35 (lane L `questions.md`); built on `feat/a275-transfer-labels`.**
 Tasks 0–2 (#2664) and Task 3 (#2740) landed: `closeBillByTransferTx` (`apps/server/src/transfer-close.ts`)
 issues or reuses the invoice and settles the sale with one tender row whose method is `transfer`
 (`transfer-close.ts:181–193`), and `POST /api/working-orders/:id/close-by-transfer` can call it.
