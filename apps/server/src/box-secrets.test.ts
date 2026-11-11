@@ -356,7 +356,7 @@ describe("reissueBoxLeaf", () => {
     },
   );
 
-  it("keeps a pair the listener can load when renaming the new key into place fails", async () => {
+  it("keeps a PEM the listener can load when its replacement rename fails", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
     const before = await pairOf(d);
@@ -471,7 +471,7 @@ describe("mintedBoxLeaf", () => {
     expect(mintedBoxLeaf(await newDir())).toBeUndefined();
   });
 
-  it("is the box's own leaf when the state volume holds both halves", async () => {
+  it("is the box's own leaf when the state volume holds its PEM", async () => {
     const d = await newDir();
     await ensureBoxSecrets(deps(d));
     expect(mintedBoxLeaf(d)).toEqual({

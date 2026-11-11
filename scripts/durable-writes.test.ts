@@ -10,7 +10,7 @@ import { sourceFilesIn } from "./no-till-as-issuer.mjs";
 const root = join(import.meta.dirname, "..");
 const server = Object.fromEntries(
   [
-    ["box-tls-repair", "flushes; fl6 owns it"],
+    ["box-tls-repair", "certificate repair files and folder moves"],
     ["box-tls-install", "A947 resumable TLS install"],
     ["cloud-remote", "the staff key's create-only link"],
     ["cloud-snapshot-worker", "snapshot state and archives; jr10 owns replacement"],

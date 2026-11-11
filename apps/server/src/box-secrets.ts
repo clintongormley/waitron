@@ -156,7 +156,6 @@ async function ensureBoxSecretsLocked(deps: EnsureBoxSecretsDeps): Promise<BoxTl
     for (const path of [
       files.caCertFile,
       files.caKeyFile,
-      files.certFile,
       join(deps.stateDir, TLS_REPAIR_DIR),
       join(deps.stateDir, SECRETS_ENV_FILE),
     ]) {

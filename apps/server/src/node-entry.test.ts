@@ -2062,7 +2062,6 @@ describe("recoveryTlsFiles", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-tls-"));
     await mkdir(join(stateDir, "tls"));
     await writeFile(join(stateDir, "tls", "server.pem"), "x");
-    await writeFile(join(stateDir, "tls", "server.pem"), "x");
     expect(recoveryTlsFiles(stateDir)).toEqual({
       certFile: join(stateDir, "tls", "server.pem"),
       keyFile: join(stateDir, "tls", "server.pem"),
@@ -2495,6 +2494,26 @@ it("a start that fails before staying up keeps its completed TLS repair", async 
     expect(
       JSON.parse(await readFile(join(stateDir, "flows/tls-repair/record.json"), "utf8")),
     ).toHaveProperty("complete", true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+it("a refused repair cleanup is logged after staying up and leaves the flow", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-tls-cleanup-refused-"));
+  try {
+    await finishedTlsRepair(stateDir);
+    const scheduleStayedUp = vi.fn<(ms: number, onStayedUp: () => void) => void>(() => {});
+    const log = vi.fn();
+    await runEntry(deps({ stateDir, scheduleStayedUp, log }));
+    await writeFile(join(stateDir, "scratch"), "blocks cleanup staging");
+    scheduleStayedUp.mock.calls[0]![1]();
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith("warn", "tls.repair_cleanup_failed", {
+        errorCode: expect.any(String),
+      }),
+    );
+    expect(existsSync(join(stateDir, "flows/tls-repair/record.json"))).toBe(true);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

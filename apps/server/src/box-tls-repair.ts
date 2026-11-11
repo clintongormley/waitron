@@ -315,6 +315,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
         trust: signingAuthority(s, deps.now()) ? "retained" : "new-required",
       };
       await fs.rm(join(flowDir(deps), "candidate.json"), { force: true });
+      await mkdirDurable(flowDir(deps), 0o700);
       await writeDurableHostJson(pendingPath(deps), p, limit);
     }
     await regularDirectory(folder);

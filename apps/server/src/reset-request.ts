@@ -6,7 +6,13 @@ import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase, openVenueDatabase, type VenueLock } from "@waitron/db";
 import { readOperationalVenueIds, readTenantIdentities } from "@waitron/provisioning";
-import { SECRETS_ENV_FILE, TLS_DIR, TLS_JOINED_FILE, VENUE_FILE } from "@waitron/store";
+import {
+  SECRETS_ENV_FILE,
+  TLS_DIR,
+  TLS_REPAIR_FLOW_DIR,
+  TLS_JOINED_FILE,
+  VENUE_FILE,
+} from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
 import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
@@ -134,6 +140,7 @@ export async function runStagedReset(
     // next setup start mints a fresh set. Before the operation record, whose removal makes a re-run
     // discard; the joined record goes last of them, so a re-run still finds this box joined.
     if (await joinedAnotherBox(deps.stateDir)) {
+      await rm(join(deps.stateDir, TLS_REPAIR_FLOW_DIR), { recursive: true, force: true });
       await rm(join(deps.stateDir, SECRETS_ENV_FILE), { force: true });
       const tlsDir = join(deps.stateDir, TLS_DIR);
       for (const name of await readdir(tlsDir)) {
