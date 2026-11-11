@@ -9,6 +9,10 @@ export const JOB_CATALOGUE = {
   "mail.send": stop,
   "fiscal.certificate_reminders": stop,
   "box.alert_mail": stop,
+  "box.name_tag": {
+    kind: "job",
+    stepdown: { keepRunning: "maintains this disk's advisory venue tag locally" },
+  },
   "menu.activation": stop,
   "fiscal.tamper_watch": {
     kind: "job",

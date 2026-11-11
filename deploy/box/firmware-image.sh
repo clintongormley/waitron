@@ -9,6 +9,7 @@ cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 cp -a --reflink=auto "$root" "$work/root"
 installer="$work/root"
+install -m 0644 "$repo/scripts/box/installer-name-notice.mjs" "$installer/opt/waitron-host/box/"
 install -D -m 0755 "$repo/deploy/box/install-dev.sh" "$installer/usr/local/sbin/waitron-dev-install"
 install -D -m 0644 "$repo/deploy/box/waitron-dev-install.service" "$installer/etc/systemd/system/waitron-dev-install.service"
 installer_uuid="$(cat /proc/sys/kernel/random/uuid)"

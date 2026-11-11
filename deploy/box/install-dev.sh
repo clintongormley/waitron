@@ -16,7 +16,10 @@ size="$(blockdev --getsize64 "$target")"
 [ "$size" -ge 12884901888 ] || refuse size
 [ -z "$(lsblk -nro MOUNTPOINTS "$target")" ] || refuse mounted
 [ -z "$(ls -A "/sys/class/block/${target##*/}/holders")" ] || refuse holders
-cmp -n "$size" "$target" /dev/zero >/dev/null 2>&1 || refuse occupied
+if ! cmp -n "$size" "$target" /dev/zero >/dev/null 2>&1; then
+  if node /opt/waitron-host/box/installer-name-notice.mjs "$target"; then exit 1; fi
+  refuse occupied
+fi
 [ "$(blockdev --getsize64 "$target")" = "$size" ] || refuse size
 [ "$(lsblk -nro SERIAL "$target")" = waitron-dev-target ] || refuse serial
 sfdisk "$target" <<'LAYOUT'

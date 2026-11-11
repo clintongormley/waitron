@@ -1,5 +1,5 @@
 [Unit]
-Description=Waitron box: the app's clock requests
+Description=Waitron box: the app's host requests
 
 [Socket]
 ListenStream=/run/waitron-box/box.sock

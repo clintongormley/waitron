@@ -566,7 +566,7 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
-The installed name-tag writer must land with the reinstall screen/header reader that uses it (watcher, 2026-11-11). PR 4’s unknown-token unlock, oversized-replacement and tag-space questions are measured on a disposable Debian 13 guest; the installed-image and physical-device checks remain open. [Measured scope and commands](../superpowers/plans/2026-11-11-b3-16-name-tag-duty.md#measured-on-11-november-2026).
+The development recipe binds the name-tag writer and the occupied-disk console reader together. The `existing-stick` rig case completes Prepare, checks the actual header and serial notice, and checks that reads leave the disk hash unchanged. Timed firmware return and the graphical warning remain unbuilt; physical qualification remains open. [Console cut](../superpowers/plans/2026-11-11-b3-18a-name-notice.md).
 
 **2026-11-11 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
 install five btrfs areas inside LUKS2 onto a second virtual disk. The first disk boot retains a recovery
@@ -902,6 +902,8 @@ nothing yet: one typed method for each of PR 7's seven requests.
   `boxHostRequests()` only; the clock client still answers `lost` there. Tests with a stand-in
   connection and with the real shell handler cover it; on Linux the handler answers a line over 700
   characters and then resets the connection (measured in Docker, the plan's re-map finding 9).
+**11 November update:** the development shell uses the longer 4096-character read only when its tag adapter is installed; clock requests still have the 700-character limit. A clock-only installation retains its original short read and Linux reset. The unchanged real-shell client assertions cover that legacy path; the forwarding test covers a complete long tag. [Console cut](../superpowers/plans/2026-11-11-b3-18a-name-notice.md).
+
 - The two reads wait 5 seconds, the five other requests 20; `readMs` and `changeMs` override them,
   and the tests run both defaults on fake timers.
 - Both clients, the clock one included, now treat an empty socket path as no path and ask
@@ -1165,21 +1167,13 @@ client. No screen calls them yet.
 
 **For later slices, from PR 7's [re-map against main](../superpowers/plans/2026-11-05-b3-7-host-protocol.md#re-map-against-main-on-2026-11-05):**
 
-- The shell handler forwards a line whose verb is on `HOST_VERBS` to the Node host and keeps
-  answering both clock verbs itself; a B3 line can be up to 4096 characters, so it must be read
-  past the clock's 700-character limit without changing a clock answer. A box with the shell alone
-  answers `unknown_request` to a B3 line of at most 700 characters, and `request_invalid` to a
-  longer one, before it reads the verb (`deploy/box/waitron-box.sh:161-165`; a join line reaches
-  1003 characters, a `tag.write` line 3142).
+- The development handler forwards `tag.write` through its installed Node adapter, up to 4096 characters, while retaining the clock's 700-character rule. The other host verbs still need their adapters. A handler without the tag module keeps its older unknown/request-invalid answers.
 - Every connection's instance stops at `RuntimeMaxSec=15`. A join and a forget are meant to answer
   once the change has started (D8), so each exchange stays short; how long a scan takes on the
   box's radio, and a join with its address, are rig measurements.
 - The Linux adapters are called as plain functions, never with `this` (the dispatcher reads each
   once and calls what it checked), so none may rely on `this`: an adapter that needs state takes
   it through a closure or a bound function.
-- `tag.write` runs as the server's own duty at handoff and after a rename or a move to Live
-  commits, sending `null` for a name the tag cannot hold: the name-tag pull request (PR 9's list
-  below).
 - The host service holds the latest change, serialises changes (one at a time, `busy` otherwise)
   and publishes the boot copy after each, keeping the two outcomes separate in `network.read`.
 - Nothing zeroes the Wi-Fi password end to end (PR 7's note above), so the host service and its
@@ -1200,27 +1194,20 @@ client. No screen calls them yet.
 
 **For later slices, from PR 8's [re-map against main](../superpowers/plans/2026-11-06-b3-8-host-client.md#re-map-against-main-on-2026-11-06):**
 
-- The name-tag pull request runs `tagWrite` as the server's own duty (see PR 9's list below).
-- The name-tag pull request: sending `null` for a venue name the tag cannot hold (PR 7's D12) needs
-  `usableVenueName` from `scripts/box/name-tag.mjs`, unless the duty reads this client's `invalid`
-  and sends `null` again. Importing it needs a declaration and a `ROOT_SCOPE_CONSUMERS` entry, which
-  would also close the CI gap below for `name-tag.mjs`.
+- The installed tag duty adds one pending socket request to the routes' two and the clock side, whose concurrent count is still unmeasured. Recount the combined demand against `MaxConnections=4` and measure a fifth connection. Tag failures retry with the existing job backoff and are logged; a dedicated alert policy remains open.
 - The socket's four connections (`MaxConnections=4`): PR 9's routes take at most two (its D7);
   what a connection over four meets is a Linux measurement, in PR 9's list below.
 - CI's `bundle-smoke` builds and starts a server bundle carrying the host protocol, so an export
   `box-host-client.ts` uses that the module lacks fails that build (the plan's finding 13). The
   routes now call the client, but `bundle-smoke` requests none of them: it waits for
   `server.listening` and stops the bundle (`.github/workflows/ci.yml`, the job's two start steps).
-- The forwarding pull request (Linux): once the shell handler lets B3 lines past 700 characters,
-  decide whether the 700-character rule stays (it also reads a lagging host's `request_invalid` to a
-  long line as `unsupported`); measure a forwarded read, scan and change against the 5 and 20
-  seconds; and if the Node host runs as its own service, stopping the shell's instance at 15 seconds
-  no longer stops a change, so the reason for 20 seconds needs revisiting (the plan's D6).
+- Network/screen forwarding still needs its Linux adapters and measurements against the client's 5- and 20-second waits. The tag adapter is a child of the existing shell instance, sharing its 15-second unit limit; the clock's 700-character rule stays.
+
 - Open: the clock client still answers `lost` to a whole reply followed by a broken connection
   (the plan's D5). Its lines stay under 700 characters, so the shell handler reads them whole, but a
   later host could break the connection after answering; whether the clock client should read that
   reply too is undecided.
-- Open: `name-tag.mjs`, `upgrades/contracts.mjs` and `disk-key.mjs` select no package in CI when
+- Open: `upgrades/contracts.mjs` and `disk-key.mjs` select no package in CI when
   they alone change, though the server's bundle carries them (the plan's D11; the root-scope guard
   states this gap in its header).
 - Decisions recorded for review: importing the module with a declaration in the server rather than
@@ -1230,13 +1217,6 @@ client. No screen calls them yet.
 
 **For later slices, from PR 9's [re-map against main](../superpowers/plans/2026-11-06-b3-9-host-routes.md#re-map-against-main-on-2026-11-06):**
 
-- The name-tag pull request: `tagWrite` as the server's own duty at handoff, after a rename commits
-  and after a move to Live, sending `null` for a name the tag cannot hold (PR 7's D12). It needs
-  `usableVenueName` from `scripts/box/name-tag.mjs` (a declaration in `box-scripts.d.ts` and a
-  `ROOT_SCOPE_CONSUMERS` entry, which also closes PR 8's CI gap for `name-tag.mjs`); a source for
-  "Live" (today only `practiceMode`, from `onboardingIntent`, `apps/server/src/boot.ts:2082`, until
-  slice 8's modes); and what a refused or failed write does (retry, alert). It is a third server
-  user of the socket, so recount PR 9's two places (its D7) against `MaxConnections=4`.
 - The screen pull request (Task 3.2): English and Spanish words for `box_host.unavailable` (both
   reasons), `box_host.failed` (saying that after `lost` or `timeout` a change may still have
   happened), `box_host.busy`, `box_network.busy`, `box_network.no_wifi`,

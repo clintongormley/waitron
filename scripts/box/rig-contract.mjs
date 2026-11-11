@@ -43,6 +43,7 @@ export const RIG_CASES = Object.freeze([
   "recipe-setup",
   "installed-setup",
   "installed-refusals",
+  "existing-stick",
 ]);
 
 const OPTIONS = /** @type {const} */ ({ "--case": "caseName", "--run-dir": "runDir" });

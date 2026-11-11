@@ -56,6 +56,10 @@ case "$name" in
  reboot) echo reboot >> "$WRITES" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
  node)
+  if [ "$1" = /opt/waitron-host/box/installer-name-notice.mjs ]; then
+   [ "\${NOTICE:-}" != "" ] || exit 1
+   printf '%s\n' "$NOTICE"; exit 0
+  fi
   [ "$1" = /opt/waitron-host/box/disk-start.mjs ] || exit 99
   [ "\${DISK_CHECK_EXIT:-0}" = 0 ] || exit 1
   echo '{"action":"ready","diskUuid":"installed-luks","openedBy":"chip","emptyPassword":false,"keySlots":2,"tpmSlots":1,"tpmPcrs":[5,7,8,9,15]}' ;;
@@ -174,6 +178,16 @@ describe("development disk writer", () => {
     const result = writer(env, args);
     expect(result.stderr).toContain(`install.refused:${reason}`);
     expect(result.status).toBe(1);
+    expect(result.writes).toBe("");
+  });
+  it("shows the stored venue notice for an occupied Waitron target without writing it", () => {
+    const result = writer({
+      OCCUPIED: "1",
+      NOTICE: "This box already has Waitron (Harbour Restaurant Ltd).",
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout.trim()).toBe("This box already has Waitron (Harbour Restaurant Ltd).");
+    expect(result.stderr).toBe("");
     expect(result.writes).toBe("");
   });
   it("excludes the USB source while admitting the virtio target", () => {

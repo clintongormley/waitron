@@ -1,5 +1,5 @@
 [Unit]
-Description=Waitron box: one clock request from the app
+Description=Waitron box: one host request from the app
 CollectMode=inactive-or-failed
 
 [Service]
