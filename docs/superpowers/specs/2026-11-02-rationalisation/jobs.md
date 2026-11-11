@@ -3,8 +3,9 @@
 # Background jobs — a rationalised design
 
 > **2026-11-11, jr16:** the agent now asks for a held pull with a 30-second client limit.
-> Receipt and page changes wake it; drawer expiry and existing claim leases shorten the hold.
-> Pending page work and discovery keep a two-second cadence on the same request timer.
+> Quiet holds end after 13 seconds, before printer reports go stale. Receipt and page changes wake
+> them; drawer expiry and claim leases shorten them. Pending print work and discovery keep a
+> two-second cadence on the same request timer.
 > The two-second job-poll descriptions below record the earlier implementation.
 >
 > **2026-11-10, A947 3b-2:** each box answers its own `box-<id>.waitron.local`; `waitron.local` only

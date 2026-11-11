@@ -6255,6 +6255,11 @@ describe("held print pulls", () => {
     expect(r.bus.subscriberCount).toBe(1);
     expect((await jobRow(other)).status).toBe("queued");
     const own = await enqueue(network, new Uint8Array([2]));
+    let answered = false;
+    void pending.then(() => {
+      answered = true;
+    });
+    await vi.waitFor(() => expect(answered).toBe(true), { timeout: 1_000 });
     const response = await pending;
     expect(response.status).toBe(200);
     expect((await response.json()).jobs).toMatchObject([{ id: own }]);
@@ -6287,10 +6292,12 @@ describe("held print pulls", () => {
     if (kind === "gate") r.gate.close({ allowed: () => false });
     else if (kind === "stop") r.stop.abort();
     else r.bus.close();
+    await vi.waitFor(() => expect(r.bus.subscriberCount).toBe(0), { timeout: 500 });
     for (const response of await Promise.all(pending))
       expect((await response.json()).jobs).toEqual([]);
     expect(await r.gate.settled(0)).toEqual({ remaining: [] });
     expect(r.bus.subscriberCount).toBe(0);
+    if (kind === "stop") expect((await r.request()).status).toBe(503);
   });
 
   it("an aborted held request claims nothing after a job arrives", async () => {
@@ -6336,6 +6343,46 @@ describe("held print pulls", () => {
       expect((await (await pending).json()).jobs).toEqual([]);
     },
   );
+
+  it("ends quiet holds before printer reports expire and keeps Unpair usable", async () => {
+    const r = await rig();
+    const address = "AA:BB:CC:DD:EE:FF";
+    await pull(r.app, r.token, { pairedBluetooth: [{ localKey: address }] });
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    const pending = r.request();
+    await held(r.bus);
+    await vi.advanceTimersByTimeAsync(13_000);
+    expect(r.bus.subscriberCount).toBe(0);
+    await pending;
+    await pull(r.app, r.token, { pairedBluetooth: [{ localKey: address }] });
+    await vi.advanceTimersByTimeAsync(3_000);
+    const forgotten = await send(
+      r.app,
+      "POST",
+      `/management-api/print-agents/${r.agentId}/bluetooth/forget`,
+      {
+        cookie: managerCookie,
+        body: { address },
+      },
+    );
+    expect(forgotten.status).toBe(202);
+  });
+
+  it("queued USB work refreshes inventory within two seconds so a returning printer can print", async () => {
+    const r = await rig();
+    const printer = await createUsbPrinter(r.app, "returning-usb");
+    const id = await enqueue(printer, new Uint8Array([4]));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const pending = r.request();
+    await held(r.bus);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(r.bus.subscriberCount).toBe(0);
+    expect((await (await pending).json()).jobs).toEqual([]);
+    expect(
+      (await pull(r.app, r.token, { visible: [{ transport: "usb", localKey: "returning-usb" }] }))
+        .jobs,
+    ).toMatchObject([{ id }]);
+  });
 
   it("a Bluetooth command ends the hold with that command", async () => {
     const r = await rig();

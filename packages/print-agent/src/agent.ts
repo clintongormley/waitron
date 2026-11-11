@@ -844,6 +844,7 @@ export function createAgent(opts: AgentOptions): Agent {
       });
     },
     beginNetworkReset() {
+      wake();
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();
@@ -854,6 +855,7 @@ export function createAgent(opts: AgentOptions): Agent {
       });
     },
     cancelNetworkReset() {
+      wake();
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();

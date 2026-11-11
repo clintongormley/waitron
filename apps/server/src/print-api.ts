@@ -640,7 +640,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     try {
       // Subscribe before rechecking so work arriving after the first claim cannot be missed.
       let claimed = await claim();
-      const deadline = performance.now() + wait * 1_000;
+      // Leave a normal retry interval before the inventory's freshness expires.
+      const deadline = performance.now() + Math.min(wait * 1_000, DISCOVERED_TTL_MS - 2_000);
       while (claimed.length === 0 && !ended && !reply) {
         if (changed) {
           changed = false;
@@ -653,21 +654,20 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         const pending = await deps.db
           .select({
             status: printJobs.status,
+            kind: printJobs.kind,
             createdAt: printJobs.createdAt,
             claimedAt: printJobs.claimedAt,
           })
           .from(printJobs)
           .innerJoin(printers, eq(printers.id, printJobs.printerId))
           .where(
-            and(
-              isNull(printers.deletedAt),
-              or(
-                eq(printJobs.status, "printing"),
-                and(eq(printJobs.kind, "drawer"), eq(printJobs.status, "queued")),
-              ),
-            ),
+            and(isNull(printers.deletedAt), inArray(printJobs.status, ["printing", "queued"])),
           );
         for (const job of pending) {
+          if (job.status === "queued" && job.kind === "document") {
+            remaining = Math.min(remaining, 2_000);
+            continue;
+          }
           const at =
             job.status === "queued"
               ? Date.parse(job.createdAt) + 30_000
@@ -677,7 +677,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             Number.isFinite(at) && at > Date.now() ? at - Date.now() : 2_000,
           );
         }
-        const [page] = await deps.db
+        const [delivery] = await deps.db
           .select({ id: invoiceDeliveries.id })
           .from(invoiceDeliveries)
           .where(
@@ -689,7 +689,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .limit(1);
         // Pending pages and discovery retain their two-second maintenance cadence on this same hold.
         if (
-          page ||
+          delivery ||
           testPages.anyWaiting() ||
           testPages.printingOn().length > 0 ||
           bluetoothCommands.current(agentId).length > 0 ||
@@ -785,6 +785,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // another box reported it visible within `DISCOVERED_TTL_MS`.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
+      if (deps.stopping?.aborted) return c.body(null, 503);
       const { agentId } = await requireAgent({ db: deps.db }, c);
       const rawWait = c.req.query("wait");
       const wait = rawWait === undefined ? 0 : Number(rawWait);

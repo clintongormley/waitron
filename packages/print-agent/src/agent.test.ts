@@ -505,6 +505,33 @@ describe("createAgent — phases", () => {
 });
 
 describe("createAgent — setup controls", () => {
+  it.each(["beginNetworkReset", "cancelNetworkReset"] as const)(
+    "%s cancels a held pull before queuing the action",
+    async (action) => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const held = heldPulls();
+      held.pull.mockResolvedValueOnce(failR({ kind: "unreachable", detail: "offline" }));
+      const agent = createAgent({ host, client: client({ pullJobs: held.pull }) });
+      await agent.runOnce();
+      if (action === "cancelNetworkReset") expect(await agent.beginNetworkReset()).toBe(true);
+      const loop = agent.start();
+      try {
+        await vi.waitFor(() => expect(held.pull).toHaveBeenCalledTimes(2));
+        let answered = false;
+        const result = agent[action]().then((value) => {
+          answered = true;
+          return value;
+        });
+        await vi.waitFor(() => expect(answered).toBe(true), { timeout: 500 });
+        expect(await result).toBe(true);
+      } finally {
+        agent.stop();
+        held.finish();
+        await loop;
+      }
+    },
+  );
+
   it("reconfigures a denied agent, wakes its held sleep, and joins again without a restart", async () => {
     const sleepStarted = deferred();
     const joinStarted = deferred();
