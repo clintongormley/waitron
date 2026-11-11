@@ -177,7 +177,7 @@ const AT_10 = {
 };
 
 /** Fixes the refused version `registroId` through the real remedy route, by default to 10%. */
-async function fixAt10(registroId: string, facts: object = AT_10) {
+async function fileFix(registroId: string, facts: object = AT_10) {
   vi.stubEnv("WAITRON_PRODUCER_NAME", "PRODUCER PERSON");
   vi.stubEnv("WAITRON_PRODUCER_TAX_ID", "00000000T");
   vi.stubEnv("WAITRON_PRODUCER_ADDRESS", "1 Example Street, 00000 Nowhere (Province), Spain");
@@ -238,7 +238,7 @@ async function soldThenFixedAt10() {
     .update(envios)
     .set({ estado: "rechazado", codigoError: "1161" })
     .where(eq(envios.registroId, before.registro.id));
-  await fixAt10(before.registro.id);
+  await fileFix(before.registro.id);
   const [fix] = await suite.db
     .select({ id: registrosFacturacion.id })
     .from(registrosFacturacion)
@@ -302,7 +302,7 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, u
     .where(eq(envios.registroId, before.registro.id));
   const refused = await captureError(() => preview(saleId, "1.00"));
 
-  await fixAt10(before.registro.id);
+  await fileFix(before.registro.id);
 
   expect(refused).toMatchObject({
     code: "sale.correction_not_admitted",
@@ -397,7 +397,7 @@ it("cancels at the stored split when the agency refused a fix whose split Waitro
     .update(envios)
     .set({ estado: "rechazado", codigoError: "1161" })
     .where(eq(envios.registroId, before.registro.id));
-  await fixAt10(before.registro.id, {
+  await fileFix(before.registro.id, {
     breakdown: [
       { ClaveRegimen: "01", OperacionExenta: "E1", BaseImponibleOimporteNoSujeto: "12.10" },
     ],

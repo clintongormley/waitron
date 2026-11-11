@@ -32,9 +32,10 @@ const DETAIL_KEYS = new Set([
 ]);
 
 /**
- * Each sale's newest alta version (the one no other alta of it fixes, as admission judges), whether
- * it still waits for AEAT's answer, and the newest version of that line of fixes whose submission
- * was accepted, with or without errors.
+ * Each sale's newest alta version (the one no other alta of it fixes, as admission judges; a refused
+ * one whose split cannot be read gives way to the version it fixes), whether it still waits for
+ * AEAT's answer, and the newest version of that line of fixes whose submission was accepted, with
+ * or without errors.
  */
 export async function filedFiguresFor(
   tx: Transaction,
@@ -75,7 +76,8 @@ function figuresOf(versions: readonly Version[]): FiledFigures {
   while (answered !== undefined && !ANSWERED.has(answered.estado ?? "")) {
     answered = byId.get(answered.corrects_registro_id ?? "");
   }
-  // A refused version's figures are read as if it were absent: AEAT holds none of them.
+  // A refused version whose split this reader cannot read gives way to the version it fixes: AEAT
+  // holds none of its figures.
   let shown: Version | undefined = latest[0];
   let newest = versionFigures(shown!);
   while (newest === undefined && shown?.estado === "rechazado") {

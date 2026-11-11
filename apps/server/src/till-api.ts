@@ -510,9 +510,10 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.correction_line_not_reversed": 409,
   "sale.total_mismatch": 409,
   "sale.correction_exceeds_total": 409,
-  // The invoice's filing cannot be credited: its figures are unreadable, a fix changed its total, or
-  // its newest fix still waits for the tax agency's answer.
+  // The invoice's filing cannot be credited: its figures are unreadable or a fix changed its total.
   "sale.correction_history_unusable": 409,
+  // A fix still waiting for the tax agency's answer carries figures other than the accepted ones
+  // (the stored ones when none was accepted).
   "sale.correction_not_admitted": 409,
   // Permanent for the same basket or bill until it is made smaller.
   "sale.total_exceeds_simplified_limit": 409,

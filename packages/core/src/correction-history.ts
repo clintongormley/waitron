@@ -44,7 +44,8 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * `sale.correction_not_admitted` when the invoice was replaced by a full invoice, its regime does
  * not admit a correction of it, the regime cannot read the filed figures of it or of an earlier
  * correction (`filed_figures_unreadable`), or a newest version of them whose figures are not the
- * answered ones still waits for the regime's answer (`filed_figures_unanswered`); refused with
+ * measured ones (the newest answered version's, else the stored ones) still waits for the regime's
+ * answer (`filed_figures_unanswered`); refused with
  * `sale.correction_unsupported`, as
  * `recordCorrection` is, when the invoice names a customer. When the answered figures differ from
  * the stored ones, the split is worked out from the answered figures and the lines from the stored

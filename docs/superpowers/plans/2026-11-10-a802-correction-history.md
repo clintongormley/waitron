@@ -699,7 +699,8 @@ which also answers whether the cash handed back may differ from what was paid wh
 the total; slice 5, the till screen, the corrective paper (it prints the corrective's split, not
 sums of its lines) and the guide, with the owner's demo-seed choice (finding 4).
 
-**Slice 4 must also handle** (second read, 2026-11-11, findings 2 and 5):
+**Slice 4 must also handle** (second read, 2026-11-11, findings 2 and 5; the last point from the
+finish-branch review the same day):
 
 - **A preview filed twice can strand the last cent.** On a fixed invoice the writer checks a
   refund's dish lines only by their totals including VAT, so a second copy of one preview carries
@@ -711,6 +712,11 @@ sums of its lines) and the guide, with the owner's demo-seed choice (finding 4).
   tax agency has not yet answered this invoice's VAT fix") fit the one reason a cancellation can
   meet; the refund preview raises the same code for a refused filing, a cancelled or replaced
   invoice, another box's invoice and more.
+- **Each refund line states its gross.** Top sellers counts a correction of a line that stored a
+  gross by the gross it states; one stating none counts as no money back, so the dish stays counted
+  as sold unless the line's stored gross is zero (`computeTopSellers`). The cancellation and the
+  exact-split path state it today; the writer still accepts a line without one in a whole-invoice
+  credit where no line at its rate states one, and in any correction sent without a VAT split.
 
 **Settled.** The queued-invoice reading went to the owner as question 3 and was answered
 "allow" (the clearance, point 4): the one-line limit written there stands in place of this
@@ -974,7 +980,7 @@ Commands: the S2 core and fiscal-verifactu commands, the golden and `inmutabilid
 
 File: `packages/fiscal-verifactu/src/correction-history.e2e.test.ts` (it already drives the real fix
 route through `mountRecordRemedies`, `:199–253`). Move that route setup into a helper
-`fixAt10(registroId)`, used by the existing case and the new ones; the existing case keeps `sell(null)`
+`fixAt10(registroId)` (since renamed `fileFix`), used by the existing case and the new ones; the existing case keeps `sell(null)`
 and its order checks. A helper `soldThenFixedAt10()` sells €12.10 at 21% with gross, marks the first
 version `rechazado`, fixes it to 10% (base 11.00, VAT 1.10, total 12.10) and marks the fix's `envios`
 row `aceptado`. A helper `agencyRates(saleId)` sums, per `TipoImpositivo` in cents, the `desglose` of
@@ -1001,7 +1007,7 @@ Files: `packages/reporting/src/top-sellers.ts`, `category-sales.ts`, their tests
 1. **Top sellers** (`top-sellers.ts:45–58`, the issued branch only; voids unchanged): a correction
    line naming an invoice line (`corrects_line_id`) counts that invoice line's quantity, negated, when
    it is the correction at which the running sum, over every correction of that line whatever its
-   date, ordered by `issued_at` then `sales.id`, first reaches the line's money; any other line
+   date, ordered by `issued_at` then `sales.id` (since: invoice number before sale id), first reaches the line's money; any other line
    naming an invoice line counts quantity zero and its money as today. The money is gross when the
    invoice line stores one (a correction line with none adds nothing), else line total (so a
    whole-invoice credit of an invoice without gross still counts its dishes). A line naming no invoice
@@ -1116,8 +1122,8 @@ Size after these: about 175 production and 320 test lines.
   and its earlier correctives in one `filedFiguresFor` call; the preview and the writer share it.
 - The writer's exact-split path (`partialVatBreakdown`) checks against those figures. It refuses
   `sale.correction_history_unusable` when they cannot be read, a backend with no `filedFiguresFor`
-  included, and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a filed fix waits
-  for its answer. Its per-rate check also covers every rate an earlier corrective used, and refuses
+  included, and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a filed fix
+  waiting for its answer carries figures other than the measured ones. Its per-rate check also covers every rate an earlier corrective used, and refuses
   `sale.correction_history_unusable` when earlier corrections at a rate already took more base or
   gross than the accepted figures hold there (the review's €23.10 case: a fix that moved €6.05
   from 21% to 10% after the steak's €12.10 was refunded at 21%). A changed total must be emptied at
@@ -1125,12 +1131,14 @@ Size after these: about 175 production and 320 test lines.
 - The whole-invoice credit (the cancellation) files the accepted split negated when a fix moved it,
   and the stored split otherwise or when the backend reads no filed figures. It refuses
   `sale.correction_history_unusable` when the figures cannot be read or a fix changed the total,
-  and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a fix waits for its answer.
+  and `sale.correction_not_admitted` (`filed_figures_unanswered`) while a fix waiting for its
+  answer carries figures other than the measured ones.
   The administrator's corrective-invoice remedy for a refused original files what it filed before:
   a refused version is answered, so nothing waits (`record-remedy-corrective-http.test.ts`, the
   refused original and the refused fix of it both pass).
 - "Waits for its answer" means the newest filed version's submission is queued, being sent or held
-  behind its chain (`detenido`), or has no submission row; accepted,
+  behind its chain (`detenido`), is in any other state such as `retenido`, or has no submission
+  row; accepted,
   accepted with errors and refused are answered (`newestAwaitingAnswer` in
   `packages/fiscal/src/backend.ts`, set by `packages/fiscal-verifactu/src/filed-figures.ts`).
 - A refused version whose split the Veri\*Factu reader cannot read is read as if it were absent
@@ -1142,7 +1150,8 @@ Size after these: about 175 production and 320 test lines.
 - Reports: top sellers count a dish as returned once its corrections reach its money (gross where
   the line stored one), leaving out a correction voided at or before that point; a void gives back
   the dishes its correction was counted as returning. The category report puts a corrected extra,
-  and its void, under its dish.
+  and its void, under its dish. Corrections issued in the same millisecond are ordered by invoice
+  number before sale id (fix wave, 2026-11-11).
 - The till API answers both refusals with 409 (`apps/server/src/till-api.ts`); the till words both
   (`apps/till/src/i18n/codes.ts`, owner 22:04).
 
@@ -1159,6 +1168,7 @@ Size after these: about 175 production and 320 test lines.
   measured ones, the same rule as the preview and the exact-split path; a waiting fix that kept
   them is allowed.
 
-**Size** (`git diff --numstat 0b7f37048f`, TypeScript only): production 533 lines added and 170
+**Size** (`git diff --numstat eb2bfdb108 1e1642ce70`, TypeScript only, before the second read's
+commits): production 533 lines added and 170
 removed; tests, test fixtures and the fake backend 1,122 added and 49 removed. The plan review
 estimated about 175 and 320, before point 5, the till wording and the reviews' fixes were added.

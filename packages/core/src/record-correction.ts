@@ -72,8 +72,8 @@ export interface RecordCorrectionInput {
    * `sale.correction_lines_mismatch` unless, rate by rate, the lines' totals are the stored copy's
    * base and the gross amounts they state are its base plus tax; with
    * `sale.correction_history_unusable` when the regime's figures cannot be read or a fix changed
-   * the total; and with `sale.correction_not_admitted` while a filed fix waits for its answer
-   * (`filed_figures_unanswered`). Its lines must also
+   * the total; and with `sale.correction_not_admitted` while a filed fix that waits for its answer
+   * carries figures other than the measured ones (`filed_figures_unanswered`). Its lines must also
    * reverse the invoice line for line (`sale.correction_line_not_reversed`): each names, in
    * `correctsLineId`, a different invoice line, with that line's product, minus its quantity and
    * minus its line total, and every invoice line is named.
@@ -392,7 +392,8 @@ export async function recordCorrection(
 /**
  * The invoice's and its earlier corrections' figures as the regime holds them. Refused with
  * `sale.correction_history_unusable` when they cannot be read, a backend reading none included, and
- * as `measuredFigures` refuses a fix still waiting for its answer.
+ * with `sale.correction_not_admitted`, as `measuredFigures` refuses, while a fix still waiting for
+ * its answer carries figures other than the measured ones.
  */
 async function measuredHistory(
   tx: Transaction,
