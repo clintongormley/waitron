@@ -274,6 +274,52 @@ describe("unreadable figures", () => {
     expect((await figuresFor(original.saleId)).get(original.saleId)).toEqual({ readable: false });
   });
 
+  const EXEMPT: Figures = {
+    desglose: [
+      { ClaveRegimen: "01", OperacionExenta: "E1", BaseImponibleOimporteNoSujeto: "12.10" },
+    ],
+    cuota: "0.00",
+    importe: "12.10",
+  };
+
+  it.each([
+    ["rechazado", null],
+    ["aceptado", V21],
+  ] as const)(
+    "a refused unreadable fix of a version %s gives way to it",
+    async (first, answered) => {
+      const original = await file({ estado: first });
+      await file({
+        figures: EXEMPT,
+        estado: "rechazado",
+        sale: original.saleId,
+        fixes: { registroId: original.registroId, number: original.number },
+      });
+      expect((await figuresFor(original.saleId)).get(original.saleId)).toEqual({
+        readable: true,
+        newest: V21,
+        newestAnswered: answered,
+        newestAwaitingAnswer: false,
+      });
+    },
+  );
+
+  it("a refused unreadable first version with nothing before it", async () => {
+    const { saleId } = await file({ figures: EXEMPT, estado: "rechazado" });
+    expect((await figuresFor(saleId)).get(saleId)).toEqual({ readable: false });
+  });
+
+  it("a queued unreadable fix", async () => {
+    const original = await file({ estado: "rechazado" });
+    await file({
+      figures: EXEMPT,
+      estado: "pendiente",
+      sale: original.saleId,
+      fixes: { registroId: original.registroId, number: original.number },
+    });
+    expect((await figuresFor(original.saleId)).get(original.saleId)).toEqual({ readable: false });
+  });
+
   it("two lines of fixes", async () => {
     const { saleId } = await file({ estado: "aceptado" });
     expect((await figuresFor(saleId)).get(saleId)).toMatchObject({ readable: true });
