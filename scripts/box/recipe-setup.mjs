@@ -5,9 +5,14 @@ export function bootstrapSucceeded(serial) {
   const plain = stripVTControlCharacters(serial);
   return (
     plain.includes('"action":"restart"') &&
-    !/(?:Starting|Started|Listening on)[^\r\n]*docker\.(?:service|socket)\b|B3_INSTALLED:/.test(
-      plain,
-    )
+    !dockerStarted(plain) &&
+    !plain.includes("B3_INSTALLED:")
+  );
+}
+
+export function dockerStarted(serial) {
+  return /(?:Starting|Started|Listening on)[^\r\n]*docker\.(?:service|socket)\b/.test(
+    stripVTControlCharacters(serial),
   );
 }
 

@@ -19,6 +19,7 @@ import {
   rigLine,
   installSucceeded,
   bootstrapSucceeded,
+  dockerStarted,
 } from "../../scripts/box/recipe-setup.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
@@ -341,9 +342,24 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
     const unlocked = join(root, "unlocked");
     await mkdir(mounted);
     await mkdir(unlocked);
-    const loop = execFileSync("losetup", ["--find", "--show", "--partscan", target], {
-      encoding: "utf8",
-    }).trim();
+    const layout = JSON.parse(
+      execFileSync("sfdisk", ["--json", target], { encoding: "utf8" }),
+    ).partitiontable;
+    const partition = layout.partitions[2];
+    const loop = execFileSync(
+      "losetup",
+      [
+        "--find",
+        "--show",
+        "--read-only",
+        "--offset",
+        String(partition.start * layout.sectorsize),
+        "--sizelimit",
+        String(partition.size * layout.sectorsize),
+        target,
+      ],
+      { encoding: "utf8" },
+    ).trim();
     const mapping = `waitron-b3-proof-${process.pid}`;
     let proofMounted = false,
       opened = false,
@@ -359,17 +375,12 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const secret = diskRecoveryKeyPassphrase(Buffer.from(record.key, "hex"));
       const result = await runDiskCommand(
         "cryptsetup",
-        ["open", "--readonly", "--key-file", "/proc/self/fd/3", `${loop}p3`, mapping],
+        ["open", "--readonly", "--key-file", "/proc/self/fd/3", loop, mapping],
         secret,
       );
       if (result.status !== 0) throw new Error(`independent retained-key unlock: ${result.status}`);
       opened = true;
-      execFileSync("mount", [
-        "-o",
-        "ro,nologreplay,subvol=@host-state",
-        `/dev/mapper/${mapping}`,
-        unlocked,
-      ]);
+      execFileSync("mount", ["-o", "ro,subvol=@host-state", `/dev/mapper/${mapping}`, unlocked]);
       dataMounted = true;
       if ((await readFile(join(unlocked, "disk-recovery", path), "utf8")) !== text)
         throw new Error("unlocked retained record differs");
@@ -503,6 +514,10 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
           stream.on("data", (bytes) => {
             serial += bytes.toString();
             appendFileSync(join(runDir, `${name}-serial.log`), bytes);
+            if (/Found ordering cycle|to break ordering cycle/.test(serial))
+              reject(new Error(`${name} has an ordering cycle`));
+            if (name === "bootstrap" && dockerStarted(serial))
+              reject(new Error("bootstrap started Docker before the key was ready"));
             if (rigLine(serial, marker) !== undefined) done();
           });
         child.once("error", reject);
