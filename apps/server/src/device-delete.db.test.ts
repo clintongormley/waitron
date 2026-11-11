@@ -7,6 +7,7 @@ import {
   billPayments,
   deviceApprovedProfiles,
   deviceMadeHereStations,
+  deviceZoneSelections,
   deviceProfiles,
   devices,
   drawerOpens,
@@ -746,7 +747,14 @@ it("device deletion keeps all saved profile zone selections, retaining other dev
   await save(two);
   await suite.db.update(devices).set({ deviceProfileId: secondProfile }).where(eq(devices.id, one));
   await save(one);
-  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(2);
+  expect(
+    (
+      await suite.db
+        .select()
+        .from(deviceZoneSelections)
+        .where(eq(deviceZoneSelections.deviceId, one))
+    ).length,
+  ).toBe(2);
   const impact = await inTx((tx) => readDeviceDeleteImpact(tx, venue.cfg, one));
   expect(impact.removes).toEqual([]);
   const before = await snapshot();
@@ -758,6 +766,20 @@ it("device deletion keeps all saved profile zone selections, retaining other dev
   ).rejects.toThrow("rollback device deletion");
   expect(await snapshot()).toEqual(before);
   await inTx((tx) => deleteDevice(tx, venue.cfg, one));
-  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, one))).toBe(2);
-  expect(await inTx((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, two))).toBe(1);
+  expect(
+    (
+      await suite.db
+        .select()
+        .from(deviceZoneSelections)
+        .where(eq(deviceZoneSelections.deviceId, one))
+    ).length,
+  ).toBe(2);
+  expect(
+    (
+      await suite.db
+        .select()
+        .from(deviceZoneSelections)
+        .where(eq(deviceZoneSelections.deviceId, two))
+    ).length,
+  ).toBe(1);
 });

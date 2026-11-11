@@ -63,6 +63,7 @@ import {
   saveVenueFields,
   readVenueSettings,
   categories,
+  deviceZoneSelections,
   deviceProfiles,
   devices,
   diningTables,
@@ -8065,7 +8066,14 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
       ...current,
       startingZoneId: current.startingZoneId!,
     });
-    expect(await VENUE_SERVICE.countDeviceZoneSelections(tx, device!.id)).toBe(1);
+    expect(
+      (
+        await tx
+          .select()
+          .from(deviceZoneSelections)
+          .where(eq(deviceZoneSelections.deviceId, device!.id))
+      ).length,
+    ).toBe(1);
   });
   const exported = await exportConfigurationTables(suite.db, ALL_MODULES);
   expect(exported.tables).toHaveProperty("device_profile_service_access");

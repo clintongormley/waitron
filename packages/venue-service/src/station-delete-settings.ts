@@ -45,12 +45,17 @@ async function settings(tx: Transaction, id: string) {
       ),
     );
   const memberships = await tx
-    .select({ id: devices.id, name: devices.label })
+    .select({ id: devices.id, name: devices.label, active: devices.active })
     .from(deviceKitchenScreenStations)
     .innerJoin(devices, eq(devices.id, deviceKitchenScreenStations.deviceId))
     .where(eq(deviceKitchenScreenStations.stationId, id));
   const notices = await tx
-    .select({ id: deviceKitchenScreenRemovals.id, deviceId: devices.id, name: devices.label })
+    .select({
+      id: deviceKitchenScreenRemovals.id,
+      deviceId: devices.id,
+      name: devices.label,
+      active: devices.active,
+    })
     .from(deviceKitchenScreenRemovals)
     .innerJoin(devices, eq(devices.id, deviceKitchenScreenRemovals.deviceId))
     .where(eq(deviceKitchenScreenRemovals.stationId, id));
@@ -101,12 +106,25 @@ async function settings(tx: Transaction, id: string) {
   }
   const compare = createLabelComparator();
   const targets = (rows: DeleteTarget[]) =>
-    [...new Map(rows.map((row) => [row.id, { id: row.id, name: row.name }])).values()].sort(
-      (a, b) => compare(a.name, b.name) || a.id.localeCompare(b.id),
-    );
+    [
+      ...new Map(
+        rows.map((row) => [
+          row.id,
+          { id: row.id, name: row.name, ...(row.deleted ? { deleted: true } : {}) },
+        ]),
+      ).values(),
+    ].sort((a, b) => compare(a.name, b.name) || a.id.localeCompare(b.id));
   const deviceTargets = targets([
-    ...memberships,
-    ...notices.map((row) => ({ id: row.deviceId, name: row.name })),
+    ...memberships.map(({ id, name, active }) => ({
+      id,
+      name,
+      ...(active ? {} : { deleted: true }),
+    })),
+    ...notices.map((row) => ({
+      id: row.deviceId,
+      name: row.name,
+      ...(row.active ? {} : { deleted: true }),
+    })),
   ]);
   const profileTargets = targets(profiles);
   const destinationTargets = targets(incoming);

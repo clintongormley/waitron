@@ -18,7 +18,9 @@ const COUNTED: Readonly<Record<string, Counted>> = {
 };
 
 const names = (targets: readonly DeleteTarget[]): string =>
-  targets.map(({ name }) => name).join(", ");
+  targets
+    .map(({ name, deleted }) => (deleted ? `${name} (${t("delete.deleted")})` : name))
+    .join(", ");
 
 function line(key: Counted, item: DeleteImpactItem): string {
   return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {

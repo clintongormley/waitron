@@ -124,8 +124,7 @@ async function binding(v: PartyVenue, id: string) {
     await setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });
-    const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Off display" });
-    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bound display" });
     await setDeviceKitchenScreens(tx, {
       deviceId,
       profileId: profile!.id,
@@ -187,7 +186,7 @@ describe("permanent station deletion", () => {
         {
           code: "station.screen_in_use",
           params: { stationId: id, count: 1 },
-          targets: [{ id: display.id, name: "Off display" }],
+          targets: [{ id: display.id, name: "Bound display" }],
         },
         {
           code: "station.work_in_progress",
@@ -200,7 +199,7 @@ describe("permanent station deletion", () => {
         {
           key: "station_device_screens",
           count: 1,
-          targets: [{ id: display.id, name: "Off display" }],
+          targets: [{ id: display.id, name: "Bound display" }],
         },
       ],
     });

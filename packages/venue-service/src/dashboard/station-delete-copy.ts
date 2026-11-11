@@ -58,7 +58,11 @@ export function stationDeleteCopy(): DeleteDialogCopy {
       const single = item.count === 1;
       return format(single ? one : many, {
         count: String(item.count),
-        names: item.targets.map((target) => target.name).join(", "),
+        names: item.targets
+          .map((target) =>
+            target.deleted ? `${target.name} (${t("venue.delete_mark_deleted")})` : target.name,
+          )
+          .join(", "),
       });
     },
     refusal: (item) =>
@@ -66,7 +70,13 @@ export function stationDeleteCopy(): DeleteDialogCopy {
         ? t("prep.delete_default")
         : item.code === "station.screen_in_use"
           ? format(item.targets.length === 1 ? "prep.delete_screens_one" : "prep.delete_screens", {
-              names: item.targets.map((target) => target.name).join(", "),
+              names: item.targets
+                .map((target) =>
+                  target.deleted
+                    ? `${target.name} (${t("venue.delete_mark_deleted")})`
+                    : target.name,
+                )
+                .join(", "),
             })
           : work(Number(item.params.count)),
   };

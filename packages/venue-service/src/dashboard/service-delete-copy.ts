@@ -81,7 +81,11 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
     retry: t("venue.delete_retry"),
     loading: t("venue.delete_loading"),
     item(item) {
-      const names = item.targets.map((target) => target.name).join(", ");
+      const names = item.targets
+        .map((target) =>
+          target.deleted ? `${target.name} (${t("venue.delete_mark_deleted")})` : target.name,
+        )
+        .join(", ");
       if (item.key === "counter_default" && !names) return t("venue.delete_counter_empty");
       if (item.key === "default_department" && !names) return t("venue.delete_default_empty");
       const keys = itemKeys[item.key as keyof typeof itemKeys];
@@ -102,7 +106,11 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
       const shown = item.targets.length;
       return format(shown === 0 ? unnamed : shown === 1 ? one : many, {
         tableName: String(item.params.tableName ?? ""),
-        names: item.targets.map((target) => target.name).join(", "),
+        names: item.targets
+          .map((target) =>
+            target.deleted ? `${target.name} (${t("venue.delete_mark_deleted")})` : target.name,
+          )
+          .join(", "),
       });
     },
   };

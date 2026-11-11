@@ -62,6 +62,7 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
     .select({
       id: devices.id,
       name: devices.label,
+      active: devices.active,
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
       cashDrawerPrinterId: devices.cashDrawerPrinterId,
@@ -74,7 +75,11 @@ async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
       `device_${role}`,
       choosing
         .filter((device) => device[column] === id)
-        .map((device) => ({ id: device.id, name: device.name })),
+        .map((device) => ({
+          id: device.id,
+          name: device.name,
+          ...(device.active ? {} : { deleted: true }),
+        })),
     ),
   );
 

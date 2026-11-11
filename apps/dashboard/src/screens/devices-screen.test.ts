@@ -121,7 +121,7 @@ const devices: DeviceRow[] = [
     kind: "kds_station",
     kitchenScreens: [],
     label: "Revoked pass",
-    active: false,
+    active: true,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
@@ -855,28 +855,6 @@ describe("the device table", () => {
     expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
       t("devices.edit_title").replace("{name}", "Grill display"),
     );
-  });
-
-  it("a disabled device's row opens nothing, and its menu offers only Delete, no Edit or Disable", async () => {
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    const table = devicesTable(el);
-    const row = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="d2"]')!;
-    expect(row.querySelector(".row-activate")).toBeNull();
-    expect(row.classList.contains("clickable")).toBe(false);
-    const menus = row.querySelectorAll<Menu>("dashboard-row-actions");
-    expect(menus).toHaveLength(1);
-    expect(menus[0]!.label).toBe(`${t("devices.actions")}: Revoked pass`);
-    const items = [...menus[0]!.querySelectorAll("wt-button")];
-    expect(items.map((b) => b.getAttribute("data-test"))).toEqual(["delete-device-d2"]);
-    expect(items.map((b) => b.textContent?.trim())).toEqual([t("action.delete")]);
-    await userEvent.click(row.querySelector("td")!);
-    await flush(el);
-    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
-    expect(dq(el.shadowRoot!, "[data-test=edit-device-d2]")).toBeNull();
-    expect(dq(el.shadowRoot!, "[data-test=remove-d2]")).toBeNull();
   });
 
   it("an active device's menu, named for it, offers Edit and Delete", async () => {
@@ -6327,27 +6305,6 @@ describe("Delete", () => {
     while (at?.shadowRoot?.activeElement) at = at.shadowRoot.activeElement;
     return at;
   }
-
-  it("an active device's menu offers Edit and Delete; a disabled one's offers Delete only, and its row still opens nothing", async () => {
-    const { el } = await mounted();
-    const menuOf = (id: string) => rowOf(el, id)!.querySelector("dashboard-row-actions")!;
-    expect(
-      [...menuOf("d1").querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual(["edit-device-d1", "delete-device-d1"]);
-    expect(
-      [...menuOf("d2").querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual(["delete-device-d2"]);
-    for (const id of ["d1", "d2"]) {
-      const del = dq(el.shadowRoot!, `[data-test="delete-device-${id}"]`)!;
-      expect(del.getAttribute("variant")).toBe("danger");
-      expect(del.hasAttribute("disabled")).toBe(false);
-    }
-    expect(rowOf(el, "d2")!.querySelector(".row-activate")).toBeNull();
-    await userEvent.click(rowOf(el, "d2")!.querySelector("td")!);
-    await flush(el);
-    expect(q(el, "[data-test=edit-device-modal]")).toBeNull();
-    expect(dialogOf(el)?.open ?? false).toBe(false);
-  });
 
   it("Delete opens the dialog, quiet and disabled while it loads, then red with the device named and its impact listed in order", async () => {
     const read = deferred<DeleteImpact>();

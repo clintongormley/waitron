@@ -435,7 +435,7 @@ function expectedImpactOfP(v: Venue): DeleteImpact {
         count: 2,
         targets: [
           { id: v.ana, name: "Handheld Ana" },
-          { id: v.oldHandheld, name: "Old handheld" },
+          { id: v.oldHandheld, name: "Old handheld", deleted: true },
         ],
       },
       {
@@ -501,6 +501,29 @@ describe("the printer delete impact", () => {
     expect(await snapshot()).toEqual(before);
   });
 
+  it("marks a deleted device whose retained printer choice will be cleared", async () => {
+    const v = await seedVenueWithPrinters();
+    const [series] = await suite.db.select().from(invoiceSeries);
+    await withTransaction(suite.db, (tx) =>
+      deleteDevice(
+        tx,
+        {
+          nodeId: brandNodeId(series!.nodeId),
+          locale: "es-ES",
+          tipsEnabled: false,
+          simplifiedInvoiceLimit: null,
+        },
+        v.ana,
+      ),
+    );
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
+    expect(impact.removes.find((item) => item.key === "device_cash_drawer")).toEqual({
+      key: "device_cash_drawer",
+      count: 1,
+      targets: [{ id: v.ana, name: "Handheld Ana", deleted: true }],
+    });
+  });
+
   it("names a device under an inherited default only where that default serves it: a portable one only for its holder", async () => {
     const v = await seedVenueWithPrinters();
     // Ana keeps holding P and goes back to Use default for receipts and slips.
@@ -512,7 +535,11 @@ describe("the printer delete impact", () => {
     const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
 
     expect(impact.removes.filter((item) => item.key.startsWith("device_"))).toEqual([
-      { key: "device_receipt", count: 1, targets: [{ id: v.oldHandheld, name: "Old handheld" }] },
+      {
+        key: "device_receipt",
+        count: 1,
+        targets: [{ id: v.oldHandheld, name: "Old handheld", deleted: true }],
+      },
       { key: "device_payment_slip", count: 1, targets: [{ id: v.barTill2, name: "Bar till 2" }] },
       { key: "device_cash_drawer", count: 1, targets: [{ id: v.ana, name: "Handheld Ana" }] },
       { key: "device_invoice", count: 1, targets: [{ id: v.barTill3, name: "Bar till 3" }] },

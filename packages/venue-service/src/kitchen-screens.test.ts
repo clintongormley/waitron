@@ -29,13 +29,11 @@ import {
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
-  countDeviceKitchenScreens,
   narrowDeviceKitchenScreens,
   readDeviceKitchenScreens,
   readDevicesKitchenScreens,
   readProfileKitchenScreens,
   readStationScreens,
-  removeDeviceKitchenScreens,
   setDeviceKitchenScreenDisplay,
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
@@ -1504,7 +1502,6 @@ describe("a profile save narrowing its devices", () => {
       .update(devices)
       .set({ active: false, deletedAt: "2026-10-10T10:00:00.000Z" })
       .where(eq(devices.id, deviceId));
-    await scoped((tx) => removeDeviceKitchenScreens(tx, deviceId));
   }
 
   it("keeps a hidden device and reports nothing for a deleted one", async () => {
@@ -1519,12 +1516,9 @@ describe("a profile save narrowing its devices", () => {
     expect(await removalsOf(all)).toEqual([]);
   });
 
-  it("backstop: written straight into the database, a deleted device's choice is not narrowed", async () => {
+  it("backstop: a deleted device's retained choice is not narrowed", async () => {
     const { venue, line, all } = await narrowing();
     await deleted(all);
-    await db
-      .insert(deviceKitchenScreens)
-      .values({ deviceId: all, screen: "station", everyStation: true, everyZone: false });
 
     await expect(
       set(venue.kds, { station: { stationIds: [venue.grill, venue.cold], zoneIds: null } }),
@@ -2030,64 +2024,6 @@ describe("the statements a device's kitchen screens are read in", () => {
     expect(statements.filter(from("device_kitchen_screens"))).toEqual([]);
     const reads = statements.filter((query) => query.sql.startsWith("select"));
     expect(reads.filter(from("device_profile_kitchen_screens"))).toHaveLength(1);
-  });
-});
-
-describe("a device's kitchen screens counted and removed", () => {
-  async function snapshotKitchenScreenRows() {
-    const rows = async (query: SQL) =>
-      (await db.execute<Record<string, unknown> & { device_id: string }>(query)).rows;
-    return {
-      screens: await rows(
-        sql`select * from device_kitchen_screens order by device_id, screen, every_station, every_zone`,
-      ),
-      stations: await rows(
-        sql`select * from device_kitchen_screen_stations order by device_id, screen, station_id`,
-      ),
-      zones: await rows(
-        sql`select * from device_kitchen_screen_zones order by device_id, screen, zone_id`,
-      ),
-      removals: await rows(
-        sql`select * from device_kitchen_screen_removals order by id, device_id, screen, station_id, zone_id, removed_at`,
-      ),
-    };
-  }
-
-  it("counts a device's kitchen screens, then removes them with their stations, zones and removals, leaving other devices alone", async () => {
-    const venue = await seedVenueWithStations();
-    await set(venue.till, {
-      station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
-      pass: { stationIds: null, zoneIds: [venue.dining, venue.terrace] },
-    });
-    const deviceA = await seedDevice(venue.till, "Till A");
-    const deviceB = await seedDevice(venue.till, "Till B");
-    await choose(deviceA, venue.till, [
-      { kind: "station", stationIds: [venue.grill], zoneIds: null },
-      { kind: "pass", stationIds: null, zoneIds: [venue.dining] },
-    ]);
-    await recordRemoval(deviceA, "station", { stationId: venue.cold });
-    await choose(deviceB, venue.till, [
-      { kind: "station", stationIds: [venue.cold], zoneIds: null },
-      { kind: "pass", stationIds: null, zoneIds: [venue.dining] },
-    ]);
-    await recordRemoval(deviceB, "pass", { zoneId: venue.terrace });
-
-    const before = await snapshotKitchenScreenRows();
-    for (const table of Object.keys(before) as (keyof typeof before)[]) {
-      expect(before[table].some((row) => row.device_id === deviceA)).toBe(true);
-    }
-    expect(before.stations.some((row) => row.device_id === deviceB)).toBe(true);
-    expect(before.zones.some((row) => row.device_id === deviceB)).toBe(true);
-    expect(before.removals.some((row) => row.device_id === deviceB)).toBe(true);
-
-    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(2);
-    await scoped((tx) => removeDeviceKitchenScreens(tx, deviceA));
-    const after = await snapshotKitchenScreenRows();
-    for (const table of Object.keys(before) as (keyof typeof before)[]) {
-      expect(after[table]).toEqual(before[table].filter((row) => row.device_id !== deviceA));
-    }
-    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceA))).toBe(0);
-    expect(await scoped((tx) => countDeviceKitchenScreens(tx, deviceB))).toBe(2);
   });
 });
 

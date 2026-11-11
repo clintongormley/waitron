@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
@@ -153,19 +153,4 @@ export async function setDeviceZoneSelection(
     .insert(deviceZoneSelectionZones)
     .values(ids.map((zoneId) => ({ deviceId, deviceProfileId: profileId, zoneId })));
   return readDeviceZoneSelection(tx, deviceId);
-}
-
-export async function countDeviceZoneSelections(
-  tx: Transaction,
-  deviceId: string,
-): Promise<number> {
-  const [row] = await tx
-    .select({ total: count() })
-    .from(deviceZoneSelections)
-    .where(eq(deviceZoneSelections.deviceId, deviceId));
-  return row!.total;
-}
-
-export async function removeDeviceZoneSelections(tx: Transaction, deviceId: string): Promise<void> {
-  await tx.delete(deviceZoneSelections).where(eq(deviceZoneSelections.deviceId, deviceId));
 }

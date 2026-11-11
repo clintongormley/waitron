@@ -272,10 +272,14 @@ it("delete last screen zone leaves an explicit empty parent on disabled devices 
         count: 2,
         targets: [
           { id: f.explicit, name: "Explicit" },
-          { id: d!.id, name: "Off screen" },
+          { id: d!.id, name: "Off screen", deleted: true },
         ],
       },
-      { key: "screen_notices", count: 1, targets: [{ id: d!.id, name: "Off screen" }] },
+      {
+        key: "screen_notices",
+        count: 1,
+        targets: [{ id: d!.id, name: "Off screen", deleted: true }],
+      },
     ]);
     await clearServiceDeleteSettings(tx, [f.gone], null);
     expect(await tx.select().from(deviceProfileKitchenScreens)).toEqual(parents.profiles);

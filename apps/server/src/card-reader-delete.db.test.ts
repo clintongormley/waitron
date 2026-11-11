@@ -262,7 +262,11 @@ describe("the card reader delete impact", () => {
       refusals: [],
       ends: [],
       removes: [
-        { key: "device_reader", count: 2, targets: [v.firstTill, v.retiredTill] },
+        {
+          key: "device_reader",
+          count: 2,
+          targets: [v.firstTill, { ...v.retiredTill, deleted: true }],
+        },
         { key: "device_reader_default", count: 1, targets: [v.secondTill] },
         { key: "profile_reader", count: 2, targets: [v.diningProfile, v.terraceProfile] },
         { key: "profile_reader_default", count: 1, targets: [v.diningProfile] },

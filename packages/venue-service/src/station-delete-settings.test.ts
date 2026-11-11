@@ -317,7 +317,7 @@ it("finds active bound KDS choices and deduplicates affected settings owners", a
           { id: explicit, name: "Á explicit" },
           { id: kindRemoved, name: "Kind removed" },
           { id: noticeOnly, name: "Notice only" },
-          { id: off, name: "Off" },
+          { id: off, name: "Off", deleted: true },
           { id: removed, name: "Removed" },
         ],
       },

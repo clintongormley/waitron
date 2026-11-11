@@ -1659,15 +1659,9 @@ export class DevicesScreen extends LitElement {
 
   #deviceActions(device: DeviceRow): TemplateResult {
     return html`<dashboard-row-actions .label=${`${t("devices.actions")}: ${device.label}`}>
-      ${
-        device.active
-          ? html`<wt-button
-              data-test=${`edit-device-${device.id}`}
-              @click=${() => this.#openEdit(device)}
-              >${t("action.edit")}</wt-button
-            >`
-          : nothing
-      }
+      <wt-button data-test=${`edit-device-${device.id}`} @click=${() => this.#openEdit(device)}
+        >${t("action.edit")}</wt-button
+      >
       <wt-button
         variant="danger"
         data-test=${`delete-device-${device.id}`}
@@ -1934,7 +1928,6 @@ export class DevicesScreen extends LitElement {
       .columns=${columns}
       .rowKey=${(d: DeviceRow) => d.id}
       .rowClick=${(d: DeviceRow) => this.#openEdit(d)}
-      .rowClickable=${(d: DeviceRow) => d.active}
       .rowClickLabel=${(d: DeviceRow) => fill("devices.edit_title", { name: d.label })}
       .emptyMessage=${t("devices.no_devices")}
     ></wt-data-table>`;

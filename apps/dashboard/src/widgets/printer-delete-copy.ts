@@ -21,7 +21,10 @@ const ROLES = [
   ["invoice", "printers.delete_role_invoice", "printers.delete_default_invoice"],
 ] as const;
 
-const names = (item: DeleteImpactItem): string => item.targets.map(({ name }) => name).join(", ");
+const names = (item: DeleteImpactItem): string =>
+  item.targets
+    .map(({ name, deleted }) => (deleted ? `${name} (${t("delete.deleted")})` : name))
+    .join(", ");
 
 function line(key: Counted, item: DeleteImpactItem, role = ""): string {
   return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {
@@ -50,7 +53,9 @@ function itemLine(item: DeleteImpactItem): string {
 }
 
 function refusalLine(refusal: DeleteImpactRefusal): string {
-  const named = refusal.targets.map(({ name }) => name).join(", ");
+  const named = refusal.targets
+    .map(({ name, deleted }) => (deleted ? `${name} (${t("delete.deleted")})` : name))
+    .join(", ");
   const message = codeMessage(refusal.code);
   return named ? `${message.replace(/\.$/, "")}: ${named}` : message;
 }

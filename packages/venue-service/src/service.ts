@@ -118,25 +118,18 @@ import {
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
-  countDeviceKitchenScreens,
   copyProfileKitchenScreens,
   narrowDeviceKitchenScreens,
   readDeviceKitchenScreens,
   readDevicesKitchenScreens,
   readProfileKitchenScreens,
   readStationScreens,
-  removeDeviceKitchenScreens,
   setDeviceKitchenScreens,
   setDeviceKitchenScreenDisplay,
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
 
-import {
-  readDeviceZoneSelection,
-  setDeviceZoneSelection,
-  countDeviceZoneSelections,
-  removeDeviceZoneSelections,
-} from "./device-zone-selection.js";
+import { readDeviceZoneSelection, setDeviceZoneSelection } from "./device-zone-selection.js";
 
 /** The generic server-facing service seat; it owns no transaction and calls no server code. */
 export const VENUE_SERVICE: VenueServiceContribution = {
@@ -237,13 +230,9 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readDevicesKitchenScreens,
   setDeviceKitchenScreens,
   setDeviceKitchenScreenDisplay,
-  countDeviceKitchenScreens,
   readDeviceZoneSelection,
   setDeviceZoneSelection,
-  countDeviceZoneSelections,
-  removeDeviceZoneSelections,
   copyProfileKitchenScreens,
-  removeDeviceKitchenScreens,
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,

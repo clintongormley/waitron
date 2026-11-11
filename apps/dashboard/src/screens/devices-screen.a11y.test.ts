@@ -85,7 +85,7 @@ const devices: DeviceRow[] = [
     kind: "kds_station",
     kitchenScreens: [],
     label: "Pass",
-    active: false,
+    active: true,
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
@@ -1015,23 +1015,6 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       await page.viewport(1280, 900);
     },
   );
-
-  it("renders a disabled device's open menu, holding only Delete, accessibly", async () => {
-    const { el, host } = await mountWidget<DevicesScreen>(
-      "dashboard-devices-screen",
-      { api: stubApi() },
-      theme,
-    );
-    await flush(el);
-    const del = deep(el.shadowRoot!, "[data-test=delete-device-d2]")!;
-    const menu = del.closest("dashboard-row-actions")!;
-    expect(menu.querySelectorAll("wt-button")).toHaveLength(1);
-    menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
-    await vi.waitFor(() =>
-      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
-    );
-    await expectNoA11yViolations(host);
-  });
 
   describe("the delete dialog", () => {
     const named = { id: "d1", name: "Kitchen display" };

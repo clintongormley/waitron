@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  deviceZoneSelections,
   deviceProfiles,
   devices,
   floorZones,
@@ -112,7 +113,11 @@ async function fixture(formFactor: "till" | "phone-portrait" | "tablet-landscape
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 const count = (f: Fixture, deviceId = f.deviceId) =>
-  run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, deviceId));
+  suite.db
+    .select()
+    .from(deviceZoneSelections)
+    .where(eq(deviceZoneSelections.deviceId, deviceId))
+    .then((rows) => rows.length);
 
 describe("the device's zone preferences", () => {
   it.each(["GET", "PUT"] as const)("requires an open session for %s", async (method) => {

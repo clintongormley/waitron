@@ -102,7 +102,7 @@ async function stationDeleteRules(tx: Transaction, id: string) {
     .innerJoin(printers, eq(printers.id, stationPrinters.printerId))
     .where(eq(stationPrinters.stationId, id));
   const madeHere = await tx
-    .select({ id: devices.id, name: devices.label })
+    .select({ id: devices.id, name: devices.label, active: devices.active })
     .from(deviceMadeHereStations)
     .innerJoin(devices, eq(devices.id, deviceMadeHereStations.deviceId))
     .where(eq(deviceMadeHereStations.stationId, id));
@@ -131,7 +131,10 @@ async function stationDeleteRules(tx: Transaction, id: string) {
     { key: "station_unsent_lines", count: unsent.length, targets: [] },
     { key: "station_draft_lines", count: drafts.length, targets: [] },
     named("station_printers", mappedPrinters),
-    named("station_made_here", madeHere),
+    named(
+      "station_made_here",
+      madeHere.map(({ id, name, active }) => ({ id, name, ...(active ? {} : { deleted: true }) })),
+    ),
     ...settings.removes,
   ].filter((row) => row.count > 0);
   const impact: DeleteImpact = { target, refusals, ends: [], removes };

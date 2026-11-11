@@ -119,9 +119,6 @@ export async function readDeviceDeleteImpact(
   return deviceDeleteRules(tx, cfg, id);
 }
 
-/** Disable: switches the device off, ends its sign-ins and releases its holds;
- * `device.not_found` when no device that is not deleted has `id`. Never a hard DELETE: a device is
- * a durable identity. */
 export async function disableDevice(tx: Transaction, id: string): Promise<void> {
   const updated = await tx
     .update(devices)

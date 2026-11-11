@@ -229,6 +229,7 @@ async function settings(
       zoneId: deviceZoneSelectionZones.zoneId,
       name: devices.label,
       deletedAt: devices.deletedAt,
+      active: devices.active,
     })
     .from(deviceZoneSelectionZones)
     .innerJoin(devices, eq(devices.id, deviceZoneSelectionZones.deviceId))
@@ -240,6 +241,7 @@ async function settings(
       zoneId: deviceZoneSelections.startingZoneId,
       name: devices.label,
       deletedAt: devices.deletedAt,
+      active: devices.active,
     })
     .from(deviceZoneSelections)
     .innerJoin(devices, eq(devices.id, deviceZoneSelections.deviceId))
@@ -254,9 +256,14 @@ async function settings(
   ];
   const compare = createLabelComparator();
   const targets = (rows: DeleteTarget[]) =>
-    [...new Map(rows.map((row) => [row.id, { id: row.id, name: row.name }])).values()].sort(
-      (a, b) => compare(a.name, b.name) || a.id.localeCompare(b.id),
-    );
+    [
+      ...new Map(
+        rows.map((row) => [
+          row.id,
+          { id: row.id, name: row.name, ...(row.deleted ? { deleted: true } : {}) },
+        ]),
+      ).values(),
+    ].sort((a, b) => compare(a.name, b.name) || a.id.localeCompare(b.id));
   const liveProfile = (profile: typeof deviceProfiles.$inferSelect) =>
     profile.retiredAt === null && profile.formFactor !== "kds";
   const removes: DeleteImpactItem[] = [
@@ -282,10 +289,18 @@ async function settings(
       targets: targets([
         ...deviceZoneReferences
           .filter((row) => row.deletedAt === null)
-          .map((row) => ({ id: row.deviceId, name: row.name })),
+          .map((row) => ({
+            id: row.deviceId,
+            name: row.name,
+            ...(row.active ? {} : { deleted: true }),
+          })),
         ...screenDevices
           .filter((row) => row.devices.deletedAt === null)
-          .map((row) => ({ id: row.devices.id, name: row.devices.label })),
+          .map((row) => ({
+            id: row.devices.id,
+            name: row.devices.label,
+            ...(row.devices.active ? {} : { deleted: true }),
+          })),
         ...screenProfiles
           .filter((row) => row.device_profiles.retiredAt === null)
           .map((row) => row.device_profiles),
@@ -297,7 +312,11 @@ async function settings(
       targets: targets(
         notices
           .filter((row) => row.devices.deletedAt === null)
-          .map((row) => ({ id: row.devices.id, name: row.devices.label })),
+          .map((row) => ({
+            id: row.devices.id,
+            name: row.devices.label,
+            ...(row.devices.active ? {} : { deleted: true }),
+          })),
       ),
     },
     { key: "zone_policies", count: policies.length + overrides.length, targets: [] },

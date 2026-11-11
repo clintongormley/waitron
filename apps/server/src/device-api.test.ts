@@ -8,6 +8,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
   devices,
+  deviceZoneSelections,
   deviceProfiles,
   diningTables,
   floorZones,
@@ -4817,9 +4818,12 @@ it.each([false, true])(
     );
     expect(result.status).toBe(204);
     expect(
-      await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.countDeviceZoneSelections(tx, device.deviceId),
-      ),
+      (
+        await suite.db
+          .select()
+          .from(deviceZoneSelections)
+          .where(eq(deviceZoneSelections.deviceId, device.deviceId))
+      ).length,
     ).toBe(retire ? 2 : 1);
     const [first] = await suite.db
       .select()
