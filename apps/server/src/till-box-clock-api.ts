@@ -85,7 +85,10 @@ const run = createErrorBoundary(
 type Session = Awaited<ReturnType<typeof requireSession>>;
 
 function refuse(
-  reason: Exclude<ClockSetRefusal, "not_admitted" | "refused" | "unverified"> | "same_machine",
+  reason:
+    | Exclude<ClockSetRefusal, "not_admitted" | "refused" | "unverified">
+    | "same_machine"
+    | "stopped",
 ): never {
   throw new AppError("clock.set_refused", { reason });
 }
@@ -210,10 +213,11 @@ export function mountTillBoxClockApi(
       const override = overrideOf(await readJsonBody<unknown>(c));
       const keepOffered = await withTransaction(db, async (tx) => {
         await admitted(tx, session);
-        // A waiting start is itself what is checked: no stop need hold.
-        if (startWaits()) return true;
-        const asAdmin = override !== undefined || (await holdsAdmin(tx, session.personId));
         const stop = await stopAt(tx, clock.now(), boxClock.witnesses());
+        // A waiting start is itself what is checked: no stop need hold. A keep writes no
+        // confirmation, so it cannot lift a stop and is not offered while one holds.
+        if (startWaits()) return !stop.stopped;
+        const asAdmin = override !== undefined || (await holdsAdmin(tx, session.personId));
         if (!stop.stopped) noStop();
         if (asAdmin) return false;
         const refusal = admitStaff(stop);
@@ -300,7 +304,20 @@ export function mountTillBoxClockApi(
           { wallMs: now.instant.getTime(), monoMs: boxClock.steady() },
         );
 
-      if (keep || (agrees && startWaits())) {
+      const startConfirmed = (
+        personId: string,
+        now: ReturnType<TrustedClock["now"]>,
+        heads: ChainHeads,
+      ) =>
+        log("info", "clock_start.confirmed", {
+          source: asAdmin ? "admin" : "staff",
+          person: personId,
+          device: session.deviceId,
+          boxAt: now.instant.toISOString(),
+          heads,
+        });
+
+      if (keep) {
         // The start's own confirmation by a person: it sets nothing, so it writes no row (D3).
         const confirmed = await withPinCheckAhead(db, toCheck, attempts, (checked) =>
           correction.inTurn(() =>
@@ -310,6 +327,7 @@ export function mountTillBoxClockApi(
               if (stale(now)) refuse("stale");
               // Keeping the box's time is offered only until the internet confirms the start.
               if (start === undefined || start.state.status === "by_internet") noStop();
+              if ((await stopAt(tx, now, boxClock.witnesses())).stopped) refuse("stopped");
               const personId = asAdmin
                 ? (await authorizeAdmin(tx, checked)).authorizedBy
                 : session.personId;
@@ -319,13 +337,7 @@ export function mountTillBoxClockApi(
             }),
           ),
         );
-        log("info", "clock_start.confirmed", {
-          source: asAdmin ? "admin" : "staff",
-          person: confirmed.personId,
-          device: session.deviceId,
-          boxAt: confirmed.now.instant.toISOString(),
-          heads: confirmed.heads,
-        });
+        startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
         return c.json(
           { confirmationId: null, stepMs: 0, confirmedAt: confirmed.now.instant.toISOString() },
           200,
@@ -333,28 +345,29 @@ export function mountTillBoxClockApi(
       }
 
       if (agrees) {
-        const confirmation: ClockConfirmation = await withPinCheckAhead(
-          db,
-          toCheck,
-          attempts,
-          (checked) =>
-            // Taken around the whole transaction, never inside it: a set in the turn waits for
-            // the write lock a transaction holds.
-            correction.inTurn(() =>
-              withTransaction(db, async (tx) => {
-                const deviceLabel = await admitted(tx, session);
-                const witnesses = boxClock.witnesses();
-                const now = clock.now();
-                // A set landed, or the wall clock stepped, after the reading: the comparison is void.
-                if (stale(now)) refuse("stale");
-                const stop = await stopAt(tx, now, witnesses);
-                if (!stop.stopped) noStop();
-                let personId = session.personId;
-                if (asAdmin) personId = (await authorizeAdmin(tx, checked)).authorizedBy;
-                else {
-                  const refusal = admitStaff(stop);
-                  if (refusal !== null) refuse(refusal);
-                }
+        // A waiting start is confirmed by the person, and a stop that holds is confirmed with its
+        // row, in the one transaction; a waiting start with no stop writes no row (D3).
+        const confirmed = await withPinCheckAhead(db, toCheck, attempts, (checked) =>
+          // Taken around the whole transaction, never inside it: a set in the turn waits for
+          // the write lock a transaction holds.
+          correction.inTurn(() =>
+            withTransaction(db, async (tx) => {
+              const deviceLabel = await admitted(tx, session);
+              const witnesses = boxClock.witnesses();
+              const now = clock.now();
+              // A set landed, or the wall clock stepped, after the reading: the comparison is void.
+              if (stale(now)) refuse("stale");
+              const waiting = startWaits();
+              const stop = await stopAt(tx, now, witnesses);
+              if (!stop.stopped && !waiting) noStop();
+              let personId = session.personId;
+              if (asAdmin) personId = (await authorizeAdmin(tx, checked)).authorizedBy;
+              else {
+                const refusal = admitStaff(stop);
+                if (refusal !== null) refuse(refusal);
+              }
+              let confirmation: ClockConfirmation | null = null;
+              if (stop.stopped) {
                 const answer = await confirmClockStop(tx, {
                   reading: { instant: now.instant, offsetMinutes: now.offsetMinutes },
                   boot: boxClock.readBoot(),
@@ -363,13 +376,26 @@ export function mountTillBoxClockApi(
                   admin: person(personId, await requiredNameOf(tx, personId), deviceLabel),
                 });
                 // With a person, the seat answers a row or throws.
-                return answer.confirmation!;
-              }),
-            ),
+                confirmation = answer.confirmation!;
+              }
+              let heads: ChainHeads | null = null;
+              if (waiting) {
+                heads = await start!.heads(tx);
+                start!.state.confirm("by_person", heads);
+              }
+              return { confirmation, personId, now, heads };
+            }),
+          ),
         );
-        boxClock.clearWitnesses();
+        if (confirmed.confirmation !== null) boxClock.clearWitnesses();
+        if (confirmed.heads !== null)
+          startConfirmed(confirmed.personId, confirmed.now, confirmed.heads);
         return c.json(
-          { confirmationId: confirmation.id, stepMs: 0, confirmedAt: confirmation.confirmedAt },
+          {
+            confirmationId: confirmed.confirmation?.id ?? null,
+            stepMs: 0,
+            confirmedAt: confirmed.confirmation?.confirmedAt ?? confirmed.now.instant.toISOString(),
+          },
           200,
         );
       }

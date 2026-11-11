@@ -1244,6 +1244,68 @@ it("refuses a keep once the start check is by the internet", async () => {
   expect(box.host.statusAsks).toBe(0);
 });
 
+const paymentsAdmitted = (box: Box) =>
+  withTransaction(venue.db, (tx) => venue.backend.refuseWhileClockBehind(tx, box.clock.now()));
+
+it("confirms a waiting start from an agreeing till behind the chain, and lifts that stop too", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+  const before = written(box);
+  const answer = await check(box, staffCookie, 20_000);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(answer.json).toMatchObject({ stepMs: 0 });
+  expect(box.host.sets).toHaveLength(0);
+  expect(written(box).rows).toBe(before.rows + 1);
+  const id = answer.json.confirmationId as string;
+  expect(confirmationRow(id)).toMatchObject({ source: "staff", person_id: venue.operatorId });
+  expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
+    confirmedBy: "staff",
+    person: "Ana",
+  });
+  expect(start.status).toBe("by_person");
+  expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
+  await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+  expect(box.witnesses.witnesses()).toEqual([]);
+});
+
+it("offers no keep to a waiting start behind the chain, and refuses one sent anyway", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  const asked = await ask(box, staffCookie);
+  expect(asked.status).toBe(200);
+  expect(asked.json).not.toHaveProperty("keepOffered");
+  await expectRefused(
+    box,
+    confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box) + 10 * MINUTE,
+      keep: true,
+    }),
+    409,
+    setRefused("stopped"),
+  );
+  expect(start.status).toBe("waiting");
+  await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+});
+
+it.each(["by_person", "by_devices"] as const)(
+  "refuses a keep behind the chain once the start is confirmed %s",
+  async (status) => {
+    const start = startClockState();
+    start.confirm(status, {});
+    const box = await stoppedBox(DAY, { start });
+    await expectRefused(
+      box,
+      check(box, staffCookie, DAY, { keep: true }),
+      409,
+      setRefused("stopped"),
+    );
+    expect(start.status).toBe(status);
+  },
+);
+
 it("keeps the box's time from a till whose own clock reads 1970", async () => {
   const { box, start } = await waitingBox();
   const asked = await ask(box, staffCookie);

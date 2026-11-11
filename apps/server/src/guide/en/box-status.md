@@ -413,12 +413,18 @@ records to the tax agency, it does so at the till's next check, within about 15 
 till can press it; it needs no permission. The [till notices guide](till-notices.md#notices) says
 what the till's dialog shows and what each button does.
 
-The till sends its own time. When it is more than a minute from the box's, the box sets its clock
-to it; when it is within a minute, the box keeps its clock, and payments restart on it. When the
-box sets its clock, the bell and the email name the staff member and the till. When the till's time is used, other
-devices' readings do not stop it. When the till agrees with the box, two devices that disagree
-with the box stop the confirmation, and the dialog says why. Two tills or handhelds that agree
-with the box do not restart payments on their own during start-up; a person confirms instead.
+The till sends its own time. When it is more than a minute from the box's, **This device** sets the
+box's clock to it; when it is within a minute, **Yes** keeps the box's clock. While the box waits for
+its time to be confirmed after a start, and its clock reads no earlier than its last record, the
+till also offers **The server**, which keeps the box's clock whatever the till's time. Each restarts
+payments. When the box sets its clock, the bell and the email name the staff member and the till.
+When the till's time is used, other devices' readings do not stop it. When the till agrees with a
+clock that reads earlier than the last record, two devices that disagree with the box stop the
+confirmation, and the dialog says why.
+
+Two tills or handhelds that agree with the box confirm its time after a start by themselves. During
+start-up they do not end a stop for a clock that reads earlier than the last record; a person
+confirms that instead.
 
 Start-up ends as soon as the box finds that the clock no longer stops payments. From then on, once
 the internet has confirmed the box's time, a staff member can no longer set the clock from a till. If payments stop for the clock again while

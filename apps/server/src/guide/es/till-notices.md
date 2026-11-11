@@ -77,9 +77,16 @@ explica más abajo. Si la hora del servidor es correcta y fue la última venta l
 equivocada, dos cajas o terminales que coinciden con el servidor también reanudan los cobros, salvo
 que la parada dure desde que arrancó el servidor. Nunca ponen la hora.
 
+**Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
+de 2 por ahora) · Comprobar la hora** es rojo. Cada vez que el servidor arranca, confirma su hora
+antes de aceptar cobros: por sí mismo en cuanto tiene la hora de internet, o en cuanto dos cajas o
+terminales con alguien con la sesión iniciada coinciden con su hora. Hasta entonces, los cobros y
+las devoluciones esperan, como en la línea de arriba; el resto del trabajo sigue. Puedes esperar, o
+confirmar tú la hora con **Comprobar la hora**.
+
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Avisa al encargado**,
 significa que el servidor arrancó con su hora en duda y no ha podido confirmarla por sí
-mismo. Termina cualquiera de las dos líneas rojas de la hora de arriba. Un cobro rechazado dice
+mismo. Termina cualquiera de las tres líneas rojas de la hora de arriba. Un cobro rechazado dice
 entonces que uses **Comprobar la hora** arriba de la pantalla. Pulsa **Comprobar la hora** para
 abrir su diálogo; si se muestra primero otro aviso, abre la lista y púlsalo ahí. Puede usarlo
 cualquiera con la sesión iniciada en la caja.
@@ -89,13 +96,15 @@ la hora de la propia caja.
 
 - Cuando las dos horas están a más de un minuto, pregunta cuál es la correcta. Pulsa **Este
   dispositivo** si la hora de la caja es la buena: el reloj del servidor se pone a esa hora y se
-  puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la buena, o **Las dos
-  horas están mal** si ninguna lo es.
-- Cuando coinciden, pregunta **¿Es correcta esta hora?** Pulsa **Sí** si lo es; se puede volver a
+  puede volver a cobrar. Pulsa **El servidor** si la hora del servidor es la buena: cuando **Los
+  cobros esperan** es la única línea roja de la hora, el servidor mantiene su hora y se puede volver
+  a cobrar; si no, el diálogo te pide que corrijas la hora de la caja, como con **Las dos horas
+  están mal**. Pulsa **Las dos horas están mal** si ninguna lo es.
+- Cuando coinciden, pregunta si la hora es correcta. Pulsa **Sí** si lo es; se puede volver a
   cobrar. Pulsa **No** si no lo es.
 
-Si el diálogo te pide que corrijas la hora de la caja, hazlo en los ajustes de la propia caja y
-vuelve a conectarte al servidor.
+Si el diálogo te pide que corrijas la hora de la caja, corrígela en los ajustes de la propia caja y
+vuelve a abrir **Comprobar la hora**: el diálogo lee de nuevo la hora de la caja cada vez que se abre.
 
 Se avisa a quienes gestionan el sistema cuando el reloj del servidor se pone en hora desde una
 caja. Si el

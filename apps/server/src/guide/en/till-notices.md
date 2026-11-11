@@ -70,9 +70,15 @@ right and it was the last sale that carried a wrong time, two tills or handhelds
 the server also restart payments, unless the stop has lasted since the server started. They never set
 the clock.
 
+**Payments wait: the server is waiting for devices to connect and agree with its time (0 of 2 so
+far) · Check the time** is red. Each time the server starts, it confirms its time before it takes
+payments: by itself once it has the internet's time, or once two tills or handhelds where someone is
+signed in agree with its time. Until then, payments and refunds wait, as for the line above; other
+work carries on. You can wait, or confirm the time yourself with **Check the time**.
+
 **Check the time** at the end of a red clock line, instead of **Tell a manager**, means the server
-started with its clock in doubt and could not confirm it by itself. It ends either
-of the two red clock lines above. A refused payment then says to use **Check the time** at the top
+started with its clock in doubt and could not confirm it by itself. It ends any of the three red
+clock lines above. A refused payment then says to use **Check the time** at the top
 of the screen. Tap **Check the time** to open its dialog; when another notice shows first, open the
 list and tap it there. Anyone signed in on the till can use it.
 
@@ -81,12 +87,14 @@ what is sent.
 
 - When the two times are more than a minute apart, it asks which is correct. Press **This device**
   if the till's time is right: the server's clock is set to it and payments start again. Press **The
-  server** if the server's time is right, or **Both times are wrong** if neither is.
-- When they agree, it asks **Is this time correct:**. Press **Yes** if it is; payments start again.
-  Press **No** if it is not.
+  server** if the server's time is right: when **Payments wait** is the only red clock line, the
+  server keeps its time and payments start again; otherwise the dialog asks you to correct the
+  till's time, as it does for **Both times are wrong**. Press **Both times are wrong** if neither is.
+- When they agree, it asks whether the time is correct. Press **Yes** if it is; payments start
+  again. Press **No** if it is not.
 
-If the dialog asks you to correct the time on the till, do it in the till's own settings, then
-reconnect to the server.
+If the dialog asks you to correct the time on the till, correct it in the till's own settings, then
+open **Check the time** again: the dialog reads the till's time afresh each time it opens.
 
 The people who manage the system are told when the server's clock is set from a till. If the server refuses,
 the dialog says why above its buttons and, where trying again can help, offers **Check again**.

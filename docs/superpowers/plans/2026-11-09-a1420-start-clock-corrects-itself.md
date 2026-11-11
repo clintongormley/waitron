@@ -736,6 +736,8 @@ Documents: `conventions-data.md`'s sections "While the box's clock reads behind 
 
 On the Debian 13 test box once the watcher reports it back, or a preproduction box the owner names, with `WAITRON_FISCAL_TEST_SUBMISSIONS=enabled`. Record each command and its output in the PR description.
 
+(2026-11-11: the till's dialog now uses the owner's words of that day. In the checks below, "Use this time" is now **This device**, "The server's time is right" is **The server**, and "The time is right" is **Yes**.)
+
 **PR 1a:**
 
 1. **Every boot starts unsynchronised (R4).** Reboot. Compare `journalctl -u systemd-timesyncd -o short-iso | grep -m1 -i 'contacted\|synchroni'` with the server's first `clock_start.*` log line. **A failing reading of R4** shows the time service synchronised before the server's first look on every one of three boots.

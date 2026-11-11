@@ -439,14 +439,19 @@ la siguiente consulta de la caja, en unos 15 segundos. Cualquier empleado con la
 permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué muestra el diálogo
 de la caja y qué hace cada botón.
 
-La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, el equipo pone su
-reloj a esa hora; cuando está a menos de un minuto, el equipo mantiene su reloj y los cobros se
-reanudan con él. Cuando el equipo pone su reloj en hora, la campana y el correo nombran al empleado
-y a la caja. Cuando se
-usa la hora de la caja, las lecturas de otros dispositivos no lo impiden. Cuando la caja coincide
-con el equipo, dos dispositivos que no coinciden con el equipo impiden la confirmación, y el diálogo
-dice por qué. Durante el arranque, dos cajas o terminales que coinciden con el equipo no reanudan
-los cobros por sí solos; la hora la confirma una persona.
+La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, **Este dispositivo**
+pone el reloj del equipo a esa hora; cuando está a menos de un minuto, **Sí** mantiene el reloj del
+equipo. Mientras el equipo espera a que se confirme su hora tras un arranque, y su reloj no marca
+una hora anterior a su último registro, la caja ofrece también **El servidor**, que mantiene el
+reloj del equipo sea cual sea la hora de la caja. Cualquiera de ellos reanuda los cobros. Cuando el
+equipo pone su reloj en hora, la campana y el correo nombran al empleado y a la caja. Cuando se usa
+la hora de la caja, las lecturas de otros dispositivos no lo impiden. Cuando la caja coincide con un
+reloj que marca una hora anterior al último registro, dos dispositivos que no coinciden con el
+equipo impiden la confirmación, y el diálogo dice por qué.
+
+Dos cajas o terminales que coinciden con el equipo confirman su hora tras un arranque por sí solos.
+Durante el arranque no terminan una parada por un reloj que marca una hora anterior al último
+registro; la confirma una persona.
 
 El arranque termina en cuanto el equipo ve que el reloj ya no para los cobros. Desde entonces, en cuanto
 internet ha confirmado la hora del equipo, un empleado ya no puede poner la hora desde una caja. Si el reloj vuelve a parar los cobros mientras
