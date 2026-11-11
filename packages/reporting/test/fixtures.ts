@@ -190,6 +190,8 @@ export async function seedSale(
      * bucketing) sets this to the venue's real offset, e.g. Madrid's summer +120.
      */
     issuedOffsetMinutes?: number;
+    /** The bill this invoice was issued for; absent means a walk-up sale with no order. */
+    workingOrderId?: string;
   },
 ): Promise<SaleId> {
   const [row] = await db
@@ -211,6 +213,7 @@ export async function seedSale(
       fiscalBackend: "fake",
       fiscalState: "recorded",
       correctsSaleId: opts.correctsSaleId,
+      workingOrderId: opts.workingOrderId ?? null,
     })
     .returning({ id: sales.id });
   const saleId = brandSaleId(row!.id);
@@ -498,6 +501,13 @@ export async function seedOpenOrder(
     })
     .returning({ id: workingOrders.id });
   return { orderId: order!.id };
+}
+
+export async function settleOrder(db: Database, orderId: string, at: string): Promise<void> {
+  await db
+    .update(workingOrders)
+    .set({ status: "settled", settledAt: at })
+    .where(eq(workingOrders.id, orderId));
 }
 
 export async function seedFiredOrder(
