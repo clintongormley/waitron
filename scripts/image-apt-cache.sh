@@ -9,4 +9,4 @@ exec sudo timeout 90 unshare --net apt-get \
   -o Dir::Etc::sourceparts="$cache/source-parts" \
   -o Dir::State::lists="$cache/lists" \
   -o Dir::Cache::archives="$cache/archives" \
-  install -y --no-download --no-install-recommends bluez python3-dbus python3-gi
+  install -y --no-upgrade --no-download --no-install-recommends bluez python3-dbus python3-gi

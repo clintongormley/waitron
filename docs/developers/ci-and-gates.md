@@ -2680,6 +2680,8 @@ package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python
 through `scripts/image-apt-cache.sh`, using saved signed indexes and debs, the runner's
 installed-package status and `apt-get --no-download` inside a network namespace with
 no external connection. The log names the saved set and prints the installed versions.
+The three named packages already supplied by the runner stay at their installed versions
+(`--no-upgrade`); the cache supplies missing packages without downgrading a newer runner baseline.
 The workflow's text guards cannot inspect the helper; its real Linux offline probe
 is retained with A1509's review evidence.
 
