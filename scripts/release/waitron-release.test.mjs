@@ -13,6 +13,7 @@ import {
   parseVersion,
   prepareRelease,
   releasedVersions,
+  tagRelease,
 } from "./waitron-release.mjs";
 
 const SPAWN_TIMEOUT_MS = 30_000;
@@ -26,6 +27,39 @@ const LS_REMOTE = `${OTHER_SHA}\trefs/tags/v0.9.0\n${OTHER_SHA}\trefs/tags/pre-s
 const PR_BODY =
   `Adds ${FILE}, the declaration for Waitron 1.0.0, ` +
   "which the producer read and signed with `pnpm release prepare`.";
+
+const RUN_SUCCESS = '[{"status":"completed","conclusion":"success"}]\n';
+const ON_MAIN = { "git rev-parse --abbrev-ref HEAD": "main\n" };
+
+const tagPath = (version = "1.0.0") => [
+  ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+  ["git", "status", "--porcelain"],
+  ["git", "fetch", "origin", "main"],
+  ["git", "rev-parse", "HEAD"],
+  ["git", "rev-parse", "origin/main"],
+  ["git", "cat-file", "-e", `HEAD:packages/fiscal-verifactu/declarations/v${version}.md`],
+  ["pnpm", "--filter", "@waitron/fiscal-verifactu", "declaration", "check", "--version", version],
+  ["git", "ls-remote", "--tags", "origin", "refs/tags/v*"],
+  [
+    "gh",
+    "run",
+    "list",
+    "--workflow",
+    "ci.yml",
+    "--branch",
+    "main",
+    "--event",
+    "push",
+    "--commit",
+    HEAD_SHA,
+    "--json",
+    "status,conclusion",
+    "--limit",
+    "1",
+  ],
+  ["git", "tag", "-a", `v${version}`, "-m", `Waitron ${version}`],
+  ["git", "push", "origin", `v${version}`],
+];
 
 const happyPath = (version = "1.0.0", place = "Elche", date = "2026-11-11") => [
   ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -92,6 +126,7 @@ function fakeRun(answers = {}) {
     if (key === "git rev-parse HEAD" || key === "git rev-parse origin/main") return `${HEAD_SHA}\n`;
     if (key.startsWith("git ls-remote")) return LS_REMOTE;
     if (key.includes(" declaration show ")) return "THE DECLARATION TEXT\n";
+    if (key.startsWith("gh run list")) return RUN_SUCCESS;
     return "";
   };
   return { run, calls };
@@ -268,6 +303,73 @@ describe("prepareRelease", () => {
   });
 });
 
+describe("tagRelease", () => {
+  const tag = async (answers = {}) => {
+    const { run, calls } = fakeRun({ ...ON_MAIN, ...answers });
+    let error;
+    try {
+      await tagRelease({ version: "1.0.0", run });
+    } catch (caught) {
+      error = caught;
+    }
+    return { calls, error };
+  };
+  const tagged = (calls) =>
+    calls.filter(([file, command]) => file === "git" && ["tag", "push"].includes(command));
+  const runList = tagPath()[8].join(" ");
+
+  it("issues the happy path's commands in order", async () => {
+    const { calls, error } = await tag();
+    expect(error).toBeUndefined();
+    expect(calls).toEqual(tagPath());
+  });
+
+  it.each([
+    [
+      "a branch other than main",
+      { "git rev-parse --abbrev-ref HEAD": "release/1.0.0\n" },
+      /branch main/,
+      1,
+    ],
+    [
+      "a declaration file missing from HEAD",
+      { [tagPath()[5].join(" ")]: new Error("git cat-file exited with status 128") },
+      /v1\.0\.0\.md is not committed/,
+      6,
+    ],
+    [
+      "a check that exits non-zero",
+      { [tagPath()[6].join(" ")]: new Error("pnpm --filter exited with status 1") },
+      /status 1/,
+      7,
+    ],
+    [
+      "a tag that already exists",
+      { "git ls-remote --tags origin refs/tags/v*": `${OTHER_SHA}\trefs/tags/v1.0.0\n` },
+      /already released/,
+      8,
+    ],
+    [
+      "a run still in progress",
+      { [runList]: '[{"status":"in_progress","conclusion":""}]' },
+      /in_progress/,
+      9,
+    ],
+    [
+      "a run that failed",
+      { [runList]: '[{"status":"completed","conclusion":"failure"}]' },
+      /failure/,
+      9,
+    ],
+    ["no run at all", { [runList]: "[]" }, /no CI run/, 9],
+  ])("refuses %s with no tag and no push", async (_, answers, message, count) => {
+    const { calls, error } = await tag(answers);
+    expect(error?.message).toMatch(message);
+    expect(calls).toEqual(tagPath().slice(0, count));
+    expect(tagged(calls)).toEqual([]);
+  });
+});
+
 describe("main", () => {
   const deps = (overrides = {}) => {
     const { run, calls } = fakeRun();
@@ -292,9 +394,18 @@ describe("main", () => {
     expect(calls).toEqual(happyPath());
   });
 
+  it("runs tag and answers 0", async () => {
+    const { run, calls } = fakeRun(ON_MAIN);
+    const { deps: d } = deps({ run });
+    expect(await main(["tag", "1.0.0"], d)).toBe(0);
+    expect(calls).toEqual(tagPath());
+  });
+
   it.each([
     [[]],
-    [["tag", "1.0.0"]],
+    [["tag"]],
+    [["tag", "1.0.0", "2.0.0"]],
+    [["tag", "1.0.0", "--place", "Elche"]],
     [["prepare"]],
     [["prepare", "1.0.0"]],
     [["prepare", "1.0.0", "--place"]],
@@ -364,7 +475,8 @@ printf '%s' "$(basename "$0")" >> "$WT_CALLS"
 for argument in "$@"; do printf '\\037%s' "$argument" >> "$WT_CALLS"; done
 printf '\\036' >> "$WT_CALLS"
 case "$(basename "$0") $*" in
-  "git rev-parse --abbrev-ref HEAD") echo release/1.0.0 ;;
+  "git rev-parse --abbrev-ref HEAD") echo "\${WT_BRANCH:-release/1.0.0}" ;;
+  "gh run list"*) echo '[{"status":"completed","conclusion":"success"}]' ;;
   "git rev-parse HEAD"|"git rev-parse origin/main") echo ${HEAD_SHA} ;;
   "git ls-remote"*) printf '${OTHER_SHA}\\trefs/tags/v0.9.0\\n' ;;
   *" declaration show "*) echo THE DECLARATION TEXT ;;
@@ -375,35 +487,57 @@ for (const name of ["git", "gh", "pnpm"]) {
   chmodSync(join(STUB_BIN, name), 0o755);
 }
 
+function runEntryPoint(argv, extraEnv, input) {
+  const calls = join(STUB_BIN, `calls-${process.pid}`);
+  writeFileSync(calls, "");
+  const env = { ...process.env, PATH: `${STUB_BIN}:${process.env.PATH}`, WT_CALLS: calls };
+  Object.assign(env, extraEnv);
+  for (const name of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+  ]) {
+    delete env[name];
+  }
+  const result = spawnSync(
+    process.execPath,
+    [join(import.meta.dirname, "waitron-release.mjs"), ...argv],
+    {
+      env,
+      input,
+      encoding: "utf8",
+      timeout: SPAWN_TIMEOUT_MS,
+    },
+  );
+  const recorded = readFileSync(calls, "utf8")
+    .split("\u001e")
+    .filter(Boolean)
+    .map((call) => call.split("\u001f"));
+  return { result, recorded };
+}
+
 describe("the entry point", () => {
   it("runs prepare end to end through the real wrappers with yes on standard input", () => {
-    const calls = join(STUB_BIN, `calls-${process.pid}`);
-    writeFileSync(calls, "");
-    const env = { ...process.env, PATH: `${STUB_BIN}:${process.env.PATH}`, WT_CALLS: calls };
-    for (const name of [
-      "GIT_DIR",
-      "GIT_WORK_TREE",
-      "GIT_INDEX_FILE",
-      "GIT_OBJECT_DIRECTORY",
-      "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-      "GIT_COMMON_DIR",
-      "GIT_NAMESPACE",
-      "GIT_PREFIX",
-    ]) {
-      delete env[name];
-    }
-    const result = spawnSync(
-      process.execPath,
-      [join(import.meta.dirname, "waitron-release.mjs"), "prepare", "1.0.0", "--place", "Elche"],
-      { env, input: "yes\n", encoding: "utf8", timeout: SPAWN_TIMEOUT_MS },
+    const { result, recorded } = runEntryPoint(
+      ["prepare", "1.0.0", "--place", "Elche"],
+      {},
+      "yes\n",
     );
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("THE DECLARATION TEXT\n");
-    const recorded = readFileSync(calls, "utf8")
-      .split("\u001e")
-      .filter(Boolean)
-      .map((call) => call.split("\u001f"));
     expect(recorded).toEqual(happyPath("1.0.0", "Elche", madridDate(new Date())));
+  });
+
+  it("runs tag end to end through the real wrappers", () => {
+    const { result, recorded } = runEntryPoint(["tag", "1.0.0"], { WT_BRANCH: "main" }, "");
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(recorded).toEqual(tagPath());
   });
 });

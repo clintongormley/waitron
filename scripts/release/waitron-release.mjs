@@ -5,7 +5,8 @@ import { isMainScript } from "../is-main-script.mjs";
 
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const TAG = /^refs\/tags\/v((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*))$/;
-const USAGE = "usage: pnpm release prepare <version> --place <place>\n";
+const USAGE =
+  "usage: pnpm release prepare <version> --place <place>\n       pnpm release tag <version>\n";
 // The push runs the pre-push hook, which typechecks; that can take minutes.
 const COMMAND_TIMEOUT_MS = 20 * 60_000;
 
@@ -55,26 +56,36 @@ const declaration = (subcommand, version, place, date) => [
   date,
 ];
 
-export async function prepareRelease({ version, place, run, ask, now, print }) {
-  parseVersion(version);
-  const branch = `release/${version}`;
+function onCleanBranchAtOriginMain(run, branch) {
   const git = (...args) => run("git", args).trim();
-
   if (git("rev-parse", "--abbrev-ref", "HEAD") !== branch) {
     throw new Error(`run this on the branch ${branch}`);
   }
   if (git("status", "--porcelain") !== "") throw new Error("the worktree has uncommitted changes");
   git("fetch", "origin", "main");
-  if (git("rev-parse", "HEAD") !== git("rev-parse", "origin/main")) {
+  const head = git("rev-parse", "HEAD");
+  if (head !== git("rev-parse", "origin/main")) {
     throw new Error(`${branch} must point at origin/main`);
   }
+  return head;
+}
 
+function refuseUnlessNextVersion(run, version) {
   const released = releasedVersions(run("git", ["ls-remote", "--tags", "origin", "refs/tags/v*"]));
   if (released.includes(version)) throw new Error(`${version} is already released`);
   const highest = released.at(-1);
   if (highest !== undefined && compareVersions(version, highest) <= 0) {
     throw new Error(`${version} is not above ${highest}, the highest released version`);
   }
+}
+
+const declarationFile = (version) => `packages/fiscal-verifactu/declarations/v${version}.md`;
+
+export async function prepareRelease({ version, place, run, ask, now, print }) {
+  parseVersion(version);
+  const branch = `release/${version}`;
+  onCleanBranchAtOriginMain(run, branch);
+  refuseUnlessNextVersion(run, version);
 
   const date = madridDate(now);
   print(run("pnpm", declaration("show", version, place, date)));
@@ -82,7 +93,7 @@ export async function prepareRelease({ version, place, run, ask, now, print }) {
   if (answer.trim() !== "yes")
     throw new Error("the declaration was not signed; nothing was written");
 
-  const file = `packages/fiscal-verifactu/declarations/v${version}.md`;
+  const file = declarationFile(version);
   run("pnpm", declaration("write", version, place, date));
   run("git", ["add", file]);
   run("git", ["commit", "-s", "-m", `Release ${version}`]);
@@ -98,6 +109,53 @@ export async function prepareRelease({ version, place, run, ask, now, print }) {
     `Adds ${file}, the declaration for Waitron ${version}, ` +
       "which the producer read and signed with `pnpm release prepare`.",
   ]);
+}
+
+export async function tagRelease({ version, run }) {
+  parseVersion(version);
+  const head = onCleanBranchAtOriginMain(run, "main");
+  const file = declarationFile(version);
+  try {
+    run("git", ["cat-file", "-e", `HEAD:${file}`]);
+  } catch {
+    throw new Error(`${file} is not committed on main; land the release pull request first`);
+  }
+  run("pnpm", [
+    "--filter",
+    "@waitron/fiscal-verifactu",
+    "declaration",
+    "check",
+    "--version",
+    version,
+  ]);
+  refuseUnlessNextVersion(run, version);
+
+  const runs = JSON.parse(
+    run("gh", [
+      "run",
+      "list",
+      "--workflow",
+      "ci.yml",
+      "--branch",
+      "main",
+      "--event",
+      "push",
+      "--commit",
+      head,
+      "--json",
+      "status,conclusion",
+      "--limit",
+      "1",
+    ]),
+  );
+  if (runs.length !== 1) throw new Error(`no CI run on main for ${head}`);
+  const [{ status, conclusion }] = runs;
+  if (status !== "completed" || conclusion !== "success") {
+    throw new Error(`main's CI run for ${head} is ${status}, ${conclusion || "no conclusion"}`);
+  }
+
+  run("git", ["tag", "-a", `v${version}`, "-m", `Waitron ${version}`]);
+  run("git", ["push", "origin", `v${version}`]);
 }
 
 // Standard error is inherited so a refusal's own words reach the signer; the error thrown here never
@@ -139,15 +197,17 @@ const NODE_DEPS = {
 
 function parse(argv) {
   const [command, ...rest] = argv;
-  if (command !== "prepare") return null;
+  if (command !== "prepare" && command !== "tag") return null;
   try {
     const { values, positionals } = parseArgs({
       args: rest,
       allowPositionals: true,
-      options: { place: { type: "string" } },
+      options: command === "prepare" ? { place: { type: "string" } } : {},
     });
-    if (positionals.length !== 1 || values.place === undefined) return null;
-    return { version: positionals[0], place: values.place };
+    if (positionals.length !== 1) return null;
+    if (command === "tag") return { release: tagRelease, version: positionals[0] };
+    if (values.place === undefined) return null;
+    return { release: prepareRelease, version: positionals[0], place: values.place };
   } catch {
     return null;
   }
@@ -160,7 +220,8 @@ export async function main(argv, deps = NODE_DEPS) {
     return 1;
   }
   try {
-    await prepareRelease({ ...args, ...deps, now: deps.now() });
+    const { release, ...inputs } = args;
+    await release({ ...inputs, ...deps, now: deps.now() });
     return 0;
   } catch (error) {
     deps.printError(`release: ${error.message}\n`);
