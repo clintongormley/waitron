@@ -104,6 +104,11 @@ describe("dashboard-overview-screen", () => {
       const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
       await flush(el);
       const root = el.shadowRoot!;
+      expect(
+        [...root.querySelectorAll('[data-test^="department-row-"]')].map((row) =>
+          row.getAttribute("data-test"),
+        ),
+      ).toEqual(["department-row-old-bar", "department-row-unallocated"]);
       const row = root.querySelector('[data-test="department-row-unallocated"]');
       expect(row).not.toBeNull();
       const values = [...row!.querySelectorAll("td")].map((td) => td.textContent?.trim());
@@ -127,6 +132,9 @@ describe("dashboard-overview-screen", () => {
     const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
     await flush(el);
     expect(api.getSalesOverview).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector('[data-test="departments-empty"]')?.textContent).toContain(
+      "No hay cobros",
+    );
     const root = el.shadowRoot!;
     expect(root.querySelector("[data-test=gross-total]")!.textContent).toBe("1279,50\u00a0€");
     expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("1234,50\u00a0€");

@@ -1,12 +1,18 @@
-import { css, html } from "lit";
+import { css, html, nothing } from "lit";
 import { formatMoney } from "@waitron/shared";
 import type { DepartmentTakingsDto } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 
 export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {
   const money = (value: string) => formatMoney(value, currentLocale());
+  const sorted = [...rows].sort((a, b) => {
+    if (a.departmentId === null) return b.departmentId === null ? 0 : 1;
+    if (b.departmentId === null) return -1;
+    return (a.departmentName ?? "").localeCompare(b.departmentName ?? "", currentLocale());
+  });
   return html` <h2>${t("reports.by_department")}</h2>
     <p class="muted" data-test="department-note">${t("reports.department_note")}</p>
+    ${rows.length === 0 ? html`<p class="muted" data-test="departments-empty">${t("reports.departments_empty")}</p>` : nothing}
     <div
       class="department-takings"
       role="region"
@@ -24,7 +30,7 @@ export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {
           </tr>
         </thead>
         <tbody>
-          ${rows.map((row) => {
+          ${sorted.map((row) => {
             const amount = (method: string) =>
               money(row.byMethod.find((line) => line.method === method)?.amount ?? "0.00");
             return html`<tr data-test=${`department-row-${row.departmentId ?? "unallocated"}`}>

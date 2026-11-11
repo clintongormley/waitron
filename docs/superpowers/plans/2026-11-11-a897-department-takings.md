@@ -11,6 +11,10 @@ Owner, 2026-11-11 14:01: "is the total per venue or per department? i don't care
 Author: Codex. Claude read the draft (223 seconds); findings applied. Watcher 2026-11-11 14:35 required storing department figures in the close and directed no further read. No owner approval of this approach is claimed.
 Watcher 2026-11-11 19:52 cleared build after #2819 landed at `8c085bc57a50656827e29efc781280455eaa09ca`. The owner answer and dependency conditions are met. The driver rebased this plan onto main before build. Visible wording is **Deferred payment / Pago aplazado**.
 
+## Later review direction, 2026-11-11 22:09
+
+Both built reviews questioned the saved/live reader because no production route records a daily close yet. The owner answered through the watcher: “we're building towards proper reporting. just rejecting all steps along the way seems counterproductive”. The watcher withdrew its 22:08 removal note and directed keeping the 21:40 reader, testing merged tips, and recording the later-write question in the close-day backlog. This is the owner's direction to retain that step, not a claim that the owner approved the full plan. The one fresh read of fixes follows; no new whole-branch wave.
+
 ## Smallest usable finish line
 
 On Takings today and the Sales daily report, retain venue totals and add one By department table for cash, card, Deferred payment, and both the count and value of bills closed. Combine tills within each department; keep the existing Sales tender-by-device table. Retain existing received-money and tip figures without adding a separate tip breakdown.

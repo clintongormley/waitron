@@ -1,8 +1,7 @@
 import type { Transaction } from "@waitron/db";
 import { validateBusinessDay, validateCutover, validateTimeZone } from "./business-day.js";
-import { decimal } from "@waitron/shared";
 import { computeDepartmentClosedBills } from "./closed-bills.js";
-import { computeCashUp, computeDepartmentCashUp } from "./cash-up.js";
+import { computeCashUp } from "./cash-up.js";
 import { computeCloseCounts } from "./counts.js";
 import { computeVatSummary } from "./vat-summary.js";
 import type { DailyClose, DailyCloseInput, DepartmentTakings } from "./types.js";
@@ -24,26 +23,19 @@ export async function computeDailyClose(
 
   // Awaited in turn on the one transaction, never `Promise.all` (docs/developers/conventions-data.md).
   const vat = await computeVatSummary(tx, input);
-  const cash = await computeCashUp(tx, input);
+  const { cash, departmentTakings } = await computeCashUp(tx, input);
   const counts = await computeCloseCounts(tx, input);
-  const departmentCash = await computeDepartmentCashUp(tx, input);
   const departmentBills = await computeDepartmentClosedBills(tx, input);
-  const departments = new Map<string | null, DepartmentTakings>();
-  for (const { line, ...department } of departmentCash) {
-    let row = departments.get(department.departmentId);
-    if (row === undefined) {
-      row = { ...department, byMethod: [], billsClosed: { count: 0, total: decimal("0.00") } };
-      departments.set(department.departmentId, row);
-    }
-    row.byMethod.push(line);
-  }
+  const departments = new Map<string | null, DepartmentTakings>(
+    departmentTakings.map((row) => [row.departmentId, row]),
+  );
   for (const department of departmentBills) {
     const row = departments.get(department.departmentId);
     if (row === undefined)
       departments.set(department.departmentId, { ...department, byMethod: [] });
     else row.billsClosed = department.billsClosed;
   }
-  const departmentTakings = [...departments.values()].sort(
+  const sortedDepartments = [...departments.values()].sort(
     (a, b) =>
       Number((a.departmentId ?? "") > (b.departmentId ?? "")) -
       Number((a.departmentId ?? "") < (b.departmentId ?? "")),
@@ -56,6 +48,6 @@ export async function computeDailyClose(
     vat,
     cash,
     counts,
-    departmentTakings,
+    departmentTakings: sortedDepartments,
   };
 }

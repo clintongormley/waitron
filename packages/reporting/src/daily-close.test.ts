@@ -98,7 +98,7 @@ describe("computeDailyClose", () => {
       { saleId: sale },
       {
         method: "cash",
-        amount: "42.00",
+        amount: "37.00",
         tipAmount: "2.00",
         settledAt: at,
         billPaymentId: payment,

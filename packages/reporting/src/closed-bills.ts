@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import { rawCentsToDecimal } from "@waitron/shared";
+import { addDecimal, decimal, rawCentsToDecimal } from "@waitron/shared";
 import { businessDayWindow, nodeScopeClause } from "./business-day.js";
 import type { ClosedBills, DailyCloseInput } from "./types.js";
 
@@ -8,12 +8,14 @@ export async function computeClosedBills(
   tx: Transaction,
   input: DailyCloseInput,
 ): Promise<ClosedBills> {
-  const { rows } = await tx.execute<{ count: number; total: string }>(sql`
-    select count(*) as count, cast(coalesce(sum(s.total), 0) as text) as total
-    from (${settledBills(input)}) s
-  `);
-  const row = rows[0]!;
-  return { count: Number(row.count), total: rawCentsToDecimal(row.total) };
+  const rows = await computeDepartmentClosedBills(tx, input);
+  return rows.reduce(
+    (total, row) => ({
+      count: total.count + row.billsClosed.count,
+      total: addDecimal(total.total, row.billsClosed.total),
+    }),
+    { count: 0, total: decimal("0.00") },
+  );
 }
 
 export async function computeDepartmentClosedBills(tx: Transaction, input: DailyCloseInput) {
