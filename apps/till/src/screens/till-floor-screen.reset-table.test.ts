@@ -692,6 +692,7 @@ describe("till-floor-screen: Reset table's refusals name the tables", () => {
 
   it("a named refusal shows at the window's foot, and moves to the floor when the window closes", async () => {
     const api = stubApi();
+    // Simulate another till seating Counter 5 after this read.
     api.resetTableToday.mockRejectedValueOnce({
       code: "joined_table.tables_in_group",
       status: 409,
