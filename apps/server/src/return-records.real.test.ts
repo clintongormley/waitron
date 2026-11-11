@@ -232,16 +232,14 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
 
   const [filingCase] = await withTransaction(current.db, listFilingCases);
   expect(filingCase).toMatchObject({ cause: "fiscal.registro_rechazado", status: "open" });
-  await current.db
-    .insert(tenders)
-    .values({
-      id: "later-main-tip",
-      saleId,
-      method: "cash",
-      amount: 1,
-      tipAmount: 1,
-      settledAt: now.toISOString(),
-    });
+  await current.db.insert(tenders).values({
+    id: "later-main-tip",
+    saleId,
+    method: "cash",
+    amount: 1,
+    tipAmount: 1,
+    settledAt: now.toISOString(),
+  });
   expect(await send()).toBe("clash");
   const currentListing = (await (
     await app.request("/management-api/return-clashes", {
