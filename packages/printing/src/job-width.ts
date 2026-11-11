@@ -15,13 +15,16 @@ const FIXED: ReadonlyMap<number, number> = new Map([
 ]);
 
 /**
- * The offsets of every `GS L` and the width of every `GS W`, walking command by command so image
- * and `GS ( k` data is stepped over; null for anything `EscBuilder` does not send or a command cut
- * short by the end.
+ * The print area a printout was laid out for, walking command by command so image and `GS ( k`
+ * data is stepped over: its width, read from its own `GS W`, and a copy whose every `GS L` centres
+ * it on a wider printer. Null for anything `EscBuilder` does not send, a command cut short by the
+ * end, or unless every `GS W` names one width.
  */
-function walk(payload: Uint8Array): { margins: number[]; widths: number[] } | null {
+export function printArea(
+  payload: Uint8Array,
+): { widthDots: number; centredOn: (printerDots: number) => Uint8Array } | null {
   const margins: number[] = [];
-  const widths: number[] = [];
+  const widths = new Set<number>();
   const at = (i: number): number => payload[i] ?? 0;
   let offset = 0;
   while (offset < payload.length) {
@@ -35,34 +38,40 @@ function walk(payload: Uint8Array): { margins: number[]; widths: number[] } | nu
     }
     if (length === undefined || offset + length > payload.length) return null;
     if (command === GS_L) margins.push(offset);
-    if (command === GS_W) widths.push(at(offset + 2) | (at(offset + 3) << 8));
+    if (command === GS_W) widths.add(at(offset + 2) | (at(offset + 3) << 8));
     offset += length;
   }
-  return { margins, widths };
+  if (widths.size !== 1) return null;
+  const [widthDots] = widths;
+  return {
+    widthDots,
+    centredOn: (printerDots) => {
+      if (widthDots > printerDots) {
+        throw new RangeError(
+          `a printout ${widthDots} dots wide cannot be centred on ${printerDots} dots`,
+        );
+      }
+      const margin = Math.floor((printerDots - widthDots) / 2);
+      const centred = payload.slice();
+      for (const position of margins) {
+        centred[position + 2] = margin & 0xff;
+        centred[position + 3] = margin >> 8;
+      }
+      return centred;
+    },
+  };
 }
 
-/**
- * The print area's width in dots that a printout was laid out for, read from its own `GS W`; null
- * unless every `GS W` names one width. Works on the first ten bytes alone.
- */
+/** The print area's width in dots that a printout was laid out for; see {@link printArea}. */
 export function jobWidthDots(payload: Uint8Array): number | null {
-  const found = walk(payload);
-  if (found === null || found.widths.length === 0) return null;
-  const [width] = found.widths;
-  return found.widths.every((each) => each === width) ? width! : null;
+  return printArea(payload)?.widthDots ?? null;
 }
 
 /** A copy whose every `GS L` centres the printout's width on a printer `printerDots` wide. */
 export function centredForPrinter(payload: Uint8Array, printerDots: number): Uint8Array {
-  const width = jobWidthDots(payload);
-  if (width === null || width > printerDots) {
-    throw new RangeError(`a printout ${width} dots wide cannot be centred on ${printerDots} dots`);
+  const area = printArea(payload);
+  if (area === null) {
+    throw new RangeError(`a printout of unknown width cannot be centred on ${printerDots} dots`);
   }
-  const margin = Math.floor((printerDots - width) / 2);
-  const centred = payload.slice();
-  for (const offset of walk(payload)!.margins) {
-    centred[offset + 2] = margin & 0xff;
-    centred[offset + 3] = margin >> 8;
-  }
-  return centred;
+  return area.centredOn(printerDots);
 }
