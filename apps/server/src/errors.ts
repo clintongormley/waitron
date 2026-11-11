@@ -1379,8 +1379,8 @@ declare module "@waitron/shared" {
      * same object was still in flight; the second is refused rather than allowed to interleave its
      * teardown with the first. */
     "backup.reload_in_progress": Record<string, never>;
-    /** Start the copy again was asked while another box writes this venue's copy to the same
-     * bucket (`pointer_changed`, `pointer_newer_term`); this box will not copy over it. */
+    /** Start the copy again was asked while the copy is refused because another box was found
+     * writing this venue's copy to the same bucket (`pointer_changed`, `pointer_newer_term`). */
     "backup.stream_held_by_another_box": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted

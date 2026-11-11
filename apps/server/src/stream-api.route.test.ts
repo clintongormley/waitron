@@ -254,6 +254,7 @@ describe("stream settings routes", () => {
       ["PUT", "/api/backup/stream"],
       ["POST", "/api/backup/stream/test"],
       ["DELETE", "/api/backup/stream"],
+      ["POST", "/api/backup/stream/restart"],
     ] as const) {
       const res = await app.request(path, { method });
       expect(res.status).toBe(401);
@@ -1085,6 +1086,15 @@ describe("stream settings routes", () => {
   describe("starting the bucket copy again", () => {
     const STOPPED: StreamStatus = { ...STREAMING, state: "off", reason: "supervisor_failed" };
 
+    async function storeBucketSettings(): Promise<void> {
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: STREAM_PURPOSE,
+          value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+        }),
+      );
+    }
+
     it("refuses without a manager session", async () => {
       const { app, reload } = harness();
       const res = await app.request("/api/backup/stream/restart", { method: "POST" });
@@ -1094,38 +1104,62 @@ describe("stream settings routes", () => {
     });
 
     it("restarts a copy that stopped by itself and answers the new view", async () => {
-      let status: StreamStatus = STOPPED;
-      const reload = vi.fn(async () => {
-        status = STREAMING;
-      });
-      const { app } = harness({ stream: { reload, status: () => status } });
-      const cookie = await login(app);
-      const res = await app.request("/api/backup/stream/restart", {
-        method: "POST",
-        headers: { cookie },
-      });
-      expect(res.status).toBe(200);
-      expect(await res.json()).toMatchObject({ status: { state: "streaming", reason: null } });
-      expect(reload).toHaveBeenCalledOnce();
-    });
-
-    it.each(["pointer_changed", "pointer_newer_term"])(
-      "will not start copying over another box's copy (%s)",
-      async (reason) => {
-        const reload = vi.fn(async () => {});
-        const { app } = harness({
-          stream: { reload, status: () => ({ ...STREAMING, state: "refused", reason }) },
+      await storeBucketSettings();
+      try {
+        let status: StreamStatus = STOPPED;
+        const reload = vi.fn(async () => {
+          status = STREAMING;
         });
+        const { app } = harness({ stream: { reload, status: () => status } });
         const cookie = await login(app);
         const res = await app.request("/api/backup/stream/restart", {
           method: "POST",
           headers: { cookie },
         });
-        expect(res.status).toBe(409);
-        expect(await res.json()).toMatchObject({
-          error: { code: "backup.stream_held_by_another_box" },
-        });
-        expect(reload).not.toHaveBeenCalled();
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ status: { state: "streaming", reason: null } });
+        expect(reload).toHaveBeenCalledOnce();
+      } finally {
+        await clearBucket();
+      }
+    });
+
+    it("is refused when no bucket copy is set up", async () => {
+      await clearBucket();
+      const reload = vi.fn(async () => {});
+      const { app } = harness({ stream: { reload, status: () => ({ state: "off" }) } });
+      const cookie = await login(app);
+      const res = await app.request("/api/backup/stream/restart", {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.stream_not_configured" } });
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it.each(["pointer_changed", "pointer_newer_term"])(
+      "will not start copying over another box's copy (%s)",
+      async (reason) => {
+        await storeBucketSettings();
+        try {
+          const reload = vi.fn(async () => {});
+          const { app } = harness({
+            stream: { reload, status: () => ({ ...STREAMING, state: "refused", reason }) },
+          });
+          const cookie = await login(app);
+          const res = await app.request("/api/backup/stream/restart", {
+            method: "POST",
+            headers: { cookie },
+          });
+          expect(res.status).toBe(409);
+          expect(await res.json()).toMatchObject({
+            error: { code: "backup.stream_held_by_another_box" },
+          });
+          expect(reload).not.toHaveBeenCalled();
+        } finally {
+          await clearBucket();
+        }
       },
     );
 

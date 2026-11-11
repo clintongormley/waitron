@@ -264,6 +264,11 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       guardPrimary();
       return deps.turns(async () => {
         guardPrimary();
+        // No stored row is what `view()` answers as `configured: false`.
+        const revision = await withTransaction(deps.db, (tx) =>
+          credentialRevision(tx, { purpose: STREAM_PURPOSE }),
+        );
+        if (revision === null) throw new AppError("backup.stream_not_configured", {});
         const status = deps.stream.status();
         if (
           status.state === "refused" &&

@@ -42,7 +42,7 @@ referrals, not completed recovery experiments.
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
 | [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
-| [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Host-configuration diagnosis, restart and ownership choices remain open, with authentication and evidence before resuming a primary. |
+| [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Start the copy again (A1089 B1) restarts a copy that stopped or could not start. Host-configuration diagnosis, reason-specific guidance for a stopped copy and ownership choices remain open, with authentication and evidence before resuming a primary. |
 | [Sealed state](#backup-state) | Expose the safe cause and a correction/retry choice; show whether the key copy was refreshed. |
 | [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
 | [Restored first start](#restore-start) | Preserve the completion refusal and offer a specific correction when restart fails again. |
@@ -151,7 +151,7 @@ State: The stream is absent, refused, or stopped for a reported reason such as l
 
 Route: Existing: saving or removing stream settings calls reload. Missing: an explicit supported restart/retry action and reason-specific guidance; changing a healthy setting just to trigger a reload is not a documented recovery procedure. See apps/server/src/stream-api.ts:232 and :260.
 
-_2026-11-11, A1089 B1: the words no longer say to contact support. Backups now shows Start the copy again while the copy is off for a reason other than a first start waiting after a restore (`POST /api/backup/stream/restart`, which reloads the copy with its saved settings and refuses with `backup.stream_held_by_another_box` while another box writes this venue's copy to the same bucket). The alert says to press it, and if the copy stops again, to choose Change bucket and press Test. Still open: the Backups page shows only "Not running", not the reason the copy stopped, so reason-specific guidance is still missing, and a copy that keeps stopping with a bucket that passes Test has no further remedy. The rest of this entry records the earlier tree._
+_2026-11-11, A1089 B1: the words no longer say to contact support. Backups now shows Start the copy again whenever the box raises `backup.stream_stopped` (`POST /api/backup/stream/restart`, which reloads the copy with its saved settings and refuses with `backup.stream_held_by_another_box` once another box was found writing this venue's copy to the same bucket). The alert says to press it, and if the copy stops again, to choose Change bucket and press Test. Still open: the Backups page shows only "Not running", not the reason the copy stopped, so reason-specific guidance is still missing, and a copy that keeps stopping with a bucket that passes Test has no further remedy. The rest of this entry records the earlier tree._
 
 ### `backup.sealed_state_failed`
 
@@ -819,9 +819,9 @@ or show that replacing settings repairs every configuration failure.
 limit. Add authenticated diagnosis and the applicable correction separately; do not discard keys
 or existing backup files.
 
-**A stopped or refused bucket stream still needs restart or ownership choices.** Distinguish an
+**A refused bucket stream needs ownership choices, and a stopped one reason-specific guidance.**
+Start the copy again (A1089 B1) restarts a stopped copy with its saved settings. Distinguish an
 unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary.
-Offer any required sign-in there and build a missing restart/ownership workflow separately.
 
 ### backup-state
 

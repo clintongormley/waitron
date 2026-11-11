@@ -99,10 +99,22 @@ function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
 }
 
-/** The states the server raises `backup.stream_stopped` for, bar a refusal: a first start deferred
- * after a restore (`FIRST_START_PENDING`, `apps/server/src/stream-host.ts`) is not a stop. */
+const EXPLAINED_REFUSALS: ReadonlySet<string | null> = new Set([
+  "pointer_changed",
+  "pointer_newer_term",
+  "config_unsafe",
+]);
+const STOPPED_BY_ITSELF: ReadonlySet<string | null> = new Set([
+  "supervisor_failed",
+  "litestream_unavailable",
+]);
+
+/** Mirrors when `streamAlerts` (`apps/server/src/alert-sources.ts`) raises `backup.stream_stopped`. */
 function stoppedByItself(status: StreamStatusView): boolean {
-  return status.state === "off" && "reason" in status && status.reason !== "first_start_pending";
+  if (!("reason" in status) || status.reason === "first_start_pending") return false;
+  if (!("lagMs" in status)) return true;
+  if (status.state === "refused") return !EXPLAINED_REFUSALS.has(status.reason);
+  return status.state === "off" && STOPPED_BY_ITSELF.has(status.reason);
 }
 
 function stateKey(status: StreamStatusView): StringKey {
@@ -546,6 +558,17 @@ export class StreamSettingsPanel extends LitElement {
         !s.configured || this.editing
           ? this.#renderForm(s.configured)
           : html`<div class="actions">
+              ${
+                stoppedByItself(s.status)
+                  ? html`<wt-button
+                      variant="primary"
+                      data-test="restart"
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#restart()}
+                      >${t("stream.restart")}</wt-button
+                    >`
+                  : nothing
+              }
               <wt-button variant="secondary" data-test="change" @click=${() => this.#startEdit()}
                 >${t("stream.change")}</wt-button
               >
@@ -577,19 +600,6 @@ export class StreamSettingsPanel extends LitElement {
             : nothing
         }
       </dl>
-      ${
-        stoppedByItself(status)
-          ? html`<div class="actions">
-              <wt-button
-                variant="primary"
-                data-test="restart"
-                ?disabled=${this.busy}
-                @click=${() => void this.#restart()}
-                >${t("stream.restart")}</wt-button
-              >
-            </div>`
-          : nothing
-      }
     `;
   }
 
