@@ -130,6 +130,42 @@ const remembered = new RememberedAnswers();
 const askVenueNetwork: BoxLookup = (hostname, { fresh }) =>
   lookupBoxName(hostname, { remembered, fresh });
 
+/**
+ * The address at which a connection to a box's name last finished its handshake under the
+ * authority pinned for it. Process memory only: after a restart nothing counts as reached until a
+ * call reaches the box again.
+ */
+export class CheckedAddresses {
+  private readonly reached = new Map<string, string>();
+
+  recall(key: string): string | undefined {
+    return this.reached.get(key);
+  }
+
+  keep(key: string, address: string): void {
+    this.reached.set(key, address);
+  }
+}
+
+const checkedByDefault = new CheckedAddresses();
+
+/**
+ * A failed call that tried the address `CheckedAddresses` remembered for the name first and
+ * reached no address's TCP connection at all, that one included.
+ */
+export class CheckedAddressUnreached extends Error {
+  constructor(cause: unknown) {
+    super("the address last checked was not reached", { cause });
+  }
+}
+
+/** Remembering applies only to an https host, a name or a literal address, under a pinned authority. */
+function checkedKey(url: URL, host: string, trust: BoxTrust): string | undefined {
+  if (url.protocol !== "https:") return undefined;
+  if (trust.ca === undefined || trust.rejectUnauthorized !== true) return undefined;
+  return JSON.stringify([host.toLowerCase(), url.port, [trust.ca].flat().map(String)]);
+}
+
 // An address still short of its handshake after this is passed over when another try follows it;
 // the last try has whatever remains of the call's own limit.
 const HANDSHAKE_LIMIT_MS = 2_000;
@@ -142,8 +178,12 @@ interface BoxRequest {
   /** Milliseconds a connection may carry no byte before it is a failure. */
   silenceLimitMs?: number;
   lookup?: BoxLookup;
+  /** This process's own with the default lookup; with a lookup the caller names, kept for this call only. */
+  checked?: CheckedAddresses;
   /** TCP connection, before any TLS handshake or response. */
   onConnected?: () => void;
+  /** A handshake finished at `address`, under the pinned authority when there is one. */
+  onHandshake?: (address: string) => void;
 }
 
 /** Thrown when a connection failed before its handshake finished, so another address may be tried. */
@@ -197,9 +237,11 @@ function openAt(
         if (socket.connecting) socket.once("connect", onConnected);
         else onConnected();
       }
+      // Under `rejectUnauthorized`, Node emits `secureConnect` only for a certificate it accepted.
       socket.once(https ? "secureConnect" : "connect", () => {
         connected = true;
         clearTimeout(handshakeTimer);
+        options.onHandshake?.(address);
       });
     });
     req.on("timeout", () => req.destroy(new Error("no bytes in time")));
@@ -226,15 +268,19 @@ async function untilStopped<T>(work: () => Promise<T>, signal: AbortSignal): Pro
   }
 }
 
-/** Tries each address in turn; `NotConnected` carries the last failure when none connected. */
+/**
+ * Tries each address in turn; `NotConnected` carries the last failure when none connected, or
+ * `earlier` when there was no address to try.
+ */
 async function firstToConnect(
   url: URL,
   host: string,
   addresses: readonly string[],
   options: BoxRequest,
   anotherTryFollows: boolean,
+  earlier: unknown = new Error("no address"),
 ): Promise<IncomingMessage> {
-  let failure: unknown = new Error("no address");
+  let failure = earlier;
   for (const [index, address] of addresses.entries()) {
     const followed = anotherTryFollows || index < addresses.length - 1;
     try {
@@ -249,23 +295,69 @@ async function firstToConnect(
 
 /**
  * Sends the request on the first connection to finish its handshake. Under a pinned authority only
- * a server holding a certificate that authority issued for the name finishes one; a call that
- * checks no certificate goes to whichever server finishes first.
+ * a server holding a certificate that authority issued for the name finishes one, and the address
+ * last checked that way is tried before any the network answers with; a call that checks no
+ * certificate goes to whichever server finishes first.
  */
 async function openBoxRequest(url: URL, options: BoxRequest): Promise<IncomingMessage> {
-  const { signal } = options;
   const host = url.hostname.replace(/^\[|\]$/g, "");
+  const checked =
+    options.checked ?? (options.lookup === undefined ? checkedByDefault : new CheckedAddresses());
+  const key = checkedKey(url, host, options.trust);
+  const known = key === undefined ? undefined : checked.recall(key);
+  let reachedTcp = false;
+  const tracked: BoxRequest = {
+    ...options,
+    onConnected: () => {
+      reachedTcp = true;
+      options.onConnected?.();
+    },
+    ...(key === undefined ? {} : { onHandshake: (address) => checked.keep(key, address) }),
+  };
+  try {
+    return await openByName(url, host, tracked, known);
+  } catch (error) {
+    if (known !== undefined && !reachedTcp) throw new CheckedAddressUnreached(error);
+    throw error;
+  }
+}
+
+async function openByName(
+  url: URL,
+  host: string,
+  options: BoxRequest,
+  known: string | undefined,
+): Promise<IncomingMessage> {
+  const { signal } = options;
   const lookup = options.lookup ?? askVenueNetwork;
+  let failure: unknown = new Error("no address");
+  if (known !== undefined) {
+    try {
+      return await firstToConnect(url, host, [known], options, isIP(host) === 0);
+    } catch (error) {
+      if (!(error instanceof NotConnected)) throw error;
+      failure = error.failure;
+    }
+  }
+  const unknown = (addresses: readonly string[]) => addresses.filter((a) => a !== known);
   const first = await untilStopped(() => lookup(host, { fresh: false }), signal);
   try {
-    return await firstToConnect(url, host, first.addresses, options, first.remembered);
+    return await firstToConnect(
+      url,
+      host,
+      unknown(first.addresses),
+      options,
+      first.remembered,
+      failure,
+    );
   } catch (error) {
     if (!(error instanceof NotConnected)) throw error;
     if (!first.remembered) throw error.failure;
+    failure = error.failure;
   }
   const again = await untilStopped(() => lookup(host, { fresh: true }), signal);
   try {
-    return await firstToConnect(url, host, again.addresses, options, false);
+    return await firstToConnect(url, host, unknown(again.addresses), options, false, failure);
   } catch (error) {
     throw error instanceof NotConnected ? error.failure : error;
   }
@@ -284,6 +376,7 @@ export async function boxExchange(
     signal: AbortSignal;
     body?: string;
     lookup?: BoxLookup;
+    checked?: CheckedAddresses;
     /** TCP connection, before any TLS handshake or response. */
     onConnected?: () => void;
   },

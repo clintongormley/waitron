@@ -29,6 +29,8 @@ import {
   boxExchange,
   fetchMirrorBundle,
   fetchPrimaryCertificate,
+  CheckedAddresses,
+  CheckedAddressUnreached,
   type BoxLookup,
 } from "./mirror-bundle-fetch.js";
 import {
@@ -1171,6 +1173,176 @@ describe("a box named on the venue's network is found by asking it", () => {
         lookup: () => Promise.reject(refused),
       }),
     ).rejects.toBe(refused);
+  });
+
+  describe("the address this box last reached the other box at under its pinned authority", () => {
+    const refused = () => Promise.reject(new AppError("mirror.peer_unresolved", {}));
+    const fresh = (...addresses: string[]) => ({ addresses, remembered: false });
+    const switchOff = async (box: BoxServer) => {
+      closers.splice(closers.indexOf(box.close), 1);
+      await box.close();
+    };
+
+    /** One GET to `box`'s port under `trust`, remembering checked addresses in `checked`. */
+    const call = (
+      box: BoxServer | string,
+      checked: CheckedAddresses,
+      lookup: BoxLookup,
+      trust: { ca?: string; rejectUnauthorized: boolean } = pinned(named),
+      timeoutMs = 5_000,
+    ) =>
+      boxExchange(new URL(`https://${NAME}:${typeof box === "string" ? box : portOf(box)}/x`), {
+        method: "GET",
+        trust,
+        signal: AbortSignal.timeout(timeoutMs),
+        lookup,
+        checked,
+      });
+    const failureOf = (promise: Promise<unknown>) =>
+      promise.then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    it("is tried first next time, before the network is asked", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const lookup = vi.fn<BoxLookup>(() => Promise.resolve(fresh("::1")));
+
+      await expect(call(box, checked, lookup)).resolves.toEqual({
+        status: 200,
+        text: "answered",
+      });
+      expect(lookup).not.toHaveBeenCalled();
+      expect(box.requests).toHaveLength(2);
+    });
+
+    it("is tried when nobody answers for the name, and its failure says so", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+
+      const failure = await failureOf(call(port, checked, refused));
+      expect(failure).toBeInstanceOf(CheckedAddressUnreached);
+    });
+
+    it("its failure, then a claimed address that refuses too, still says the checked address was not reached", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+      const lookup = vi.fn<BoxLookup>(() => Promise.resolve(fresh("::1")));
+
+      expect(await failureOf(call(port, checked, lookup))).toBeInstanceOf(CheckedAddressUnreached);
+      expect(lookup).toHaveBeenCalled();
+    });
+
+    it("its failure does not count when a claimed address accepted the connection", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+      let accepted = 0;
+      await onIpv6Loopback(
+        createTcpServer(() => accepted++),
+        Number(port),
+      );
+
+      const failure = await failureOf(
+        call(port, checked, () => Promise.resolve(fresh("::1")), pinned(named), 500),
+      );
+      expect(accepted).toBe(1);
+      expect(failure).toBeDefined();
+      expect(failure).not.toBeInstanceOf(CheckedAddressUnreached);
+    });
+
+    it("a failure with no checked address remembered never says one was not reached", async () => {
+      const box = await serve(named);
+      const port = portOf(box);
+      await switchOff(box);
+
+      for (const lookup of [refused, () => Promise.resolve(fresh("127.0.0.1"))]) {
+        const failure = await failureOf(call(port, new CheckedAddresses(), lookup));
+        expect(failure).toBeDefined();
+        expect(failure).not.toBeInstanceOf(CheckedAddressUnreached);
+      }
+    });
+
+    it("is not taken from a connection whose certificate the pinned authority refused", async () => {
+      const nameless = await serve(unnamed);
+      const port = portOf(nameless);
+      const checked = new CheckedAddresses();
+      await expect(
+        call(nameless, checked, () => Promise.resolve(fresh("127.0.0.1")), pinned(unnamed)),
+      ).rejects.toMatchObject({ code: "ERR_TLS_CERT_ALTNAME_INVALID" });
+      await switchOff(nameless);
+
+      const failure = await failureOf(call(port, checked, refused, pinned(unnamed)));
+      expect(failure).not.toBeInstanceOf(CheckedAddressUnreached);
+      expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("counts only under the authority that checked it", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+
+      expect(await failureOf(call(port, checked, refused, pinned(unnamed)))).toMatchObject({
+        code: "mirror.peer_unresolved",
+      });
+      expect(await failureOf(call(port, checked, refused))).toBeInstanceOf(CheckedAddressUnreached);
+    });
+
+    it.each([
+      ["no authority", () => ({ rejectUnauthorized: false })],
+      ["an authority it does not insist on", (ca: string) => ({ ca, rejectUnauthorized: false })],
+    ])("is never kept by a call under %s", async (_label, trustIn) => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      const unchecked = trustIn(named.caPem);
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")), unchecked);
+      const port = portOf(box);
+      await switchOff(box);
+
+      const failure = await failureOf(call(port, checked, refused, unchecked));
+      expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("is not used by a call that checks no certificate", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+
+      const failure = await failureOf(call(port, checked, refused, { rejectUnauthorized: false }));
+      expect(failure).toMatchObject({ code: "mirror.peer_unresolved" });
+    });
+
+    it("is passed over for a duplicate the network answers with", async () => {
+      const box = await serve(named);
+      const checked = new CheckedAddresses();
+      await call(box, checked, () => Promise.resolve(fresh("127.0.0.1")));
+      const port = portOf(box);
+      await switchOff(box);
+      let tried = 0;
+      const counting = createTcpServer();
+      counting.on("connection", (socket: Socket) => {
+        tried++;
+        socket.destroy();
+      });
+      await onIpv6Loopback(counting, Number(port));
+      // The remembered address refuses; the network then claims it again, then ::1.
+      await failureOf(call(port, checked, () => Promise.resolve(fresh("127.0.0.1", "::1"))));
+      expect(tried).toBe(1);
+    });
   });
 
   const lanAddress = Object.values(networkInterfaces())

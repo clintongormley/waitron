@@ -24,7 +24,7 @@ import {
   type TrustSet,
 } from "@waitron/membership";
 import { firstCodeInCauseChain, hasCode, isAppError } from "@waitron/shared";
-import { boxExchange } from "./mirror-bundle-fetch.js";
+import { boxExchange, CheckedAddressUnreached } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
 export type StartCheckResult = "proceed" | "superseded" | "wait";
@@ -391,7 +391,7 @@ export async function postToBox(
         error instanceof Error ? error.message : "peer exchange did not finish",
         { cause: error },
       );
-    if (signal.aborted) throw signal.reason;
+    if (signal.aborted && !(error instanceof CheckedAddressUnreached)) throw signal.reason;
     throw error;
   }
 }
@@ -435,14 +435,14 @@ export function askPeerStatus(
       );
     } catch (error) {
       if (error instanceof PeerSilenceUnestablished) return silent("not_established");
+      // Only the address this box last reached the box at under its pinned authority speaks for
+      // that box: any other may be another device's claim, or one this box never reached it at.
+      if (error instanceof CheckedAddressUnreached) return silent("unreachable");
       if (isAppError(error) && hasCode(error, "mirror.peer_unresolved"))
         return silent("unresolved");
+      if (deps.fetch === undefined) return silent("not_established");
       const code = firstCodeInCauseChain(error, () => true);
-      const unreachable =
-        ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"].includes(code ?? "") ||
-        (deps.fetch === undefined &&
-          (code === "ETIMEDOUT" ||
-            (error instanceof DOMException && error.name === "TimeoutError")));
+      const unreachable = ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"].includes(code ?? "");
       return silent(unreachable ? "unreachable" : "not_established");
     }
     if (answer.status < 200 || answer.status > 299) return silent("refused");
