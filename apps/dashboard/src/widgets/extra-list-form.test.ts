@@ -572,9 +572,9 @@ it.each([
 );
 
 it("announces a product whose name holds a replacement pattern as written", async () => {
-  const { el } = await mount({ products: [product({ name: "Pan $&" })] });
-  await addItem(el, "Pan $&");
-  expect(text(el, "added-status")).toBe(t("extras.product_added").split("{name}").join("Pan $&"));
+  const { el } = await mount({ products: [product({ name: "Bread $&" })] });
+  await addItem(el, "Bread $&");
+  expect(text(el, "added-status")).toBe(t("extras.product_added").split("{name}").join("Bread $&"));
   const max = field<HTMLElementTagNameMap["wt-number-stepper"]>(el, "item-0-max-quantity");
   expect(max.decreaseLabel("Máx $&")).toBe(t("action.decrease").split("{label}").join("Máx $&"));
   expect(max.increaseLabel("Máx $&")).toBe(t("action.increase").split("{label}").join("Máx $&"));
@@ -1615,7 +1615,7 @@ it.each([
     await page.viewport(frame, 844);
     setLocale(locale);
     try {
-      const longer = "Croquetas caseras con jamón y queso";
+      const longer = "Homemade croquettes, ham and cheese";
       const { el } = await mount({
         value: { ...addons, items: [addons.items[0]!] },
         products: [products[0]!, product({ ...products[1]!, name: longer })],
@@ -1647,7 +1647,7 @@ it.each([1280, 390])("wraps an unbroken product name inside its cell at %ipx", a
   try {
     const { el } = await mount({
       value: { ...addons, items: [addons.items[0]!] },
-      products: [product({ name: "Supercalifragilisticexpialidociouscroquetas" })],
+      products: [product({ name: "Supercalifragilisticexpialidociouscroquette" })],
     });
     const productCell = el.shadowRoot!.querySelector(
       `tr[data-item="${BACON_ITEM}"] td:nth-child(2)`,

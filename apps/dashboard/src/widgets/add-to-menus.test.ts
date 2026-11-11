@@ -111,7 +111,7 @@ const placements: PlacementMenu[] = placementMenus(menus, structures);
 async function mount(props: Partial<AddToMenus> = {}): Promise<AddToMenus> {
   const { el } = await mountWidget<AddToMenus>("dashboard-add-to-menus", {
     open: true,
-    productName: "Croquetas",
+    productName: "Croquette",
     menus: placements,
     ...props,
   });
@@ -182,7 +182,7 @@ describe("dashboard-add-to-menus", () => {
   it("lists every menu with its top level and each section by its internal name", async () => {
     const el = await mount();
     expect(root(el).querySelector("wt-modal")!.getAttribute("heading")).toBe(
-      t("add_to_menus.heading").replace("{name}", "Croquetas"),
+      t("add_to_menus.heading").replace("{name}", "Croquette"),
     );
     const legends = [...root(el).querySelectorAll("fieldset[data-menu] > legend")].map((legend) =>
       legend.textContent!.trim(),
@@ -356,7 +356,7 @@ describe("dashboard-add-to-menus", () => {
     await el.updateComplete;
     const alert = button(el, "placement-error")!;
     expect(alert.getAttribute("role")).toBe("alert");
-    expect(alert.textContent).toContain(t("add_to_menus.failed").replace("{name}", "Croquetas"));
+    expect(alert.textContent).toContain(t("add_to_menus.failed").replace("{name}", "Croquette"));
     expect(alert.textContent).toContain("Drinks");
     expect(alert.textContent).toContain("The server could not do that.");
     expect(alert.textContent).toContain(
@@ -393,7 +393,7 @@ describe("dashboard-add-to-menus", () => {
     const alert = button(el, "load-error")!;
     expect(alert.getAttribute("role")).toBe("alert");
     expect(alert.textContent).toContain(
-      t("add_to_menus.load_error").replace("{name}", "Croquetas"),
+      t("add_to_menus.load_error").replace("{name}", "Croquette"),
     );
     expect(alert.textContent).toContain("The server could not do that.");
     expect(button(el, "add-to-menus")).toBeNull();
@@ -516,15 +516,15 @@ describe("names holding replacement patterns", () => {
     },
     { id: "m-dinner", name: "Dinner $& Menu", rootSectionId: "root-dinner", sections: [] },
   ];
-  const mountTrap = () => mount({ productName: "Croquetas $&", menus: trapMenus });
+  const mountTrap = () => mount({ productName: "Croquette $&", menus: trapMenus });
 
   it("names the product and the shared menus as written", async () => {
     const el = await mountTrap();
     expect(root(el).querySelector("wt-modal")!.getAttribute("heading")).toBe(
-      "Add Croquetas $& to menus",
+      "Add Croquette $& to menus",
     );
     expect(root(el).textContent).toContain(
-      "Croquetas $& is saved. Choose where it goes on your menus",
+      "Croquette $& is saved. Choose where it goes on your menus",
     );
     expect(button(el, "shared")!.textContent!.trim()).toBe("Also on Dinner $& Menu");
   });
@@ -534,16 +534,16 @@ describe("names holding replacement patterns", () => {
     el.failures = [{ sectionId: "root-dinner", reason: "Try again." }];
     await el.updateComplete;
     const alert = button(el, "placement-error")!.textContent!;
-    expect(alert).toContain("Croquetas $& is saved, but it could not be added to these places.");
+    expect(alert).toContain("Croquette $& is saved, but it could not be added to these places.");
     expect(alert).toContain("Top level of Dinner $& Menu: Try again.");
   });
 
   it("names the product as written when the menus could not be loaded", async () => {
-    const el = await mount({ productName: "Croquetas $&", menus: null });
+    const el = await mount({ productName: "Croquette $&", menus: null });
     el.loadError = "Try again.";
     await el.updateComplete;
     expect(button(el, "load-error")!.textContent).toContain(
-      "Croquetas $& is saved, but your menus could not be loaded",
+      "Croquette $& is saved, but your menus could not be loaded",
     );
   });
 });

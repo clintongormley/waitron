@@ -143,9 +143,9 @@ const products: Product[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: "Bebidas", parentId: null, color: null },
-  { id: "c-beer", name: "Cerveza", parentId: "c-drinks", color: null },
-  { id: "c-mains", name: "Principales", parentId: null, color: null },
+  { id: "c-drinks", name: "Drinks", parentId: null, color: null },
+  { id: "c-beer", name: "Beer", parentId: "c-drinks", color: null },
+  { id: "c-mains", name: "Mains", parentId: null, color: null },
 ];
 
 const menus: CatalogueSummary[] = [
@@ -1775,9 +1775,9 @@ describe("the menus list's Changes column", () => {
     });
   });
 
-  const HYPHENATED = "Menú-del-mediodía-de-lunes-a-viernes-con-postre";
-  const SPACED = "Menú del mediodía de lunes a viernes, con postre y bebida incluidos";
-  const UNBROKEN = "Menúdelmediodíadelunesaviernesconpostreybebidaincluidos";
+  const HYPHENATED = "Weekday-lunch-menu-with-starters-main-and-cakes";
+  const SPACED = "Weekday lunch from Monday to Friday, with cakes and drinks included";
+  const UNBROKEN = "Weekdaylunchmenuwithstartersmainscakesanddrinksincluded";
 
   /** The mixed list, with Lunch, the menu that has changes, under a long name. */
   function named(name: string): Api {
@@ -11505,7 +11505,7 @@ describe("the menus list just wider than its narrow layout", () => {
       const longMenus: CatalogueSummary[] = [
         {
           id: "menu-lunch",
-          name: "Menú-del-mediodía-de-lunes-a-viernes-con-postre",
+          name: "Weekday-lunch-menu-with-starters-main-and-cakes",
           active: true,
           version: 1,
         },

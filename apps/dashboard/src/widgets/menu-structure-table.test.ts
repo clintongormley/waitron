@@ -760,7 +760,7 @@ it("focuses the empty box's first add when the menu is empty", async () => {
 });
 
 /** Sixty characters and no space, so the table scrolls sideways to show it. */
-const LONG_MENU_NAME = "Menú-de-mediodía-de-lunes-a-viernes-con-postre-y-café-diario";
+const LONG_MENU_NAME = "Lunch-menu-served-from-Monday-to-Friday-with-cake-and-coffee";
 
 it("keeps every row's menu on a phone's screen", async () => {
   const width = window.innerWidth,
@@ -770,7 +770,7 @@ it("keeps every row's menu on a phone's screen", async () => {
     expect(window.innerWidth).toBe(390);
     const el = await mount({
       nodes: [...lunchNodes(), productNode("m-long", "p-long"), wines()],
-      products: [...products, product("p-long", "Menú-del-mediodía-de-lunes-a-viernes-con-postre")],
+      products: [...products, product("p-long", "Weekday-lunch-menu-with-starters-main-and-cakes")],
       current: ["m-drinks"],
       menuName: LONG_MENU_NAME,
     });
@@ -2250,8 +2250,8 @@ it("closes a row's menu after an action is chosen, and the choice opens or close
 
 describe("colour swatches", () => {
   const categories: CategorySummary[] = [
-    { id: "c-drinks", name: "Bebidas", parentId: null, color: "#256bb1" },
-    { id: "c-soft", name: "Refrescos", parentId: "c-drinks", color: null },
+    { id: "c-drinks", name: "Drinks", parentId: null, color: "#256bb1" },
+    { id: "c-soft", name: "Soft drinks", parentId: "c-drinks", color: null },
   ];
   /** Lager has its own colour, Lemonade takes its category's parent's, and Burger has none. */
   const coloured: Product[] = [

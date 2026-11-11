@@ -553,7 +553,7 @@ it("reorders the offered products after a live language switch without new data"
   const el = await mount({
     products: [
       { id: "gnocchi", name: "Ñoquis", categoryId: null },
-      { id: "nut", name: "Nuez", categoryId: null },
+      { id: "nut", name: "Nut", categoryId: null },
     ],
   });
   expect(listed(el)).toEqual(["gnocchi", "nut"]);
