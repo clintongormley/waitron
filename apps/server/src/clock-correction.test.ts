@@ -1188,12 +1188,45 @@ describe("a set at the start", () => {
       const h = harness({ stop: () => null, start, duringSet: () => void sets++ });
       expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
       expect(h.hostSets).toHaveLength(1);
-      expect(h.calls).not.toContain("clockStopState");
+      // The clock-behind stop is read, and with none holding the row is at reason start.
       expect(h.seatCalls[0]).toMatchObject({ reason: "start", source: "staff" });
       expect(start.state.status).toBe("by_person");
       expect(start.state.mark).toEqual({ "node-1": 8 });
     },
   );
+
+  it("writes the row of a set while the start waits at reason behind_chain when that stop also holds, and confirms by a person", async () => {
+    let sets = 0;
+    const start = waitingStart(() => sets);
+    const h = harness({ start, duringSet: () => void sets++ });
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(h.seatCalls).toHaveLength(1);
+    expect(h.seatCalls[0]).toMatchObject({ reason: "behind_chain", source: "staff" });
+    expect(start.state.status).toBe("by_person");
+    expect(start.state.mark).toEqual({ "node-1": 8 });
+  });
+
+  it("keeps a start set's admission while the clock-behind stop holds with AEAT's reading in it", async () => {
+    const start = waitingStart(() => 0);
+    const h = harness({
+      stop: () => ({
+        ...STOPPED,
+        proof: "contrary",
+        contrary: { authority: authority(START_MS, H), devices: [] },
+      }),
+      start,
+    });
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(h.seatCalls[0]).toMatchObject({ reason: "behind_chain" });
+  });
+
+  it("writes a start set's row at reason start, never reading the stop, while the clock reads before 28-10-2024", async () => {
+    const start = waitingStart(() => 0);
+    const h = harness({ unusable: () => true, start });
+    expect(await h.correction.set(byStaff(h, { reason: "start" }))).toMatchObject({ set: true });
+    expect(h.calls).not.toContain("clockStopState");
+    expect(h.seatCalls[0]).toMatchObject({ reason: "start" });
+  });
 
   it("refuses not_stopped once the start is confirmed by the internet, asking the host nothing", async () => {
     const start = waitingStart(() => 0);

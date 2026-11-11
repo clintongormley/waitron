@@ -1228,7 +1228,7 @@ it("confirms a till within a minute while waiting with no set and no row", async
   expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toHaveLength(1);
 });
 
-it("refuses a keep once the start check is by the internet", async () => {
+it("refuses a keep behind the chain once the start check is by the internet, leaving the start-up window open", async () => {
   const start = startClockState();
   start.confirm("by_internet", {});
   const box = await stoppedBox(DAY, { start });
@@ -1239,9 +1239,29 @@ it("refuses a keep once the start check is by the internet", async () => {
     box,
     check(box, staffCookie, DAY, { keep: true }),
     409,
-    setRefused("not_stopped"),
+    setRefused("stopped"),
   );
   expect(box.host.statusAsks).toBe(0);
+  expect(box.startUp.open()).toBe(true);
+});
+
+it("refuses a keep with no stop once the start check turned by the internet after the challenge, and shuts the window", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(-MINUTE, { start });
+  const asked = await ask(box, staffCookie);
+  expect(asked.json).toMatchObject({ keepOffered: true });
+  start.confirm("by_internet", {});
+  await expectRefused(
+    box,
+    confirmWith(box, staffCookie, {
+      challengeId: asked.json.challengeId,
+      deviceAt: boxTime(box),
+      keep: true,
+    }),
+    409,
+    setRefused("not_stopped"),
+  );
+  expect(box.startUp.open()).toBe(false);
 });
 
 const paymentsAdmitted = (box: Box) =>
@@ -1273,6 +1293,7 @@ it("confirms a waiting start from an agreeing till behind the chain, and lifts t
 it("offers no keep to a waiting start behind the chain, and refuses one sent anyway", async () => {
   const start = startClockState();
   const box = await stoppedBox(DAY, { start });
+  const before = written(box);
   const asked = await ask(box, staffCookie);
   expect(asked.status).toBe(200);
   expect(asked.json).not.toHaveProperty("keepOffered");
@@ -1286,7 +1307,11 @@ it("offers no keep to a waiting start behind the chain, and refuses one sent any
     409,
     setRefused("stopped"),
   );
+  expect(written(box)).toEqual(before);
+  expect(box.host.sets).toHaveLength(0);
+  expect(box.host.statusAsks).toBe(0);
   expect(start.status).toBe("waiting");
+  expect(box.logs.filter((line) => line.event === "clock_start.confirmed")).toEqual([]);
   await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
 });
 
@@ -1296,15 +1321,65 @@ it.each(["by_person", "by_devices"] as const)(
     const start = startClockState();
     start.confirm(status, {});
     const box = await stoppedBox(DAY, { start });
+    const before = written(box);
     await expectRefused(
       box,
       check(box, staffCookie, DAY, { keep: true }),
       409,
       setRefused("stopped"),
     );
+    expect(written(box)).toEqual(before);
+    expect(box.host.sets).toHaveLength(0);
+    expect(box.host.statusAsks).toBe(0);
     expect(start.status).toBe(status);
+    expect(box.startUp.open()).toBe(true);
   },
 );
+
+it("confirms a waiting start from an agreeing administrator behind the chain, and lifts that stop too", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  const before = written(box);
+  const answer = await check(box, adminTillCookie, 20_000);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(box.host.sets).toHaveLength(0);
+  expect(written(box).rows).toBe(before.rows + 1);
+  const id = answer.json.confirmationId as string;
+  expect(confirmationRow(id)).toMatchObject({ source: "admin", person_id: venue.adminId });
+  expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
+    confirmedBy: "admin",
+  });
+  expect(start.status).toBe("by_person");
+  expect(
+    box.logs.filter((line) => line.event === "clock_start.confirmed").map((l) => l.fields),
+  ).toMatchObject([{ source: "admin", person: venue.adminId }]);
+  await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+});
+
+it("sets a waiting box behind the chain from a till still more than a minute before its last record, and lifts that stop too", async () => {
+  const start = startClockState();
+  const box = await stoppedBox(DAY, { start });
+  box.startUp.noStop();
+  await expect(paymentsAdmitted(box)).rejects.toMatchObject({ code: "clock.behind_chain" });
+  const before = written(box);
+  const answer = await check(box, staffCookie, 10 * MINUTE);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  expect(box.host.sets).toHaveLength(1);
+  expect(written(box).rows).toBe(before.rows + 1);
+  const id = answer.json.confirmationId as string;
+  expect(confirmationRow(id)).toMatchObject({
+    source: "staff",
+    person_id: venue.operatorId,
+    reason: "behind_chain",
+  });
+  expect(incidentParams("clock.behind_chain_restarted", id)).toMatchObject({
+    confirmedBy: "staff",
+    person: "Ana",
+  });
+  expect(start.status).toBe("by_person");
+  await expect(paymentsAdmitted(box)).resolves.toBeUndefined();
+});
 
 it("keeps the box's time from a till whose own clock reads 1970", async () => {
   const { box, start } = await waitingBox();

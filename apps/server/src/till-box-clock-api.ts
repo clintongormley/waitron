@@ -325,9 +325,10 @@ export function mountTillBoxClockApi(
               await admitted(tx, session);
               const now = clock.now();
               if (stale(now)) refuse("stale");
+              // Judged first, so a stop that holds never reaches `noStop()`, which shuts the window.
+              if ((await stopAt(tx, now, boxClock.witnesses())).stopped) refuse("stopped");
               // Keeping the box's time is offered only until the internet confirms the start.
               if (start === undefined || start.state.status === "by_internet") noStop();
-              if ((await stopAt(tx, now, boxClock.witnesses())).stopped) refuse("stopped");
               const personId = asAdmin
                 ? (await authorizeAdmin(tx, checked)).authorizedBy
                 : session.personId;

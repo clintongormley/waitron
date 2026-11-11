@@ -66,6 +66,7 @@ const REASONS: Record<string, { key: StringKey; checkAgain: boolean }> = {
   same_machine: { key: "box_time.refused.same_machine", checkAgain: false },
   contrary_proof: { key: "box_time.refused.contrary_proof", checkAgain: false },
   pending_disproofs: { key: "box_time.refused.pending_disproofs", checkAgain: true },
+  stopped: { key: "box_time.refused.stopped", checkAgain: true },
 };
 
 const OTHER = { key: "box_time.refused.other", checkAgain: true } as const;

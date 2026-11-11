@@ -441,9 +441,10 @@ de la caja y qué hace cada botón.
 
 La caja envía su propia hora. Cuando está a más de un minuto de la del equipo, **Este dispositivo**
 pone el reloj del equipo a esa hora; cuando está a menos de un minuto, **Sí** mantiene el reloj del
-equipo. Mientras el equipo espera a que se confirme su hora tras un arranque, y su reloj no marca
-una hora anterior a su último registro, la caja ofrece también **El servidor**, que mantiene el
-reloj del equipo sea cual sea la hora de la caja. Cualquiera de ellos reanuda los cobros. Cuando el
+equipo. Mientras el equipo espera a que se confirme su hora tras un arranque, la caja ofrece también
+**El servidor**, que mantiene el reloj del equipo sea cual sea la hora de la caja, salvo que los
+cobros estén parados además porque el reloj marca más de un minuto antes del último registro, o una
+fecha anterior al 28 de octubre de 2024. Cualquiera de ellos reanuda los cobros. Cuando el
 equipo pone su reloj en hora, la campana y el correo nombran al empleado y a la caja. Cuando se usa
 la hora de la caja, las lecturas de otros dispositivos no lo impiden. Cuando la caja coincide con un
 reloj que marca una hora anterior al último registro, dos dispositivos que no coinciden con el

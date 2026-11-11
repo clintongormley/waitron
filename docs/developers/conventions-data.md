@@ -4657,7 +4657,8 @@ How it moves (plan D3):
   set's reason. The watch's device check runs in the correction's turn, so it never confirms while a
   set is in flight.
 
-A confirmation that sets nothing writes a log line, never a row. Each confirmation keeps the chain
+A confirmation that sets nothing writes a log line, and no row unless the clock-behind stop also
+holds, when it writes that stop's confirmation row as before. Each confirmation keeps the chain
 heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
 
 **The gate** (`apps/server/src/start-clock-gate.ts`, plan D4 and R6). Boot wraps the one fiscal
@@ -4682,22 +4683,27 @@ production enables none of them (plan R7, run).
 staff signed in on a till see `clock.unconfirmed`, "Payments wait: the server is waiting for
 devices to connect and agree with its time (… of 2 so far)", with “Check the time”, whatever the
 start-up window and AEAT say. The count shows at most 1, since two confirm at the next look. While
-the start waits, the challenge needs no stop, asks neither the start-up window nor AEAT, and
-answers `keepOffered: true`; the till's profile and the person are still checked. The confirm then
-takes one of three paths:
+the start waits, the challenge needs no stop and asks neither the start-up window nor AEAT; it
+answers `keepOffered: true` unless the clock-behind stop or the before-28-10-2024 stop holds. The
+till's profile and the person are still checked. The confirm then takes one of three paths:
 
 - `keep: true` ("The server") confirms the box's time as it stands, whatever the
   till reads: no host call, no row, state `by_person`, one `clock_start.confirmed` line with
-  source `staff` or `admin`;
-- a till within a minute confirms the same way ("Yes");
+  source `staff` or `admin`. While either stop holds it is refused `clock.set_refused` with reason
+  `stopped`, writing nothing: a keep writes no confirmation, so it could not end the stop;
+- a till within a minute confirms the same way ("Yes"); while the clock-behind stop also holds, it
+  writes that stop's confirmation (`confirmClockStop`) in the same transaction;
 - a till further out ("This device") sets the clock through the host with reason `start`, which
   writes the row every set writes and raises `clock.corrected` with its email, then, when the set is
   verified, confirms `by_person`; if the chain heads cannot be read then, the start stays
-  waiting and `clock_start.mark_failed` is logged.
+  waiting and `clock_start.mark_failed` is logged. While the clock-behind stop also holds at the
+  set, judged in the correction's turn on a clock reading no date before 28-10-2024, the row is written at reason `behind_chain`, so it ends
+  that stop as a set outside the start does.
 
 Once the start is `by_devices` or `by_person`, the notice and the challenge follow the clock-behind
 stop's paths again, except that staff are admitted whatever the start-up window and AEAT say until
-the start is `by_internet`. `keep: true` is refused `not_stopped` once the start is `by_internet`.
+the start is `by_internet`. `keep: true` is refused `stopped` while a stop holds, and otherwise
+`not_stopped` once the start is `by_internet`.
 A box whose host service does not answer waits at every start and cannot be set through it, so
 devices or a person confirm its time as it stands (plan D12).
 

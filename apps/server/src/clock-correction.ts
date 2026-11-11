@@ -221,23 +221,32 @@ export function clockCorrection(deps: {
     );
   }
 
-  /** The stop and the till's check, judged in one write-lock turn. */
-  async function admission(
-    input: ClockSetInput,
-  ): Promise<{ refusal: ClockSetRefusal | null; authoritySpoke: boolean }> {
+  /** The stop and the till's check, judged in one write-lock turn. `rowReason` is the reason the
+   * step's row is written under: at reason `start`, `behind_chain` while that stop also holds, so
+   * the row ends it as a set at that reason does. */
+  async function admission(input: ClockSetInput): Promise<{
+    refusal: ClockSetRefusal | null;
+    authoritySpoke: boolean;
+    rowReason: ClockSetInput["reason"];
+  }> {
     if (input.reason === "start") {
-      if (input.source === "authority") return { refusal: "not_admitted", authoritySpoke: false };
+      if (input.source === "authority")
+        return { refusal: "not_admitted", authoritySpoke: false, rowReason: input.reason };
       if (deps.start === undefined || deps.start.state.status === "by_internet")
-        return { refusal: "not_stopped", authoritySpoke: false };
+        return { refusal: "not_stopped", authoritySpoke: false, rowReason: input.reason };
     }
     return deps.read(async (tx) => {
-      const stop =
-        input.reason === "start"
-          ? { stopped: true, authoritySpoke: false }
-          : await judge(tx, input.reason);
-      if (!stop.stopped) return { refusal: "not_stopped" as const, authoritySpoke: false };
+      let rowReason = input.reason;
+      let stop: { stopped: boolean; authoritySpoke: boolean };
+      if (input.reason === "start") {
+        stop = { stopped: true, authoritySpoke: false };
+        if (!unusable(reading()) && (await judge(tx, "behind_chain")).stopped)
+          rowReason = "behind_chain";
+      } else stop = await judge(tx, input.reason);
+      if (!stop.stopped)
+        return { refusal: "not_stopped" as const, authoritySpoke: false, rowReason };
       const refusal = input.admit === undefined ? null : await input.admit(tx);
-      return { refusal, authoritySpoke: stop.authoritySpoke };
+      return { refusal, authoritySpoke: stop.authoritySpoke, rowReason };
     });
   }
 
@@ -364,7 +373,7 @@ export function clockCorrection(deps: {
         targetAt: new Date(targetMs).toISOString(),
         stepMs,
         verified,
-        reason: input.reason,
+        reason: rejudged.rowReason,
         source: input.source,
         witnesses: input.witnesses,
         ...(input.admin === undefined ? {} : { admin: input.admin }),

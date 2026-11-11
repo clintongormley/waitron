@@ -1972,6 +1972,8 @@ export const en = {
   "box_time.refused.set_failed_refused": "The server could not set its clock. Nothing was changed.",
   "box_time.refused.set_failed_unverified":
     "The server asked for its clock to be set but could not confirm it took.",
+  "box_time.refused.stopped":
+    "The server's clock reads earlier than its last sale, so it cannot keep its own time. Check again and choose This device if this device's time is right; if it is not, correct this device's time first.",
   "box_time.refused.pending_disproofs":
     "The server has not finished recording what it found about its clock. Check again in a minute.",
   "box_time.refused.other":
@@ -3925,6 +3927,8 @@ export const es: Record<StringKey, string> = {
     "El servidor no ha podido poner su reloj en hora. No se ha cambiado nada.",
   "box_time.refused.set_failed_unverified":
     "El servidor pidió poner su reloj en hora, pero no ha podido confirmar que se hiciera.",
+  "box_time.refused.stopped":
+    "El reloj del servidor marca una hora anterior a su última venta, así que no puede quedarse con su propia hora. Vuelve a comprobarlo y elige «Este dispositivo» si la hora de este dispositivo es correcta; si no lo es, corrige primero la hora de este dispositivo.",
   "box_time.refused.pending_disproofs":
     "El servidor aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a comprobarlo dentro de un minuto.",
   "box_time.refused.other":

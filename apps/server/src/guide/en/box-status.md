@@ -415,9 +415,9 @@ what the till's dialog shows and what each button does.
 
 The till sends its own time. When it is more than a minute from the box's, **This device** sets the
 box's clock to it; when it is within a minute, **Yes** keeps the box's clock. While the box waits for
-its time to be confirmed after a start, and its clock reads no earlier than its last record, the
-till also offers **The server**, which keeps the box's clock whatever the till's time. Each restarts
-payments. When the box sets its clock, the bell and the email name the staff member and the till.
+its time to be confirmed after a start, the till also offers **The server**, which keeps the box's
+clock whatever the till's time, unless payments are also stopped because the clock reads more than a
+minute earlier than the last record, or before 28 October 2024. Each restarts payments. When the box sets its clock, the bell and the email name the staff member and the till.
 When the till's time is used, other devices' readings do not stop it. When the till agrees with a
 clock that reads earlier than the last record, two devices that disagree with the box stop the
 confirmation, and the dialog says why.
