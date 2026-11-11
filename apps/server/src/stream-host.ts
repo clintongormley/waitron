@@ -1,3 +1,5 @@
+import type { LiveEvents } from "./live-api.js";
+import { publishState } from "./live-publish.js";
 import type { ServiceDefinition } from "./job-runner.js";
 import { STREAM_DIR } from "@waitron/store";
 import { isDeepStrictEqual } from "node:util";
@@ -146,6 +148,7 @@ export async function readNewerBucketMain(
 }
 
 export interface StreamHostDeps {
+  bus?: LiveEvents;
   db: Database;
   node: NodeDatabase;
   ring: KeyRing;
@@ -299,6 +302,7 @@ export class StreamHost {
         store: this.#deps.store,
         onCommit: (listener) => db.onCommit(listener),
         sentPointers: this.#sentPointers,
+        onStateChange: () => this.#publish(),
       });
       this.#supervisor = supervisor;
       await supervisor.start();
@@ -308,8 +312,13 @@ export class StreamHost {
     }
   }
 
+  #publish(): void {
+    if (this.#deps.bus) publishState(this.#deps.bus, "backup_status", this.#deps.log);
+  }
+
   #notStartedFor(reason: string): void {
     this.#notStarted = { state: "off", reason, stateSince: this.#deps.now().toISOString() };
+    this.#publish();
   }
 
   /**

@@ -251,6 +251,7 @@ import { createClockWitnessStore } from "./clock-witnesses.js";
 import { bootReader } from "./boot-reader.js";
 import { clockDisagreesAlertSource } from "./clock-disagrees-alert.js";
 import { mountJoinApi } from "./join-api.js";
+import { publishState } from "./live-publish.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
 import { createPageTestPages } from "./page-test-pages.js";
@@ -2651,7 +2652,9 @@ async function bootServer(
     // ONE pairing window for the venue: every surface that has a knock shares this holder. In memory,
     // so a restart or a promotion starts SHUT — a node that has just taken over must not inherit an
     // open door.
-    const pairingMode = createPairingMode();
+    const pairingMode = createPairingMode({
+      changed: () => publishState(liveEvents, "pairing", log),
+    });
     mountDeviceApi(
       app,
       {
@@ -2696,6 +2699,7 @@ async function bootServer(
       app,
       {
         db,
+        bus: liveEvents,
         cfg: tradingContext,
         readMembership: () => readNodeMembership(db),
         pairingMode,
@@ -2981,6 +2985,7 @@ async function bootServer(
     return read === undefined ? null : db.withWriteLock(() => read(db));
   });
   const backupSupervisor = new BackupSupervisor({
+    bus: liveEvents,
     buildConfig: async () =>
       loadBackupSettings({
         managedByEnvironment: isBackupManagedByEnvironment(),
@@ -3035,6 +3040,7 @@ async function bootServer(
   // The live copy of venue.db to the owner's bucket, primary only. `start()` returns without
   // waiting for the bucket, so a bucket that never answers cannot hold boot or a sale.
   const streamHost = new StreamHost({
+    bus: liveEvents,
     db,
     node: store.node,
     ring,

@@ -41,6 +41,7 @@ import { LocalFsBackend } from "./local-fs-backend.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
+import { LiveEvents } from "./live-api.js";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
@@ -120,7 +121,11 @@ function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
   };
 }
 
-function makeSupervisor(refs: Refs, stateDir: string): BackupSupervisor {
+function makeSupervisor(
+  refs: Refs,
+  stateDir: string,
+  overrides: Partial<BackupSupervisorDeps> = {},
+): BackupSupervisor {
   return new BackupSupervisor({
     buildConfig: async () => refs.config,
     isManagedByEnvironment: () => refs.managed,
@@ -132,6 +137,7 @@ function makeSupervisor(refs: Refs, stateDir: string): BackupSupervisor {
     jitterSeed: "seed",
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     log: (level, event) => refs.logs.push({ level, event }),
+    ...overrides,
   });
 }
 
@@ -171,6 +177,39 @@ afterAll(async () => {
 });
 
 describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
+  it("publishes settings, uploaded archives and destination outcomes", async () => {
+    const dest = await makeDestDir();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const bus = new LiveEvents();
+    const snapshots: unknown[] = [];
+    const sup = makeSupervisor(refs, await makeStateDir(), { bus });
+    bus.subscribe((event) => {
+      if (event.kind === "change") snapshots.push({ change: event.change, current: sup.current() });
+    });
+    try {
+      await sup.reload();
+      await waitForArchiveUnderCurrentKey(sup);
+      await waitForEvent(refs, "backup.destination_completed");
+    } finally {
+      await sup.stop();
+    }
+    expect(snapshots.length).toBeGreaterThanOrEqual(3);
+    expect(snapshots).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          change: { resources: [{ type: "backup_status" }] },
+          current: expect.objectContaining({ enabled: true }),
+        }),
+      ]),
+    );
+  }, 60_000);
+
   it("enable from off writes an archive whose db.dump opens as the venue database", async () => {
     const dest = await makeDestDir();
     const refs: Refs = {

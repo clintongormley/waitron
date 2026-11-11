@@ -41,6 +41,7 @@ import {
   streamSettingsPayload,
   type StreamHostDeps,
 } from "./stream-host.js";
+import { LiveEvents } from "./live-api.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 import { pauseListingPrefix } from "./testing/stream-pause-scenario.js";
 
@@ -581,6 +582,30 @@ describe("the live copy's wiring", () => {
         );
       });
 
+      it("publishes bucket copy state transitions to open dashboards", async () => {
+        const bus = new LiveEvents();
+        const states: string[] = [];
+        const rt = runtime({
+          bus,
+          spawn: new FakeLitestream().spawn,
+          store: new SwitchableStore(() => new Date()),
+        });
+        bus.subscribe((event) => {
+          if (event.kind === "change") {
+            expect(event.change).toEqual({ resources: [{ type: "backup_status" }] });
+            states.push(rt.status().state);
+          }
+        });
+        try {
+          await rt.start();
+          await vi.waitFor(() => expect(rt.status().state).toBe("opening"), { timeout: 10_000 });
+          expect(states).toContain("opening");
+        } finally {
+          await rt.stop();
+        }
+        expect(states.at(-1)).toBe("off");
+      });
+
       it.each(["failed", "no_key"] as const)(
         "starts no child until resealing succeeds: %s",
         async (outcome) => {
@@ -1091,7 +1116,7 @@ describe("the live copy's wiring", () => {
         try {
           await rt.start();
           await vi.waitFor(() => expect(logs).toContain("stream.open_failed"), { timeout: 10_000 });
-          expect(rt.status().state).toBe("opening");
+          await vi.waitFor(() => expect(rt.status().state).toBe("opening"), { timeout: 10_000 });
         } finally {
           await rt.stop();
           await rm(venueDir, { recursive: true, force: true });

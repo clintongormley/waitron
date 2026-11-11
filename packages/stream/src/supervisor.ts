@@ -85,6 +85,7 @@ type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 /** Everything the supervisor needs; it opens no database and reads no settings itself. */
 export interface SupervisorDeps {
   litestreamBin: string;
+  onStateChange?: () => void;
   /** Absolute path of `venue.db`. */
   venueDbPath: string;
   /** A directory the supervisor may write Litestream's configuration into. */
@@ -1059,9 +1060,14 @@ export class StreamSupervisor {
   }
 
   #set(state: StreamState, reason: string | null, generation = this.#status.generation): void {
+    const changed =
+      state !== this.#status.state ||
+      reason !== this.#status.reason ||
+      generation !== this.#status.generation;
     const stateSince =
       state === this.#status.state ? this.#status.stateSince : this.#deps.now().toISOString();
     this.#status = { ...this.#status, state, reason, generation, stateSince };
+    if (changed) this.#deps.onStateChange?.();
   }
 
   #refuse(reason: string): void {

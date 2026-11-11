@@ -74,6 +74,33 @@ describe("one mail sender", () => {
   const update = async (patch: Partial<typeof outgoingMail.$inferInsert>, key = "one") => {
     await suite.db.update(outgoingMail).set(patch).where(eq(outgoingMail.dedupeKey, key));
   };
+  it.each([
+    ["local_capture", "sent", 1],
+    ["smtp", "sent", 0],
+    ["local_capture", "unknown", 0],
+  ] as const)("publishes inbox only after a captured send: %s %s", async (mode, status, count) => {
+    const bus = new LiveEvents();
+    const changes: unknown[] = [];
+    bus.subscribe((event) => {
+      changes.push(event);
+    });
+    deps.bus = bus;
+    deps.resolveDelivery = async () => ({
+      mode,
+      smtp: { url: "smtp://mail.test", from: "sender" },
+    });
+    deps.send = async () =>
+      status === "sent" ? { status } : { status, reason: "email.test_refused" };
+    await queue();
+    await runMailPass(deps);
+    expect((await row())?.status).toBe(status);
+    expect(changes).toEqual(
+      Array.from({ length: count }, () => ({
+        kind: "change",
+        change: { resources: [{ type: "email_inbox" }] },
+      })),
+    );
+  });
   it("does not compose or send if storage refuses to retain the claim", async () => {
     await queue();
     const before = await row();

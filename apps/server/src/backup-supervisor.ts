@@ -1,3 +1,5 @@
+import type { LiveEvents } from "./live-api.js";
+import { publishState } from "./live-publish.js";
 // The backup duty's lifecycle owner, so the duty can be reconfigured at runtime WITHOUT restarting
 // the process. `reload()` stops the running duty, closes its own database handle, re-reads the config
 // from disk, opens the venue again, and — only on a singleton primary with a valid config it could
@@ -133,6 +135,7 @@ const NO_RECORD: SweepRecord = {
 };
 
 export interface BackupSupervisorDeps {
+  bus?: LiveEvents;
   /** Re-reads the box-env files from DISK each reload — closing over a boot-time value would make
    * hot-reload a no-op. */
   buildConfig: () => Promise<BackupConfig | BackupConfigUnusable | undefined>;
@@ -324,6 +327,7 @@ export class BackupSupervisor {
         jitterSeed: this.#deps.jitterSeed,
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
+        onRunStoppedChanged: () => this.#publish(),
         stagingTurn: this.#deps.stagingTurn,
         installationStartedAt: this.#deps.readInstallationStart,
         latestClockStep: this.#deps.latestClockStep,
@@ -350,6 +354,7 @@ export class BackupSupervisor {
       await this.#writeNote(this.#backends);
     } finally {
       this.#reloading = false;
+      this.#publish();
     }
   }
 
@@ -473,6 +478,10 @@ export class BackupSupervisor {
     );
   }
 
+  #publish(): void {
+    if (this.#deps.bus) publishState(this.#deps.bus, "backup_status", this.#deps.log);
+  }
+
   /** Counted as stored before its pruning finishes; the pruning code stands until that pruning's
    * result arrives. */
   #recordUpload(id: string): void {
@@ -481,6 +490,7 @@ export class BackupSupervisor {
       uploadErrorCode: null,
       pruneErrorCode: this.#sweep.get(id)?.pruneErrorCode ?? null,
     });
+    this.#publish();
   }
 
   /** A store stays counted for the rest of the sweep; an upload code is cleared only by a later
@@ -492,6 +502,7 @@ export class BackupSupervisor {
       uploadErrorCode: result.uploadErrorCode,
       pruneErrorCode: result.stored ? result.pruneErrorCode : (prev?.pruneErrorCode ?? null),
     });
+    this.#publish();
   }
 
   async stop(): Promise<void> {

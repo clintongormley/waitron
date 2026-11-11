@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from "node:util";
+import type { LiveEvents } from "./live-api.js";
+import { publishState } from "./live-publish.js";
 import { readReceiptLanguage } from "@waitron/catalogue";
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
@@ -92,6 +95,7 @@ import { mountPagePrintApi, type RenderInvoicePage } from "./page-print-api.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 export interface PrintApiDeps {
+  bus?: LiveEvents;
   db: Database;
   cfg: TradingContext;
   readMembership: () => Promise<SignedMembershipDocument | null>;
@@ -489,6 +493,14 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     /** Only a visible report sets this: the agent can print to the device. */
     visibleAt?: number;
   }
+  const description = (entry: DiscoveredEntry | undefined) =>
+    entry === undefined
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(entry).filter(
+            ([key]) => !["lastSeenAt", "scannedAt", "pairedAt", "visibleAt"].includes(key),
+          ),
+        );
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
   const testPages = deps.testPages ?? createPageTestPages(() => deps.now?.() ?? new Date());
@@ -626,6 +638,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const now = Date.now();
       // A visible or scanned report replaces the description, never another kind of report's stamp;
       // a visible report carries no printer mark, so it keeps the one already held.
+      let discoveryChanged = false;
       const describedThisPull = new Set<string>();
       const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
         const locator = d.ippOnly ? queueKeyOf(d) : undefined;
@@ -645,6 +658,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           visibleAt: prior?.visibleAt,
           [stamp]: now,
         });
+        if (!isDeepStrictEqual(description(prior), description(discovered.get(key))))
+          discoveryChanged = true;
         describedThisPull.add(key);
       };
       for (const v of visible) remember(v, "visibleAt");
@@ -659,7 +674,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ? { agentId, transport: "bluetooth", ...p, ...stamps }
             : { ...prior, name: prior.name ?? p.name, ...stamps },
         );
+        if (!isDeepStrictEqual(description(prior), description(discovered.get(key))))
+          discoveryChanged = true;
       }
+      if (discoveryChanged && deps.bus) publishState(deps.bus, "printer_discovery", log);
 
       const visibleKeys = visible
         .filter((v) => v.transport === "usb" || v.transport === "bluetooth")

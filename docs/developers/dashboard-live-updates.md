@@ -7,10 +7,20 @@ events carry resource types only and need no person signed in. The transfer watc
 empty-object event body and checks its person, device, permissions and profile at every wake.
 Keepalives remain every 15 seconds. The till's browser adoption belongs to jr13/jr14.
 
+The dashboard treats thirty seconds without an event as a lost connection, re-reads its watched
+queries and reconnects with back-off. Keepalives keep the connection alive. Queries marked
+`quietWhileConnected` skip timed re-reads while the stream is ready. Only audited database reads
+(and values fixed until restart) receive that mark; clock-dependent, in-memory and external reads
+keep their timers. New queries keep their timers unless explicitly marked.
+
+Pairing holds, changed printer discovery descriptions, practice-inbox deliveries, archive outcomes
+and bucket-copy state transitions publish their own resource changes. Printer scan timers and
+invoice-delivery timers remain because their answers also age with time.
+
 When you add a dashboard read, subscribe to the data it displays. You should not need to know which
 button, background worker or other client will change that data. "Other client" carries one
-condition: a change reaches the dashboard only when the write went through `withTransaction` in this
-server process. What falls outside that, and what it costs, is in `workflow-guide.md` under _The
+condition: a database change reaches the dashboard only when the write went through `withTransaction`
+in this server process. What falls outside that, and what it costs, is in `workflow-guide.md` under _The
 development stack from a worktree_.
 
 The shared `LiveConnection` owns the document lifecycle. When you leave the document, `pagehide`

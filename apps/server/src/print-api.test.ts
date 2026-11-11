@@ -3,7 +3,7 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   type Database,
@@ -44,6 +44,7 @@ import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import { createStation } from "./kitchen.js";
 import type { Logger } from "./logger.js";
+import { LiveEvents } from "./live-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { configureDemoPrinter, deliverDemoPrinterJobs } from "./demo-printer.js";
 import { formatTestPage } from "./test-page.js";
@@ -130,6 +131,7 @@ beforeEach(() => seedPrintRouteFixture(suite.db));
 
 function mountApp(
   opts: {
+    bus?: LiveEvents;
     pairingOpen?: boolean;
     enrolRateLimiter?: EnrolRateLimiter;
     venueLocale?: SupportedLocale;
@@ -147,6 +149,7 @@ function mountApp(
     app,
     {
       db: suite.db,
+      bus: opts.bus,
       cfg: { ...cfg, practiceMode: opts.practiceMode },
       pairingMode,
       readMembership: async () => MEMBERSHIP,
@@ -6073,4 +6076,31 @@ describe("drawer expiry and printer visibility in the queue", () => {
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     expect((await listed(app)).find((row) => row.id === jobId)?.waitReason).toBeUndefined();
   });
+});
+
+it("publishes discovery descriptions, but not unchanged pull timestamps", async () => {
+  const bus = new LiveEvents();
+  const changes: unknown[] = [];
+  bus.subscribe((event) => {
+    changes.push(event);
+  });
+  const app = mountApp({ bus });
+  const { token } = await joinAndAccept(app);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const device = { transport: "usb", localKey: "usb:1", name: "Kitchen" };
+  const event = { kind: "change", change: { resources: [{ type: "printer_discovery" }] } };
+  await pull(app, token, { scanned: [device] });
+  expect(changes).toEqual([event]);
+  vi.setSystemTime(Date.now() + 2000);
+  await pull(app, token, { scanned: [device] });
+  expect(changes).toEqual([event]);
+  await pull(app, token, { scanned: [{ ...device, name: "Pass" }] });
+  expect(changes).toEqual([event, event]);
+  await pull(app, token, { pairedBluetooth: [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Receipt" }] });
+  expect(changes).toEqual([event, event, event]);
+  await pull(app, token, { pairedBluetooth: [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Receipt" }] });
+  expect(changes).toEqual([event, event, event]);
 });

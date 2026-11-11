@@ -111,6 +111,7 @@ export interface BackupSweepDeps {
   /** Read by the backups alert source, so a failed store, or a run that stopped before any
    * destination, shows before the freshness threshold. */
   outcomes?: BackupOutcomeHolder;
+  onRunStoppedChanged?: () => void;
   log: Logger;
   /**
    * Must leave either a whole copy at `outFile` or nothing, so a truncated copy is never encrypted
@@ -280,7 +281,10 @@ export async function runOnce(
     // whole before its rename.
     if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
     const key = backupArchiveKey(stamp);
-    if (deps.outcomes) delete deps.outcomes.runStopped;
+    if (deps.outcomes?.runStopped) {
+      delete deps.outcomes.runStopped;
+      deps.onRunStoppedChanged?.();
+    }
     // Every destination call has settled before `finally` removes the ciphertext they read.
     await Promise.allSettled(
       deps.backends.map(async (backend) => {
@@ -332,6 +336,7 @@ export async function runOnce(
         const { neededBytes, availableBytes } = err.params;
         deps.outcomes.runStopped.sizes = { neededBytes, availableBytes };
       }
+      deps.onRunStoppedChanged?.();
     }
     throw err;
   } finally {

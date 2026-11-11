@@ -11,6 +11,8 @@ import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
+import { LiveEvents } from "./live-api.js";
+import { publishState } from "./live-publish.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 
 const dirs: string[] = [];
@@ -89,9 +91,15 @@ it("clears the stopped run once a later run reaches its destinations", async () 
   let free = 1999;
   let nowMs = STAMP.getTime();
   const seen: unknown[] = [];
+  const bus = new LiveEvents();
+  const notified: unknown[] = [];
+  bus.subscribe((event) => {
+    if (event.kind === "change") notified.push(outcomes.runStopped);
+  });
   const { deps, outcomes, backend } = await loopDeps({
     signal: controller.signal,
     now: () => new Date(nowMs),
+    onRunStoppedChanged: () => publishState(bus, "backup_status", () => {}),
     stagingEstimateBytes: async () => 1000,
     statfs: async () => freeSpace(free)(),
     sleep: async (chunk) => {
@@ -117,6 +125,7 @@ it("clears the stopped run once a later run reaches its destinations", async () 
   ]);
   expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
   expect(outcomes.runStopped).toBeUndefined();
+  expect(notified).toEqual([seen[0], undefined]);
 });
 
 it("records nothing for a run that throws because it was cancelled", async () => {
