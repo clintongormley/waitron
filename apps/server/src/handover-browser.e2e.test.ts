@@ -280,7 +280,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
     await writeNodeMembership(mainBox.db, chart);
     await writeNodeMembership(spareBefore.db, chart);
     await writeMirrorLink(spareBefore.node, standby.nodeId, {
-      relayUrl: sourceUrl,
+      originUrl: sourceUrl,
       boxHostname: "localhost",
       boxCaPem: material.caCertPem,
       originNodeId: primary.nodeId,

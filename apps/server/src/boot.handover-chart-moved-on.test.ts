@@ -322,7 +322,7 @@ describe("the emergency routes through a real spare start", () => {
     const authority = await mintBoxAuthority();
     const source = await startBoxServer(authority, () => ({ status: 503, body: "{}" }));
     await writeMirrorLink(copy.node, standby.nodeId, {
-      relayUrl: "http://127.0.0.1:1/",
+      originUrl: "http://127.0.0.1:1/",
       boxHostname: "box.local",
       boxCaPem: authority.caPem,
       originNodeId: primary.nodeId,

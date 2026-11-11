@@ -557,7 +557,7 @@ describe("the start check on a real start", () => {
         joined: true,
         beforeStart: async (nodeId) =>
           writeMirrorLink(suite.node, nodeId, {
-            relayUrl: "https://relay.example",
+            originUrl: "https://relay.example",
             boxHostname: "localhost",
             boxCaPem: pinned.caPem,
             originNodeId: SPARE.nodeId,
