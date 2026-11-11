@@ -902,13 +902,3 @@ Left as they were, from #827's review: unlike the two staff
 
 Check screens that watch after an awaited read: decide whether they should watch those types
 from the start, avoiding a replacement of the initial live stream after loading.
-
-
-## A1315. Bring every help bubble down to orientation, one area per PR
-
-The remaining help work is in English and Spanish. The rule is in
-[conventions-ui.md](../developers/conventions-ui.md#a-help-bubble-orients): read the code a bubble
-describes first, move each dropped fact into its linked guide section, and list every changed text
-before and after.
-
-- **No guide section to link yet:** the guide has no section on a zone's Reset.
