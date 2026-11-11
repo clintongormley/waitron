@@ -43,7 +43,7 @@ export function mountModulesApi(
         ...deps.providers.map((provider) => ({
           id: provider.providerId,
           category: "card-provider",
-          enabled: true,
+          enabled: deps.enabled.includes("payments"),
         })),
       ]);
     }),

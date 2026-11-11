@@ -584,8 +584,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Pide a un responsable que revise su lector en la pantalla Pagos con tarjeta",
   },
   "reader.provider_disconnected": {
-    en: "The card reader's payment provider is not connected. Ask a manager to connect it on the Card payments screen, or take cash",
-    es: "El proveedor de pagos del lector no está conectado. Pide a un responsable que lo conecte en la pantalla Pagos con tarjeta, o cobra en efectivo",
+    en: "The card reader's payment provider is not connected. Ask a manager to connect it in Modules on the dashboard, or take cash",
+    es: "El proveedor de pagos del lector no está conectado. Pide a un responsable que lo conecte en Módulos del panel, o cobra en efectivo",
   },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",

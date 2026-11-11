@@ -61,11 +61,11 @@ export class ModulesScreen extends LitElement {
         width: calc(var(--wt-tap-min) * 8);
         max-width: calc(90vw - var(--wt-space-5) * 2);
       }
-      .error,
-      wt-data-table::part(switch-reason) {
+      .error {
         color: var(--wt-color-danger);
       }
       wt-data-table::part(switch-reason) {
+        color: var(--wt-color-text-muted);
         display: block;
         font-size: var(--wt-font-size-sm);
       }
@@ -190,29 +190,34 @@ export class ModulesScreen extends LitElement {
         label: text("modules.configuration"),
         cell: (row) =>
           row.category === "module"
-            ? text("modules.no_settings")
-            : this.providers === undefined
-              ? text("modules.loading")
-              : text(
-                  this.providers.find((provider) => provider.providerId === row.id)?.state ===
-                    "connected"
-                    ? "modules.configured"
-                    : "modules.needs_setup",
-                ),
+            ? nothing
+            : this.providersError
+              ? text("modules.configuration_unavailable")
+              : this.providers === undefined
+                ? text("modules.loading")
+                : text(
+                    this.providers.find((provider) => provider.providerId === row.id)?.state ===
+                      "connected"
+                      ? "modules.configured"
+                      : "modules.needs_setup",
+                  ),
       },
       {
         key: "actions",
         label: "",
         pinned: "end",
         cell: (row) =>
-          html`<wt-row-actions label=${this.#name(row)}
-            ><wt-button
-              data-test=${`configure-${row.id}`}
-              variant="secondary"
-              @click=${(event: Event) => this.#configure(row, event)}
-              >${text("modules.configure")}</wt-button
-            ></wt-row-actions
-          >`,
+          row.category === "card-provider" &&
+          this.panels.some((panel) => panel.providerId === row.id)
+            ? html`<wt-row-actions label=${this.#name(row)}
+                ><wt-button
+                  data-test=${`configure-${row.id}`}
+                  variant="secondary"
+                  @click=${(event: Event) => this.#configure(row, event)}
+                  >${text("modules.configure")}</wt-button
+                ></wt-row-actions
+              >`
+            : nothing,
       },
     ];
   }
@@ -259,7 +264,7 @@ export class ModulesScreen extends LitElement {
       ${rows ? html`<wt-data-table aria-label=${text("nav.modules")} .emptyMessage=${tableNoMatches()} noMatchesMessage=${tableNoMatches()} .rows=${rows} .columns=${this.#columns()} .rowKey=${(row: ModuleRow) => `${row.category}:${row.id}`} .wrapToFit=${true}></wt-data-table>` : html`<p>${text("modules.loading")}</p>`}
       <p><a href=${guideHref("modules.set-up")}>${text("modules.guide")}</a></p>
       ${
-        editor
+        editor && panel
           ? html`<wt-dialog
               .open=${true}
               heading=${`${text("modules.configure")}: ${this.#name(editor)}`}
@@ -267,29 +272,24 @@ export class ModulesScreen extends LitElement {
               .beforeClose=${this.#beforeClose}
               @wt-close=${() => this.#closed()}
             >
-              ${
-                panel
-                  ? html`<div class="configuration">
-                      ${panel.renderConnectForm({
-                        request: this.request,
-                        onConnected: () => this.#saved(),
-                        actions: {
-                          saveLabel: t("action.save"),
-                          cancelLabel: t("action.cancel"),
-                          onCancel: () => {
-                            void this.renderRoot
-                              .querySelector<WtDialog>("wt-dialog")
-                              ?.requestClose("cancel");
-                          },
-                          onBusy: (busy) => {
-                            this.busy = busy;
-                          },
-                        },
-                      })}
-                    </div>`
-                  : html`<p>${text("modules.no_settings")}</p>`
-              }
-              ${!panel ? html`<wt-button slot="footer" data-test="close-module" variant="secondary" @click=${() => void this.renderRoot.querySelector<WtDialog>("wt-dialog")?.requestClose("cancel")}>${t("action.close")}</wt-button>` : nothing}
+              <div class="configuration">
+                ${panel.renderConnectForm({
+                  request: this.request,
+                  onConnected: () => this.#saved(),
+                  actions: {
+                    saveLabel: t("action.save"),
+                    cancelLabel: t("action.cancel"),
+                    onCancel: () => {
+                      void this.renderRoot
+                        .querySelector<WtDialog>("wt-dialog")
+                        ?.requestClose("cancel");
+                    },
+                    onBusy: (busy) => {
+                      this.busy = busy;
+                    },
+                  },
+                })}
+              </div>
             </wt-dialog>`
           : nothing
       }

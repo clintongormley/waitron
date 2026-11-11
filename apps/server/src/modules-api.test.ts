@@ -21,11 +21,11 @@ beforeEach(async () => {
     return cookies as [string, string];
   });
 });
-function app() {
+function app(enabled: readonly string[] = ["payments"]) {
   const app = new Hono();
   mountModulesApi(
     app,
-    { db: suite.db, modules: ALL_MODULES, enabled: ["payments"], providers: CARD_PROVIDERS },
+    { db: suite.db, modules: ALL_MODULES, enabled, providers: CARD_PROVIDERS },
     () => {},
   );
   return app;
@@ -52,4 +52,16 @@ it("refuses unsigned and staff reads with the management error codes", async () 
     expect(response.status).toBe(status);
     expect(await response.json()).toMatchObject({ error: { code } });
   }
+});
+
+it("shows card providers disabled while their Payments module is off", async () => {
+  const response = await app([]).request("/management-api/modules", {
+    headers: { cookie: manager },
+  });
+  expect(response.status).toBe(200);
+  const rows = (await response.json()) as { id: string; category: string; enabled: boolean }[];
+  expect(rows.filter((row) => row.category === "card-provider")).toEqual([
+    { id: "sumup", category: "card-provider", enabled: false },
+    { id: "stripe", category: "card-provider", enabled: false },
+  ]);
 });

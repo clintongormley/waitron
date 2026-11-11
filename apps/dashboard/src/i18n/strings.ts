@@ -2709,7 +2709,6 @@ export const en = {
   "payments.state.simulator": "Simulator",
   "payments.simulator_banner":
     "This venue is running in demo mode — card payments are simulated and no real cards are charged.",
-  "payments.connect": "Connect",
   "payments.disconnect": "Disconnect",
   "payments.disconnect_confirm": "Disconnect this provider?",
   "payments.no_providers": "No payment providers are available.",
@@ -6617,7 +6616,6 @@ export const es: Record<StringKey, string> = {
   "payments.state.simulator": "Simulador",
   "payments.simulator_banner":
     "Este local funciona en modo de demostración: los pagos con tarjeta se simulan y no se cobra ninguna tarjeta real.",
-  "payments.connect": "Conectar",
   "payments.disconnect": "Desconectar",
   "payments.disconnect_confirm": "¿Desconectar este proveedor?",
   "payments.no_providers": "No hay proveedores de pago disponibles.",

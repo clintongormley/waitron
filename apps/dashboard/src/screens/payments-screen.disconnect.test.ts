@@ -59,7 +59,7 @@ const notice = (el: PaymentsScreen) =>
     ?.shadowRoot?.querySelector("[role=alert]");
 beforeEach(() => {
   setLocale("en");
-  history.replaceState(null, "", "/manage/payments/view/providers");
+  history.replaceState(null, "", "/manage/payments");
 });
 afterEach(() => {
   cleanupWidgets();

@@ -72,7 +72,7 @@ To add a different agent, follow the setup steps in **Add an agent** and match i
 
 ## Card readers {#card-readers}
 
-In **Card payments**, open **Card readers** and choose **Delete** in the reader's menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
+In **Card payments**, find the reader under **Card readers** and choose **Delete** in its menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
 
 To use the reader again, choose **Add reader** for its provider. A recognised registration shows its saved name and print settings: choose **Add**, then assign it to devices and profiles again. Otherwise, pair it using the provider's normal steps.
 

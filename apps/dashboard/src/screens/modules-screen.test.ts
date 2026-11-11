@@ -1,4 +1,4 @@
-import { page, userEvent } from "vitest/browser";
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -36,6 +36,9 @@ function change(el: ModulesScreen, name: string, value: string) {
 it("opens Enabled, and Add discovers Disabled without changing the independent category", async () => {
   const el = await mount();
   expect(rows(el)).toHaveLength(5);
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  expect(table.shadowRoot!.querySelector("[data-test=configure-workforce]")).toBeNull();
+  expect(table.shadowRoot!.querySelectorAll("wt-row-actions")).toHaveLength(2);
   expect(rows(el).join()).toContain("Workforce");
   expect(rows(el).join()).not.toContain("Bookings");
   change(el, "category", "card-providers");
@@ -61,26 +64,6 @@ it("honours the direct all-provider link and separates Enabled from Needs setup"
   expect(text).toContain("Needs setup");
   expect(text).not.toContain("Disabled");
 });
-it("offers a truthful no-settings window for a module and restores focus after closing", async () => {
-  const el = await mount();
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  const configure = table.shadowRoot!.querySelector<HTMLElement>(
-    "[data-test=configure-workforce]",
-  )!;
-  const menu = configure.closest("wt-row-actions")!;
-  const opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
-  await userEvent.click(opener);
-  await userEvent.click(configure);
-  await el.updateComplete;
-  const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
-  await dialog.updateComplete;
-  expect(dialog.textContent).toContain("No settings for this module");
-  expect(dialog.textContent).not.toContain("Save");
-  expect(rows(el).join()).toContain("Switching this module is not available yet");
-  dialog.querySelector<HTMLElement>("[data-test=close-module]")!.click();
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-dialog")).toBeNull());
-  await vi.waitFor(() => expect(menu.shadowRoot!.activeElement).toBe(opener));
-});
 it("shows a failed catalogue read and retries without substituting an empty list", async () => {
   const api = modulesClient({
     listModules: vi
@@ -95,7 +78,7 @@ it("shows a failed catalogue read and retries without substituting an empty list
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
 
-it("wraps the module refusal on a Spanish phone display", async () => {
+it("wraps the module preparation note on a Spanish phone display", async () => {
   await page.viewport(390, 900);
   try {
     setLocale("es-ES");
@@ -109,4 +92,23 @@ it("wraps the module refusal on a Spanish phone display", async () => {
   } finally {
     await page.viewport(1280, 900);
   }
+});
+
+it("ends the loading indication when provider configuration cannot be read, and recovers on Retry", async () => {
+  const api = modulesClient({
+    listPaymentProviders: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue([
+        { providerId: "sumup", state: "connected", canUnpair: true },
+        { providerId: "stripe", state: "not_connected", canUnpair: false },
+      ]),
+  });
+  const { el } = await mountWidget<ModulesScreen>("dashboard-modules-screen", { api });
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+  await vi.waitFor(() => expect(rows(el).join()).toContain("Configuration unavailable"));
+  expect(rows(el).join()).not.toContain("Loading");
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-modules]")!.click();
+  await vi.waitFor(() => expect(rows(el).join()).toContain("Needs setup"));
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });

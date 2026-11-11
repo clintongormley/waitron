@@ -121,8 +121,19 @@ it.each([
     await field(form, input, value);
     expect(save.disabled).toBe(false);
     vi.mocked(api.listModules).mockRejectedValue({ code: "connection.failed" });
+    vi.mocked(api.listPaymentProviders).mockResolvedValue([
+      { providerId: "sumup", state: "connected", canUnpair: true },
+      { providerId: "stripe", state: "connected", canUnpair: false },
+    ]);
     save.click();
     await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-dialog")).toBeNull());
+    await vi.waitFor(() =>
+      expect(
+        screen
+          .shadowRoot!.querySelector("wt-data-table")!
+          .shadowRoot!.querySelector(`[data-row-key="card-provider:${provider}"]`)!.textContent,
+      ).toContain("Configured"),
+    );
     expect(request).toHaveBeenCalledWith(
       `/management-api/payments/providers/${provider}/connect`,
       "POST",

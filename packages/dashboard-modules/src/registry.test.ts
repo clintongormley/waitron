@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { CARD_PROVIDERS } from "@waitron/composition";
-import { CARD_PROVIDER_PANELS, DASHBOARD_MODULES } from "./index.js";
+import { CARD_PROVIDER_PANELS, DASHBOARD_MODULES, MODULE_LABEL_KEYS } from "./index.js";
 
 // Every registry entry names a REAL server module and is unique. The reverse — a UI-bearing module
 // silently MISSING from the registry — is NOT mechanically checkable: the server descriptor carries
@@ -95,4 +95,12 @@ it("registers workforce Hours beside Time corrections with current correction au
     group: "team",
     requiresPermission: "workforce.correct",
   });
+});
+
+it("gives every optional module a browser-side display label", () => {
+  expect(
+    ALL_MODULES.filter((module) => module.tier === "toggleable")
+      .filter((module) => !MODULE_LABEL_KEYS[module.name])
+      .map((module) => module.name),
+  ).toEqual([]);
 });

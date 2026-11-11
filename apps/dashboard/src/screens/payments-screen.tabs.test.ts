@@ -50,6 +50,9 @@ describe("Card payments reader tools", () => {
       });
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-data-table")).not.toBeNull());
       expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+      expect(
+        [...el.shadowRoot!.querySelectorAll("h2")].map((heading) => heading.textContent),
+      ).toEqual(["Providers", "Card readers"]);
       expect(el.shadowRoot!.querySelector("[data-test=refresh-readers]")).not.toBeNull();
       expect(
         el.shadowRoot!.querySelector("[data-test=configure-providers]")?.getAttribute("href"),

@@ -181,6 +181,9 @@ export class PaymentsScreen extends LitElement {
         margin-top: 0;
         font-size: var(--wt-font-size-lg);
       }
+      a {
+        color: var(--wt-color-primary-text);
+      }
       h2 {
         font-size: var(--wt-font-size-md);
       }
@@ -2470,6 +2473,7 @@ export class PaymentsScreen extends LitElement {
         >
       </p>
       <section aria-label=${t("payments.providers_heading")}>
+        <h2>${t("payments.providers_heading")}</h2>
         ${
           this.providers === undefined
             ? nothing
@@ -2481,6 +2485,7 @@ export class PaymentsScreen extends LitElement {
         }
       </section>
       <section data-test="readers-section" aria-label=${t("payments.readers_heading")}>
+        <h2>${t("payments.readers_heading")}</h2>
         <div class="reader-tools">
           <wt-button
             variant="secondary"
