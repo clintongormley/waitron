@@ -1,7 +1,3 @@
-// A Vitest sequencer that packs test files into shards by measured duration, because Vitest's own
-// split cuts by file count. See docs/developers/ci-and-gates.md, "The server's shards: sixteen,
-// packed by measured duration".
-
 import path from "node:path";
 
 const PREFIX = "[duration-sequencer]";

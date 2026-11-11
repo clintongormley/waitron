@@ -94,7 +94,7 @@ export const ROOT_SCOPE_CONSUMERS = new Map([
   ["scripts/mutation-shard.mjs", ["packages/shared"]],
   ["scripts/mutation-aggregate.mjs", ["packages/shared"]],
   ["scripts/setup-s3-test-server.mjs", ["apps/server"]],
-  ["scripts/vitest-duration-sequencer.mjs", ["apps/server"]],
+  ["scripts/vitest-duration-sequencer.mjs", ["apps/dashboard", "apps/server", "apps/till"]],
   ["scripts/box/host-protocol.mjs", ["apps/server"]],
   ["scripts/box/name-tag.mjs", ["apps/server"]],
   ["scripts/box/wifi-record.mjs", ["apps/server"]],

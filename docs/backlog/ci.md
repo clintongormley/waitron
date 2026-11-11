@@ -81,16 +81,6 @@ person to open the screen got a 500; the "open it and look" half is CLAUDE.md §
 other half — a matrix that varies two things separately and never crosses them proves less than
 it looks — wants its own line. Left open by content languages and the image library (#339).
 
-## The other sharded packages still use Vitest's file-count split.
-
-Fiscal-verifactu, till, dashboard,
-venue-service, db and provisioning do not pack their shards by measured duration as the server
-does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
-shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
-the fix at the cause. On main run 40597297102 (head `8e454b1eb`, 2026-10-27) the dashboard's four
-shards' runs took about 115, 202, 235 and 239 s, and shard 4's job 4 min 46 s.
-[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
@@ -414,12 +404,11 @@ infer either from the missing outcome alone.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
-2 entries, size M. Duration warnings are implemented separately. For later packing comparisons,
-use qualified runs with one coverage mode; never mix runs from before and after A1427.
-
-- **The other sharded packages still use Vitest's file-count split.**
-  [Detail](ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
-- an inventory of run test files, only if a same-count wrong-files case is ever seen
+1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
+ever seen. For later packing comparisons, use qualified runs with one coverage mode; never mix
+runs from before and after A1427.
+Db, provisioning, venue-service and fiscal-verifactu keep the file-count split because their
+measured shards are inside the four-minute target; revisit a package when a job passes about four minutes.
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 
@@ -872,9 +861,8 @@ A1424's live qualification was added on 7 November 2026.
   [Receipt](../developers/ci-and-gates.md#the-upgrade-deadline-grows-with-the-walk),
   [processor time](../developers/ci-and-gates.md#the-upgrade-budget-counts-the-walks-own-processor-time).
 
-- **Job-sharding levers:** `--shard` splits by FILE COUNT, except in `apps/server`, whose shards are
-  packed by measured duration since A938
-  ([how](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)); bump `shard: [1..N]` and the denominator
+- **Job-sharding levers:** server, dashboard and till use measured-duration packing
+  ([tables and refresh](../developers/ci-and-gates.md#package-duration-tables)); bump `shard: [1..N]` and the denominator
   together with N at or below the file count; rebalance `LIGHT_A/B_PACKAGES` when one light shard
   dominates.
 - **The package suites' databases stay on the runner's disk, except in `test-venue-service` and

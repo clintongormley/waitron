@@ -268,12 +268,12 @@ describe("scopeForPaths", () => {
       },
     );
 
-    it("selects the server, whose Vitest config loads scripts/vitest-duration-sequencer.mjs", () => {
+    it("selects all three packages whose Vitest configs load scripts/vitest-duration-sequencer.mjs", () => {
       expect(
         scopeForPaths(["scripts/vitest-duration-sequencer.mjs"], workspace(consumers)),
       ).toMatchObject({
         kind: "packages",
-        packages: ["@waitron/server"],
+        packages: ["@waitron/dashboard", "@waitron/server", "@waitron/till"],
         root: true,
       });
     });
@@ -811,9 +811,9 @@ describe("the CLI", () => {
     );
   });
 
-  it("selects the server, whose Vitest config loads scripts/vitest-duration-sequencer.mjs", () => {
+  it("selects all three packages whose Vitest configs load scripts/vitest-duration-sequencer.mjs", () => {
     expect(run("scripts/vitest-duration-sequencer.mjs\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/server @waitron/till\nroot=true\ndeploy=false\n",
     );
   });
 

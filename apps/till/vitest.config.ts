@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
@@ -46,6 +48,11 @@ export default defineConfig({
     entries: ["src/main.ts"],
   },
   test: {
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     globals: true,
     clearMocks: false,
     // A crashed Stryker run leaves mutated copies of the source, tests included, in .stryker-tmp.

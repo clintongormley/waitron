@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import type { BrowserCommand } from "vitest/node";
@@ -113,6 +115,11 @@ export default defineConfig({
   // and unhandled rejection to the terminal, a passing test's deliberate ones included.
   server: { forwardConsole: false },
   test: {
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     projects: [browserProject, touchProject, nodeTimezoneProject],
     coverage: {
       provider: "v8",
