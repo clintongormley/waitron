@@ -615,6 +615,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Service periods, opening hours and departments
 
+- **A1512. Send the venue's opening hours to Google (owner, 2026-11-11; was SP19).** Wanted. The
+  hours and closures kept in Waitron update the venue's Google Business Profile, so Google Maps never
+  shows a closed venue as open. Needs a design. Not started.
+
 - **Department dialog** (bundle of 2, 1 important, size S). [Detail](backlog/service-periods.md#bundle-department-dialog)
 
 - **One rule for two managers editing at once** (bundle of 6, 2 important, size M). Holds A1073. [Detail](backlog/service-periods.md#bundle-one-rule-for-two-managers-editing-at-once)
@@ -1009,6 +1013,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Floor plan editor at phone width** (bundle of 3, size S). Holds A1103, A1109. [Detail](backlog/till.md#bundle-floor-plan-editor-at-phone-width)
 
 - **Guest-facing QR, online ordering, delivery, online booking** (bundle of 4, size L, waits for another entry). Holds A508, A509, A1012, A1013. [Detail](backlog/till.md#bundle-guest-facing-qr-online-ordering-delivery-online-booking)
+
+- **A1513. Take orders from the delivery apps: Glovo, Uber Eats, Just Eat (owner, 2026-11-11).**
+  After go-live, not at it. Today staff would type each app order into the till by hand. Needs a
+  design, including whether to connect each app or one service that gathers them all. Not started.
+
+- **A1514. Share bookings with TheFork and Reserve with Google (owner, 2026-11-11).** Later: Waitron's
+  own booking system, including online booking (A1013), works first. Without it, a venue taking
+  bookings in both places can double-book a table. Not started.
 
 - **Loose ends left by A429 slice 1 (#1493).**
   The bookings list shows no table for any booking, and a past booking's kept table name
@@ -1600,6 +1612,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/workforce.md#a588-a-solver-drafts-the-rota-as-a-paid-waitron-cloud-feature-owner-2026-10-22).
 
 ### Purchasing, recipes, stock and reports
+
+- **A1511. An export for the venue's accountant (owner, 2026-11-11; was SP17).** Wanted at go-live or
+  soon after. Almost every Spanish venue hands its books to an outside accountant (_gestor_ or
+  _asesor_), who today would have to type in Waitron's sales and purchase invoices by hand. Needs a
+  design: which accounting programs to load into first, and what the export holds. Not started.
 
 - **One design for supplier invoices and credit notes** (bundle of 2, 2 important, size M, needs the owner). Holds A1326. [Detail](backlog/back-office.md#bundle-one-design-for-supplier-invoices-and-credit-notes)
 
