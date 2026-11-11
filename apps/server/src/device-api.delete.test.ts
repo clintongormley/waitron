@@ -183,12 +183,11 @@ async function deleteThroughRoute(app: Hono, venue: Venue, deviceId: string): Pr
   expect(res.status).toBe(200);
 }
 
-/** The row a delete leaves: kept, disabled, stamped and with no token. */
-async function expectStillDeleted(deviceId: string, tokenHash = ""): Promise<void> {
+async function expectStillDeleted(deviceId: string, tokenHash?: string): Promise<void> {
   const row = await deviceRow(deviceId);
-  expect(row.deletedAt).not.toBeNull();
   expect(row.active).toBe(false);
-  expect(row.tokenHash).toBe(tokenHash);
+  if (tokenHash === undefined) expect(row.tokenHash).not.toBe("");
+  else expect(row.tokenHash).toBe(tokenHash);
 }
 
 async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
@@ -232,7 +231,7 @@ describe("device delete routes", () => {
       cookie: venue.managerCookie,
     });
     expect(deleted.status).toBe(200);
-    expect((await deviceRow(deviceId)).deletedAt).not.toBeNull();
+    expect((await deviceRow(deviceId)).deletedAt).toBeNull();
   });
 
   it("a malformed id answers 404 device.not_found, after the permission check", async () => {
@@ -251,7 +250,7 @@ describe("device delete routes", () => {
     }
   });
 
-  it("reads the impact, then deletes with it recomputed, and a second delete answers device.not_found and writes nothing", async () => {
+  it("recomputes Delete impact, and a repeated Delete ends nothing and leaves the retained rows unchanged", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
@@ -277,14 +276,15 @@ describe("device delete routes", () => {
     });
     expect(await openSessionCount(deviceId)).toBe(0);
 
-    const state = await snapshot();
+    const state = await deviceRow(deviceId);
     const again = await send(app, "DELETE", devicePath(deviceId), { cookie: venue.managerCookie });
-    expect(again.status).toBe(404);
-    expect(await again.json()).toMatchObject({ error: { code: "device.not_found" } });
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual({ ...before, ends: [] });
     const reread = await send(app, "GET", impactPath(deviceId), { cookie: venue.managerCookie });
-    expect(reread.status).toBe(404);
-    expect(await reread.json()).toMatchObject({ error: { code: "device.not_found" } });
-    expect(await snapshot()).toEqual(state);
+    expect(reread.status).toBe(200);
+    expect(await reread.json()).toEqual({ ...before, ends: [] });
+    expect(await deviceRow(deviceId)).toEqual(state);
+    expect(await openSessionCount(deviceId)).toBe(0);
   });
 
   it("a refusal created between the read and the delete makes the delete answer 409 device.payment_in_progress", async () => {
@@ -346,10 +346,10 @@ describe("device delete routes", () => {
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const { deviceId, jar } = await enrol(app, venue, mode);
-    const revoked = await send(app, "POST", `/management-api/devices/${deviceId}/revoke`, {
+    const revoked = await send(app, "DELETE", `/management-api/devices/${deviceId}`, {
       cookie: venue.managerCookie,
     });
-    expect(revoked.status).toBe(204);
+    expect(revoked.status).toBe(200);
 
     const hold = mode.open();
     const knock = await send(app, "POST", "/api/device/join", {
@@ -372,33 +372,26 @@ describe("device delete routes", () => {
 });
 
 describe("a deleted device", () => {
-  it("the device list leaves out a deleted device and still lists a disabled one", async () => {
+  it("the device list leaves out deleted and inactive devices", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const gone = await enrol(app, venue, mode, "Bar");
     const disabled = await enrol(app, venue, mode, "Terrace");
-    await enrol(app, venue, mode, "Kitchen");
+    const live = await enrol(app, venue, mode, "Kitchen");
     await deleteThroughRoute(app, venue, gone.deviceId);
-    const revoked = await send(app, "POST", `${devicePath(disabled.deviceId)}/revoke`, {
-      cookie: venue.managerCookie,
-    });
-    expect(revoked.status).toBe(204);
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, disabled.deviceId));
 
     const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
     expect(res.status).toBe(200);
     const listed = (await res.json()) as { id: string; active: boolean }[];
 
-    const undeleted = await suite.db
-      .select({ id: devices.id })
-      .from(devices)
-      .where(isNull(devices.deletedAt));
-    expect(listed.map((row) => row.id).sort()).toEqual(undeleted.map((row) => row.id).sort());
+    expect(listed.map((row) => row.id)).toEqual([live.deviceId]);
     expect(listed.map((row) => row.id)).not.toContain(gone.deviceId);
-    expect(listed.find((row) => row.id === disabled.deviceId)).toMatchObject({ active: false });
+    expect(listed.map((row) => row.id)).not.toContain(disabled.deviceId);
   });
 
-  it("a deleted device answers 404 device.not_found to Disable, Edit, the delete-impact read and Delete, and nothing is written", async () => {
+  it("a deleted device answers 404 device.not_found to Edit, and nothing is written", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
@@ -422,12 +415,7 @@ describe("a deleted device", () => {
 
     const body = await editBody(deviceId, "Bar 2");
     const state = await snapshot();
-    for (const [method, path, sent] of [
-      ["POST", `${devicePath(deviceId)}/revoke`, undefined],
-      ["PATCH", devicePath(deviceId), body],
-      ["GET", impactPath(deviceId), undefined],
-      ["DELETE", devicePath(deviceId), undefined],
-    ] as const) {
+    for (const [method, path, sent] of [["PATCH", devicePath(deviceId), body]] as const) {
       const res = await send(app, method, path, { cookie: venue.managerCookie, body: sent });
       expect({ method, path, status: res.status }).toEqual({ method, path, status: 404 });
       expect(await res.json()).toMatchObject({
@@ -437,7 +425,7 @@ describe("a deleted device", () => {
     expect(await snapshot()).toEqual(state);
   });
 
-  it("a deleted device's browser knocking again is a new request under a new id, and accepting it makes a second device", async () => {
+  it("a deleted device asks to return under its retained id, and acceptance restores that device", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
@@ -451,14 +439,14 @@ describe("a deleted device", () => {
     });
     expect(knock.status).toBe(200);
     const { joinId } = (await knock.json()) as { joinId: string };
-    expect(joinId).not.toBe(deviceId);
+    expect(joinId).toBe(deviceId);
 
     const pending = await send(app, "GET", "/management-api/join-requests?kind=device", {
       cookie: venue.managerCookie,
     });
     expect(pending.status).toBe(200);
     expect(await pending.json()).toEqual([
-      expect.objectContaining({ id: joinId, returning: null }),
+      expect.objectContaining({ id: joinId, returning: expect.objectContaining({ name: "Bar" }) }),
     ]);
 
     const profileId = await seedProfile();
@@ -466,12 +454,12 @@ describe("a deleted device", () => {
       acceptDeviceJoinRequest(tx, venue.cfg, joinId, { label: "Bar", profileId }),
     );
     mode.release(hold.holdId);
-    expect(await deviceCount()).toBe(2);
+    expect(await deviceCount()).toBe(1);
     expect((await deviceRow(joinId)).active).toBe(true);
-    await expectStillDeleted(deviceId);
+    expect((await deviceRow(joinId)).deletedAt).toBeNull();
   });
 
-  it("in dev mode, a deleted device's browser knocking again is enrolled at once as a new device", async () => {
+  it("in dev mode, a deleted device is restored at once under its retained id", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg, createPairingMode(), { devMode: true });
     const first = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
@@ -485,12 +473,12 @@ describe("a deleted device", () => {
     });
     expect(again.status).toBe(200);
     const { joinId } = (await again.json()) as { joinId: string };
-    expect(joinId).not.toBe(oldId);
+    expect(joinId).toBe(oldId);
     const me = await send(app, "GET", "/api/device/me", { cookie: deviceCookieFrom(again) });
     expect(me.status).toBe(200);
     expect(await me.json()).toMatchObject({ deviceId: joinId, name: "Dev till" });
-    expect(await deviceCount()).toBe(2);
-    await expectStillDeleted(oldId);
+    expect(await deviceCount()).toBe(1);
+    expect((await deviceRow(oldId)).active).toBe(true);
   });
 
   it("a knock proved before the delete and written after it answers device.join_stale and leaves the deleted row as it was", async () => {
@@ -498,14 +486,17 @@ describe("a deleted device", () => {
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
-    const revoked = await send(app, "POST", `${devicePath(deviceId)}/revoke`, {
+    const revoked = await send(app, "DELETE", devicePath(deviceId), {
       cookie: venue.managerCookie,
     });
-    expect(revoked.status).toBe(204);
+    expect(revoked.status).toBe(200);
     const proof = await provenDisabledDevice(suite.db, parseDeviceCookie(cookieValue(jar)));
     expect(proof).not.toBeNull();
 
-    await deleteThroughRoute(app, venue, deviceId);
+    await suite.db
+      .update(devices)
+      .set({ active: false, deletedAt: new Date().toISOString() })
+      .where(eq(devices.id, deviceId));
     const before = await deviceRow(deviceId);
     const code = await codeOf(() =>
       withTransaction(suite.db, (tx) =>
@@ -524,7 +515,10 @@ describe("a deleted device", () => {
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const { deviceId } = await enrol(app, venue, mode, "Bar");
-    await deleteThroughRoute(app, venue, deviceId);
+    await suite.db
+      .update(devices)
+      .set({ active: false, deletedAt: new Date().toISOString() })
+      .where(eq(devices.id, deviceId));
     await suite.db.insert(joinRequests).values({
       id: deviceId,
       nodeId: venue.cfg.nodeId,
@@ -635,7 +629,10 @@ describe("a deleted device", () => {
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
     const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
-    await deleteThroughRoute(app, venue, deviceId);
+    await suite.db
+      .update(devices)
+      .set({ active: false, deletedAt: new Date().toISOString() })
+      .where(eq(devices.id, deviceId));
     const realHash = hashDeviceToken(parseDeviceCookie(cookieValue(jar))!.token);
     await suite.db.update(devices).set({ tokenHash: realHash }).where(eq(devices.id, deviceId));
 

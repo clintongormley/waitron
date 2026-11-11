@@ -188,6 +188,7 @@ export type {
   DeleteImpactRefusal,
   DeleteTarget,
 } from "./delete-impact.js";
+export { deleteTargetName } from "./delete-impact.js";
 export type { ClassificationEntry, SaleLineClassification } from "./sale-line-classification.js";
 export { compareLabels, createLabelComparator } from "./compare-labels.js";
 export {

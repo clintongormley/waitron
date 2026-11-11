@@ -196,3 +196,14 @@ describe("a refusal, should a printer ever answer one", () => {
     );
   });
 });
+
+it.each([
+  ["en", "deleted"],
+  ["es", "eliminado"],
+])("marks the deleted device beside its affected setting in %s", (locale, mark) => {
+  setLocale(locale);
+  const target = { ...ana, deleted: true };
+  const line = printerDeleteCopy().item(item("device_receipt", [target, bar]));
+  expect(line).toContain(`Handheld Ana (${mark}), Bar till`);
+  expect(line).not.toContain(`Bar till (${mark})`);
+});

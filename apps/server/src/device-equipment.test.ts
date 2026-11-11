@@ -258,7 +258,7 @@ function mountApp(venue: Venue): Hono {
 function managerRequest(
   app: Hono,
   venue: Venue,
-  method: "POST" | "PATCH",
+  method: "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
 ) {
@@ -487,9 +487,9 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     expect(await readerChoice(a)).toBe(reader);
     const app = mountApp(venue);
 
-    const revoked = await managerRequest(app, venue, "POST", `/management-api/devices/${a}/revoke`);
+    const revoked = await managerRequest(app, venue, "DELETE", `/management-api/devices/${a}`);
 
-    expect(revoked.status).toBe(204);
+    expect(revoked.status).toBe(200);
     expect(await columns(a)).toEqual({ receipt: handheld, slip: null, drawer: null });
     expect(await readerChoice(a)).toBe(reader);
     expect(await printerHoldersOf([handheld])).toEqual({});
@@ -535,8 +535,8 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
     });
     const app = mountApp(venue);
     expect(
-      (await managerRequest(app, venue, "POST", `/management-api/devices/${a}/revoke`)).status,
-    ).toBe(204);
+      (await managerRequest(app, venue, "DELETE", `/management-api/devices/${a}`)).status,
+    ).toBe(200);
 
     await reEnable(venue, a, profile);
 

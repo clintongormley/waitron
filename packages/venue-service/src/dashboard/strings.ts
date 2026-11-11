@@ -2,6 +2,7 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
   "venue.delete_zone_heading": "Delete zone",
+  "venue.delete_mark_deleted": "deleted",
   "venue.delete_department_heading": "Delete department",
   "venue.delete": "Delete",
   "venue.delete_refusals": "Why this cannot be deleted",
@@ -1021,6 +1022,7 @@ const es: Record<keyof typeof en, string> = {
   "venue.delete_refusal_department_profile_in_use_unnamed":
     "Mueve primero a otro departamento los perfiles de este departamento.",
   "venue.delete_zone_heading": "Eliminar zona",
+  "venue.delete_mark_deleted": "eliminado",
   "venue.delete_department_heading": "Eliminar departamento",
   "venue.delete": "Eliminar",
   "venue.delete_refusals": "Por qué no se puede eliminar",

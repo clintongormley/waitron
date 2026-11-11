@@ -29,6 +29,7 @@ import {
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
 } from "@waitron/venue-service";
+import { deleteDevice } from "./device-delete.js";
 import { deleteStation, readStationDeleteImpact } from "./station-delete.js";
 import { createStation, listStations, updateStation, setDefaultStation } from "./kitchen.js";
 import { listStationPrinters } from "./station-printers.js";
@@ -124,8 +125,7 @@ async function binding(v: PartyVenue, id: string) {
     await setProfileKitchenScreens(tx, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });
-    const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Off display" });
-    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bound display" });
     await setDeviceKitchenScreens(tx, {
       deviceId,
       profileId: profile!.id,
@@ -187,7 +187,7 @@ describe("permanent station deletion", () => {
         {
           code: "station.screen_in_use",
           params: { stationId: id, count: 1 },
-          targets: [{ id: display.id, name: "Off display" }],
+          targets: [{ id: display.id, name: "Bound display" }],
         },
         {
           code: "station.work_in_progress",
@@ -200,7 +200,7 @@ describe("permanent station deletion", () => {
         {
           key: "station_device_screens",
           count: 1,
-          targets: [{ id: display.id, name: "Off display" }],
+          targets: [{ id: display.id, name: "Bound display" }],
         },
       ],
     });
@@ -274,6 +274,24 @@ describe("permanent station deletion", () => {
       expect(await snapshot(v)).toEqual(before);
     },
   );
+  it("marks a deleted device's retained made-here choice", async () => {
+    const { v, id } = await fixture();
+    await inTx(v, async (tx) => {
+      await tx
+        .update(devices)
+        .set({ label: "Terrace" })
+        .where(eq(devices.id, v.cfg.origin.deviceId));
+      await tx
+        .insert(deviceMadeHereStations)
+        .values({ stationId: id, deviceId: v.cfg.origin.deviceId });
+      await deleteDevice(tx, v.cfg, v.cfg.origin.deviceId);
+    });
+    const impact = await inTx(v, (tx) => readStationDeleteImpact(tx, id));
+    expect(impact.removes.find((item) => item.key === "station_made_here")?.targets).toEqual([
+      { id: v.cfg.origin.deviceId, name: "Terrace", deleted: true },
+    ]);
+  });
+
   it("clears eligible choices and core settings, bumps revisions once, and retains history", async () => {
     const { v, id } = await fixture();
     const first = await food(v, id, { ticket: false });

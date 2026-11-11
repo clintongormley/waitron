@@ -158,7 +158,14 @@ describe("device zone selection", () => {
       startingZoneId: f.counter,
     });
     await save(f, [f.counter], f.counter);
-    expect(await run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, f.deviceId))).toBe(2);
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(deviceZoneSelections)
+          .where(eq(deviceZoneSelections.deviceId, f.deviceId))
+      ).length,
+    ).toBe(2);
     await run((tx) =>
       tx.update(devices).set({ deviceProfileId: f.profileId }).where(eq(devices.id, f.deviceId)),
     );
@@ -250,7 +257,14 @@ describe("device zone selection", () => {
         ).rejects.toMatchObject({ code: "device_zones.invalid", params: { field } });
       }
       expect(await read(f)).toEqual(current);
-      expect(await run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, f.deviceId))).toBe(0);
+      expect(
+        (
+          await suite.db
+            .select()
+            .from(deviceZoneSelections)
+            .where(eq(deviceZoneSelections.deviceId, f.deviceId))
+        ).length,
+      ).toBe(0);
     },
   );
 
@@ -266,7 +280,14 @@ describe("device zone selection", () => {
       code: "device_zones.invalid",
       params: { field: "startingZoneId" },
     });
-    expect(await run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, f.deviceId))).toBe(0);
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(deviceZoneSelections)
+          .where(eq(deviceZoneSelections.deviceId, f.deviceId))
+      ).length,
+    ).toBe(0);
   });
 
   it("rejects a superseded snapshot and profile while allowing a fresh save", async () => {
@@ -357,7 +378,7 @@ describe("device zone selection", () => {
     await expect(read(f)).rejects.toMatchObject({ code: "device.not_found" });
   });
 
-  it("retains disabled device preferences and removes every saved profile for only the named device", async () => {
+  it("refuses hidden devices while retaining their saved preferences", async () => {
     const f = await fixture();
     await save(f, [f.terrace], f.terrace);
     await run(async (tx) => {
@@ -368,11 +389,9 @@ describe("device zone selection", () => {
       });
       await tx.update(devices).set({ active: false }).where(eq(devices.id, f.deviceId));
     });
+    await expect(read(f)).rejects.toMatchObject({ code: "device.not_found" });
+    await run((tx) => tx.update(devices).set({ active: true }).where(eq(devices.id, f.deviceId)));
     expect(await read(f)).toMatchObject({ selectedZoneIds: [f.terrace] });
-    await run((tx) => VENUE_SERVICE.removeDeviceZoneSelections(tx, f.deviceId));
-    expect(await run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, f.deviceId))).toBe(0);
-    expect(await run((tx) => VENUE_SERVICE.countDeviceZoneSelections(tx, f.otherDeviceId))).toBe(1);
-    expect(await read(f)).toMatchObject({ selectedZoneIds: [f.dining, f.terrace] });
   });
 });
 

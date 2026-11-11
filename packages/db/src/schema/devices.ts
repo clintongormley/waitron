@@ -6,13 +6,6 @@ import { pagePrinters } from "./page-printers.js";
 import { printers } from "./printers.js";
 import { locations } from "./tenants.js";
 
-/**
- * An always-on trusted device: a screen that joins and then authenticates with an httpOnly
- * cookie, with no per-person login.
- *
- * Disable clears `active`; Delete also sets `deleted_at` and keeps the row, which other tables
- * reference.
- */
 export const devices = table(
   "devices",
   {

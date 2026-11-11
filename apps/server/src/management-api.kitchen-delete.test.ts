@@ -2,14 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import {
-  devices,
-  deviceProfiles,
-  kitchenStations,
-  products,
-  printers,
-  stationPrinters,
-} from "@waitron/db";
+import { deviceProfiles, kitchenStations, products, printers, stationPrinters } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -248,7 +241,7 @@ it("default station refuses deletion with its exact conflict params", async () =
     error: { code: "station.is_default", params: { stationId: row!.id } },
   });
 });
-it("station bound to an off KDS refuses deletion with distinct device count", async () => {
+it("station bound to an active KDS refuses deletion with distinct device count", async () => {
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: "KDS", formFactor: "kds" })
@@ -259,9 +252,8 @@ it("station bound to an off KDS refuses deletion with distinct device count", as
     }),
   );
   const device = {
-    id: (await seedDevice(suite.db, { profileId: profile!.id, label: "Off display" })).deviceId,
+    id: (await seedDevice(suite.db, { profileId: profile!.id, label: "Bound display" })).deviceId,
   };
-  await suite.db.update(devices).set({ active: false }).where(eq(devices.id, device.id));
   await inTx(v, (tx) =>
     setDeviceKitchenScreens(tx, {
       deviceId: device!.id,
@@ -277,14 +269,14 @@ it("station bound to an off KDS refuses deletion with distinct device count", as
       {
         code: "station.screen_in_use",
         params: { stationId: station, count: 1 },
-        targets: [{ id: device!.id, name: "Off display" }],
+        targets: [{ id: device!.id, name: "Bound display" }],
       },
     ],
     removes: [
       {
         key: "station_device_screens",
         count: 1,
-        targets: [{ id: device!.id, name: "Off display" }],
+        targets: [{ id: device!.id, name: "Bound display" }],
       },
     ],
   });

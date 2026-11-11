@@ -269,3 +269,16 @@ it.each([
     );
   },
 );
+
+it.each([
+  ["en", "deleted"],
+  ["es", "eliminado"],
+])("marks the deleted settings owner in %s", (locale, mark) => {
+  setLocale(locale);
+  const line = stationDeleteCopy().item({
+    key: "station_made_here",
+    count: 1,
+    targets: [{ id: "gone", name: "Terrace", deleted: true }],
+  });
+  expect(line).toContain(`Terrace (${mark})`);
+});

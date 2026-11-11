@@ -1,3 +1,4 @@
+import { deleteTargetName } from "@waitron/shared";
 import type { DeleteImpactItem, DeleteImpactRefusal } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
@@ -21,7 +22,8 @@ const ROLES = [
   ["invoice", "printers.delete_role_invoice", "printers.delete_default_invoice"],
 ] as const;
 
-const names = (item: DeleteImpactItem): string => item.targets.map(({ name }) => name).join(", ");
+const names = (item: DeleteImpactItem): string =>
+  item.targets.map((target) => deleteTargetName(target, t("delete.deleted"))).join(", ");
 
 function line(key: Counted, item: DeleteImpactItem, role = ""): string {
   return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {

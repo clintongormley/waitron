@@ -268,7 +268,7 @@ it("successful pairing commits its exact payload before a failed refresh and ope
   );
   await expect
     .poll(() => q(screen, "[data-test=joined-modal]")?.getAttribute("heading"))
-    .toBe(t("devices.enabled").replace("{name}", "Renamed"));
+    .toBe(t("devices.added").replace("{name}", "Renamed"));
 });
 it("refused pairing retains changed settings and asks before cleanup", async () => {
   const { app, screen, deny } = await mount({

@@ -106,7 +106,7 @@ async function cardReaderDeleteRules(
     refusals.push(refused("reader.provider_disconnected", { providerId: reader.provider }, []));
 
   const choosing = await tx
-    .select({ id: devices.id, name: devices.label })
+    .select({ id: devices.id, name: devices.label, active: devices.active })
     .from(deviceCardReaders)
     .innerJoin(devices, eq(devices.id, deviceCardReaders.deviceId))
     .where(eq(deviceCardReaders.readerId, id));
@@ -151,7 +151,10 @@ async function cardReaderDeleteRules(
       ? [named("provider_registration_kept", provider)]
       : [];
   const removes: DeleteImpactItem[] = [
-    named("device_reader", choosing),
+    named(
+      "device_reader",
+      choosing.map(({ id, name, active }) => ({ id, name, ...(active ? {} : { deleted: true }) })),
+    ),
     named("device_reader_default", inheriting),
     named("profile_reader", profiles(false)),
     named("profile_reader_default", profiles(true)),

@@ -1,3 +1,4 @@
+import { deleteTargetName } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeOf } from "@waitron/dashboard-kit";
 import { format } from "./hours-view.js";
@@ -81,7 +82,9 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
     retry: t("venue.delete_retry"),
     loading: t("venue.delete_loading"),
     item(item) {
-      const names = item.targets.map((target) => target.name).join(", ");
+      const names = item.targets
+        .map((target) => deleteTargetName(target, t("venue.delete_mark_deleted")))
+        .join(", ");
       if (item.key === "counter_default" && !names) return t("venue.delete_counter_empty");
       if (item.key === "default_department" && !names) return t("venue.delete_default_empty");
       const keys = itemKeys[item.key as keyof typeof itemKeys];

@@ -1,3 +1,4 @@
+import { deleteTargetName } from "@waitron/shared";
 import type { DeleteImpactItem, DeleteImpactRefusal, DeleteTarget } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
@@ -18,7 +19,7 @@ const COUNTED: Readonly<Record<string, Counted>> = {
 };
 
 const names = (targets: readonly DeleteTarget[]): string =>
-  targets.map(({ name }) => name).join(", ");
+  targets.map((target) => deleteTargetName(target, t("delete.deleted"))).join(", ");
 
 function line(key: Counted, item: DeleteImpactItem): string {
   return fill(item.count === 1 ? (`${key}_one` as StringKey) : key, {

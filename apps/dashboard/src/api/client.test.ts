@@ -1656,16 +1656,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
-  it("revokeDevice POSTs the device's revoke route and resolves undefined on an empty 204", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.revokeDevice("d1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/revoke", {
-      method: "POST",
-      credentials: "include",
-    });
-  });
-
   // ── Pairing mode + join requests ───────────────────────────────────────────────────────────────
 
   it("pairingMode GETs the window's state and the address devices use", async () => {
@@ -1858,14 +1848,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     await expect(
       api.acceptDeviceJoinRequest("j1", { name: "Pass", profileId: "dp1", kitchenScreens: [] }),
     ).rejects.toMatchObject({ code: "join_request.unclaimed" });
-  });
-
-  it("revokeDevice rejects with { code } on a non-2xx (device not found)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "device.not_found" } }, false, 404));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.revokeDevice("nope")).rejects.toMatchObject({ code: "device.not_found" });
   });
 
   it("createDeviceProfile POSTs the profile body including its form factor + inactivity timeout (201)", async () => {

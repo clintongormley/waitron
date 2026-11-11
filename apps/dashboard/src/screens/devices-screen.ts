@@ -262,18 +262,16 @@ interface EditForm {
   display: Partial<Record<PassKind, boolean | null>>;
 }
 
-/** A returning device goes by the name it had, which Enable keeps, not the one its browser asked with. */
 function waitingName(request: JoinRequestRow): string {
   return request.returning?.name ?? request.label;
 }
 
-/** Bringing back a disabled device says Enable, as re-adding a disabled printer does. */
 function pairAction(request: JoinRequestRow): string {
-  return request.returning ? t("devices.enable") : t("devices.pair");
+  return request.returning ? t("action.add") : t("devices.pair");
 }
 
 function pairTitle(request: JoinRequestRow): string {
-  return fill(request.returning ? "devices.enable_title" : "devices.pair_title", {
+  return fill(request.returning ? "devices.readd_title" : "devices.pair_title", {
     name: waitingName(request),
   });
 }
@@ -475,8 +473,7 @@ export class DevicesScreen extends LitElement {
   @state() private addingDevice = false;
   @state() private deviceAddress = "";
   @state() private qr = "";
-  /** The last device this dialog paired, and whether it was enabled rather than added. */
-  @state() private added: { name: string; enabled: boolean } | null = null;
+  @state() private added: { name: string } | null = null;
   @state() private hasJoined = false;
   /** The device whose open Pair dialog its own new ask replaced. */
   @state() private askedAgain: string | null = null;
@@ -544,7 +541,6 @@ export class DevicesScreen extends LitElement {
       restore: () => {},
     });
   }
-  @state() private armedRemoveId: string | null = null;
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
@@ -734,7 +730,6 @@ export class DevicesScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
-    this.armedRemoveId = null;
     try {
       await Promise.all([
         this.#watchDevices(),
@@ -1090,7 +1085,7 @@ export class DevicesScreen extends LitElement {
     this.hasJoined = true;
     this.#addEpoch++;
     this.#hold.stop();
-    this.added = { name: result.name, enabled: Boolean(request.returning) };
+    this.added = { name: result.name };
     if (!scope?.isDirty()) await this.#finishPair(epoch, "saved");
     try {
       await this.#reloadDevices();
@@ -1100,30 +1095,7 @@ export class DevicesScreen extends LitElement {
   }
 
   async #reloadDevices(): Promise<void> {
-    this.armedRemoveId = null;
     this.devices = await this.api.listDevices();
-  }
-
-  #onRemove(id: string): void {
-    if (this.armedRemoveId === id) {
-      this.armedRemoveId = null;
-      void this.#remove(id);
-      return;
-    }
-    this.armedRemoveId = id;
-  }
-
-  async #remove(id: string): Promise<void> {
-    this.#showError(null);
-    let written = false;
-    try {
-      await this.api.revokeDevice(id);
-      written = true;
-      await this.#reloadDevices();
-    } catch (error) {
-      if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
-    }
   }
 
   #panelFor(providerId: string): CardProviderPanel | undefined {
@@ -1686,25 +1658,10 @@ export class DevicesScreen extends LitElement {
   }
 
   #deviceActions(device: DeviceRow): TemplateResult {
-    const armed = this.armedRemoveId === device.id;
     return html`<dashboard-row-actions .label=${`${t("devices.actions")}: ${device.label}`}>
-      ${
-        device.active
-          ? html`<wt-button
-                data-test=${`edit-device-${device.id}`}
-                @click=${() => this.#openEdit(device)}
-                >${t("action.edit")}</wt-button
-              >
-              <wt-button
-                variant="danger"
-                data-keep-open
-                data-test=${`remove-${device.id}`}
-                data-armed=${armed ? "true" : nothing}
-                @click=${() => this.#onRemove(device.id)}
-                >${armed ? t("devices.disable_confirm") : t("devices.disable")}</wt-button
-              >`
-          : nothing
-      }
+      <wt-button data-test=${`edit-device-${device.id}`} @click=${() => this.#openEdit(device)}
+        >${t("action.edit")}</wt-button
+      >
       <wt-button
         variant="danger"
         data-test=${`delete-device-${device.id}`}
@@ -1815,7 +1772,6 @@ export class DevicesScreen extends LitElement {
   /** Not `#load`, which would clear a message this screen has just shown. A failure is a read's. */
   async #rewatchDevices(): Promise<void> {
     if (!this.isConnected) return;
-    this.armedRemoveId = null;
     // A failure has already reached `#showReadError`.
     await this.#watchDevices().catch(() => undefined);
   }
@@ -1836,7 +1792,6 @@ export class DevicesScreen extends LitElement {
       open = true;
       this.#endEdit();
     }
-    if (this.armedRemoveId === id) this.armedRemoveId = null;
     this.devices = this.devices.filter((d) => d.id !== id);
     if (refuse && open && !ours) this.#showError("device.not_found");
   }
@@ -1930,26 +1885,6 @@ export class DevicesScreen extends LitElement {
         cell: (d) => this.#battery(d),
       },
       {
-        key: "status",
-        sortValue: (d) => (d.active ? t("devices.status_active") : t("devices.status_disabled")),
-        filter: {
-          preserveOrder: true, // Active before disabled.
-          label: t("devices.column_status"),
-          allLabel: t("devices.filter_status_all"),
-          value: (d) => (d.active ? "active" : "disabled"),
-          options: [
-            { value: "active", label: t("devices.status_active") },
-            { value: "disabled", label: t("devices.status_disabled") },
-          ],
-        },
-        choosable: "shown",
-        label: t("devices.column_status"),
-        cell: (d) =>
-          html`<span data-test=${`device-status-${d.id}`}
-            >${d.active ? t("devices.status_active") : t("devices.status_disabled")}</span
-          >`,
-      },
-      {
         key: "lastSeen",
         choosable: "shown",
         label: t("devices.column_last_seen"),
@@ -1993,7 +1928,6 @@ export class DevicesScreen extends LitElement {
       .columns=${columns}
       .rowKey=${(d: DeviceRow) => d.id}
       .rowClick=${(d: DeviceRow) => this.#openEdit(d)}
-      .rowClickable=${(d: DeviceRow) => d.active}
       .rowClickLabel=${(d: DeviceRow) => fill("devices.edit_title", { name: d.label })}
       .emptyMessage=${t("devices.no_devices")}
     ></wt-data-table>`;
@@ -2037,8 +1971,8 @@ export class DevicesScreen extends LitElement {
                 ? html`<span part="returning-hint" data-test=${`returning-hint-${request.id}`}
                     >${t(
                       request.returning.profileRetired
-                        ? "devices.enable_hint_profile_deleted"
-                        : "devices.enable_hint",
+                        ? "devices.returning_hint_profile_deleted"
+                        : "devices.returning_hint",
                     )}</span
                   >`
                 : nothing
@@ -2079,7 +2013,7 @@ export class DevicesScreen extends LitElement {
     return html`<wt-modal
       size="compact"
       data-test="joined-modal"
-      heading=${fill(this.added.enabled ? "devices.enabled" : "devices.added", { name: this.added.name })}
+      heading=${fill("devices.added", { name: this.added.name })}
       description=${t("devices.add_another_question")}
       .open=${true}
       .opener=${this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]")}

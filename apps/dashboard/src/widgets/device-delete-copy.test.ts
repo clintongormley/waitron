@@ -35,7 +35,7 @@ describe("a device's delete dialog copy, in English", () => {
       "Why it can't be deleted",
       "Work that ends",
       "Settings that are removed",
-      "This can't be undone.",
+      "History and device settings are kept. To use this device again, add it through Add a device. Ended sign-ins stay ended.",
       "Try again",
       "Checking what changes…",
       "Delete",
@@ -49,14 +49,6 @@ describe("a device's delete dialog copy, in English", () => {
     [item("held_printers", [kitchen, bar]), "Stops carrying Kitchen printer, Bar printer"],
     [item("held_readers", [{ id: "r-1", name: "Solo" }]), "Stops carrying Solo"],
     [item("join_request", [], 1), "Its request to come back"],
-    [item("printer_choices", [kitchen, bar]), "Printers: Kitchen printer, Bar printer"],
-    [item("made_here_stations", [{ id: "s-grill", name: "Grill" }]), "Made here, no ticket: Grill"],
-    [item("approved_profiles", [waiters]), "Can switch to: Waiters"],
-    [item("card_reader", [{ id: "r-1", name: "Solo" }]), "Card reader: Solo"],
-    [item("kitchen_screens", [], 2), "2 kitchen screens"],
-    [item("zone_selections", [], 2), "2 saved zone selections"],
-    [item("zone_selections", [], 1), "Saved zone selection"],
-    [item("kitchen_screens", [], 1), "Kitchen screen"],
   ])("words %j", (each, line) => {
     setLocale("en");
     expect(deviceDeleteCopy().item(each)).toBe(line);
@@ -108,7 +100,7 @@ describe("a device's delete dialog copy, in Spanish", () => {
       "Por qué no se puede eliminar",
       "Trabajo que finaliza",
       "Configuración que se elimina",
-      "Esta acción no se puede deshacer.",
+      "Se conservan el historial y los ajustes del dispositivo. Para volver a usarlo, añádelo desde Añadir un dispositivo. Las sesiones cerradas no se recuperan.",
       "Reintentar",
       "Comprobando qué cambia…",
       "Eliminar",
@@ -122,17 +114,6 @@ describe("a device's delete dialog copy, in Spanish", () => {
     [item("held_printers", [kitchen, bar]), "Deja de llevar Kitchen printer, Bar printer"],
     [item("held_readers", [{ id: "r-1", name: "Solo" }]), "Deja de llevar Solo"],
     [item("join_request", [], 1), "Su solicitud para volver"],
-    [item("printer_choices", [kitchen]), "Impresoras: Kitchen printer"],
-    [
-      item("made_here_stations", [{ id: "s-grill", name: "Grill" }]),
-      "Se prepara aquí, sin comanda: Grill",
-    ],
-    [item("approved_profiles", [waiters]), "Puede cambiar a: Waiters"],
-    [item("card_reader", [{ id: "r-1", name: "Solo" }]), "Lector de tarjetas: Solo"],
-    [item("kitchen_screens", [], 2), "2 pantallas de cocina"],
-    [item("zone_selections", [], 2), "2 selecciones de zonas guardadas"],
-    [item("zone_selections", [], 1), "Selección de zonas guardada"],
-    [item("kitchen_screens", [], 1), "Pantalla de cocina"],
   ])("words %j", (each, line) => {
     setLocale("es");
     expect(deviceDeleteCopy().item(each)).toBe(line);
@@ -152,16 +133,7 @@ describe("a device's delete dialog copy, in Spanish", () => {
 });
 
 describe.each(["en", "es"])("every fixed item key has its own wording (%s)", (locale) => {
-  const keys = [
-    "sessions",
-    "held_printers",
-    "join_request",
-    "printer_choices",
-    "made_here_stations",
-    "approved_profiles",
-    "card_reader",
-    "kitchen_screens",
-  ];
+  const keys = ["sessions", "held_printers", "join_request"];
 
   it("no line shows a key or a target's id, and no two keys share a line", () => {
     setLocale(locale);

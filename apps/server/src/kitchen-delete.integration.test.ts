@@ -8,7 +8,6 @@ import {
   ticketItems,
   workingOrderLines,
   orderDraftEvents,
-  devices,
   deviceProfiles,
   products,
 } from "@waitron/db";
@@ -221,9 +220,8 @@ it("keeps retained draft, group, course and ready station history through manage
     });
     const { deviceId } = await seedDevice(tx, {
       profileId: profile!.id,
-      label: "Off dessert display",
+      label: "Dessert display",
     });
-    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
     await setDeviceKitchenScreens(tx, {
       deviceId,
       profileId: profile!.id,

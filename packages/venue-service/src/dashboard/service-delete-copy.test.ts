@@ -525,3 +525,16 @@ it.each([
     }
   },
 );
+
+it.each([
+  ["en", "deleted"],
+  ["es", "eliminado"],
+])("marks the deleted settings owner in %s", (locale, mark) => {
+  setLocale(locale);
+  const line = serviceDeleteCopy("zone").item({
+    key: "screen_zones",
+    count: 1,
+    targets: [{ id: "gone", name: "Terrace", deleted: true }],
+  });
+  expect(line).toContain(`Terrace (${mark})`);
+});

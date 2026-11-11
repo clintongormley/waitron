@@ -190,3 +190,16 @@ describe.each(languages)("a card reader's delete dialog copy ($locale)", (langua
     expect(new Set(lines).size).toBe(lines.length);
   });
 });
+
+it.each([
+  ["en", "deleted"],
+  ["es", "eliminado"],
+])("marks the deleted settings owner in %s", (locale, mark) => {
+  setLocale(locale);
+  const line = readerDeleteCopy(providerName).item({
+    key: "device_reader",
+    count: 1,
+    targets: [{ id: "gone", name: "Terrace", deleted: true }],
+  });
+  expect(line).toContain(`Terrace (${mark})`);
+});

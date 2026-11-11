@@ -1,3 +1,4 @@
+import { deleteTargetName } from "@waitron/shared";
 import type { DeleteDialogCopy } from "@waitron/ui";
 import { codeOf } from "@waitron/dashboard-kit";
 import { format } from "./hours-view.js";
@@ -58,7 +59,9 @@ export function stationDeleteCopy(): DeleteDialogCopy {
       const single = item.count === 1;
       return format(single ? one : many, {
         count: String(item.count),
-        names: item.targets.map((target) => target.name).join(", "),
+        names: item.targets
+          .map((target) => deleteTargetName(target, t("venue.delete_mark_deleted")))
+          .join(", "),
       });
     },
     refusal: (item) =>

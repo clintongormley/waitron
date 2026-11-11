@@ -61,7 +61,7 @@ import {
   type EquipmentSelection,
   type EquipmentPickup,
 } from "./device-equipment.js";
-import { deleteDevice, disableDevice, readDeviceDeleteImpact } from "./device-delete.js";
+import { deleteDevice, readDeviceDeleteImpact } from "./device-delete.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -783,7 +783,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             })
             .from(devices)
             .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-            .where(isNull(devices.deletedAt))
+            .where(and(eq(devices.active, true), isNull(devices.deletedAt)))
             .orderBy(desc(devices.enrolledAt));
           return {
             rows,
@@ -817,18 +817,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  // ── Revoke a device (hardware.manage) ──────────────────────────────────────────────────────────────────
-  app.post("/management-api/devices/:id/revoke", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      // A malformed id names no device, exactly as an absent one does.
-      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      await gated(sessionId, (tx) => disableDevice(tx, id));
-      return c.body(null, 204);
-    }),
-  );
-
   // ── Delete a device (hardware.manage) ─────────────────────────────────────────────────────────────────
   app.get("/management-api/devices/:id/delete-impact", (c) =>
     run(c, log, async () => {
@@ -849,7 +837,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const id = c.req.param("id");
       const impact = await gated(sessionId, (tx) => {
         if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-        return deleteDevice(tx, deps.cfg, id, deps.now?.());
+        return deleteDevice(tx, deps.cfg, id);
       });
       deps.pairingMode.dropClaim(id);
       return c.json(impact);
