@@ -114,6 +114,7 @@ it.each(["same-account", "other-account", "no-permission"])(
       liveData: new LiveData(),
       getGoogleConfig: async () => ({ configured: false }),
       getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
+      getLegalAbout: async () => ({ release: null, build: "test" }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       forgetLocales: () => {},
       getLocales: async () => ({

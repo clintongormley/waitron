@@ -53,6 +53,7 @@ function stubApi(me: Record<string, unknown> = {}): DashboardApi {
       ...me,
     }),
     getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: async () => ({ release: null, build: "test" }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getDiskStop: async () => ({ stopped: false, deleted: null }),

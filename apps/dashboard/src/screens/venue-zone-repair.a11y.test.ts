@@ -64,6 +64,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
             locales: [],
           }),
           getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
+          getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
           getVenueZoneRepair: vi.fn(async (zone?: string) => {
             if (saved) throw { code: "connection.failed" };
             return zone ? { ...status, preview } : status;

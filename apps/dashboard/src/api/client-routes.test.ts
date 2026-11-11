@@ -1596,6 +1596,15 @@ it("reads a venue clock preview passively with encoded clock values", async () =
   expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
 });
 
+it("reads /legal/about passively", async () => {
+  const answer = { release: { version: "1.2.3", releasedOn: "2026-10-22" }, build: "b" };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+  const api = new DashboardApi("", fetchImpl);
+  await expect(api.getLegalAbout()).resolves.toEqual(answer);
+  expect(callsOf(fetchImpl)).toEqual([["/legal/about", "GET", undefined]]);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
+});
+
 it("reads the new-product default through the catalogue settings route", async () => {
   const config = { defaultProductVatClass: "reduced" as const, defaultColor: null };
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(config));

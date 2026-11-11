@@ -33,7 +33,7 @@ export interface NodeRecoveryPack {
  * `@waitron/shared`'s type-only `menu-document/*-types.ts` leaves
  * (`scripts/dashboard-browser-purity.test.ts`).
  */
-import type { TimingBand } from "@waitron/shared";
+import type { LegalAbout, TimingBand } from "@waitron/shared";
 import type { RoutingView } from "@waitron/venue-service/routing";
 import {
   createRequest,
@@ -2581,6 +2581,10 @@ export class DashboardApi {
 
   forgetLocales(): void {
     this.#localesPromise = undefined;
+  }
+
+  getLegalAbout(): Promise<LegalAbout> {
+    return this.#request<LegalAbout>("/legal/about", "GET", undefined, { passive: true });
   }
 
   login(input: {

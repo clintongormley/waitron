@@ -1,4 +1,5 @@
 import "./widgets/fresh-sign-in-dialog.js";
+import "./widgets/about-dialog.js";
 import { LeaveController, navigationGuardFor, type LeaveReason } from "@waitron/ui";
 import { dashboardPath, leftToBrowser } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -26,7 +27,7 @@ import {
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
-import { FALLBACK_LOCALE, resolveActiveLocale } from "@waitron/shared";
+import { FALLBACK_LOCALE, resolveActiveLocale, type LegalAbout } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
 import { collectSearchDestinations } from "./nav-destinations.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -690,6 +691,12 @@ export class DashboardApp extends LitElement {
         margin-block-start: var(--wt-space-4);
       }
 
+      .about-foot {
+        display: flex;
+        justify-content: center;
+        margin-block-start: var(--wt-space-2);
+      }
+
       .venue-row {
         display: contents;
       }
@@ -870,6 +877,8 @@ export class DashboardApp extends LitElement {
   /** Defaults to `login`, so a cold load never flashes a logged-in face before the probe confirms a
    * session. */
   @state() private screen: ScreenId = "login";
+  @state() private aboutOpen = false;
+  @state() private about: LegalAbout | null = null;
 
   #enabledModules: readonly string[] = [];
   #activeScreens = new Map<
@@ -1479,6 +1488,7 @@ export class DashboardApp extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("screen")) this.#openGroupOf(this.screen);
+    if (changed.has("screen") && this.screen === "login") void this.#readAbout();
     if (this.stripPanel !== null && (changed.has("screen") || !this.#folded()))
       this.stripPanel = null;
   }
@@ -1839,7 +1849,38 @@ export class DashboardApp extends LitElement {
   override render(): TemplateResult {
     return html`${this.leaveConfirmation()} ${this.#permissionDialog()}
       <dashboard-fresh-sign-in-dialog .api=${this.api}></dashboard-fresh-sign-in-dialog>
+      <dashboard-about-dialog
+        .open=${this.aboutOpen}
+        .about=${this.about}
+        @about-close=${() => (this.aboutOpen = false)}
+      ></dashboard-about-dialog>
       ${this.#renderPage()}`;
+  }
+
+  async #readAbout(): Promise<void> {
+    try {
+      const about = await this.api.getLegalAbout();
+      if (this.isConnected) this.about = about;
+    } catch {
+      // The foot falls back to "About Waitron".
+    }
+  }
+
+  #openAbout(): void {
+    this.aboutOpen = true;
+    if (this.about === null) void this.#readAbout();
+  }
+
+  #aboutFoot(): TemplateResult {
+    const release = this.about?.release;
+    return html`<wt-button
+      class="about-foot"
+      variant="ghost"
+      size="sm"
+      data-test="about-foot"
+      @click=${() => this.#openAbout()}
+      >${release ? fill("about.foot", { version: release.version }) : t("about.title")}</wt-button
+    >`;
   }
 
   #renderPage(): TemplateResult {
@@ -1874,7 +1915,7 @@ export class DashboardApp extends LitElement {
               }}
               @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
             ></dashboard-login-screen>
-            ${this.#poweredBy()}
+            ${this.#poweredBy()} ${this.#aboutFoot()}
           </div>
         </div>
       `;
@@ -2241,6 +2282,13 @@ export class DashboardApp extends LitElement {
                     .active=${currentLocale()}
                     .loadLocales=${this.#loadLocalesPassively}
                   ></wt-language-chooser>
+                  <wt-button
+                    variant="ghost"
+                    align="start"
+                    data-test="about"
+                    @click=${() => this.#openAbout()}
+                    >${t("about.title")}</wt-button
+                  >
                   <wt-button
                     variant="ghost"
                     align="start"

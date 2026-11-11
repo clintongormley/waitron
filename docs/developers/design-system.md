@@ -2102,7 +2102,8 @@ above). Give it a `size` chosen by its content:
 - `size="wide"` (`--wt-modal-max-width`, 1024px): a table wider than a form, a side-by-side layout,
   an image grid, or a toolbar that needs one line.
 - `size="full"`: the viewport less the side margin (`--wt-modal-inline-margin`) on all four sides,
-  in width and in height; for an editor that takes the place of a page (the floor plan editor).
+  in width and in height; for an editor that takes the place of a page (the floor plan editor), or
+  a window framing a whole page (About Waitron).
 
 A modal given no size, or a value not listed, is wide. Choose one anyway, so a reader can see the
 choice; do not widen a modal past what its content needs. Each size is bounded by the viewport less
@@ -3867,8 +3868,13 @@ waits for its first theme read, the logo's place is an empty `wt-venue-logo` `si
 read that fails or passes its 5-second limit (`VENUE_THEME_TIME_LIMIT_MS`) ends the wait with the
 lockup.
 Once a session is active, put the account menu — a person-icon `wt-row-actions` popover holding
-Account settings, Theme, Language and Log out — at the banner's trailing (right-hand in the shipped
-locales) edge. Do not show it before authentication. Below the drawer breakpoint (`48rem`) the
+Account settings, Theme, Language, About Waitron and Log out — at the banner's trailing (right-hand
+in the shipped locales) edge. Do not show it before authentication. About Waitron opens the About
+window (`dashboard-about-dialog`), which also opens from the sign-in screen's foot line: a small
+ghost button under the sign-in form (and under Powered by, when shown) reading
+"Waitron <version> · Declaración responsable" when `/legal/about` names a release, and "About
+Waitron" until the read answers, or when it names none or fails. Opening the window with no answer
+held reads `/legal/about` again. Below the drawer breakpoint (`48rem`) the
 banner takes two rows: the menu toggle, the logo (the venue's, or Waitron's lockup) and the menus
 share the first, with the logo shrinking when space runs short, and the legal name and Live mode
 pill take the second. Signed in, while a venue logo is in use and has not failed, `wt-powered-by`

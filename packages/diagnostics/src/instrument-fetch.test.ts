@@ -30,6 +30,7 @@ describe("maskPath", () => {
     "/management-api/alerts",
     "/management-api/disk-stop",
     "/management-api/session/me/profile",
+    "/legal/about",
   ])("names the fixed dashboard request %s without its query", (path) => {
     expect(maskPath(path + "?email=private@example.test#note")).toBe(path);
   });

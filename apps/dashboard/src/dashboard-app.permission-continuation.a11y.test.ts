@@ -79,6 +79,7 @@ describe.each(["light", "dark"] as const)("permission continuation in %s", (them
         }),
         getGoogleConfig: async () => ({ configured: false }),
         getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
+        getLegalAbout: async () => ({ release: null, build: "test" }),
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
         listAlerts: async () => ({ visible: false, alerts: [] }),
         getDiskStop: async () => ({ stopped: false, deleted: null }),

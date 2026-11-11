@@ -25,6 +25,7 @@ import {
 import { MenuPreviewPanel } from "./widgets/menu-preview.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
+import type { AboutDialog } from "./widgets/about-dialog.js";
 import { diag } from "./diagnostics.js";
 import indexHtml from "../index.html?raw";
 import darkLockup from "../../../packages/ui/brand/waitron-lockup-dark.svg?raw";
@@ -74,7 +75,7 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
     },
   };
 }
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { es } from "./i18n/strings.js";
 import { LiveConnection, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
@@ -200,6 +201,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue([]),
     getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
@@ -9953,4 +9955,110 @@ it("returns to English sign-in before locale reads answer", async () => {
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await vi.waitFor(() => expect(login(el)).not.toBeNull());
   expect(currentLocale()).toBe("en-GB");
+});
+
+describe("dashboard-app: About Waitron", () => {
+  const released = {
+    release: { version: "1.2.3", releasedOn: "2026-12-03" },
+    build: "abc1234",
+  };
+  const aboutDialog = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<AboutDialog>("dashboard-about-dialog")!;
+  const foot = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>(".login-page [data-test=about-foot]");
+  const signedOut = (overrides: Record<string, unknown>) =>
+    stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      ...overrides,
+    });
+
+  it("the account menu offers About Waitron between Language and Log out", async () => {
+    const api = stubApi({ getLegalAbout: vi.fn().mockResolvedValue(released) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    const menu = accountMenuTrigger(el)!;
+    expect([...menu.children].map((child) => child.getAttribute("data-test")).slice(-3)).toEqual([
+      "language-chooser",
+      "about",
+      "logout",
+    ]);
+    expect(menu.querySelector("[data-test=about]")!.textContent!.trim()).toBe(t("about.title"));
+  });
+
+  it("About Waitron opens the window with what /legal/about answered", async () => {
+    const api = stubApi({ getLegalAbout: vi.fn().mockResolvedValue(released) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(false);
+    accountMenuTrigger(el)!.querySelector<HTMLElement>("[data-test=about]")!.click();
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(true);
+    await vi.waitFor(() => expect(aboutDialog(el).about).toEqual(released));
+    aboutDialog(el).dispatchEvent(
+      new CustomEvent("about-close", { bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(false);
+  });
+
+  it("the sign-in screen's foot names the release and opens the same window", async () => {
+    const api = signedOut({ getLegalAbout: vi.fn().mockResolvedValue(released) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() =>
+      expect(foot(el)?.textContent?.trim()).toBe(fill("about.foot", { version: "1.2.3" })),
+    );
+    expect(api.getLegalAbout).toHaveBeenCalledOnce();
+    foot(el)!.click();
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(true);
+    expect(aboutDialog(el).about).toEqual(released);
+    expect(api.getLegalAbout).toHaveBeenCalledOnce();
+  });
+
+  it("the sign-in foot reads About Waitron when the box has no release", async () => {
+    const api = signedOut({
+      getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "abc1234" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(api.getLegalAbout).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(foot(el)!.textContent!.trim()).toBe(t("about.title"));
+  });
+
+  it("a failed /legal/about read still offers the foot", async () => {
+    const api = signedOut({
+      getLegalAbout: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(api.getLegalAbout).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(foot(el)!.textContent!.trim()).toBe(t("about.title"));
+    foot(el)!.click();
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(true);
+    expect(aboutDialog(el).about).toBeNull();
+  });
+
+  it("opening the window after a failed read asks /legal/about again", async () => {
+    const api = signedOut({
+      getLegalAbout: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValueOnce(released),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(api.getLegalAbout).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(foot(el)!.textContent!.trim()).toBe(t("about.title"));
+    foot(el)!.click();
+    await flush(el);
+    expect(aboutDialog(el).open).toBe(true);
+    await vi.waitFor(() => expect(aboutDialog(el).about).toEqual(released));
+    expect(api.getLegalAbout).toHaveBeenCalledTimes(2);
+    expect(foot(el)!.textContent!.trim()).toBe(fill("about.foot", { version: "1.2.3" }));
+  });
 });

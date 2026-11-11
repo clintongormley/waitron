@@ -72,6 +72,7 @@ async function mount() {
     }),
     getGoogleConfig: async () => ({ configured: false }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
     getDiskStop: async () => ({ stopped: false, deleted: null }),

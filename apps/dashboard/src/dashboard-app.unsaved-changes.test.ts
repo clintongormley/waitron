@@ -71,6 +71,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardA
       getGoogleConfig: async () => ({ configured: false }),
       getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
       getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+      getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       getStaffRoster: async () => [{ personId: "p1", displayName: "Ada" }],
       listMyShifts: async () => [],

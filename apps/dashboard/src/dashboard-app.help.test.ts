@@ -67,6 +67,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listCatalogues: vi.fn().mockResolvedValue([]),
     getCatalogueSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+    getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     listCategories: vi.fn().mockResolvedValue([]),
     listProducts: vi.fn().mockResolvedValue([]),
@@ -523,6 +524,7 @@ it("signed in, the banner has no language chooser and the account menu holds the
     "profile-row",
     "theme-choices",
     "language-chooser",
+    "about",
     "logout",
   ]);
   const group = languageGroup(el)!;

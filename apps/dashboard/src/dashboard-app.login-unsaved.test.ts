@@ -32,6 +32,7 @@ async function mount(path = "/manage/", overrides: Partial<DashboardApi> = {}) {
         throw { code: "management_session.required" };
       },
       getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
+      getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
       getGoogleConfig: async () => ({ configured: false }),
       forgetLocales: () => {},
       getLocales: async () => ({
