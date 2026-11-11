@@ -28,9 +28,20 @@ export interface JobDefinition {
   readonly ownFailureAlert?: string;
   onStop?(): Promise<void>;
 }
+export interface ServiceDefinition {
+  readonly name: JobName;
+  applies(): boolean;
+  start(): Promise<void>;
+  suspend(): Promise<void>;
+  stop(): Promise<void>;
+  describe(): { running: boolean; reason: string | null };
+}
+export const SERVICE_STOP_ORDER: readonly JobName[] = ["stream"];
+
 export type JobState = "waiting" | "running" | "not_applicable" | "stopped";
 export interface JobView {
   kind: "job" | "service";
+  detail: string | null;
   state: JobState;
   judged: boolean;
   lastTurnAt: string | null;
@@ -47,6 +58,8 @@ export interface JobView {
 export type PublicJobView = Omit<JobView, "lastErrorCode" | "ownFailureAlert">;
 export interface JobRunner {
   add(job: JobDefinition): void;
+  addService(service: ServiceDefinition): Promise<void>;
+  stopServices(): Promise<void>;
   wake(name: JobName): void;
   roleChanged(): void;
   signalStepdown(): void;
@@ -58,6 +71,7 @@ export const LONGEST_TIMER_MS = 2_147_483_647;
 export function createJobRunner(deps: {
   now: () => Date;
   log: Logger;
+  serviceCheckMs?: number;
   delay?: (ms: number, signal: AbortSignal) => Promise<void>;
   monotonicMs?: () => number;
   subscribe?: (fn: (change: ResourceChange) => void) => () => void;
@@ -74,6 +88,80 @@ export function createJobRunner(deps: {
       loop: Promise<void>;
     }
   >();
+  function makeView(
+    kind: JobView["kind"],
+    judged: boolean,
+    ownFailureAlert: string | null = null,
+  ): JobView {
+    return {
+      kind,
+      state: "waiting",
+      detail: null,
+      judged: judged,
+      lastTurnAt: null,
+      lastRunAt: null,
+      lastOkAt: null,
+      consecutiveFailures: 0,
+      failingSince: null,
+      throwsSinceClean: 0,
+      throwingSince: null,
+      lastErrorCode: null,
+      nextDueAt: null,
+      ownFailureAlert: ownFailureAlert,
+    } as JobView;
+  }
+  const services = new Map<
+    JobName,
+    {
+      definition: ServiceDefinition;
+      active: boolean;
+      pending: Promise<void>;
+      view: JobView;
+    }
+  >();
+  type Service = typeof services extends Map<JobName, infer T> ? T : never;
+  const serviceController = new AbortController();
+  let servicesStopping: Promise<void> | undefined;
+  let serviceLoop: Promise<void> | undefined;
+
+  function checkService(service: Service): Promise<void> {
+    service.pending = service.pending.then(async () => {
+      if (servicesStopping) return;
+      const { definition: def, view } = service;
+      const at = deps.now().toISOString();
+      view.lastTurnAt = at;
+      try {
+        if (def.applies()) {
+          if (!service.active && !steppedDown) {
+            await def.start();
+            service.active = true;
+          }
+        } else if (service.active) {
+          await def.suspend();
+          service.active = false;
+        }
+        view.consecutiveFailures = 0;
+        view.failingSince = null;
+        view.lastErrorCode = null;
+        view.lastOkAt = at;
+      } catch (error) {
+        view.consecutiveFailures++;
+        view.failingSince ??= at;
+        view.throwsSinceClean++;
+        view.throwingSince ??= at;
+        view.lastErrorCode = codeOf(error);
+        deps.log("error", "job.failed", { job: def.name, errorCode: view.lastErrorCode });
+      }
+    });
+    return service.pending;
+  }
+  async function recheckServices(): Promise<void> {
+    while (!serviceController.signal.aborted) {
+      await delay(deps.serviceCheckMs ?? 60_000, serviceController.signal);
+      if (!serviceController.signal.aborted)
+        await Promise.all([...services.values()].map(checkService));
+    }
+  }
   let stopping: Promise<void> | undefined;
   let steppedDown = false;
   const unsubscribe = (deps.subscribe ?? subscribeToChanges)((change) => {
@@ -169,6 +257,45 @@ export function createJobRunner(deps: {
   }
 
   return {
+    async addService(definition) {
+      if (stopping || servicesStopping) throw Error("The job runner has stopped");
+      if (jobs.has(definition.name) || services.has(definition.name))
+        throw Error("The service is already registered");
+      if (
+        JOB_CATALOGUE[definition.name].kind !== "service" ||
+        !SERVICE_STOP_ORDER.includes(definition.name)
+      )
+        throw Error("The service has no stop order");
+      const service = {
+        definition,
+        active: false,
+        pending: Promise.resolve(),
+        view: makeView("service", false),
+      };
+      services.set(definition.name, service);
+      serviceLoop ??= recheckServices();
+      await checkService(service);
+    },
+    stopServices() {
+      if (!servicesStopping) {
+        serviceController.abort();
+        servicesStopping = (async () => {
+          await serviceLoop;
+          await closeAll(
+            SERVICE_STOP_ORDER.filter((name) => services.has(name)).map((name) => async () => {
+              const service = services.get(name)!;
+              await service.pending;
+              try {
+                await service.definition.stop();
+              } finally {
+                service.view.state = "stopped";
+              }
+            }),
+          );
+        })();
+      }
+      return servicesStopping;
+    },
     add(definition) {
       if (stopping) throw Error("The job runner has stopped");
       if (jobs.has(definition.name)) throw Error("The job is already registered");
@@ -185,21 +312,7 @@ export function createJobRunner(deps: {
           delay,
           monotonicMs: deps.monotonicMs,
         }),
-        view: {
-          kind: entry.kind,
-          state: "waiting",
-          judged: "failsHealth" in entry,
-          lastTurnAt: null,
-          lastRunAt: null,
-          lastOkAt: null,
-          consecutiveFailures: 0,
-          failingSince: null,
-          throwsSinceClean: 0,
-          throwingSince: null,
-          lastErrorCode: null,
-          nextDueAt: null,
-          ownFailureAlert: definition.ownFailureAlert ?? null,
-        } as JobView,
+        view: makeView(entry.kind, "failsHealth" in entry, definition.ownFailureAlert ?? null),
         loop: Promise.resolve(),
       };
       jobs.set(definition.name, job);
@@ -212,6 +325,7 @@ export function createJobRunner(deps: {
     },
     roleChanged() {
       for (const job of jobs.values()) job.role.abort();
+      for (const service of services.values()) void checkService(service);
     },
     signalStepdown() {
       steppedDown = true;
@@ -227,7 +341,27 @@ export function createJobRunner(deps: {
       return stopping;
     },
     views() {
-      return Object.fromEntries([...jobs].map(([name, job]) => [name, { ...job.view }]));
+      return Object.fromEntries([
+        ...[...jobs].map(([name, job]) => [name, { ...job.view }]),
+        ...[...services].map(([name, service]) => {
+          const described = service.definition.describe();
+          return [
+            name,
+            {
+              ...service.view,
+              state:
+                service.view.state === "stopped"
+                  ? "stopped"
+                  : !service.active
+                    ? "not_applicable"
+                    : described.running
+                      ? "running"
+                      : "waiting",
+              detail: described.reason,
+            },
+          ];
+        }),
+      ]);
     },
   };
 }
