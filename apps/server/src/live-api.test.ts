@@ -371,8 +371,15 @@ it("delivers a write made outside withTransaction on the next transaction the pr
       sql`select count(*) as n from change_log`,
     );
     expect(waiting.rows[0]!.n).toBe(2);
-    await withTransaction(suite.db, async () => {});
     await vi.advanceTimersByTimeAsync(15_000);
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+      "event: keepalive\ndata: []\n\n",
+    );
+    const stillWaiting = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from change_log`,
+    );
+    expect(stillWaiting.rows[0]!.n).toBe(2);
+    await withTransaction(suite.db, async () => {});
     expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: change");
   } finally {
     await reader.cancel();

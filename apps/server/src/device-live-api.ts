@@ -21,7 +21,9 @@ export function mountDeviceLiveApi(
   app.get("/api/live/events", (c) =>
     run(c, log, async () => {
       const proof = await requireDeviceProof(deps, c, { passive: true });
-      const interests = parseInterests(c.req.query("resources"), allowed);
+      const interests = parseInterests(c.req.query("resources"), allowed).map(({ type }) => ({
+        type,
+      }));
       return liveStreamResponse(c, {
         bus: deps.bus,
         interests,

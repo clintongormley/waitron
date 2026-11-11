@@ -54,6 +54,29 @@ it("refuses missing device proof", async () => {
   expect(bus.subscriberCount).toBe(0);
 });
 
+it("a device interest naming one id still hears another id of that type", async () => {
+  const { app, bus, cookie } = await fixture();
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const response = await app.request(
+    '/api/live/events?resources=[{"type":"printers","id":"known"}]',
+    {
+      headers: { cookie },
+    },
+  );
+  const reader = response.body!.getReader();
+  try {
+    await reader.read();
+    bus.publish({ resources: [{ type: "printers", id: "another" }] });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+      'event: change\ndata: [{"type":"printers"}]\n\n',
+    );
+  } finally {
+    await reader.cancel();
+    vi.useRealTimers();
+  }
+});
+
 it("refuses an unknown interest type", async () => {
   const { app, cookie } = await fixture();
   const response = await app.request('/api/live/events?resources=[{"type":"unknown"}]', {
