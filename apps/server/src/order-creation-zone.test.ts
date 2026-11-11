@@ -51,7 +51,7 @@ it.each(["cash", "integrated"] as const)(
   "a walk-up %s sale with no zone records the counter zone and files its authored description",
   async (method) => {
     const id = randomUUID();
-    const request = { id, lines: [{ menuItemId: venue.counterItem("Agua"), quantity: "1" }] };
+    const request = { id, lines: [{ menuItemId: venue.counterItem("Water"), quantity: "1" }] };
     const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
     if (method === "cash") {
       expect(
@@ -154,7 +154,7 @@ it("a split of a damaged counter order refuses instead of creating another order
   await parkOrder({ db: suite.db }, venue.cfg, {
     id,
     zoneId: venue.counter.zoneId,
-    lines: [{ menuItemId: venue.counterItem("Agua"), quantity: "1" }],
+    lines: [{ menuItemId: venue.counterItem("Water"), quantity: "1" }],
     operatorId: venue.operator.personId,
   });
   await suite.db.delete(orderServiceContexts).where(eq(orderServiceContexts.workingOrderId, id));
@@ -177,7 +177,7 @@ it("splitting a counter bill retains its zone and frozen payment flow without us
   await parkOrder({ db: suite.db }, venue.cfg, {
     id,
     zoneId: venue.counter.zoneId,
-    lines: [{ menuItemId: venue.counterItem("Agua"), quantity: "2" }],
+    lines: [{ menuItemId: venue.counterItem("Water"), quantity: "2" }],
     operatorId: venue.operator.personId,
   });
   await suite.db
@@ -213,7 +213,7 @@ it("a closed zone refuses new orders but still lets its existing bill split", as
   await parkOrder({ db: suite.db }, venue.cfg, {
     id,
     zoneId: venue.counter.zoneId,
-    lines: [{ menuItemId: venue.counterItem("Agua"), quantity: "2" }],
+    lines: [{ menuItemId: venue.counterItem("Water"), quantity: "2" }],
     operatorId: venue.operator.personId,
   });
   await withTransaction(suite.db, (tx) =>

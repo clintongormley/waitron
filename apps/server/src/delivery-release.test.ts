@@ -84,7 +84,7 @@ describe("releaseDeliveries", () => {
         tx,
         v.cfg,
         abandoned,
-        [{ menuItemId: v.counterItem("Agua"), quantity: "1" }],
+        [{ menuItemId: v.counterItem("Water"), quantity: "1" }],
         null,
         { deliveryTableId: t5, zoneId: v.counter.zoneId },
       ),

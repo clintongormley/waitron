@@ -207,12 +207,12 @@ it("names paid but unserved work in the current saved venue zone", async () => {
 
 it("lists only the bills represented at each printer and excludes an inactive printer", async () => {
   const bar = await inTx(v, (tx) => createStation(tx, { name: "Bar" }));
-  await inTx(v, (tx) => routeProductTo(tx, v.productId("Agua"), bar.id));
+  await inTx(v, (tx) => routeProductTo(tx, v.productId("Water"), bar.id));
   const shared = await printer([stationId, bar.id]);
   const barOnly = await printer([bar.id]);
   const off = await printer();
   const p = await seat(v, await v.table("Table 4"));
-  await order(v, p.tabId, "Burger", "Agua");
+  await order(v, p.tabId, "Burger", "Water");
   const second = await split(v, p.partyId, p.tabId, [2]);
   await inTx(v, (tx) => tx.update(printers).set({ active: false }).where(eq(printers.id, off)));
   const out = await rename(p.partyId, "Ann");
@@ -267,7 +267,7 @@ it("rolls back the name and revision when the paper cannot be queued", async () 
 
 it("renames only the station whose HOLD paper was recorded", async () => {
   const bar = await inTx(v, (tx) => createStation(tx, { name: "Bar" }));
-  await inTx(v, (tx) => routeProductTo(tx, v.productId("Agua"), bar.id));
+  await inTx(v, (tx) => routeProductTo(tx, v.productId("Water"), bar.id));
   await printer([stationId]);
   const barOnly = await printer([bar.id]);
   await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [stationId]));
@@ -278,7 +278,7 @@ it("renames only the station whose HOLD paper was recorded", async () => {
       groups: [
         {
           release: "hold",
-          lines: ["Burger", "Agua"].map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
+          lines: ["Burger", "Water"].map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
         },
       ],
     }),

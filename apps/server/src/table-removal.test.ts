@@ -232,7 +232,7 @@ describe("removing a live table the master no longer has", () => {
     const collected = await delivery(t4!);
     await pay(v, collected, "20.00");
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, collected));
-    const uncollected = await delivery(t4!, "Agua");
+    const uncollected = await delivery(t4!, "Water");
     await pay(v, uncollected, "2.00");
     await madeHereOnly(uncollected);
     expect(await kitchenItemsOf(uncollected)).toBe(0);
@@ -286,7 +286,7 @@ describe("removing a live table the master no longer has", () => {
       await inTx(v, (tx) => leaveTables(tx, [t1!]));
       free = () => finish(partyId);
     } else if (tie.startsWith("an unpaid")) {
-      const order = await delivery(t1!, "Agua");
+      const order = await delivery(t1!, "Water");
       free = async () => {
         await pay(v, order, "2.00");
         await madeHereOnly(order);
@@ -595,7 +595,7 @@ describe("a catch-up that changes nothing", () => {
         status: "booked",
       }),
     );
-    await delivery(tied!, "Agua");
+    await delivery(tied!, "Water");
     await deleteFromMaster(booked!);
     await deleteFromMaster(tied!);
     await reset(zoneId, [BOOKINGS_TABLE_REMOVAL]);
@@ -630,7 +630,7 @@ describe("a catch-up that removes two tables", () => {
       zoneId,
       ids: [t1, t2],
     } = await plannedZone("Two gone 1", "Two gone 2");
-    const orders = [await delivery(t1!, "Agua"), await delivery(t2!, "Agua")];
+    const orders = [await delivery(t1!, "Water"), await delivery(t2!, "Water")];
     await deleteFromMaster(t1!);
     await deleteFromMaster(t2!);
     await reset(zoneId, [BOOKINGS_TABLE_REMOVAL]);
@@ -805,7 +805,7 @@ describe("tablesTied", () => {
       await v.table("Several free", z),
     ];
     await seat(v, held);
-    await delivery(ordered, "Agua");
+    await delivery(ordered, "Water");
 
     const tied = await inTx(v, (tx) => tablesTied(tx, [held, ordered, free]));
 
@@ -856,7 +856,7 @@ describe("tablesTied", () => {
 
   it("is true for a placed order delivered to it", async () => {
     const t1 = await v.table("Placed 1", await zone());
-    const order = await delivery(t1, "Agua");
+    const order = await delivery(t1, "Water");
     await inTx(v, (tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, order)),
     );

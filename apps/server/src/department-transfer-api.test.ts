@@ -1318,7 +1318,7 @@ describe("department transfer tab lifecycle", () => {
     "closing a party withdraws a placed bill request while keeping its unpaid invoice (absorbed: %s)",
     async (absorbed) => {
       const f = await ready();
-      f.tab = await counterOrder(v, "Agua");
+      f.tab = await counterOrder(v, "Water");
       const table = await v.table(randomUUID(), f.az);
       const rootTable = absorbed ? await v.table(randomUUID(), f.az) : table;
       const party = await withTransaction(suite.db, async (tx) => {
@@ -1412,7 +1412,7 @@ describe("department transfer tab lifecycle", () => {
   });
   it("cancels a placed uninvoiced tab and withdraws its pending request", async () => {
     const f = await ready();
-    f.tab = await counterOrder(v, "Agua");
+    f.tab = await counterOrder(v, "Water");
     await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
     await placeOrder(
       { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
@@ -1460,7 +1460,7 @@ describe("department transfer tab lifecycle", () => {
 
   it("settles an issued bill owing nothing and withdraws its pending request", async () => {
     const f = await ready();
-    const offer = await pricedInZone(v, f.az, "Agua", "0.00");
+    const offer = await pricedInZone(v, f.az, "Water", "0.00");
     f.tab = randomUUID();
     await parkOrder({ db: suite.db }, v.cfg, {
       id: f.tab,
@@ -1489,7 +1489,7 @@ describe("department transfer tab lifecycle", () => {
     "%s withdraws its request while preserving invoice history on retry",
     async (kind) => {
       const f = await ready();
-      f.tab = await counterOrder(v, "Agua");
+      f.tab = await counterOrder(v, "Water");
       await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
       const deps = {
         db: suite.db,
@@ -1543,7 +1543,7 @@ describe("department transfer tab lifecycle", () => {
     "%s settlement withdraws the pending request without creating another invoice on retry",
     async (kind) => {
       const f = await ready();
-      f.tab = await counterOrder(v, "Agua");
+      f.tab = await counterOrder(v, "Water");
       await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, f.tab, f.az));
       const deps = { db: suite.db, backend: v.backend, clock: v.clock };
       if (kind === "issued")

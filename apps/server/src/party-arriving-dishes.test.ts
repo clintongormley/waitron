@@ -215,7 +215,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const receivingParty = await seat(v, table7);
     await orderForParty(v, originalParty.partyId, ["Burger", "Red wine bottle"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [2]);
-    await orderForParty(v, receivingParty.partyId, ["Agua"]);
+    await orderForParty(v, receivingParty.partyId, ["Water"]);
     const groupsBefore = await groupsOf(receivingParty.partyId);
 
     await move(b2, { tableId: table7 });
@@ -625,7 +625,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   it("gives a bill moved to a free table its new party's first group", async () => {
     const originalParty = await coursedBill("Free 1");
     const freeTable = await v.table("Free 2");
-    await orderForParty(v, originalParty.partyId, ["Agua"]);
+    await orderForParty(v, originalParty.partyId, ["Water"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [1]);
 
     const result = await move(b2, { tableId: freeTable });
@@ -875,7 +875,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
   it("gives a bill leaving for the counter no group", async () => {
     const originalParty = await coursedBill("Bar 1");
-    await orderForParty(v, originalParty.partyId, ["Agua"]);
+    await orderForParty(v, originalParty.partyId, ["Water"]);
     const b2 = await splitOff(originalParty.partyId, originalParty.tabId, [1]);
 
     await move(b2, { counter: { zoneId: null } });

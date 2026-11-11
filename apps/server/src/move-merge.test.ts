@@ -425,7 +425,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     await orderForParty(v, partyId, ["Burger"], tabId);
     await orderForParty(v, partyId, ["Red wine bottle"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
-    await holdOne(v, tabId, "Agua");
+    await holdOne(v, tabId, "Water");
     const before = await noticesOf([tabId, checkId]);
 
     await join(v, partyId, table5);
@@ -998,12 +998,12 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        { row: { kind: "product", productId: v.productId("Agua") }, zoneId: null },
+        { row: { kind: "product", productId: v.productId("Water") }, zoneId: null },
         { kind: "no_preparation" },
       ),
     );
     const { partyId, tabId } = await seat(v, await v.table("Mesa 93"));
-    await order(v, tabId, "Burger", "Agua", "Agua");
+    await order(v, tabId, "Burger", "Water", "Water");
     const before = (await printedBy(grill)).length;
 
     const second = await split(v, partyId, tabId, [2]);
@@ -2304,7 +2304,7 @@ describe("A803 split: what the kitchen is told", () => {
 
       await expectOnlyTheDishesLeft(table, moved);
 
-      await order(v, tabId, "Agua");
+      await order(v, tabId, "Water");
       const finishing = await commandFor(v, partyId);
       const refused = await captureError(() =>
         inTx(v, (tx) => finishTable(tx, { partyId, ...finishing })),
@@ -3080,7 +3080,7 @@ describe("a prep station's own print-MOVED-slips choice", () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa 33"));
     await updateHeldOrder({ admission: testTradingAdmission(), db: v.db }, v.cfg, tabId, {
       revision: (await billRow(v, tabId)).revision,
-      lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
+      lines: [{ menuItemId: v.item("Water"), quantity: "1" }],
       operatorId: OPERATOR,
     });
     const second = await split(v, partyId, tabId, [1]);

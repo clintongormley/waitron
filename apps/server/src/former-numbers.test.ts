@@ -80,14 +80,13 @@ async function send(partyId: string, billId: string, ...names: string[]) {
   );
 }
 
-/** A party at a fresh table with `count` bills, each made by splitting off an unsent Agua. */
 async function party(label: string, count: number): Promise<{ partyId: string; bills: string[] }> {
   const { partyId, tabId } = await seat(v, await v.table(label));
   const bills = [tabId];
   for (let i = 1; i < count; i++) {
     await updateHeldOrder({ admission: testTradingAdmission(), db: v.db }, v.cfg, tabId, {
       revision: (await billRow(v, tabId)).revision,
-      lines: [{ menuItemId: v.item("Agua"), quantity: "1" }],
+      lines: [{ menuItemId: v.item("Water"), quantity: "1" }],
       operatorId: OPERATOR,
     });
     const command = await commandFor(v, partyId);

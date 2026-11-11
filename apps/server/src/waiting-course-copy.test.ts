@@ -117,10 +117,10 @@ async function seatWith(groups: { names: string[]; release: Release; courseId?: 
   return { partyId: seated.partyId, billId: seated.tabId };
 }
 
-/** A second party, seated, with one fired Agua so its groups do not start at 1. */
+/** A second party, seated, with a fired water line so its groups do not start at 1. */
 async function otherParty() {
   const seated = await seat(v, await v.table(`Copy ${++tableNumber}`));
-  await orderForParty(v, seated.partyId, ["Agua"]);
+  await orderForParty(v, seated.partyId, ["Water"]);
   return seated.partyId;
 }
 
@@ -262,7 +262,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
   it("A803 waiting mark: the bill's lines, which the split panel reads, give a held dish its course and group and no fired time", async () => {
     const { billId } = await seatWith([
       { names: ["Flan"], release: "hold" },
-      { names: ["Agua"], release: "fire", courseId: null },
+      { names: ["Water"], release: "fire", courseId: null },
     ]);
     const lines = await inTx(v, (tx) => readBillLines(tx, billId));
     const flan = lines.find((line) => line.name === "Flan")!;
@@ -270,7 +270,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     expect(flan.groupId).not.toBeNull();
     expect(flan.firedAt).toBeNull();
     expect((await groupRow(flan.groupId!)).state).toBe("held");
-    const water = lines.find((line) => line.name === "Agua")!;
+    const water = lines.find((line) => line.name === "Water")!;
     expect(water.course).toBeUndefined();
     expect((await groupRow(water.groupId!)).state).toBe("fired");
   });
@@ -1000,7 +1000,6 @@ async function openDraft(partyId: string, billId: string): Promise<string> {
   return draft!.id;
 }
 
-/** A fresh Agua in the draft, placed by `place`. */
 async function draftLine(
   draftId: string,
   position: number,
@@ -1012,7 +1011,7 @@ async function draftLine(
       .values({
         draftId,
         position,
-        menuItemId: v.item("Agua"),
+        menuItemId: v.item("Water"),
         options: [],
         extras: [],
         quantity: 1000,
@@ -1196,7 +1195,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
         });
       });
     const saved = await save([
-      { menuItemId: v.item("Agua"), quantity: "1", slot: 0, joinGroupId: g, courseId: null },
+      { menuItemId: v.item("Water"), quantity: "1", slot: 0, joinGroupId: g, courseId: null },
     ]);
     const [line] = saved.draft!.lines;
     expect(line).toMatchObject({ joinGroupId: g });
@@ -1209,7 +1208,7 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
       save([
         {
           id: line!.id,
-          menuItemId: v.item("Agua"),
+          menuItemId: v.item("Water"),
           quantity: "1",
           slot: 0,
           joinGroupId: g,
@@ -1337,7 +1336,7 @@ describe("A803 waiting copy: Move this bill", () => {
     ]);
     const source = (await lineOf(a.billId, "Flan")).groupId!;
     const b = await seatWith([
-      { names: ["Agua"], release: "fire" },
+      { names: ["Water"], release: "fire" },
       { names: ["Tarta"], release: "hold" },
     ]);
     const before = await groupsOf(b.partyId);
@@ -1876,7 +1875,7 @@ function movedSlip(station: string, orderLine: string, from: string, to: string,
 
 /**
  * Grill (Burger, Tarta) and Pastry (Flan), each with its own printer, Pastry printing held work
- * when `holdPaper` and Grill when `grillHoldPaper`. A party at Mesa 5: Bill 1 keeps a fired Agua and the held Flan; Bill 2 has a fired
+ * when `holdPaper` and Grill when `grillHoldPaper`. A party at Mesa 5: Bill 1 keeps a fired water line and the held Flan; Bill 2 has a fired
  * Burger and the held Tarta. Flan and Tarta share held group G, the party's third, so a copy at a
  * new party (fired group 1, copy 2) never shares G's number.
  */
@@ -1892,7 +1891,10 @@ async function paperTable(holdPaper: boolean, grillHoldPaper = holdPaper) {
   await inTx(v, (tx) =>
     placeGroups(tx, v.cfg, seated.partyId, {
       groups: [
-        { release: "fire", lines: [{ menuItemId: v.item("Agua"), quantity: "1", courseId: null }] },
+        {
+          release: "fire",
+          lines: [{ menuItemId: v.item("Water"), quantity: "1", courseId: null }],
+        },
         {
           release: "fire",
           lines: [{ menuItemId: v.item("Burger"), quantity: "1", courseId: null }],
@@ -2221,7 +2223,7 @@ describe("A803 waiting copy: kitchen paper", () => {
     const third = await v.table(table9);
     // A group already there makes the copy number 3 here against 2 at the second table, so a slip
     // printing the number the dish left behind cannot pass.
-    await orderForParty(v, (await seat(v, third)).partyId, ["Agua"]);
+    await orderForParty(v, (await seat(v, third)).partyId, ["Water"]);
     const first = await moveBill2(t, table8);
 
     const second = await moveBill2(t, table9, third);
@@ -2332,7 +2334,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       const t = await waitingTable();
       const label = `Mesa 8 (${t.n})`;
       const tableId = await v.table(label);
-      await orderForParty(v, (await seat(v, tableId)).partyId, ["Agua"]);
+      await orderForParty(v, (await seat(v, tableId)).partyId, ["Water"]);
 
       const { marks } = await moveBill2(t, label, tableId);
 
@@ -2803,7 +2805,7 @@ describe("A803 waiting copy: kitchen paper", () => {
       const label = `Mesa 8 (${t.n})`;
       const tableId = await v.table(label);
       const other = await seat(v, tableId);
-      await orderForParty(v, other.partyId, ["Agua"]);
+      await orderForParty(v, other.partyId, ["Water"]);
       const fromNumber = await orderNumberOf(t.bill2);
       const mark = (await printed(t.grill.printer)).length;
 
@@ -3318,7 +3320,7 @@ describe("A803 waiting copy: how long a group has been held", () => {
     await backdateGroup((await lineOf(a.billId, "Tarta")).groupId!, minutesAgo(20));
     const tableId = await v.table(`Copy ${++tableNumber}`);
     const { partyId } = await seat(v, tableId);
-    await orderForParty(v, partyId, ["Agua"]);
+    await orderForParty(v, partyId, ["Water"]);
 
     await moveWholeBill(a.billId, a.partyId, { tableId });
 

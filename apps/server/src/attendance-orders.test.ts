@@ -213,7 +213,7 @@ describe("accepted order attendance", () => {
           maxPicks: 1,
           active: true,
           items: [
-            { productId: v.productId("Agua"), maxQuantity: 1, preselected: false, price: "0.50" },
+            { productId: v.productId("Water"), maxQuantity: 1, preselected: false, price: "0.50" },
           ],
         },
         "es-ES",
@@ -231,7 +231,9 @@ describe("accepted order attendance", () => {
           id,
           1,
           {
-            extras: [{ listId: list.id, picks: [{ productId: v.productId("Agua"), quantity: 1 }] }],
+            extras: [
+              { listId: list.id, picks: [{ productId: v.productId("Water"), quantity: 1 }] },
+            ],
           },
           0,
           worker,
@@ -245,7 +247,7 @@ describe("accepted order attendance", () => {
       .where(eq(workingOrderLines.workingOrderId, id));
     expect(rows.map((r) => [r.productId, r.parentLineId === null, r.quantity])).toEqual([
       [v.productId("Burger"), true, 1000],
-      [v.productId("Agua"), false, 1000],
+      [v.productId("Water"), false, 1000],
     ]);
     await expectActivity(id, 1, "line");
   });

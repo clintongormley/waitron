@@ -428,15 +428,15 @@ beforeAll(async () => {
       deliCounter: deliCounter.id,
       deliTables: deliTables.id,
       deliTable: deliTable.id,
-      deliItem: deliCounterOffers.offerFor(v.productId("Agua")),
-      deliTablesItem: deliTablesOffers.offerFor(v.productId("Agua")),
-      barItem: barOffers.offerFor(v.productId("Agua")),
+      deliItem: deliCounterOffers.offerFor(v.productId("Water")),
+      deliTablesItem: deliTablesOffers.offerFor(v.productId("Water")),
+      barItem: barOffers.offerFor(v.productId("Water")),
       deliSpecial: special.id,
     };
   });
   const deliSeated = await seatWithRound(zones.deliTable, zones.deliTablesItem);
   const restTable = await v.table("R1");
-  const restSeated = await seatWithRound(restTable, v.item("Agua"));
+  const restSeated = await seatWithRound(restTable, v.item("Water"));
   f = {
     bar: zones.bar,
     counter: v.counter.zoneId,
@@ -1437,7 +1437,7 @@ describe("a kitchen display", () => {
     );
     const restTable = () => v.table(`R${floorLabelSuffix().padStart(4, "0")}`);
     const deliRound = await fire(deliTable.id, f.deliTablesItem);
-    const restRound = await fire(await restTable(), v.item("Agua"));
+    const restRound = await fire(await restTable(), v.item("Water"));
     // One more order from each department, its dish then moved to another station.
     const pastry = await inTx(v, (tx) =>
       createStation(tx, { name: `Pastry ${randomUUID().slice(0, 4)}` }),
@@ -1454,7 +1454,7 @@ describe("a kitchen display", () => {
         ).id,
         f.deliTablesItem,
       ),
-      await fire(await restTable(), v.item("Agua")),
+      await fire(await restTable(), v.item("Water")),
     ];
     for (const round of elsewhere) {
       const lines = await suite.db
@@ -1684,7 +1684,7 @@ describe("a Restaurant profile on another department's zone", () => {
 describe("naming a paid bill a merged party kept", () => {
   it("reads the zone of the party now numbering it, not the bill's own", async () => {
     const source = await seat(v, await v.table("Merged source", f.restTables));
-    await order(v, source.tabId, "Agua", "Flan");
+    await order(v, source.tabId, "Water", "Flan");
     await split(v, source.partyId, source.tabId, [2]);
     await pay(v, source.tabId, "2.00");
     const deliTable = await v.table("Merged destination", f.deliTables);
@@ -2071,7 +2071,7 @@ describe("the bill and invoice lookups", () => {
       await inTx(v, (tx) =>
         offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
       )
-    ).offerFor(v.productId("Agua"));
+    ).offerFor(v.productId("Water"));
 
   it("shows a Deli bill to the Deli and to a profile with no department, never to the Restaurant", async () => {
     const deliBill = await unpaidBill(
@@ -2083,10 +2083,10 @@ describe("the bill and invoice lookups", () => {
         await inTx(v, (tx) =>
           offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
         )
-      ).offerFor(v.productId("Agua")),
+      ).offerFor(v.productId("Water")),
       "Lookup Deli",
     );
-    const restBill = await unpaidBill(await v.table("R7"), v.item("Agua"), "Lookup Sala");
+    const restBill = await unpaidBill(await v.table("R7"), v.item("Water"), "Lookup Sala");
     const as = async (cookie: string) => {
       const answer = await send(cookie, "GET", "/api/bills/lookup?q=Lookup");
       expect(answer.status).toBe(200);
@@ -2105,7 +2105,7 @@ describe("the bill and invoice lookups", () => {
     );
     const restInvoice = await invoiced(
       await v.table("R9"),
-      v.item("Agua"),
+      v.item("Water"),
       "Lookup Sala Invoices SL",
     );
     const as = async (cookie: string) => {
@@ -2119,7 +2119,7 @@ describe("the bill and invoice lookups", () => {
   });
 
   it("fills the Restaurant's page past twenty Deli invoices that match first", async () => {
-    const restInvoice = await invoiced(await v.table("R10"), v.item("Agua"), "Packed Sala SL");
+    const restInvoice = await invoiced(await v.table("R10"), v.item("Water"), "Packed Sala SL");
     const item = await deliTableItem();
     for (let index = 0; index < 21; index++) {
       await invoiced(await deliTable(`DI${index}`), item, `Packed Deli ${index} SL`);
@@ -2129,12 +2129,12 @@ describe("the bill and invoice lookups", () => {
   });
 
   it("fills the Restaurant's page past twenty Deli bills that match first", async () => {
-    const restBill = await unpaidBill(await v.table("R8"), v.item("Agua"), "Crowded Sala");
+    const restBill = await unpaidBill(await v.table("R8"), v.item("Water"), "Crowded Sala");
     const deliItem = (
       await inTx(v, (tx) =>
         offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
       )
-    ).offerFor(v.productId("Agua"));
+    ).offerFor(v.productId("Water"));
     for (let index = 0; index < 21; index++) {
       const table = await inTx(
         v,

@@ -77,12 +77,12 @@ useVenueDb({
     }));
     counter = made.counter;
     productIds = new Map(made.products.map((p) => [p.name, p.id]));
-    // Agua is handed over at the bar, so a held Agua has no kitchen ticket at all: only its group
+    // water is handed over at the bar, so a held water has no kitchen ticket at all: only its group
     // says it is held.
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        { row: { kind: "product", productId: productIds.get("Agua")! }, zoneId: null },
+        { row: { kind: "product", productId: productIds.get("Water")! }, zoneId: null },
         { kind: "no_preparation" },
       ),
     );
@@ -247,7 +247,7 @@ describe("split a bill", () => {
   it("puts the chosen items on a new bill of the same party, from a bill that was itself split off", async () => {
     const table4 = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4);
-    await order(v, tabId, "Burger", "Red wine bottle", "Agua");
+    await order(v, tabId, "Burger", "Red wine bottle", "Water");
     const first = await splitOff(partyId, tabId, [2, 3]);
 
     const second = await splitOff(partyId, first, [2]);
@@ -260,7 +260,7 @@ describe("split a bill", () => {
         price: l.unitPriceGross,
         vat: l.vatClass,
       })),
-    ).toEqual([{ name: "Agua", price: 200, vat: "general" }]);
+    ).toEqual([{ name: "Water", price: 200, vat: "general" }]);
     expect(await openingBillOfParty(v, partyId)).toBe(tabId);
     expect(await activeTablesOf(v, partyId)).toEqual([table4]);
   });
@@ -359,7 +359,7 @@ describe("split a bill", () => {
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
         { names: ["Burger"], release: "fire" },
-        { names: ["Agua"], release: "hold" },
+        { names: ["Water"], release: "hold" },
       ]),
     );
     const [, held] = await linesOf(v, tabId);
@@ -368,7 +368,7 @@ describe("split a bill", () => {
 
     expect(held!.groupId).not.toBeNull();
     expect((await linesOf(v, tabId)).map((l) => l.name)).toEqual(["Burger"]);
-    expect(await linesOf(v, made)).toMatchObject([{ name: "Agua", groupId: held!.groupId }]);
+    expect(await linesOf(v, made)).toMatchObject([{ name: "Water", groupId: held!.groupId }]);
   });
 
   it("refuses a paid bill, changing nothing", async () => {
@@ -666,7 +666,7 @@ describe("a held dish on a whole table bill presented or paid before its group f
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
         { names: ["Burger"], release: "fire" },
-        { names: ["Flan", "Agua"], release: "hold" },
+        { names: ["Flan", "Water"], release: "hold" },
         { names: ["Tarta"], release: "hold" },
       ]),
     );
@@ -688,7 +688,7 @@ describe("a held dish on a whole table bill presented or paid before its group f
     const flan = byName.get("Flan")!;
     expect(flan.sentAt).not.toBeNull();
     expect(flan.sentAt).toBe(firedAtOf(flan.id));
-    expect(byName.get("Agua")!.sentAt).toBe(flan.sentAt);
+    expect(byName.get("Water")!.sentAt).toBe(flan.sentAt);
     expect(byName.get("Tarta")!.sentAt).toBeNull();
     expect(firedAtOf(byName.get("Tarta")!.id)).toBeNull();
     expect(await ticketsPrinting(printerId, "FLAN")).toBe(1);
@@ -999,13 +999,13 @@ describe("requireUntouched", () => {
 
 describe("bills of two service modes", () => {
   /**
-   * A party whose Bill 1 (Agua) takes the counter zone's `prepay` mode, by a direct retarget of
+   * A party whose Bill 1 (water) takes the counter zone's `prepay` mode, by a direct retarget of
    * its service context, while its second bill (Burger, already fired to the kitchen) stays
    * `table_tab`.
    */
   async function mixedModes(label: string) {
     const { partyId, tabId: prepay } = await seat(v, await v.table(label));
-    await orderForParty(v, partyId, ["Agua", "Burger"]);
+    await orderForParty(v, partyId, ["Water", "Burger"]);
     const tableTab = await splitOff(partyId, prepay, [2]);
     await inTx(v, (tx) => VENUE_SERVICE.retargetOrderContext(tx, prepay, counter.zoneId));
     const modes = v.db.all<{ id: string; mode: string }>(sql`

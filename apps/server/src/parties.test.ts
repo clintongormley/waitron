@@ -239,7 +239,7 @@ describe("related bills", () => {
     const venue = await setupPartyVenue(suite.db);
     const table4 = await venue.table("Table 4");
     const { partyId, tabId } = await seat(venue, table4, 2);
-    await order(venue, tabId, "Burger", "Red wine bottle", "Agua");
+    await order(venue, tabId, "Burger", "Red wine bottle", "Water");
     const checkId = await split(venue, partyId, tabId, [2]);
 
     expect(await partyIdOf(checkId)).toBe(partyId);
@@ -326,7 +326,7 @@ describe("finish table", () => {
     const venue = await setupPartyVenue(suite.db);
     const table4 = await venue.table("Table 4");
     const { partyId, tabId } = await seat(venue, table4, 2);
-    await order(venue, tabId, "Burger", "Red wine bottle", "Agua");
+    await order(venue, tabId, "Burger", "Red wine bottle", "Water");
     const checkId = await split(venue, partyId, tabId, [2]);
     await pay(venue, tabId, "14.00");
 
@@ -350,7 +350,7 @@ describe("finish table", () => {
     const venue = await setupPartyVenue(suite.db);
     const table4 = await venue.table("Table 4");
     const { partyId, tabId } = await seat(venue, table4, 2);
-    await order(venue, tabId, "Burger", "Red wine bottle", "Agua");
+    await order(venue, tabId, "Burger", "Red wine bottle", "Water");
     const checkId = await split(venue, partyId, tabId, [2]);
     await pay(venue, tabId, "14.00");
     await pay(venue, checkId, "30.00");
@@ -780,7 +780,7 @@ describe("stale moves", () => {
     const table6 = await venue.table("Table 6");
     const table7 = await venue.table("Table 7");
     const a = await seat(venue, table4);
-    await order(venue, a.tabId, "Burger", "Red wine bottle", "Agua");
+    await order(venue, a.tabId, "Burger", "Red wine bottle", "Water");
     const b = await seat(venue, table6);
     await order(venue, b.tabId, "Flan");
     return { venue, table4, table5, table6, table7, a, b };
@@ -967,7 +967,7 @@ describe("merge (D2)", () => {
     const t = { ...(await seat(venue, table4)), tableId: table4 };
     await order(venue, t.tabId, "Red wine bottle");
     const s = { ...(await seat(venue, table6)), tableId: table6 };
-    await order(venue, s.tabId, "Paella", "Tarta", "Agua");
+    await order(venue, s.tabId, "Paella", "Tarta", "Water");
     const settledId = await split(venue, s.partyId, s.tabId, [1]);
     await pay(venue, settledId, "20.00");
     const openCheckId = await split(venue, s.partyId, s.tabId, [2]);
@@ -1729,7 +1729,7 @@ describe("money received against a bill before its invoice", () => {
     const venue = await setupPartyVenue(suite.db);
     const table4 = await venue.table("Table 4");
     const { partyId, tabId } = await seat(venue, table4, 2);
-    await order(venue, tabId, "Burger", "Red wine bottle", "Agua");
+    await order(venue, tabId, "Burger", "Red wine bottle", "Water");
     const pendingId = await split(venue, partyId, tabId, [2]);
     const failedId = await split(venue, partyId, tabId, [3]);
     await contribute(venue, tabId, "5.00");
@@ -1804,7 +1804,7 @@ describe("A803 bill order:", () => {
     const early = await seat(venue, table4);
     await order(venue, early.tabId, "Red wine bottle");
     const late = await seat(venue, table5);
-    await order(venue, late.tabId, "Agua");
+    await order(venue, late.tabId, "Water");
     const moving = {
       expectedPartyRevision: await revisionOf(suite, early.partyId),
       otherPartyId: late.partyId,
