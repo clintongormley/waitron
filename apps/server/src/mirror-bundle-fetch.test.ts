@@ -278,6 +278,70 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
   });
 
+  async function refusalFor(body: unknown): Promise<unknown> {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.json(body, 409));
+    const base = await startServer(app);
+    return fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+  }
+
+  it.each([
+    "mirror.bucket_stream_active",
+    "mirror.standby_name_taken",
+    "mirror.spare_already_joined",
+  ])("passes on %s, carrying none of its parameters", async (code) => {
+    const error = await refusalFor({
+      error: { code, params: { detail: "https://primary.internal" } },
+    });
+    expect(isAppError(error) && error.code).toBe(code);
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("passes on module.operation_invalid with a known module's name, and nothing else", async () => {
+    const error = await refusalFor({
+      error: {
+        code: "module.operation_invalid",
+        params: { module: "fiscal-verifactu", detail: "https://primary.internal" },
+      },
+    });
+    expect(isAppError(error) && error.code).toBe("module.operation_invalid");
+    expect(isAppError(error) && error.params).toEqual({ module: "fiscal-verifactu" });
+  });
+
+  it.each([
+    ["naming an unknown module", { module: "https://primary.internal" }],
+    ["naming no module", {}],
+    ["whose module is not text", { module: 7 }],
+  ])("does not pass on module.operation_invalid %s", async (_shape, params) => {
+    const error = await refusalFor({ error: { code: "module.operation_invalid", params } });
+    expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("passes on mirror.clocks_apart with its two times only, and not with a time that is not one", async () => {
+    const primaryAt = "2026-11-10T12:00:00.000Z";
+    const standbyAt = "2026-11-10T12:05:00.000Z";
+    const relayed = await refusalFor({
+      error: {
+        code: "mirror.clocks_apart",
+        params: { primaryAt, standbyAt, detail: "https://primary.internal" },
+      },
+    });
+    expect(isAppError(relayed) && relayed.code).toBe("mirror.clocks_apart");
+    expect(isAppError(relayed) && relayed.params).toEqual({ primaryAt, standbyAt });
+
+    for (const params of [
+      { primaryAt, standbyAt: "https://primary.internal" },
+      { primaryAt: "2026-11-10", standbyAt },
+      { primaryAt, standbyAt: Date.parse(standbyAt) },
+      { primaryAt },
+    ]) {
+      const error = await refusalFor({ error: { code: "mirror.clocks_apart", params } });
+      expect(isAppError(error) && error.code).toBe("mirror.bundle_fetch_failed");
+      expect(isAppError(error) && error.params).toEqual({});
+    }
+  });
+
   it("maps a 200 with an unparseable body to mirror.bundle_fetch_failed", async () => {
     const app = new Hono();
     app.post("/management-api/mirror-bundle", (c: Context) =>

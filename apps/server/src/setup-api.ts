@@ -286,7 +286,8 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
 /**
  * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the request
  * was well-formed, but the mirror's upstream — the primary it was pointed at — failed.
- * `password.invalid` is the primary's refusal of the login, relayed by `fetchMirrorBundle`.
+ * `password.invalid` is the primary's refusal of the login, and the four `mirror.*` refusals at 409
+ * are the main box's own refusals of the join, each relayed by `fetchMirrorBundle`.
  * The two ring refusals, `credentials.key_invalid` and `credentials.key_ring_version_collision`,
  * are left unlisted (400, the setup screen's generic words): only a faulty main box raises them.
  */
@@ -297,6 +298,10 @@ const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.bundle_fetch_failed": 502,
   "mirror.vault_not_empty": 409,
   "mirror.primary_unconfirmed": 409,
+  "mirror.bucket_stream_active": 409,
+  "mirror.standby_name_taken": 409,
+  "mirror.spare_already_joined": 409,
+  "mirror.clocks_apart": 409,
   "password.invalid": 401,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,

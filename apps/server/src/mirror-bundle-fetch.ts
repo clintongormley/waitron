@@ -10,12 +10,14 @@ import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import { checkBackupSettings } from "./backup-env-writer.js";
 import { lookupBoxName, RememberedAnswers, type BoxAddresses } from "./box-lookup.js";
+import { ALL_MODULES } from "./modules.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { assertSafePrimaryUrl } from "./primary-url.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
-// The registry of the code this file relays from the primary.
+// The registries of the codes this file relays from the primary.
 import "@waitron/identity";
+import "@waitron/module";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,19 +83,55 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
   return true;
 }
 
+const RELAYED_BARE = [
+  "password.invalid",
+  "mirror.bucket_stream_active",
+  "mirror.standby_name_taken",
+  "mirror.spare_already_joined",
+] as const;
+
+function isRelayedBare(code: unknown): code is (typeof RELAYED_BARE)[number] {
+  return (RELAYED_BARE as readonly unknown[]).includes(code);
+}
+
+/** Text that is an ISO time exactly as `Date.prototype.toISOString` writes one. */
+function isIsoTime(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const time = new Date(value);
+  return !Number.isNaN(time.getTime()) && time.toISOString() === value;
+}
+
 /**
- * The primary's refused login is relayed as `password.invalid`, rebuilt here so nothing the primary
- * wrote travels on; every other refusal is `mirror.bundle_fetch_failed`.
+ * A refusal from the main box is passed on only when it is on this short list, and each is rebuilt
+ * here so nothing the main box wrote travels on: `password.invalid`,
+ * `mirror.bucket_stream_active`, `mirror.standby_name_taken` and `mirror.spare_already_joined`
+ * with no parameters; `module.operation_invalid` with `{ module }` only when it names a module in
+ * `ALL_MODULES`; `mirror.clocks_apart` with `{ primaryAt, standbyAt }` only when both are ISO
+ * times. Every other code, and any of these whose parameters fail their check, is
+ * `mirror.bundle_fetch_failed`.
  */
 async function refusalFrom(response: Response): Promise<AppError> {
-  let code: unknown;
+  let error: Record<string, unknown> = {};
   try {
     const body: unknown = await response.json();
-    code = isRecord(body) && isRecord(body.error) ? body.error.code : undefined;
+    if (isRecord(body) && isRecord(body.error)) error = body.error;
   } catch {
-    code = undefined;
+    // An unreadable answer is the generic refusal below.
   }
-  if (code === "password.invalid") return new AppError("password.invalid", {});
+  const { code } = error;
+  const params = isRecord(error.params) ? error.params : {};
+  if (isRelayedBare(code)) return new AppError(code, {});
+  if (code === "module.operation_invalid") {
+    const named = ALL_MODULES.find((module) => module.name === params.module);
+    if (named !== undefined) return new AppError(code, { module: named.name });
+  }
+  if (
+    code === "mirror.clocks_apart" &&
+    isIsoTime(params.primaryAt) &&
+    isIsoTime(params.standbyAt)
+  ) {
+    return new AppError(code, { primaryAt: params.primaryAt, standbyAt: params.standbyAt });
+  }
   return new AppError("mirror.bundle_fetch_failed", {});
 }
 
