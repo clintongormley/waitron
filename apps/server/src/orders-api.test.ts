@@ -52,7 +52,9 @@ describe("Orders routes", () => {
     expect(await get("", "/printers")).toMatchObject({ status: 401 });
     const answer = await get(venue.staffDashboard, "/printers");
     expect(answer).toMatchObject({ status: 200 });
-    expect(answer.json).toEqual(expect.arrayContaining([{ id: venue.printerId, name: "Recibos" }]));
+    expect(answer.json).toEqual(
+      expect.arrayContaining([{ id: venue.printerId, name: "Receipt printer" }]),
+    );
   });
 
   it("shows staff unfinished bills at any date and finished bills only from today's business day", async () => {
@@ -374,7 +376,7 @@ describe("Orders routes", () => {
         "/management-api/orders/printers",
       );
       expect(choices.status).toBe(200);
-      expect(choices.json).toEqual([{ id: printer.id, name: "Recibos" }]);
+      expect(choices.json).toEqual([{ id: printer.id, name: "Receipt printer" }]);
       const detail = await send(
         app,
         venue.adminDashboard,

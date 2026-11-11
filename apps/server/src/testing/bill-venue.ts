@@ -220,7 +220,7 @@ export async function provisionBillVenue(
       ])
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(tx, {
-      name: "Recibos",
+      name: "Receipt printer",
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
       hasCashDrawer: true,
@@ -228,8 +228,8 @@ export async function provisionBillVenue(
     const readers = await tx
       .insert(cardReaders)
       .values([
-        { provider: "fake", providerRef: "reader-1", name: "Lector 1" },
-        { provider: "fake", providerRef: "reader-2", name: "Lector 2" },
+        { provider: "fake", providerRef: "reader-1", name: "Card reader 1" },
+        { provider: "fake", providerRef: "reader-2", name: "Card reader 2" },
       ])
       .returning({ id: cardReaders.id });
     return {
@@ -254,7 +254,7 @@ export async function provisionBillVenue(
     devices.push(device);
   }
   const cashOnlyDevice = await enrolDeviceForTest(db, cfg, {
-    name: "Caja efectivo",
+    name: "Cash till",
     profileId: seeded.cashOnlyProfileId,
   });
   db.run(

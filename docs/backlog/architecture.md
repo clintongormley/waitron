@@ -849,7 +849,9 @@ product failures.
   A976 rather than the private-name work in A974. The `made-here.routes.test.ts` venue
   samples and `receipt-document.test.ts` fixture descriptions and test titles also need
   triage there; preserve Spanish receipt output and deliberate locale checks. Fiscal-sale
-  descriptions also retain Spanish words. The fiscal-sale
+  descriptions also retain Spanish words.
+  BillVenue's receipt printer, card readers and cash till use English display names.
+  The fiscal-sale
   suite’s string-selected SQL count alias stays with its fixture text. Bookings’ native suites use English
   sample location, operation, contact and note text. Native provisioning and floor-plan-set route
   suites use English venue, operation and menu samples; their Spanish locale and starter-content
