@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBucketClient, type BucketConfig } from "./s3-client.js";
 import { prepareBucketEncryption } from "./sse-c.js";
@@ -23,6 +24,8 @@ type Behavior = {
   dropSettings?: boolean;
   dropRead?: "correct" | "control";
   loseUploadReply?: boolean;
+  /** The keyed read sends its headers and part of its body, calls this, and sends no more. */
+  stallRead?: () => void;
 };
 
 async function provider(behavior: Behavior = {}) {
@@ -112,6 +115,12 @@ async function provider(behavior: Behavior = {}) {
         (behavior.dropRead === "control" && key !== object.key)
       ) {
         req.socket.destroy();
+        return;
+      }
+      if (behavior.stallRead && key === object.key) {
+        res.writeHead(200, { etag: '"encrypted-probe"', "content-length": "1000" });
+        res.write("the first part");
+        behavior.stallRead();
         return;
       }
       if (!behavior.ignoreKeys && key !== object.key)
@@ -330,5 +339,39 @@ describe("Save's encryption capability check over the real S3 client", () => {
       reason: "encryption_unavailable",
     });
     expect(objects.size).toBe(0);
+  });
+
+  it("stops when its signal is cancelled while a read's body stalls after its headers", async () => {
+    let headersSent!: () => void;
+    const stalled = new Promise<void>((resolve) => (headersSent = resolve));
+    const { bucket, seen, objects } = await provider({
+      alreadyEnabled: true,
+      stallRead: () => headersSent(),
+    });
+    const controller = new AbortController();
+    const ended = prepareBucketEncryption(bucket, undefined, { signal: controller.signal }).then(
+      () => "resolved",
+      (error: unknown) => error,
+    );
+    await stalled;
+    controller.abort();
+    expect(await Promise.race([ended, delay(2_000, "still pending")])).toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", status: null, name: "AbortError" },
+    });
+    // The clean-up runs under the same signal, so a cancelled check leaves its object behind.
+    expect(seen.some((call) => call.method === "DELETE")).toBe(false);
+    expect(objects.size).toBe(1);
+  });
+
+  it("sends nothing on a signal already cancelled", async () => {
+    const { bucket, seen } = await provider();
+    await expect(
+      prepareBucketEncryption(bucket, undefined, { signal: AbortSignal.abort() }),
+    ).rejects.toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { operation: "get", key: "venue-copy", status: null, name: "AbortError" },
+    });
+    expect(seen).toEqual([]);
   });
 });

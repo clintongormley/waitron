@@ -1712,8 +1712,6 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   transaction.**
   [Detail](backlog/box.md#migrating-a-box-drops-the-change-feed-triggers-one-statement-at-a-time-outside-a-transaction)
 
-- **Bucket calls always end** (bundle of 3, 1 important, size S). [Detail](backlog/box.md#bundle-bucket-calls-always-end)
-
 - **The Amazon S3 delete and archive rehearsal's open edges (A538-9).** Left open by #1668, in
   `apps/server/src/testing/` (`aws-request-recorder.ts`, `s3-delete-scenario.ts`,
   `s3-archive-scenario.ts`) and the runbook `docs/developers/aws-backup-rehearsal.md`.

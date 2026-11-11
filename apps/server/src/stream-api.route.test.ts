@@ -19,7 +19,12 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
-import { type BucketConfig, type ProbeFailure, type StreamStatus } from "@waitron/stream";
+import {
+  type BucketConfig,
+  type ProbeFailure,
+  type ProbeResult,
+  type StreamStatus,
+} from "@waitron/stream";
 import { ARCHIVE_PURPOSE, readArchiveSettings, writeArchiveSettings } from "./archive-settings.js";
 import { destinationView, keyFingerprint } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
@@ -271,7 +276,7 @@ describe("stream settings routes", () => {
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(deps.probe).toHaveBeenCalledWith(BUCKET);
+    expect(deps.probe).toHaveBeenCalledWith(BUCKET, expect.any(AbortSignal));
   });
 
   it("Test treats a blank endpoint as an Amazon bucket", async () => {
@@ -283,7 +288,7 @@ describe("stream settings routes", () => {
     });
     const amazon = { ...BUCKET };
     delete amazon.endpoint;
-    expect(deps.probe).toHaveBeenCalledWith(amazon);
+    expect(deps.probe).toHaveBeenCalledWith(amazon, expect.any(AbortSignal));
   });
 
   // Every reason the bucket check can give reaches the screen by name, where the dashboard words
@@ -334,6 +339,98 @@ describe("stream settings routes", () => {
     });
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
+  });
+
+  /** A bucket that never finishes answering: the check ends only when its signal aborts. */
+  function stalledProbe() {
+    const signals: AbortSignal[] = [];
+    let started: () => void = () => {};
+    const running = new Promise<void>((resolve) => (started = resolve));
+    const probe = vi.fn(
+      (_bucket: BucketConfig, signal: AbortSignal) =>
+        new Promise<ProbeResult>((_resolve, reject) => {
+          signals.push(signal);
+          started();
+          signal.addEventListener(
+            "abort",
+            () =>
+              reject(
+                new AppError("backup.stream_request_failed", {
+                  operation: "put",
+                  key: "k",
+                  status: null,
+                  name: "AbortError",
+                }),
+              ),
+            { once: true },
+          );
+        }),
+    );
+    return { probe, signals, running };
+  }
+
+  it("Test ends a check that outlasts the time limit as a bucket that did not answer", async () => {
+    const { probe, signals } = stalledProbe();
+    const { app } = harness({ probe, probeLimitMs: 20 });
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream/test", {
+      method: "POST",
+      ...json(cookie, BODY),
+    });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
+  });
+
+  it("Save ends a check that outlasts the time limit and stores nothing", async () => {
+    await clearBucket();
+    const { probe, signals } = stalledProbe();
+    const { app, deps, reload } = harness({ probe, probeLimitMs: 20 });
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
+    expect(signals[0]!.aborted).toBe(true);
+    expect(deps.prepareEncryption).not.toHaveBeenCalled();
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
+  it("Save ends an encryption check that outlasts the time limit and stores nothing", async () => {
+    await clearBucket();
+    const probe = vi.fn<StreamApiDeps["probe"]>(async () => ({ ok: true }));
+    const { probe: prepareEncryption, signals } = stalledProbe();
+    const { app, deps, reload } = harness({ probe, prepareEncryption, probeLimitMs: 20 });
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
+    expect(signals).toHaveLength(1);
+    expect(signals[0]!.aborted).toBe(true);
+    // One deadline for the whole of Save's wait on the bucket, not one per check.
+    expect(probe.mock.calls[0]![1]).toBe(signals[0]);
+    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
+  it("Test stops checking the bucket when the browser drops the request", async () => {
+    const { probe, signals, running } = stalledProbe();
+    const { app } = harness({ probe, probeLimitMs: 3_600_000 });
+    const cookie = await login(app);
+    const dropped = new AbortController();
+    const pending = app.request("/api/backup/stream/test", {
+      method: "POST",
+      ...json(cookie, BODY),
+      signal: dropped.signal,
+    });
+    await running;
+    expect(signals[0]!.aborted).toBe(false);
+    dropped.abort();
+    await pending;
+    expect(signals[0]!.aborted).toBe(true);
   });
 
   it("refuses a missing required field by name, before any probe", async () => {
@@ -442,7 +539,7 @@ describe("stream settings routes", () => {
       expect(await res.json()).toEqual({
         error: { code: "backup.stream_test_failed", params: { reason } },
       });
-      expect(deps.prepareEncryption).toHaveBeenCalledWith(BUCKET);
+      expect(deps.prepareEncryption).toHaveBeenCalledWith(BUCKET, expect.any(AbortSignal));
       expect(order).toEqual([]);
       expect(await storedBucket()).toBeNull();
     },

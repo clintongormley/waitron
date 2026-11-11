@@ -9,6 +9,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { bucketKey } from "./names.js";
 import { generationPrefix } from "./generations.js";
+import type { StoreCall } from "./object-store.js";
 import { PROBE_PREFIX, type ProbeResult } from "./probe.js";
 import {
   createBucketClient,
@@ -72,8 +73,10 @@ export async function verifyStreamKey(
 export async function prepareBucketEncryption(
   bucket: BucketConfig,
   clientFor: typeof createBucketClient = createBucketClient,
+  call?: StoreCall,
 ): Promise<ProbeResult> {
   const client = clientFor(bucket);
+  const sent = { abortSignal: call?.signal };
   const key = bucketKey(bucket, `${PROBE_PREFIX}encryption-${randomUUID()}`);
   const bytes = randomBytes(32);
   const headers = (secret: Buffer) => ({
@@ -94,6 +97,7 @@ export async function prepareBucketEncryption(
     try {
       const { ServerSideEncryptionConfiguration: settings } = await client.send(
         new GetBucketEncryptionCommand({ Bucket: bucket.bucket }),
+        sent,
       );
       if (
         settings?.Rules?.some((rule) =>
@@ -114,6 +118,7 @@ export async function prepareBucketEncryption(
               })),
             },
           }),
+          sent,
         );
       }
     } catch (error) {
@@ -132,10 +137,12 @@ export async function prepareBucketEncryption(
         IfNoneMatch: "*",
         ...headers(secret),
       }),
+      sent,
     );
     operation = "get";
     const correct = await client.send(
       new GetObjectCommand({ Bucket: bucket.bucket, Key: key, ...headers(secret) }),
+      sent,
     );
     if (
       !correct.Body ||
@@ -147,6 +154,7 @@ export async function prepareBucketEncryption(
       try {
         const readable = await client.send(
           new GetObjectCommand({ Bucket: bucket.bucket, Key: key, ...control }),
+          sent,
         );
         await readable.Body?.transformToByteArray();
         return {
@@ -165,8 +173,11 @@ export async function prepareBucketEncryption(
     if (statusOf(error) === null) throw requestFailed(operation, requestedKey, null, nameOf(error));
     return unavailable();
   } finally {
+    // Under `call`'s signal too, so a cancelled check can leave its object behind.
     try {
-      if (wrote) await client.send(new DeleteObjectCommand({ Bucket: bucket.bucket, Key: key }));
+      if (wrote) {
+        await client.send(new DeleteObjectCommand({ Bucket: bucket.bucket, Key: key }), sent);
+      }
     } catch {
       // A unique probe name prevents a failed cleanup from replacing another check's object.
     }
