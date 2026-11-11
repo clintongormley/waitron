@@ -17,6 +17,8 @@ Each row gives the invoice's number, type, issue date, the day the bill was clos
 on a full invoice, its amounts as issued, and the numbers and total of any later corrective invoices
 (credit notes, _facturas rectificativas_) against it. The file holds rows only once Task 7 gives staff
 the button that closes a bill by transfer; until then it holds the header line alone.
+_2026-11-11: rows can already come from a device whose profile has the close action switched on
+and that sends a close to the till route directly; no till screen sends one until Task 7._
 
 Worked example, a Spanish venue, range 2026-11-02 to 2026-11-08: a €220 simplified invoice (F2, no
 customer named) issued at a meal on 3 November, closed by transfer the next business day and later

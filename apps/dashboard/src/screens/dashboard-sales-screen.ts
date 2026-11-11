@@ -183,6 +183,9 @@ export class SalesScreen extends LitElement {
         gap: var(--wt-space-2) var(--wt-space-4);
         margin-top: var(--wt-space-4);
       }
+      .export {
+        margin-bottom: var(--wt-space-4);
+      }
       .print wt-combobox {
         flex: 0 1 calc(var(--wt-space-6) * 7);
         min-width: 0;
@@ -191,6 +194,7 @@ export class SalesScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) canExport = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -238,9 +242,17 @@ export class SalesScreen extends LitElement {
   @state() private printSentTo: string | null = null;
   @state() private printErrorKey: string | null = null;
   @state() private printersErrorKey: string | null = null;
+  @state() private exporting = false;
+  @state() private exportErrorKey: string | null = null;
+  @state() private incompleteDates: Readonly<Record<"from" | "to", boolean>> = {
+    from: false,
+    to: false,
+  };
   #rangeChosen = false;
   /** Bumped on every new category question, so a print sent for an earlier one reports nothing. */
   #categoryGeneration = 0;
+  /** Bumped on every new range, so an export sent for an earlier one reports nothing. */
+  #exportGeneration = 0;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -264,6 +276,10 @@ export class SalesScreen extends LitElement {
     return this.from > this.to;
   }
 
+  #exportBlocked(): boolean {
+    return this.incompleteDates.from || this.incompleteDates.to || this.#rangeRunsBackwards();
+  }
+
   async #loadInitialRange(): Promise<void> {
     if (this.#rangeChosen) return;
     try {
@@ -273,6 +289,9 @@ export class SalesScreen extends LitElement {
         if (this.from === businessDay && this.to === businessDay) return;
         this.from = businessDay;
         this.to = businessDay;
+        this.incompleteDates = { from: false, to: false };
+        this.#exportGeneration += 1;
+        this.exportErrorKey = null;
         void this.#load();
         void this.#loadCategories();
       });
@@ -345,6 +364,28 @@ export class SalesScreen extends LitElement {
     }
   }
 
+  async #exportTransfer(): Promise<void> {
+    if (this.exporting || this.#exportBlocked()) return;
+    // The fields stay editable while the file is asked for.
+    const sent = { from: this.from, to: this.to };
+    this.exporting = true;
+    this.exportErrorKey = null;
+    const generation = this.#exportGeneration;
+    try {
+      const file = await this.api.downloadClosedByTransfer(sent);
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `deferred-payments-${sent.from}-${sent.to}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      if (generation === this.#exportGeneration) this.exportErrorKey = codeOf(error);
+    } finally {
+      this.exporting = false;
+    }
+  }
+
   /** BOTH branches' state is cleared before the request, so a rejection can never leave a stale close
    * or period rendering beside the error banner. */
   async #load(): Promise<void> {
@@ -371,11 +412,15 @@ export class SalesScreen extends LitElement {
   #onDateChange(field: "from" | "to", event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const value = event.detail.value;
-    // A date field reads "" while cleared or part-typed, which builds an Invalid Date → NaN; ignore
-    // it rather than reloading with a bogus window.
-    if (Number.isNaN(Date.parse(`${value}T00:00:00Z`))) return;
+    // A date field reads "" while cleared or part-typed, which parses to NaN: the reports keep the
+    // last good range, and the export waits until the field holds a date again.
+    const incomplete = Number.isNaN(Date.parse(`${value}T00:00:00Z`));
+    this.incompleteDates = { ...this.incompleteDates, [field]: incomplete };
+    if (incomplete) return;
     this.#rangeChosen = true;
     this[field] = value;
+    this.#exportGeneration += 1;
+    this.exportErrorKey = null;
     void this.#load();
     void this.#loadCategories();
   }
@@ -401,6 +446,7 @@ export class SalesScreen extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onDateChange("to", e)}
         ></wt-input>
       </div>
+      ${this.canExport ? this.#renderExport() : nothing}
       ${
         this.errorKey
           ? html`<p class="error" role="alert" data-test="error">${codeMessage(this.errorKey)}</p>`
@@ -409,6 +455,28 @@ export class SalesScreen extends LitElement {
       ${this.close ? this.#renderClose(this.close) : nothing}
       ${this.period ? this.#renderPeriod(this.period) : nothing}
       ${this.#rangeRunsBackwards() ? nothing : this.#renderCategories()}
+    `;
+  }
+
+  #renderExport(): TemplateResult {
+    return html`
+      <div class="export">
+        <wt-button
+          variant="secondary"
+          data-test="export-transfer"
+          ?disabled=${this.#exportBlocked()}
+          ?loading=${this.exporting}
+          @click=${() => void this.#exportTransfer()}
+          >${t("sales.export_transfer")}</wt-button
+        >
+        ${
+          this.exportErrorKey
+            ? html`<p class="error" role="alert" data-test="export-error">
+                ${codeMessage(this.exportErrorKey)}
+              </p>`
+            : nothing
+        }
+      </div>
     `;
   }
 

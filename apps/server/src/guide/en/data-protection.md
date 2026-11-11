@@ -311,7 +311,9 @@ details, and Waitron can email them the invoice.
 - What data: name, tax number, address and country, and the email address an invoice was sent to.
 - Who receives it: the Tax Agency, which receives the customer's name and tax number, but not the
   address, with each invoice record; your email provider, for each invoice you email, which carries
-  the invoice as a PDF with the customer's name, tax number and address.
+  the invoice as a PDF with the customer's name, tax number and address; and your accountant, when
+  you give them the file of deferred payments from **Sales & takings**, which lists each such
+  invoice's customer name and tax number.
 - How long: _set with your adviser_. Waitron never changes or deletes an issued invoice. It also
   keeps every receipt and ticket it sends to a receipt or kitchen printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4

@@ -224,4 +224,20 @@ describe.each(["light", "dark"] as const)("dashboard-sales-screen a11y (%s theme
     expect(el.shadowRoot!.querySelector("[data-test=print-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
+
+  it("renders the deferred-payments file action and its refusal accessibly", async () => {
+    const api = stubApi({
+      downloadClosedByTransfer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el, host } = await mountWidget<SalesScreen>(
+      "dashboard-sales-screen",
+      { api, canExport: true },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=export-transfer]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=export-error]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

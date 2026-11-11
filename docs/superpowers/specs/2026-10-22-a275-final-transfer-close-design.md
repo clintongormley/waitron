@@ -10,6 +10,8 @@
 
 _2026-11-10: as built, the stored request digest is the column `fingerprint`, the request id is `submissionId`, and `actor_id` references `persons` ([A275 Task 3 plan](../plans/2026-11-10-a275-transfer-close-route.md))._
 
+_2026-11-11: as built, the accountant's file is `POST /management-api/reports/closed-by-transfer`, venue-wide, behind a button on **Sales & takings** rather than a Reports → Closed by transfer screen; its columns are in the [A275 Task 6 plan](../plans/2026-11-11-a275-transfer-export.md)._
+
 **PROPOSED, 2026-10-22. Awaiting full owner approval; no plan or implementation authorised.**
 All new behaviour below is proposed. Synthetic pictures
 illustrate the policy, not a running application.

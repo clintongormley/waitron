@@ -343,13 +343,14 @@ huella/inmutabilidad unedited. Design approval does not waive that gate.
 The [partial-receipts proposal](../superpowers/specs/2026-10-20-a275-invoice-now-transfer-later-design.md),
 historical research/source receipts and pictures remain unchanged. Old question 1 is retired;
 questions 2–5 are withdrawn. The revised Spanish adviser confirmation remains attached, not sent.
-Tasks 0–3 are built: the `transfer_closures` table, the party readiness read, the close command
+Tasks 0–3 and 6 are built: the `transfer_closures` table, the party readiness read, the close command
 ([2026-11-09 plans](../superpowers/plans/2026-11-09-a275-transfer-close-command.md)), and its till
 route, recovery read and device-profile action, off by default
 ([Task 3 plan](../superpowers/plans/2026-11-10-a275-transfer-close-route.md)), and the
-accountant's file's server route (Task 6a,
-[plan](../superpowers/plans/2026-11-11-a275-transfer-export.md); no button until 6b); not
-usable until Task 7 adds the button, after A739 Cut B. A275 stays open pending the rest of the
+accountant's file (Task 6,
+[plan](../superpowers/plans/2026-11-11-a275-transfer-export.md): its server route, and a button on
+**Sales & takings** for a session holding `report.export`); no till screen sends a close until Task 7 puts it in
+the till's Pay flow, after A739 Cut B. A275 stays open pending the rest of the
 build and acceptance. The reviewed plan includes an explicit recovery read,
 party completion before its retained result, live Bills exclusion, separate delivery/closing actors
 and bounded implementation checkpoints.

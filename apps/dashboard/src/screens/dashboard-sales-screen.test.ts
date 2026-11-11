@@ -1,12 +1,13 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DailyCloseDto, DashboardApi, SalesOverview, SalesPeriodDto } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";
 import { SalesScreen } from "./dashboard-sales-screen.js";
-import type { WtInput } from "@waitron/ui";
+import type { WtButton, WtInput } from "@waitron/ui";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -653,5 +654,242 @@ describe("dashboard-sales-screen date fields", () => {
     send(from!, "2030-06-01");
     await flush(el);
     expect(api.getSalesPeriod).toHaveBeenLastCalledWith("2030-06-01", "2030-06-15");
+  });
+});
+
+describe("dashboard-sales-screen deferred-payments file", () => {
+  const FILE = new Blob(["﻿header\r\n"]);
+  const exportButton = (el: SalesScreen) =>
+    el.shadowRoot!.querySelector<WtButton>("[data-test=export-transfer]");
+  const exportError = (el: SalesScreen) =>
+    el.shadowRoot!.querySelector("[data-test=export-error]")?.textContent?.trim() ?? null;
+  const fieldValue = (el: SalesScreen, test: string) =>
+    el.shadowRoot!.querySelector<WtInput>(`[data-test=${test}]`)!.value;
+  async function mount(api: DashboardApi, canExport: boolean): Promise<SalesScreen> {
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api, canExport });
+    await flush(el);
+    return el;
+  }
+  function catchDownloads(): { clicked: HTMLAnchorElement[] } {
+    const clicked: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      clicked.push(this);
+    });
+    return { clicked };
+  }
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("offers no deferred-payments file to a session that may not export reports", async () => {
+    const el = await mount(stubApi({ downloadClosedByTransfer: vi.fn() }), false);
+    expect(exportButton(el)).toBeNull();
+  });
+
+  it("calls the action Export deferred payments in English", async () => {
+    setLocale("en-GB");
+    const english = await mount(stubApi(), true);
+    expect(exportButton(english)!.textContent!.trim()).toBe("Export deferred payments (CSV)");
+  });
+
+  it("downloads the range the fields show, named for that range", async () => {
+    const downloadClosedByTransfer = vi.fn().mockResolvedValue(FILE);
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:transfer");
+    const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const { clicked } = catchDownloads();
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    setDate(el, "from-picker", "2030-06-01");
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+
+    expect(exportButton(el)!.textContent!.trim()).toBe(t("sales.export_transfer"));
+    exportButton(el)!.click();
+    await flush(el);
+
+    expect(downloadClosedByTransfer).toHaveBeenCalledWith({ from: "2030-06-01", to: "2030-06-15" });
+    expect(createObjectURL).toHaveBeenCalledWith(FILE);
+    expect(clicked).toHaveLength(1);
+    expect(clicked[0]!.download).toBe("deferred-payments-2030-06-01-2030-06-15.csv");
+    expect(clicked[0]!.href).toBe("blob:transfer");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:transfer");
+    expect(exportError(el)).toBeNull();
+  });
+
+  it("names the file for the range it asked for, even when the fields change before the answer", async () => {
+    let answer!: (file: Blob) => void;
+    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>((r) => (answer = r)));
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:transfer");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const { clicked } = catchDownloads();
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    setDate(el, "from-picker", "2030-06-01");
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+    exportButton(el)!.click();
+    await flush(el);
+
+    setDate(el, "to-picker", "2030-06-20");
+    answer(FILE);
+    await flush(el);
+
+    expect(clicked).toHaveLength(1);
+    expect(clicked[0]!.download).toBe("deferred-payments-2030-06-01-2030-06-15.csv");
+  });
+
+  it("shows the action busy while the file is asked for, and sends one request however often it is pressed", async () => {
+    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>(() => {}));
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+
+    exportButton(el)!.click();
+    await flush(el);
+    exportButton(el)!.click();
+    await flush(el);
+
+    expect(exportButton(el)!.loading).toBe(true);
+    expect(downloadClosedByTransfer).toHaveBeenCalledOnce();
+  });
+
+  it("shows a refusal under the action, keeps both dates, and asks again when pressed again", async () => {
+    const downloadClosedByTransfer = vi
+      .fn()
+      .mockRejectedValue({ code: "authorization.not_permitted" });
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    setDate(el, "from-picker", "2030-06-01");
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+
+    exportButton(el)!.click();
+    await flush(el);
+
+    expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
+    expect(fieldValue(el, "from-picker")).toBe("2030-06-01");
+    expect(fieldValue(el, "to-picker")).toBe("2030-06-15");
+    expect(exportButton(el)!.loading).toBe(false);
+    expect(exportButton(el)!.disabled).toBe(false);
+
+    exportButton(el)!.click();
+    await flush(el);
+
+    expect(downloadClosedByTransfer).toHaveBeenCalledTimes(2);
+    expect(downloadClosedByTransfer).toHaveBeenLastCalledWith({
+      from: "2030-06-01",
+      to: "2030-06-15",
+    });
+  });
+
+  it("is disabled while a date field is cleared, and downloads what the fields show once it holds a date again", async () => {
+    const downloadClosedByTransfer = vi.fn().mockResolvedValue(FILE);
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:transfer");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    catchDownloads();
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    setDate(el, "from-picker", "2030-06-01");
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+    const nativeTo = el
+      .shadowRoot!.querySelector<WtInput>("[data-test=to-picker]")!
+      .shadowRoot!.querySelector<HTMLInputElement>("input[type=date]")!;
+
+    await userEvent.clear(nativeTo);
+    await flush(el);
+
+    expect(fieldValue(el, "to-picker")).toBe("");
+    expect(exportButton(el)!.disabled).toBe(true);
+    exportButton(el)!.click();
+    await flush(el);
+    expect(downloadClosedByTransfer).not.toHaveBeenCalled();
+
+    await userEvent.fill(nativeTo, "2030-06-20");
+    await flush(el);
+
+    expect(exportButton(el)!.disabled).toBe(false);
+    exportButton(el)!.click();
+    await flush(el);
+    expect(downloadClosedByTransfer).toHaveBeenCalledExactlyOnceWith({
+      from: "2030-06-01",
+      to: "2030-06-20",
+    });
+  });
+
+  it("is enabled again when the business day fills a field cleared before it arrived", async () => {
+    let answer!: (value: SalesOverview) => void;
+    const getSalesOverview = vi.fn(() => new Promise<SalesOverview>((r) => (answer = r)));
+    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>(() => {}));
+    const el = await mount(stubApi({ getSalesOverview, downloadClosedByTransfer }), true);
+    setDate(el, "to-picker", "");
+    await flush(el);
+    expect(exportButton(el)!.disabled).toBe(true);
+
+    answer(overview("2030-06-15"));
+    await flush(el);
+
+    expect(fieldValue(el, "to-picker")).toBe("2030-06-15");
+    expect(exportButton(el)!.disabled).toBe(false);
+    exportButton(el)!.click();
+    await flush(el);
+    expect(downloadClosedByTransfer).toHaveBeenCalledWith({ from: "2030-06-15", to: "2030-06-15" });
+  });
+
+  it("takes a refusal away once the dates change", async () => {
+    const downloadClosedByTransfer = vi
+      .fn()
+      .mockRejectedValue({ code: "authorization.not_permitted" });
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    exportButton(el)!.click();
+    await flush(el);
+    expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
+
+    setDate(el, "to-picker", "2030-06-15");
+    await flush(el);
+
+    expect(exportError(el)).toBeNull();
+  });
+
+  it("shows no refusal for a range the fields no longer hold", async () => {
+    let refuse!: (reason: unknown) => void;
+    const downloadClosedByTransfer = vi.fn(() => new Promise<Blob>((_, r) => (refuse = r)));
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    exportButton(el)!.click();
+    await flush(el);
+
+    setDate(el, "to-picker", "2030-06-15");
+    refuse({ code: "authorization.not_permitted" });
+    await flush(el);
+
+    expect(exportError(el)).toBeNull();
+    expect(exportButton(el)!.loading).toBe(false);
+  });
+
+  it("takes a refusal away once the business day replaces both dates", async () => {
+    let answer!: (value: SalesOverview) => void;
+    const getSalesOverview = vi.fn(() => new Promise<SalesOverview>((r) => (answer = r)));
+    const downloadClosedByTransfer = vi
+      .fn()
+      .mockRejectedValue({ code: "authorization.not_permitted" });
+    const el = await mount(stubApi({ getSalesOverview, downloadClosedByTransfer }), true);
+    exportButton(el)!.click();
+    await flush(el);
+    expect(exportError(el)).toBe(codeMessage("authorization.not_permitted"));
+
+    answer(overview("2030-06-15"));
+    await flush(el);
+
+    expect(fieldValue(el, "from-picker")).toBe("2030-06-15");
+    expect(fieldValue(el, "to-picker")).toBe("2030-06-15");
+    expect(exportError(el)).toBeNull();
+  });
+
+  it("is disabled while the range runs backwards", async () => {
+    const downloadClosedByTransfer = vi.fn().mockResolvedValue(FILE);
+    const el = await mount(stubApi({ downloadClosedByTransfer }), true);
+    expect(exportButton(el)!.disabled).toBe(false);
+
+    setDate(el, "from-picker", "2030-06-15");
+    setDate(el, "to-picker", "2030-06-01");
+    await flush(el);
+
+    expect(exportButton(el)!.disabled).toBe(true);
   });
 });

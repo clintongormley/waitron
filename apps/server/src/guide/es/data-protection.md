@@ -334,7 +334,9 @@ datos, y Waitron puede enviarle la factura por correo.
 - Datos: nombre, NIF, dirección y país, y la dirección de correo a la que se envió una factura.
 - Destinatarios: la Agencia Tributaria, que recibe con cada registro de factura el nombre y el NIF
   del cliente, pero no su dirección; tu proveedor de correo, por cada factura que envías por correo,
-  que lleva la factura en PDF con el nombre, el NIF y la dirección del cliente.
+  que lleva la factura en PDF con el nombre, el NIF y la dirección del cliente; y tu gestor, cuando
+  le das el archivo de pagos aplazados de **Ventas y recaudación**, que lista el nombre y el NIF
+  del cliente de cada una de esas facturas.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una factura emitida.
   También guarda cada recibo y cada comanda que envía a una impresora de recibos o de cocina y no
   borra ninguno, así que los datos del cliente de una factura impresa en la caja también quedan en
