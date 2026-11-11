@@ -6468,6 +6468,8 @@ does not see.
 
 ### State-folder names live in `packages/store/src/state-layout.ts`, except Cloud and legacy setup names awaiting their layout slices; a plain reset keeps exactly its `kept` entries
 
+_2026-11-11, A1308 fl4: Cloud names now live in the layout. See [One state-folder layout](#one-state-folder-layout) and the current root rule; this excerpt retains the earlier wording._
+
 > Guard: `scripts/state-layout.test.ts`, weaker than its name: reads text, and sees only a constant
 > or a join from the state folder.
 

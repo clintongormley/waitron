@@ -16,7 +16,6 @@ const ROOT = join(import.meta.dirname, "..");
 const LAYOUT = "packages/store/src/state-layout.ts";
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const names = [
-  CLOUD_DIR,
   ...STATE_LAYOUT.map((entry) => entry.name).filter((name) => /[.\-/]/.test(name)),
   ...Object.values(layout).filter(
     (value): value is string => typeof value === "string" && value.startsWith(`${CLOUD_DIR}/`),
@@ -24,7 +23,7 @@ const names = [
 ];
 const quotedNames = names.map(escaped).join("|");
 const definitions = new RegExp(
-  String.raw`\bconst\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?=\s*["'\x60](?:${quotedNames})["'\x60]|\bjoin\(\s*[\w$.#]*stateDir\s*,\s*["'\x60](?:${quotedNames}|stream|handover|tls|venue|records|logs)["'\x60]`,
+  String.raw`\bconst\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?=\s*["'\x60](?:${quotedNames})["'\x60]|\bjoin\(\s*[\w$.#]*stateDir\s*,\s*["'\x60](?:${quotedNames}|stream|handover|tls|venue|records|logs|cloud)["'\x60]`,
   "gi",
 );
 
@@ -142,7 +141,7 @@ it("reports Cloud folder and child definitions while accepting other roots and f
   expect(
     strays(
       "apps/server/src/example.ts",
-      'const path = join(archiveDir, "cloud"); const item = { item: "cloud/connection.json" };',
+      'const label = "Cloud"; const path = join(archiveDir, "cloud"); const item = { item: "cloud/connection.json" };',
     ),
   ).toEqual([]);
   expect(strays(LAYOUT, text)).toEqual([]);
