@@ -4075,7 +4075,8 @@ describe("department transfers across operator lifetimes", () => {
       requestDepartmentTransfer: send,
     });
     await signIn(el);
-    Object.assign(el, { activeTabId: "selected-tab", drill: { kind: "table-order" } });
+    const c = counter(el)!;
+    c.store.loadFrom("selected-tab", [{ product: c.products[0]!, quantity: "1" }], "Lunch", 1);
     el.requestUpdate();
     await flush(el);
     await openTransfers(el);
@@ -4099,6 +4100,60 @@ describe("department transfers across operator lifetimes", () => {
     );
     expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
   });
+
+  it.each(["table-order", "Counter"] as const)(
+    "does not offer a party bill from %s while keeping incoming transfers available",
+    async (source) => {
+      const desk = transfers();
+      const { el } = await mountApp(desk.calls);
+      await signIn(el);
+      if (source === "table-order") {
+        Object.assign(el, {
+          activeTabId: "party-tab",
+          drill: { kind: "table-order" },
+          orderParty: {
+            id: "party-1",
+            revision: 1,
+            guestCount: 2,
+            state: "open",
+            name: null,
+            displayName: "Table 4",
+            openingBillId: "party-tab",
+            outstanding: "0.00",
+            billCount: 1,
+            tableIds: [],
+            unsentDrafts: [],
+            reminder: null,
+            kitchenNote: {
+              scope: { partyId: "party-1" },
+              note: null,
+              revision: 0,
+              ownerRevision: 1,
+            },
+          } satisfies TableParty,
+        });
+      } else {
+        const c = counter(el)!;
+        c.store.loadFrom("party-tab", [{ product: c.products[0]!, quantity: "1" }], "Table 4", 1, {
+          note: null,
+          revision: 0,
+          scopeKey: "party:party-1",
+        });
+      }
+      el.requestUpdate();
+      await flush(el);
+      expect(
+        el.shadowRoot!.querySelector(
+          source === "table-order" ? "till-table-order-screen" : "till-counter-screen",
+        ),
+      ).not.toBeNull();
+      await openTransfers(el);
+      expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+      expect(
+        transferRoot(el)?.querySelector("[data-incoming=request-1] [data-view]"),
+      ).not.toBeNull();
+    },
+  );
 
   it("does not offer a request for a previously selected tab while another surface is showing", async () => {
     const desk = transfers();
