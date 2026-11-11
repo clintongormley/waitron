@@ -1,6 +1,8 @@
 # A275 Task 6: the accountant's file of bills closed "to be paid by transfer"
 
-**Status: proposed 2026-11-11, revised the same day after a fresh reader's review; for the watcher;
+**Cleared by the watcher 2026-11-11 10:24 with two changes (below, marked "watcher 10:24"); owner
+question 1 answered "B" 2026-11-11 10:25 (each download recorded).** Earlier status: proposed
+2026-11-11, revised the same day after a fresh reader's review; for the watcher;
 on `feat/a275-transfer-export` (off `main` at `e57d4ba008`).** Every `file:line` below was read at
 that commit. One thing was run; it is marked **Measured**. Everything else is read, not run.
 
@@ -123,12 +125,13 @@ issued at real time was then accepted (no clock-behind refusal), and a €1.21 c
    `requireRange` (as `period` does: a malformed range is a 400 `management.request_invalid` with
    `field` "from", "to" or "range", already in `STATUS`, `:74`), then one `withTransaction` that calls
    `authorizeManager` with `report.export` (`:172–181` shows the shared gate; this route needs its
-   `authorizedBy`), reads the rows and, under option B, records the activity. The language is the
-   venue's: `deps.venueLocale` (`:60`) `es-ES` → `es`, otherwise `en`. Answers
+   `authorizedBy`), reads the rows and records the activity (option B, owner 10:25). The language is the
+   venue's: `deps.venueLocale` (`:60`) through the existing `toLanguage`
+   (`apps/server/src/personal-data-export-api.ts:53`), never a new mapping (watcher 10:24). Answers
    `text/csv; charset=utf-8`, `attachment; filename="closed-by-transfer-{from}-{to}.csv"`,
    `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` (`attendance-export-api.ts:101–110`).
    The doc comment at `:164–170` gains "and the transfer file".
-4. Option B only: `packages/db/src/activity-kinds.ts` gains `transfer_export.downloaded`, data
+4. Option B (owner 10:25): `packages/db/src/activity-kinds.ts` gains `transfer_export.downloaded`, data
    `{ from, to, rows }`, subject `report`.
 
 **Personal data.** The file carries customers' names and tax numbers (owner question 1). Nothing new
@@ -204,8 +207,8 @@ in a spreadsheet in each language. Screenshots stay out of the repository.
    `renderTransferClosedCsv(<reader for that range>, "es")`, whose one data line names `A/1` and
    `R/1`; under option B, one new `activity_log` row of kind `transfer_export.downloaded`, actor the
    manager, data `{ from, to, rows: 1 }`. The supervisor (holds `report.view`) answers 403
-   `authorization.not_permitted` and adds no activity row; `from` after `to` answers 400 with
-   `field: "range"`.
+   `authorization.not_permitted` and adds no activity row. (No backwards-range case: it is tested
+   where `requireRange` lives; watcher 10:24.)
 
 **Dashboard** (after `memory_pressure` shows headroom; real Chromium):
 
@@ -223,8 +226,7 @@ day (case 1 fails); recipient columns read as null (case 2); corrections query r
 `total`); `order by` removed (case 4: insertion order puts case 1 first); `null` passed to `csvCell`
 unmapped (case 5 reads `"null"`); cells quoted without `csvCell` (case 5); amounts through `csvCell`
 (case 5 reads `"'-1.21"`); language ignored (case 5, Spanish); no byte-order mark, or LF line ends
-(case 5); route gated by `report.view` (case 6, 403); `requireRange` removed (case 6, 400);
-`recordActivity` removed (case 6, option B); screen ignores `canExport`, sends today instead of the
+(case 5); route gated by `report.view` (case 6, 403); `recordActivity` removed (case 6, option B); screen ignores `canExport`, sends today instead of the
 fields, drops the refusal, or never disables (case 7); `.canExport` not passed (case 8).
 
 **Commands:**
