@@ -364,6 +364,7 @@ export async function postToBox(
         body,
         signal,
       });
+      connected = true;
       return { status: res.status, text: await res.text() };
     }
     const ca = deps.authorityOf?.(nodeId);
@@ -385,7 +386,10 @@ export async function postToBox(
   } catch (error) {
     // A connected peer may still sell. A fetch replacement exposes no connection phase.
     if (connected || (signal.aborted && deps.fetch !== undefined))
-      throw new PeerSilenceUnestablished("peer exchange did not finish", { cause: error });
+      throw new PeerSilenceUnestablished(
+        error instanceof Error ? error.message : "peer exchange did not finish",
+        { cause: error },
+      );
     if (signal.aborted) throw signal.reason;
     throw error;
   }
@@ -432,8 +436,10 @@ export function askPeerStatus(
       if (error instanceof PeerSilenceUnestablished) return silent("not_established");
       const code = firstCodeInCauseChain(error, () => true);
       const unreachable =
-        ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH", "ETIMEDOUT"].includes(code ?? "") ||
-        (error instanceof DOMException && error.name === "TimeoutError");
+        ["ECONNREFUSED", "ENETUNREACH", "EHOSTUNREACH"].includes(code ?? "") ||
+        (deps.fetch === undefined &&
+          (code === "ETIMEDOUT" ||
+            (error instanceof DOMException && error.name === "TimeoutError")));
       return silent(unreachable ? "unreachable" : "not_established");
     }
     if (answer.status < 200 || answer.status > 299) return silent("refused");

@@ -16,10 +16,12 @@ import {
 import {
   boxRefusal,
   askPeerStatus,
+  postToBox,
   checkPeersAtStart,
   persistingAccept,
   type CheckPeersDeps,
 } from "./boot-peer-check.js";
+import * as boxTransport from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
 import { freePorts } from "./testing/free-ports.js";
 import {
@@ -1303,7 +1305,11 @@ describe("askPeerStatus", () => {
     ["a refused connection", Object.assign(new Error(), { code: "ECONNREFUSED" }), "unreachable"],
     ["no network route", Object.assign(new Error(), { code: "ENETUNREACH" }), "unreachable"],
     ["no host route", Object.assign(new Error(), { code: "EHOSTUNREACH" }), "unreachable"],
-    ["a connection timeout", Object.assign(new Error(), { code: "ETIMEDOUT" }), "unreachable"],
+    [
+      "an opaque transport timeout",
+      Object.assign(new Error(), { code: "ETIMEDOUT" }),
+      "not_established",
+    ],
     [
       "a refused connection wrapped by fetch",
       new TypeError("fetch failed", {
@@ -1335,6 +1341,31 @@ describe("askPeerStatus", () => {
     expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
     expect(fetchFn).not.toHaveBeenCalled();
   });
+
+  it.each([
+    [false, "unreachable"],
+    [true, "not_established"],
+  ] as const)(
+    "a native timeout (connected: %s) keeps its diagnostic and is %s",
+    async (connected, reason) => {
+      const exchange = vi
+        .spyOn(boxTransport, "boxExchange")
+        .mockImplementation(async (_url, options) => {
+          if (connected) options.onConnected?.();
+          throw Object.assign(new Error("synthetic exchange timeout"), { code: "ETIMEDOUT" });
+        });
+      try {
+        await expect(postToBox({ timeoutMs: 100 }, SPARE, PEER.url, "{}")).rejects.toThrow(
+          "synthetic exchange timeout",
+        );
+        const onSilent = vi.fn();
+        expect(await realAsk({ onSilent })(PEER)).toBeNull();
+        expect(onSilent).toHaveBeenCalledWith(SPARE, reason);
+      } finally {
+        exchange.mockRestore();
+      }
+    },
+  );
 
   it.each(["", "https://this-box.local/"])(
     "an empty or own address %j cannot establish that the peer is silent",
