@@ -137,7 +137,7 @@ async function venue(): Promise<Venue> {
         country: "ES",
         taxId: nifWithControlLetter(65_000_000 + nifCounter),
         legalName: "Deli Facturas SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
@@ -151,7 +151,7 @@ async function venue(): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -173,7 +173,7 @@ async function venue(): Promise<Venue> {
   const fixtures = await withTransaction(suite.db, async (tx) => {
     await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
     const catalogue = await createCatalogue(tx, { name: "Delicatessen" });
-    const category = await createCategory(tx, { name: "Bebidas" });
+    const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
       catalogueId: catalogue.id,
       categoryId: category.id,

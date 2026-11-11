@@ -190,7 +190,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         country: "ES",
         taxId: nextNif(),
         legalName: "Deli Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
@@ -204,7 +204,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -225,7 +225,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
     });
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const drinks = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
