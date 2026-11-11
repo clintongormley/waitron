@@ -8,7 +8,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     identifierTypes: {
       "vat-number": "VAT number",
       passport: "Passport",
-      "residence-country-id": "Country of residence identity document",
+      "residence-country-id": "Residence-country ID",
       "residence-certificate": "Residence certificate",
       "other-document": "Other document",
     },

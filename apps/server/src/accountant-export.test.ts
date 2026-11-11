@@ -73,7 +73,7 @@ const purchase = {
 };
 
 describe("accountant workbook", () => {
-  it("serves another event-loop turn while a large workbook is being encoded", async () => {
+  it("yields to another event-loop turn before completing a large workbook", async () => {
     const encoding = Promise.resolve(
       renderAccountantWorkbook(
         { invoices: Array.from({ length: 10_000 }, () => invoice), purchases: [] },
