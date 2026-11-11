@@ -1,7 +1,9 @@
 # A1002 access roles and job roles — implementation plan
 
 **Status: APPROVED by the owner, 2026-11-11**, after the fresh-context plan-against-design read
-and the Fable second read. Queued to lane K.
+and the Fable second read. The owner's words: "approve", typed at 21:46 Madrid time (20:46:54 UTC)
+in the owner's main-checkout Claude session (`a914fa5c-626b-4ca9-a682-f12947d87788`), in answer to
+this revision's PR list and 40–50 hour estimate. Queued to lane K.
 **Revision 3, 2026-11-11 evening:** the fresh-context read's findings, the Fable read
 (`~/waitron-campaign-m/reports/ra.md`) and the owner's answers to its proposals (recorded in the
 design by `e69416d2cd`) are applied: eighteen pull requests, re-sized from source on `c00b1a6f39`.
