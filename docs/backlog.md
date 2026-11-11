@@ -489,10 +489,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   use the button and whether "sold out" switches back by itself the next day; today it never does.
   [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
 
-- **A1517. Allergen points to revisit before go-live (owner, 2026-11-11).** Five gaps the owner wants
-  looked at again before go-live, the first a possible safety question: the till's allergen filter
-  still shows dishes whose allergens nobody has entered.
-  [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
+- **A1517. Allergen points to revisit before go-live (owner, 2026-11-11).** Five recommendations
+  need the owner's choices before implementation. Runtime checks confirm that the filter retains
+  unchecked dishes; choose their treatment before go-live.
+  [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
 
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
