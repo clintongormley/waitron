@@ -137,6 +137,10 @@ is not.** Every other slice is the same under either answer.
 **2026-11-03:** Slice 9 left one more open question, whether S2's verdict is read off Parts F and G
 alone. The owner answered the same day: yes (Slice 9 as built).
 
+**2026-11-10 update:** the owner’s 2026-11-09 20:11 returned-fact decision supersedes the
+records-only boundary below for the [A1342 plan’s](2026-11-09-a1342-return-records.md) named tables.
+It does not replay live business side effects. The historical reasoning remains below.
+
 **Dropped from the draft: "may a returned invoice come back as a tax record only?"** The approved
 design already answers it. §5: "Do not replay orders, payments, cash, drawer, stock, printing or
 other business side effects", and only "original immutable fiscal records and the fiscal chain

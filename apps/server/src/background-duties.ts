@@ -207,3 +207,12 @@ export async function stopBackgroundDuties(duties: BackgroundDuties): Promise<vo
   }
   if (failures.length > 0) throw failures[0];
 }
+
+export function restrictedBackgroundDuties(returnRecords?: Stopper): BackgroundDuties {
+  return {
+    aborts: [],
+    closers: returnRecords
+      ? [{ name: "returnRecords", atStepdown: true, close: once(() => returnRecords.stop()) }]
+      : [],
+  };
+}

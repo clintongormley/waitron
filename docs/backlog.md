@@ -1887,9 +1887,14 @@ Not in any track until the standalone primary is done.
   plan yet builds its path, including whose invoice series the new main box takes. A947 3b's table
   expects Slice 5 to reach these venues. Left open by A1018 Slice 5 (Ruling P9).
 
-- **A1342 recovery: return a stopped box’s fiscal records to the new main before reset.** Owner
-  2026-11-09 18:59 replaces old-box filing with records-only transfer and confirmation; no other
-  tables are synced. The new main files/corrects them under their original chain and node id.
+- **A1342 PR2: resolve clashes in returned invoice and payment facts.** A clash stops the return
+  without permitting reset. Exact-clash acceptance must coexist with ordinary fiscal filing
+  cases through its own signed acceptance record, as the owner chose on 10 November. A later
+  filing refusal must remain correctable.
+  A filing result held only by the old box is not applied to a record already on the new main.
+  Pending card refunds now carry their original capture and settled-order anchor for the main’s
+  existing outcome check; no order lines or new refund sends are included.
+  A late payment on an older box’s chain is not included in this return.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 
 - **A third box's chart can leave another box serving-secondary and filing.** The remaining

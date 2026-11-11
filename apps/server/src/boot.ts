@@ -1,3 +1,5 @@
+import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
+import { mountReturnRecordsApi } from "./return-records-api.js";
 import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE } from "@waitron/store";
 import {
   boxHostClient,
@@ -1795,19 +1797,33 @@ async function bootServer(
   // Not a self-promotion: it applies a promotion this box already committed and signed with its own
   // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
   await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
-  // Before every worker, the first start, the stream host and the backup supervisor: a box that
-  // has handed over or been superseded starts nothing that sells, files or writes beside its
-  // successor.
+  // Restricted starts run only the return sender, which reads this venue's data.
   const restrictedStart = () => {
+    const returnRecords = startReturnRecordsDuty({
+      db,
+      node: store.node,
+      ring,
+      nodeId: node.nodeId,
+      modules: setsToMigrate,
+      log,
+    });
+    undoOnFailure.push(() => returnRecords.stop());
     health.takesNoSales = true;
     return startRestricted({
       app,
+      returnRecords,
       nodeId: node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
       cors: corsForVenue(allowOrigin),
       routes: [
-        restrictedPageRoute({ venue: db, node: store.node, nodeId: node.nodeId, log }),
+        restrictedPageRoute({
+          venue: db,
+          node: store.node,
+          nodeId: node.nodeId,
+          log,
+          returnState: returnRecords.state,
+        }),
         (restrictedApp) =>
           mountPeerStatusApi(
             restrictedApp,
@@ -1837,7 +1853,7 @@ async function bootServer(
           ),
       ],
       log,
-      listen: (restrictedApp) => {
+      listen: (restrictedApp, stopWork) => {
         const server = startTradingListener(config, restrictedApp, now, log);
         undoOnFailure.push(() => closeListener(server));
         const mdns = startMdnsResponder({
@@ -1854,7 +1870,7 @@ async function bootServer(
           health,
           log,
           {
-            stopWork: () => Promise.resolve(),
+            stopWork,
             settleRequests: () => Promise.resolve(),
             closePools: () => store.close(),
           },
@@ -2865,6 +2881,8 @@ async function bootServer(
       nodeId: tradingContext.nodeId,
       environment: config.environment,
       clock: tillClock,
+      returnSource: (tx) =>
+        formerMainForReturn({ db, node: store.node, ring, nodeId: tradingContext.nodeId }, tx),
       mode: () => holders.mode.current,
       role: () => holders.singletonRole.current,
       fenced: () => fenced,
@@ -2890,6 +2908,20 @@ async function bootServer(
       wake: drainWaker.wake,
     },
   };
+  mountReturnRecordsApi(
+    app,
+    {
+      db,
+      node: store.node,
+      ring,
+      nodeId: tradingContext.nodeId,
+      modules: setsToMigrate,
+      requireWritable: () => routeCtx.recordGeneration!.requireWritable(),
+      wake: drainWaker.wake,
+      now,
+    },
+    log,
+  );
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
   mountReportApi(app, { db, cfg: { nodeId: dataNodeId }, venueLocale }, log);

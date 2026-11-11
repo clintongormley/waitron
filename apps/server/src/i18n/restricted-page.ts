@@ -1,3 +1,4 @@
+import type { ReturnState } from "../return-records.js";
 import type { HandoverOperationState } from "@waitron/node-db";
 import type { SupportedLocale } from "@waitron/shared";
 
@@ -86,5 +87,38 @@ export const RESTRICTED_STEP_WORDS: Readonly<
   final_state: {
     "en-GB": "Final copy of the venue taken",
     "es-ES": "Copia final del local hecha",
+  },
+};
+
+export const RESTRICTED_RETURN_WORDS: Readonly<
+  Record<SupportedLocale, Readonly<Record<ReturnState, string>>>
+> = {
+  "en-GB": {
+    waiting:
+      "This box is waiting to return its invoice records to the main box. Keep its data. Do not reset this box. Refresh this page to check again.",
+    sending:
+      "This box is returning its invoice records to the main box. Do not reset this box. Refresh this page to check again.",
+    "needs-attention":
+      "The return could not be confirmed. Keep this box running with its data intact while it retries. Do not reset this box. Refresh this page to check again.",
+    clock:
+      "The main box cannot accept invoice records dated ahead of its clock. Keep both boxes running while the return retries. Check the clocks on both boxes. Do not reset this box. Refresh this page to check again.",
+    clash:
+      "The main box found differing invoice or payment facts. This return has stopped. Keep both boxes running with their data intact. Do not reset this box. Clash recovery is not available yet.",
+    confirmed:
+      "The main box has confirmed the returned invoice and payment records. Resetting this box deletes its venue data, including sale lines and local backups. Those are not included in this return.",
+  },
+  "es-ES": {
+    waiting:
+      "Este equipo está esperando para devolver sus registros de facturación al equipo principal. Conserva sus datos. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    sending:
+      "Este equipo está devolviendo sus registros de facturación al equipo principal. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    "needs-attention":
+      "No se ha podido confirmar la devolución. Mantén este equipo encendido y conserva sus datos mientras vuelve a intentarlo. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    clock:
+      "El equipo principal no puede aceptar registros de facturación adelantados respecto a su reloj. Mantén ambos equipos encendidos mientras se vuelve a intentar la devolución. Comprueba los relojes de ambos equipos. No restablezcas este equipo. Actualiza esta página para comprobar el estado.",
+    clash:
+      "El equipo principal ha encontrado diferencias en los datos de facturación o de pago. La devolución se ha detenido. Mantén ambos equipos encendidos y conserva sus datos. No restablezcas este equipo. La resolución de estas diferencias aún no está disponible.",
+    confirmed:
+      "El equipo principal ha confirmado los registros de facturación y de pago devueltos. Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen en esta devolución.",
   },
 };

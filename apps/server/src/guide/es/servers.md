@@ -46,6 +46,21 @@ los registró, con la fecha y la hora de cada uno en la zona horaria del local.
 
 Si la página ofrece **Progreso**, úsalo para terminar el traspaso en el equipo de reserva.
 
+Mantén este equipo encendido mientras devuelve sus registros de facturación al equipo principal.
+Actualiza la página para comprobar el progreso. Los reembolsos con tarjeta en curso se devuelven
+con sus pagos originales para que el principal pueda comprobar su resultado. Una vez que confirma
+los registros de facturación y de pago devueltos, el envío a Hacienda continúa allí. Restablecer el equipo anterior borra sus datos del
+local, incluidas las líneas de venta y las copias de seguridad locales. Esos datos no se incluyen
+en esta devolución; conserva los datos del equipo anterior si los necesitas.
+
+Si la devolución se detiene porque hay diferencias en los datos de facturación o de pago, mantén
+ambos equipos encendidos y conserva sus datos. La resolución de estas diferencias aún no está
+disponible. Los registros posteriores a una factura con diferencias pueden seguir pendientes en
+este equipo: no lo restablezcas.
+
+Si la página avisa de una diferencia de reloj, comprueba los relojes de ambos equipos y manténlos
+encendidos mientras se vuelve a intentar la devolución. No restablezcas el equipo anterior.
+
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.
 
@@ -72,8 +87,9 @@ niega a seguir como principal. Abre el otro equipo con el enlace. Si esa informa
 de continuar, este equipo deja de aceptar ventas. Usa el nuevo equipo principal. Los equipos antiguos
 pueden compartir dirección: comprueba qué equipo has abierto.
 
-Conserva los datos de este equipo hasta que el nuevo principal confirme que tiene todos los registros
-de facturación. El envío de esos registros aún no está disponible: no restablezcas este equipo todavía.
+Mantén este equipo encendido y conserva sus datos hasta que su página confirme que el principal
+tiene todos los registros de facturación devueltos. No lo restablezcas mientras la devolución esté
+esperando, enviándose o detenida.
 
 ## Activar o desactivar el acceso remoto del personal {#remote-access}
 

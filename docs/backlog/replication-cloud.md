@@ -8,8 +8,9 @@ The open entries are listed in [the backlog](../backlog.md), under "Replication,
 [current design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md)
 as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`: both Harbour
 Kitchen handovers (§§8–9) and the retained defaults (§§3, 5 and 7). M2 alone handles
-AEAT after either takeover; returning M1 transfers only fiscal originals and
-received AEAT outcomes.
+AEAT after either takeover. The owner’s later returned-fact decision is recorded under
+[Decisions and deliberate limits](#decisions-and-deliberate-limits); it supersedes the original
+fiscal-only return boundary.
 The owner gave build authority on 2026-11-01. The
 [build plan](../superpowers/plans/2026-11-02-a1018-handover-build.md) sets the formats as
 [local-only, version 1](../superpowers/plans/2026-11-02-a1018-handover-build.md#formats-local-only-version-1),
@@ -512,13 +513,22 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
-Owner 2026-11-09 18:59 replaces the withdrawn restricted-filing proposal: transfer only fiscal
-records absent from the bucket copy to the new main over the existing signed connection. The new
-main preserves original chain/node identity, skips records already held, and files/corrects through
-its normal outbox/remedy path. Do not sync other domain tables. The old page says safe to reset only
-after the new main confirms it holds every record. One-page plan and approval are pending; the
-bucket stop does not provide this transfer. Reset-to-clean-setup is qualified; completed current
-contract rejoin remains with A9473b6, as watcher18:51accepted.
+A differing original or payment fact stops the return and leaves reset unconfirmed. PR2 still
+needs exact-clash acceptance and the remaining hand-over refusals. Do not use a return-clash
+filing case: a record has one case slot, which its later AEAT refusal needs. The
+real signed-return/outbox probe reproduced a rejected invoice whose only case was a resolved
+return clash and whose correction answered `fiscal.remedy_invalid`.
+
+Normal return preserves original identities and chains and uses the main box’s outbox.
+Completed and pending tender refunds travel with their payments. Pending card refunds carry
+their original capture and its settled-order anchor, without order lines; the new main uses its
+existing recovery worker to check the provider outcome without sending another refund. Reset deletes the old box's venue data, including the sale lines
+and local backups that this return does not carry. Correction
+is an internal authenticated API; it appends a corrective record on the main box’s own chain.
+Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain
+outside this cut. Reset-to-clean-setup is qualified; completed current-contract rejoin remains
+with A947 3b-6. The return compares stored row shapes without negotiating software versions;
+complete the return before upgrading either box to a different table layout.
 
 ## A box the chart no longer names main keeps filing its earlier records
 
@@ -956,6 +966,18 @@ signal, so only an answer or an exit ends its wait. Left open by A1018 Slice 5 (
   as a refactor larger than that PR (its simplify review, 2026-10-15).
 
 ## Decisions and deliberate limits
+
+### Returned originals and their recorded facts (A1342, 2026-11-10)
+
+The watcher’s 2026-11-09 20:11 note records the owner’s choice of inserts into fiscal records,
+sales, devices, chain heads, delivery outcomes, tenders, settlements, voids and substitutions,
+using existing source metadata and dead registrations for absent devices. This supersedes the
+18:59 records-only boundary; it does not replay drawer, printing, stock or other live effects.
+The watcher’s 2026-11-10 15:40 note records the owner’s “Approve all three (Recommended)” for
+bounded batches of at most 100 and exact-clash acceptance. The owner then said “Split it into two
+PRs” (watcher 19:30). The watcher cleared ordinary return/correction as PR1 at 19:45, with clashes
+stopped and no return filing case or acceptance. PR2’s case-coexistence decision remains open.
+The reviewed plan is [return originals before reset](../superpowers/plans/2026-11-09-a1342-return-records.md).
 
 **A mirror serves no dashboard (owner, 2026-10-26; scope narrowed by the watcher, 2026-11-08).**
 A spare shows its status and refuses restaurant screens and data. Its ambient administrator is

@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
+import type { CanonicalValue } from "@waitron/membership";
 import type { ModuleHandoverContribution } from "@waitron/module";
+import {
+  makeReturnedBatches,
+  readReturnedOriginals,
+  receiveReturnedOriginals,
+  readReturnedBatch,
+} from "./handover-return.js";
 import type { BackupQuery, BackupValue } from "@waitron/store";
 import { checkFiscalChains } from "./handover-chain-check.js";
 
@@ -114,4 +121,10 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
 export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
   summarise: summariseChains,
   checkCopy: checkFiscalChains,
+  returnRecords: {
+    read: async (tx, source) =>
+      makeReturnedBatches(await readReturnedOriginals(tx, source)) as unknown as CanonicalValue[],
+    receive: async (tx, source, batch, now) =>
+      (await receiveReturnedOriginals(tx, source, readReturnedBatch(batch), now)).complete,
+  },
 };

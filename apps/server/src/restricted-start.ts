@@ -1,3 +1,5 @@
+import type { startReturnRecordsDuty } from "./return-records.js";
+import { restrictedBackgroundDuties, stopBackgroundDuties } from "./background-duties.js";
 import type { Hono, MiddlewareHandler } from "hono";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type { StartedServer } from "./boot.js";
@@ -16,13 +18,14 @@ export interface RestrictedStartDeps {
   /** Routes later handover steps add to the restricted box. */
   routes: ((app: Hono) => void)[];
   log: Logger;
-  /** Binds the listeners and returns the running server; starts no background work. */
-  listen: (app: Hono) => StartedServer;
+  /** Binds the listeners and uses stopWork before closing the stores. */
+  returnRecords?: ReturnType<typeof startReturnRecordsDuty>;
+  listen: (app: Hono, stopWork: () => Promise<void>) => StartedServer;
 }
 
 /**
  * The start of a box that has handed over or been superseded: it answers the role probe so tills
- * move to the successor, and nothing that sells, files or writes.
+ * move to the successor. Only the return sender runs; it never sells, files or writes venue data.
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
   deps.app.use("/api/*", deps.cors);
@@ -37,5 +40,6 @@ export function startRestricted(deps: RestrictedStartDeps): StartedServer {
     deps.log,
   );
   for (const mount of deps.routes) mount(deps.app);
-  return deps.listen(deps.app);
+  const duties = restrictedBackgroundDuties(deps.returnRecords);
+  return deps.listen(deps.app, () => stopBackgroundDuties(duties));
 }

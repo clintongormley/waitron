@@ -270,6 +270,10 @@ a build qualification dependency, including background workers as well as till r
 
 ## 5. Point 3: fiscal-only return, with a visible business gap
 
+**2026-11-10 update:** the owner’s 2026-11-09 20:11 returned-fact decision supersedes this section’s
+fiscal-only import boundary for the tables named in the [A1342 plan](../plans/2026-11-09-a1342-return-records.md).
+Live business side effects are still not replayed. The historical design below is retained.
+
 The owner says only fiscal records sync back, never M1's other changes. **Recommendation for
 approval: show an explicit reconciliation list, rather than import the sale's payment totals.**
 Transfer missing original immutable fiscal records and the fiscal chain and filing rows needed

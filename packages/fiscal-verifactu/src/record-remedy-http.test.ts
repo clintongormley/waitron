@@ -103,7 +103,12 @@ beforeEach(async () => {
   });
 });
 
-function send(value: unknown = body, enabled = true, runtime = true) {
+function send(
+  value: unknown = body,
+  enabled = true,
+  runtime = true,
+  returnSource?: () => Promise<SeededNode["nodeId"] | null>,
+) {
   const app = new Hono();
   mountRecordRemedies(
     app,
@@ -114,6 +119,7 @@ function send(value: unknown = body, enabled = true, runtime = true) {
             nodeId: generationNode,
             environment,
             clock,
+            returnSource,
             requireWritable: () => {
               if (!writable) throw new AppError("node.read_only", {});
               if (!tradingReady)
@@ -140,6 +146,18 @@ async function snapshot() {
     head: await withTransaction(suite.db, (tx) => readChainHead(tx, node.nodeId)),
   };
 }
+
+it("keeps correction disabled for an original outside the pinned former main", async () => {
+  generationNode = (await seedNode(suite.db, "Current main")).nodeId;
+  const formerMain = (await seedNode(suite.db, "Former main")).nodeId;
+  const before = await snapshot();
+  const response = await send(body, false, true, async () => formerMain);
+  expect(response.status).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "fiscal.remedy_disabled", params: { kind: "record-correction" } },
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 async function acceptedDescriptionDecision() {
   const saleId = await seedSale(suite.db, node, 2);

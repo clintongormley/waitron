@@ -18,7 +18,9 @@ import {
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import type { ReturnState } from "./return-records.js";
 import { restrictedPageRoute } from "./restricted-page.js";
+import { RESTRICTED_RETURN_WORDS } from "./i18n/restricted-page.js";
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -61,12 +63,17 @@ async function handOver(successor: string): Promise<void> {
 
 const logged: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
 
-function request(language: string, venue: Database = suite.db): Promise<Response> {
+function request(
+  language: string,
+  venue: Database = suite.db,
+  returnState?: ReturnState,
+): Promise<Response> {
   const app = new Hono();
   restrictedPageRoute({
     venue,
     node: suite.node,
     nodeId: NODE,
+    returnState: () => returnState ?? "waiting",
     log: (level, event, fields) => logged.push({ level, event, fields }),
   })(app);
   return Promise.resolve(app.request("/", { headers: { "Accept-Language": language } }));
@@ -338,4 +345,41 @@ describe("the restricted box's own page", () => {
     expect(status).toBe(200);
     inOrder(html, ["Stopped taking sales", ": toString</li>"]);
   });
+});
+
+it.each(["waiting", "sending", "needs-attention", "clock", "clash", "confirmed"] as const)(
+  "keeps data before confirmation and explains reset data loss after it: %s",
+  async (state) => {
+    await handOver(await seedSuccessor("Main box"));
+    const response = await request("en-GB", suite.db, state);
+    const html = await response.text();
+    if (state === "confirmed") {
+      expect(html).toContain(
+        "Resetting this box deletes its venue data, including sale lines and local backups",
+      );
+      expect(html).not.toContain("You can reset this box.");
+    } else {
+      expect(html).toContain("Do not reset this box.");
+      expect(html).not.toContain("You can reset this box.");
+      if (state === "clock") expect(html).toContain(RESTRICTED_RETURN_WORDS["en-GB"].clock);
+    }
+  },
+);
+
+it("shows the Spanish clock refusal while withholding reset permission", async () => {
+  await handOver(await seedSuccessor("Main box"));
+  const response = await request("es-ES", suite.db, "clock");
+  expect(response.status).toBe(200);
+  const html = await response.text();
+  expect(html).toContain(RESTRICTED_RETURN_WORDS["es-ES"].clock);
+  expect(html).not.toContain(RESTRICTED_RETURN_WORDS["es-ES"].confirmed);
+});
+
+it("explains reset data loss in Spanish after confirmation", async () => {
+  await handOver(await seedSuccessor("Bar counter box"));
+  const html = await (await request("es-ES", suite.db, "confirmed")).text();
+  expect(html).toContain(
+    "Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales",
+  );
+  expect(html).not.toContain("Puedes restablecer este equipo");
 });

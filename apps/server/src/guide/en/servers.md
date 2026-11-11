@@ -41,6 +41,20 @@ recorded them, with the date and time of each in the venue's time zone.
 
 If the page offers **Progress**, use it to finish the handover on the spare.
 
+Keep this box running while it returns its invoice records to the main box. Refresh the page to
+check progress. Card refunds still in progress go with their original payments so the main box
+can check their outcome. Once it confirms the returned invoice and payment records, filing with
+the tax agency continues there.
+Resetting the old box deletes its venue data, including sale lines and local backups. Those are
+not included in this return; keep the old box's data if you need them.
+
+If the return stops because invoice or payment facts differ, keep both boxes running with their
+data intact. Recovery from these differences is not available yet. Records after a clashing
+invoice may still be waiting on this box; do not reset it.
+
+If the page reports a clock difference, check the clocks on both boxes and keep both running
+while the return retries. Do not reset the old box.
+
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
 
 ## When a box is waiting for another box {#waiting}
@@ -65,8 +79,8 @@ If the backup confirms that another box has taken over, this box refuses to carr
 other box using the link. If that evidence appears after you carry on, this box stops taking sales.
 Use the new main box. Older boxes may share an address: check which box you opened.
 
-Keep this box’s data until the new main confirms it holds every invoice record. Sending those
-records to the new main is not available yet. Do not reset this box now.
+Keep this box running with its data until its page confirms that the main box holds every
+returned invoice record. Do not reset it while the return is waiting, sending or stopped.
 
 ## Turn remote staff access on or off {#remote-access}
 
