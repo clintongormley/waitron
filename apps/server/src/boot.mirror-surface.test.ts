@@ -395,6 +395,24 @@ describe("a spare's network surface", () => {
     }
   }, 60_000);
 
+  it("a mirror repairing its time zone serves the network no more than a full start", async () => {
+    const { server, app, stateDir } = await boot("mirror-zone-repair", {
+      fromBox: { current: false },
+    });
+    try {
+      // The repair start's gate refuses these two before they reach the route a full start opens.
+      const stricter = new Set(["OPTIONS /api/node", "GET /handover/assets/app.js"]);
+      await walk(app, (method, path) =>
+        stricter.has(`${method} ${path}`)
+          ? { status: 409, code: "venue.time_zone_not_ready" }
+          : mirrorExpected(method, path),
+      );
+    } finally {
+      await server.close();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("a mirror serves the network the handover page of its own destination operation", async () => {
     const { server, app, stateDir } = await boot("mirror", { fromBox: { current: false } });
     try {
