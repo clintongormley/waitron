@@ -58,7 +58,7 @@ jobs:
 
       - name: Save the refreshed Ubuntu package set
         if: steps.acquire.outcome == 'success'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         timeout-minutes: 1
         with:
           path: ${{ runner.temp }}/image-apt

@@ -2688,7 +2688,9 @@ empty package-status file makes apt download the dependency closure, including p
 already installed on that runner, so a later runner image can supply its own missing
 dependencies. A failed refresh saves nothing and leaves the previous set available.
 An absent set uses the bounded download loop below. A failed offline install warns
-with the failed set's date and also uses that loop. A green smoke alone therefore does
+with the failed set's date, finishes any interrupted package configuration under a
+90-second bound, and uses that loop. A cache-restore failure also falls back to downloads.
+A green smoke alone therefore does
 not prove a cache hit: check that **Install the saved Ubuntu packages offline** succeeded.
 These sets share the repository's cache budget with `node-cache-*`, `playwright-*`
 and `lint-results-*`; there is no extra storage allocation or cache deletion.
