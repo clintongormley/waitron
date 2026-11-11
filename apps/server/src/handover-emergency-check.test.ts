@@ -94,22 +94,20 @@ it("includes a sale's issue time in the latest dated activity", async () => {
     .insert(invoiceSeries)
     .values({ nodeId, code: "A", purpose: "standard", nextNumber: 1 })
     .returning();
-  await venue.db
-    .insert(sales)
-    .values({
-      source: "operator_script",
-      seriesId: series!.id,
-      nodeId,
-      invoiceNumber: 1,
-      issuedAt: "2026-11-11T10:00:00Z",
-      issuedOffsetMinutes: 0,
-      total: 100,
-      vatBreakdown: [],
-      locale: "en",
-      invoiceLocales: ["en"],
-      fiscalBackend: "none",
-      fiscalState: "not_applicable",
-    });
+  await venue.db.insert(sales).values({
+    source: "operator_script",
+    seriesId: series!.id,
+    nodeId,
+    invoiceNumber: 1,
+    issuedAt: "2026-11-11T10:00:00Z",
+    issuedOffsetMinutes: 0,
+    total: 100,
+    vatBreakdown: [],
+    locale: "en",
+    invoiceLocales: ["en"],
+    fiscalBackend: "none",
+    fiscalState: "not_applicable",
+  });
   expect((await checkEmergencyCopy({ venueDir: venueDir(), modules: [] })).lastChangeAtMs).toBe(
     1794391200000,
   );
