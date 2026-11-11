@@ -1043,6 +1043,7 @@ product failures.
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only)
+  BillVenue's receipt printer, card readers and cash till use English display names.
 
 ## A1308. Rationalise the tables, background jobs, environment variables and files
 

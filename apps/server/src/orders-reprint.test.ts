@@ -170,7 +170,7 @@ describe("dashboard receipt reprint", () => {
       `/management-api/orders/${billId}`,
     );
     expect(detail.json).toMatchObject({
-      reprints: [{ personName: "Administradora", printerName: "Recibos" }],
+      reprints: [{ personName: "Administradora", printerName: "Receipt printer" }],
     });
   });
 

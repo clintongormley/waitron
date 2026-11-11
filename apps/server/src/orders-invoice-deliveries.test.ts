@@ -510,7 +510,7 @@ describe("the order detail's delivery status", () => {
         actions: {
           print: {
             printers: [
-              { id: venue.printerId, name: "Recibos", kind: "receipt" },
+              { id: venue.printerId, name: "Receipt printer", kind: "receipt" },
               { id: officeId, name: "Oficina", kind: "a4" },
             ],
             designation: "original",
@@ -545,7 +545,7 @@ describe("the order detail's delivery status", () => {
           actions: {
             print: {
               printers: [
-                { id: venue.printerId, name: "Recibos", kind: "receipt" },
+                { id: venue.printerId, name: "Receipt printer", kind: "receipt" },
                 { id: upstairs, name: "Arriba", kind: "a4" },
                 { id: officeId, name: "Oficina", kind: "a4" },
               ],
@@ -942,7 +942,7 @@ describe("dashboard print on a receipt printer", () => {
         actions: {
           print: {
             printers: [
-              { id: venue.printerId, name: "Recibos", kind: "receipt" },
+              { id: venue.printerId, name: "Receipt printer", kind: "receipt" },
               { id: officeId, name: "Oficina", kind: "a4" },
             ],
           },
