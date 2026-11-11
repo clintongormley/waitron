@@ -29,7 +29,7 @@ async function kitchenStationId(v: PartyVenue): Promise<string> {
     tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(eq(kitchenStations.name, "Cocina")),
+      .where(eq(kitchenStations.isDefault, true)),
   );
   return station!.id;
 }

@@ -8,6 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
 import { readTenantIdentities } from "./tenant-guard.js";
+import { childEnvironment } from "../test/child-environment.js";
 
 const certificateMaterial = makeCertificateAuthority().issue({
   passphrase: "SYNTHETIC-certificate",
@@ -128,7 +129,7 @@ syncBuiltinESMExports();\n`,
     ],
     {
       env: {
-        ...process.env,
+        ...childEnvironment(),
         WAITRON_STATE_DIR: stateDir,
         WAITRON_ENV: "preproduction",
         WAITRON_ADMIN_PIN: "4826",
@@ -232,7 +233,7 @@ it("the built preproduction command completes checked publication in one run", a
       ],
       {
         env: {
-          ...process.env,
+          ...childEnvironment(),
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
           WAITRON_ADMIN_PIN: "4826",
@@ -427,7 +428,7 @@ it("the built production command checks readiness and seals settings without sen
       ],
       {
         env: {
-          ...process.env,
+          ...childEnvironment(),
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "production",
           WAITRON_ADMIN_PIN: "4826",
@@ -606,7 +607,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
       ],
       {
         env: {
-          ...process.env,
+          ...childEnvironment(),
           WAITRON_STATE_DIR: stateDir,
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_ENV: "production",

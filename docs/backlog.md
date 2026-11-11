@@ -881,10 +881,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   `party_id` is the table's own party.
   [Detail](backlog/till.md#a1030-firing-one-held-dish-is-refused-on-a-merged-in-partys-paid-bill-found-by-a758-7)
 
-- **Two server tests find the default kitchen station by the name «Cocina» (left open by A918
-  slice 2, #2130).** `apps/server/src/table-signals.test.ts:89-95` and `watchers.leave.test.ts:28-35`
-  pass only because their venues have Spanish receipts. Find it by `is_default` instead.
-
 - **What an open till picks up from a setup change** (bundle of 3, 1 important, size S). Holds A785, A787. [Detail](backlog/till.md#bundle-what-an-open-till-picks-up-from-a-setup-change)
 
 - **An element inside a shadow root attached after a drag starts keeps its own cursor rule during
@@ -2100,10 +2096,6 @@ values rather than PIN substrings inside random IDs. See the
 [testing guide](developers/testing-guide.md#check-stored-secrets-as-values-and-inspect-every-write).
 The cited refund test checks `setItem` calls and its own final entry; direct property assignments
 under another key fall outside that check.
-
-- **Tests that read a built command's error output fail under Claude Code.**
-  Find which inherited variable lets the hint through and clear it in the cases' child environment.
-  [Detail](backlog/ci.md#tests-that-read-a-built-commands-error-output-fail-under-claude-code).
 
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
   tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
