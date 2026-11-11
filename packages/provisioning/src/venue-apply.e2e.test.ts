@@ -1,4 +1,4 @@
-import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
+import { locations, readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
@@ -269,9 +269,8 @@ describe("direct action country zone preflight", () => {
         [module.name, { eventId: "zone-test", sourceId: "zone-test", input: {} }],
       ]),
     }).catch((error: unknown) => error);
-    expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual(
-      [],
-    );
+    expect(await suite.db.select().from(locations)).toEqual([]);
+    expect((await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).revision).toBe(0);
     expect(await suite.db.select().from(tenants)).toEqual([]);
     expect(await suite.db.select().from(nodes)).toEqual([]);
     expect({ preparations, seeds }).toEqual({ preparations: 0, seeds: 0 });
@@ -298,9 +297,8 @@ describe("direct action country zone preflight", () => {
       (error: unknown) => error,
     );
     expect(seeds).toBe(0);
-    expect(await readSettings(suite.db, BUSINESS_DAY_SETTINGS).then(({ doc }) => [doc])).toEqual(
-      [],
-    );
+    expect(await suite.db.select().from(locations)).toEqual([]);
+    expect((await readSettings(suite.db, BUSINESS_DAY_SETTINGS)).revision).toBe(0);
     expect(refusal).toMatchObject({
       code: "venue.time_zone_invalid",
       params: { reason: "country" },
