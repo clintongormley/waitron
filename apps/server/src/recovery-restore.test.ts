@@ -226,3 +226,24 @@ it("sets up again after a box with its own identity throws away a placed restore
     if (held.server.listening) await held.close();
   }
 }, 60_000);
+
+it("keeps the recovery page usable when the restore folder cannot be read", async () => {
+  const f = await fixture("unreadable");
+  await rm(join(f.stateDir, "flows/restore"), { recursive: true });
+  await writeFile(join(f.stateDir, "flows/restore"), "not a folder");
+  const answer = await f.request("/");
+  expect(answer.status).toBe(200);
+  const body = await answer.text();
+  expect(body).toContain("restore.flow_unreadable");
+  expect(body).toContain('action="/recovery-api/retry"');
+  expect(body).not.toContain('name="password"');
+});
+
+it("refuses to discard with a wrong password and keeps the database and request", async () => {
+  const f = await fixture("placing");
+  const record = await readFile(join(f.stateDir, "flows/restore/record.json"));
+  const answer = await f.request("/recovery-api/restore/discard", "choice=move&password=wrong");
+  expect(answer.status).toBe(403);
+  expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("destination database");
+  expect(await readFile(join(f.stateDir, "flows/restore/record.json"))).toEqual(record);
+});

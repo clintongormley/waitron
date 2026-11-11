@@ -95,7 +95,8 @@ it("runs the command-line restore again over a pending first start", async () =>
       { code: "FF", purpose: "full" },
     ],
   });
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt === 2) await writeFile(join(stateDir, "flows/restore/record.json"), "broken");
     const held = allocation.request("restore");
     const modules = ALL_MODULES.map((module) =>
       module.name === "fiscal-verifactu" ? { ...module, operations: held.preparation } : module,

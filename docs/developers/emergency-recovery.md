@@ -168,19 +168,19 @@ completion with Cloud: the box cannot start serving until that step succeeds. Co
 removes the setup operation, then replaces the request with a `first-start` record and removes its
 source attachments. First start finishes the separate recovery checks and removes the old
 identity copy; it does not repeat the restore. The saved administrator password hashes remain
-until boot's `runFirstStart` or `deferFirstStart` returns, then boot removes them durably before
-serving. A blocking first-start refusal retains them; an ordinary first-start failure that allows
+until boot's `runFirstStart` or `deferFirstStart` returns, then boot removes them durably before mounting sale routes. A blocking first-start refusal retains them; an ordinary first-start failure that allows
 serving does not.
 
 If this restore cannot finish, open the recovery page over HTTPS and choose **Throw this restore
 away**. Enter an active administrator's password from the selected backup, or choose **Stop** to
-leave the restore waiting. An unreadable restore record also stops the box and offers this choice.
+leave the restore waiting. An unreadable record also stops the box. For a setup-page restore,
+this choice remains available when its separately saved administrator hashes can be read.
 Before copying begins, discard preserves the destination database. Once copying has begun, the
 previous database is gone: discard removes the partial databases and restored configuration,
 including both `trading.env` and `trading.env.replaced`. It keeps the box's TLS files, so your
 browser can reconnect. You can then restore another backup or set up again.
 
-This choice covers restores started from setup. If a command-line restore is stuck at first start,
+This choice covers restores started from setup. If a command-line restore is stuck at first start, or its first-start record is unreadable,
 run `waitron-restore restore` again with the backup and its recovery credentials. The command
 retries the restore over the pending first-start record. Its within-attempt file rollback is
 unchanged.

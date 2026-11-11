@@ -2176,7 +2176,7 @@ async function bootServer(
   // held. A failure does not keep the box shut: it sells, does not stream, and raises
   // restore.first_start_failed until a later start finishes. The exception is a restored
   // membership document that fails its signature check, or unreadable restore state: either
-  // fails the start. Discard authority ends after this step returns, before serving.
+  // fails the start. Discard authority ends after this step returns, before sale routes are mounted.
   const firstStart = fencedOrMirror
     ? await deferFirstStart(config.stateDir, log)
     : await runFirstStart({

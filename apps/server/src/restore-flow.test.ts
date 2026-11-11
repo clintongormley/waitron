@@ -181,3 +181,29 @@ it("retains private discard authority through an unreadable record and drops it 
   expect(synced).toContain(join(stateDir, "flows/restore/admin-verifiers"));
   expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
 });
+
+it("flushes a prior discard-authority deletion again after its first folder flush failed", async () => {
+  await publishRestoreFlow(stateDir, firstStart, async (folder) => {
+    await atomic.writeFileDurable(
+      join(folder, "admin-verifiers"),
+      JSON.stringify(["saved-hash"]),
+      0o600,
+    );
+  });
+  const original = atomic.syncFolderHolding;
+  const failure = Object.assign(new Error("folder flush failed"), { code: "EIO" });
+  let fail = true;
+  let attempts = 0;
+  vi.spyOn(atomic, "syncFolderHolding").mockImplementation(async (path) => {
+    if (path === join(stateDir, "flows/restore/admin-verifiers")) {
+      attempts++;
+      if (fail) throw failure;
+    }
+    await original(path);
+  });
+  await expect(flow.disarmRestoreDiscard(stateDir)).rejects.toBe(failure);
+  expect(await flow.restoreAdminVerifiers(stateDir)).toBeNull();
+  fail = false;
+  await flow.disarmRestoreDiscard(stateDir);
+  expect(attempts).toBe(2);
+});

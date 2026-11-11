@@ -9,7 +9,6 @@ import {
   SCRATCH_DIR,
   SETUP_OPERATION_FILE,
   TRADING_ENV_FILE,
-  TRADING_ENV_REPLACED_SUFFIX,
 } from "@waitron/store";
 import { lstat, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -107,8 +106,6 @@ async function discard(deps: RestoreRecoveryDeps): Promise<void> {
     ])
       await removeFile(`${path}${suffix}`);
   }
-  if (phase !== "staged")
-    await removeFile(join(stateDir, `${TRADING_ENV_FILE}${TRADING_ENV_REPLACED_SUFFIX}`));
   await removeFile(join(stateDir, SETUP_OPERATION_FILE));
   await removeFile(join(stateDir, CLOUD_RECOVERY_FILE));
   await rm(join(stateDir, SCRATCH_DIR), { recursive: true, force: true });

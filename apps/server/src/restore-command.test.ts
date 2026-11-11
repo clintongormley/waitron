@@ -209,6 +209,7 @@ describe("waitron-restore restore", () => {
           }),
         ).toBe(1);
         expect(out.at(-1)).toContain("restore.request_waiting");
+        expect(out.at(-1)).toContain("Throw this restore away");
         expect(out.at(-1)).toContain("start the server");
         expect(out.at(-1)).toContain("setup page");
         expect(restore).not.toHaveBeenCalled();

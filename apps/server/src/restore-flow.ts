@@ -118,10 +118,8 @@ export async function restoreAdminVerifiers(stateDir: string): Promise<readonly 
     )
       return null;
     return hashes as string[];
-  } catch (error) {
-    if (error instanceof SyntaxError || (error as NodeJS.ErrnoException).code === "ENOENT")
-      return null;
-    throw error;
+  } catch {
+    return null;
   }
 }
 
@@ -130,8 +128,11 @@ export async function disarmRestoreDiscard(stateDir: string): Promise<void> {
   try {
     await rm(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
-  await syncFolderHolding(path);
+  try {
+    await syncFolderHolding(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
 }

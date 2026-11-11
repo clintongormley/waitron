@@ -621,7 +621,7 @@ export const RESTORE_DISCARD_TEXT = {
     before:
       "This restore has not begun copying. Throwing it away keeps the database already on this box.",
     after:
-      "Once copying began, the previous database was already removed. Throwing this restore away does not bring it back. You can restore again or set up this box.",
+      "Throwing this restore away removes the destination database, including any previous database put back after a failed attempt. It does not recover the old data. You can restore again or set up this box.",
     wrong: "The password does not match an active administrator in the selected backup.",
     unavailable: "This restore cannot be thrown away now.",
     notFinished:
@@ -635,7 +635,7 @@ export const RESTORE_DISCARD_TEXT = {
     before:
       "La copia de esta restauración aún no ha comenzado. Descartarla conserva la base de datos que ya está en esta caja.",
     after:
-      "Al comenzar la copia, la base de datos anterior ya se eliminó. Descartar esta restauración no la recupera. Puedes restaurar otra copia o configurar esta caja.",
+      "Descartar esta restauración elimina la base de datos de destino, incluida cualquier base de datos anterior que se haya devuelto tras un intento fallido. No recupera los datos anteriores. Puedes restaurar otra copia o configurar esta caja.",
     wrong: "La contraseña no coincide con la de un administrador activo de la copia seleccionada.",
     unavailable: "Ahora no se puede descartar esta restauración.",
     notFinished:
