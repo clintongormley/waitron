@@ -648,7 +648,7 @@ it("never marks the open clock.corrected handled before it was detected, when a 
 
 describe("the seat's chain heads", () => {
   it("answers each chain's node with its highest record position, and none before a record", async () => {
-    const heads = () => withTransaction(suite.db, (tx) => backend.chainHeads(tx));
+    const heads = () => withTransaction(suite.db, (tx) => backend.recordHeads(tx));
     await expect(heads()).resolves.toEqual({});
     await sale(R);
     await sale(R + M);

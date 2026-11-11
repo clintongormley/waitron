@@ -2409,7 +2409,7 @@ async function bootServer(
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();
   const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
-  const recordHeads = (tx: Transaction) => nodeBackend.chainHeads?.(tx) ?? Promise.resolve({});
+  const recordHeads = (tx: Transaction) => nodeBackend.recordHeads?.(tx) ?? Promise.resolve({});
   // Before the tills' routes, which set the clock through it.
   const correction = clockCorrection({
     host: boxHost,

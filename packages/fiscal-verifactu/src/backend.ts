@@ -246,7 +246,7 @@ export class VerifactuBackend implements FiscalBackend {
     return latestClockStep(tx);
   }
 
-  chainHeads(tx: Transaction): Promise<Record<string, number>> {
+  recordHeads(tx: Transaction): Promise<Record<string, number>> {
     return chainHeads(tx);
   }
 

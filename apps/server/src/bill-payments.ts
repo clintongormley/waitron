@@ -1338,12 +1338,16 @@ export async function afterCardCharged<T>(
   }
 }
 
+export function clockUnconfirmedRefusal(error: unknown): boolean {
+  return error instanceof AppError && error.code === "clock.unconfirmed";
+}
+
 function notRecordedReason(error: unknown): NotRecordedReason | null {
   if (error instanceof IssuanceRefusedError || isUniqueViolation(error)) return "issuance_refused";
   if (diskFullIn(error)) return "disk_full";
   if (error instanceof AppError && error.code === "clock.behind_chain") return "clock_behind_chain";
   if (error instanceof AppError && error.code === "clock.unusable") return "clock_unusable";
-  if (error instanceof AppError && error.code === "clock.unconfirmed") return "clock_unconfirmed";
+  if (clockUnconfirmedRefusal(error)) return "clock_unconfirmed";
   return null;
 }
 

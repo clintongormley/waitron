@@ -4658,7 +4658,7 @@ How it moves (plan D3):
   set is in flight.
 
 A confirmation that sets nothing writes a log line, never a row. Each confirmation keeps the chain
-heads it was made at, read through the seat's optional `chainHeads?(tx)` (`packages/fiscal/src/backend.ts`).
+heads it was made at, read through the seat's optional `recordHeads?(tx)` (`packages/fiscal/src/backend.ts`).
 
 **The gate** (`apps/server/src/start-clock-gate.ts`, plan D4 and R6). Boot wraps the one fiscal
 seat. The gate holds on a box that files records while the start waits, and also while a clock set

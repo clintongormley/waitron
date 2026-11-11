@@ -13,7 +13,7 @@ export function startClockAgreed(witnesses: readonly ClockWitness[]): number {
 export type StartClockConfirmation = "by_devices" | "by_person" | "by_internet";
 export type StartClockStatus = "waiting" | StartClockConfirmation;
 export type StartClockCause = "start" | "future_date_refused";
-/** Each chain's node and its highest record position, as `chainHeads` reads them. */
+/** Each chain's node and its highest record position, as `recordHeads` reads them. */
 export type ChainHeads = Readonly<Record<string, number>>;
 
 /** Held in memory for one process. `by_internet` is final: nothing moves it. */

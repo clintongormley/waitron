@@ -482,8 +482,8 @@ export interface FiscalBackend {
    * recorded: one by the time service, or by a person on the host, is never answered here. */
   latestClockStep?(tx: Transaction): Promise<ClockStep | null>;
 
-  /** Each chain's node and its highest record position. Absent when the regime keeps no chain. */
-  chainHeads?(tx: Transaction): Promise<Record<string, number>>;
+  /** Each node's highest record position. Absent when the regime keeps no record positions. */
+  recordHeads?(tx: Transaction): Promise<Record<string, number>>;
 
   /** Records when a stop began: opens a check while the stop holds and none is open, and answers
    * the open one; null, and nothing written, while there is no stop. */

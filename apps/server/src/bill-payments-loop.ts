@@ -9,7 +9,12 @@ import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment, paymentResolutions } from "@waitron/payments";
 import { AppError, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
-import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
+import {
+  billPaymentIsLive,
+  clockUnconfirmedRefusal,
+  completeBillPayment,
+  failBillPayment,
+} from "./bill-payments.js";
 import type { BillPaymentDeps } from "./bill-payments.js";
 import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
@@ -181,7 +186,7 @@ export async function settlePendingBillPayments(
       if (settled !== "left") pass[settled] += 1;
       if (settled === "received" || settled === "failed") pass.pending -= 1;
     } catch (error) {
-      if (codeOf(error) === "clock.unconfirmed") break;
+      if (clockUnconfirmedRefusal(error)) break;
       pass.errors.push({ billPaymentId: id, error: String(error) });
       if (!(error instanceof IssuanceRefusal)) {
         await raiseSettleFailed(deps, id, error, now).catch((alertError: unknown) => {

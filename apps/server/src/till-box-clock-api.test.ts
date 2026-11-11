@@ -374,7 +374,7 @@ async function stoppedBox(
 
 const boxTime = (box: Box) => box.clock.now().instant.getTime();
 
-const recordHeads = (tx: Transaction) => venue.backend.chainHeads!(tx);
+const recordHeads = (tx: Transaction) => venue.backend.recordHeads!(tx);
 
 function ask(box: Box, cookie: string, body: unknown = {}) {
   return send(box.app, cookie, "POST", "/api/box-clock/challenge", body);
