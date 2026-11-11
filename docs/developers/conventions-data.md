@@ -6442,3 +6442,67 @@ The full limits are in
 
 How each path treats the list is in
 [the transferred-table section](#a-column-of-a-transferred-table-that-holds-another-rows-id-is-a-foreign-key-a-declared-references-entry-or-left-out-of-the-export).
+
+## Root receipts moved on 2026-11-11
+
+These excerpts are from `CLAUDE.md` at `62a38292d2cd628ec2bae8eff3fa6bfba47e95bb`; they are not new
+measurements. Each heading names a root entry that still names its guard and says the guard is
+weaker than its name or the rule; the excerpt is the original sentence, which says what the guard
+does not see.
+
+### General code is English only
+
+> Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and accented letters
+> only, and files on its still-to-clean list not line by line; review greps the diff.
+
+### A change adding third-party code or a binary to the image carries its licence notices, shipped in `/app/third-party/`
+
+> Guard: the third-party blocks in `scripts/deploy-image-env.test.ts`, weaker than their name — they
+> read text, and a new binary or system package is seen by none of them.
+
+### State-folder names live in `packages/store/src/state-layout.ts`, except Cloud and legacy setup names awaiting their layout slices; a plain reset keeps exactly its `kept` entries
+
+> Guard: `scripts/state-layout.test.ts`, weaker than its name: reads text, and sees only a constant
+> or a join from the state folder.
+
+### A state file is replaced through `writeFileDurable`; the guard names existing exceptions, without checking whether they flush, and the venue-holder heartbeat stays unflushed on purpose
+
+> Guard: `scripts/durable-writes.test.ts`, weaker than its name: it reads text, finds only three
+> rename spellings in files importing fs, and never proves a listed writer flushes.
+
+### Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn
+
+> Guard: `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never
+> checks that a file takes the turn; the turn is in-process only.
+
+### A `local` row belongs to one node, so no foreign key may join a `local` table to a `ledger`/`state` one, in either direction
+
+> Guard: `scripts/two-file-foreign-keys.test.ts`, weaker than its name — it reads drizzle's
+> generated snapshots, not hand-written SQL.
+
+### Store anything that works as a live login as a hash
+
+> Guards: database-copy cases in `apps/server/src/me-api.test.ts`,
+> `apps/server/src/till-api.test.ts` and the stored-hash cases in
+> `packages/identity/src/management-session.test.ts` and
+> `packages/identity/src/device-token.test.ts`, weaker than the rule: limited credentials, only the
+> dashboard and device hashes tried as a token; new login tables unguarded.
+
+### `requireManagementChangeFromOwnPage` checks the page of a change carrying the dashboard's cookie, ahead of every main-app route after the request-id middleware and every waiting-app write route; register none ahead of it
+
+> Guards: sweeps in `apps/server/src/boot.management-origin.test.ts` and
+> `apps/server/src/waiting-start.test.ts`, weaker than their names: one attack, own app's routes as
+> mounted; recovery, first-setup, landing, node-entry apps unseen.
+
+### A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry or left out of the export
+
+> Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name — it knows an id column
+> only by a name ending `_id` or `_ids`, and a JSON column only by a `json_valid` CHECK naming it.
+
+### A box holding a `node_handover_restriction` row starts restricted, before every worker; a background duty is stopped through `apps/server/src/background-duties.ts`, or is a job on the runner whose mark in `apps/server/src/job-catalogue.ts` says it stops at a stepdown or why it keeps running
+
+> Guards: `apps/server/src/boot.restricted-quiet.test.ts` and
+> `apps/server/src/handover-stepdown.test.ts`'s "every closer is either atStepdown or carries a
+> reason" and `apps/server/src/job-catalogue.test.ts`, weaker than their names: one five-second
+> watch of named services, and a field's presence, not what the duty does; none sees a duty boot
+> starts but leaves out of the table.

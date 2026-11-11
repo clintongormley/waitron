@@ -5041,3 +5041,30 @@ These supporting fragments are from `CLAUDE.md` at
 
 > Main uses the newest completed successful main ancestor to scope quick checks;
 > without a baseline, change scope is global.
+
+## Root receipts moved on 2026-11-11
+
+These excerpts are from `CLAUDE.md` at `62a38292d2cd628ec2bae8eff3fa6bfba47e95bb`; they are not new
+measurements. Each heading names a root entry that still names its guard and says the guard is
+weaker than its name or the rule; the excerpt is the original sentence, which says what the guard
+does not see.
+
+### PR CI runs scoped package tests without package-wide coverage; ordinary main pushes run no package tests in `ci.yml`; nightly, manual and release runs enforce `98/98/98/95` coverage
+
+> Guard: `scripts/ci-workflow.test.mjs`, weaker than the rule: workflow text and controlled shell
+> fixtures, not a hosted Actions run.
+
+### `mutation-db`'s whole files are packed by the committed `packages/db/mutation-costs.json`, not by bytes
+
+> Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`, weaker than their name:
+> existence, shape and that every file named is still mutated, not freshness.
+
+### `bundle-smoke` builds dashboard, setup and till but opens only setup in Chromium with server reads intercepted
+
+> Guard: `scripts/bundle-smoke.test.mjs`, weaker than its name: reads workflow steps and real
+> build-script declarations, not the builds or browser check.
+
+### A migration can fail on a box with an earlier trigger naming what it changes, including in the body of a trigger on another table
+
+> Guard: `scripts/migration-upgrade.test.ts`, weaker than its name: synthetic counted rows, not
+> compared; today's trigger lists, not each historical boot's.
