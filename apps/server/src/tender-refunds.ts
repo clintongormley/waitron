@@ -1,4 +1,5 @@
 import { eq, or } from "drizzle-orm";
+import { carryNewTenderRefund } from "./tender-refund-completion.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { tenderRefunds, tenders, type Transaction } from "@waitron/db";
 import type { PinAttempts } from "@waitron/identity";
@@ -95,50 +96,29 @@ export async function beginSettledTenderRefund(
         }
         return toTenderRefundView(begun.refund);
       }
-      await deps.backend.refuseWhileClockBehind(tx, reading);
-      await deps.backend.refuseNewRefund(tx, cfg.nodeId);
-      let refund = begun.refund;
-      if (refund.method === "card") {
-        const capture = (await captureFor(tx, refund))!;
-        if (refund.manual) {
-          await recordManualRefund(tx, {
-            paymentRef: capture.paymentRef,
-            amount: centsToDecimal(refund.appliedAmount + refund.tipAmount),
-            authorizedBy: authorization.authorizedBy,
-          });
-        } else {
-          const provider = await deps.refundProviderFor?.(capture.provider);
-          if (
-            provider?.provider !== capture.provider ||
-            provider.sendRefund === undefined ||
-            (!provider.capabilities.partialRefund &&
-              refund.appliedAmount + refund.tipAmount !== capture.amount)
-          )
-            throw new AppError("tender.refund_unavailable", { tenderId: refund.tenderId });
-        }
-      }
-      if (refund.method === "cash" || refund.manual) {
-        const [completed] = await tx
-          .update(tenderRefunds)
-          .set({
-            state: "completed",
-            completedAt: createdAt,
-          })
-          .where(eq(tenderRefunds.id, refund.id))
-          .returning();
-        refund = completed!;
-        if (refund.method === "cash") {
-          await enqueueTenderRefundDrawer(tx, cfg, refund.id, operator.personId, authorization);
-        }
-      }
-      await deps.attendance?.(tx, {
-        source: "refund",
-        key: refund.id,
-        personId: refund.requestedBy,
-        kind: "payment",
-        at: refund.createdAt,
-        offsetMinutes: 0,
-        outcome: refund.state === "completed" ? "qualified" : "pending",
+      const refund = await carryNewTenderRefund(tx, deps, cfg.nodeId, reading, begun.refund, {
+        beforeCompletion: async (reserved) => {
+          if (reserved.method !== "card") return;
+          const capture = (await captureFor(tx, reserved))!;
+          if (reserved.manual) {
+            await recordManualRefund(tx, {
+              paymentRef: capture.paymentRef,
+              amount: centsToDecimal(reserved.appliedAmount + reserved.tipAmount),
+              authorizedBy: authorization.authorizedBy,
+            });
+          } else {
+            const provider = await deps.refundProviderFor?.(capture.provider);
+            if (
+              provider?.provider !== capture.provider ||
+              provider.sendRefund === undefined ||
+              (!provider.capabilities.partialRefund &&
+                reserved.appliedAmount + reserved.tipAmount !== capture.amount)
+            )
+              throw new AppError("tender.refund_unavailable", { tenderId: reserved.tenderId });
+          }
+        },
+        openDrawer: (reserved) =>
+          enqueueTenderRefundDrawer(tx, cfg, reserved.id, operator.personId, authorization),
       });
       if (refund.state === "pending") claimConnected?.(refund.id);
       return toTenderRefundView(refund);

@@ -20,5 +20,6 @@
     "packages/provisioning/src/taxpayer-name.ts",
     "packages/provisioning/src/venue-apply.ts"
   ],
-  "activity_log": ["packages/db/src/activity-log.ts"]
+  "activity_log": ["packages/db/src/activity-log.ts"],
+  "invoice_corrections": ["apps/server/src/invoice-corrections.ts"]
 }
