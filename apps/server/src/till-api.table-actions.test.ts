@@ -20,7 +20,6 @@ import "./errors.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createTable } from "./testing/live-table.js";
 import { numbersOf } from "./testing/bill-identities.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { tableSnapshot } from "./testing/table-snapshot.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";

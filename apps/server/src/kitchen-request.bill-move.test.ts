@@ -14,7 +14,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { addTabRound, setLineCourse, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { setLineCourse, updateOrderLine } from "./testing/order-writer-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";

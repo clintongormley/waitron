@@ -17,7 +17,6 @@ import {
 } from "./testing/move-bill-fixture.js";
 import { finishPartyService } from "./finish-party-service.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   allocationsOf,
   billNumberTables,
