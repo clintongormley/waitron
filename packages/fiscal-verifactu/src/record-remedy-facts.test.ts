@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -119,9 +119,7 @@ it("corrects stored invoice facts without changing the issued sale, original rec
     issuerName: "Corrected Issuer",
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    description: "Corrected restaurant service",
   });
   expect(res.status).toBe(200);
   const result = (await res.json()) as { registroId: string; eventId: string };
@@ -137,10 +135,10 @@ it("corrects stored invoice facts without changing the issued sale, original rec
     nombreRazonEmisor: "Corrected Issuer",
     tipoFactura: "F1",
     destinatarios: { IDDestinatario: [recipient] },
-    desglose: breakdown,
-    cuotaTotal: "20.00",
-    importeTotal: "220.00",
-    descripcionOperacion: before.records[0]!.descripcionOperacion,
+    desglose: before.records[0]!.desglose,
+    cuotaTotal: before.records[0]!.cuotaTotal,
+    importeTotal: before.records[0]!.importeTotal,
+    descripcionOperacion: "Corrected restaurant service",
     subsanacion: "S",
     rechazoPrevio: "X",
     anteriorHuella: before.records[0]!.huella,
@@ -156,9 +154,28 @@ it("corrects stored invoice facts without changing the issued sale, original rec
 });
 
 it.each([
+  { facts: { breakdown, taxTotal: "20.00", total: "220.00" }, field: "total" },
+  { facts: { total: "123.46" }, field: "total" },
+  { facts: { taxTotal: "21.44" }, field: "taxTotal" },
+  { facts: { breakdown }, field: "breakdown" },
+])(
+  "refuses a fix that changes the invoice's amounts, without a write: %j",
+  async ({ facts, field }) => {
+    const before = await snapshot();
+    const res = await send({ issuerName: "Corrected Issuer", ...facts });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "fiscal.remedy_amount_changed",
+        params: { registroId: body.registroId, field },
+      },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
+it.each([
   { facts: { issuerName: "Corrected Issuer" }, row: { nombreRazonEmisor: "Corrected Issuer" } },
-  { facts: { total: "123.46" }, row: { importeTotal: "123.46" } },
-  { facts: { taxTotal: "21.44" }, row: { cuotaTotal: "21.44" } },
   {
     facts: {
       invoiceType: "F1",
@@ -201,8 +218,8 @@ it.each(["R1", "F3"])(
             correctionType: "S",
             correctedInvoices: [reference],
             correctionAmounts: {
-              BaseRectificada: "200.00",
-              CuotaRectificada: "20.00",
+              BaseRectificada: "0.00",
+              CuotaRectificada: "0.00",
               CuotaRecargoRectificado: "0.00",
             },
             recipients: [recipient],
@@ -227,8 +244,8 @@ it.each(["R1", "F3"])(
       importeRectificacion:
         invoiceType === "R1"
           ? {
-              BaseRectificada: "200.00",
-              CuotaRectificada: "20.00",
+              BaseRectificada: "0.00",
+              CuotaRectificada: "0.00",
               CuotaRecargoRectificado: "0.00",
             }
           : null,
@@ -243,7 +260,7 @@ it("can explicitly remove optional facts from the next version without removing 
         invoiceType: "R1",
         correctionType: "S",
         correctedInvoices: [reference],
-        correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+        correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
         recipients: [recipient],
       })
     ).status,
@@ -291,12 +308,12 @@ it("can explicitly remove optional facts from the next version without removing 
 });
 
 it("replays complete facts in another key order after the clock and delivery change", async () => {
+  const filed = (await snapshot()).records[0]!.desglose as Record<string, string>[];
   const facts = {
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    breakdown: filed,
+    description: "Corrected restaurant service",
   };
   const first = await send(facts);
   expect(first.status).toBe(200);
@@ -308,9 +325,8 @@ it("replays complete facts in another key order after the clock and delivery cha
     .where(eq(envios.registroId, body.registroId as string));
   const before = await snapshot();
   const replay = await send({
-    total: "220.00",
-    taxTotal: "20.00",
-    breakdown: breakdown.map((item) => Object.fromEntries(Object.entries(item).reverse())),
+    description: "Corrected restaurant service",
+    breakdown: filed.map((item) => Object.fromEntries(Object.entries(item).reverse())),
     recipients: [{ NIF: "B12345674", NombreRazon: "Corrected Customer" }],
     invoiceType: "F1",
   });
@@ -319,7 +335,8 @@ it("replays complete facts in another key order after the clock and delivery cha
   expect(await snapshot()).toEqual(before);
 });
 
-it("applies complete facts under an explicit accepted-with-errors decision while retaining both case histories", async () => {
+/** Points `send` at an invoice the agency accepted with errors, under that explicit decision. */
+async function targetAcceptedWithErrors() {
   const saleId = await seedSale(suite.db, node, 2);
   await withTransaction(suite.db, async (tx) => {
     const accepted = await appendToChain(
@@ -343,13 +360,15 @@ it("applies complete facts under an explicit accepted-with-errors decision while
       priorOutcome: "accepted-with-errors",
     };
   });
+}
+
+it("applies complete facts under an explicit accepted-with-errors decision while retaining both case histories", async () => {
+  await targetAcceptedWithErrors();
   const before = await snapshot();
   const res = await send({
     invoiceType: "F1",
     recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
+    description: "Corrected restaurant service",
   });
   expect(res.status).toBe(200);
   const after = await snapshot();
@@ -358,8 +377,7 @@ it("applies complete facts under an explicit accepted-with-errors decision while
     tipoFactura: "F1",
     subsanacion: "S",
     rechazoPrevio: "N",
-    cuotaTotal: "20.00",
-    importeTotal: "220.00",
+    descripcionOperacion: "Corrected restaurant service",
     destinatarios: { IDDestinatario: [recipient] },
   });
   expect(after.cases.find((item) => item.id !== body.caseId)).toEqual(
@@ -370,10 +388,27 @@ it("applies complete facts under an explicit accepted-with-errors decision while
   expect(after.sales).toEqual(before.sales);
 });
 
+it("refuses an amount change under an explicit accepted-with-errors decision, without a write", async () => {
+  await targetAcceptedWithErrors();
+  const before = await snapshot();
+  const res = await send({
+    invoiceType: "F1",
+    recipients: [recipient],
+    total: "123.46",
+  });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_amount_changed",
+      params: { registroId: body.registroId, field: "total" },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
 it.each([
   { correctionType: "I", correctionAmounts: null },
   { correctedInvoices: [{ ...reference, NumSerieFactura: "PRIOR/2" }] },
-  { correctionAmounts: { BaseRectificada: "201.00", CuotaRectificada: "20.00" } },
 ])(
   "refuses changed corrective-reference decisions under a saved action key: %j",
   async (change) => {
@@ -381,7 +416,7 @@ it.each([
       invoiceType: "R1",
       correctionType: "S",
       correctedInvoices: [reference],
-      correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+      correctionAmounts: { BaseRectificada: "0.00", CuotaRectificada: "0.00" },
       recipients: [recipient],
     };
     expect((await send(facts)).status).toBe(200);
@@ -392,6 +427,25 @@ it.each([
     expect(await snapshot()).toEqual(before);
   },
 );
+
+it("refuses a fix that gives an invoice non-zero correction amounts, without a write", async () => {
+  const before = await snapshot();
+  const res = await send({
+    invoiceType: "R1",
+    correctionType: "S",
+    correctedInvoices: [reference],
+    correctionAmounts: { BaseRectificada: "201.00", CuotaRectificada: "20.00" },
+    recipients: [recipient],
+  });
+  expect(res.status).toBe(400);
+  expect(await res.json()).toEqual({
+    error: {
+      code: "fiscal.remedy_amount_changed",
+      params: { registroId: body.registroId, field: "correctionAmounts" },
+    },
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it.each(
   [
@@ -417,29 +471,53 @@ it.each(
   expect(await snapshot()).toEqual(before);
 });
 
+it.each([{ issuerName: "Another Issuer" }, { invoiceType: "F2" }, { recipients: null }])(
+  "refuses changed saved facts %j",
+  async (change) => {
+    const facts = {
+      issuerName: "Corrected Issuer",
+      invoiceType: "F1",
+      recipients: [recipient],
+      description: "Corrected restaurant service",
+    };
+    expect((await send(facts)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send({ ...facts, ...change });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
+    expect(await snapshot()).toEqual(before);
+  },
+);
+
 it.each([
-  { issuerName: "Another Issuer" },
-  { invoiceType: "F2" },
-  { recipients: null },
-  { taxTotal: "20.01" },
-  { total: "220.01" },
-  { breakdown: [{ ...breakdown[0], BaseImponibleOimporteNoSujeto: "200.01" }] },
-])("refuses changed saved facts %j", async (change) => {
-  const facts = {
-    issuerName: "Corrected Issuer",
-    invoiceType: "F1",
-    recipients: [recipient],
-    breakdown,
-    taxTotal: "20.00",
-    total: "220.00",
-  };
-  expect((await send(facts)).status).toBe(200);
-  const before = await snapshot();
-  const res = await send({ ...facts, ...change });
-  expect(res.status).toBe(409);
-  expect(await res.json()).toMatchObject({ error: { code: "filing_case.action_mismatch" } });
-  expect(await snapshot()).toEqual(before);
-});
+  { change: { taxTotal: "20.01" }, field: "taxTotal" },
+  { change: { total: "220.01" }, field: "total" },
+  {
+    change: { breakdown: [{ ...breakdown[0], BaseImponibleOimporteNoSujeto: "200.01" }] },
+    field: "breakdown",
+  },
+])(
+  "refuses an amount change after a saved decision, without a write: %j",
+  async ({ change, field }) => {
+    const facts = {
+      issuerName: "Corrected Issuer",
+      invoiceType: "F1",
+      recipients: [recipient],
+      description: "Corrected restaurant service",
+    };
+    expect((await send(facts)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send({ ...facts, ...change });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "fiscal.remedy_amount_changed",
+        params: { registroId: body.registroId, field },
+      },
+    });
+    expect(await snapshot()).toEqual(before);
+  },
+);
 
 it.each(
   [
@@ -493,9 +571,7 @@ it.each([false, true])(
     const facts = {
       invoiceType: "F1",
       recipients: [recipient],
-      breakdown,
-      taxTotal: "20.00",
-      total: "220.00",
+      description: "Corrected restaurant service",
     };
     if (replay) expect((await send(facts)).status).toBe(200);
     const before = await snapshot();
@@ -539,3 +615,192 @@ it.each(
     expect(await snapshot()).toEqual(before);
   },
 );
+
+describe("a fix never changes the invoice's amounts", () => {
+  const twelveTen = [
+    {
+      Impuesto: "01",
+      ClaveRegimen: "01",
+      CalificacionOperacion: "S1",
+      TipoImpositivo: "21.00",
+      BaseImponibleOimporteNoSujeto: "10.00",
+      CuotaRepercutida: "2.10",
+    },
+  ] as const;
+
+  /** Points `send` at a refused €12.10 invoice filed at 21% (10.00 + 2.10). */
+  async function targetRefusedTwelveTenInvoice() {
+    const saleId = await seedSale(suite.db, node, 2);
+    await withTransaction(suite.db, async (tx) => {
+      const pending = altaFor(node, saleId, 2, 2, "preproduction");
+      const original = await appendToChain(tx, node.nodeId, {
+        ...pending,
+        input: {
+          ...pending.input,
+          Desglose: [...twelveTen],
+          CuotaTotal: "2.10",
+          ImporteTotal: "12.10",
+        },
+      });
+      await tx
+        .insert(envios)
+        .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
+      const filingCase = await openFilingCase(tx, {
+        registroId: original.id,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: 1161, mensaje: null, csv: null },
+        now: NOW,
+      });
+      body = { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "twelve-ten" };
+    });
+  }
+
+  async function storedFix(res: Response) {
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    const { registroId } = (await res.json()) as { registroId: string };
+    const [row] = await suite.db
+      .select()
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, registroId));
+    return row;
+  }
+
+  it("refuses a €12.10 invoice filed at 21% (10.00 + 2.10) re-filed at 10% (11.00 + 1.10)", async () => {
+    await targetRefusedTwelveTenInvoice();
+    const before = await snapshot();
+    const res = await send({
+      breakdown: [
+        {
+          ...twelveTen[0],
+          TipoImpositivo: "10.00",
+          BaseImponibleOimporteNoSujeto: "11.00",
+          CuotaRepercutida: "1.10",
+        },
+      ],
+      taxTotal: "1.10",
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "fiscal.remedy_amount_changed",
+        params: { registroId: body.registroId, field: "taxTotal" },
+      },
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("accepts a fix restating the stored 12.10 total as 12.1", async () => {
+    await targetRefusedTwelveTenInvoice();
+    const row = await storedFix(
+      await send({ total: "12.1", description: "Corrected restaurant service" }),
+    );
+    expect(row).toMatchObject({
+      importeTotal: "12.10",
+      descripcionOperacion: "Corrected restaurant service",
+    });
+  });
+
+  /** Points `send` at a refused corrective invoice whose correction amounts are 200.00 + 20.00. */
+  async function targetRefusedCorrective() {
+    const saleId = await seedSale(suite.db, node, 3);
+    await withTransaction(suite.db, async (tx) => {
+      const pending = altaFor(node, saleId, 3, 3, "preproduction");
+      const original = await appendToChain(tx, node.nodeId, {
+        ...pending,
+        input: {
+          ...pending.input,
+          TipoFactura: "R1",
+          TipoRectificativa: "S",
+          FacturasRectificadas: [{ ...reference, FechaExpedicionFactura: new Date(NOW) }],
+          ImporteRectificacion: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+          Destinatarios: { IDDestinatario: [recipient] },
+        },
+      });
+      await tx
+        .insert(envios)
+        .values({ registroId: original.id, estado: "rechazado", codigoError: "1161" });
+      const filingCase = await openFilingCase(tx, {
+        registroId: original.id,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: 1161, mensaje: null, csv: null },
+        now: NOW,
+      });
+      body = { ...body, caseId: filingCase.id, registroId: original.id, actionKey: "corrective" };
+    });
+  }
+
+  it.each([
+    { BaseRectificada: "999.00", CuotaRectificada: "20.00" },
+    { BaseRectificada: "200.00", CuotaRectificada: "21.00" },
+    { BaseRectificada: "200.00", CuotaRectificada: "20.00", CuotaRecargoRectificado: "1.00" },
+    null,
+  ])(
+    "refuses a fix of a corrective invoice that changes its correction amounts to %j",
+    async (correctionAmounts) => {
+      await targetRefusedCorrective();
+      const before = await snapshot();
+      const res = await send({ correctionAmounts, description: "Corrected restaurant service" });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: {
+          code: "fiscal.remedy_amount_changed",
+          params: { registroId: body.registroId, field: "correctionAmounts" },
+        },
+      });
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it("accepts a fix of a corrective invoice restating its correction amounts as 200, 20.0 and 0", async () => {
+    await targetRefusedCorrective();
+    const row = await storedFix(
+      await send({
+        correctionAmounts: {
+          BaseRectificada: "200",
+          CuotaRectificada: "20.0",
+          CuotaRecargoRectificado: "0",
+        },
+        description: "Corrected restaurant service",
+      }),
+    );
+    expect(row).toMatchObject({ descripcionOperacion: "Corrected restaurant service" });
+    expect(row?.importeRectificacion).toEqual({
+      BaseRectificada: "200.00",
+      CuotaRectificada: "20.00",
+      CuotaRecargoRectificado: "0.00",
+    });
+  });
+
+  it("refuses a correction-amount change after a saved decision, without a write", async () => {
+    await targetRefusedCorrective();
+    const facts = {
+      correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.00" },
+      description: "Corrected restaurant service",
+    };
+    expect((await send(facts)).status).toBe(200);
+    const before = await snapshot();
+    const res = await send({
+      ...facts,
+      correctionAmounts: { BaseRectificada: "200.00", CuotaRectificada: "20.01" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: {
+        code: "fiscal.remedy_amount_changed",
+        params: { registroId: body.registroId, field: "correctionAmounts" },
+      },
+    });
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it("accepts a fix of the same invoice that changes only its description", async () => {
+    await targetRefusedTwelveTenInvoice();
+    const row = await storedFix(await send({ description: "Corrected restaurant service" }));
+    expect(row).toMatchObject({
+      descripcionOperacion: "Corrected restaurant service",
+      desglose: twelveTen,
+      cuotaTotal: "2.10",
+      importeTotal: "12.10",
+    });
+  });
+});

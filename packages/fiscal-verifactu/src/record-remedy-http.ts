@@ -3,10 +3,10 @@ import { sql } from "drizzle-orm";
 import { readHistoryNodes, readTenant, type Transaction } from "@waitron/db";
 import { prepareIssueClock } from "@waitron/fiscal";
 import type { ModuleRouteContext } from "@waitron/module";
-import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
+import { AppError, compareDecimal, decimal, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
 import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
-import { readCorrectedRecordFacts } from "./record-remedy-facts.js";
+import { readCorrectedRecordFacts, type CorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import {
@@ -29,6 +29,55 @@ function text(value: unknown): string {
 }
 function only(value: Record<string, unknown>, keys: readonly string[]) {
   if (Object.keys(value).some((key) => !keys.includes(key))) invalid();
+}
+
+const BREAKDOWN_AMOUNTS = [
+  "TipoImpositivo",
+  "BaseImponibleOimporteNoSujeto",
+  "BaseImponibleACoste",
+  "CuotaRepercutida",
+  "TipoRecargoEquivalencia",
+  "CuotaRecargoEquivalencia",
+] as const;
+
+const CORRECTION_AMOUNTS = [
+  "BaseRectificada",
+  "CuotaRectificada",
+  "CuotaRecargoRectificado",
+] as const;
+
+function sameAmount(left: string | undefined, right: string | undefined) {
+  return compareDecimal(decimal(left ?? "0"), decimal(right ?? "0")) === 0;
+}
+
+function refuseChangedAmounts(
+  registroId: string,
+  facts: CorrectedRecordFacts,
+  original: Pick<AltaInput, "Desglose" | "CuotaTotal" | "ImporteTotal" | "ImporteRectificacion">,
+) {
+  const refuse = (field: "breakdown" | "taxTotal" | "total" | "correctionAmounts"): never => {
+    throw new AppError("fiscal.remedy_amount_changed", { registroId, field });
+  };
+  if (facts.total !== undefined && !sameAmount(facts.total, original.ImporteTotal)) refuse("total");
+  if (facts.taxTotal !== undefined && !sameAmount(facts.taxTotal, original.CuotaTotal))
+    refuse("taxTotal");
+  if (
+    facts.correctionAmounts !== undefined &&
+    CORRECTION_AMOUNTS.some(
+      (key) => !sameAmount(facts.correctionAmounts?.[key], original.ImporteRectificacion?.[key]),
+    )
+  )
+    refuse("correctionAmounts");
+  const lines = facts.breakdown;
+  if (lines === undefined) return;
+  if (
+    lines.length !== original.Desglose.length ||
+    lines.some((line, index) => {
+      const filed = original.Desglose[index]!;
+      return BREAKDOWN_AMOUNTS.some((key) => !sameAmount(line[key], filed[key]));
+    })
+  )
+    refuse("breakdown");
 }
 
 export async function applyCorrectedRecordFacts(
@@ -65,6 +114,7 @@ export async function applyCorrectedRecordFacts(
     throw new AppError("fiscal.remedy_invalid", { registroId });
   const original = fromRegistroRow(target);
   if (!("TipoFactura" in original)) throw new AppError("fiscal.remedy_invalid", { registroId });
+  refuseChangedAmounts(registroId, facts, original);
   const clock = await prepareIssueClock(tx, { nodeId: generation.nodeId }, generation.clock);
   const reading = clock.now();
   const sif = await currentSif(tx, generation.nodeId);
