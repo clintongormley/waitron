@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { saleId } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import {
   seedNodeAndSeries,
   seedSale,
@@ -934,8 +936,9 @@ describe("computeTopSellers", () => {
       });
     });
 
-    const correct = (issuedAt: string, net: string, gross: string) =>
+    const correct = (issuedAt: string, net: string, gross: string, id?: SaleId) =>
       seedSale(suite.db, venue, {
+        id,
         invoiceNumber: nextNumber++,
         issuedAt,
         total: `-${gross}`,
@@ -986,6 +989,27 @@ describe("computeTopSellers", () => {
       ]);
       expect(await run(day("2026-08-05"))).toEqual([
         { name: coffeeName, quantity: "1.000", total: "11.00", variants: [] },
+      ]);
+    });
+
+    it("orders corrections issued in the same millisecond by invoice number, not sale id", async () => {
+      // The second-issued correction holds the lower id, so an order by id reads it first.
+      await correct(
+        "2026-08-04T10:01:00.000Z",
+        "5.50",
+        "6.05",
+        saleId("ffffffff-ffff-4fff-8fff-ffffffffffff"),
+      );
+      const completing = await correct(
+        "2026-08-04T10:01:00.000Z",
+        "5.50",
+        "6.05",
+        saleId("00000000-0000-4000-8000-000000000001"),
+      );
+      await seedVoid(suite.db, { saleId: completing }, "2026-08-05T10:00:00.000Z");
+
+      expect(await run(day("2026-08-05"))).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.50", variants: [] },
       ]);
     });
 

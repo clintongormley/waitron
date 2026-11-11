@@ -140,6 +140,8 @@ export async function seedSale(
   db: Database,
   seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   opts: {
+    /** A fixed sale id, for a test that needs a known id order; absent means a fresh one. */
+    id?: SaleId;
     invoiceNumber: number;
     /** A sample sale the Demo seed recorded, with no device; otherwise `seed.deviceId` rang it. */
     source?: "demo_seed";
@@ -194,6 +196,7 @@ export async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
+      id: opts.id,
       source: opts.source ?? "device",
       deviceId: opts.source === undefined ? seed.deviceId : null,
       nodeId: seed.nodeId,

@@ -25,13 +25,16 @@ function reaches(money: SQL, returned: SQL): SQL {
  * Same predicates as the VAT roll-up (`issuedSalesClause`, `reversedSalesClause`); corrections are
  * NOT excluded — their negative lines net the total down. A correction line naming no invoice line
  * nets its own quantity down too. One naming an invoice line takes back that line's quantity only if
- * it is the correction, in issue order, at which the line's corrections first add up to its money
- * (gross where the line stored one, else net); any other counts no dishes. The sum leaves out a
- * correction voided at or before the moment the one being counted was issued, so a day's count
- * never changes after the day; a void reverses exactly what its sale was counted as. It assumes a
- * line's corrections, voided ones included, never take more than its money, as the exact-split and
- * whole-invoice paths refuse; past that, a void followed by a further correction can return the
- * dish twice.
+ * it is the correction, in issue order (time, then invoice number), at which the line's corrections
+ * first add up to its money (gross where the line stored one, else net); any other counts no dishes.
+ * The sum leaves out a correction voided at or before the moment the one being counted was issued,
+ * so a day's count never changes after the day; a void reverses exactly what its sale was counted
+ * as. It assumes a line's corrections, voided ones included, never take more than its money, as the
+ * exact-split and whole-invoice paths refuse; past that, a void followed by a further correction
+ * can return the dish twice. It also assumes a correction of a line that stored a gross states its
+ * own, as the cancellation and the exact-split path do: one that states none counts as no money
+ * back, so the dish stays counted as sold unless the line's stored gross is zero, where the line's
+ * first correction returns it whatever it states.
  *
  * Invalid inputs are a caller precondition and throw a plain `Error` before any query runs.
  */
@@ -59,14 +62,14 @@ export async function computeTopSellers(
   }>(sql`
     with lines as (
       select sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.line_gross, sl.line_no,
-        sl.corrects_line_id, s.id as sale_id, s.issued_at, 1 as sign
+        sl.corrects_line_id, s.id as sale_id, s.issued_at, s.invoice_number, 1 as sign
       from sale_lines sl
       join sales s on s.id = sl.sale_id
       where ${issuedSalesClause(window)}
         ${nodeClause}
       union all
       select sl.name, sl.variant_name, sl.quantity, sl.line_total, sl.line_gross, sl.line_no,
-        sl.corrects_line_id, s.id, s.issued_at, -1
+        sl.corrects_line_id, s.id, s.issued_at, s.invoice_number, -1
       from sale_voids sv
       join sales s on s.id = sv.sale_id
       join sale_lines sl on sl.sale_id = s.id
@@ -87,7 +90,8 @@ export async function computeTopSellers(
           from sales cs indexed by sales_corrects_idx
           join sale_lines cl indexed by sale_lines_sale_idx on cl.sale_id = cs.id
           where cs.corrects_sale_id = il.sale_id and cl.corrects_line_id = il.id
-            and (cs.issued_at, cs.id, cl.line_no) < (l.issued_at, l.sale_id, l.line_no)
+            and (cs.issued_at, cs.invoice_number, cs.id, cl.line_no)
+              < (l.issued_at, l.invoice_number, l.sale_id, l.line_no)
             and not exists (
               select 1 from sale_voids cv where cv.sale_id = cs.id and cv.voided_at <= l.issued_at
             )
