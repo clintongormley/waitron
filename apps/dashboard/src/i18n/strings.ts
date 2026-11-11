@@ -1587,7 +1587,6 @@ export const en = {
   "devices.no_kitchen_screen": "— no kitchen screen —",
   "devices.shows": "Shows",
   "devices.station_disabled_mark": "Disabled",
-  "devices.watcher_disabled_mark": "Disabled",
   "devices.device_profile": "Device profile",
   "devices.profile_deleted": "Profile deleted",
   "devices.receipt_printer_now": "Receipt printer",
@@ -2699,8 +2698,6 @@ export const en = {
   "payments.reader_unavailable": "Unavailable",
   "payments.reader_unpaired": "Unpaired",
   "payments.reader_retained": "Saved name and print settings",
-  "payments.reader_help":
-    "Delete removes a reader from Waitron. Add a recognised reader to keep its name and print settings, then assign it to devices and profiles again.",
   "payments.reader_col_battery": "Battery",
   "payments.refresh": "Refresh",
   "payments.details": "Details",
@@ -5458,7 +5455,6 @@ export const es: Record<StringKey, string> = {
   "devices.no_kitchen_screen": "— sin pantalla de cocina —",
   "devices.shows": "Muestra",
   "devices.station_disabled_mark": "Deshabilitada",
-  "devices.watcher_disabled_mark": "Deshabilitado",
   "devices.device_profile": "Perfil de dispositivo",
   "devices.profile_deleted": "Perfil eliminado",
   "devices.receipt_printer_now": "Impresora de tickets",
@@ -6586,8 +6582,6 @@ export const es: Record<StringKey, string> = {
   "payments.reader_unavailable": "No disponible",
   "payments.reader_unpaired": "Sin vincular",
   "payments.reader_retained": "Nombre y ajustes de impresión guardados",
-  "payments.reader_help":
-    "Eliminar quita un lector de Waitron. Añade un lector reconocido para conservar su nombre y ajustes de impresión y vuelve a asignarlo a dispositivos y perfiles.",
   "payments.reader_col_battery": "Batería",
   "payments.refresh": "Actualizar",
   "payments.details": "Detalles",

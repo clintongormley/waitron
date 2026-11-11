@@ -629,9 +629,6 @@ describe("reader discovery and status", () => {
     );
     await openAdd(el);
     expect(api.availableReaders).toHaveBeenCalledWith("acme");
-    expect(q(el, "[data-test=reader-discovery] wt-help-tooltip")?.getAttribute("guide-href")).toBe(
-      "/help/en/printers#card-readers",
-    );
     expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("123");
     expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Add");
     expect(q(el, "[data-test=adopt-v-3]")).toBeNull();

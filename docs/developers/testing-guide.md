@@ -2539,7 +2539,7 @@ and separately retain the already-absent 404 retry
 Reader Enable initially accepted a row after Unpair had removed it at SumUp. Successful unpair
 records a local marker which only provider-verified adoption clears. A1484 removes Enable; the
 provider-list refusal and the adoption-during-unpair cases in `apps/server/src/payments-api.test.ts`
-check that Add still requires the provider to list the reader and waits until Unpair finishes.
+check that Add still requires the provider to list the reader and is refused while Unpair or Delete is at the provider.
 
 ## A fixture no check reads is unverified data, and a green suite resting on it proves nothing about the records production can build.
 

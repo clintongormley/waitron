@@ -89,7 +89,7 @@ panel, edita ese lector y activa **Imprime su propio justificante automáticamen
 **Guardar**. Waitron deja los justificantes de ese lector en manos del propio lector. Este ajuste
 describe el lector; no cambia la configuración de su impresora. Empieza desactivado en un lector nuevo.
 
-Volver a añadir un lector reconocido conserva tu elección. Consulta [Lectores de tarjetas](printers.md#card-readers)
+Si añades de nuevo un lector reconocido, conserva tu elección. Consulta [Lectores de tarjetas](printers.md#card-readers)
 para eliminar un lector o añadirlo de nuevo. La exportación de configuración incluye la política
 de pagos, pero no los lectores ni este ajuste.
 
