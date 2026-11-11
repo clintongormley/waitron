@@ -1133,6 +1133,9 @@ Size after these: about 175 production and 320 test lines.
   behind its chain (`detenido`), or has no submission row; accepted,
   accepted with errors and refused are answered (`newestAwaitingAnswer` in
   `packages/fiscal/src/backend.ts`, set by `packages/fiscal-verifactu/src/filed-figures.ts`).
+- A refused version whose split the Veri\*Factu reader cannot read is read as if it were absent
+  (second read, 2026-11-11, finding 3), so a refused fix carrying, say, an exempt line no longer
+  makes a cancellation answer `sale.correction_history_unusable`.
 - The preview's moved path: naming dishes refuses `sale.correction_scope_invalid`
   (`filed_split_changed`), a part of a changed total refuses it (`filed_total_changed`); the split
   comes from the accepted figures and the lines from the stored history.
