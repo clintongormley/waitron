@@ -28,11 +28,16 @@ export async function resendInvoicePrintJob(
   requestKey?: string,
 ): Promise<{ jobId: string }> {
   const [invoice] = await tx
-    .select({ saleId: sales.id, recipient: sales.counterpartyTaxId })
+    .select({
+      saleId: sales.id,
+      recipient: sales.counterpartyTaxId,
+      receiptCopy: printJobs.receiptCopy,
+    })
     .from(printJobs)
     .innerJoin(sales, eq(sales.id, printJobs.saleId))
     .where(eq(printJobs.id, jobId));
-  if (invoice === undefined) return resendPrintJob(tx, jobId);
+  if (invoice === undefined || (invoice.recipient === null && invoice.receiptCopy !== false))
+    return resendPrintJob(tx, jobId);
   await expireInvoiceDeliveryClaims(tx, now);
   if (invoice.recipient === null) {
     const emails = await tx

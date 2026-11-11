@@ -71,7 +71,6 @@ export interface InvoiceDeliveryStatus {
  */
 export type InvoiceDeliveryReadOptions = { emailAvailable: boolean };
 
-/** A full invoice's sale, as the status reader found it. */
 export type InvoiceDeliverySale = { id: string };
 
 /**
@@ -80,7 +79,6 @@ export type InvoiceDeliverySale = { id: string };
  */
 export type PrinterOffer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter[]>;
 
-/** For one sale, `emailAvailable` may be asked of it once it is known to be a full invoice. */
 export type InvoiceDeliverySaleReadOptions = {
   emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
   printers?: PrinterOffer;

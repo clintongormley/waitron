@@ -107,7 +107,6 @@ export async function requestPrintDelivery(
   return rowAttempt(row);
 }
 
-/** Emails the recorded document to `recipient`, as the delivery status offers it. */
 export async function requestEmailDelivery(
   tx: Transaction,
   saleId: string,

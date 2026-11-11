@@ -165,6 +165,32 @@ function textPart(message: string) {
 }
 
 describe("invoice SMTP transport", () => {
+  it("omits the full-invoice privacy notice from a simplified receipt", async () => {
+    const rig = await smtpRig("accepted");
+    try {
+      const document = structuredClone(fixture);
+      document.invoiceLocale = "en-GB";
+      document.result.invoiceType = "F2";
+      document.result.invoiceNumber = "S/1";
+      document.result.issuer = { venueName: "Dining Room Ltd", nif: "B12345678" };
+      delete document.result.recipient;
+      expect(
+        await createInvoiceEmailSender(rig.config)({
+          recipient: "guest@example.test",
+          document,
+          privacy: {
+            privacyNoticeUrl: "https://example.com/privacy",
+            privacyEmail: null,
+            taxRecord: true,
+          },
+        }),
+      ).toEqual({ status: "sent" });
+      expect(textPart(rig.messages[0]!)).toBe("Simplified invoice S/1");
+    } finally {
+      await rig.close();
+    }
+  });
+
   it.each([
     { locale: "en-GB", duplicate: false, total: "19.69" },
     { locale: "es-ES", duplicate: true, total: "19,69" },
