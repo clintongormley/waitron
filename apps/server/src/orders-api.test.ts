@@ -250,7 +250,7 @@ describe("Orders routes", () => {
   });
 
   it("reads a departed, part credited, collected bill's parts", async () => {
-    const party = await departed(venue, "Botella tinto");
+    const party = await departed(venue, "Red wine bottle");
     await credit(venue, party.tabId, "2.00", "-2.42");
     const before = await get(venue.supervisorDashboard, `/${party.tabId}`);
     expect(before.status).toBe(200);

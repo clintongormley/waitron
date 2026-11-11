@@ -137,8 +137,8 @@ useVenueDb({
         "en",
       );
       await assignProductUnit(tx, await productOf(tx, "Paella"), gram!.id);
-      await assignProductUnit(tx, await productOf(tx, "Chuletón"), ml.id);
-      await assignProductUnit(tx, await productOf(tx, "Ensalada"), kilo!.id);
+      await assignProductUnit(tx, await productOf(tx, "Steak"), ml.id);
+      await assignProductUnit(tx, await productOf(tx, "House salad"), kilo!.id);
       await assignProductUnit(tx, await productOf(tx, "Croquetas"), tenth.id);
       const octopus = await productOf(tx, "Pulpo");
       await assignProductUnit(tx, octopus, gram!.id);
@@ -503,12 +503,12 @@ describe("readOrderStateCounts", () => {
   });
 
   it("counts a 330 ml dish as one", async () => {
-    const id = await parked([["Chuletón", "330"]]);
+    const id = await parked([["Steak", "330"]]);
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
   it("counts a 0.450 kg dish as one", async () => {
-    const id = await parked([["Ensalada", "0.450"]]);
+    const id = await parked([["House salad", "0.450"]]);
     expect(await countsOf([id])).toEqual(new Map([[id, { ...zero, ordered: 1, unsent: 1 }]]));
   });
 
@@ -754,7 +754,7 @@ describe("readOrderStateCounts on a party's bill", () => {
         tx,
         venue.cfg,
         { partyId, tabId: billId },
-        { lines: [withSauce("Tarta", "2"), plain("Ensalada", "0.450")], release: "hold" },
+        { lines: [withSauce("Tarta", "2"), plain("House salad", "0.450")], release: "hold" },
         venue.operatorId,
       ),
     );
@@ -924,7 +924,7 @@ describe("readOrderStateCounts on a party's bill", () => {
 
   it("counts cancellations out: one of three, and a weighed dish cancelled whole", async () => {
     const { billId } = await seatParty();
-    await sendRound(billId, [plain("Tarta", "3"), plain("Ensalada", "0.450")]);
+    await sendRound(billId, [plain("Tarta", "3"), plain("House salad", "0.450")]);
     const [cake, salad] = await dishLines(billId);
     await cancel(cake!.id, 1000);
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 3, waiting: 3 });

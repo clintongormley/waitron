@@ -33,7 +33,7 @@ const suite = useVenueDb({
     const [product] = await db
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.name, "Ensalada"));
+      .where(eq(products.name, "House salad"));
     offerId = counter.offerFor(product!.id);
     await parkOrder({ db }, venue.cfg, {
       id: controlId,
@@ -82,7 +82,7 @@ async function requestFor(path: Path, cardRefund = false) {
     await placeOrder({ ...deps, admission: testTradingAdmission() }, venue.cfg, id, venue.adminId);
     return { id, path: `/api/working-orders/${id}/collect`, body: { tender: cash } };
   }
-  const billId = await tabWith(venue, "Ensalada");
+  const billId = await tabWith(venue, "House salad");
   const paid = await send(venue.app, cookie, "POST", `/api/working-orders/${billId}/payments`, {
     submissionId: randomUUID(),
     kind: "contribution",

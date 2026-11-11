@@ -361,7 +361,7 @@ describe("A773 request kind of arriving dishes", () => {
   const send = observedRelocationSender(() => suite.db, rawSend);
 
   it("gives arrival at a party with a group added, and a held course's arrival next_course", async () => {
-    const p = await seatedWith(v, "Ensalada", "Tarta");
+    const p = await seatedWith(v, "House salad", "Tarta");
     const lines = await suite.db
       .select()
       .from(workingOrderLines)
@@ -397,7 +397,7 @@ describe("A773 request kind of arriving dishes", () => {
   });
 
   async function splitOff() {
-    const source = await seatedWith(v, "Ensalada", "Tarta");
+    const source = await seatedWith(v, "House salad", "Tarta");
     const path = `/api/bills/${source.tabId}/split`;
     const splitBill = await send(
       v.app,

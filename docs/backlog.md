@@ -2288,12 +2288,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A976. Finish the server's English test-venue defaults.**
   `setupVenue`, `provisionVenueBody` and eight local route/command seeds use `Main room`;
-  other venue seeds and the boot helper's raw location names remain.
+  other venue seeds and the boot helper's raw location names remain. The shared
+  `setupVenue` uses Administrator, Drinks, Coffee and Water. BillVenue uses Steak,
+  Red wine bottle and House salad as staff keys; its Spanish customer and kitchen names stay.
   Local party-suite table, party, course and printer samples use English. Shared dish samples
   remain in their helpers and consumers, including party bill-action, bill-move, arriving-dish
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
   suites still use Spanish display samples; fiscal-sale test descriptions,
-  shared helpers and their consumers' dish selectors and screen expectations remain.
+  other shared-helper names and their consumers' dish selectors and screen expectations remain.
   Triage made-here route and receipt-document fixture
   text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).

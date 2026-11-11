@@ -40,7 +40,7 @@ useVenueDb({
 });
 
 it("copies a reader payment before settlement and keeps its original balance after another payment", async () => {
-  const billId = await tabWith(venue, "Botella tinto");
+  const billId = await tabWith(venue, "Red wine bottle");
   const paid = await send(
     venue.app,
     venue.cookie,
@@ -140,7 +140,7 @@ it("copies a reader payment before settlement and keeps its original balance aft
 });
 
 it("rejects a payment on another bill and offers no copy for an own-slip reader", async () => {
-  const billId = await tabWith(venue, "Botella tinto");
+  const billId = await tabWith(venue, "Red wine bottle");
   const otherId = await tabWith(venue, "Tarta");
   const paid = await send(
     venue.app,
@@ -244,7 +244,7 @@ const readerContribution = {
 } as const;
 
 it("prints a requested slip only for the fresh confirmed reader capture", async () => {
-  const billId = await tabWith(venue, "Botella tinto");
+  const billId = await tabWith(venue, "Red wine bottle");
   const body = {
     submissionId: randomUUID(),
     ...readerContribution,
@@ -278,7 +278,7 @@ it("prints a requested slip only for the fresh confirmed reader capture", async 
 it.each([null, "true", 1])(
   "refuses non-boolean slip choice %j before charging",
   async (printCardSlip) => {
-    const billId = await tabWith(venue, "Botella tinto");
+    const billId = await tabWith(venue, "Red wine bottle");
     const calls = venue.card.collectCalls.length;
     const paid = await send(
       venue.app,
@@ -303,7 +303,7 @@ it.each([null, "true", 1])(
 it.each(["whole", "short", "presented", "issued"])(
   "prints the %s card slip once and rejects an invalid choice",
   async (kind) => {
-    const id = await tabWith(venue, "Botella tinto");
+    const id = await tabWith(venue, "Red wine bottle");
     if (kind === "issued")
       await issueOrderInvoice(
         { ...venue, admission: testTradingAdmission() },
@@ -381,7 +381,7 @@ it.each(["before", "during"])(
           .set({ paymentSlipPrinterId: null })
           .where(eq(devices.id, venue.deviceId)),
       );
-    const billId = await tabWith(venue, "Botella tinto");
+    const billId = await tabWith(venue, "Red wine bottle");
     const before = (await venue.db.select().from(printJobs)).length;
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
@@ -413,7 +413,7 @@ it.each(["before", "during"])(
 );
 
 it("keeps the order language chosen before the reader answers", async () => {
-  const billId = await tabWith(venue, "Botella tinto");
+  const billId = await tabWith(venue, "Red wine bottle");
   const before = (await venue.db.select().from(printJobs)).length;
   const calls = venue.card.collectCalls.length;
   const release = venue.card.holdNextCollect();
@@ -440,7 +440,7 @@ it("keeps the order language chosen before the reader answers", async () => {
 });
 
 it.each(["cash", "manual"])("rejects a slip field on %s payments", async (method) => {
-  const id = await tabWith(venue, "Botella tinto");
+  const id = await tabWith(venue, "Red wine bottle");
   const answer = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     submissionId: randomUUID(),
     kind: "contribution",
@@ -460,7 +460,7 @@ it.each(["cash", "manual"])("rejects a slip field on %s payments", async (method
 
 it("does not print an unrequested, declined or unanswered attempt", async () => {
   for (const outcome of ["off", "decline", "timeout"] as const) {
-    const id = await tabWith(venue, "Botella tinto");
+    const id = await tabWith(venue, "Red wine bottle");
     if (outcome === "decline") venue.card.failNextCollect();
     if (outcome === "timeout") venue.card.stallNextCollect();
     const before = (await venue.db.select().from(printJobs)).length;
@@ -478,7 +478,7 @@ it("does not print an unrequested, declined or unanswered attempt", async () => 
 });
 
 it("recovers received money after an unclear answer without recovering the slip request", async () => {
-  const id = await tabWith(venue, "Botella tinto");
+  const id = await tabWith(venue, "Red wine bottle");
   const before = (await venue.db.select().from(printJobs)).length;
   venue.card.crashNextCollect("captured");
   const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
@@ -503,7 +503,7 @@ it("recovers received money after an unclear answer without recovering the slip 
 
 it("keeps a received payment when enqueueing its requested slip fails", async () => {
   const log = vi.fn();
-  const id = await tabWith(venue, "Botella tinto");
+  const id = await tabWith(venue, "Red wine bottle");
   const before = (await venue.db.select().from(printJobs)).length;
   venue.db.run(
     sql`create temp trigger refuse_slip before insert on print_jobs begin select raise(abort, 'printer refused'); end`,
@@ -561,7 +561,7 @@ it("uses the explicitly selected reader's own-slip setting", async () => {
       .set({ printsOwnSlipAutomatically: false })
       .where(eq(cardReaders.id, readers[1]!.id));
   });
-  const id = await tabWith(venue, "Botella tinto");
+  const id = await tabWith(venue, "Red wine bottle");
   const before = (await venue.db.select().from(printJobs)).length;
   const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     submissionId: randomUUID(),
@@ -572,7 +572,7 @@ it("uses the explicitly selected reader's own-slip setting", async () => {
   expect(paid.status).toBe(200);
   expect(venue.card.collectCalls.at(-1)).toHaveProperty("readerId", readers[1]!.id);
   expect(await venue.db.select().from(printJobs)).toHaveLength(before + 1);
-  const other = await tabWith(venue, "Botella tinto");
+  const other = await tabWith(venue, "Red wine bottle");
   expect(
     (
       await send(venue.app, venue.cookie, "POST", `/api/working-orders/${other}/payments`, {
@@ -587,7 +587,7 @@ it("uses the explicitly selected reader's own-slip setting", async () => {
 });
 
 it("rolls back the whole-card attempt when preparing its optional slip fails", async () => {
-  const id = await tabWith(venue, "Botella tinto");
+  const id = await tabWith(venue, "Red wine bottle");
   const calls = venue.card.collectCalls.length;
   venue.db.run(sql`create temp table printers (broken text)`);
   try {
@@ -627,7 +627,7 @@ it("ignores a forged slip request without the print capability", async () => {
         })
         .where(eq(deviceProfiles.id, profile.id));
   });
-  const id = await tabWith(venue, "Botella tinto");
+  const id = await tabWith(venue, "Red wine bottle");
   const before = (await venue.db.select().from(printJobs)).length;
   const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
     submissionId: randomUUID(),

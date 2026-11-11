@@ -1966,7 +1966,7 @@ describe("a paid bill", () => {
 
 describe("design §8 test 23: the invoice waits for the refund", () => {
   it("refuses the reduction that would issue it while the refund is pending, then issues one invoice once it completes", async () => {
-    const billId = await bill("Botella tinto", "Pulpo", "Croquetas");
+    const billId = await bill("Red wine bottle", "Pulpo", "Croquetas");
     const card = await pay(billId, "card", "30.00");
     await pay(billId, "cash", "20.00");
     venue.card.scriptNextRefund({ made: "completed", answer: LOST });

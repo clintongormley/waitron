@@ -98,7 +98,7 @@ function api(attendance?: AttendanceRecorder) {
   return app;
 }
 async function prepare(action: Action) {
-  const party = await seatedWith(v, "Ensalada");
+  const party = await seatedWith(v, "House salad");
   const [line] = await suite.db
     .select()
     .from(workingOrderLines)
@@ -199,7 +199,7 @@ async function state() {
 }
 describe("kitchen service attendance", () => {
   it("group preparation captures each affected bill once at one trusted instant", async () => {
-    const party = await seatedWith(v, "Ensalada", "Tarta");
+    const party = await seatedWith(v, "House salad", "Tarta");
     const [line] = await suite.db
       .select()
       .from(workingOrderLines)

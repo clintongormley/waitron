@@ -130,7 +130,7 @@ describe("each status, from the product's own write paths", () => {
   });
 
   it("reads a debt as Left without paying, then as Paid once collected, keeping when it left", async () => {
-    const party = await departed(venue, "Botella tinto");
+    const party = await departed(venue, "Red wine bottle");
     const before = await rowOf(party.tabId);
     expect(before).toMatchObject({
       status: "left_without_paying",
@@ -235,7 +235,7 @@ describe("each status, from the product's own write paths", () => {
 
 describe("credit notes and what is still owed", () => {
   it("marks a part credit, and owes what the till's collect then charges, to the cent", async () => {
-    const id = await placedIssuedBill(venue, "Botella tinto");
+    const id = await placedIssuedBill(venue, "Red wine bottle");
     await credit(venue, id, "2.00", "-2.42");
     const row = await rowOf(id);
     expect(row).toMatchObject({
@@ -261,7 +261,7 @@ describe("credit notes and what is still owed", () => {
   });
 
   it("a debt credited to nothing stays Left without paying, Credited in full, owing nothing", async () => {
-    const party = await departed(venue, "Botella tinto");
+    const party = await departed(venue, "Red wine bottle");
     await credit(venue, party.tabId, "24.79", "-30.00");
     expect(await rowOf(party.tabId)).toMatchObject({
       status: "left_without_paying",
@@ -274,7 +274,7 @@ describe("credit notes and what is still owed", () => {
 describe("filters and search", () => {
   it("limits a till lookup to bills that still owe money", async () => {
     const waiting = await placedIssuedBill(venue, "Caña");
-    const fullyCredited = await departed(venue, "Botella tinto");
+    const fullyCredited = await departed(venue, "Red wine bottle");
     await credit(venue, fullyCredited.tabId, "24.79", "-30.00");
     const sale = await billlessSale(venue);
     const rows = await withTransaction(venue.db, (tx) =>

@@ -261,7 +261,7 @@ function nextInvoiceNumbers(): { id: string; next: number }[] {
 
 describe("recording that a table left without paying", () => {
   it("issues a saved full invoice when the party leaves without paying", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     await inTx(venue, (tx) =>
       tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
     );
@@ -301,7 +301,7 @@ describe("recording that a table left without paying", () => {
   });
 
   it("invoices the open bill in full, leaves it unpaid, records who and why, and frees the table", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: party.revision,
@@ -346,7 +346,7 @@ describe("recording that a table left without paying", () => {
   });
 
   it("leaves the table needing clearing when its department has Needs clearing on", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     await inTx(venue, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     try {
       const answer = await depart(party.partyId, {
@@ -370,7 +370,7 @@ describe("recording that a table left without paying", () => {
                (select count(*) from print_jobs) as prints
       `)[0];
     const atStart = counts();
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const before = counts();
     // The control: sending the dish is seen by all three counts.
     expect(before!.items).toBeGreaterThan(atStart!.items);
@@ -391,7 +391,7 @@ describe("recording that a table left without paying", () => {
   });
 
   it("refuses a request from a session whose device has been revoked, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const revoked = await revokedDeviceSessionCookie(venue.db, supervisorId, SUPERVISOR_PIN);
 
     const answer = await depart(
@@ -405,7 +405,7 @@ describe("recording that a table left without paying", () => {
   });
 
   it("prints no receipt, and the bill's receipt can still be printed again", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
     const [issued] = await salesOf(party.tabId);
     const receiptsOf = () =>
@@ -424,7 +424,7 @@ describe("recording that a table left without paying", () => {
   });
 
   it("keeps the closed party's bills readable", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     await depart(party.partyId, { expectedPartyRevision: party.revision, reason: REASON });
 
     const bills = await send(venue.app, venue.cookie, "GET", `/api/parties/${party.partyId}/bills`);
@@ -444,7 +444,7 @@ describe("recording that a table left without paying", () => {
 
 describe("who may record it", () => {
   it("refuses an operator without the permission, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(
       party.partyId,
@@ -463,7 +463,7 @@ describe("who may record it", () => {
   });
 
   it("records it for an operator with a supervisor's PIN, naming the supervisor as authorising", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(
       party.partyId,
@@ -497,7 +497,7 @@ describe("who may record it", () => {
       name: "Comandera",
       profileId: profile!.id,
     });
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const onHandheld = await inTx(venue, (tx) =>
       loginWithPin(tx, {
         deviceId: handheld.deviceId,
@@ -541,7 +541,7 @@ describe("who may record it", () => {
       name: "Comandera origin",
       profileId: profile!.id,
     });
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const onHandheld = await inTx(venue, (tx) =>
       loginWithPin(tx, {
         deviceId: handheld.deviceId,
@@ -571,7 +571,7 @@ describe("who may record it", () => {
   });
 
   it("refuses a wrong supervisor PIN, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(
       party.partyId,
@@ -607,7 +607,7 @@ describe("a supervisor's PIN on a departure", () => {
   });
 
   it("is checked while another writer commits, outside the write lock", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
 
     const answer = await depart(
@@ -635,7 +635,7 @@ describe("the reason", () => {
     ["too long", "x".repeat(501)],
     ["not text", 42],
   ])("refuses a %s reason, and writes nothing", async (_, reason) => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: party.revision,
@@ -650,7 +650,7 @@ describe("the reason", () => {
   });
 
   it("refuses an override that is not an object, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(
       party.partyId,
@@ -666,7 +666,7 @@ describe("the reason", () => {
   });
 
   it("takes a reason of exactly 500 characters", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: party.revision,
@@ -876,7 +876,7 @@ describe("a presented bill whose card is in flight", () => {
 
 describe("a bill that owes nothing", () => {
   it("settles a presented bill whose credit note brought it to nothing, so no sale is left owing nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, ticketThenPayZone, party, true);
     await credit(placedId, "14.88", "-18.00");
     const [invoiced] = await salesOf(placedId);
@@ -907,7 +907,7 @@ describe("a bill that owes nothing", () => {
   it("invoices and settles an open bill whose every line was given away, beside a bill it records", async () => {
     const ana = await seatedWith(venue, "Caña");
     await giveAway(venue, ana.tabId, 1);
-    const luis = await seatedWith(venue, "Botella tinto");
+    const luis = await seatedWith(venue, "Red wine bottle");
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
       expectedEdits: await inTx(venue, (tx) =>
@@ -1038,7 +1038,7 @@ describe("what the departure dialog lists for each bill (GET /api/parties/:id/bi
 
 describe("two departures at once, and a failure part-way", () => {
   it("records a party once when two departures of it are sent together", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     const body = { expectedPartyRevision: revisionOf(party.partyId), reason: REASON };
 
@@ -1056,7 +1056,7 @@ describe("two departures at once, and a failure part-way", () => {
   });
 
   it("keeps nothing when filing the second bill's invoice fails after the first was filed", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const placedId = await placedCounterBillMovedTo(venue, prepayZone, party);
     let filed = 0;
     const failing = new Proxy(venue.backend, {
@@ -1172,7 +1172,7 @@ describe("a departure sent together with a payment or Finish table on the same p
   it.each(orders)(
     "lands a part payment or the departure, never both, with %s",
     async (_, first) => {
-      const party = await seatedWith(venue, "Botella tinto");
+      const party = await seatedWith(venue, "Red wine bottle");
       const body = { expectedPartyRevision: party.revision, reason: REASON };
 
       const [departed, paid] = await together(
@@ -1206,7 +1206,7 @@ describe("a departure sent together with a payment or Finish table on the same p
   it.each(orders)(
     "lands a payment in full or the departure, never both, and invoices the bill once, with %s",
     async (_, first) => {
-      const party = await seatedWith(venue, "Botella tinto");
+      const party = await seatedWith(venue, "Red wine bottle");
       const body = { expectedPartyRevision: party.revision, reason: REASON };
 
       const [departed, paid] = await together(
@@ -1245,7 +1245,7 @@ describe("a departure sent together with a payment or Finish table on the same p
   it.each(orders)(
     "records an owing party once and closes it once when Finish table is sent too, with %s",
     async (_, first) => {
-      const party = await seatedWith(venue, "Botella tinto");
+      const party = await seatedWith(venue, "Red wine bottle");
 
       const [departed, finished] = await together(
         first,
@@ -1336,7 +1336,7 @@ describe("the party's other bills", () => {
 
 describe("what is refused", () => {
   it("refuses a bill holding dishes never sent to the kitchen, and writes nothing", async () => {
-    const billId = await tabWith(venue, "Botella tinto");
+    const billId = await tabWith(venue, "Red wine bottle");
     const [{ partyId }] = venue.db.all<{ partyId: string }>(
       sql`select party_id as partyId from working_orders where id = ${billId}`,
     ) as [{ partyId: string }];
@@ -1365,7 +1365,7 @@ describe("what is refused", () => {
         expectedPartyRevision: party.revision,
         groups: [
           {
-            lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+            lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }],
             release: "fire",
           },
           { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
@@ -1408,7 +1408,7 @@ describe("what is refused", () => {
   });
 
   it("refuses a bill holding a dish recalled from the kitchen, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto", "Caña");
+    const party = await seatedWith(venue, "Red wine bottle", "Caña");
     const recalled = await send(
       venue.app,
       venue.cookie,
@@ -1443,7 +1443,7 @@ describe("what is refused", () => {
         expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, party.tabId)),
         groups: [
           {
-            lines: [{ menuItemId: venue.offerFor("Botella tinto"), quantity: "1" }],
+            lines: [{ menuItemId: venue.offerFor("Red wine bottle"), quantity: "1" }],
             release: "fire",
           },
           { lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }], release: "hold" },
@@ -1475,7 +1475,7 @@ describe("what is refused", () => {
   });
 
   it("refuses a bill holding a payment, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const paid = await send(
       venue.app,
       venue.cookie,
@@ -1509,7 +1509,7 @@ describe("what is refused", () => {
   });
 
   it("refuses a bill being paid in full by card at the reader, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     venue.db.run(
       sql`update working_orders set payment_attempt_at = ${new Date().toISOString()} where id = ${party.tabId}`,
     );
@@ -1555,7 +1555,7 @@ describe("what is refused", () => {
   });
 
   it("refuses a stale party revision as Finish does, and writes nothing", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
 
     const answer = await depart(party.partyId, {
       expectedPartyRevision: party.revision - 1,
@@ -1570,7 +1570,7 @@ describe("what is refused", () => {
   });
 
   it("answers a retry after it was recorded as Finish does a closed party, and invoices nothing twice", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const body = { expectedPartyRevision: party.revision, reason: REASON };
     expect((await depart(party.partyId, body)).status).toBe(200);
 
@@ -1607,12 +1607,12 @@ describe("A773 requested lifecycle", () => {
     }
   }
 
-  /** A seated party whose bill holds one line of two "Botella tinto" behind one kitchen item. */
+  /** A seated party whose bill holds one line of two "Red wine bottle" behind one kitchen item. */
   async function seatedWithTwoBottles() {
     const party = await seatedWith(venue);
     await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, party.tabId, [
-        { menuItemId: venue.offerFor("Botella tinto"), quantity: "2" },
+        { menuItemId: venue.offerFor("Red wine bottle"), quantity: "2" },
       ]),
     );
     return party;
@@ -1649,7 +1649,7 @@ describe("A773 requested lifecycle", () => {
 
   it("refuses a bill holding a dish waiting for the pass, and writes nothing", async () => {
     await whileStationsWait(async () => {
-      const party = await seatedWith(venue, "Botella tinto");
+      const party = await seatedWith(venue, "Red wine bottle");
       expect(await kitchenTimes(party.tabId)).toEqual([
         { requestedAt: expect.any(String), firedAt: null },
       ]);
@@ -1672,7 +1672,7 @@ describe("A773 requested lifecycle", () => {
 
   it("records a bill whose waiting dish was served whole, and invoices it (D41)", async () => {
     await whileStationsWait(async () => {
-      const party = await seatedWith(venue, "Botella tinto");
+      const party = await seatedWith(venue, "Red wine bottle");
       await serve(party.partyId, (await onlyLine(party.tabId)).id, "1");
       expect(await kitchenTimes(party.tabId)).toEqual([
         { requestedAt: expect.any(String), firedAt: null },
@@ -1712,7 +1712,7 @@ describe("A773 requested lifecycle", () => {
   });
 
   it("with no station waiting, still refuses a dish served whole and then recalled to held", async () => {
-    const party = await seatedWith(venue, "Botella tinto");
+    const party = await seatedWith(venue, "Red wine bottle");
     const line = await onlyLine(party.tabId);
     await serve(party.partyId, line.id, "1");
     const recalled = await send(
@@ -1743,7 +1743,7 @@ describe("A773 requested lifecycle", () => {
 
 describe("a merged party", () => {
   it("invoices and records an owing bill brought by each party, and frees every table", async () => {
-    const ana = await seatedWith(venue, "Botella tinto");
+    const ana = await seatedWith(venue, "Red wine bottle");
     const luis = await seatedWith(venue, "Pulpo");
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
@@ -1771,7 +1771,7 @@ describe("a merged party", () => {
   });
 
   it("A803 departure order: invoices the bill opened first first, when its bill number is the higher one", async () => {
-    const ana = await seatedWith(venue, "Botella tinto");
+    const ana = await seatedWith(venue, "Red wine bottle");
     const luis = await seatedWith(venue, "Pulpo");
     const joined = await send(
       venue.app,
@@ -1847,7 +1847,7 @@ describe("the guests its invoice's receipts print", () => {
   }
 
   it("stores the party's count at the departure, and a later collect's guests is ignored", async () => {
-    const party = await seatedFor(4, "Botella tinto");
+    const party = await seatedFor(4, "Red wine bottle");
     const answer = await depart(party.partyId, {
       expectedPartyRevision: revisionOf(party.partyId),
       reason: REASON,
@@ -1882,7 +1882,7 @@ describe("the guests its invoice's receipts print", () => {
   });
 
   it("refuses a collect's guests 0 on the departed invoice, and writes nothing", async () => {
-    const party = await seatedFor(4, "Botella tinto");
+    const party = await seatedFor(4, "Red wine bottle");
     expect(
       (
         await depart(party.partyId, {
@@ -1910,7 +1910,7 @@ describe("the guests its invoice's receipts print", () => {
   });
 
   it("refuses a part payment on the departed bill, so its invoice is never filed again and the row stands", async () => {
-    const party = await seatedFor(4, "Botella tinto");
+    const party = await seatedFor(4, "Red wine bottle");
     expect(
       (
         await depart(party.partyId, {
@@ -1949,7 +1949,7 @@ describe("the guests its invoice's receipts print", () => {
   });
 
   it("stores the party's count on an invoice issued unpaid without a departure", async () => {
-    const party = await seatedFor(3, "Botella tinto");
+    const party = await seatedFor(3, "Red wine bottle");
     await issueOrderInvoice(
       { ...venue, admission: testTradingAdmission() },
       venue.cfg,
