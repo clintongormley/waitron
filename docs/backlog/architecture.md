@@ -841,7 +841,8 @@ product failures.
   Caña, Paella and its other labels remain. PartyVenue uses Red wine bottle and Water as
   staff keys, retaining customer Rioja crianza / Agua mineral, kitchen TINTO / AGUA and the
   independent recorded Vino.
-  The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels.
+  The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
+  their product names (Agua mineral, Cerveza) remain.
   Local party-suite table, party,
   course and printer samples use English. Shared dish samples remain in their helpers and
   consumers, including `party-bill-actions.test.ts`, `party-move-bill.test.ts`,
