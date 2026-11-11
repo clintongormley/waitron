@@ -92,7 +92,12 @@ const burger: TillProduct = {
   offeredModifiers: [extras, cooked],
 };
 
-afterEach(cleanupWidgets);
+const startLocale = currentLocale();
+
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(startLocale);
+});
 
 describe.each(["light", "dark"] as const)("till-modifier-picker a11y (%s theme)", (theme) => {
   it("A738 line inspection and invalid quantity remain accessible", async () => {

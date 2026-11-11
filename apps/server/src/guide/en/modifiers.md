@@ -127,7 +127,7 @@ arranged them. A dish sold by weight, or by a unit that allows decimal places, a
 and then shows only its options lists: extras cannot be added to it. A dish in a unit switched to
 **Measures a quantity (ml, g…) — no extras** shows only its options lists too. An extras list shows each
 entry's price per portion, with a tick box each, or a stepper where you allowed more than one.
-Beside each entry are the allergens its product declares. A
+Under each entry's name are the allergens its product declares. A
 list you made required keeps **Add** shut until something is picked. An options list shows its
 available options as a set of radio buttons, exactly one to choose, with your default already
 selected. While the default is switched off, the first available option is selected instead. If no

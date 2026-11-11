@@ -16,9 +16,9 @@ function dietBadge(key: string, label: string): TemplateResult {
 }
 
 /**
- * A SELECTED EXTRA's OWN nutrition. This is NOT a fold: the dish shows its figures and each extra shows
- * its own. Unlike {@link dietBadges}, an extra's suitability is a DIRECT positive claim, so there is no
- * pending/"not reviewed" state.
+ * An EXTRA's OWN nutrition, offered or selected. This is NOT a fold: the dish shows its figures and
+ * each extra shows its own. Unlike {@link dietBadges}, an extra's suitability is a DIRECT positive
+ * claim, so there is no pending/"not reviewed" state.
  */
 export function extraNutrition(
   extra: {
