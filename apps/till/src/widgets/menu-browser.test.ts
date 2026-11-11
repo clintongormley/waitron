@@ -1617,7 +1617,7 @@ describe("till-menu-browser", () => {
      * compared with the theme's own tokens rather than with another tile. */
     function token(
       el: TillMenuBrowser,
-      property: "color" | "background-color" | "width",
+      property: "color" | "background-color" | "border-color" | "width",
       value: string,
     ) {
       const probe = document.createElement("span");
