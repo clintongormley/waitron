@@ -1053,6 +1053,8 @@ product failures.
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only)
   BillVenue's receipt printer, card readers and cash till use English display names.
+  Local device-equipment and office-printer route fixtures use English printer and reader names;
+  their shared BillVenue device names and venue/operation samples remain.
 
 ## A1308. Rationalise the tables, background jobs, environment variables and files
 

@@ -158,10 +158,10 @@ beforeEach(async () => {
       .id;
   r1 = readerOf("reader-1");
   r2 = readerOf("reader-2");
-  r3 = await seedReader("Lector 3");
-  pp = await seedPrinter("Portátil", { portable: true });
-  fp = await seedPrinter("Barra fija");
-  dr = await seedPrinter("Cajón", { hasCashDrawer: true });
+  r3 = await seedReader("Card reader 3");
+  pp = await seedPrinter("Portable printer", { portable: true });
+  fp = await seedPrinter("Fixed bar printer");
+  dr = await seedPrinter("Drawer printer", { hasCashDrawer: true });
   await printerLists({});
   await readerList([r1, r2, r3]);
   deviceApp = new Hono();
@@ -337,7 +337,7 @@ describe("choosing a portable printer, by scan or by a confirmed list choice", (
     expect(roleOf((res.json as { roles: RoleEquipment[] }).roles, "receipt")).toMatchObject({
       selection: "item",
       chosenId: fp,
-      resolved: { id: fp, name: "Barra fija", available: true },
+      resolved: { id: fp, name: "Fixed bar printer", available: true },
     });
     expect((await columns(a)).receipt).toBe(fp);
   });
@@ -618,7 +618,7 @@ describe("what a device may newly choose", () => {
   ] as const)("a %s is device.binding_invalid naming the role's field", async (shape) => {
     const reader = shape.endsWith("reader");
     let id: string;
-    if (shape === "unlisted printer") id = await seedPrinter("Sin lista");
+    if (shape === "unlisted printer") id = await seedPrinter("Unlisted printer");
     else if (shape === "switched-off printer") {
       await suite.db.update(printers).set({ active: false }).where(eq(printers.id, fp));
       id = fp;
@@ -633,7 +633,7 @@ describe("what a device may newly choose", () => {
         .set({ active: false, disabledAt: at, unpairedAt: at })
         .where(eq(cardReaders.id, r3));
       id = r3;
-    } else id = await seedReader("Sin lista");
+    } else id = await seedReader("Unlisted reader");
     const before = { a: await columns(a), readers: await readerChoices() };
 
     const res = await choose(venue.cookie, reader ? "card_terminal" : "receipt", { id }, "scan");
@@ -859,8 +859,8 @@ describe("what a device may newly choose", () => {
 
 describe("GET /api/till's readers", () => {
   it("the boot payload lists only the device's resolved reader", async () => {
-    const counter = await seedReader("Mostrador", "stripe");
-    await seedReader("Otro", "stripe");
+    const counter = await seedReader("Counter reader", "stripe");
+    await seedReader("Other reader", "stripe");
     await readerList([r1, r2, r3, counter]);
     expect((await choose(venue.cookie, "card_terminal", { id: counter }, "list")).status).toBe(200);
 
@@ -870,7 +870,7 @@ describe("GET /api/till's readers", () => {
     expect(res.json).toMatchObject({
       cardProvider: "stripe_terminal",
       defaultReaderId: counter,
-      activeReaders: [{ id: counter, name: "Mostrador", provider: "stripe_terminal" }],
+      activeReaders: [{ id: counter, name: "Counter reader", provider: "stripe_terminal" }],
     });
   });
 });
@@ -990,7 +990,7 @@ describe("the invoice role, which names a receipt printer or an A4 printer", () 
   let office: string;
 
   beforeEach(async () => {
-    office = await seedPagePrinter("Oficina");
+    office = await seedPagePrinter("Office");
     await printerLists({ invoicePrinterIds: [office, pp], invoicePrinterDefaultId: office });
   });
 
@@ -1008,12 +1008,12 @@ describe("the invoice role, which names a receipt printer or an A4 printer", () 
     expect(invoice).toMatchObject({
       selection: "default",
       chosenId: null,
-      resolved: { id: office, name: "Oficina", available: true },
+      resolved: { id: office, name: "Office", available: true },
     });
     expect(invoice.choices).toEqual([
       {
         id: office,
-        name: "Oficina",
+        name: "Office",
         kind: "a4",
         portable: false,
         available: true,
@@ -1022,7 +1022,7 @@ describe("the invoice role, which names a receipt printer or an A4 printer", () 
       },
       {
         id: pp,
-        name: "Portátil",
+        name: "Portable printer",
         kind: "receipt",
         portable: true,
         available: true,
@@ -1332,7 +1332,7 @@ describe("a deleted reader", () => {
     expect((await choose(venue.cookie, "card_terminal", { id: r3 }, "list")).status).toBe(200);
     expect(await readerChoices()).toEqual({ [a]: r3, [b]: r2 });
 
-    const unlisted = await seedReader("Sin lista");
+    const unlisted = await seedReader("Unlisted reader");
     const res = await choose(venue.cookie, "card_terminal", { id: unlisted }, "scan", true);
     expect(res.status).toBe(400);
     expect(res.json).toEqual({
