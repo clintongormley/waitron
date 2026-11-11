@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  deviceProfiles,
+  devices,
   invoiceDeliveries,
   pagePrinters,
   printAgents,
@@ -19,6 +21,8 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { recordSyntheticInvoice } from "./testing/synthetic-invoice.js";
+import { waitingDish } from "./testing/waiting-dish.js";
+import { VENUE_SERVICE } from "./modules.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -97,13 +101,13 @@ async function withServer(venue: Venue, use: (base: string) => Promise<void>): P
   }
 }
 
-async function invoiceAlerts(base: string, venue: Venue): Promise<Alert[]> {
+async function alertsIn(base: string, venue: Venue, area: string): Promise<Alert[]> {
   const response = await fetch(`${base}/management-api/alerts`, {
     headers: { cookie: venue.managerCookie },
   });
   expect(response.status).toBe(200);
   const body = (await response.json()) as { alerts: Alert[] };
-  return body.alerts.filter((alert) => alert.area === "invoice_delivery");
+  return body.alerts.filter((alert) => alert.area === area);
 }
 
 describe("the running server's undelivered invoice alert", () => {
@@ -125,7 +129,7 @@ describe("the running server's undelivered invoice alert", () => {
     });
 
     await withServer(venue, async (base) => {
-      expect(await invoiceAlerts(base, venue)).toEqual([
+      expect(await alertsIn(base, venue, "invoice_delivery")).toEqual([
         {
           key: `invoice_delivery.undelivered:${saleId}`,
           code: "invoice_delivery.failed",
@@ -211,7 +215,7 @@ describe("the running server's undelivered invoice alert", () => {
       });
       expect(queued.status).toBe(204);
 
-      expect(await invoiceAlerts(base, venue)).toEqual([
+      expect(await alertsIn(base, venue, "invoice_delivery")).toEqual([
         {
           key: `invoice_delivery.undelivered:${saleId}`,
           code: "invoice_delivery.queued_behind_hold",
@@ -221,6 +225,53 @@ describe("the running server's undelivered invoice alert", () => {
           screen: "orders",
           kind: "ongoing",
           area: "invoice_delivery",
+        },
+      ]);
+    });
+  });
+});
+
+describe("the running server's dark pass screen alert", () => {
+  it("reports a pass screen unseen for ten minutes with a dish waiting", async () => {
+    const venue = await setupVenue(suite.db);
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+    beforeServerStarts();
+    await waitingDish(suite.db, venue, venue.defaultStationId, tenMinutesAgo, new Date());
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Pass profile", formFactor: "kds", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    const [pass] = await suite.db
+      .insert(devices)
+      .values({
+        locationId: venue.cfg.locationId,
+        deviceProfileId: profile!.id,
+        label: "Pass",
+        tokenHash: "hash",
+        lastSeenAt: tenMinutesAgo,
+      })
+      .returning({ id: devices.id });
+    const screen = { kind: "pass", stationIds: null, zoneIds: null } as const;
+    await withTransaction(suite.db, async (tx) => {
+      await VENUE_SERVICE.addProfileKitchenScreen(tx, profile!.id, screen);
+      await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
+        deviceId: pass!.id,
+        profileId: profile!.id,
+        screens: [screen],
+      });
+    });
+
+    await withServer(venue, async (base) => {
+      expect(await alertsIn(base, venue, "kitchen")).toEqual([
+        {
+          key: `kitchen_screen.pass_dark:${pass!.id}`,
+          code: "kitchen_screen.pass_dark",
+          params: { device: "Pass" },
+          severity: "warning",
+          since: tenMinutesAgo,
+          screen: "devices",
+          kind: "ongoing",
+          area: "kitchen",
         },
       ]);
     });

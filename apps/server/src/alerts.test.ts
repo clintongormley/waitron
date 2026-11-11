@@ -435,6 +435,42 @@ describe("readOpenAlerts", () => {
     ]);
   });
 
+  it("drops the writes of a source that writes and then fails, and keeps a later source's", async () => {
+    const v = await seedVenueWithTill();
+    const writeIncident = (tx: Transaction, code: string) =>
+      recordIncident(tx, {
+        origin: deviceOrigin(v.deviceId),
+        error: new AppError(code as never, {} as never),
+        severity: "warning",
+        detectedAt: NOW,
+      });
+    const writesThenFails: AlertSource = {
+      area: "backup",
+      permission: "system.manage",
+      read: async ({ tx }) => {
+        await writeIncident(tx, "test.failed_source");
+        throw new AppError("server.internal", {});
+      },
+    };
+    const writesThenAnswers: AlertSource = {
+      area: "printing",
+      permission: "system.manage",
+      read: async ({ tx }) => {
+        await writeIncident(tx, "test.healthy_source");
+        return [];
+      },
+    };
+    const r = createAlertRegistry({ claims: [], sources: [writesThenFails, writesThenAnswers] });
+    const alerts = await asApp((tx) =>
+      readOpenAlerts(tx, { registry: r, now: NOW, log: noopLog }, new Set(["system.manage"])),
+    );
+    expect(alerts.map((a) => a.key)).toEqual(["alert.source_unavailable:backup"]);
+    const committed = await asApp(async (tx) =>
+      (await listOpenIncidents(tx)).map((i) => i.code).sort(),
+    );
+    expect(committed).toEqual(["test.healthy_source"]);
+  });
+
   it("merges the alerts of two sources sharing an area", async () => {
     const a: AlertSource = {
       area: "fiscal",

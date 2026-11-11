@@ -1,5 +1,3 @@
-import { testTradingAdmission } from "./testing/trading-admission.js";
-import { placeOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -28,12 +26,9 @@ import {
   waitingDishesQuery,
 } from "./station-outputs-down.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { waitingDish } from "./testing/waiting-dish.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { parkOrder } from "./working-order.js";
-import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { deploymentEnvironment } from "./config.js";
 import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";
-import { deviceRequestCfg } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 
@@ -123,49 +118,12 @@ async function job(
   });
 }
 
-async function waitingItem(
+function waitingItem(
   venue: Awaited<ReturnType<typeof setup>>["venue"],
   stationId: string,
   firedAt: string,
 ) {
-  const orderId = randomUUID();
-  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
-  await parkOrder({ db: suite.db }, venue.cfg, {
-    id: orderId,
-    zoneId: offers.zoneId,
-    lines: offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
-    label: "Mesa 7",
-  });
-  const clock = {
-    now: () => ({
-      instant: at,
-      offsetMinutes: 0,
-      confident: true,
-      confidence: "anchored" as const,
-      anchorAgeSeconds: 0,
-    }),
-    anchor: () => {
-      throw new Error("unused");
-    },
-    currentAnchor: () => null,
-  };
-  const backend = new VerifactuBackend({
-    clock,
-    db: suite.db,
-    environment: deploymentEnvironment(process.env),
-    deploymentEnvironment: deploymentEnvironment(process.env),
-    resolveClient: () => Promise.reject(new Error("unused")),
-  });
-  await placeOrder(
-    { admission: testTradingAdmission(), db: suite.db, backend, clock },
-    await deviceRequestCfg(suite.db, venue.cfg),
-    orderId,
-    randomUUID(),
-  );
-  await suite.db.execute(
-    sql`update ticket_items set station_id = ${stationId}, fired_at = ${firedAt} where working_order_id = ${orderId}`,
-  );
-  return orderId;
+  return waitingDish(suite.db, venue, stationId, firedAt, at);
 }
 
 describe("station output status", () => {
