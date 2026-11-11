@@ -1863,7 +1863,9 @@ Not in any track until the standalone primary is done.
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
   The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
   The controlled Servers-to-spare screen is built and checked on simulated boxes; real-box use
-  still waits for joining and the emergency flow. Slices 7–8 remain open.
+  still waits for real-box qualification. Slice 7’s emergency server flow is checked on simulated
+  boxes; Slice 8’s page remains open. Slice 12a will derive unknown intervals from the signed
+  declarations in `handover_activations.evidence`, without separate gap tables in Slice 7.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
   pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read

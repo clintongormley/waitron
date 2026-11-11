@@ -344,5 +344,29 @@ export function placedSpareFixture(boxes: {
     };
   }
 
-  return { setupBoxes, placeRealCopy, stoppedBeforePlacing };
+  async function placeEmergencyCopy(): Promise<PlacedSpare> {
+    const keys = await setupBoxes();
+    await writeMirrorLink(spareBefore.node, standby.nodeId, {
+      relayUrl: "http://127.0.0.1:1/",
+      boxHostname: "box.local",
+      boxCaPem: mintSelfSignedServerCert({
+        hostnames: ["box.local"],
+        ipAddresses: [],
+        now: new Date(),
+      }).caCertPem,
+      originNodeId: primary.nodeId,
+    });
+    const { spareVenue } = dirs();
+    mainBox.db.run(sql`vacuum into ${join(spareVenue, "venue.db")}`);
+    spareBefore.node.run(sql`vacuum into ${join(spareVenue, "node.db")}`);
+    const opened = await openVenueDatabase(spareVenue);
+    return {
+      venue: opened.venue,
+      node: opened.node,
+      close: () => opened.close(),
+      relinquishment: null,
+      ...keys,
+    };
+  }
+  return { setupBoxes, placeRealCopy, stoppedBeforePlacing, placeEmergencyCopy };
 }

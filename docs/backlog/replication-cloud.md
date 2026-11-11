@@ -32,6 +32,12 @@ reachable on real boxes after A947 3b; what it leaves open is under _Replication
 cloud_ in [the backlog](../backlog.md)) and Slice 9
 (S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row reads PASS since the
 owner's reading of 2026-11-03, see below).
+**2026-11-11 — Slice 7:** simulated clients can declare, prepare and activate the spare.
+The signed declaration in `handover_activations.evidence` records the last dated activity
+the copy holds; Slice 12a will derive the unknown-interval list from these rows. The watcher
+deferred both gap tables and the preview, and accepted no declaration withdrawal for this
+simulated-only slice. Slice 8’s page and real-box qualification remain open.
+
 Left for the slices that add the callers:
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
 - `currentBinding` (no taxpayer row) and `waitHandover` (unknown operation) treat a missing row as a

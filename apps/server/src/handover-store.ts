@@ -46,7 +46,7 @@ export interface HandoverRefusal {
   readonly params: Readonly<Record<string, string>>;
 }
 
-function beginTx(
+export function beginHandoverTx(
   tx: NodeTransaction,
   nodeId: string,
   binding: HandoverBinding,
@@ -71,7 +71,7 @@ export function beginHandover(
   binding: HandoverBinding,
   role: HandoverRole,
 ): Promise<"created" | "replayed"> {
-  return withNodeTransaction(deps.node, (tx) => beginTx(tx, deps.nodeId, binding, role));
+  return withNodeTransaction(deps.node, (tx) => beginHandoverTx(tx, deps.nodeId, binding, role));
 }
 
 /** `beginHandover` that also records, in the same transaction, the offer the operation began with. */
@@ -82,7 +82,7 @@ export function beginHandoverFromOffer(
   offer: SignedHandoverEnvelope<unknown>,
 ): Promise<"created" | "replayed"> {
   return withNodeTransaction(deps.node, async (tx) => {
-    const outcome = await beginTx(tx, deps.nodeId, binding, role);
+    const outcome = await beginHandoverTx(tx, deps.nodeId, binding, role);
     if (outcome === "created") {
       await appendHandoverEventTx(tx, {
         nodeId: deps.nodeId,

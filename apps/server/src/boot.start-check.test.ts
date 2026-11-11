@@ -43,7 +43,8 @@ import {
 } from "@waitron/membership";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { nodeHandoverEvents, readHandoverRestriction } from "@waitron/node-db";
+import { nodeHandoverEvents, readHandoverRestriction, writeMirrorLink } from "@waitron/node-db";
+import { mintBoxAuthority, startBoxServer } from "./testing/box-authority.js";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { boxHostnameFor } from "./box-name.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
@@ -539,6 +540,35 @@ describe("the start check on a real start", () => {
     expect(startChecks(booted.lines)).toEqual([{ result: "proceed", peers: [] }]);
     expect(observer).not.toHaveBeenCalled();
     observer.mockRestore();
+  }, 60_000);
+
+  it("a peer certificate failure leaves the real boot waiting and unable to sell", async () => {
+    const presented = await mintBoxAuthority();
+    const pinned = await mintBoxAuthority();
+    const tlsPeer = await startBoxServer(presented, () => ({ status: 200, body: "unused" }));
+    try {
+      const booted = await boot(suite, {
+        spareUrl: tlsPeer.url,
+        joined: true,
+        beforeStart: async (nodeId) =>
+          writeMirrorLink(suite.node, nodeId, {
+            relayUrl: "https://relay.example",
+            boxHostname: "localhost",
+            boxCaPem: pinned.caPem,
+            originNodeId: SPARE.nodeId,
+          }),
+      });
+      expect(booted.acceptingSales).toBe(false);
+      expect(startChecks(booted.lines)).toEqual([
+        {
+          result: "wait",
+          peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "not_established" }],
+        },
+      ]);
+      expect(tlsPeer.requests).toHaveLength(0);
+    } finally {
+      await tlsPeer.close();
+    }
   }, 60_000);
 
   it("control: with the spare's nodes row the box counts it; at this box's own address it is never asked, so it counts as silent", async () => {

@@ -124,6 +124,8 @@ export function boxExchange(
     trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
     signal: AbortSignal;
     body?: string;
+    /** TCP connection, before any TLS handshake or response. */
+    onConnected?: () => void;
   },
   maxBytes?: number,
 ): Promise<{ status: number; text: string }> {
@@ -164,6 +166,12 @@ export function boxExchange(
         res.on("error", reject);
       },
     );
+    const onConnected = options.onConnected;
+    if (onConnected !== undefined)
+      req.on("socket", (socket) => {
+        if (socket.connecting) socket.once("connect", onConnected);
+        else onConnected();
+      });
     options.signal.addEventListener("abort", () => {
       reject(new Error("no answer in time"));
       req.destroy();

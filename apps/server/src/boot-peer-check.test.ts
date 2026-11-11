@@ -1,4 +1,5 @@
 import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { signEnvelope, type HandoverState } from "@waitron/handover";
@@ -15,11 +16,14 @@ import {
 import {
   boxRefusal,
   askPeerStatus,
+  postToBox,
   checkPeersAtStart,
   persistingAccept,
   type CheckPeersDeps,
 } from "./boot-peer-check.js";
+import * as boxTransport from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
+import { freePorts } from "./testing/free-ports.js";
 import {
   mintBoxAuthority,
   startBoxServer,
@@ -1297,20 +1301,146 @@ describe("askPeerStatus", () => {
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
 
+  it.each<[string, Error, "unreachable" | "not_established"]>([
+    ["a refused connection", Object.assign(new Error(), { code: "ECONNREFUSED" }), "unreachable"],
+    ["no network route", Object.assign(new Error(), { code: "ENETUNREACH" }), "unreachable"],
+    ["no host route", Object.assign(new Error(), { code: "EHOSTUNREACH" }), "unreachable"],
+    [
+      "an opaque transport timeout",
+      Object.assign(new Error(), { code: "ETIMEDOUT" }),
+      "not_established",
+    ],
+    [
+      "a refused connection wrapped by fetch",
+      new TypeError("fetch failed", {
+        cause: Object.assign(new Error(), { code: "ECONNREFUSED" }),
+      }),
+      "unreachable",
+    ],
+    ["an unexplained transport failure", new TypeError("fetch failed"), "not_established"],
+  ])("distinguishes %s from a verified answer", async (_label, error, reason) => {
+    const onSilent = vi.fn();
+    const fetchFn = vi.fn(async () => {
+      throw error;
+    });
+    expect(await realAsk({ fetch: fetchFn, onSilent })(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, reason);
+  });
+
+  it("a signing fault cannot establish that the peer is silent, even with a connection error code", async () => {
+    const onSilent = vi.fn();
+    const fetchFn = vi.fn();
+    const real = realAsk({
+      sign: async () => {
+        throw Object.assign(new Error("signing failed"), { code: "ECONNREFUSED" });
+      },
+      fetch: fetchFn,
+      onSilent,
+    });
+    expect(await real(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, "unreachable"],
+    [true, "not_established"],
+  ] as const)(
+    "a native timeout (connected: %s) keeps its diagnostic and is %s",
+    async (connected, reason) => {
+      const exchange = vi
+        .spyOn(boxTransport, "boxExchange")
+        .mockImplementation(async (_url, options) => {
+          if (connected) options.onConnected?.();
+          throw Object.assign(new Error("synthetic exchange timeout"), { code: "ETIMEDOUT" });
+        });
+      try {
+        await expect(postToBox({ timeoutMs: 100 }, SPARE, PEER.url, "{}")).rejects.toThrow(
+          "synthetic exchange timeout",
+        );
+        const onSilent = vi.fn();
+        expect(await realAsk({ onSilent })(PEER)).toBeNull();
+        expect(onSilent).toHaveBeenCalledWith(SPARE, reason);
+      } finally {
+        exchange.mockRestore();
+      }
+    },
+  );
+
+  it.each(["", "https://this-box.local/"])(
+    "an empty or own address %j cannot establish that the peer is silent",
+    async (url) => {
+      const onSilent = vi.fn();
+      const { fetchFn } = answerWith((q) => sign(body(q.nonce)));
+      const signer = vi.fn<Parameters<typeof askPeerStatus>[0]["sign"]>(async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      );
+      const real = realAsk({
+        ownOrigin: "https://this-box.local",
+        sign: signer,
+        fetch: fetchFn,
+        onSilent,
+      });
+      expect(await real({ ...PEER, url })).toBeNull();
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+      expect(signer).not.toHaveBeenCalled();
+      expect(fetchFn).not.toHaveBeenCalled();
+    },
+  );
+
   it("a body that is not JSON is null", async () => {
     const fetchFn = vi.fn(async () => new Response("<html>", { status: 200 }));
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
 
-  it("a peer that does not answer within the time limit is null", async () => {
+  it("a timed-out fetch replacement cannot establish connection silence", async () => {
+    const onSilent = vi.fn();
     const fetchFn = vi.fn(
       (_url: string | URL | Request, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
         }),
     );
-    expect(await ask(fetchFn, 20)(PEER)).toBeNull();
+    expect(await realAsk({ fetch: fetchFn, timeoutMs: 20, onSilent })(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
   });
+
+  it("a refused real TCP connection still counts as silence", async () => {
+    const [port] = await freePorts(1);
+    const onSilent = vi.fn();
+    expect(await realAsk({ onSilent })({ ...PEER, url: `http://127.0.0.1:${port}` })).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "unreachable");
+  });
+
+  it.each([false, true])(
+    "a connected %s-TLS peer that withholds its answer is not established",
+    async (secure) => {
+      let received = 0;
+      const receive: import("node:http").RequestListener = (req) => {
+        received += 1;
+        req.resume();
+      };
+      const server = secure
+        ? createHttpsServer({ key: authorityX.keyPem, cert: authorityX.certPem }, receive)
+        : createHttpServer(receive);
+      await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+      try {
+        const { port } = server.address() as AddressInfo;
+        const onSilent = vi.fn();
+        expect(
+          await realAsk({ timeoutMs: 1000, authorityOf: () => authorityX.caPem, onSilent })({
+            ...PEER,
+            url: `${secure ? "https" : "http"}://localhost:${port}`,
+          }),
+        ).toBeNull();
+        expect(received).toBe(1);
+        expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((done) => server.close(() => done()));
+      }
+    },
+  );
 
   describe("over HTTPS to a box serving a leaf from its own authority", () => {
     it("with the peer's authority pinned, the signed answer verifies", async () => {
@@ -1328,9 +1458,11 @@ describe("askPeerStatus", () => {
 
     it("with the authority pinned, a box presenting another authority's leaf is refused before the query is sent", async () => {
       const server = await statusServer(authorityY, (q) => sign(body(q.nonce)));
-      const real = realAsk({ authorityOf: () => authorityX.caPem });
+      const onSilent = vi.fn();
+      const real = realAsk({ authorityOf: () => authorityX.caPem, onSilent });
       expect(await real({ ...PEER, url: server.url })).toBeNull();
       expect(server.requests).toHaveLength(0);
+      expect(onSilent).toHaveBeenCalledWith(SPARE, "not_established");
     });
 
     it("with no authority known, an unsigned answer is still null", async () => {

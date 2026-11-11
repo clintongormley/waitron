@@ -866,7 +866,7 @@ describe("the real start check's transport", () => {
     expect((await check(suite, b, undefined)).result).toBe("proceed");
   });
 
-  it("control: a pinned authority the box does not present refuses it, logged as unreachable", async () => {
+  it("control: a pinned authority the box does not present refuses it, logged as not established", async () => {
     const held: { chart?: SignedMembershipDocument } = {};
     const url = await httpsPeer(() => held.chart!);
     const b = await box(suite, { peerUrl: url });
@@ -876,7 +876,7 @@ describe("the real start check's transport", () => {
     expect((await check(suite, b, undefined, log)).result).toBe("wait");
     expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
       result: "wait",
-      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "unreachable" }],
+      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "not_established" }],
     });
     expect(servers[0]!.requests).toHaveLength(0);
   });

@@ -251,10 +251,16 @@ declare module "@waitron/shared" {
     "handover.settings_changed": Record<string, never>;
     /** A final-state indicator's signature is not the handing-over box's own. */
     "handover.indicator_untrusted": Record<string, never>;
-    /** The copy a spare received is not the file the old box's indicator describes. */
+    /** The copy has no matching confirmation for this handover. */
     "handover.copy_mismatch": Record<string, never>;
-    /** The copy a spare received fails the database's own integrity check. */
+    /** The copy fails the database's own integrity check. */
     "handover.copy_damaged": Record<string, never>;
+    /** A declaration got an answer, or activation got no restriction naming this successor. */
+    "handover.source_still_answering": Record<string, never>;
+    /** Neither a verified answer nor one of the allowed silence reasons was obtained. */
+    "handover.source_not_established": Record<string, never>;
+    /** Only this source's prepared controlled destination may be replaced. */
+    "handover.controlled_unresolved": Record<string, never>;
     /** `module`'s records in the copy a spare received fail that module's own check. */
     "handover.chain_broken": { module: string };
     /** The old box's retained selections and the spare's own would leave their file too little room. */
