@@ -305,7 +305,35 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
   "setup.not_ready": "shell.not_ready",
+  "mirror.bucket_stream_active": "shell.adopt.bucket_stream_active",
+  "mirror.standby_name_taken": "shell.adopt.standby_name_taken",
+  "mirror.spare_already_joined": "shell.adopt.spare_already_joined",
+  // On the join, the only module operation the primary refuses is adding a standby to Veri*Factu.
+  "module.operation_invalid": "shell.adopt.verifactu_unsupported",
 };
+
+/** A join's refusal in words; the clocks refusal shows both servers' times in the wizard's language. */
+function adoptErrorWords(code: string, params: Record<string, unknown> | undefined): Message {
+  const { primaryAt, standbyAt } = params ?? {};
+  if (
+    code === "mirror.clocks_apart" &&
+    typeof primaryAt === "string" &&
+    typeof standbyAt === "string"
+  )
+    return () =>
+      format("shell.adopt.clocks_apart", {
+        primaryAt: clockReading(primaryAt),
+        standbyAt: clockReading(standbyAt),
+      });
+  return say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+}
+
+function clockReading(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime())
+    ? iso
+    : at.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
+}
 
 /**
  * The repair page's steps before activation, the claim included; activation keeps the first-setup
@@ -2146,7 +2174,7 @@ export class SetupApp extends LitElement {
         ADOPT_FIELD_PATHS,
       );
       if (this.connectInvalidField === undefined) {
-        this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+        this.connectError = adoptErrorWords(code, error.params);
         this.connectErrorAboutLogin = code === "password.invalid";
       }
       this.connectRequest = body;

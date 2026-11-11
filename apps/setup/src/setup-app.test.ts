@@ -1941,6 +1941,174 @@ describe("setup-app", () => {
     },
   );
 
+  describe("a join the primary server refuses", () => {
+    const refusedJoin = async (
+      code: string,
+      locale: string,
+      params: Record<string, unknown> = {},
+    ) => {
+      const adopt = vi.fn().mockRejectedValue({ code, params, status: 409 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      setLocale(locale);
+      adoptRequest(el);
+      await flush(el);
+      const connect = await screenHost(el, "connect");
+      const control = (name: string) =>
+        connect.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+          `[data-test=${name}]`,
+        );
+      return { el, adopt, connect, control };
+    };
+    // The typed login is a refused submission, so Back first asks whether to discard it.
+    const backLeadsToRole = async (
+      el: SetupApp,
+      control: (name: string) => (HTMLElement & { disabled: boolean }) | null,
+    ) => {
+      control("back")!.click();
+      await el.updateComplete;
+      const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+        "wt-unsaved-changes",
+      )!;
+      await expect.poll(() => warning.open).toBe(true);
+      warning.dispatchEvent(
+        new CustomEvent("wt-unsaved-choice", {
+          detail: { decision: "discard" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=screen-role]"))
+        .not.toBeNull();
+    };
+
+    it.each([
+      [
+        "en-GB",
+        "The primary server copies the restaurant's data to its own storage bucket, and it can copy to only one place at a time. This version of Waitron cannot yet pass that copy on from this server to the bucket, so joining now would end the restaurant's offsite copy. Nothing was changed on either server. To join anyway, stop the bucket copy in the primary's dashboard under Backups — the restaurant then has no offsite copy — and press Connect again. To keep the bucket copy, press Back: nothing changes, and this server can join later.",
+      ],
+      [
+        "es-ES",
+        "El servidor principal copia los datos del restaurante en su propio bucket de almacenamiento, y solo puede copiar en un sitio a la vez. Esta versión de Waitron aún no puede pasar esa copia desde este servidor al bucket, así que unirlo ahora acabaría con la copia externa del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Para unirlo de todos modos, detén la copia al bucket en el panel del servidor principal, en Copias de seguridad —el restaurante se queda entonces sin copia externa— y vuelve a pulsar Conectar. Para conservar la copia al bucket, pulsa Volver: no cambia nada, y este servidor puede unirse más adelante.",
+      ],
+    ] as const)(
+      "shows the bucket refusal's words with both choices (%s)",
+      async (locale, sentence) => {
+        try {
+          const { el, connect, control } = await refusedJoin("mirror.bucket_stream_active", locale);
+          expect(await bottomOf(connect)).toBe(sentence);
+          expect(control("connect")!.disabled).toBe(false);
+          await backLeadsToRole(el, control);
+        } finally {
+          setLocale("en-GB");
+        }
+      },
+    );
+
+    it.each([
+      [
+        "en-GB",
+        "This server picked a name another server of the restaurant already uses. Nothing was changed on either server. Press Connect again: it picks a new name.",
+      ],
+      [
+        "es-ES",
+        "Este servidor eligió un nombre que ya usa otro servidor del restaurante. No se ha cambiado nada en ninguno de los dos servidores. Vuelve a pulsar Conectar: elegirá un nombre nuevo.",
+      ],
+    ] as const)(
+      "shows the name refusal and leaves Connect working (%s)",
+      async (locale, sentence) => {
+        try {
+          const { el, adopt, connect, control } = await refusedJoin(
+            "mirror.standby_name_taken",
+            locale,
+          );
+          expect(await bottomOf(connect)).toBe(sentence);
+          adopt.mockResolvedValue({ adopted: true, restarting: true });
+          control("connect")!.click();
+          await flush(el);
+          expect(adopt).toHaveBeenCalledTimes(2);
+        } finally {
+          setLocale("en-GB");
+        }
+      },
+    );
+
+    it.each([
+      [
+        "en-GB",
+        "The restaurant files its invoices with Veri*Factu, and this version of Waitron cannot yet add a standby server to a restaurant that does. Nothing was changed on either server, and the primary keeps working as before. Back returns to the start of setup. You can leave this server switched off and join it after an update that adds this.",
+      ],
+      [
+        "es-ES",
+        "El restaurante presenta sus facturas con Veri*Factu, y esta versión de Waitron aún no puede añadir un servidor en espera a un restaurante que lo hace. No se ha cambiado nada en ninguno de los dos servidores, y el principal sigue funcionando como antes. Volver te lleva al inicio de la configuración. Puedes dejar este servidor apagado y unirlo después de una actualización que lo permita.",
+      ],
+    ] as const)("shows the Veri*Factu refusal and Back (%s)", async (locale, sentence) => {
+      try {
+        const { el, connect, control } = await refusedJoin("module.operation_invalid", locale, {
+          module: "verifactu",
+        });
+        expect(await bottomOf(connect)).toBe(sentence);
+        await backLeadsToRole(el, control);
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+
+    it.each([
+      [
+        "en-GB",
+        "The primary server already has a standby server that finished joining, and this version of Waitron keeps one standby per restaurant. A standby that finished joining cannot be removed in this version. Nothing was changed on either server. Back returns to the start of setup, where this server can be set up for another restaurant; or leave it switched off.",
+      ],
+      [
+        "es-ES",
+        "El servidor principal ya tiene un servidor en espera que terminó de unirse, y esta versión de Waitron admite un solo servidor en espera por restaurante. Un servidor en espera que terminó de unirse no se puede retirar en esta versión. No se ha cambiado nada en ninguno de los dos servidores. Volver te lleva al inicio de la configuración, donde puedes configurar este servidor para otro restaurante; o déjalo apagado.",
+      ],
+    ] as const)("shows the second-standby refusal and Back (%s)", async (locale, sentence) => {
+      try {
+        const { el, connect, control } = await refusedJoin("mirror.spare_already_joined", locale);
+        expect(await bottomOf(connect)).toBe(sentence);
+        await backLeadsToRole(el, control);
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+
+    const primaryAt = "2026-11-10T09:30:00.000Z";
+    const standbyAt = "2026-11-10T08:55:00.000Z";
+    const shown = (iso: string, locale: string) =>
+      new Date(iso).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
+    it.each([
+      [
+        "en-GB",
+        (standby: string, primary: string) =>
+          `This server's clock and the primary server's are 10 minutes or more apart: this server reads ${standby}, the primary reads ${primary}. The two servers can work together only while their clocks agree. Nothing was changed on either server. If this server's time is wrong, connect it to the internet for a minute so it sets its clock, then press Connect again.`,
+      ],
+      [
+        "es-ES",
+        (standby: string, primary: string) =>
+          `El reloj de este servidor y el del servidor principal se diferencian en 10 minutos o más: este servidor marca ${standby} y el principal marca ${primary}. Los dos servidores solo pueden trabajar juntos mientras sus relojes coinciden. No se ha cambiado nada en ninguno de los dos servidores. Si la hora de este servidor está mal, conéctalo a internet un minuto para que ajuste su reloj y vuelve a pulsar Conectar.`,
+      ],
+    ] as const)("shows the clocks refusal with both times (%s)", async (locale, sentence) => {
+      try {
+        const { connect, control } = await refusedJoin("mirror.clocks_apart", locale, {
+          primaryAt,
+          standbyAt,
+        });
+        expect(await bottomOf(connect)).toBe(
+          sentence(shown(standbyAt, locale), shown(primaryAt, locale)),
+        );
+        expect(await bottomOf(connect)).not.toContain(primaryAt);
+        expect(control("connect")!.disabled).toBe(false);
+      } finally {
+        setLocale("en-GB");
+      }
+    });
+
+    it("words the clocks refusal's times in the browser's language", () => {
+      expect(shown(primaryAt, "es-ES")).not.toBe(shown(primaryAt, "en-GB"));
+    });
+  });
+
   it.each([
     ["mirror.primary_url_invalid", {}, "primaryUrl", "Check the primary server address."],
     [

@@ -12,10 +12,10 @@ export const startEn = {
 
   "role.heading": "Join or recover an existing restaurant",
   "role.intro":
-    "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. Adding a mirror is unavailable in this version.",
+    "Restore a backup onto this server when no other server is still running with newer restaurant data, or rebuild from the continuous copy in your own storage bucket when the old server is gone. Adding a mirror is not finished in this version.",
   "role.mirror.heading": "Add a mirror node",
   "role.mirror.copy":
-    "Adding a mirror is unavailable in this version. Your server stays in setup. To recover a restaurant, choose Restore a backup or Restore from my bucket.",
+    "Adding a mirror is not finished in this version: this server can join the primary, but it does not yet receive the restaurant's data, so it cannot take over. To recover a restaurant, choose Restore a backup or Restore from my bucket.",
   "role.mirror.button": "Add a mirror",
   "role.restore.heading": "Restore from backup",
   "role.restore.copy":
@@ -141,10 +141,10 @@ export const startEs: Record<keyof typeof startEn, string> = {
 
   "role.heading": "Unirse a un restaurante existente o recuperarlo",
   "role.intro":
-    "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Añadir una réplica no está disponible en esta versión.",
+    "Restaura una copia de seguridad en este servidor cuando no haya otro servidor funcionando con datos más recientes del restaurante, o reconstrúyelo desde la copia continua de tu propio bucket cuando el servidor anterior ya no esté. Añadir una réplica aún no está terminado en esta versión.",
   "role.mirror.heading": "Añadir un nodo réplica",
   "role.mirror.copy":
-    "Añadir una réplica no está disponible en esta versión. Este servidor sigue en el asistente de configuración. Para recuperar un restaurante, elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
+    "Añadir una réplica aún no está terminado en esta versión: este servidor puede unirse al principal, pero todavía no recibe los datos del restaurante, así que no puede sustituirlo. Para recuperar un restaurante, elige Restaurar una copia de seguridad o Restaurar desde mi bucket.",
   "role.mirror.button": "Añadir una réplica",
   "role.restore.heading": "Restaurar desde una copia de seguridad",
   "role.restore.copy":
