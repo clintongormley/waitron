@@ -2,7 +2,7 @@ import { html } from "lit";
 import type { WtFormActions } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, registerCatalogue } from "@waitron/dashboard-kit";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, ReaderRow } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -34,8 +34,6 @@ function client(rows = [reader], canUnpair = true, overrides: Partial<DashboardA
     listStuckTenderRefunds: vi.fn().mockResolvedValue([]),
     listStuckBillRefunds: vi.fn().mockResolvedValue([]),
     listHeldPayments: vi.fn().mockResolvedValue([]),
-    disableReader: vi.fn().mockResolvedValue(undefined),
-    enableReader: vi.fn().mockResolvedValue(undefined),
     unpairReader: vi.fn().mockResolvedValue(undefined),
     liveData: new LiveData(),
     ...overrides,
@@ -58,26 +56,16 @@ async function mount(api = client()) {
       },
     ],
   });
-  await vi.waitFor(() => expect(q(el, "wt-combobox[name=reader-status-filter]")).not.toBeNull());
-  await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "all");
   await vi.waitFor(() => expect(cell(el, "[data-test=details-counter]")).not.toBeNull());
   return el;
 }
 async function open(el: PaymentsScreen) {
-  cell(el, "[data-test=disable-counter]")!.click();
+  cell(el, "[data-test=unpair-counter]")!.click();
   await el.updateComplete;
 }
 async function press(el: PaymentsScreen, selector: string) {
   expect(q(el, selector), `Missing action ${selector}`).not.toBeNull();
   q(el, selector)!.click();
-  await el.updateComplete;
-}
-const checkbox = (el: PaymentsScreen) =>
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[name=also-unpair]");
-async function tick(el: PaymentsScreen, checked: boolean) {
-  expect(checkbox(el), "Missing optional unpair checkbox").not.toBeNull();
-  checkbox(el)!.checked = checked;
-  checkbox(el)!.dispatchEvent(new Event("change", { bubbles: true }));
   await el.updateComplete;
 }
 beforeEach(() => {
@@ -89,94 +77,55 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("Disable and optional provider unpairing", () => {
-  it("confirms before disabling, hides standalone Unpair for active readers and cancels without writing", async () => {
+describe("direct provider Unpair", () => {
+  it("confirms Unpair for an active reader and cancels without writing", async () => {
     const api = client();
     const el = await mount(api);
-    expect(cell(el, "[data-test=unpair-counter]")).toBeNull();
+    expect(cell(el, "[data-test=disable-counter]")).toBeNull();
     await open(el);
-    expect(api.disableReader).not.toHaveBeenCalled();
     expect(api.unpairReader).not.toHaveBeenCalled();
     expect(q(el, "[data-test=reader-editor]")?.getAttribute("heading")).toContain("Counter");
-    expect(checkbox(el)?.checked).toBe(false);
-    expect(q(el, "[data-test=confirm-disable]")?.getAttribute("variant")).toBe("danger");
+    expect(q(el, "[data-test=confirm-unpair]")?.getAttribute("variant")).toBe("danger");
     await press(el, "[data-test=close-reader-editor]");
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.disableReader).not.toHaveBeenCalled();
     expect(api.unpairReader).not.toHaveBeenCalled();
   });
 
-  it("disables locally by default and closes before a failed refresh", async () => {
+  it("unpairs and closes before a failed refresh", async () => {
     const api = client();
     const el = await mount(api);
     await open(el);
     vi.mocked(api.listReaders).mockRejectedValue({ code: "server.internal" });
-    await press(el, "[data-test=confirm-disable]");
+    await press(el, "[data-test=confirm-unpair]");
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.disableReader).toHaveBeenCalledExactlyOnceWith("counter");
-    expect(api.unpairReader).not.toHaveBeenCalled();
+    expect(api.unpairReader).toHaveBeenCalledExactlyOnceWith("counter");
     await vi.waitFor(() =>
       expect(q(el, "[role=alert]")?.textContent).toContain(codeMessage("server.internal")),
     );
   });
 
   it.each(["en", "es-ES"])(
-    "explains irreversible unpairing, uses only the unpair route and resets the choice on reopen (%s)",
+    "explains irreversible unpairing and uses its route (%s)",
     async (locale) => {
       setLocale(locale);
       const api = client();
       const el = await mount(api);
       await open(el);
       const body = q(el, "[data-test=reader-editor]")!.textContent!;
-      expect(body).toContain(
-        locale === "en" ? "Also unpair from Acme Pay" : "Desvincular también de Acme Pay",
-      );
       expect(body).toContain(locale === "en" ? "cannot be undone" : "no se puede deshacer");
       expect(body).toContain(locale === "en" ? "pairing code" : "código de vinculación");
-      await tick(el, true);
-      await press(el, "[data-test=confirm-disable]");
+      await press(el, "[data-test=confirm-unpair]");
       await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
       expect(api.unpairReader).toHaveBeenCalledExactlyOnceWith("counter");
-      expect(api.disableReader).not.toHaveBeenCalled();
       await open(el);
-      expect(checkbox(el)?.checked).toBe(false);
     },
   );
 
-  it("rechecks provider capability if it changes after optional unpair was selected", async () => {
-    const api = client();
-    const el = await mount(api);
-    await open(el);
-    await tick(el, true);
-    vi.mocked(api.listPaymentProviders).mockResolvedValue([
-      { providerId: "acme", state: "connected", canUnpair: false },
-    ]);
-    api.liveData!.refresh();
-    await vi.waitFor(() => expect(checkbox(el)).toBeNull());
-    await press(el, "[data-test=confirm-disable]");
-    await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.disableReader).toHaveBeenCalledExactlyOnceWith("counter");
-    expect(api.unpairReader).not.toHaveBeenCalled();
-  });
-
-  it("offers only local Disable when the provider cannot unpair", async () => {
-    const api = client([reader], false);
-    const el = await mount(api);
-    await open(el);
-    expect(checkbox(el)).toBeNull();
-    expect(q(el, "[data-test=reader-editor]")!.textContent).not.toContain("pairing code");
-    await press(el, "[data-test=confirm-disable]");
-    await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.disableReader).toHaveBeenCalledExactlyOnceWith("counter");
-    expect(api.unpairReader).not.toHaveBeenCalled();
-  });
-
   it.each([{ paired: true }, { paired: false }])(
-    "offers standalone Unpair only for a disabled paired reader ($paired)",
+    "offers Unpair only for a paired reader ($paired)",
     async ({ paired }) => {
       const api = client([{ ...reader, active: false, canEnable: paired }]);
       const el = await mount(api);
-      await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
       await el.updateComplete;
       expect(cell(el, "[data-test=disable-counter]")).toBeNull();
       if (!paired) {
@@ -187,22 +136,22 @@ describe("Disable and optional provider unpairing", () => {
       await el.updateComplete;
       expect(api.unpairReader).not.toHaveBeenCalled();
       expect(q(el, "[data-test=reader-editor]")!.textContent).toContain("cannot be undone");
-      expect(checkbox(el)).toBeNull();
       await press(el, "[data-test=confirm-unpair]");
       await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
       expect(api.unpairReader).toHaveBeenCalledExactlyOnceWith("counter");
-      expect(api.disableReader).not.toHaveBeenCalled();
     },
   );
 
-  it("keeps a refused unpair visible and permits choosing local disable for the retry", async () => {
+  it("keeps a refused Unpair visible and permits a retry", async () => {
     const api = client([reader], true, {
-      unpairReader: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      unpairReader: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(undefined),
     });
     const el = await mount(api);
     await open(el);
-    await tick(el, true);
-    await press(el, "[data-test=confirm-disable]");
+    await press(el, "[data-test=confirm-unpair]");
     await vi.waitFor(async () =>
       expect(
         (
@@ -210,23 +159,20 @@ describe("Disable and optional provider unpairing", () => {
         )?.textContent?.trim(),
       ).toBe(codeMessage("server.internal")),
     );
-    expect(checkbox(el)?.checked).toBe(true);
-    expect(q(el, "[data-test=confirm-disable]")!.hasAttribute("disabled")).toBe(false);
-    await tick(el, false);
-    await press(el, "[data-test=confirm-disable]");
+    expect(q(el, "[data-test=confirm-unpair]")!.hasAttribute("disabled")).toBe(false);
+    await press(el, "[data-test=confirm-unpair]");
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
-    expect(api.disableReader).toHaveBeenCalledExactlyOnceWith("counter");
-    expect(api.unpairReader).toHaveBeenCalledTimes(1);
+    expect(api.unpairReader).toHaveBeenCalledTimes(2);
   });
 
   it.each([
-    ["en", "The provider did not confirm the unpairing. The reader is still enabled; try again."],
+    ["en", "The provider did not confirm the unpairing. The reader is still available; try again."],
     [
       "es",
-      "El proveedor no confirmó la desvinculación. El lector sigue habilitado; inténtalo de nuevo.",
+      "El proveedor no confirmó la desvinculación. El lector sigue disponible; inténtalo de nuevo.",
     ],
   ] as const)(
-    "says in %s that a reader whose unpair failed while disabling it is still enabled",
+    "says in %s that an active reader whose Unpair failed is still available",
     async (locale, text) => {
       setLocale(locale);
       const api = client([reader], true, {
@@ -234,8 +180,7 @@ describe("Disable and optional provider unpairing", () => {
       });
       const el = await mount(api);
       await open(el);
-      await tick(el, true);
-      await press(el, "[data-test=confirm-disable]");
+      await press(el, "[data-test=confirm-unpair]");
       await vi.waitFor(async () =>
         expect(
           (
@@ -248,12 +193,11 @@ describe("Disable and optional provider unpairing", () => {
     },
   );
 
-  it("keeps the shared wording when a standalone Unpair of a disabled reader fails", async () => {
+  it("keeps the shared wording when Unpair of an inactive reader fails", async () => {
     const api = client([{ ...reader, active: false }], true, {
       unpairReader: vi.fn().mockRejectedValue({ code: "reader.unpair_failed" }),
     });
     const el = await mount(api);
-    await chooseOption(q(el, "wt-combobox[name=reader-status-filter]")!, "disabled");
     await el.updateComplete;
     cell(el, "[data-test=unpair-counter]")!.click();
     await el.updateComplete;
@@ -267,10 +211,10 @@ describe("Disable and optional provider unpairing", () => {
     );
   });
 
-  it("prevents duplicate submits and freezes the choice while the request is pending", async () => {
+  it("prevents duplicate Unpair submits while the request is pending", async () => {
     let done!: () => void;
     const api = client([reader], true, {
-      disableReader: vi.fn().mockReturnValue(
+      unpairReader: vi.fn().mockReturnValue(
         new Promise<void>((resolve) => {
           done = resolve;
         }),
@@ -278,11 +222,10 @@ describe("Disable and optional provider unpairing", () => {
     });
     const el = await mount(api);
     await open(el);
-    await press(el, "[data-test=confirm-disable]");
-    expect(checkbox(el)?.disabled).toBe(true);
-    expect(q(el, "[data-test=confirm-disable]")!.hasAttribute("disabled")).toBe(true);
-    await press(el, "[data-test=confirm-disable]");
-    expect(api.disableReader).toHaveBeenCalledTimes(1);
+    await press(el, "[data-test=confirm-unpair]");
+    expect(q(el, "[data-test=confirm-unpair]")!.hasAttribute("disabled")).toBe(true);
+    await press(el, "[data-test=confirm-unpair]");
+    expect(api.unpairReader).toHaveBeenCalledTimes(1);
     done();
     await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
   });
@@ -296,23 +239,21 @@ describe("Disable and optional provider unpairing", () => {
         done = resolve;
         fail = reject;
       });
-      const api = client([reader], true, { disableReader: vi.fn().mockReturnValue(pending) });
+      const api = client([reader], true, { unpairReader: vi.fn().mockReturnValue(pending) });
       const el = await mount(api);
       await open(el);
-      await press(el, "[data-test=confirm-disable]");
+      await press(el, "[data-test=confirm-unpair]");
       await press(el, "[data-test=close-reader-editor]");
       await vi.waitFor(() => expect(q(el, "[data-test=reader-editor]")).toBeNull());
       await open(el);
-      await tick(el, true);
       if (outcome === "success") done();
       else fail({ code: "server.internal" });
       await pending.catch(() => undefined);
       await el.updateComplete;
       await vi.waitFor(() =>
-        expect(q(el, "[data-test=confirm-disable]")!.hasAttribute("disabled")).toBe(false),
+        expect(q(el, "[data-test=confirm-unpair]")!.hasAttribute("disabled")).toBe(false),
       );
       expect(q(el, "[data-test=reader-editor]")).not.toBeNull();
-      expect(checkbox(el)?.checked).toBe(true);
       expect(
         await formMessageOf(q(el, "[data-test=reader-editor] wt-form-actions")! as WtFormActions),
       ).toBeNull();

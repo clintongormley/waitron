@@ -2,7 +2,6 @@ import { sql } from "drizzle-orm";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
 import { flag, id, label, newId, nowIso, table, tsString } from "@waitron/db";
 
-/** Disable clears `active`; Delete also sets `deleted_at`; payments keep the row either way. */
 export const cardReaders = table(
   "card_readers",
   {
@@ -15,12 +14,11 @@ export const cardReaders = table(
     printsOwnSlipAutomatically: flag("prints_own_slip_automatically").notNull().default(false),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     disabledAt: tsString("disabled_at"),
-    // Local Enable cannot restore a registration we removed at the provider; verified adoption can.
+    // Provider-verified adoption must precede reuse of an unpaired registration.
     unpairedAt: tsString("unpaired_at"),
     deletedAt: tsString("deleted_at"),
   },
   (t) => [
-    // One undeleted reader per provider id; a deleted row frees it, a disabled one keeps it.
     uniqueIndex("card_readers_provider_ref_key")
       .on(t.provider, t.providerRef)
       .where(sql`${t.deletedAt} is null`),

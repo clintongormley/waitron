@@ -82,9 +82,9 @@ reader and turn on **Prints its own slip automatically**, then choose **Save**. 
 that reader's payment slips to the reader. This setting describes the reader; it does not change
 its printer's settings. It starts off for a new reader.
 
-Disabling and enabling the same reader keeps your choice, as does adding that retained reader
-again. Deleting it and adding it as a new reader starts with the setting off. A configuration
-export carries payment policy, not card readers or this setting.
+Adding a recognised reader again keeps your choice. See [Card readers](printers.md#card-readers)
+to delete a reader or add it again. A configuration export carries payment policy, not card readers
+or this setting.
 
 When Waitron prints a card slip for a sale, its words, date and amounts follow that sale’s saved receipt language. Changing your screen language or the venue’s current receipt language keeps the earlier sale’s slip in its original language.
 

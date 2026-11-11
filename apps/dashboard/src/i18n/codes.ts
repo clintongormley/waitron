@@ -1228,16 +1228,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Conecta primero este proveedor de pagos",
   },
   "reader.unpair_failed": {
-    en: "The provider did not confirm the unpairing. The reader is disabled; try again.",
-    es: "El proveedor no confirmó la desvinculación. Queda deshabilitado; inténtalo de nuevo.",
+    en: "The provider did not confirm the unpairing. The reader is unavailable; try again.",
+    es: "El proveedor no confirmó la desvinculación. El lector no está disponible; inténtalo de nuevo.",
   },
   "reader.unpair_in_progress": {
     en: "That card reader is being unpaired or deleted. Try again when that finishes.",
     es: "Ese lector de tarjetas se está desvinculando o eliminando. Vuelve a intentarlo cuando termine.",
   },
   "payment.provider_in_use": {
-    en: "Disable this provider's card readers before disconnecting it",
-    es: "Deshabilita los lectores de tarjetas de este proveedor antes de desconectarlo",
+    en: "Delete or unpair this provider's card readers before disconnecting it",
+    es: "Elimina o desvincula los lectores de tarjetas de este proveedor antes de desconectarlo",
   },
   "payment.provider_credential_rejected": {
     en: "The payment provider rejected those details — check them and try again",

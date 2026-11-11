@@ -128,14 +128,12 @@ describe("DashboardApi", () => {
     await api.availableReaders("acme");
     await api.adoptReader(input);
     await api.renameReader("r-1", "Garden");
-    await api.disableReader("r-1");
-    await api.enableReader("r-1");
     await api.unpairReader("r-1");
     expect(fetchImpl.mock.calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
       ["/management-api/payments/providers/acme/available-readers", "GET", undefined],
       ["/management-api/payments/readers/adopt", "POST", JSON.stringify(input)],
       ["/management-api/payments/readers/r-1", "PATCH", JSON.stringify({ name: "Garden" })],
-      ...["disable", "enable", "unpair"].map((action) => [
+      ...["unpair"].map((action) => [
         `/management-api/payments/readers/r-1/${action}`,
         "POST",
         undefined,

@@ -4757,14 +4757,6 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/payments/readers/${id}`, "PATCH", { name });
   }
 
-  disableReader(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/payments/readers/${id}/disable`, "POST");
-  }
-
-  enableReader(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/payments/readers/${id}/enable`, "POST");
-  }
-
   unpairReader(id: string): Promise<void> {
     return this.#request<void>(`/management-api/payments/readers/${id}/unpair`, "POST");
   }

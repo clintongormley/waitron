@@ -1,5 +1,4 @@
 import { afterEach, expect, it } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons, type WtDialog } from "@waitron/ui";
@@ -22,7 +21,7 @@ const reader: ReaderRow = {
 };
 const available: AvailableReader[] = [
   { providerRef: "a1", name: "Counter", status: "available", model: "Solo", serial: "SN1" },
-  { providerRef: "a2", name: "Bar", status: "disabled", model: "Solo", serial: "SN2" },
+  { providerRef: "a2", name: "Bar", status: "available", model: "Solo", serial: "SN2" },
 ];
 class ReaderLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
@@ -330,8 +329,7 @@ it("details and unpair confirmation remain exempt", async () => {
   const { app, screen } = await mount();
   q(screen, "[data-test=close-reader-editor]")!.click();
   await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
-  for (const mode of ["details", "disable", "unpair"]) {
-    await chooseOption(q(screen, "wt-combobox[name=reader-status-filter]")!, "all");
+  for (const mode of ["details", "unpair"]) {
     await screen.updateComplete;
     await open(screen, mode === "unpair" ? "disabled" : "r1", mode);
     expect(unload()).toBe(false);
@@ -479,7 +477,7 @@ it("unpair's submitted command retains its direct dismissal exemption", async ()
   });
   q(screen, "[data-test=close-reader-editor]")!.click();
   await expect.poll(() => dialog(screen, "reader-editor")).toBeNull();
-  await chooseOption(q(screen, "wt-combobox[name=reader-status-filter]")!, "all");
+
   await screen.updateComplete;
   await open(screen, "disabled", "unpair");
   q(screen, "[data-test=confirm-unpair]")!.click();

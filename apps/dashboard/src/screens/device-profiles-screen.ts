@@ -1951,12 +1951,13 @@ export class DeviceProfilesScreen extends LitElement {
     return html`${lists.map(({ list, choices }) => this.#renderPrinterList(list, choices, errors))}`;
   }
 
-  /** The profile's readers first, in its order, a disabled one marked; then every other enabled one. */
   #renderReaders(errors: FieldErrors): TemplateResult | typeof nothing {
     if (!this.#readersShown()) return nothing;
     const listed = this.draftReaders.readerIds;
     const label = (reader: ReaderRow) =>
-      reader.active ? reader.name : `${reader.name} (${t("devices.watcher_disabled_mark")})`;
+      reader.active
+        ? reader.name
+        : `${reader.name} (${t(reader.canEnable ? "payments.reader_unavailable" : "payments.reader_unpaired")})`;
     const choices = [
       ...listed.flatMap((id) => {
         const reader = this.readers.find((r) => r.id === id);

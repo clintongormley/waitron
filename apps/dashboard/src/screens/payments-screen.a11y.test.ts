@@ -109,7 +109,6 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
     listReaderHolders: vi.fn().mockResolvedValue([]),
     readerStatus: vi.fn().mockResolvedValue({ online: true }),
     disconnectPaymentProvider: vi.fn().mockResolvedValue(undefined),
-    disableReader: vi.fn().mockResolvedValue(undefined),
     availableReaders: vi.fn().mockResolvedValue([
       { providerRef: "v-1", name: "Counter", status: "available", model: "solo", serial: "123" },
       { providerRef: "v-2", name: "Terrace", status: "disabled" },
@@ -198,7 +197,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it.each(["discovery", "edit", "details", "disable", "unpair"])(
+  it.each(["discovery", "edit", "details", "unpair"])(
     "renders the %s dialog accessibly",
     async (mode) => {
       const { el, host } = await mountWidget<PaymentsScreen>(
@@ -215,13 +214,6 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
         theme,
       );
       await flush(el);
-      if (mode === "unpair") {
-        await chooseOption(
-          el.shadowRoot!.querySelector("wt-combobox[name=reader-status-filter]")!,
-          "disabled",
-        );
-        await flush(el);
-      }
       const root =
         mode === "discovery"
           ? el.shadowRoot!

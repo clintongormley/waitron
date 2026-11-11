@@ -118,6 +118,7 @@ describe("the user guides", () => {
       "printer-details",
       "print-queue",
       "print-agents",
+      "card-readers",
     ]);
   });
 

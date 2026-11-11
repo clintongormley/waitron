@@ -3203,7 +3203,7 @@ These open already savable:
   2026-10-08, still awaiting the owner's word. Opened from a printer's details, it opens quiet;
 - the device pairing dialog's Pair: its settings step opens holding the name the device asked
   with, and pressing Pair approves the device;
-- each reader's Add (Enable for a disabled one) in "Add a card reader", holding the provider's name;
+- each reader's Add in "Add a card reader", holding the provider's name or a recognised reader's saved name;
 - the floor plan editor's Add tables dialog, holding one table, four seats and the zone's name as
   the prefix: pressing Save is the add (`apps/dashboard/src/screens/floor-plan-add-tables.ts`);
 - the routing cell editor on an inherited cell: Save pins the inherited choice as the cell's own
@@ -5581,7 +5581,7 @@ removing a product from a menu removes that offer.
 
 ### Switching off versus deleting
 
-Something switched off but kept — an options or extras list, a user or a card reader — is switched off with **Disable** (options and extras lists
+Something switched off but kept — an options or extras list or a user — is switched off with **Disable** (options and extras lists
 are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** permanently removes a record from current use, and **Remove** for taking a row out of a list or a link off a record,
@@ -5589,8 +5589,8 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 "Inactive" are not used for a record that is kept.
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
-screen uses: **Activo** or **Deshabilitado** for a usuario,
-lector; **Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+screen uses: **Activo** or **Deshabilitado** for a usuario;
+**Activa** or **Deshabilitada** for a lista or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
@@ -5635,21 +5635,21 @@ accepts it through **Add a device**. A retired profile needs a replacement. Ende
 free portable equipment may be taken again from its saved choices. A browser without the retained
 proof joins as a new device.
 
-A card reader offers both. **Disable** switches the reader off and keeps its id, and Enable brings
-it back unless it was also unpaired. **Delete** is permanent, and is refused while a payment is in progress on the reader. A
-reader still paired at a provider that can unpair it (SumUp) is unpaired there first; while that
-provider's account is not connected, the delete removes it from Waitron only and the confirmation
-says it stays registered at the provider; an unpair that fails leaves the reader disabled but not
-deleted. A Delete refused `reader.provider_disconnected`, because the account was disconnected after the
-dialog read its impact, shows no message: the dialog reads the impact again and then says the
-reader stays registered at the provider. If the account went during the provider call, the
-reader is left disabled. While a Delete or an Unpair of a reader is running, Enable, Unpair,
-another Delete and adopting it are refused (`reader.unpair_in_progress`), and an adoption whose
-provider list was requested before an Unpair or Delete dropped the reader there is refused
-`reader.not_listed`. A Stripe reader is deleted without contacting Stripe. Delete takes the
-reader off every device and profile and off the device holding it, and the row is kept only as
-history, for the payments that point at it. Nothing brings a deleted reader back; found again, it is
-added as a new reader.
+A card reader offers **Delete**, **Add** and, for a paired reader whose provider supports it,
+**Unpair from …**, with no Disable/Enable or status filter. Connection, Unavailable and Unpaired
+status stay visible. Delete is refused while a payment is in progress; it removes device/profile
+choices and the holder while retaining name, slip setting and history. Provider-verified Add
+restores a matching registration that Delete left at the provider, with assignments still cleared.
+The recognised Add row shows the saved name and print settings instead of an editable name.
+Add does not restore a deleted row marked as unpaired; fresh provider references create new ids.
+
+A Delete refused `reader.provider_disconnected` re-reads its impact and explains that the
+registration stays at the provider. A provider unpair that fails leaves the reader unavailable
+and listed. Unpair on its own keeps it listed too; a failed Unpair leaves its earlier state.
+While Delete or Unpair is at the provider, another Unpair, Delete or adoption is refused
+`reader.unpair_in_progress`; an adoption whose list request predates that removal is refused
+`reader.not_listed`. Removing a reader's row menu sends focus to the Payments heading, since
+Refresh may still be disabled while status reads finish.
 
 Products use **Archive**, with **Archived** in the Availability column, and **View** for an archived
 row. In Spanish these are **Archivar**, **Archivado** for a product, **Archivada** for a variant,

@@ -63,3 +63,11 @@ En **Impresoras**, abre **Agentes** y elige **Eliminar** en el menú del agente.
 Para usar un agente en el que sigas confiando, elige **Añadir un agente** y **Añadir** junto a su nombre guardado, incluido el agente marcado como **En esta caja**. Los trabajos que sigan pendientes pueden imprimirse cuando vuelva.
 
 Para añadir otro agente, sigue los pasos de **Añadir un agente** y comprueba su número. Tras vincular un agente nuevo, busca y añade de nuevo sus impresoras A4.
+
+## Lectores de tarjetas {#card-readers}
+
+En **Pagos con tarjeta**, abre **Lectores de tarjetas** y elige **Eliminar** en el menú del lector. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
+
+Para volver a usar el lector, elige **Añadir lector** en su proveedor. Si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir** y vuelve a asignarlo a dispositivos y perfiles. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
+
+Elige **Desvincular de …** para quitar solo su registro en el proveedor y conservarlo en la lista de Waitron. Tendrás que añadirlo o vincularlo de nuevo antes de usarlo.

@@ -6,7 +6,7 @@ import "./errors.js";
 import { profileAllows } from "@waitron/layouts";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { isFencedStanding, standingOf } from "@waitron/membership";
 import { isReadableChart } from "./membership-trust.js";
 import { readTakenOverFrom } from "./handover-collection.js";
@@ -550,20 +550,37 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const listed = await seat.readers.list(runtimeDeps());
       const rows = await gated(sessionId, (tx) =>
         tx
-          .select({ providerRef: cardReaders.providerRef, active: cardReaders.active })
+          .select()
           .from(cardReaders)
-          .where(and(eq(cardReaders.provider, seat.providerId), isNull(cardReaders.deletedAt))),
+          .where(
+            and(
+              eq(cardReaders.provider, seat.providerId),
+              or(isNull(cardReaders.deletedAt), isNull(cardReaders.unpairedAt)),
+            ),
+          )
+          .orderBy(
+            desc(isNull(cardReaders.deletedAt)),
+            desc(cardReaders.deletedAt),
+            desc(cardReaders.createdAt),
+            desc(cardReaders.id),
+          ),
       );
-      const registered = new Map(rows.map((row) => [row.providerRef, row.active]));
+      const registered = new Map<string, (typeof rows)[number]>();
+      for (const row of rows)
+        if (!registered.has(row.providerRef)) registered.set(row.providerRef, row);
+
       return c.json(
-        listed.map((reader) => ({
-          ...reader,
-          status: !registered.has(reader.providerRef)
-            ? "available"
-            : registered.get(reader.providerRef)
-              ? "added"
-              : "disabled",
-        })),
+        listed.map((reader) => {
+          const registration = registered.get(reader.providerRef);
+          if (registration === undefined) return { ...reader, status: "available" };
+          const status =
+            registration.active && registration.deletedAt === null ? "added" : "disabled";
+          return {
+            ...reader,
+            ...(status === "disabled" ? { name: registration.name } : {}),
+            status,
+          };
+        }),
       );
     }),
   );
@@ -589,28 +606,36 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         const row = await gated(sessionId, async (tx) => {
           await requireConnected(tx, seat);
           const [existing] = await tx
-            .select({ id: cardReaders.id })
+            .select()
             .from(cardReaders)
             .where(
               and(
                 eq(cardReaders.provider, providerId),
                 eq(cardReaders.providerRef, providerRef),
-                isNull(cardReaders.deletedAt),
+                or(isNull(cardReaders.deletedAt), isNull(cardReaders.unpairedAt)),
               ),
-            );
+            )
+            .orderBy(
+              desc(isNull(cardReaders.deletedAt)),
+              desc(cardReaders.deletedAt),
+              desc(cardReaders.createdAt),
+              desc(cardReaders.id),
+            )
+            .limit(1);
           if (existing !== undefined) refuseWhileUnpairing(existing.id);
           if (adopt.stale) throw new AppError("reader.not_listed", { providerId });
+          if (existing !== undefined) {
+            await tx
+              .update(cardReaders)
+              .set({ active: true, deletedAt: null, disabledAt: null, unpairedAt: null })
+              .where(readerWhere(existing.id));
+            return { id: existing.id };
+          }
           const [saved] = await tx
             .insert(cardReaders)
             .values({ provider: providerId, providerRef, name })
-            .onConflictDoUpdate({
-              target: [cardReaders.provider, cardReaders.providerRef],
-              targetWhere: isNull(cardReaders.deletedAt),
-              set: { name, active: true, disabledAt: null, unpairedAt: null },
-            })
             .returning({ id: cardReaders.id });
-          // A re-adopted reader keeps the lists it has: a manager may have taken it off one.
-          if (existing === undefined) await joinReaderTakingProfiles(tx, saved!.id);
+          await joinReaderTakingProfiles(tx, saved!.id);
           return saved!;
         });
         return c.json({ id: row.id, status: "paired" }, 201);
@@ -646,32 +671,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       return c.body(null, 204);
     }),
   );
-
-  for (const action of ["disable", "enable"] as const) {
-    app.post(`/management-api/payments/readers/:id/${action}`, (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const id = requireUuidParam(c.req.param("id"), "CardReaderId");
-        await gated(sessionId, async (tx) => {
-          const reader = await requireReader(tx, id);
-          if (action === "enable") {
-            refuseWhileUnpairing(id);
-            await requireConnected(tx, cardProviderById(deps.providers, reader.provider));
-            if (reader.unpairedAt !== null)
-              throw new AppError("reader.not_listed", { providerId: reader.provider });
-          }
-          await tx
-            .update(cardReaders)
-            .set({
-              active: action === "enable",
-              disabledAt: action === "enable" ? null : nowIso(),
-            })
-            .where(readerWhere(id));
-        });
-        return c.body(null, 204);
-      }),
-    );
-  }
 
   app.get("/management-api/payments/readers/:id/delete-impact", (c) =>
     run(c, log, async () => {
@@ -780,7 +779,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const id = c.req.param("id");
       await gated(sessionId, async (tx) => {
         const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
-        // Refused while an active reader uses this provider; the operator disables those first.
+        // Refused while an active reader uses this provider; delete those readers first.
         const active = await tx
           .select({ id: cardReaders.id })
           .from(cardReaders)

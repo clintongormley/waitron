@@ -1367,26 +1367,15 @@ describe("a deleted reader", () => {
     expect(venue.card.collectCalls.length).toBe(calls);
   });
 
-  it("while the delete is at the provider, Enable is refused and a pay naming the reader is 404 reader.not_found, charging nothing", async () => {
+  it("while the delete is at the provider, a pay naming the reader is 404 reader.not_found, charging nothing", async () => {
     const calls = venue.card.collectCalls.length;
-    let enabled: { status: number; json: unknown } | undefined;
     let paid: Awaited<ReturnType<typeof pay>> | undefined;
     duringRemove = async () => {
-      enabled = await send(
-        paymentsApp,
-        managerCookie,
-        "POST",
-        `/management-api/payments/readers/${r1}/enable`,
-      );
       paid = await pay(venue.cookie, r1);
     };
 
     await deleteReader(r1);
 
-    expect(enabled).toMatchObject({
-      status: 409,
-      json: { code: "reader.unpair_in_progress", params: { readerId: r1 } },
-    });
     expect(paid).toMatchObject({
       status: 404,
       json: { code: "reader.not_found", params: { id: r1 } },

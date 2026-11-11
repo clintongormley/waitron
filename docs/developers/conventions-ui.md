@@ -1038,11 +1038,14 @@ agent; it restores neither assignments nor ended deliveries. Guards: `apps/serve
 (assignments/history/restoration), `page-printers-api.test.ts` (routes), and dashboard
 `printers-screen.test.ts` (Delete/Add and confirmation).
 
-Card readers retain their Disable/Enable behavior until their own A1484 slice lands.
-
-A deleted card reader is offered as a new registration: when discovery finds it again it is offered as available, and
-adding it creates a new reader beside the deleted row, which its payments still point at. Guard: "is offered by discovery as
-new" in `apps/server/src/payments-api.test.ts`.
+Card readers offer Delete and Add, without Disable/Enable or a status filter. Unpair stays directly
+available for a paired reader whose provider supports it. Delete clears device/profile choices
+and holders, while keeping its name, slip setting and history. Provider-verified Add restores a
+matching registration that Delete left at the provider, with its assignments still cleared;
+Add does not restore a deleted row marked as unpaired. A system switch-off or Unpair
+keeps the reader listed, shown as Unavailable or Unpaired. Guards: the “Delete then provider-verified
+Add” and disconnected-reader discovery cases in `apps/server/src/payments-api.test.ts`, the
+`card-reader-delete.db.test.ts` assignment/history cases, and dashboard `payments-screen` suites.
 
 Devices offer Delete and Add, with no Disable/Enable action or Status filter. Delete hides the
 inactive registration and keeps its proof, profile and local choices. It ends sign-ins, releases
