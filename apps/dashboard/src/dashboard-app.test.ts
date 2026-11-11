@@ -10013,6 +10013,7 @@ describe("dashboard-app: About Waitron", () => {
     await flush(el);
     expect(aboutDialog(el).open).toBe(true);
     expect(aboutDialog(el).about).toEqual(released);
+    expect(api.getLegalAbout).toHaveBeenCalledOnce();
   });
 
   it("the sign-in foot reads About Waitron when the box has no release", async () => {

@@ -99,7 +99,11 @@ it.each([1, 2])(
     const el = await mount(released);
     const frame = frames(el)[0]!;
     let page = await showPage(frame);
-    if (pages === 2) page = await showPage(frame);
+    if (pages === 2) {
+      const next = await showPage(frame);
+      expect(next).not.toBe(page);
+      page = next;
+    }
     const closes: Event[] = [];
     el.addEventListener("about-close", (event) => closes.push(event));
     page.body.focus();
@@ -109,10 +113,13 @@ it.each([1, 2])(
     await userEvent.keyboard("{Escape}");
 
     await vi.waitFor(() => expect(closes).toHaveLength(1));
+    expect(
+      el.shadowRoot!.querySelector<WtModal>("wt-modal")!.shadowRoot!.querySelector("dialog")!.open,
+    ).toBe(false);
   },
 );
 
-it("frames a page from another origin, which it cannot reach into, without an error", async () => {
+it("a page from another origin in the frame, which it cannot reach into, raises no error", async () => {
   const errors: unknown[] = [];
   const onError = (event: ErrorEvent) => errors.push(event.error);
   window.addEventListener("error", onError);
