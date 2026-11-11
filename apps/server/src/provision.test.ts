@@ -68,7 +68,7 @@ function venueRequest(taxId: string): VenueRequest {
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
-      displayName: "Administradora",
+      displayName: "Administrator",
       pinHash: fixturePinHash("1234"),
       passwordHash: fixturePasswordHash("dashPass123"),
       email: "owner@example.test",

@@ -54,7 +54,7 @@ async function setupTenant(adminPassword: string = OLD_PASSWORD): Promise<{ admi
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword(adminPassword),
           email: "owner@example.test",
@@ -330,7 +330,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
     await suite.db.execute(sql`update persons set status = 'suspended' where id = ${adminId}`);
     // The suspended admin's name is outside the live-name index, so another person may take it.
     await suite.db.insert(persons).values({
-      displayName: "Administradora",
+      displayName: "Administrator",
       pinHash: hashPin("5678"),
       role: "staff",
     });

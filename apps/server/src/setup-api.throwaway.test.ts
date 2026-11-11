@@ -84,7 +84,7 @@ function body(mode: Mode): Record<string, unknown> {
       fullSeriesCode: "FF",
       rectificativeSeriesCode: "R",
       admin: {
-        displayName: "Administradora",
+        displayName: "Administrator",
         firstNames: "Ana Maria",
         lastNames: "Lopez Garcia",
         pin: "1357",
