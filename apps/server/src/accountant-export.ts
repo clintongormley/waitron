@@ -1,6 +1,18 @@
+import { and, asc, between, eq, isNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } from "@waitron/db";
+import { formatInvoiceNumber } from "@waitron/core";
+import { listPurchaseInvoices } from "@waitron/purchasing";
 import { strToU8, zipSync } from "fflate";
 import type { PurchaseInvoice } from "@waitron/purchasing";
-import { compareDecimal, decimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
+import {
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  sumDecimals,
+  toScale,
+  type Decimal,
+} from "@waitron/shared";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
@@ -75,7 +87,7 @@ function worksheet(rows: readonly (readonly Cell[])[]): string {
 export function renderAccountantWorkbook(
   data: AccountantExport,
   language: "en" | "es",
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   const words = ACCOUNTANT_EXPORT_WORDS[language];
   const invoiceRows: Cell[][] = [];
   for (const invoice of data.invoices) {
@@ -151,4 +163,62 @@ export function renderAccountantWorkbook(
   return zipSync(
     Object.fromEntries(Object.entries(parts).map(([name, xml]) => [name, strToU8(xml)])),
   );
+}
+
+export async function listAccountantExport(
+  tx: Transaction,
+  range: { from: string; to: string },
+): Promise<AccountantExport> {
+  const original = alias(sales, "original_invoice");
+  const originalSeries = alias(invoiceSeries, "original_series");
+  const civilDate = sql<string>`date(${sales.issuedAt}, printf('%+d minutes', ${sales.issuedOffsetMinutes}))`;
+  const rows = await tx
+    .select({
+      id: sales.id,
+      nodeId: sales.nodeId,
+      code: invoiceSeries.code,
+      number: sales.invoiceNumber,
+      issueDate: civilDate,
+      operationDate: sales.operationDate,
+      customerName: sales.counterpartyLegalName,
+      customerTaxId: sales.counterpartyTaxId,
+      customerIdentifierType: sales.counterpartyIdentifierType,
+      customerIdentifierCountry: sales.counterpartyIdentifierCountryCode,
+      customerCountry: sales.counterpartyCountryCode,
+      customerAddress: sales.counterpartyAddress,
+      total: sales.total,
+      vatBreakdown: sales.vatBreakdown,
+      correctsSaleId: sales.correctsSaleId,
+      originalCode: originalSeries.code,
+      originalNumber: original.invoiceNumber,
+      voidedAt: saleVoids.voidedAt,
+    })
+    .from(sales)
+    .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+    .leftJoin(original, eq(original.id, sales.correctsSaleId))
+    .leftJoin(originalSeries, eq(originalSeries.id, original.seriesId))
+    .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
+    .leftJoin(saleSubstitutions, eq(saleSubstitutions.substitutionSaleId, sales.id))
+    .where(and(between(civilDate, range.from, range.to), isNull(saleSubstitutions.id)))
+    .orderBy(asc(civilDate), asc(sales.issuedAt), asc(sales.id));
+  const invoices: AccountantInvoice[] = rows.map(
+    ({ code, number, originalCode, originalNumber, ...row }) => ({
+      ...row,
+      invoiceNumber: formatInvoiceNumber(code, number),
+      invoiceType:
+        row.correctsSaleId !== null ? "corrective" : row.customerTaxId === null ? "F2" : "F1",
+      originalInvoiceNumber:
+        originalCode === null || originalNumber === null
+          ? null
+          : formatInvoiceNumber(originalCode, originalNumber),
+      total: centsToDecimal(row.total),
+    }),
+  );
+  const nextDay = new Date(`${range.to}T00:00:00.000Z`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const purchases = await listPurchaseInvoices(tx, {
+    from: range.from,
+    to: nextDay.toISOString().slice(0, 10),
+  });
+  return { invoices, purchases };
 }

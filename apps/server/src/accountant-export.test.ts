@@ -1,7 +1,18 @@
 import { strFromU8, unzipSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  seedVenueWithSeries,
+  seedNodeAndSeries,
+  seedSale,
+  seedVoid,
+  seedSubstitution,
+  seedPurchaseInvoice,
+  type SeededVenue,
+} from "@waitron/reporting/test/fixtures.js";
 import { decimal } from "@waitron/shared";
-import { renderAccountantWorkbook } from "./accountant-export.js";
+import { listAccountantExport, renderAccountantWorkbook } from "./accountant-export.js";
 
 function row(xml: string, number: number): string[] {
   const body = xml.match(new RegExp(`<row r="${number}">([\\s\\S]*?)</row>`))?.[1] ?? "";
@@ -248,5 +259,215 @@ describe("accountant workbook", () => {
       for (const invalid of ["\u0001", "\u000b", "\ud800"]) expect(sheet).not.toContain(invalid);
       expect(sheet).not.toMatch(/<v>[^<]*[eE+]/);
     }
+  });
+});
+
+describe("accountant period selection", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  let venue: SeededVenue;
+  beforeEach(async () => {
+    venue = await seedVenueWithSeries(suite.db);
+  });
+  const list = (from = "2026-11-01", to = "2026-11-30") =>
+    withTransaction(suite.db, (tx) => listAccountantExport(tx, { from, to }));
+
+  it("reads unpaid invoices across nodes by their inclusive recorded civil dates and keeps customer and VAT facts", async () => {
+    const other = await seedNodeAndSeries(suite.db, venue, "B");
+    const [full] = await suite.db
+      .insert(sales)
+      .values({
+        source: "device",
+        deviceId: venue.deviceId,
+        nodeId: other.nodeId,
+        seriesId: other.seriesId,
+        invoiceNumber: 7,
+        issuedAt: "2026-10-31T23:30:00.000Z",
+        issuedOffsetMinutes: 60,
+        operationDate: "2026-10-29",
+        total: 2310,
+        vatBreakdown: [
+          { rate: "10.00", base: "10.00", tax: "1.01" },
+          { rate: "21.00", base: "10.00", tax: "2.09" },
+        ],
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        fiscalBackend: "fake",
+        fiscalState: "recorded",
+        counterpartyLegalName: "Harbour Foods",
+        counterpartyTaxId: "FR00123",
+        counterpartyCountryCode: "FR",
+        counterpartyIdentifierType: "vat-number",
+        counterpartyIdentifierCountryCode: "FR",
+        counterpartyAddress: "12 Harbour Road",
+      })
+      .returning({ id: sales.id });
+    const last = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-12-01T00:30:00.000Z",
+      issuedOffsetMinutes: -60,
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-01T00:30:00.000Z",
+      issuedOffsetMinutes: -60,
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-11-30T23:30:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+
+    expect((await list()).invoices).toEqual([
+      {
+        id: full!.id,
+        nodeId: other.nodeId,
+        invoiceNumber: "B/7",
+        invoiceType: "F1",
+        issueDate: "2026-11-01",
+        operationDate: "2026-10-29",
+        customerName: "Harbour Foods",
+        customerTaxId: "FR00123",
+        customerIdentifierType: "vat-number",
+        customerIdentifierCountry: "FR",
+        customerCountry: "FR",
+        customerAddress: "12 Harbour Road",
+        total: "23.10",
+        vatBreakdown: [
+          { rate: "10.00", base: "10.00", tax: "1.01" },
+          { rate: "21.00", base: "10.00", tax: "2.09" },
+        ],
+        correctsSaleId: null,
+        originalInvoiceNumber: null,
+        voidedAt: null,
+      },
+      {
+        id: last,
+        nodeId: venue.nodeId,
+        invoiceNumber: "A/1",
+        invoiceType: "F2",
+        issueDate: "2026-11-30",
+        operationDate: null,
+        customerName: null,
+        customerTaxId: null,
+        customerIdentifierType: null,
+        customerIdentifierCountry: null,
+        customerCountry: null,
+        customerAddress: null,
+        total: "12.10",
+        vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+        correctsSaleId: null,
+        originalInvoiceNumber: null,
+        voidedAt: null,
+      },
+    ]);
+    expect(await list("2027-01-01", "2027-01-01")).toEqual({ invoices: [], purchases: [] });
+  });
+
+  it("links signed corrections outside the period, retains original tickets and flags later voids", async () => {
+    const original = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-10-10T12:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "R", purpose: "rectificative" })
+      .returning({ id: invoiceSeries.id });
+    const correction = await seedSale(
+      suite.db,
+      { ...venue, seriesId: series!.id as SeededVenue["seriesId"] },
+      {
+        invoiceNumber: 1,
+        issuedAt: "2026-11-01T12:00:00.000Z",
+        total: "-12.10",
+        correctsSaleId: original,
+        lines: [{ vatRate: "21.00", lineTotal: "-10.00" }],
+      },
+    );
+    const ticket = await seedSale(suite.db, venue, {
+      invoiceNumber: 2,
+      issuedAt: "2026-11-02T12:00:00.000Z",
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 3,
+      issuedAt: "2026-11-03T12:00:00.000Z",
+      total: "12.10",
+      counterpartyTaxId: "B12345674",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await seedSubstitution(suite.db, {
+      substitutionSaleId: replacement,
+      substitutedSaleId: ticket,
+    });
+    await seedVoid(suite.db, { saleId: ticket }, "2026-12-05T12:34:56.789Z");
+
+    const rows = (await list()).invoices;
+    expect(rows.map((row) => row.id)).toEqual([correction, ticket]);
+    expect(rows[0]).toMatchObject({
+      invoiceType: "corrective",
+      invoiceNumber: "R/1",
+      total: "-12.10",
+      correctsSaleId: original,
+      originalInvoiceNumber: "A/1",
+      vatBreakdown: [{ rate: "21.00", base: "-10.00", tax: "-2.10" }],
+    });
+    expect(rows[1]).toMatchObject({ total: "12.10", voidedAt: "2026-12-05T12:34:56.789Z" });
+  });
+
+  it("uses inclusive receipt dates for purchases and retains recorded scales and discrepancies", async () => {
+    for (const [index, receivedOn] of [
+      "2026-10-31",
+      "2026-11-01",
+      "2026-11-30",
+      "2026-12-01",
+    ].entries()) {
+      await seedPurchaseInvoice(suite.db, {
+        supplierInvoiceNumber: `P-${index}`,
+        issuedOn: "2026-09-01",
+        receivedOn,
+        total: index === 1 ? "-24.00" : "24.00",
+        deductibleProportion: "75.25",
+        regime: "equivalence_surcharge",
+        lines: [
+          { rate: "10.00", base: "10.00", tax: "1.00" },
+          { rate: "21.00", base: "10.00", tax: "2.10", kind: "capital" },
+        ],
+      });
+    }
+    expect((await list()).purchases).toEqual([
+      expect.objectContaining({
+        supplierInvoiceNumber: "P-1",
+        supplierName: "Supplier",
+        supplierTaxId: "B00000000",
+        issuedOn: "2026-09-01",
+        receivedOn: "2026-11-01",
+        total: "-24.00",
+        deductibleProportion: "75.25",
+        regime: "equivalence_surcharge",
+        note: null,
+        lines: [
+          { rate: "10.00", base: "10.00", tax: "1.00", kind: "ordinary" },
+          { rate: "21.00", base: "10.00", tax: "2.10", kind: "capital" },
+        ],
+      }),
+      expect.objectContaining({
+        supplierInvoiceNumber: "P-2",
+        receivedOn: "2026-11-30",
+        total: "24.00",
+      }),
+    ]);
+    expect(
+      (await list("2026-11-30", "2026-11-30")).purchases.map((p) => p.supplierInvoiceNumber),
+    ).toEqual(["P-2"]);
+    expect((await list("2026-12-31", "2026-12-31")).purchases).toEqual([]);
   });
 });
