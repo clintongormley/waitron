@@ -51,7 +51,7 @@ it("saves exact independent receipt and policy, keeps hidden translations and st
       headerSubtitle: { "es-ES": "Bar", "eu-ES": "Retained" },
       email: "bar@example.com",
     },
-    policy: { receiptPrintMode: "auto", printTradingName: true },
+    policy: { printTradingName: true },
   });
   expect(api.getDepartmentReceipt).toHaveBeenCalledTimes(1);
   await el.updateComplete;
@@ -142,7 +142,6 @@ it("edits receipt policies with the same venue authority as receipt text", async
   await clickReceiptSave(el);
   await expect.poll(() => api.putDepartmentReceipt.mock.calls.length).toBe(1);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1].policy).toEqual({
-    receiptPrintMode: "auto",
     printTradingName: false,
   });
 });
@@ -257,12 +256,12 @@ it("draft address and policy switches affect both preview and the exact submitte
     .toMatchObject({
       departmentId: "bar",
       receipt: { printAddress: true },
-      policy: { receiptPrintMode: "auto", printTradingName: false },
+      policy: { printTradingName: false },
     });
   await clickReceiptSave(el);
   expect(api.putDepartmentReceipt.mock.lastCall?.[1]).toMatchObject({
     receipt: { printAddress: true },
-    policy: { receiptPrintMode: "auto", printTradingName: false },
+    policy: { printTradingName: false },
   });
 });
 it("returning an initially absent address switch to off restores the quiet Save baseline", async () => {
@@ -452,7 +451,7 @@ it.each(["success", "refusal"] as const)(
             operationDescription: "Dining service",
             headerSubtitle: { "es-ES": "Bar", "eu-ES": "Retained" },
           },
-          policy: { receiptPrintMode: "auto", printTradingName: false },
+          policy: { printTradingName: false },
         },
       ],
     ]);

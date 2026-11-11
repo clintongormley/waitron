@@ -214,7 +214,6 @@ function till(formFactor: FormFactor) {
     venueName: "Bar Pepe",
     nif: "B12345678",
     orderFlow: "prepay" as const,
-    receiptPrintMode: "auto" as const,
     fireControl: "waiter" as const,
     courses,
     cardProvider: "none" as const,

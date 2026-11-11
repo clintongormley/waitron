@@ -47,12 +47,6 @@ async function mount() {
     if (path === "/management-api/venue-service/departments/d1/settings") {
       Object.assign(stored.salePolicies.departments[0]!, body);
       return structuredClone(stored);
-    } else if (
-      path === "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode"
-    ) {
-      stored.salePolicies.departments[0]!.receiptPrintMode = (
-        body as { value: "auto" | "on_request" }
-      ).value;
     } else if (path === "/management-api/venue-service/zones/z1/settings") {
       Object.assign(stored.salePolicies.zones[0]!, body);
     } else throw new Error(`Unexpected write: ${method} ${path}`);
@@ -178,7 +172,6 @@ it.each([
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
         [field]: override,
       },
     });
@@ -210,7 +203,6 @@ it.each([
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     });
     expect(combo.value).toBe("");

@@ -608,7 +608,6 @@ it("a retained zone draft cannot save twice while its first write is refreshing"
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     ],
   ]);

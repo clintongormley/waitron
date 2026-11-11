@@ -71,7 +71,6 @@ it("shows only inherited placeholders, clears to null and saves the service sett
     orderStart: null,
     paidWhen: null,
     collectionNumber: null,
-    receiptPrintMode: null,
   });
   await fields().updateComplete;
   const combos = [...fields().shadowRoot!.querySelectorAll("wt-combobox")];
@@ -99,7 +98,6 @@ it("shows only inherited placeholders, clears to null and saves the service sett
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     },
   ]);
@@ -109,7 +107,6 @@ it("shows only inherited placeholders, clears to null and saves the service sett
 });
 it("renders inherited Print from a refreshed department", async () => {
   await mount();
-  el.model!.salePolicies.departments[0]!.receiptPrintMode = "on_request";
   el.model!.salePolicies.departments[0]!.collectionNumber = "numbered";
   el.model = structuredClone(el.model!);
   await el.updateComplete;
@@ -189,7 +186,6 @@ it.each(["prepay", "ticket_then_pay", "table_tab"] as const)(
       orderStart: "counter",
       paidWhen: "prepay",
       collectionNumber: "none",
-      receiptPrintMode: "auto",
     });
   },
 );
@@ -201,7 +197,6 @@ it("a removed zone releases its form, while a zone with no policy starts by inhe
     orderStart: null,
     paidWhen: null,
     collectionNumber: null,
-    receiptPrintMode: null,
   });
   el.model = { ...el.model!, zones: [] };
   await el.updateComplete;
@@ -283,7 +278,6 @@ it.each([
                 orderStart: null,
                 paidWhen: null,
                 collectionNumber: null,
-                receiptPrintMode: null,
               }
             : zone,
         ),
@@ -367,7 +361,6 @@ it.each([
             orderStart: null,
             paidWhen: null,
             collectionNumber: null,
-            receiptPrintMode: null,
             [kind]: submitted,
           },
         },
@@ -393,7 +386,6 @@ it.each([
           orderStart: null,
           paidWhen: null,
           collectionNumber: null,
-          receiptPrintMode: null,
           [kind]: newer,
         },
       });
@@ -437,7 +429,6 @@ it.each([
           orderStart: null,
           paidWhen: null,
           collectionNumber: null,
-          receiptPrintMode: null,
           [name]: changed,
         },
       },

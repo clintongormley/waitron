@@ -201,7 +201,6 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       }),
   ],
   [

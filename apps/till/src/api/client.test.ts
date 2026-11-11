@@ -681,7 +681,6 @@ describe("TillApi", () => {
       venueName: "Deli",
       nif: "B12345678",
       orderFlow: "prepay",
-      receiptPrintMode: "on_request",
       fireControl: "waiter",
       cardProvider: "none",
       tipsEnabled: false,

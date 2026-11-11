@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c3d93748-c255-47a3-aa91-a23966ababee",
+  "id": "2da5625a-4684-41cc-baa9-e00482dcf696",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15113,14 +15113,6 @@
           "autoincrement": false,
           "default": "'none'"
         },
-        "receipt_print_mode": {
-          "name": "receipt_print_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'auto'"
-        },
         "print_trading_name": {
           "name": "print_trading_name",
           "type": "integer",
@@ -15160,10 +15152,6 @@
         "department_sale_policies_collection_number_ck": {
           "name": "department_sale_policies_collection_number_ck",
           "value": "\"department_sale_policies\".\"collection_number\" in ('none', 'numbered')"
-        },
-        "department_sale_policies_receipt_mode_ck": {
-          "name": "department_sale_policies_receipt_mode_ck",
-          "value": "\"department_sale_policies\".\"receipt_print_mode\" in ('auto', 'on_request')"
         }
       }
     },
@@ -15775,13 +15763,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "receipt_print_mode": {
-          "name": "receipt_print_mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -15814,10 +15795,6 @@
         "zone_sale_policies_collection_number_ck": {
           "name": "zone_sale_policies_collection_number_ck",
           "value": "\"zone_sale_policies\".\"collection_number\" in ('none', 'numbered')"
-        },
-        "zone_sale_policies_receipt_mode_ck": {
-          "name": "zone_sale_policies_receipt_mode_ck",
-          "value": "\"zone_sale_policies\".\"receipt_print_mode\" in ('auto', 'on_request')"
         }
       }
     },

@@ -225,7 +225,7 @@ it("zone service deletion invalidates pending discard on the same retained compo
   await el.updateComplete;
   const fields = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
   emit(fields, "service-settings-change", {
-    value: { ...fields.value, receiptPrintMode: "on_request" },
+    value: { ...fields.value, paidWhen: "ticket_then_pay" },
   });
   await el.updateComplete;
   expect(app.leave.coordinator.isDirty([el])).toBe(true);

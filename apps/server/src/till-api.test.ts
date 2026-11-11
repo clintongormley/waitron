@@ -37,6 +37,7 @@ import {
   setProfileServiceAccess,
   setRoutingCell,
   zoneServicePolicies,
+  zoneSalePolicies,
 } from "@waitron/venue-service";
 import {
   createPinThrottle,
@@ -2192,44 +2193,35 @@ describe("zone-offer catalogue routes", () => {
     }
   });
 
-  it("offers the selected zone's effective receipt choice instead of the venue-wide choice", async () => {
-    const app = new Hono();
-    mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
-    await suite.db.execute(sql`
-      update department_sale_policies set receipt_print_mode = 'on_request'
-      where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
-    await suite.db.execute(sql`
-      update zone_sale_policies set receipt_print_mode = 'auto' where zone_id = ${counterZoneId}`);
-    try {
-      for (const path of [
-        "/api/default-service-zone/offers",
-        `/api/service-zones/${counterZoneId}/offers`,
-      ]) {
-        const response = await app.request(path, { headers });
-        expect(response.status).toBe(200);
-        expect(await response.json()).toMatchObject({
-          context: { zoneId: counterZoneId, receiptPrintMode: "auto" },
+  it.each(["default", "selected"] as const)(
+    "refuses %s-zone offers while its sale policy needs repair",
+    async (route) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const token = await openSession(suite.db);
+      const [policy] = await suite.db
+        .select()
+        .from(zoneSalePolicies)
+        .where(eq(zoneSalePolicies.zoneId, counterZoneId));
+      expect(policy).toBeDefined();
+      await suite.db.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, counterZoneId));
+      try {
+        const path =
+          route === "default"
+            ? "/api/default-service-zone/offers"
+            : `/api/service-zones/${counterZoneId}/offers`;
+        const response = await app.request(path, {
+          headers: { cookie: `${SESSION_COOKIE}=${token}` },
         });
+        expect(response.status).toBe(404);
+        expect(await response.json()).toMatchObject({
+          error: { code: "service_zone.not_found" },
+        });
+      } finally {
+        await suite.db.insert(zoneSalePolicies).values(policy!);
       }
-      await suite.db.execute(sql`
-        update zone_sale_policies set receipt_print_mode = null where zone_id = ${counterZoneId}`);
-      const inherited = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
-        headers,
-      });
-      expect(inherited.status).toBe(200);
-      expect(await inherited.json()).toMatchObject({
-        context: { zoneId: counterZoneId, receiptPrintMode: "on_request" },
-      });
-    } finally {
-      await suite.db.execute(sql`
-        update zone_sale_policies set receipt_print_mode = null where zone_id = ${counterZoneId}`);
-      await suite.db.execute(sql`
-        update department_sale_policies set receipt_print_mode = 'auto'
-        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
-    }
-  });
+    },
+  );
 
   it("returns the configured default counter zone and its offers", async () => {
     const app = new Hono();
@@ -2240,7 +2232,9 @@ describe("zone-offer catalogue routes", () => {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body.context).not.toHaveProperty("receiptPrintMode");
+    expect(body).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
       zones: [{ id: counterZoneId, name: "Counter" }],
       offers: [{ id: waterOfferId, grossPrice: "1.75" }],
@@ -2297,7 +2291,9 @@ describe("zone-offer catalogue routes", () => {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
+    const body = await res.json();
+    expect(body.context).not.toHaveProperty("receiptPrintMode");
+    expect(body).toMatchObject({
       context: { zoneId: counterZoneId, serviceMode: "prepay" },
       defaultMenuId: waterProduct.catalogueId,
       menus: [{ id: waterProduct.catalogueId, name: "Carta", isDefault: true }],

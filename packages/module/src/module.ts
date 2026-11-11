@@ -184,7 +184,6 @@ export interface EffectiveSalePolicy {
   readonly tradingName: string;
   readonly paidWhen: "prepay" | "ticket_then_pay";
   readonly collectionNumber: "none" | "numbered";
-  readonly receiptPrintMode: "auto" | "on_request";
   readonly printTradingName: boolean;
 }
 

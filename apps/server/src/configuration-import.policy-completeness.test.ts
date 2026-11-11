@@ -117,7 +117,6 @@ it("imports complete policies and resolves inherited values for the remapped zon
     orderStart: "table",
     paidWhen: "prepay",
     collectionNumber: "none",
-    receiptPrintMode: "auto",
     printTradingName: true,
   });
 });

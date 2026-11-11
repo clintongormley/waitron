@@ -392,7 +392,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 17,
+  version: 18,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -5501,7 +5501,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
       ...exported,
       tables: {
         ...exported.tables,
-        [table]: exported.tables[table]!.map((row) => ({ ...row, receipt_print_mode: "never" })),
+        [table]: exported.tables[table]!.map((row) => ({ ...row, receipt_print_mode: "auto" })),
       },
     };
     expect(bad.tables[table]).not.toHaveLength(0);
@@ -5516,7 +5516,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
       ),
     ).rejects.toMatchObject({
       code: "setup.request_invalid",
-      params: { field: `${table}.receipt_print_mode` },
+      params: { field: `table:${table}` },
     });
     expect(targetSuite.db.all(sql`select * from departments`)).toEqual(before.departments);
     expect(targetSuite.db.all(sql`select * from department_sale_policies`)).toEqual(
@@ -5537,26 +5537,22 @@ it("A725 transfers station and department choices", async () => {
       name: "Receipt department",
       orderStart: "table",
     });
-    await tx
-      .update(departmentSalePolicies)
-      .set({ receiptPrintMode: "on_request" })
-      .where(eq(departmentSalePolicies.departmentId, department.id));
     const explicit = await createServiceZone(tx, {
       name: "Explicit receipts",
       departmentId: department.id,
     });
-    const inherited = await createServiceZone(tx, {
+    await createServiceZone(tx, {
       name: "Inherited receipts",
       departmentId: department.id,
     });
     await tx
-      .update(zoneSalePolicies)
-      .set({ receiptPrintMode: "auto" })
-      .where(eq(zoneSalePolicies.zoneId, explicit.id));
+      .update(departmentSalePolicies)
+      .set({ printTradingName: false })
+      .where(eq(departmentSalePolicies.departmentId, department.id));
     await tx
       .update(zoneSalePolicies)
-      .set({ receiptPrintMode: null })
-      .where(eq(zoneSalePolicies.zoneId, inherited.id));
+      .set({ collectionNumber: "numbered" })
+      .where(eq(zoneSalePolicies.zoneId, explicit.id));
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const exported = await buildConfigurationBundle(
@@ -5566,7 +5562,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(17);
+  expect(exported.version).toBe(18);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
@@ -5585,15 +5581,15 @@ it("A725 transfers station and department choices", async () => {
   const targetVenueId = await venueLocationId(targetSuite.db);
   expect(targetVenueId).not.toBe(sourceVenueId);
   const modes = await targetSuite.db.execute(sql`
-    select z.name, p.receipt_print_mode as department_mode, q.receipt_print_mode as zone_mode
+    select z.name, p.print_trading_name as trading_name, q.collection_number as zone_collection
     from floor_zones z join zone_service_policies s on s.zone_id=z.id
     join departments d on d.id=s.department_id
     join department_sale_policies p on p.department_id=d.id
     join zone_sale_policies q on q.zone_id=z.id
     where d.name='Receipt department' order by z.name`);
   expect(modes.rows).toEqual([
-    { name: "Explicit receipts", department_mode: "on_request", zone_mode: "auto" },
-    { name: "Inherited receipts", department_mode: "on_request", zone_mode: null },
+    { name: "Explicit receipts", trading_name: 0, zone_collection: "numbered" },
+    { name: "Inherited receipts", trading_name: 0, zone_collection: null },
   ]);
 });
 

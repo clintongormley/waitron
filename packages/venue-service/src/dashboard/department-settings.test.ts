@@ -71,7 +71,6 @@ const model: VenueServiceView = {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
         printTradingName: false,
       },
     ],
@@ -81,12 +80,10 @@ const model: VenueServiceView = {
         orderStart: "counter",
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
         effective: {
           orderStart: "counter",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
           printTradingName: false,
         },
       },
@@ -95,12 +92,10 @@ const model: VenueServiceView = {
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: "on_request",
         effective: {
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "on_request",
           printTradingName: false,
         },
       },
@@ -109,12 +104,10 @@ const model: VenueServiceView = {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
         effective: {
           orderStart: "table",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
           printTradingName: false,
         },
       },
@@ -219,7 +212,6 @@ it("opens quiet with Cancel before Save and sends all settings in one request", 
           orderStart: "counter",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
         },
       },
       bubbles: true,
@@ -570,7 +562,6 @@ it("undoing a service or destination change returns Save to quiet without depend
             orderStart: "table",
             paidWhen,
             collectionNumber: "none",
-            receiptPrintMode: "auto",
           },
         },
         bubbles: true,
@@ -599,7 +590,6 @@ it("undoing a service or destination change returns Save to quiet without depend
 it("a service-setting change updates the differing-zone readout while null overrides follow", async () => {
   const view = structuredClone(model);
   view.salePolicies.zones[1]!.paidWhen = null;
-  view.salePolicies.zones[1]!.receiptPrintMode = null;
   const { el } = await mount(view);
   const service = el.shadowRoot!.querySelector("dashboard-service-settings-fields")!;
   service.dispatchEvent(
@@ -609,7 +599,6 @@ it("a service-setting change updates the differing-zone readout while null overr
           orderStart: "table",
           paidWhen: "ticket_then_pay",
           collectionNumber: "none",
-          receiptPrintMode: "on_request",
         },
       },
       bubbles: true,
@@ -675,13 +664,13 @@ it("a same-department snapshot updates pristine fields but leaves a dirty draft 
   const { el } = await mount();
   const updated = structuredClone(model);
   updated.departments[0]!.name = "Live name";
-  updated.salePolicies.departments[0]!.receiptPrintMode = "on_request";
+  updated.salePolicies.departments[0]!.paidWhen = "ticket_then_pay";
   el.model = updated;
   await el.updateComplete;
   expect(field(el, "name").value).toBe("Live name");
-  expect(
-    el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value.receiptPrintMode,
-  ).toBe("on_request");
+  expect(el.shadowRoot!.querySelector("dashboard-service-settings-fields")!.value.paidWhen).toBe(
+    "ticket_then_pay",
+  );
   expect(save(el).disabled).toBe(true);
   await change(el, "name", "Draft");
   const newer = structuredClone(updated);
@@ -820,7 +809,6 @@ it("differing-zone summaries name paid timing and collection choices independent
           orderStart: "counter",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
         },
       },
       bubbles: true,
@@ -853,7 +841,6 @@ it.each(["table_tab", "ticket_then_pay"] as const)(
       orderStart: "counter",
       paidWhen: "prepay",
       collectionNumber: "none",
-      receiptPrintMode: "auto",
     });
   },
 );
@@ -1314,7 +1301,6 @@ it("a draft typed on two tabs is sent by one Save", async () => {
           orderStart: "counter",
           paidWhen: "prepay",
           collectionNumber: "none",
-          receiptPrintMode: "auto",
         },
       },
       bubbles: true,

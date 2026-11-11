@@ -1291,7 +1291,6 @@ describe("departments", () => {
           orderStart: null,
           paidWhen: null,
           collectionNumber: null,
-          receiptPrintMode: null,
         },
       ]);
       expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
@@ -1314,7 +1313,6 @@ describe("departments", () => {
         orderStart: "counter" as const,
         paidWhen: "ticket_then_pay" as const,
         collectionNumber: "numbered" as const,
-        receiptPrintMode: "on_request" as const,
       };
       await tx.update(zoneSalePolicies).set(overrides).where(eq(zoneSalePolicies.zoneId, zone.id));
       await configureZone(tx, { zoneId: zone.id, departmentId: second.id });
@@ -1478,16 +1476,15 @@ describe("departments", () => {
         orderStart: "counter",
       });
       await configureZone(tx, { zoneId, departmentId: department.id });
-      await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", "on_request");
+      await setZoneSalePolicyOverride(tx, zoneId, "collectionNumber", "numbered");
       await tx.execute(sql`update floor_zones set active = false where id = ${zoneId}`);
     });
 
     await expect(scoped((tx) => resolveSalePolicy(tx, zoneId))).resolves.toMatchObject({
       zoneId,
-      receiptPrintMode: "on_request",
     });
     await expect(
-      scoped((tx) => setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", "auto")),
+      scoped((tx) => setZoneSalePolicyOverride(tx, zoneId, "collectionNumber", "none")),
     ).rejects.toMatchObject({ code: "service_zone.not_found" });
   });
 
@@ -1504,13 +1501,13 @@ describe("departments", () => {
     });
 
     await scoped(async (tx) => {
-      await setDepartmentSalePolicyField(tx, department.id, "receiptPrintMode", "on_request");
+      await setDepartmentSalePolicyField(tx, department.id, "collectionNumber", "numbered");
       await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", "ticket_then_pay");
-      await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", "auto");
-      await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", null);
+      await setZoneSalePolicyOverride(tx, zoneId, "collectionNumber", "none");
+      await setZoneSalePolicyOverride(tx, zoneId, "collectionNumber", null);
       await expect(resolveSalePolicy(tx, zoneId)).resolves.toMatchObject({
         paidWhen: "ticket_then_pay",
-        receiptPrintMode: "on_request",
+        collectionNumber: "numbered",
       });
     });
   });
@@ -1530,10 +1527,8 @@ describe("departments", () => {
     await db.execute(sql`
       update department_sale_policies
       set paid_when = 'ticket_then_pay', collection_number = 'numbered',
-          receipt_print_mode = 'on_request', print_trading_name = 0
+          print_trading_name = 0
       where department_id = ${department.id}`);
-    await db.execute(sql`
-      update zone_sale_policies set receipt_print_mode = 'auto' where zone_id = ${zoneId}`);
 
     await scoped(async (tx) => {
       await expect(resolveSalePolicy(tx, zoneId)).resolves.toEqual({
@@ -1544,7 +1539,6 @@ describe("departments", () => {
         tradingName: "Terrace Kitchen",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "auto",
         printTradingName: false,
       });
     });
@@ -1564,13 +1558,10 @@ describe("departments", () => {
     const policies = await db.execute<{
       paid_when: string | null;
       collection_number: string | null;
-      receipt_print_mode: string | null;
     }>(sql`
-      select paid_when, collection_number, receipt_print_mode
+      select paid_when, collection_number
       from zone_sale_policies where zone_id = ${zoneId}`);
-    expect(policies.rows).toEqual([
-      { paid_when: null, collection_number: null, receipt_print_mode: null },
-    ]);
+    expect(policies.rows).toEqual([{ paid_when: null, collection_number: null }]);
   });
 
   it("gives a newly created department the quick-sale and receipt defaults", async () => {
@@ -1582,16 +1573,14 @@ describe("departments", () => {
     const policies = await db.execute<{
       paid_when: string;
       collection_number: string;
-      receipt_print_mode: string;
       print_trading_name: number;
     }>(sql`
-      select paid_when, collection_number, receipt_print_mode, print_trading_name
+      select paid_when, collection_number, print_trading_name
       from department_sale_policies where department_id = ${department.id}`);
     expect(policies.rows).toEqual([
       {
         paid_when: "prepay",
         collection_number: "none",
-        receipt_print_mode: "auto",
         print_trading_name: 1,
       },
     ]);
@@ -3338,12 +3327,6 @@ describe("combined settings operations", () => {
         "printTradingName",
         false,
       );
-      await settingsOperations.setDepartmentSalePolicyField(
-        tx,
-        department.id,
-        "receiptPrintMode",
-        "on_request",
-      );
       expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
         departmentId: department.id,
@@ -3353,7 +3336,6 @@ describe("combined settings operations", () => {
         orderStart: "table",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
       expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "table_tab",
@@ -3374,13 +3356,11 @@ describe("combined settings operations", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
       expect(await resolveSalePolicy(tx, zone.id)).toMatchObject({
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
       expect(await resolveZoneContext(tx, zone.id)).toMatchObject({
         serviceMode: "ticket_then_pay",
@@ -3403,12 +3383,10 @@ describe("combined settings operations", () => {
           orderStart: null,
           paidWhen: null,
           collectionNumber: null,
-          receiptPrintMode: null,
           effective: {
             orderStart: "table",
             paidWhen: "prepay",
             collectionNumber: "none",
-            receiptPrintMode: "auto",
             printTradingName: true,
           },
         },
@@ -3424,12 +3402,10 @@ describe("combined settings operations", () => {
             orderStart: null,
             paidWhen: null,
             collectionNumber: null,
-            receiptPrintMode: null,
             effective: {
               orderStart: "counter",
               paidWhen: "prepay",
               collectionNumber: "none",
-              receiptPrintMode: "auto",
               printTradingName: false,
             },
           },
@@ -3455,12 +3431,6 @@ describe("combined settings operations", () => {
         "printTradingName",
         true,
       );
-      await settingsOperations.setDepartmentSalePolicyField(
-        tx,
-        department.id,
-        "receiptPrintMode",
-        "on_request",
-      );
       await settingsOperations.saveDepartmentEditSettings(tx, department.id, {
         name: "Restaurant",
         tradingName: "Receipt",
@@ -3472,7 +3442,6 @@ describe("combined settings operations", () => {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
       });
       expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
@@ -3483,13 +3452,11 @@ describe("combined settings operations", () => {
         orderStart: "table",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
       });
       await settingsOperations.saveZoneServiceSettings(tx, zone.id, {
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       });
       expect(await resolveSalePolicy(tx, zone.id)).toEqual({
         zoneId: zone.id,
@@ -3500,7 +3467,6 @@ describe("combined settings operations", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
     });
   });

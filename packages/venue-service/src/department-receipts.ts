@@ -334,7 +334,6 @@ export async function readDepartmentReceiptPolicy(
 ): Promise<DepartmentReceiptPolicy> {
   const [row] = await tx
     .select({
-      receiptPrintMode: departmentSalePolicies.receiptPrintMode,
       printTradingName: departmentSalePolicies.printTradingName,
     })
     .from(departments)
@@ -342,7 +341,6 @@ export async function readDepartmentReceiptPolicy(
     .where(and(rowQuery(departmentId), eq(departments.active, true)));
   if (!row) throw new AppError("department.not_found", { departmentId });
   return {
-    receiptPrintMode: row.receiptPrintMode ?? "auto",
     printTradingName: row.printTradingName ?? false,
   };
 }
@@ -354,12 +352,6 @@ export async function saveDepartmentReceiptSettings(
   rasters?: ReceiptLogoRasters,
 ): Promise<void> {
   await writeDepartmentReceipt(tx, departmentId, input.receipt, rasters);
-  await setDepartmentSalePolicyField(
-    tx,
-    departmentId,
-    "receiptPrintMode",
-    input.policy.receiptPrintMode,
-  );
   await setDepartmentSalePolicyField(
     tx,
     departmentId,

@@ -64,7 +64,6 @@ import {
   createDepartment,
   createServiceZone,
   departmentReceipts,
-  departmentSalePolicies,
   departments,
 } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
@@ -1678,10 +1677,6 @@ describe("the invoice at full payment (design §8 test 8)", () => {
         name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
-      await tx
-        .update(departmentSalePolicies)
-        .set({ receiptPrintMode: "on_request" })
-        .where(eq(departmentSalePolicies.departmentId, department.id));
       const table = await createTable(tx, venue.cfg, {
         label: `D-${randomUUID().slice(0, 8)}`,
         zoneId: zone.id,

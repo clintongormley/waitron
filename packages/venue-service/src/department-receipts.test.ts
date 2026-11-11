@@ -599,7 +599,6 @@ describe("receipt and printing policy transaction", () => {
   it("an absent policy uses the established sale reader default until it is repaired", async () => {
     const f = await fixture();
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual({
-      receiptPrintMode: "auto",
       printTradingName: false,
     });
   });
@@ -608,7 +607,6 @@ describe("receipt and printing policy transaction", () => {
     const f = await fixture();
     await suite.db.insert(departmentSalePolicies).values({ departmentId: f.id });
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual({
-      receiptPrintMode: "auto",
       printTradingName: true,
     });
   });
@@ -621,7 +619,7 @@ describe("receipt and printing policy transaction", () => {
       collectionNumber: "numbered",
     });
     const receipt = { printAddress: false, operationDescription: "Dining service" };
-    const policy = { receiptPrintMode: "on_request" as const, printTradingName: false };
+    const policy = { printTradingName: false };
     await scoped((tx) => receipts.saveDepartmentReceiptSettings(tx, f.id, { receipt, policy }));
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, f.cfg, f.id))).toEqual(receipt);
     expect(await scoped((tx) => receipts.readDepartmentReceiptPolicy(tx, f.id))).toEqual(policy);
@@ -653,7 +651,7 @@ describe("receipt and printing policy transaction", () => {
         scoped((tx) =>
           receipts.saveDepartmentReceiptSettings(tx, f.id, {
             receipt: { operationDescription: "New description" },
-            policy: { receiptPrintMode: "on_request", printTradingName: false },
+            policy: { printTradingName: false },
           }),
         ),
       ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: f.id } });
@@ -683,7 +681,7 @@ describe("receipt and printing policy transaction", () => {
         scoped((tx) =>
           receipts.saveDepartmentReceiptSettings(tx, id, {
             receipt: {},
-            policy: { receiptPrintMode: "auto", printTradingName: true },
+            policy: { printTradingName: true },
           }),
         ),
       ).rejects.toMatchObject({ code: "department.not_found" });

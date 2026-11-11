@@ -2292,6 +2292,8 @@ so there is nothing on the document that says who each *duplicado* belongs to.
 
 ### Q22. Printing the ticket only on request, or never (added 2026-09-23)
 
+**Source update, 2026-11-11:** A739 retires the stored receipt-print setting. Final payment offers Receipt / Full invoice / None, and paper is explicit. This does not answer the delivery question below.
+
 **Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
 The current receipt policy is declared in `packages/db/src/schema/venue-service/service.ts` and read
 by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)

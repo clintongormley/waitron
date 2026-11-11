@@ -266,7 +266,7 @@ export async function enqueueSaleReceipt(
 ): Promise<void> {
   await optionalDocument(tx, "enqueueSaleReceipt", saleId, async () => {
     const [sale] = await tx
-      .select({ workingOrderId: sales.workingOrderId, operatorId: sales.operatorId })
+      .select({ workingOrderId: sales.workingOrderId })
       .from(sales)
       .where(eq(sales.id, saleId));
     const context = sale?.workingOrderId
@@ -275,9 +275,7 @@ export async function enqueueSaleReceipt(
     if (context?.serviceMode === "prepay") {
       await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber, printers);
     }
-    if ((await reserveStagedInvoiceDelivery(tx, saleId)) !== false) return;
-    if (sale?.workingOrderId != null) return;
-    await enqueueOriginalReceipt(tx, cfg, ticket, saleId, printers, sale?.operatorId ?? null);
+    await reserveStagedInvoiceDelivery(tx, saleId);
   });
 }
 
@@ -300,12 +298,6 @@ export async function enqueueCollectionTicket(
   });
 }
 
-/**
- * The manual reprint of an already-filed sale: it files nothing, has no `receipt_print_mode` gate
- * (a reprint is always available), and never opens the drawer. No active printer means no job.
- * `language` puts the fixed words and the formatting in another receipt language; the caller has
- * checked it.
- */
 export async function enqueueReceiptReprint(
   tx: Transaction,
   cfg: OriginConfig,

@@ -59,10 +59,8 @@ export function validateDepartmentReceiptWrite(
   const policy = input.policy;
   if (
     !object(policy) ||
-    typeof policy.receiptPrintMode !== "string" ||
-    !["auto", "on_request"].includes(policy.receiptPrintMode) ||
     typeof policy.printTradingName !== "boolean" ||
-    Object.keys(policy).some((key) => key !== "receiptPrintMode" && key !== "printTradingName")
+    Object.keys(policy).some((key) => key !== "printTradingName")
   )
     throw new AppError("management.request_invalid", { field: "policy" });
   const receipt = validateDepartmentReceipt(input.receipt, languages.storageLanguages);
@@ -107,7 +105,6 @@ export function validateDepartmentReceiptWrite(
   return {
     receipt,
     policy: {
-      receiptPrintMode: policy.receiptPrintMode as "auto" | "on_request",
       printTradingName: policy.printTradingName,
     },
   };

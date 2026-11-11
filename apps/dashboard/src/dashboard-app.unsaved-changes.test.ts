@@ -934,7 +934,7 @@ it.each([
         ],
         getDepartmentReceipt: async () => ({
           receipt: { operationDescription: "Meals" },
-          policy: { receiptPrintMode: "auto", printTradingName: true },
+          policy: { printTradingName: true },
           receiptLanguage: "en-GB",
           operationDescriptionRequired: true,
           languages: ["en-GB"],
@@ -956,7 +956,6 @@ it.each([
                 tradingName: null,
                 orderStart: "counter",
                 paidWhen: "prepay",
-                receiptPrintMode: "auto",
                 printTradingName: true,
                 collectionNumber: "none",
               },

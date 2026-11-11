@@ -327,10 +327,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const department = await db.execute<{
       paid_when: string;
       collection_number: string;
-      receipt_print_mode: string;
       print_trading_name: number;
     }>(sql`
-      select order_start, paid_when, collection_number, receipt_print_mode, print_trading_name
+      select order_start, paid_when, collection_number, print_trading_name
       from department_sale_policies
       where department_id = (
         select id from departments where is_default = 1
@@ -340,24 +339,20 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
         order_start: "counter",
         paid_when: "prepay",
         collection_number: "none",
-        receipt_print_mode: "auto",
         print_trading_name: 1,
       },
     ]);
     const zone = await db.execute<{
       paid_when: string | null;
       collection_number: string | null;
-      receipt_print_mode: string | null;
     }>(sql`
-      select paid_when, collection_number, receipt_print_mode
+      select paid_when, collection_number
       from zone_sale_policies
       where zone_id = (
         select zone_id from zone_service_policies
         where is_counter_default = 1
       )`);
-    expect(zone.rows).toEqual([
-      { paid_when: null, collection_number: null, receipt_print_mode: null },
-    ]);
+    expect(zone.rows).toEqual([{ paid_when: null, collection_number: null }]);
   });
 
   it("seeds one counter policy idempotently without resetting authored mode", async () => {

@@ -34,7 +34,7 @@ const suite = useVenueDb({
 });
 const fiscal = ALL_MODULES.find((module) => module.fiscal?.venueFields !== undefined)!.fiscal!
   .venueFields!;
-const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+const policy = { printTradingName: true } as const;
 const savedReceipt = {
   operationDescription: "Meals",
   footerMessage: { "eu-ES": "Eskerrik asko", "es-ES": "Antes" },
@@ -203,7 +203,7 @@ describe("replacement department receipt HTTP contract", () => {
         printAddress: true,
         footerMessage: { "eu-ES": "Eskerrik asko", "es-ES": "Gracias" },
       },
-      policy: { receiptPrintMode: "on_request", printTradingName: false },
+      policy: { printTradingName: false },
     });
     expect((await f.put(input)).status).toBe(204);
     const saved = await rows();
@@ -213,7 +213,7 @@ describe("replacement department receipt HTTP contract", () => {
   it("uses the same venue permission for decoration and policy changes, refusing a later loss atomically", async () => {
     const f = await fixture();
     expect((await f.put(body())).status).toBe(204);
-    const changedPolicy = { ...policy, receiptPrintMode: "on_request" as const };
+    const changedPolicy = { ...policy };
     expect((await f.put(body({ policy: changedPolicy }))).status).toBe(204);
     expect((await rows()).policies[0]).toMatchObject(changedPolicy);
     await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, f.personId));

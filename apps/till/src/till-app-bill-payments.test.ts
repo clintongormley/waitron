@@ -1446,18 +1446,16 @@ describe("till-app: a bill payment's refusals and retries", () => {
         getPartyBills: vi
           .fn()
           .mockResolvedValue([billOf({ status, receiptAvailable: status === "placed" })]),
-        getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+        getTill: vi.fn().mockResolvedValue({ ...till }),
         listZoneOffers: vi.fn().mockResolvedValue({
           ...offers,
-          context: { ...offers.context, receiptPrintMode: "on_request" },
+          context: { ...offers.context },
         }),
         listDefaultZoneOffers: vi.fn().mockResolvedValue({
           ...offers,
-          context: { ...offers.context, receiptPrintMode: "on_request" },
+          context: { ...offers.context },
         }),
-        getTablesState: vi
-          .fn()
-          .mockResolvedValue([{ ...mesa(), zonePolicy: { receiptPrintMode: "on_request" } }]),
+        getTablesState: vi.fn().mockResolvedValue([{ ...mesa(), zonePolicy: {} }]),
         ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
         listBills: vi.fn().mockResolvedValue(listPage([selected])),
@@ -1530,18 +1528,16 @@ describe("till-app: a bill payment's refusals and retries", () => {
         findBillOptions: vi.fn().mockResolvedValue(billOptions),
         listBills: vi.fn().mockResolvedValue(listPage([selected])),
         getFindBill: vi.fn().mockResolvedValue(selected),
-        getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+        getTill: vi.fn().mockResolvedValue({ ...till }),
         listZoneOffers: vi.fn().mockResolvedValue({
           ...offers,
-          context: { ...offers.context, receiptPrintMode: "on_request" },
+          context: { ...offers.context },
         }),
         listDefaultZoneOffers: vi.fn().mockResolvedValue({
           ...offers,
-          context: { ...offers.context, receiptPrintMode: "on_request" },
+          context: { ...offers.context },
         }),
-        getTablesState: vi
-          .fn()
-          .mockResolvedValue([{ ...mesa(), zonePolicy: { receiptPrintMode: "on_request" } }]),
+        getTablesState: vi.fn().mockResolvedValue([{ ...mesa(), zonePolicy: {} }]),
       });
       await openTable(el);
       emit(shell(el), "find-bill");

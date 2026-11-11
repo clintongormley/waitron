@@ -1223,6 +1223,8 @@ paper without prior express, revocable consent, and paper can never be charged f
 the receipt instead" flow is opt-in only. Today this is moot — grep receipt: there is **no** electronic
 receipt path in `apps/server/src` or `packages/printing/src`; every receipt is ESC/POS on paper.
 
+**Source update, 2026-11-11:** A739 retires the stored receipt-print setting. Final payment offers Receipt / Full invoice / None, and paper is explicit. This does not answer the delivery question below.
+
 **Source update, 2026-10-06:** A261 step 8 removes the unused location receipt column.
 The current receipt policy is declared in `packages/db/src/schema/venue-service/service.ts` and read
 by `packages/venue-service/src/operations.ts`; [the retirement plan](../superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)

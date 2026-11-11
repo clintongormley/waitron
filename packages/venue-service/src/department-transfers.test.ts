@@ -1450,7 +1450,6 @@ describe("combined department transfer settings", () => {
     const v = await venue();
     await withTransaction(suite.db, async (tx) => {
       await service.setDepartmentSalePolicyField(tx, v.b, "printTradingName", true);
-      await service.setDepartmentSalePolicyField(tx, v.b, "receiptPrintMode", "on_request");
       await service.saveDepartmentEditSettings(tx, v.b, {
         name: "New restaurant",
         tradingName: "Receipt name",
@@ -1473,7 +1472,6 @@ describe("combined department transfer settings", () => {
         orderStart: "counter",
         paidWhen: "ticket_then_pay",
         collectionNumber: "numbered",
-        receiptPrintMode: "on_request",
       });
     });
   });
@@ -1487,7 +1485,6 @@ describe("combined department transfer settings", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         await service.setDepartmentSalePolicyField(tx, v.a, "printTradingName", true);
-        await service.setDepartmentSalePolicyField(tx, v.a, "receiptPrintMode", "on_request");
         await service.saveDepartmentEditSettings(tx, v.a, {
           name: "New deli",
           tradingName: "Changed receipt",

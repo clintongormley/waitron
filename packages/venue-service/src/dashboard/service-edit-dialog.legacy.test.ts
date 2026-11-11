@@ -258,7 +258,6 @@ it("retained zone fields and action controls cannot change or save a replacement
           orderStart: "counter",
           paidWhen: "ticket_then_pay",
           collectionNumber: "numbered",
-          receiptPrintMode: "on_request",
         },
       },
       bubbles: true,
@@ -276,7 +275,6 @@ it("retained zone fields and action controls cannot change or save a replacement
     orderStart: null,
     paidWhen: null,
     collectionNumber: null,
-    receiptPrintMode: "on_request",
   });
   expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   expect(writes).toEqual([]);
@@ -504,7 +502,6 @@ it("a missing zone retains its Spanish edited name and exact attempted request",
         orderStart: "counter",
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       },
     ],
   ]);

@@ -344,7 +344,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
       })
       .returning();
     const departmentId = department!.id;
-    const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+    const policy = { printTradingName: true } as const;
     await db.insert(departmentSalePolicies).values({ departmentId, ...policy });
     const session = await startManagementSession(db, { personId });
     return { personId, departmentId, policy, session };

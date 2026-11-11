@@ -36,7 +36,6 @@ export function venueServiceModel(
         orderStart: "counter",
         paidWhen: "prepay",
         collectionNumber: "none",
-        receiptPrintMode: "auto",
         printTradingName: true,
       })),
       zones: [],

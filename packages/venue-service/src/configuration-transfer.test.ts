@@ -973,60 +973,6 @@ describe("service-period configuration", () => {
   });
 });
 
-describe("configuration receipt modes", () => {
-  it.each(["department_sale_policies", "zone_sale_policies"])(
-    "refuses Never and malformed %s receipt values",
-    (table) => {
-      for (const value of [
-        "never",
-        "unknown",
-        ["auto"],
-        1,
-        ...(table === "department_sale_policies" ? [null] : []),
-      ]) {
-        expect(() =>
-          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            departments: [{ id: RESTAURANT }],
-            floor_zones: [{ id: "zone" }],
-            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
-            department_sale_policies: [{ department_id: RESTAURANT }],
-            zone_sale_policies: [{ zone_id: "zone" }],
-            [table]: [{ department_id: RESTAURANT, zone_id: "zone", receipt_print_mode: value }],
-          }),
-        ).toThrowError(refusal(`${table}.receipt_print_mode`));
-      }
-    },
-  );
-  it.each(["department_sale_policies", "zone_sale_policies"])(
-    "accepts both modes and absent %s receipt values",
-    (table) => {
-      for (const value of [
-        "auto",
-        "on_request",
-        undefined,
-        ...(table === "zone_sale_policies" ? [null] : []),
-      ]) {
-        expect(() =>
-          VENUE_SERVICE_CONFIGURATION_TRANSFER.validate({
-            departments: [{ id: RESTAURANT }],
-            floor_zones: [{ id: "zone" }],
-            zone_service_policies: [{ zone_id: "zone", department_id: RESTAURANT }],
-            department_sale_policies: [{ department_id: RESTAURANT }],
-            zone_sale_policies: [{ zone_id: "zone" }],
-            [table]: [
-              {
-                department_id: RESTAURANT,
-                zone_id: "zone",
-                ...(value === undefined ? {} : { receipt_print_mode: value }),
-              },
-            ],
-          }),
-        ).not.toThrow();
-      }
-    },
-  );
-});
-
 describe("configuration order starts", () => {
   it.each(["department_sale_policies", "zone_sale_policies"])(
     "refuses malformed %s order starts",

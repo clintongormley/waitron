@@ -532,7 +532,6 @@ export interface EffectiveSalePolicy {
   tradingName: string;
   paidWhen: DepartmentSalePolicyRow["paidWhen"];
   collectionNumber: DepartmentSalePolicyRow["collectionNumber"];
-  receiptPrintMode: DepartmentSalePolicyRow["receiptPrintMode"];
   printTradingName: boolean;
 }
 
@@ -549,12 +548,10 @@ export async function resolveSalePolicy(
       departmentOrderStart: departmentSalePolicies.orderStart,
       departmentPaidWhen: departmentSalePolicies.paidWhen,
       departmentCollectionNumber: departmentSalePolicies.collectionNumber,
-      departmentReceiptMode: departmentSalePolicies.receiptPrintMode,
       printTradingName: departmentSalePolicies.printTradingName,
       zoneOrderStart: zoneSalePolicies.orderStart,
       zonePaidWhen: zoneSalePolicies.paidWhen,
       zoneCollectionNumber: zoneSalePolicies.collectionNumber,
-      zoneReceiptMode: zoneSalePolicies.receiptPrintMode,
     })
     .from(zoneServicePolicies)
     .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
@@ -571,7 +568,6 @@ export async function resolveSalePolicy(
     orderStart: row.zoneOrderStart ?? row.departmentOrderStart,
     paidWhen: row.zonePaidWhen ?? row.departmentPaidWhen,
     collectionNumber: row.zoneCollectionNumber ?? row.departmentCollectionNumber,
-    receiptPrintMode: row.zoneReceiptMode ?? row.departmentReceiptMode,
     printTradingName: row.printTradingName,
   };
 }
@@ -604,13 +600,10 @@ export async function readSaleReceiptHeader(tx: Transaction, saleId: string) {
 
 type DepartmentPolicyField = Pick<
   DepartmentSalePolicyRow,
-  "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode" | "printTradingName"
+  "orderStart" | "paidWhen" | "collectionNumber" | "printTradingName"
 >;
 type ZoneSalePolicyRow = typeof zoneSalePolicies.$inferSelect;
-type ZonePolicyField = Pick<
-  ZoneSalePolicyRow,
-  "orderStart" | "paidWhen" | "collectionNumber" | "receiptPrintMode"
->;
+type ZonePolicyField = Pick<ZoneSalePolicyRow, "orderStart" | "paidWhen" | "collectionNumber">;
 
 export async function listSalePolicies(tx: Transaction) {
   const activeDepartments = await listDepartments(tx);
@@ -633,7 +626,6 @@ export async function listSalePolicies(tx: Transaction) {
         orderStart: null,
         paidWhen: null,
         collectionNumber: null,
-        receiptPrintMode: null,
       };
       const inherited = departmentsById.get(zone.departmentId);
       return {
@@ -642,7 +634,6 @@ export async function listSalePolicies(tx: Transaction) {
           orderStart: raw.orderStart ?? inherited?.orderStart ?? "counter",
           paidWhen: raw.paidWhen ?? inherited?.paidWhen ?? "prepay",
           collectionNumber: raw.collectionNumber ?? inherited?.collectionNumber ?? "none",
-          receiptPrintMode: raw.receiptPrintMode ?? inherited?.receiptPrintMode ?? "auto",
           printTradingName: inherited?.printTradingName ?? false,
         },
       };
@@ -727,7 +718,6 @@ export async function saveDepartmentEditSettings(
     .values({
       departmentId,
       ...settings,
-      receiptPrintMode: "auto",
       printTradingName: false,
     })
     .onConflictDoUpdate({ target: departmentSalePolicies.departmentId, set: settings });
@@ -771,7 +761,6 @@ export async function saveZoneServiceSettings(
   await setZoneSalePolicyOverride(tx, zoneId, "orderStart", input.orderStart);
   await setZoneSalePolicyOverride(tx, zoneId, "paidWhen", input.paidWhen);
   await setZoneSalePolicyOverride(tx, zoneId, "collectionNumber", input.collectionNumber);
-  await setZoneSalePolicyOverride(tx, zoneId, "receiptPrintMode", input.receiptPrintMode);
 }
 
 async function zoneMenuIdsByZone(tx: Transaction): Promise<Map<string, string[]>> {

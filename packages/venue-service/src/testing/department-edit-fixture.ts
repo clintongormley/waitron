@@ -34,7 +34,6 @@ export function departmentSettingsAnswer(
     answer.salePolicies.departments.push({
       departmentId,
       ...fields,
-      receiptPrintMode: "auto",
       printTradingName: false,
     });
   if (input.needsClearing !== undefined)

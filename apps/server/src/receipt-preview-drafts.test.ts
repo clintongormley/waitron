@@ -37,7 +37,7 @@ function ask(body: unknown, cookie = venue.managerCookie) {
     body: JSON.stringify(body),
   });
 }
-const policy = { receiptPrintMode: "auto", printTradingName: true } as const;
+const policy = { printTradingName: true } as const;
 const draft = () => ({ departmentId, receipt: {}, policy });
 async function drawn(body: unknown) {
   const response = await ask(body);

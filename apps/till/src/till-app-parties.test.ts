@@ -224,7 +224,6 @@ const till = {
   venueName: "Bar Pepe",
   nif: "B12345678",
   orderFlow: "prepay" as const,
-  receiptPrintMode: "auto" as const,
   fireControl: "waiter" as const,
   courses: [] as { id: string; name: string; displayOrder: number }[],
   cardProvider: "none" as const,
@@ -5498,8 +5497,8 @@ describe("till-app: paying a bill by its state", () => {
     ["offers no original receipt when the bill's sale was filed before", true, false],
   ])("%s", async (_case, filedBefore, offered) => {
     const { el } = await mountApp({
-      zonePolicy: { receiptPrintMode: "on_request" },
-      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+      zonePolicy: {},
+      getTill: vi.fn().mockResolvedValue({ ...till }),
       getPartyBills: vi
         .fn()
         .mockResolvedValue([tabBill, { ...placedCheck, receiptAvailable: filedBefore }]),
