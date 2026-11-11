@@ -842,6 +842,7 @@ product failures.
 - **A976. Finish the server's English test-venue defaults.**
   The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   The `floor-today-*` route suites use Anna as their staff sample.
+  Local course-retention, service-step, status, kitchen-note, allergy, today-join, course and party route fixtures use Anna for staff.
   Many server fixtures still use Administradora, among them the backup, stream and shared-helper fixtures.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot

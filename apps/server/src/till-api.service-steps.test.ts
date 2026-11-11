@@ -42,7 +42,7 @@ beforeEach(async () => {
   };
   const [person] = await suite.db
     .insert(persons)
-    .values({ displayName: "Ana", role: "staff" })
+    .values({ displayName: "Anna", role: "staff" })
     .returning();
   personId = person!.id;
   const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-orders"] });
