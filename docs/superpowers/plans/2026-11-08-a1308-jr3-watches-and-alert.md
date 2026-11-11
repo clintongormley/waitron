@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Build correction — watcher, 2026-11-11 08:13:** the `job.failing` message is now en
+> "The box keeps failing at {job:job_name}. It keeps trying by itself." and es
+> "El servidor sigue fallando en {job:job_name}. Lo sigue intentando por sí solo."
+> Use `servidor` for the box in the Spanish job words too. This supersedes the exact copy below.
+> In the one-time clock-stop probe, the alert was present while the real sale route refused
+> `clock.behind_chain`; the original promise that sales continue did not hold.
+
 **Owner lands:** no (rules §6). The tamper watch guards `verifactu_records`' triggers but sends
 nothing to AEAT and writes no record: it only changes how its 10-second check is scheduled. It is a
 risk-trigger diff (fiscal invariant), so it takes the full review path.

@@ -31,8 +31,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "La última comparación del reloj del servidor con la AEAT mostró una diferencia de {seconds} segundos. Comprueba su fecha y hora; puedes seguir vendiendo.",
   },
   "job.failing": {
-    en: "The box keeps failing at {job:job_name}. It keeps trying by itself, and sales continue.",
-    es: "El equipo sigue fallando en {job:job_name}. Lo sigue intentando por sí solo y las ventas continúan.",
+    en: "The box keeps failing at {job:job_name}. It keeps trying by itself.",
+    es: "El servidor sigue fallando en {job:job_name}. Lo sigue intentando por sí solo.",
   },
   "alert.source_unavailable": {
     en: "One of Waitron's checks could not run. It will try again in a minute.",
@@ -506,7 +506,10 @@ export const ALERT_WORDS: Readonly<
         en: "checking the invoice record's protections",
         es: "la comprobación de las protecciones del registro de facturas",
       },
-      "clock.watch": { en: "checking the box's clock", es: "la comprobación del reloj del equipo" },
+      "clock.watch": {
+        en: "checking the box's clock",
+        es: "la comprobación del reloj del servidor",
+      },
       "storage.free_space": {
         en: "checking disk space",
         es: "la comprobación del espacio en disco",
@@ -514,7 +517,7 @@ export const ALERT_WORDS: Readonly<
       "backups.scheduled": { en: "scheduled backups", es: "las copias de seguridad programadas" },
       "backups.sealed_state": {
         en: "saving the box's locked keys with its data",
-        es: "el guardado de las claves cifradas del equipo con sus datos",
+        es: "el guardado de las claves cifradas del servidor con sus datos",
       },
       stream: { en: "the bucket copy", es: "la copia en el bucket" },
       "cloud.connection": {
