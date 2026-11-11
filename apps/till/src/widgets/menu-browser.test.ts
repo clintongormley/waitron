@@ -1260,7 +1260,7 @@ describe("till-menu-browser", () => {
       const drinksGroup = groups(el).find((group) => group.menu === "menu-drinks")!;
       expect(drinksGroup.names).not.toContain("Cordial");
       const soldOut = groupEntry(el, "menu-drinks", "Coconut water");
-      expect(soldOut.disabled).toBe(true);
+      expect(soldOut.hasAttribute("data-sold-out")).toBe(true);
       expect(soldOut.querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
       await tap(el, soldOut);
       expect(store.lines).toEqual([]);
@@ -1284,7 +1284,7 @@ describe("till-menu-browser", () => {
         each === porridge ? { ...each, available: false } : each,
       );
       await el.updateComplete;
-      expect(groupEntry(el, "menu-brunch", "Porridge").disabled).toBe(true);
+      expect(groupEntry(el, "menu-brunch", "Porridge").hasAttribute("data-sold-out")).toBe(true);
     });
 
     it("puts the newly selected menu first", async () => {
@@ -1880,14 +1880,14 @@ describe("till-menu-browser", () => {
         expect(getComputedStyle(inner(blue)).borderTopColor).toBe(border);
       });
 
-      it("draws a sold-out tile, painted or not, unfaded and still disabled, saying Sold out in the body colour", async () => {
+      it("draws a sold-out tile, painted or not, unfaded and available for information, saying Sold out in the body colour", async () => {
         const store = new WorkingOrderStore();
         const el = await mountPainted(theme, store);
         const body = token(el, "color", "var(--wt-color-text)");
         for (const name of SOLD_OUT) {
           const tile = entry(el, "structure", name);
           expect(opacity(tile)).toBe(1);
-          expect(inner(tile).disabled).toBe(true);
+          expect(tile.hasAttribute("data-sold-out")).toBe(true);
           expect(tile.querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
           expect(ink(tile, ".sold-out")).toBe(body);
           await tap(el, tile);
@@ -1907,12 +1907,18 @@ describe("till-menu-browser", () => {
   });
 
   describe("an unavailable product keeps its place, greyed (D12)", () => {
-    it("in the home grid: a grid of four with the second unavailable keeps it second, and a tap does nothing", async () => {
+    it("in the home grid: a grid of four with the second unavailable keeps it second, and a tap opens information without adding it", async () => {
       const { el, store } = await mount({ menu: lunch(withShortcuts(FOUR_TILES)) });
       const tiles = entries(el, "shortcuts");
       expect(names(tiles)).toEqual(["Café", "Burger", "Cola", "Agua"]);
-      expect(tiles.map((tile) => tile.disabled)).toEqual([false, true, false, false]);
+      expect(tiles.map((tile) => tile.hasAttribute("data-sold-out"))).toEqual([
+        false,
+        true,
+        false,
+        false,
+      ]);
       await tap(el, tiles[1]!);
+      expect(root(el).querySelector("till-product-info")).not.toBeNull();
       expect(store.lines).toEqual([]);
       expect(root(el).querySelector("till-modifier-picker")).toBeNull();
     });
@@ -1922,7 +1928,7 @@ describe("till-menu-browser", () => {
       await search(el, "burger");
       const results = entries(el, "results");
       expect(names(results)).toEqual(["Burger"]);
-      expect(results[0]!.disabled).toBe(true);
+      expect(results[0]!.hasAttribute("data-sold-out")).toBe(true);
     });
 
     it("in its section: greyed, in order", async () => {
@@ -1930,7 +1936,11 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Comida (ES)"));
       const shown = entries(el, "section");
       expect(names(shown)).toEqual(["Jamón", "Burger", "Vino"]);
-      expect(shown.map((button) => button.disabled)).toEqual([false, true, false]);
+      expect(shown.map((button) => button.hasAttribute("data-sold-out"))).toEqual([
+        false,
+        true,
+        false,
+      ]);
     });
 
     it("keeps a section whose products are all sold out, in place, with its products greyed", async () => {
@@ -1940,7 +1950,7 @@ describe("till-menu-browser", () => {
       await tap(el, entry(el, "structure", "Sold out (EN)"));
       const shown = entries(el, "section");
       expect(names(shown)).toEqual(["Burger", "Tarta"]);
-      expect(shown.map((button) => button.disabled)).toEqual([true, true]);
+      expect(shown.map((button) => button.hasAttribute("data-sold-out"))).toEqual([true, true]);
     });
 
     it("keeps a product with only some variants sold out orderable, beside one with all sold out, greyed", async () => {
@@ -1962,7 +1972,11 @@ describe("till-menu-browser", () => {
       });
       const shown = entries(el, "structure");
       expect(names(shown)).toEqual(["Café", "Tinto", "Cava"]);
-      expect(shown.map((button) => button.disabled)).toEqual([false, false, true]);
+      expect(shown.map((button) => button.hasAttribute("data-sold-out"))).toEqual([
+        false,
+        false,
+        true,
+      ]);
       await tap(el, entry(el, "structure", "Tinto"));
       expect(root(el).querySelector("till-modifier-picker")!.product).toBe(mixed);
       expect(store.lines).toEqual([]);
@@ -2000,7 +2014,7 @@ describe("till-menu-browser", () => {
         products: PRODUCTS.map((each) => (each === wine ? soldOutWine : each)),
       });
       await tap(el, entry(el, "structure", "Comida (ES)"));
-      expect(entry(el, "section", "Vino").disabled).toBe(true);
+      expect(entry(el, "section", "Vino").hasAttribute("data-sold-out")).toBe(true);
     });
   });
 
@@ -3025,7 +3039,7 @@ describe("A461 current-menu mixed search", () => {
     expect(selected).not.toHaveBeenCalled();
     expect(store.lines).toEqual([]);
     expect(entry(el, "results", "Coffee sold").disabled).toBe(false);
-    expect(entry(el, "results", "Coffee sold out").disabled).toBe(true);
+    expect(entry(el, "results", "Coffee sold out").hasAttribute("data-sold-out")).toBe(true);
   });
 
   it("A461 section taps open nested and repeated visible copies without changing the basket", async () => {

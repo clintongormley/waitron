@@ -118,7 +118,7 @@ it.each(["public", "staff_only", "not_sold_separately"] as const)(
     expect(parse({ ...input, ordering }).ordering).toBe(ordering);
   },
 );
-it("requires the ordering in the body, exactly like available", () => {
+it("requires the ordering in the body", () => {
   const noOrdering: Record<string, unknown> = { ...input };
   delete noOrdering.ordering;
   expect(() => parse(noOrdering)).toThrow(
@@ -138,10 +138,22 @@ it.each([true, false])(
     );
   },
 );
-it("refuses an absent available, the sibling required boolean", () => {
-  const noAvailable: Record<string, unknown> = { ...input };
-  delete noAvailable.available;
-  expect(() => parse(noAvailable)).toThrow(
+it("keeps omitted availability absent on the product and its listed variants", () => {
+  const { available: _available, ...body } = input;
+  const variant = {
+    name: "Small",
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: "2.00",
+    active: true,
+  };
+  const parsed = parse({ ...body, variants: [variant] });
+  expect(parsed).not.toHaveProperty("available");
+  expect(parsed.variants).toEqual([variant]);
+});
+it.each([null, "true", 0])("refuses explicit malformed availability %j", (available) => {
+  expect(() => parse({ ...input, available })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "available" } }),
   );
 });

@@ -2922,6 +2922,14 @@ export class TillApi {
     );
   }
 
+  setAvailability(zoneId: string, productId: string, available: boolean): Promise<void> {
+    return this.#request<void>(
+      `/api/service-zones/${encodeURIComponent(zoneId)}/products/${encodeURIComponent(productId)}/availability`,
+      "PUT",
+      { available },
+    );
+  }
+
   menuState(zoneId: string, options: ReadOptions = {}): Promise<MenuStateAnswer> {
     return this.#request<MenuStateAnswer>(
       `/api/menu-state?zoneId=${encodeURIComponent(zoneId)}`,

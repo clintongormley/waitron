@@ -241,7 +241,7 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     const { el, host } = await mount(theme);
     expect(button(el, "Jamón").querySelector(".price")!.textContent).toContain("/kg");
     for (const name of ["Burger", "Blue gone", "Pink gone"]) {
-      expect((button(el, name) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+      expect(button(el, name).hasAttribute("data-sold-out")).toBe(true);
       expect(button(el, name).querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
     }
     await expectNoA11yViolations(host);
@@ -309,7 +309,7 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     );
     await el.updateComplete;
     expect(el.shadowRoot!.querySelectorAll('[data-region="shortcuts"] .slot')).toHaveLength(4);
-    expect((button(el, "Burger") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    expect(button(el, "Burger").hasAttribute("data-sold-out")).toBe(true);
     await expectNoA11yViolations(host);
   });
 

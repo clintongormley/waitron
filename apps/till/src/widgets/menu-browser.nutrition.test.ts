@@ -401,3 +401,22 @@ describe("A738 published product description", () => {
     },
   );
 });
+
+it.each(["tap", "keyboard"])(
+  "opens a sold-out tile's information by %s without adding it",
+  async (mode) => {
+    const { el, store, button } = await mount({ ...dish, available: false });
+    if (mode === "tap") await userEvent.click(button);
+    else {
+      button.focus();
+      await userEvent.keyboard("{Enter}");
+    }
+    await el.updateComplete;
+    expect(info(el)).not.toBeNull();
+    expect(
+      (info(el)!.shadowRoot!.querySelector("[data-add]") as HTMLElement & { disabled: boolean })
+        .disabled,
+    ).toBe(true);
+    expect(store.lines).toHaveLength(0);
+  },
+);

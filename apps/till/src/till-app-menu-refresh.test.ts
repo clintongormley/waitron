@@ -2,7 +2,7 @@ import { idleLiveReadFor } from "./widgets/test-helpers.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   floorPartyBills,
   partyBillOf,
@@ -422,7 +422,7 @@ describe("the unavailable set", () => {
 
     api.menuState.mockResolvedValue(menuState("v1", { products: ["Burger"] }));
     await poll(el);
-    expect(tile(el, "Burger").disabled).toBe(true);
+    expect(tile(el, "Burger").hasAttribute("data-sold-out")).toBe(true);
     expect(tile(el, "Lemonade").disabled).toBe(false);
     expect(api.listDefaultZoneOffers).toHaveBeenCalledOnce();
     expect(api.listZoneOffers).not.toHaveBeenCalled();
@@ -2685,3 +2685,29 @@ it.each(["counter", "table"] as const)(
     expect(read.mock.calls.length).toBe(before + 1);
   },
 );
+
+it("changes availability from Counter information then refreshes immediately", async () => {
+  const setAvailability = vi.fn().mockResolvedValue({ available: false });
+  const { el } = await mountApp({
+    setAvailability,
+    getTill: vi
+      .fn()
+      .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "take-orders"] }),
+  });
+  await toCounter(el);
+  const browser = grid(el).querySelector("till-menu-browser")!;
+  tile(el, "Burger").dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+  );
+  await browser.updateComplete;
+  const info = browser.shadowRoot!.querySelector("till-product-info")!;
+  await info.updateComplete;
+  const control = info.shadowRoot!.querySelector<HTMLElement>('[data-availability="Burger"]')!;
+  expect(control).not.toBeNull();
+  api.menuState.mockResolvedValue(menuState("v1", { products: ["Burger"] }));
+  await userEvent.click(control);
+  await flush(el);
+  expect(setAvailability).toHaveBeenCalledExactlyOnceWith("zone-counter", "Burger", false);
+  expect(tile(el, "Burger").hasAttribute("data-sold-out")).toBe(true);
+  expect(browser.shadowRoot!.querySelector("till-product-info")).toBeNull();
+});

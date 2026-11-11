@@ -926,6 +926,9 @@ export const en = {
   "pay_equipment.printer_switched_off":
     "{item} is switched off: unless you choose another, no ticket will print",
   "pay_equipment.printer_none": "No ticket printer: unless you choose one, no ticket will print",
+  "product_info.sold_out": "Mark sold out",
+  "product_info.restore": "Back on sale",
+  "product_info.all_menus": "Changes every menu in this venue.",
   "product_info.add": "Add to order",
   "product_info.dietary": "Dietary",
   "product_info.not_reviewed": "Allergens not yet reviewed",
@@ -2893,6 +2896,9 @@ export const es: Record<StringKey, string> = {
     "{item} está desactivada: si no eliges otra, no se imprimirá el ticket",
   "pay_equipment.printer_none":
     "Sin impresora de tickets: si no eliges una, no se imprimirá el ticket",
+  "product_info.sold_out": "Marcar como agotado",
+  "product_info.restore": "Volver a poner a la venta",
+  "product_info.all_menus": "Cambia todas las cartas de este local.",
   "product_info.add": "Añadir al pedido",
   "product_info.dietary": "Dieta",
   "product_info.not_reviewed": "Alérgenos pendientes de revisión",

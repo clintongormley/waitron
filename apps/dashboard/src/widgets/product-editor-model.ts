@@ -6,6 +6,7 @@ import type {
   DietaryLabel,
   InheritedValues,
   ProductEditorBody,
+  ProductEditorSaveBody,
   ProductModifierRef,
   ProductVariantInput,
 } from "@waitron/shared";
@@ -14,8 +15,7 @@ export type { DietaryLabel };
 /** A new variant omits `id`; an edited one carries it. */
 export type EditorVariant = ProductVariantInput;
 
-/** The product editor's DRAFT: the wire body the editor sends (`ProductEditorBody`), plus an optional
- * `id` for an existing product. `courseId` is re-required here even though the wire body's
+/** Complete editor values, plus an optional `id` for an existing product. `courseId` is re-required here even though the wire body's
  * `ProductRouting` allows omission — it travels in the product's own save, and the form always carries
  * an explicit value, so an absent key and a cleared one must not collapse to the same submitted body.
  * `inherited` is what the editor READ carries for a variant and is never sent back. */
@@ -24,6 +24,24 @@ export type ProductEditorDraft = ProductEditorBody & {
   courseId: string | null;
   inherited?: InheritedValues | null;
 };
+export function productEditorSaveBody(
+  value: ProductEditorDraft,
+  baseline?: ProductEditorDraft,
+): ProductEditorSaveBody {
+  const { available, variants, ...body } = value;
+  const byId = new Map(baseline?.variants.map((variant) => [variant.id, variant]));
+  return {
+    ...body,
+    ...(value.id !== undefined && available === baseline?.available ? {} : { available }),
+    variants: variants.map(({ available, ...variant }) => ({
+      ...variant,
+      ...(variant.id !== undefined && available === byId.get(variant.id)?.available
+        ? {}
+        : { available }),
+    })),
+  };
+}
+
 /** A modifier list's id and plain STAFF name: the product editor and the products list show that
  * name and no other (docs/developers/products.md). */
 export interface ModifierListChoice {

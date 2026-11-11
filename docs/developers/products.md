@@ -881,7 +881,7 @@ The product write body carries `name` (required, plain text), `customerName` (a 
 main reporting category; on a variant it must be `null`, and any other value is refused with
 `product.invalid`; a body carrying the retired `labelIds` is refused), `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
-dietary declarations, the two required state flags `active` and `available` (below), the required
+dietary declarations, the required `active` flag and optional save-only `available` (below), the required
 `ordering` (a body carrying the retired `soldAlone` is refused), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
 a required `active`, plus `id` when it already exists. An active variant sent with `active: false`, or left out of the body, is archived; an already
@@ -894,7 +894,9 @@ and keeps the row. Switching it back on is refused with `product.archived`. Edit
 patches, variant writes, extras-list additions, course writes, and unit reassignment
 refuse an archived product too. Translation fixes, the main reporting category and folder moves
 remain allowed.
-**Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
+**Available / Unavailable** is "sold out for now": a save sends `available` only when the editor's
+Available switch changed. Omission preserves an existing row; a new row defaults to available. This
+also applies to listed variants and a variant's own-page save. Complete reads and drafts retain booleans,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`applyLiveFields` in `packages/catalogue/src/menu-document.ts` marks it on each
 served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses

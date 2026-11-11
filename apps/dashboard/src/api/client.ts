@@ -46,6 +46,7 @@ import {
 import type {
   Product,
   ProductEditorValue,
+  ProductEditorSaveBody,
   ProductVariantInput as ProductEditorVariant,
   ProductEditorBody as ProductEditorInput,
 } from "@waitron/shared";
@@ -3238,7 +3239,10 @@ export class DashboardApi {
     return this.#request<ExtraOfferUsage[]>(`/management-api/products/${id}/extra-usage`, "GET");
   }
 
-  createProductEditor(catalogueId: string, input: ProductEditorInput): Promise<ProductEditorValue> {
+  createProductEditor(
+    catalogueId: string,
+    input: ProductEditorSaveBody,
+  ): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(
       `/management-api/catalogues/${catalogueId}/product-editor`,
       "POST",
@@ -3246,7 +3250,7 @@ export class DashboardApi {
     );
   }
 
-  updateProductEditor(id: string, input: ProductEditorInput): Promise<ProductEditorValue> {
+  updateProductEditor(id: string, input: ProductEditorSaveBody): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
   }
 

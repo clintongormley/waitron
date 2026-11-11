@@ -93,3 +93,46 @@ describe.each(["light", "dark"] as Theme[])("product information in %s", (theme)
     },
   );
 });
+
+it.each(["light", "dark"] as Theme[])(
+  "availability controls, sending and refusal are accessible in %s",
+  async (theme) => {
+    let reject!: (error: unknown) => void;
+    const change = vi.fn(
+      () =>
+        new Promise<void>((_resolve, no) => {
+          reject = no;
+        }),
+    );
+    const product = {
+      ...base,
+      productId: "soup",
+      available: false,
+      variants: [
+        {
+          ...base,
+          id: "cup",
+          name: "Cup",
+          unitPrice: "2.00",
+          unitPriceDifference: null,
+          available: false,
+        },
+      ],
+    };
+    const { el, host } = await mountWidget<TillProductInfo>(
+      "till-product-info",
+      { product, changeAvailability: change },
+      theme,
+    );
+    const dish = el.shadowRoot!.querySelector<HTMLElement>('[data-availability="soup"]')!;
+    expect(dish).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-availability="cup"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+    await userEvent.click(dish);
+    expect(change).toHaveBeenCalledExactlyOnceWith("soup", true);
+    expect((dish as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    reject({ code: "product.not_found" });
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
+    await expectNoA11yViolations(host);
+  },
+);

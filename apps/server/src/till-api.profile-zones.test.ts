@@ -111,6 +111,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * Attendance allowed control: till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive".
  * | GET/PUT /api/device/zones | current admitted session; PUT checks live profile/selection snapshot and subset | device-zones-api.test.ts: "refuses a foreign zone or profile...", "rechecks %s %s..."; allowed: "serves admitted staff..." |
  * | GET  /api/default-service-zone/offers                   | Till selection / handheld profile start | "starts Counter in a selected counter...", "keeps its profile..." |
+ * | PUT /api/service-zones/:zoneId/products/:productId/availability | path zone | refuses PUT availability |
  * | GET  /api/service-zones/:zoneId/offers                  | path zone              | refuses GET /api/service-zones/:zoneId/offers        |
  * | GET  /api/service-zones/:zoneId/keep-open               | path zone              | till-api.keep-open.test.ts: refuses the read for a zone outside the profile department |
  * | PUT  /api/service-zones/:zoneId/zone-extension          | path zone              | till-api.keep-open.test.ts: refuses a zone outside the profile department |
@@ -526,6 +527,13 @@ const adjustment = () => ({
 const saleLines = (x: Fixtures) => [{ menuItemId: x.deliItem, quantity: "1" }];
 
 const ROUTES: readonly Row[] = [
+  [
+    "PUT availability",
+    "PUT",
+    (x) => `/api/service-zones/${x.deliCounter}/products/${id}/availability`,
+    () => ({ available: false }),
+    deliOrderZone,
+  ],
   [
     "GET /api/service-zones/:zoneId/offers",
     "GET",

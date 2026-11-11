@@ -403,7 +403,7 @@ own nutrition separate from the dish. There is no separate Allergens screen or p
 sheet in the till.
 
 Shift+F10 or the context-menu key opens the same information window for a focused product. Enter
-still selects the dish.
+selects an available dish; tap or press Enter on a sold-out dish to open its information.
 
 ## Keep a table's allergy answer with its dishes {#table-allergies}
 
@@ -434,3 +434,12 @@ correction stays in place through background refreshes; a new refusal can highli
 The kitchen keeps its first allergy copy with each dish. A later change reaches it as a separate
 notice to acknowledge. Read how [kitchen allergy copies and corrections](kitchen-service.md#allergy-copies)
 stay with the work.
+
+## Mark a dish sold out during service {#sold-out}
+
+When the kitchen runs out, hold the dish on Counter or a table order to open its information.
+Choose **Mark sold out** for the dish or one size. You must be signed in on a device that takes
+orders. The change applies to every menu in this venue. A sold-out dish stays visible in grey.
+
+Choose **Back on sale** when it is ready again; nothing resets the switch the next day.
+Restoring the dish keeps any individually sold-out sizes off sale.
