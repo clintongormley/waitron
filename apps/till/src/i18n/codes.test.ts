@@ -895,8 +895,8 @@ it("A773 pass asks the pass to check a refreshed screen when its card went stale
 it.each([
   [
     "transfer_close.ineligible",
-    "This bill can't be closed by transfer: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
-    "Esta cuenta no se puede cerrar por transferencia: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
+    "This bill can't be closed as a deferred payment: it has already been paid, changed or cancelled, it belongs to another server, or its total is zero",
+    "Esta cuenta no se puede cerrar como pago aplazado: ya se ha pagado, modificado o anulado, pertenece a otro servidor o su total es cero",
   ],
   [
     "transfer_close.conflict",
@@ -905,8 +905,8 @@ it.each([
   ],
   [
     "transfer_close.day_frozen",
-    "This business day already has its daily close. Close the bill by transfer once the next business day starts",
-    "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta por transferencia cuando empiece el siguiente día de trabajo",
+    "This business day already has its daily close. Close the bill as a deferred payment once the next business day starts",
+    "Este día de trabajo ya tiene su cierre diario. Cierra la cuenta como pago aplazado cuando empiece el siguiente día de trabajo",
   ],
 ])("explains close-by-transfer refusal %s in English and Spanish", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);

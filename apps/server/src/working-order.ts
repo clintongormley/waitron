@@ -7732,7 +7732,7 @@ export interface CounterWaitingOrder {
   movableDishes: { lineId: string; stationId: string }[];
   /** {@link readFormerNumbers}; absent when there are none. */
   formerNumbers?: number[];
-  /** Only on a settled order closed to be paid later by transfer. */
+  /** Only on a settled order closed as a deferred payment. */
   closedByTransfer?: true;
 }
 

@@ -162,7 +162,7 @@ it("names a transfer closure as still to be paid, with no card and no tip", asyn
     (section) => section.querySelector("h3")?.textContent === "Payments",
   )!;
   const words = payments.textContent!.replace(/\s+/g, " ").trim();
-  expect(words).toContain("To be paid by transfer");
+  expect(words).toContain("Deferred payment");
   expect(words).not.toContain("Card");
   expect(words).not.toContain("Tip");
 });

@@ -157,7 +157,7 @@ function partyReleaseFor(device: DeviceBinding) {
   };
 }
 
-/** Close one bill, final in Waitron, as to be paid by bank transfer. */
+/** Close one bill, final in Waitron, as a deferred payment. */
 export function mountTransferCloseApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   app.post("/api/working-orders/:id/close-by-transfer", (c) =>
     run(c, log, async () => {

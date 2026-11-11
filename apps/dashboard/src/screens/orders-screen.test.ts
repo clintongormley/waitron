@@ -623,7 +623,7 @@ describe("dashboard Orders", () => {
     const { el } = await loaded(api);
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
-    expect(table.shadowRoot!.textContent).toContain("To be paid by transfer");
+    expect(table.shadowRoot!.textContent).toContain("Deferred payment");
     expect(table.shadowRoot!.textContent).toContain("Left without paying on");
   });
 

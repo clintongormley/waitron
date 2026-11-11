@@ -234,8 +234,8 @@ describe("each status, from the product's own write paths", () => {
   });
 });
 
-describe("a bill closed to be paid by transfer", () => {
-  it("reads as To be paid by transfer, found by its own filter and never by Paid", async () => {
+describe("a bill closed as a deferred payment", () => {
+  it("reads as Deferred payment, found by its own filter and never by Paid", async () => {
     const kit = transferCloseKit(venue, venue.counterZone);
     const id = await placedIssuedBill(venue, "Tarta");
     await kit.close(await kit.requestFor(id, "18.00", null));

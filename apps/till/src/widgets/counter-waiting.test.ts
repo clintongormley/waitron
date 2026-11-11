@@ -173,7 +173,7 @@ describe("till-counter-waiting", () => {
       });
       const row = rowOf(el, "wo-paid");
       expect(row.querySelector("[data-waiting-state]")!.textContent).toBe(
-        "To be paid by transfer, not handed over",
+        "Deferred payment, not handed over",
       );
       expect(buttons(row)).toEqual([t("waiting.hand_over")]);
     } finally {

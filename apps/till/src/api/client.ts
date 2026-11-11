@@ -1021,7 +1021,7 @@ export interface ReceiptAdjustment {
 
 /**
  * How a filed sale was paid, read back from the committed rows: `unpaid` is an invoice issued before
- * collection, `transfer` a bill closed to be paid by transfer later, `cash` carries the change, and
+ * collection, `transfer` a bill closed as a deferred payment, `cash` carries the change, and
  * `card` the whole charge (`charged` = total + tip), the `tip` ("0.00" when none) and the operator
  * `reference` (null for an integrated capture). Card-present identity belongs only to the separate
  * payment slip.
@@ -1296,7 +1296,7 @@ export interface OrderPreviewItem {
 
 /** `GET /api/orders/counter-waiting`: a counter order the counter is still waiting on. A `placed`
  * one was sent and not paid, and was handed over when `collectedAt` is set; a `settled` one was paid,
- * or closed to be paid by transfer (`closedByTransfer`), and not handed over. `canHandOver` says
+ * or closed as a deferred payment (`closedByTransfer`), and not handed over. `canHandOver` says
  * whether {@link TillApi.markCollected} would accept it now. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
@@ -1323,7 +1323,7 @@ export interface CounterWaitingOrder {
   /** The numbers the order's dishes were sent under before they moved to it, lowest first;
    *  absent when there are none. */
   formerNumbers?: number[];
-  /** Only on a settled order closed to be paid later by transfer. */
+  /** Only on a settled order closed as a deferred payment. */
   closedByTransfer?: true;
 }
 

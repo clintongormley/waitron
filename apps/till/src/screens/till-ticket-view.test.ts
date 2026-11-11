@@ -1067,7 +1067,7 @@ describe("till-ticket-view", () => {
       const rows = [...el.shadowRoot!.querySelectorAll(".tender-row")].map((row) =>
         norm(row.textContent ?? "").trim(),
       );
-      expect(rows).toEqual(["A pagar por transferencia"]);
+      expect(rows).toEqual(["Pago aplazado"]);
       expect(text(el)).not.toContain("Tarjeta");
       expect(el.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();
     });

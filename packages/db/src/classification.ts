@@ -43,7 +43,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   appendOnly(
     "transfer_closures",
     "ledger",
-    "a bill closed as to be paid by bank transfer, and the answer that close gave",
+    "a bill closed as a deferred payment, and the answer that close gave",
   ),
   appendOnly(
     "receipt_reprints",

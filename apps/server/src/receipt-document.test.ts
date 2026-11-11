@@ -536,7 +536,7 @@ describe("the simplified receipt's own layout (A663)", () => {
         result: { ...SIMPLIFIED.result, tender: { method: "transfer" } },
       }).elements,
     );
-    expect(printed).toContain("A pagar por transferencia");
+    expect(printed).toContain("Pago aplazado");
     for (const word of ["Tarjeta", "Cobrado", "Ref.", "Efectivo"])
       expect(printed).not.toContain(word);
   });
