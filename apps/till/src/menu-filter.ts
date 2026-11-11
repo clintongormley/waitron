@@ -1,4 +1,4 @@
-import type { AllergenCode, Kind } from "@waitron/shared";
+import type { AllergenCode, Kind, ProductAllergens } from "@waitron/shared";
 import type { TillProduct } from "./api/client.js";
 
 /**
@@ -34,9 +34,11 @@ export function filterProductsByDiet(
   });
 }
 
+type Exclusion = "all" | readonly Kind[];
+
 export interface MenuFilters {
   readonly diets: readonly DietPredicate[];
-  readonly exclude: Readonly<Partial<Record<AllergenCode, "all" | readonly Kind[]>>>;
+  readonly exclude: Readonly<Partial<Record<AllergenCode, Exclusion>>>;
 }
 
 export const EMPTY_MENU_FILTERS: MenuFilters = Object.freeze({
@@ -44,11 +46,30 @@ export const EMPTY_MENU_FILTERS: MenuFilters = Object.freeze({
   exclude: Object.freeze({}),
 });
 
+function isActiveExclusion(selected: Exclusion): boolean {
+  return selected === "all" || selected.length > 0;
+}
+
 export function activeFilterCount(filters: MenuFilters): number {
-  return (
-    filters.diets.length +
-    Object.values(filters.exclude).filter((value) => value === "all" || value.length > 0).length
-  );
+  return filters.diets.length + Object.values(filters.exclude).filter(isActiveExclusion).length;
+}
+
+function passesExclusions(
+  allergens: ProductAllergens,
+  exclusions: readonly [string, Exclusion][],
+): boolean {
+  return exclusions.every(([code, selected]) => {
+    const declaration = allergens[code];
+    if (declaration === undefined) return true;
+    if (selected === "all") return false;
+    if (selected.length === 0) return true;
+    // A declared cereal or nut without kinds can match any selected kind.
+    return (
+      declaration.kinds !== undefined &&
+      declaration.kinds.length > 0 &&
+      !selected.some((kind) => declaration.kinds!.includes(kind))
+    );
+  });
 }
 
 export function visibleProducts(
@@ -59,31 +80,13 @@ export function visibleProducts(
   const byMenu = filterProductsByMenu(products, selectedMenuId);
   const byDiet = filters.diets.reduce(filterProductsByDiet, byMenu);
   const exclusions = Object.entries(filters.exclude);
-  if (exclusions.length === 0) return byDiet;
-  const anyActive = exclusions.some(([, selected]) => selected === "all" || selected.length > 0);
+  if (!exclusions.some(([, selected]) => isActiveExclusion(selected))) return byDiet;
   return byDiet.filter((product) => {
-    if (anyActive && neverReviewed(product)) return false;
-    return exclusions.every(([code, selected]) => {
-      const declaration = product.allergens?.[code];
-      if (declaration === undefined) return true;
-      if (selected === "all") return false;
-      if (selected.length === 0) return true;
-      // A declared cereal or nut without kinds can match any selected kind.
-      return (
-        declaration.kinds !== undefined &&
-        declaration.kinds.length > 0 &&
-        !selected.some((kind) => declaration.kinds!.includes(kind))
-      );
-    });
+    if (product.allergens !== null) return passesExclusions(product.allergens, exclusions);
+    return (product.variants ?? []).some(
+      (variant) => variant.allergens !== null && passesExclusions(variant.allergens, exclusions),
+    );
   });
-}
-
-// A dish whose allergens were entered only on its variants reaches the till with its own `null`.
-function neverReviewed(product: TillProduct): boolean {
-  return (
-    product.allergens === null &&
-    (product.variants ?? []).every((variant) => variant.allergens === null)
-  );
 }
 
 interface OrderableMenu {

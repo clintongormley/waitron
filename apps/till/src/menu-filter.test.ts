@@ -235,36 +235,67 @@ describe("A738 filter combinations", () => {
   it("A1517 keeps an unreviewed dish while no allergen exclusion is active", () => {
     const unreviewed = product("unreviewed");
     const products = [unreviewed, { ...product("clear"), allergens: {} }];
-    expect(visibleProducts(products, "", { diets: [], exclude: { gluten: [] } })).toEqual(products);
-    expect(visibleProducts(products, "", EMPTY_MENU_FILTERS)).toEqual(products);
+    expect(visibleProducts(products, "", { diets: [], exclude: { gluten: [] } })).toBe(products);
+    expect(visibleProducts(products, "", EMPTY_MENU_FILTERS)).toBe(products);
   });
 
-  it("A1517 keeps a dish whose allergens were entered only on its variants", () => {
-    const variant = (id: string, allergens: TillProduct["allergens"]) => ({
-      id,
-      name: id,
-      pricingUnit: "each" as const,
-      vatClass: "general" as const,
-      category: null,
-      allergens,
-      unitPrice: "1.00",
-      unitPriceDifference: null,
-      available: true,
-    });
-    const reviewedVariants: TillProduct = {
-      ...product("reviewed-variants"),
-      variants: [variant("small", null), variant("large", { nuts: {} })],
+  function withVariants(id: string, ...declarations: TillProduct["allergens"][]): TillProduct {
+    return {
+      ...product(id),
+      variants: declarations.map((allergens, index) => ({
+        id: `${id}-${index}`,
+        name: `${id}-${index}`,
+        pricingUnit: "each" as const,
+        vatClass: "general" as const,
+        category: null,
+        allergens,
+        unitPrice: "1.00",
+        unitPriceDifference: null,
+        available: true,
+      })),
     };
-    const unreviewedVariants: TillProduct = {
-      ...product("unreviewed-variants"),
-      variants: [variant("small", null), variant("large", null)],
-    };
+  }
+
+  it("A1517 keeps a dish reviewed only on its variants and hides one whose variants are unreviewed too", () => {
     expect(
-      visibleProducts([reviewedVariants, unreviewedVariants], "", {
-        diets: [],
-        exclude: { milk: "all" },
-      }).map((p) => p.id),
+      visibleProducts(
+        [
+          withVariants("reviewed-variants", null, { nuts: {} }),
+          withVariants("unreviewed-variants", null, null),
+        ],
+        "",
+        { diets: [], exclude: { milk: "all" } },
+      ).map((p) => p.id),
     ).toEqual(["reviewed-variants"]);
+  });
+
+  it("A1517 hides a dish reviewed only on its variants when every reviewed variant declares an excluded allergen", () => {
+    expect(
+      visibleProducts([withVariants("nutty", null, { nuts: {} })], "", {
+        diets: [],
+        exclude: { nuts: "all" },
+      }),
+    ).toEqual([]);
+  });
+
+  it("A1517 keeps a dish reviewed only on its variants while one variant passes every exclusion", () => {
+    expect(
+      visibleProducts(
+        [
+          withVariants("one-clear", { nuts: {} }, {}),
+          withVariants("other-kind", { nuts: { kinds: ["walnuts"] } }),
+          withVariants("excluded-kind", { nuts: { kinds: ["almonds"] } }),
+        ],
+        "",
+        { diets: [], exclude: { nuts: ["almonds"] } },
+      ).map((p) => p.id),
+    ).toEqual(["one-clear", "other-kind"]);
+    expect(
+      visibleProducts([withVariants("one-clear", { nuts: {} }, {})], "", {
+        diets: [],
+        exclude: { nuts: "all" },
+      }).map((p) => p.id),
+    ).toEqual(["one-clear"]);
   });
 
   it("A738 leaves empty filters and unchanged immutable memo inputs stable", () => {

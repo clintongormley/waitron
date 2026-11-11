@@ -251,8 +251,10 @@ Before you publish now or schedule a menu, the confirmation lists offered dishes
 variants whose allergens are unreviewed. Select a name to open that product's own page. You can
 still publish or schedule: the warning asks you to check the declarations, rather than refusing
 the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
-While someone at the till uses **Filter** to hide an allergen, dishes marked **Not reviewed** are
-hidden too, so review a dish for it to show.
+
+While someone at the till uses **Filter** to hide an allergen, it also hides dishes whose allergens
+nobody has entered, either on the dish or on any of its variants. To let such a dish show, choose
+its allergens, or **Contains none of the 14**, and publish each menu it is on again.
 
 Existing purchasing data and recorded order facts remain available, but you maintain live
 product allergens and dietary suitability in **Products**.

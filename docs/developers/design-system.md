@@ -5760,8 +5760,11 @@ that order's zone and recorded prices.
 Counter and table Order share one Filter beside the menu search. You can require several dietary
 labels and exclude several declared allergens at once. A dish must meet every selected diet and
 contain none of the excluded allergens. Gluten and Nuts offer All or their recorded kinds; an
-unspecified kind matches every kind in that allergen group. An unreviewed declaration supplies no
-recorded allergens, so a filtered result is not an assurance that a dish is safe to eat.
+unspecified kind matches every kind in that allergen group. While any allergen is excluded, a dish
+with no declaration of its own is judged by its variants': it stays only while at least one variant
+has a declaration containing none of the excluded allergens, so a dish whose allergens nobody
+entered is hidden. The filter reads neither extras nor the variants of a dish that has its own
+declaration, so a filtered result is not an assurance that a dish is safe to eat.
 
 The app owns this selection. Screen and menu changes, payment, and new or parked orders retain it;
 a fresh sign-in clears it. Clear all removes every selected diet and exclusion. The badge counts
