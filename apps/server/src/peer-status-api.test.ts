@@ -69,7 +69,7 @@ describe("POST /api/node/peer-status", () => {
   async function boxes(peerStanding: NodeStanding = "serving-secondary"): Promise<Boxes> {
     const db = suite.db;
     await seedVenue(db, {
-      name: "Barra",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta",
     });

@@ -39,7 +39,7 @@ async function seedTenantWithLocation(): Promise<Tenant> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
   await seedVenue(suite.db, {
-    name: "Barra",
+    name: "Main room",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });

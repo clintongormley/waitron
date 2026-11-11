@@ -59,7 +59,7 @@ describe("node identity establishment", () => {
     db = suite.db;
     node = suite.node;
     await seedVenue(db, {
-      name: "Barra",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });

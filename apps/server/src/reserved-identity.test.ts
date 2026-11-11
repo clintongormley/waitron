@@ -45,7 +45,7 @@ describe("establishReservedStandbyIdentity", () => {
   // tenant with the establish case (which seals one).
   beforeEach(async () => {
     await seedVenue(suite.db, {
-      name: "Barra",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });

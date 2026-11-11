@@ -834,7 +834,8 @@ product failures.
 
 - **A976. Finish the server's English test-venue defaults.** `setupVenue` and
   `provisionVenueBody` use `Main room`, with the venue-details readbacks and eight local
-  route/command seeds. Other suites' own venue seeds, the stream-loop/pause helpers and the boot
+  route/command seeds. Other suites' own venue seeds, including email and sale suites,
+  the stream-loop/pause helpers and the boot
   helper's raw `Barra` location seeds remain. The shared `setupVenue` uses Administrator,
   Drinks, Coffee and Water; BillVenue uses Steak, Red wine bottle, House salad, Croquettes
   and Octopus as staff keys, with Spanish customer and kitchen names unchanged. Tarta,

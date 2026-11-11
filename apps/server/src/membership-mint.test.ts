@@ -42,7 +42,7 @@ describe("mintNextMembershipDocument", () => {
   beforeAll(async () => {
     db = suite.db;
     await seedVenue(db, {
-      name: "Barra",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });

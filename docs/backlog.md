@@ -2280,7 +2280,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A976. Finish the server's English test-venue defaults.**
   `setupVenue`, `provisionVenueBody` and eight local route/command seeds use `Main room`;
-  other venue seeds and the boot helper's raw location names remain. The shared
+  other venue seeds, including email and sale suites, and the boot helper's raw location names
+  remain. The shared
   `setupVenue` uses Administrator, Drinks, Coffee and Water. BillVenue uses Steak,
   Red wine bottle, House salad, Croquettes and Octopus as staff keys; its Spanish customer
   and kitchen names stay.
