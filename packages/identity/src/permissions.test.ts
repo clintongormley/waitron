@@ -75,6 +75,13 @@ describe("roleHasPermission", () => {
     expect(roleHasPermission("supervisor", "sale.rectify")).toBe(true);
     expect(roleHasPermission("supervisor", "person.manage")).toBe(false);
   });
+  // A cash invoice correction asks one approver for both (A802); it adds no refusal of its own.
+  it("gives sale.refund and sale.rectify to the same roles", () => {
+    for (const role of ["staff", "supervisor", "manager", "admin"] as const)
+      expect(roleHasPermission(role, "sale.rectify"), role).toBe(
+        roleHasPermission(role, "sale.refund"),
+      );
+  });
   it("adds staff management for a manager", () => {
     expect(roleHasPermission("manager", "person.manage")).toBe(true);
     expect(roleHasPermission("manager", "sale.void")).toBe(true);

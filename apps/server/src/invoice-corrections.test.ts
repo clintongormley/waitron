@@ -12,6 +12,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { parkOrder } from "./working-order.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
+import { readRefundableTenders } from "./tender-refund-balance.js";
+import { carryNewTenderRefund } from "./tender-refund-completion.js";
+import { reserveTenderRefund } from "./tender-refund-reservation.js";
 import { businessDayAt, saleId as brandSaleId } from "@waitron/shared";
 import { acceptInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
@@ -40,6 +44,7 @@ useVenueDb({
       for (const [name, price] of [
         ["Rib steak", "12.10"],
         ["Set menu", "40.00"],
+        ["Rice platter", "10.00"],
       ] as const) {
         const product = await createProduct(tx, {
           catalogueId: catalogue!.id,
@@ -68,8 +73,9 @@ useVenueDb({
   },
 });
 
-/** A counter order of `dish`, paid in cash through the till in parts of `parts`; its invoice. */
-async function soldForCash(dish: string, parts: readonly string[]) {
+/** A counter order of `dish`, paid through the till in `parts` (cash, or a hand-keyed card); its
+ * invoice, issued unpaid when `parts` is empty. */
+async function soldForCash(dish: string, parts: readonly (string | { card: string })[]) {
   const id = randomUUID();
   const deps = {
     db: venue.db,
@@ -83,21 +89,28 @@ async function soldForCash(dish: string, parts: readonly string[]) {
     zoneId: venue.zoneId,
     operatorId: venue.operatorId,
   });
-  for (const amount of parts) {
+  if (parts.length === 0) await issueOrderInvoice(deps, venue.cfg, id, venue.operatorId);
+  await payFor(id, parts);
+  const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
+  return brandSaleId(sale!.id);
+}
+
+async function payFor(id: string, parts: readonly (string | { card: string })[]) {
+  for (const part of parts) {
+    const amount = typeof part === "string" ? part : part.card;
     const paid = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/payments`, {
       submissionId: randomUUID(),
       kind: "contribution",
       amount,
-      method: "cash",
-      tendered: amount,
+      ...(typeof part === "string"
+        ? { method: "cash", tendered: amount }
+        : { method: "card", entry: "manual" }),
       applied: amount,
       tip: "0.00",
       expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
     });
     expect(paid.status).toBe(200);
   }
-  const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
-  return brandSaleId(sale!.id);
 }
 
 const deps = () => ({
@@ -113,7 +126,13 @@ const actor = () => ({
 
 async function correct(
   saleId: ReturnType<typeof brandSaleId>,
-  ask: { submissionId: string; gross: string; note?: string },
+  ask: {
+    submissionId: string;
+    gross: string;
+    note?: string;
+    split?: { rate: string; base: string; tax: string }[];
+    backend?: typeof venue.backend;
+  },
 ) {
   const preview = await inTx(venue, (tx) =>
     previewInvoiceCorrection(tx, venue.backend, venue.cfg, saleId, { gross: ask.gross }),
@@ -121,7 +140,7 @@ async function correct(
   return inTx(venue, (tx) =>
     acceptInvoiceCorrection(
       tx,
-      deps(),
+      { ...deps(), backend: ask.backend ?? venue.backend },
       venue.cfg,
       saleId,
       {
@@ -129,7 +148,8 @@ async function correct(
         gross: ask.gross,
         reasonId,
         note: ask.note ?? "Overcooked",
-        expectedSplit: preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
+        expectedSplit:
+          ask.split ?? preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
       },
       actor(),
     ),
@@ -146,8 +166,14 @@ async function original(saleId: string) {
 }
 
 function counts() {
-  const [row] = venue.db.all<{ invoices: number; refunds: number; drawers: number }>(sql`
+  const [row] = venue.db.all<{
+    invoices: number;
+    refunds: number;
+    drawers: number;
+    corrections: number;
+  }>(sql`
     select (select count(*) from sales) as invoices,
+           (select count(*) from invoice_corrections) as corrections,
            (select count(*) from tender_refunds) as refunds,
            (select count(*) from print_jobs where kind = 'drawer') as drawers`);
   return row!;
@@ -317,5 +343,143 @@ describe("acceptInvoiceCorrection", () => {
       gross: -605,
       cash: -605,
     });
+  });
+});
+
+/** A goodwill return of `amount` from the sale's first cash payment, left pending unless `complete`. */
+async function giveBack(saleId: string, amount: string, complete = true) {
+  await inTx(venue, async (tx) => {
+    const [cash] = await readRefundableTenders(tx, saleId);
+    const reading = venue.clock.now();
+    const { refund } = await reserveTenderRefund(
+      tx,
+      venue.cfg,
+      saleId,
+      {
+        submissionId: randomUUID(),
+        tenderId: cash!.tenderId,
+        appliedAmount: amount,
+        tipAmount: "0.00",
+        reason: "Goodwill",
+      },
+      { requestedBy: managerId, authorizedBy: managerId },
+      reading.instant.toISOString(),
+    );
+    if (complete) await carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, reading, refund);
+  });
+}
+
+/** Runs `attempt`, expecting it refused with `error`, and checks it wrote nothing. */
+async function refusedWithNothingWritten(attempt: () => Promise<unknown>, error: object) {
+  const before = counts();
+  await expect(attempt()).rejects.toMatchObject(error);
+  expect(counts()).toEqual(before);
+}
+
+describe("acceptInvoiceCorrection refuses", () => {
+  it("an invoice not yet paid, and corrects it once paid in cash", async () => {
+    const saleId = await soldForCash("Rib steak", []);
+    await refusedWithNothingWritten(
+      () => correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
+      { code: "invoice_correction.not_settled", params: { saleId } },
+    );
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.id, saleId));
+    await payFor(sale!.workingOrderId!, ["12.10"]);
+    await expect(
+      correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it.each([[[{ card: "40.00" }]], [["20.00", { card: "20.00" }]]])(
+    "an invoice with a payment that is not cash (%j)",
+    async (parts) => {
+      const saleId = await soldForCash("Set menu", parts);
+      await refusedWithNothingWritten(
+        () => correct(saleId, { submissionId: randomUUID(), gross: "5.00" }),
+        { code: "invoice_correction.not_cash", params: { saleId } },
+      );
+    },
+  );
+
+  it("more than the cash left, naming €7.00 after €3.00 of €10.00 went back, and allows €7.00", async () => {
+    const saleId = await soldForCash("Rice platter", ["10.00"]);
+    await giveBack(saleId, "3.00");
+    await refusedWithNothingWritten(
+      () => correct(saleId, { submissionId: randomUUID(), gross: "10.00" }),
+      {
+        code: "invoice_correction.cash_short",
+        params: { saleId, cashLeft: "7.00", gross: "10.00" },
+      },
+    );
+    await expect(
+      correct(saleId, { submissionId: randomUUID(), gross: "7.00" }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "7.00" }] });
+  });
+
+  it("a split that differs from the one the till showed, answering the fresh one", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    await refusedWithNothingWritten(
+      () =>
+        correct(saleId, {
+          submissionId: randomUUID(),
+          gross: "6.05",
+          split: [{ rate: "21.00", base: "4.99", tax: "1.06" }],
+        }),
+      {
+        code: "invoice_correction.split_changed",
+        params: {
+          saleId,
+          gross: "6.05",
+          vatBreakdown: [{ rate: "21.00", base: "5.00", tax: "1.05" }],
+          cashRefundable: "12.10",
+        },
+      },
+    );
+    await expect(
+      correct(saleId, {
+        submissionId: randomUUID(),
+        gross: "6.05",
+        split: [{ rate: "21", base: "5.0", tax: "1.05" }],
+      }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it("while the fiscal chain's check reports an issue, and corrects once it reports none", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    const broken = Object.create(venue.backend, {
+      checkIntegrity: {
+        value: async () => ({
+          ok: false,
+          checked: 1,
+          issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+        }),
+      },
+    }) as typeof venue.backend;
+    await refusedWithNothingWritten(
+      () => correct(saleId, { submissionId: randomUUID(), gross: "6.05", backend: broken }),
+      { code: "invoice_correction.chain_unsound", params: { saleId } },
+    );
+    await expect(
+      correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
+  });
+
+  it("while a refund on the invoice is pending, and corrects once it completes", async () => {
+    const saleId = await soldForCash("Rib steak", ["12.10"]);
+    await giveBack(saleId, "1.00", false);
+    const [pending] = await venue.db
+      .select()
+      .from(tenderRefunds)
+      .where(eq(tenderRefunds.saleId, saleId));
+    await refusedWithNothingWritten(
+      () => correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
+      { code: "invoice_correction.refund_pending", params: { saleId, refundId: pending!.id } },
+    );
+    await inTx(venue, (tx) =>
+      carryNewTenderRefund(tx, deps(), venue.cfg.nodeId, venue.clock.now(), pending!),
+    );
+    await expect(
+      correct(saleId, { submissionId: randomUUID(), gross: "6.05" }),
+    ).resolves.toMatchObject({ refunds: [{ appliedAmount: "6.05" }] });
   });
 });

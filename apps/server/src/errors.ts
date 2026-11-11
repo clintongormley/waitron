@@ -648,6 +648,19 @@ declare module "@waitron/shared" {
      * arguments. The id is the device's own, made fresh for each person's action.
      */
     "submission.id_reused": { submissionId: string };
+    "invoice_correction.not_settled": { saleId: string };
+    /** A cash correction gives cash back; an invoice paid by anything else, even in part, waits. */
+    "invoice_correction.not_cash": { saleId: string };
+    "invoice_correction.cash_short": { saleId: string; cashLeft: string; gross: string };
+    /** The split the till showed is no longer what this correction would file; the fresh one. */
+    "invoice_correction.split_changed": {
+      saleId: string;
+      gross: string;
+      vatBreakdown: Array<{ rate: string; base: string; tax: string }>;
+      cashRefundable: string;
+    };
+    "invoice_correction.chain_unsound": { saleId: string };
+    "invoice_correction.refund_pending": { saleId: string; refundId: string };
     /** The bill cannot be closed by transfer: it is not one whole, positive, untouched bill. */
     "transfer_close.ineligible": {
       workingOrderId: string;

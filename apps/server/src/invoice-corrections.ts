@@ -5,6 +5,7 @@ import { previewCorrectionAmounts, recordCorrection, type CorrectionPreview } fr
 import {
   invoiceCorrections,
   readLiveSeriesIdTx,
+  saleSettlements,
   tenderRefunds,
   tenders,
   type Transaction,
@@ -14,6 +15,7 @@ import type { AuthzInput } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
+  compareDecimal,
   decimal,
   decimalToCents,
   isUuid,
@@ -138,12 +140,48 @@ export async function acceptInvoiceCorrection(
     };
   }
 
+  const [settled] = await tx
+    .select({ id: saleSettlements.id })
+    .from(saleSettlements)
+    .where(eq(saleSettlements.saleId, saleId));
+  if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
+  const paid = await tx
+    .select({ method: tenders.method })
+    .from(tenders)
+    .where(eq(tenders.saleId, saleId));
+  if (paid.some((row) => row.method !== "cash"))
+    throw new AppError("invoice_correction.not_cash", { saleId });
+  const refundable = await readRefundableTenders(tx, saleId);
+  const pending = refundable.find((row) => row.pendingRefundId !== null);
+  if (pending !== undefined)
+    throw new AppError("invoice_correction.refund_pending", {
+      saleId,
+      refundId: pending.pendingRefundId!,
+    });
   const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
     gross: ask.gross,
     ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
   });
-  // Step 4.3 refuses here: an unsettled invoice, a payment that is not cash, cash left below
-  // `ask.gross`, a split that differs from `ask.expectedSplit`, integrity issues, a refund pending.
+  const cashLeft = sumDecimals([
+    decimal("0.00"),
+    ...refundable.map((row) => decimal(row.appliedRemaining)),
+  ]);
+  if (compareDecimal(cashLeft, preview.gross) < 0)
+    throw new AppError("invoice_correction.cash_short", {
+      saleId,
+      cashLeft,
+      gross: preview.gross,
+    });
+  const split = preview.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax }));
+  if (splitKey(split) !== splitKey(ask.expectedSplit))
+    throw new AppError("invoice_correction.split_changed", {
+      saleId,
+      gross: preview.gross,
+      vatBreakdown: split,
+      cashRefundable: cashLeft,
+    });
+  if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
+    throw new AppError("invoice_correction.chain_unsound", { saleId });
 
   const reason = await findAdjustmentReason(tx, ask.reasonId);
   const reasonText = (ask.note === null ? reason.name : `${reason.name}: ${ask.note}`).slice(
@@ -173,9 +211,8 @@ export async function acceptInvoiceCorrection(
   const createdAt = reading.instant.toISOString();
   let left = decimalToCents(preview.gross);
   const refunds: TenderRefundView[] = [];
-  for (const tender of await readRefundableTenders(tx, saleId)) {
+  for (const tender of refundable) {
     if (left === 0) break;
-    if (tender.method !== "cash") continue;
     const leg = Math.min(left, decimalToCents(decimal(tender.appliedRemaining)));
     if (leg === 0) continue;
     left -= leg;
@@ -253,6 +290,14 @@ function parse(request: InvoiceCorrectionRequest) {
       tax: centsToDecimal(decimalToCents(decimal(tax))),
     })),
   };
+}
+
+/** The split compared by value, in rate order, whatever order or spelling the till sent. */
+function splitKey(split: readonly SplitLine[]): string {
+  return split
+    .map((line) => [line.rate, line.base, line.tax].map((v) => decimalToCents(decimal(v))))
+    .sort((a, b) => a[0]! - b[0]!)
+    .join(";");
 }
 
 function moneyOf(value: unknown, field: string): Decimal {
