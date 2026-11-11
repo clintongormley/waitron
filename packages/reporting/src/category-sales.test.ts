@@ -605,6 +605,68 @@ describe("computeCategorySales at time of sale", () => {
     ]);
   });
 
+  it("files under its dish's category a correction reversing a refund of an extra alone", async () => {
+    const dish = randomUUID();
+    const extra = randomUUID();
+    const refundLine = randomUUID();
+    const extras = classified(chain(["cat-extras", "Extras"]));
+    const invoice = await sell("2026-08-04", [
+      {
+        id: dish,
+        net: "10.00",
+        gross: "11.00",
+        cls: classified(chain(["cat-food", "Food"], ["cat-burgers", "Burgers"])),
+      },
+      { id: extra, parentLineId: dish, net: "1.00", gross: "1.10", cls: extras },
+    ]);
+    const refund = await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-04"),
+      [
+        {
+          id: refundLine,
+          correctsLineId: extra,
+          net: "-1.00",
+          gross: "-1.10",
+          quantity: "-1.000",
+          cls: extras,
+        },
+      ],
+      invoice,
+    );
+    await sellLines(
+      suite.db,
+      venue,
+      at("2026-08-05"),
+      [
+        {
+          correctsLineId: refundLine,
+          net: "1.00",
+          gross: "1.10",
+          quantity: "1.000",
+          cls: extras,
+        },
+      ],
+      refund,
+    );
+
+    const reversalDay = await run({
+      extrasIntoDish: true,
+      fromBusinessDay: "2026-08-05",
+      toBusinessDay: "2026-08-05",
+    });
+    const both = await run({ extrasIntoDish: true });
+
+    expect(rows(reversalDay.tree).map((r) => `${r.path}: ${r.gross}/${r.net} ${r.direct}`)).toEqual(
+      ["Food: 1.10/1.00 0.00/0.00/0", "Food > Burgers: 1.10/1.00 1.10/1.00/1"],
+    );
+    expect(rows(both.tree).map((r) => `${r.path}: ${r.gross}/${r.net} ${r.direct}`)).toEqual([
+      "Food: 12.10/11.00 0.00/0.00/0",
+      "Food > Burgers: 12.10/11.00 12.10/11.00/4",
+    ]);
+  });
+
   it("rolls an extra of an unclassified dish into Not recorded under the dish's free-text category", async () => {
     const dish = randomUUID();
     await sell("2026-08-04", [

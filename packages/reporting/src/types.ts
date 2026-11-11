@@ -47,10 +47,11 @@ export interface TopSellersInput extends PeriodVatInput {
 export interface TopSeller {
   /** The frozen `sale_lines.name` — the parent's staff name on a variant line. */
   name: string;
-  /** Σ line quantity over the range, at three decimal places; corrections and the reversed lines
-   * of a sale whose void falls in the range net in, so it can fall below zero. */
+  /** Dishes sold less dishes returned over the range, as `computeTopSellers` counts them, at three
+   * decimal places; it can fall below zero. */
   quantity: Decimal;
-  /** Σ line_total over the range, as an amount; nets in as {@link TopSeller.quantity} does. */
+  /** Σ line_total over the range, as an amount; every correction, and the reversed lines of a sale
+   * whose void falls in the range, net in. */
   total: Decimal;
   /** One row per variant sold under this name, by quantity then name; `[]` when none was. */
   variants: TopSellerVariant[];
@@ -61,7 +62,7 @@ export interface TopSeller {
 export interface TopSellerVariant {
   /** The frozen `sale_lines.variant_name` — the variant's own staff name, alone. */
   name: string;
-  /** Σ line quantity, as {@link TopSeller.quantity}. */
+  /** Dishes sold less dishes returned, as {@link TopSeller.quantity}. */
   quantity: Decimal;
   /** Σ line_total, as {@link TopSeller.total}. */
   total: Decimal;

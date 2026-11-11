@@ -773,14 +773,14 @@ describe("computeTopSellers", () => {
   });
 
   it("returns a dish only with the correction that completes its line's money", async () => {
-    const steakLine = randomUUID();
+    const coffeeLine = randomUUID();
     const invoice = await seedSale(suite.db, venue, {
       invoiceNumber: 1,
       issuedAt: noonUtc,
       total: "12.10",
       lines: [
         {
-          id: steakLine,
+          id: coffeeLine,
           vatRate: "10.00",
           lineTotal: "11.00",
           lineGross: "12.10",
@@ -804,7 +804,7 @@ describe("computeTopSellers", () => {
             name: coffeeName,
             descriptions: coffeeText,
             quantity: "-1.000",
-            correctsLineId: steakLine,
+            correctsLineId: coffeeLine,
           },
         ],
       });
@@ -819,7 +819,6 @@ describe("computeTopSellers", () => {
     // The money is back in gross, not in net: 10.99 of 11.00.
     await correct(4, "03", "0.02", "0.03");
 
-    // Today's count would be 1 − 3 = −2.000.
     expect(await run()).toEqual([
       { name: coffeeName, quantity: "0.000", total: "0.01", variants: [] },
     ]);
@@ -911,12 +910,12 @@ describe("computeTopSellers", () => {
   });
 
   describe("voided corrections of a line", () => {
-    let steakLine: string;
+    let coffeeLine: string;
     let invoice: Awaited<ReturnType<typeof seedSale>>;
     let nextNumber: number;
 
     beforeEach(async () => {
-      steakLine = randomUUID();
+      coffeeLine = randomUUID();
       nextNumber = 2;
       invoice = await seedSale(suite.db, venue, {
         invoiceNumber: 1,
@@ -924,7 +923,7 @@ describe("computeTopSellers", () => {
         total: "12.10",
         lines: [
           {
-            id: steakLine,
+            id: coffeeLine,
             vatRate: "10.00",
             lineTotal: "11.00",
             lineGross: "12.10",
@@ -951,7 +950,7 @@ describe("computeTopSellers", () => {
             name: coffeeName,
             descriptions: coffeeText,
             quantity: "-1.000",
-            correctsLineId: steakLine,
+            correctsLineId: coffeeLine,
           },
         ],
       });
@@ -1026,6 +1025,96 @@ describe("computeTopSellers", () => {
       expect(await run(day("2026-08-05"))).toEqual(closed);
       expect(await run(day("2026-08-06"))).toEqual([
         { name: coffeeName, quantity: "0.000", total: "5.50", variants: [] },
+      ]);
+    });
+  });
+
+  describe("corrections of a correction", () => {
+    let nextNumber: number;
+
+    beforeEach(() => {
+      nextNumber = 1;
+    });
+
+    /** A one-line coffee invoice, correcting `of`'s line when given. */
+    const issue = async (
+      minute: string,
+      quantity: string,
+      net: string,
+      gross: string,
+      of?: { sale: SaleId; line: string },
+      day = "04",
+    ) => {
+      const line = randomUUID();
+      const sale = await seedSale(suite.db, venue, {
+        invoiceNumber: nextNumber++,
+        issuedAt: new Date(`2026-08-${day}T10:${minute}:00Z`).toISOString(),
+        total: gross,
+        correctsSaleId: of?.sale,
+        lines: [
+          {
+            id: line,
+            vatRate: "10.00",
+            lineTotal: net,
+            lineGross: gross,
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity,
+            correctsLineId: of?.line,
+          },
+        ],
+      });
+      return { sale, line };
+    };
+
+    it("counts no dish at a reversal of a refund that returned none", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const partial = await issue("01", "-1.000", "-5.00", "-5.50", invoice);
+      await issue("02", "1.000", "5.00", "5.50", partial);
+
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "10.00", variants: [] },
+      ]);
+    });
+
+    it("sells the dish again at a partial reversal of the refund that returned it", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const refund = await issue("01", "-1.000", "-10.00", "-11.00", invoice);
+      await issue("02", "1.000", "5.00", "5.50", refund);
+
+      // Half the money is kept again, so the line is no longer wholly refunded.
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.00", variants: [] },
+      ]);
+    });
+
+    it("returns the dish again at a reversal of that partial reversal", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const refund = await issue("01", "-1.000", "-10.00", "-11.00", invoice);
+      const reversal = await issue("02", "1.000", "5.00", "5.50", refund);
+      await issue("03", "-1.000", "-5.00", "-5.50", reversal);
+
+      expect(await run()).toEqual([
+        { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+      ]);
+    });
+
+    it("judges a reversal at the moment the first correction in its chain was issued", async () => {
+      const invoice = await issue("00", "1.000", "10.00", "11.00");
+      const first = await issue("01", "-1.000", "-5.00", "-5.50", invoice);
+      const second = await issue("02", "-1.000", "-5.00", "-5.50", invoice);
+      await seedVoid(
+        suite.db,
+        { saleId: first.sale },
+        new Date("2026-08-05T10:00:00Z").toISOString(),
+      );
+      await issue("00", "1.000", "5.00", "5.50", second, "06");
+
+      expect(await run({ fromBusinessDay: "2026-08-06", toBusinessDay: "2026-08-06" })).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "5.00", variants: [] },
+      ]);
+      expect(await run({ toBusinessDay: "2026-08-06" })).toEqual([
+        { name: coffeeName, quantity: "1.000", total: "10.00", variants: [] },
       ]);
     });
   });

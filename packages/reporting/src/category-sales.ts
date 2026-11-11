@@ -17,7 +17,8 @@ export type CategoryReportMode = (typeof CATEGORY_REPORT_MODES)[number];
 
 export interface CategorySalesInput extends PeriodVatInput {
   mode: CategoryReportMode;
-  /** Count an extras line under its dish line's classification rather than its own. */
+  /** Count an extras line under its dish line's classification rather than its own (a
+   * correction of an extra alone reaches its dish through the lines it corrects). */
   extrasIntoDish?: boolean;
 }
 
@@ -199,31 +200,44 @@ export async function computeCategorySales(
   }
   const nodeClause = nodeScopeClause(input.nodeIds);
   const { rows } = await tx.execute<LineRow>(sql`
-    select s.id as sale_id, s.issued_at, sl.line_no,
-      cast(sl.line_total as text) as net, cast(sl.line_gross as text) as gross,
-      coalesce(sl.parent_line_id, il.parent_line_id) as parent_line_id,
-      sl.product_id, sl.category, sl.classification,
+    with lines as (
+      select s.id as sale_id, s.issued_at, sl.line_no, sl.id, sl.line_total, sl.line_gross,
+        sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification
+      from sale_lines sl
+      join sales s on s.id = sl.sale_id
+      where ${issuedSalesClause(window)}
+        ${nodeClause}
+      union all
+      select s.id, s.issued_at, sl.line_no, sl.id, -sl.line_total, -sl.line_gross,
+        sl.parent_line_id, sl.corrects_line_id, sl.product_id, sl.category, sl.classification
+      from sale_voids sv
+      join sales s on s.id = sv.sale_id
+      join sale_lines sl on sl.sale_id = s.id
+      where ${reversedSalesClause(window)}
+        ${nodeClause}
+    ),
+    -- A correction's extra named without its dish takes the dish of the first line up the chain
+    -- of lines it corrects that names one.
+    up(id, parent_line_id, corrects_line_id) as (
+      select l.id, t.parent_line_id, t.corrects_line_id
+      from lines l
+      join sale_lines t on t.id = l.corrects_line_id
+      where l.parent_line_id is null
+      union all
+      select u.id, t.parent_line_id, t.corrects_line_id
+      from up u
+      join sale_lines t on t.id = u.corrects_line_id
+      where u.parent_line_id is null
+    )
+    select l.sale_id, l.issued_at, l.line_no,
+      cast(l.line_total as text) as net, cast(l.line_gross as text) as gross,
+      coalesce(l.parent_line_id, u.parent_line_id) as parent_line_id,
+      l.product_id, l.category, l.classification,
       dl.product_id as dish_product_id, dl.category as dish_category,
       dl.classification as dish_classification
-    from sale_lines sl
-    join sales s on s.id = sl.sale_id
-    -- A correction's extra named without its dish reaches the dish through the line it corrects.
-    left join sale_lines il on il.id = sl.corrects_line_id
-    left join sale_lines dl on dl.id = coalesce(sl.parent_line_id, il.parent_line_id)
-    where ${issuedSalesClause(window)}
-      ${nodeClause}
-    union all
-    select s.id, s.issued_at, sl.line_no,
-      cast(-sl.line_total as text), cast(-sl.line_gross as text),
-      coalesce(sl.parent_line_id, il.parent_line_id), sl.product_id, sl.category,
-      sl.classification, dl.product_id, dl.category, dl.classification
-    from sale_voids sv
-    join sales s on s.id = sv.sale_id
-    join sale_lines sl on sl.sale_id = s.id
-    left join sale_lines il on il.id = sl.corrects_line_id
-    left join sale_lines dl on dl.id = coalesce(sl.parent_line_id, il.parent_line_id)
-    where ${reversedSalesClause(window)}
-      ${nodeClause}
+    from lines l
+    left join up u on u.id = l.id and u.parent_line_id is not null
+    left join sale_lines dl on dl.id = coalesce(l.parent_line_id, u.parent_line_id)
   `);
 
   const lines = rows.map((row) => {
