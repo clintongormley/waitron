@@ -111,6 +111,15 @@ describe("renderDeclaration", () => {
     }
   });
 
+  it("refuses a slot wrapped across two lines", () => {
+    expect(() => renderDeclaration("Título\n\n**X)** ‹versión\n  de algo›\n", producer)).toThrow(
+      expect.objectContaining({
+        code: "declaration.slot_unfilled",
+        params: { slot: "‹versión de algo›" },
+      }),
+    );
+  });
+
   it("refuses a source still holding a release slot", () => {
     expect(() => renderDeclaration("**1.c) Versión:** ‹versión›\n", producer)).toThrow(
       expect.objectContaining({

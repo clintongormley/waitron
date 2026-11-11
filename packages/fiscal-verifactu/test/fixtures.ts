@@ -293,8 +293,8 @@ async function insertLocationNodeSeries(
  * from `tenants`. A test that needs `tenants.tax_id` itself to match must seed before anything
  * else does.
  *
- * `options.idSistemaInformatico` defaults to `"WT"`, not the `"W1"` a real first setup registers;
- * a test comparing with `SOFTWARE_IDENTITY.code` passes `WAITRON_ID_SISTEMA`.
+ * A test comparing with `SOFTWARE_IDENTITY.code` passes `idSistemaInformatico: WAITRON_ID_SISTEMA`;
+ * the default is not the code a real setup registers.
  */
 export async function seedTenantWithSif(
   db: Database,

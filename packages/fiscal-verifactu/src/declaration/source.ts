@@ -22,7 +22,6 @@ export const PRODUCER_SLOTS = {
 
 const PRODUCER_SLOT_SET: ReadonlySet<string> = new Set(Object.values(PRODUCER_SLOTS));
 
-/** Never spans a line, so a slot sits whole inside one line of the source. */
 export const SLOT = /‹[^›\n]*›/g;
 
 const SI_NO: Record<SiNo, string> = { S: "S - Sí", N: "N - No" };

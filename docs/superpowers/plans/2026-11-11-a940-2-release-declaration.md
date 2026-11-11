@@ -149,7 +149,8 @@ there; the root script holds none by construction (Spanish stays in the package,
   the renderer: `‹nombre y apellidos›`, `‹NIF›`, `‹dirección›` (design §5.3, 2026-11-06).
 - Error codes (in `packages/fiscal-verifactu/src/errors.ts`'s `ErrorParams`):
   `declaration.slot_unfilled: { slot: string }`, `declaration.release_blocked: { count: number }`,
-  `declaration.disagrees: { item: string }`, `declaration.functions_malformed: { line: number }`.
+  `declaration.disagrees: { item: string }`, `declaration.functions_malformed: { line: number }`,
+  `declaration.date_invalid: { date: string }`, `declaration.producer_invalid: { field: "name" | "taxId" | "address" }`.
   Params never carry a producer's value.
 - Test producer values (Task 8's): `PRODUCER PERSON`, `00000000T`,
   `1 Example Street, 00000 Nowhere (Province), Spain`. The real values never appear in a commit,

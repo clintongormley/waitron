@@ -15,8 +15,6 @@ export interface DeclarationBlock {
   lines: DeclarationRun[][];
 }
 
-// `readSoftwareProducer` refuses only CR and LF. Unicode also ends a line at VT, FF, NEL, U+2028 and
-// U+2029, so a reader that honours them would see a paragraph of the text broken in two.
 const BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/u;
 
 /** Each producer slot's value, once the source is known to hold no other slot. */
@@ -38,7 +36,11 @@ function producerValues(source: string, producer: DeclarationProducer): Map<stri
 
 function filled(text: string, values: Map<string, string>): string {
   // One pass: a producer's value is never read again as a slot.
-  return text.replace(SLOT, (slot) => values.get(slot)!);
+  return text.replace(SLOT, (slot) => {
+    const value = values.get(slot);
+    if (value === undefined) throw new AppError("declaration.slot_unfilled", { slot });
+    return value;
+  });
 }
 
 /**
