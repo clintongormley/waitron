@@ -96,7 +96,8 @@ import { mountPagePrintersApi, type PagePrinterQueue } from "./page-printers-api
 import type { PagePrinterDiscovery } from "./page-printers.js";
 import { mountPagePrintApi, type RenderInvoicePage } from "./page-print-api.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import { reprintJobOn, type LayOutSaleReceipt } from "./print-job-reprint.js";
+import { reprintJobOn } from "./print-job-reprint.js";
+import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 export interface PrintApiDeps {
   bus?: LiveEvents;

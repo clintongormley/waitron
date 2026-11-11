@@ -7,7 +7,6 @@ import {
   receiptReprints,
   type Transaction,
 } from "@waitron/db";
-import type { FiscalBackend } from "@waitron/fiscal";
 import {
   canResendPrintJob,
   centredForPrinter,
@@ -15,37 +14,10 @@ import {
   jobWidthDots,
   MAX_DELIVERY_ATTEMPTS,
   textGrid,
-  type EscSetting,
 } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import { endInvoicePrintDeliveries, resendInvoicePrintJob } from "./invoice-print.js";
-import { buildReceiptBytes } from "./receipt-print.js";
-import type { TradingContext } from "./trading-context.js";
-import { readTransactionReceipt } from "./transaction-receipt.js";
-
-export type LayOutSaleReceipt = (
-  tx: Transaction,
-  saleId: string,
-  duplicate: boolean,
-  printer: EscSetting,
-) => Promise<Uint8Array>;
-
-/** A filed sale's receipt laid out for `printer`, with today's trim, logo and address. */
-export async function layOutSaleReceipt(
-  backend: FiscalBackend,
-  tx: Transaction,
-  cfg: TradingContext,
-  saleId: string,
-  duplicate: boolean,
-  printer: EscSetting,
-): Promise<Uint8Array> {
-  const ticket = await readTransactionReceipt(backend, tx, cfg, saleId);
-  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
-  /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
-  if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
-  /* v8 ignore stop */
-  return bytes;
-}
+import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 /**
  * Resend a job on `printerId`: a receipt or full invoice laid out again for it, keeping the job's
