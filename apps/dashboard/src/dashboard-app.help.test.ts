@@ -523,6 +523,7 @@ it("signed in, the banner has no language chooser and the account menu holds the
     "profile-row",
     "theme-choices",
     "language-chooser",
+    "about",
     "logout",
   ]);
   const group = languageGroup(el)!;

@@ -192,6 +192,7 @@ it("signed in, the banner has no theme chooser and the account menu holds the Th
     "profile-row",
     "theme-choices",
     "language-chooser",
+    "about",
     "logout",
   ]);
   await openAccountMenu(el);
