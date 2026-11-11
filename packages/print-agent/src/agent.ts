@@ -23,8 +23,7 @@ import type {
 } from "./host.js";
 import { Router } from "./router.js";
 
-/** A non-empty batch re-polls at once; only an empty pull sleeps, and a finished Bluetooth command
- * or a discovery pass that found devices cuts the sleep short so what it produced goes out at once. */
+/** Failed pulls and active discovery passes use this interval. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
 /** A third of the server's 60 s claim lease (`INVOICE_DELIVERY_LEASE_MS`,
@@ -98,6 +97,7 @@ export function createAgent(opts: AgentOptions): Agent {
   let approved = false;
   let halted = false;
   let running = false;
+  let pullController: AbortController | undefined;
   // Set by stop() and cleared by start(): a job still out then reports, but nothing new is claimed.
   // Not `running`, which is false before start(), when runOnce() must still claim.
   let stopped = false;
@@ -148,6 +148,7 @@ export function createAgent(opts: AgentOptions): Agent {
   }
 
   function wake(): void {
+    pullController?.abort();
     wakeResolve();
   }
 
@@ -520,7 +521,7 @@ export function createAgent(opts: AgentOptions): Agent {
     }
   }
 
-  /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
+  /** Returns true when the loop can pull again without backing off. */
   async function tick(): Promise<boolean> {
     // The loop, not the host, holds the live config, so a later merge never clobbers an earlier
     // one.
@@ -652,6 +653,8 @@ export function createAgent(opts: AgentOptions): Agent {
     const sentOutcomes = bluetoothOutcomes;
     // Started before `visibleDevices`, and awaited after it, so the host's paired-device listing is
     // already running when the visible-device read wants one and can be shared.
+    const activePull = running ? new AbortController() : undefined;
+    pullController = activePull;
     const pairedListing = listPairedBluetooth();
     const visible = await host.visibleDevices();
     const pairedBluetooth = await pairedListing;
@@ -719,7 +722,7 @@ export function createAgent(opts: AgentOptions): Agent {
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
-    const pulled = await client.pullJobs(current, token, {
+    const inventory = {
       visible,
       scanned,
       pairedBluetooth,
@@ -727,7 +730,12 @@ export function createAgent(opts: AgentOptions): Agent {
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),
       ...(setupPort === undefined ? {} : { setupPort }),
-    });
+    };
+    const pulled = activePull
+      ? await client.pullJobs(current, token, inventory, activePull.signal)
+      : await client.pullJobs(current, token, inventory);
+    if (pullController === activePull) pullController = undefined;
+    if (!pulled.ok && activePull?.signal.aborted) return true;
     if (!pulled.ok) {
       if (pulled.failure.kind === "unauthorized") {
         await halt(config, current);
@@ -776,7 +784,7 @@ export function createAgent(opts: AgentOptions): Agent {
       ...(anyFailed ? {} : { lastError: undefined }),
     });
     acceptBluetoothCommands(pulled.value.bluetoothCommands ?? []);
-    return pulled.value.jobs.length > 0;
+    return true;
   }
 
   async function runOnce(): Promise<boolean> {
@@ -836,6 +844,7 @@ export function createAgent(opts: AgentOptions): Agent {
       });
     },
     beginNetworkReset() {
+      wake();
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();
@@ -846,6 +855,7 @@ export function createAgent(opts: AgentOptions): Agent {
       });
     },
     cancelNetworkReset() {
+      wake();
       return exclusive(async () => {
         const config = await host.config();
         const token = await host.token();

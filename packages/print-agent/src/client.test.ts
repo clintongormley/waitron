@@ -331,7 +331,7 @@ describe("createClient — pullJobs", () => {
     expect(result.value.servers).toEqual([{ url: "http://a.test", nodeId: "n1" }]);
     expect(result.value.jobs[0]!.payload).toEqual(new Uint8Array([1, 2, 3]));
     expect(result.value.discoveryUntil).toBeNull();
-    expect(fetchImpl.mock.calls[0]![0]).toBe(`${URL_A}/print-api/agent/jobs`);
+    expect(fetchImpl.mock.calls[0]![0]).toBe(`${URL_A}/print-api/agent/jobs?wait=25`);
     expect(fetchImpl.mock.calls[0]![1].headers.authorization).toBe("Bearer a1.secret");
   });
 
@@ -899,5 +899,45 @@ describe("isBluetoothAddress / isBluetoothPin", () => {
     expect(isBluetoothPin("~".repeat(16))).toBe(true);
     for (const bad of ["", "1".repeat(17), "12 34", "1234\n", "12\x7f"])
       expect(isBluetoothPin(bad)).toBe(false);
+  });
+});
+
+it("gives a held pull 30 seconds while probes retain their three-second limit", async () => {
+  vi.useFakeTimers();
+  try {
+    const fetchImpl = vi.fn(
+      (_url: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    );
+    const client = createClient({ fetch: fetchImpl });
+    const probe = client.probeNode(URL_A);
+    const pulled = client.pullJobs(URL_A, "a1.s", NO_INVENTORY);
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(await probe).toMatchObject({ ok: false, failure: { kind: "unreachable" } });
+    expect(fetchImpl.mock.calls[1]![1]!.signal!.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(26_999);
+    expect(fetchImpl.mock.calls[1]![1]!.signal!.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pulled).toMatchObject({ ok: false, failure: { kind: "unreachable" } });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a caller can abort its held pull before the deadline", async () => {
+  const stop = new AbortController();
+  const client = createClient({
+    fetch: (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("cancelled")));
+      }),
+  });
+  const pulled = client.pullJobs(URL_A, "a1.s", NO_INVENTORY, stop.signal);
+  stop.abort();
+  expect(await pulled).toMatchObject({
+    ok: false,
+    failure: { kind: "unreachable", detail: "cancelled" },
   });
 });

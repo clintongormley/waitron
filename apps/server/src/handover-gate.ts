@@ -4,6 +4,7 @@ import "./errors.js";
 
 export interface HandoverGate {
   middleware: MiddlewareHandler;
+  readonly closed: AbortSignal;
   close(deps: { allowed: (c: Context) => boolean; self?: Context }): void;
   isClosed(): boolean;
   settled(limitMs: number): Promise<{ remaining: readonly { method: string; path: string }[] }>;
@@ -15,6 +16,7 @@ export interface HandoverGate {
  * boundary's response shape directly rather than thrown.
  */
 export function createHandoverGate(): HandoverGate {
+  const closed = new AbortController();
   const inside = new Set<Context>();
   const atZero = new Set<() => void>();
   let allowed: ((c: Context) => boolean) | null = null;
@@ -25,6 +27,7 @@ export function createHandoverGate(): HandoverGate {
   };
 
   return {
+    closed: closed.signal,
     middleware: async (c, next) => {
       if (allowed !== null) {
         if (allowed(c)) return next();
@@ -42,6 +45,7 @@ export function createHandoverGate(): HandoverGate {
     },
     close: ({ allowed: names, self }) => {
       allowed = names;
+      closed.abort();
       if (self !== undefined) leave(self);
     },
     isClosed: () => allowed !== null,

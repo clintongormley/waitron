@@ -45,6 +45,25 @@ function deferred<T = void>() {
   return { promise, resolve };
 }
 
+function heldPulls() {
+  const waits: ReturnType<typeof deferred<Result<PullReply>>>[] = [];
+  const finish = () =>
+    waits.forEach((wait) => wait.resolve(failR({ kind: "unreachable", detail: "cancelled" })));
+  const pull = vi.fn(
+    (_url: string, _token: string, _inventory: AgentInventory, signal?: AbortSignal) => {
+      const wait = deferred<Result<PullReply>>();
+      waits.push(wait);
+      signal?.addEventListener(
+        "abort",
+        () => wait.resolve(failR({ kind: "unreachable", detail: "cancelled" })),
+        { once: true },
+      );
+      return wait.promise;
+    },
+  );
+  return { pull, finish, waits };
+}
+
 /** Answers renewals in turn (then success) and never answers past `limit`, so a renewal loop that
  * does not stop fails its case instead of exhausting the heap. */
 function renewer(answers: Result<void>[] = [], limit = 10) {
@@ -486,6 +505,33 @@ describe("createAgent — phases", () => {
 });
 
 describe("createAgent — setup controls", () => {
+  it.each(["beginNetworkReset", "cancelNetworkReset"] as const)(
+    "%s cancels a held pull before queuing the action",
+    async (action) => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s" });
+      const held = heldPulls();
+      held.pull.mockResolvedValueOnce(failR({ kind: "unreachable", detail: "offline" }));
+      const agent = createAgent({ host, client: client({ pullJobs: held.pull }) });
+      await agent.runOnce();
+      if (action === "cancelNetworkReset") expect(await agent.beginNetworkReset()).toBe(true);
+      const loop = agent.start();
+      try {
+        await vi.waitFor(() => expect(held.pull).toHaveBeenCalledTimes(2));
+        let answered = false;
+        const result = agent[action]().then((value) => {
+          answered = true;
+          return value;
+        });
+        await vi.waitFor(() => expect(answered).toBe(true), { timeout: 500 });
+        expect(await result).toBe(true);
+      } finally {
+        agent.stop();
+        held.finish();
+        await loop;
+      }
+    },
+  );
+
   it("reconfigures a denied agent, wakes its held sleep, and joins again without a restart", async () => {
     const sleepStarted = deferred();
     const joinStarted = deferred();
@@ -1740,28 +1786,28 @@ describe("createAgent — inventory, discovery and resolve", () => {
       expect(pulls.mock.calls[2]![2].scanned).toEqual([]);
     });
 
-    it("a finished pass wakes a sleeping loop so its devices go out at once", async () => {
+    it("a finished pass ends a held pull so its devices go out at once", async () => {
       const pass = deferred<DiscoveredDevice[]>();
       const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
       const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
-      host.sleep = () => new Promise(() => {});
-      // The first reply carries a job, so the loop re-polls at once and that tick starts the pass;
-      // after the second, empty, reply it sleeps for good unless something wakes it.
-      const pulls = vi
-        .fn()
-        .mockResolvedValueOnce(open([usbJob("opens")]))
-        .mockResolvedValue(open());
+      const held = heldPulls();
+      const pulls = held.pull.mockResolvedValueOnce(open([usbJob("opens")]));
       const c = client({ pullJobs: pulls });
       const agent = createAgent({ host, client: c });
       const loop = agent.start();
-      await settle();
-      expect(pulls).toHaveBeenCalledTimes(2);
-      pass.resolve([bt]);
-      await settle();
-      expect(pulls).toHaveBeenCalledTimes(3);
-      expect(inventoryOf(c, 2).scanned).toEqual([bt]);
-      agent.stop();
-      await loop;
+      try {
+        await settle();
+        expect(pulls).toHaveBeenCalledTimes(2);
+        pass.resolve([bt]);
+        await settle();
+        expect(pulls).toHaveBeenCalledTimes(3);
+        expect(inventoryOf(c, 2).scanned).toEqual([bt]);
+        expect(host.sleeps).toEqual([]);
+      } finally {
+        agent.stop();
+        held.finish();
+        await loop;
+      }
     });
 
     it("logs a pass that rejects with a value String() cannot convert", async () => {
@@ -1879,40 +1925,60 @@ describe("createAgent — inventory, discovery and resolve", () => {
 });
 
 describe("createAgent — start/stop and logging", () => {
-  it("start loops runOnce, sleeping the interval after an empty pull and not at all after a batch", async () => {
+  it("repulls after both a batch and an empty held reply without sleeping", async () => {
     const host = fakeHost({ config: CONFIG, token: "a1.s" });
-    const pulls = vi
-      .fn()
-      .mockResolvedValueOnce(
-        okR<PullReply>({
+    let pulls = 0;
+    const c = client({
+      pullJobs: vi.fn(async () => {
+        pulls++;
+        if (pulls === 3) agent.stop();
+        return okR<PullReply>({
           nodeId: "n1",
           servers: [],
-          jobs: [
-            {
-              id: "j1",
-              printerId: "p1",
-              transport: "network_tcp",
-              host: "h",
-              port: 1,
-              localKey: null,
-              payload: new Uint8Array(),
-            },
-          ],
+          jobs:
+            pulls === 1
+              ? [
+                  {
+                    id: "j1",
+                    printerId: "p1",
+                    transport: "network_tcp",
+                    host: "h",
+                    port: 1,
+                    localKey: null,
+                    payload: new Uint8Array(),
+                  },
+                ]
+              : [],
           discoveryUntil: null,
-        }),
-      )
-      .mockResolvedValue(
-        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
-      );
-    const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
-    const originalSleep = host.sleep;
-    host.sleep = async (ms) => {
-      await originalSleep(ms);
-      if (host.sleeps.length >= 2) agent.stop();
-    };
+        });
+      }),
+    });
+    const agent = createAgent({ host, client: c, intervalMs: 50 });
     await agent.start();
-    expect(host.sleeps).toEqual([50, 50]); // tick 1 had a batch → no sleep; ticks 2 and 3 slept
-    expect(pulls).toHaveBeenCalledTimes(3);
+    expect(host.sleeps).toEqual([]);
+    expect(pulls).toBe(3);
+    expect(c.report).toHaveBeenCalledExactlyOnceWith(A, "a1.s", "j1", { status: "done" });
+  });
+
+  it("stop ends a held pull without another request", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const held = heldPulls();
+    const agent = createAgent({ host, client: client({ pullJobs: held.pull }) });
+    let finished = false;
+    const loop = agent.start().then(() => {
+      finished = true;
+    });
+    try {
+      await vi.waitFor(() => expect(held.pull).toHaveBeenCalledTimes(1));
+      agent.stop();
+      await vi.waitFor(() => expect(finished).toBe(true));
+      expect(held.pull).toHaveBeenCalledTimes(1);
+      expect(host.sleeps).toEqual([]);
+    } finally {
+      agent.stop();
+      held.finish();
+      await loop;
+    }
   });
 
   it("stop during a tick ends start without sleeping", async () => {
@@ -1937,17 +2003,15 @@ describe("createAgent — start/stop and logging", () => {
       now: Date.now,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     });
-    const sent: AgentInventory[] = [];
-    const pulls = vi.fn(async (_url: string, _token: string, inventory: AgentInventory) => {
-      sent.push(inventory);
-      if (pulls.mock.calls.length > 10) agent.stop();
-      return okR<PullReply>({
+    const held = heldPulls();
+    const pulls = held.pull.mockResolvedValueOnce(
+      okR<PullReply>({
         nodeId: "n1",
         servers: [],
         jobs: [],
         discoveryUntil: Date.now() + 10_000,
-      });
-    });
+      }),
+    );
     const c = client({ pullJobs: pulls });
     const agent = createAgent({ host, client: c });
     await agent.runOnce(); // opens discovery before the timed loop begins
@@ -1957,17 +2021,20 @@ describe("createAgent — start/stop and logging", () => {
       expect(pulls.mock.calls.length - 1).toBeLessThanOrEqual(2);
       expect(scan).toHaveBeenCalledTimes(1);
       expect(
-        sent.some((inventory) => inventory.scanned.some((item) => item.localKey === "SN-9")),
+        pulls.mock.calls.some(([, , inventory]) =>
+          inventory.scanned.some((item) => item.localKey === "SN-9"),
+        ),
       ).toBe(true);
     } finally {
       agent.stop();
+      held.finish();
       await loop;
     }
   });
 
   it("starts another empty scan at the next polling interval", async () => {
     let clock = 1_000;
-    const sleeps: ReturnType<typeof deferred<void>>[] = [];
+    const held = heldPulls();
     const scan = vi.fn(async () => {
       clock += 20;
       return [];
@@ -1977,13 +2044,8 @@ describe("createAgent — start/stop and logging", () => {
       token: "a1.s",
       scan,
       now: () => clock,
-      sleep: () => {
-        const pause = deferred();
-        sleeps.push(pause);
-        return pause.promise;
-      },
     });
-    const pulls = vi.fn(async () =>
+    const pulls = held.pull.mockResolvedValueOnce(
       okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000 }),
     );
     const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
@@ -1993,11 +2055,14 @@ describe("createAgent — start/stop and logging", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(scan).toHaveBeenCalledTimes(1);
       clock = 1_050;
-      sleeps[0]!.resolve(undefined);
+      held.waits[0]!.resolve(
+        okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(scan).toHaveBeenCalledTimes(2);
     } finally {
       agent.stop();
+      held.finish();
       await loop;
     }
   });
@@ -2013,20 +2078,15 @@ describe("createAgent — start/stop and logging", () => {
     "starts the next scan within two polls when its time lies further ahead than one interval (%s)",
     async (_case, steppedTo, scans) => {
       let clock = 1_000;
-      const sleeps: ReturnType<typeof deferred<void>>[] = [];
+      const held = heldPulls();
       const scan = vi.fn(async () => []);
       const host = fakeHost({
         config: CONFIG,
         token: "a1.s",
         scan,
         now: () => clock,
-        sleep: () => {
-          const pause = deferred();
-          sleeps.push(pause);
-          return pause.promise;
-        },
       });
-      const pulls = vi.fn(async () =>
+      const pulls = held.pull.mockResolvedValueOnce(
         okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
       );
       const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
@@ -2036,13 +2096,18 @@ describe("createAgent — start/stop and logging", () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(scan).toHaveBeenCalledTimes(1);
         clock = steppedTo;
-        sleeps[0]!.resolve(undefined);
+        held.waits[0]!.resolve(
+          okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+        );
         await new Promise((resolve) => setTimeout(resolve, 0));
-        sleeps[1]!.resolve(undefined);
+        held.waits[1]!.resolve(
+          okR({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: clock + 10_000 }),
+        );
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(scan).toHaveBeenCalledTimes(scans);
       } finally {
         agent.stop();
+        held.finish();
         await loop;
       }
     },
@@ -2683,23 +2748,27 @@ describe("createAgent — Bluetooth commands", () => {
     expect(outcomesOn(c, 4)).toStrictEqual([{ id: "c1", ok: true }]);
   });
 
-  it("wakes a sleeping loop to send an outcome as soon as its command finishes", async () => {
-    const held = heldPair();
-    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: held.fn });
-    host.sleep = () => new Promise(() => {});
-    const pulls = scripted(reply({ bluetoothCommands: [pair("c1")] }));
+  it("ends a held pull to send an outcome as soon as its command finishes", async () => {
+    const paired = heldPair();
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: paired.fn });
+    const held = heldPulls();
+    const pulls = held.pull.mockResolvedValueOnce(reply({ bluetoothCommands: [pair("c1")] }));
     const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
     const loop = agent.start();
-    await settle();
-    expect(pulls).toHaveBeenCalledTimes(1);
-    held.release();
-    await settle();
-    expect(pulls).toHaveBeenCalledTimes(2);
-    expect(outcomesOn({ pullJobs: pulls } as unknown as AgentClient, 1)).toStrictEqual([
-      { id: "c1", ok: true },
-    ]);
-    agent.stop();
-    await loop;
+    try {
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(2);
+      paired.release();
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(3);
+      expect(outcomesOn({ pullJobs: pulls } as unknown as AgentClient, 2)).toStrictEqual([
+        { id: "c1", ok: true },
+      ]);
+    } finally {
+      agent.stop();
+      held.finish();
+      await loop;
+    }
   });
 
   it("setup controls do not wait for a running Pair, and a reset drops its outcome", async () => {

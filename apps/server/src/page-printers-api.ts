@@ -42,6 +42,7 @@ export interface PagePrintersApiDeps {
   /** Shared with the agent routes that hand them out. */
   testPages: PageTestPages;
   now?: () => Date;
+  wakeAgent?: (agentId: string) => void;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -131,7 +132,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PagePrinterId");
-      const receiptLocale = await gated(sessionId, async (tx) => {
+      const { receiptLocale, agentId } = await gated(sessionId, async (tx) => {
         const [printer] = await tx
           .select({ agentId: pagePrinters.agentId })
           .from(pagePrinters)
@@ -139,10 +140,11 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
         if (printer.agentId === null) throw new AppError("page_printer.no_agent", {});
         const { locale } = await readReceiptLanguage(tx);
-        return locale;
+        return { receiptLocale: locale, agentId: printer.agentId };
       });
-      // Register the in-memory page only after the database turn commits.
-      return c.json(deps.testPages.request(id, receiptLocale), 202);
+      const page = deps.testPages.request(id, receiptLocale);
+      deps.wakeAgent?.(agentId);
+      return c.json(page, 202);
     }),
   );
 

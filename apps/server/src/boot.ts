@@ -2322,6 +2322,8 @@ async function bootServer(
   };
   undoOnFailure.push(stopJobRunner);
   health.readJobs = () => jobRunner.views();
+  const printStop = new AbortController();
+  undoOnFailure.push(async () => printStop.abort());
   const liveEvents = new LiveEvents();
   const changeSources = setsToMigrate.flatMap((module) => module.changes ?? []);
   await installChangeFeed(db, changeSources);
@@ -2721,6 +2723,7 @@ async function bootServer(
       {
         db,
         bus: liveEvents,
+        stopping: AbortSignal.any([handoverGate.closed, printStop.signal]),
         cfg: tradingContext,
         readMembership: () => readNodeMembership(db),
         pairingMode,
@@ -4089,8 +4092,9 @@ async function bootServer(
     health,
     log,
     {
-      stopWork: () =>
-        closeAll([
+      stopWork: () => {
+        printStop.abort();
+        return closeAll([
           async () => {
             try {
               await jobRunner.stopJobs();
@@ -4099,7 +4103,8 @@ async function bootServer(
             }
           },
           () => stopBackgroundDuties(duties),
-        ]),
+        ]);
+      },
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },

@@ -216,3 +216,10 @@ describe("createHandoverGate", () => {
     await Promise.all([a, b]);
   });
 });
+
+it("close aborts the closed signal", () => {
+  const gate = createHandoverGate();
+  expect(gate.closed.aborted).toBe(false);
+  gate.close({ allowed: () => false });
+  expect(gate.closed.aborted).toBe(true);
+});
