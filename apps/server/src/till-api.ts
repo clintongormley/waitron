@@ -672,6 +672,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 export const run = createErrorBoundary(STATUS, "till.failed");
+const runAvailability = createErrorBoundary({ ...STATUS, "product.not_found": 404 }, "till.failed");
 const runSplitLine = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 const runSaveDraft = createErrorBoundary({ ...STATUS, "group.not_found": 400 }, "till.failed");
 const runDeadEndsOrder = createErrorBoundary(
@@ -1598,7 +1599,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   );
 
   app.put("/api/service-zones/:zoneId/products/:productId/availability", (c) =>
-    run(c, log, async () => {
+    runAvailability(c, log, async () => {
       const session = await requireSession(deps, c, { action: "take-orders" });
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const productId = requireUuidParam(c.req.param("productId"), "ProductId");

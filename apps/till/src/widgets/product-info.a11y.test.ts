@@ -94,9 +94,31 @@ describe.each(["light", "dark"] as Theme[])("product information in %s", (theme)
   );
 });
 
-it.each(["light", "dark"] as Theme[])(
-  "availability controls, sending and refusal are accessible in %s",
-  async (theme) => {
+it.each([
+  [
+    "light",
+    "product.not_found",
+    "This dish or size is no longer offered here. Close this window and choose another dish or size.",
+  ],
+  [
+    "dark",
+    "product.not_found",
+    "Este plato o tamaño ya no se ofrece aquí. Cierra esta ventana y elige otro plato o tamaño.",
+  ],
+  [
+    "light",
+    "product.archived",
+    "This dish or size has been archived. Close this window and choose another dish or size.",
+  ],
+  [
+    "dark",
+    "product.archived",
+    "Este plato o tamaño se ha archivado. Cierra esta ventana y elige otro plato o tamaño.",
+  ],
+] as const)(
+  "availability controls, sending and refusal are accessible in %s for %s",
+  async (theme, code, expected) => {
+    setLocale(theme === "dark" ? "es-ES" : "en-GB");
     let reject!: (error: unknown) => void;
     const change = vi.fn(
       () =>
@@ -131,8 +153,9 @@ it.each(["light", "dark"] as Theme[])(
     await userEvent.click(dish);
     expect(change).toHaveBeenCalledExactlyOnceWith("soup", true);
     expect((dish as HTMLElement & { disabled: boolean }).disabled).toBe(true);
-    reject({ code: "product.not_found" });
+    reject({ code });
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull());
+    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toBe(expected);
     await expectNoA11yViolations(host);
   },
 );

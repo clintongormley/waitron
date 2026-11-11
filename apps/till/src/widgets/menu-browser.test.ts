@@ -1880,6 +1880,15 @@ describe("till-menu-browser", () => {
         expect(getComputedStyle(inner(blue)).borderTopColor).toBe(border);
       });
 
+      it("keeps a sold-out painted tile's border when hovered", async () => {
+        const el = await mountPainted(theme);
+        const tile = entry(el, "structure", "Blue gone");
+        await userEvent.hover(tile);
+        expect(getComputedStyle(inner(tile)).borderTopColor).toBe(
+          token(el, "border-color", "var(--wt-color-border)"),
+        );
+      });
+
       it("draws a sold-out tile, painted or not, unfaded and available for information, saying Sold out in the body colour", async () => {
         const store = new WorkingOrderStore();
         const el = await mountPainted(theme, store);

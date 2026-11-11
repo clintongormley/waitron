@@ -299,7 +299,7 @@ export class TillMenuBrowser extends LitElement {
         color: var(--tile-ink);
       }
 
-      .tile[data-painted]::part(button):hover:not(:disabled) {
+      .tile[data-painted]:not([data-sold-out])::part(button):hover:not(:disabled) {
         border-color: var(--tile-ink);
       }
 

@@ -443,3 +443,5 @@ orders. The change applies to every menu in this venue. A sold-out dish stays vi
 
 Choose **Back on sale** when it is ready again; nothing resets the switch the next day.
 Restoring the dish keeps any individually sold-out sizes off sale.
+
+Send or fire portions already taken before marking the dish sold out.

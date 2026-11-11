@@ -1,6 +1,9 @@
 import { Hono } from "hono";
-import { beforeEach, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { requireSession } from "./till-session.js";
+import * as tillSession from "./till-session.js";
+import { deviceProfiles, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createProduct, setProductVariants } from "@waitron/catalogue";
@@ -109,5 +112,24 @@ it("refuses an existing product outside the zone's published offer", async () =>
   const answer = await send(app, cookie, "PUT", path().replace(productId, outsider.id), {
     available: false,
   });
+  expect(answer.status).toBe(404);
   expect(answer.json.code).toBe("product.not_found");
+});
+
+it("rechecks take-orders after the signed-in device's profile changes", async () => {
+  const original = requireSession;
+  const spy = vi.spyOn(tillSession, "requireSession").mockImplementation(async (...args) => {
+    const session = await original(...args);
+    await withTransaction(suite.db, (tx) =>
+      tx
+        .update(deviceProfiles)
+        .set({ capabilities: [] })
+        .where(eq(deviceProfiles.id, session.device.deviceProfileId)),
+    );
+    return session;
+  });
+  onTestFinished(() => spy.mockRestore());
+  const answer = await send(app, cookie, "PUT", path(), { available: false });
+  expect(answer.status).toBe(403);
+  expect(answer.json.code).toBe("device.forbidden_action");
 });
