@@ -6,7 +6,8 @@ their full text.
 ## Later and parked
 
 **Later and parked** (no owner decision pending; reopen when work reaches them): Square and
-generic CSV menu import · gift vouchers, loyalty and a customer list · owners with more
+generic CSV menu import · gift vouchers, loyalty and a customer list · a sold-out count that runs down ("only 5
+left", after A1516) · owners with more
 than one venue (combined reports, one menu kept in step) · which regions of Spain Waitron sells in
 (the Basque Country and Navarra use TicketBAI and their own rules, not Veri\*Factu) ·
 per-seat ordering and multiple tabs per table (each reopens a

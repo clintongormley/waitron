@@ -472,6 +472,23 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
+- **A1515. Set lunch menus, the _menú del día_ (owner, 2026-11-11): go-live.** One fixed price for a
+  menu of courses, where the guest picks a dish for each course (say one of three starters), with
+  bread, a drink or coffee included and an extra charge for a premium choice. The receipt shows one
+  line. Today a set lunch can only be sold as separate dishes with their own prices. Needs a design,
+  including how VAT is worked out on the one price (a question for the adviser).
+  [Detail](backlog/catalogue.md#a1515-set-lunch-menus-the-menú-del-día)
+
+- **A1516. Mark a dish sold out from the till (owner, 2026-11-11): go-live.** Only a manager in the
+  dashboard can do it today, so floor staff cannot during service. The design also decides who may
+  use the button and whether "sold out" switches back by itself the next day; today it never does.
+  [Detail](backlog/catalogue.md#a1516-mark-a-dish-sold-out-from-the-till)
+
+- **A1517. Allergen points to revisit before go-live (owner, 2026-11-11).** Five gaps the owner wants
+  looked at again before go-live, the first a possible safety question: the till's allergen filter
+  still shows dishes whose allergens nobody has entered.
+  [Detail](backlog/catalogue.md#a1517-allergen-points-to-revisit-before-go-live)
+
 - **Menu prices' narrow-layout CI failure still needs a cause (A613).**
   [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
 

@@ -1114,6 +1114,60 @@ tests. Media still validates required image names and translates its refusal to
   (`apps/server/src/receipt-figures.ts:205-212`), so moving its words can change printed text: its
   own pull request waits for the owner.
 
+## A1515. Set lunch menus, the menú del día
+
+**Go-live (owner, 2026-11-11). Not designed; not started.** Most Spanish restaurants sell a fixed-price
+lunch menu. Waitron has no way to sell one: the demo's "Set lunch" is an ordinary menu whose dishes
+each carry their own price, sold, printed and taxed one by one. The catalogue design names this
+"bundles" and leaves it undesigned (`docs/superpowers/specs/2026-09-30-catalogue-menus-routing-design.md`,
+"Bundles"); that section also sets the routing direction: each dish in it goes to its kitchen
+station as an ordinary product, and the menu itself is made by no station.
+
+What the design has to settle:
+
+- one price for the menu, with courses where the guest picks one dish from a list;
+- items included in the price (bread, a drink, coffee or dessert) and an extra charge for a premium
+  choice;
+- how the one price is split for VAT when the items carry different rates: ask the adviser;
+- what the receipt, the invoice and the kitchen ticket show (one menu line on the receipt; each
+  dish on the kitchen ticket);
+- when it can be sold: service periods already limit a menu to its times and days.
+
+## A1516. Mark a dish sold out from the till
+
+**Go-live (owner, 2026-11-11). Not designed; not started.** The "sold out for now" switch (the
+product's `available` flag, separate from archiving) is set only in the dashboard's product editor,
+by someone with `catalogue.manage`. When it is set, every till greys the dish out within about 15
+seconds and the server refuses to sell it. Floor staff cannot set it during service. The design
+decides:
+
+- who may press it on the till (a permission for the person, and whether the device's profile
+  must allow it too);
+- whether it covers variants and choices in an options list, as the dashboard switch does;
+- whether "sold out" switches back by itself at the start of the next day. Today nothing switches it
+  back, so someone has to remember.
+
+A count that runs down ("only 5 left") can follow later (owner, 2026-11-11); it is on the parked
+list.
+
+## A1517. Allergen points to revisit before go-live
+
+**Before go-live (owner, 2026-11-11).** Found by reading the code on 2026-11-11; nothing below was run.
+
+1. **The till's allergen filter still shows dishes nobody has checked.** Filtering out an allergen
+   hides dishes that declare it but keeps dishes whose allergens were never entered, with no
+   warning on their tile. A test pins this on purpose (A738, the "A738 filter combinations" cases
+   in `apps/till/src/menu-filter.test.ts`). The filter also ignores the allergens of extras.
+2. **Paper kitchen tickets show no dish allergens** unless a guest at the table was flagged as
+   allergic. The kitchen screen shows them; a cook working from paper does not see them.
+3. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
+   retired), no printed menu (A670) and no online menu yet (A509). The data-protection guide tells
+   venues to put a notice "on the menu or allergen sheet".
+4. **The screen for choosing extras shows no allergens.** They appear only once the extra is on
+   the order.
+5. **Allergen icons on a sent order read the product as it is now**, not as it was when sold, so
+   a later edit changes what staff see on an earlier order.
+
 ## Decisions and deliberate limits
 
 - **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before
