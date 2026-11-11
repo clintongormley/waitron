@@ -1157,7 +1157,7 @@ the [recorded decisions](../superpowers/specs/2026-11-11-a1517-allergen-proposal
 split the remaining implementation into six follow-ups; five remain for the watcher to queue. No product change
 is built by the proposal. It distinguishes the narrower measured cases from these original observations.
 
-1. **The till's allergen filter ignores the allergens of extras**, and the allergens of variants of a dish that has its own declaration (found in A1517-1's review, 2026-11-11).
+1. **The till's allergen filter ignores the allergens of extras**, and the allergens of variants of a dish that has its own declaration; a dish shown because one variant passes still offers its other variants (found in A1517-1's review, 2026-11-11; A1517-2).
 2. **Paper kitchen tickets show no dish allergens** unless a guest at the table was flagged as
    allergic. The kitchen screen shows them; a cook working from paper does not see them.
 3. **Nothing shows allergens to guests:** no printed allergen sheet (the till's old one was
