@@ -266,8 +266,8 @@ checked word for word against the downloaded text, are in
 about a quarter were answered outright and most of the rest narrowed to a yes or no. What is left for the
 advisor is below: eighteen short questions, S1 to S18, and a review list, R1 to R6, for the advisor to
 read and correct only where we are wrong. **This list replaces the 6 October Word copies**; the
-question texts further down this file stay as the background and the record. No enquiry has been
-sent.
+question texts further down this file stay as the background and the record. Sent; awaiting the
+adviser's reply (owner, 2026-11-11).
 
 Questions not in the 6 October Word copy (Q3, Q4, Q8, Q10, and the lawyer's Q9, Q11, Q12 and Q16)
 are unchanged by this pass. Q46, on selling by weight, was added afterwards the same day as S17.
@@ -3312,6 +3312,20 @@ these rejections. Advancing the queue does not resolve the rejected invoice.
 > **(c)** ¿Qué debe hacer y conservar el restaurante mientras se corrige el rechazo y cómo debe
 > reflejarlo en sus libros y declaraciones? Distinguimos la remisión de las facturas posteriores
 > de la resolución de esta factura: continuar enviando no la da por resuelta.
+
+**Answered by the owner, 2026-11-11** (watcher session; the owner: "this doesn't need more
+confirmation. it is confirmed." and "all of this is already established"):
+
+- **(a)** "1 and 2 needs a corrective invoice / 3 can be fixed in place": a wrong registered name
+  (1) and an issue date in the future (2) are put right with a corrective invoice (case 2.a); a
+  format or encoding error in a field not printed on the ticket (3) is put right with a correction
+  record (case 2.b).
+- **(b)** one replacement invoice carrying the right registered name is enough: "yes".
+- **(c)** what the restaurant keeps while the refusal is put right: "the old invoice and the new
+  invoice".
+
+Consequence (owner, 2026-11-11 14:12, option A): a correction record (subsanación) for a refused
+invoice never changes its amounts — the VAT rate, the base, the VAT or the total.
 
 **Proposed interim treatment:** preserve the rejected record and response, show the invoice as
 unresolved, and require an explicit corrective action. D2 proposes continuing later submissions
