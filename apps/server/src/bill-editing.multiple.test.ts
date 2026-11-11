@@ -42,18 +42,18 @@ const expectedOf = ({ billId, editorVersion, draftId, draftRevision }: BillEditS
   draftRevision,
 });
 
-async function fixture(owners: ("Ana" | "Luis" | null)[]) {
+async function fixture(owners: ("Anna" | "Lewis" | null)[]) {
   return inTx(async (tx) => {
     await seedVenue(tx, {
       name: "Dining room",
       invoiceLocales: ["en"],
       operationDescription: "Restaurant",
     });
-    const [ana, luis, sam] = await tx
+    const [anna, lewis, sam] = await tx
       .insert(persons)
-      .values([{ displayName: "Ana" }, { displayName: "Luis" }, { displayName: "Sam" }])
+      .values([{ displayName: "Anna" }, { displayName: "Lewis" }, { displayName: "Sam" }])
       .returning();
-    const [party] = await tx.insert(parties).values({ openedBy: ana!.id }).returning();
+    const [party] = await tx.insert(parties).values({ openedBy: anna!.id }).returning();
     const states: BillEditState[] = [];
     for (const [index, owner] of owners.entries()) {
       const billId = ids[index]!;
@@ -63,7 +63,7 @@ async function fixture(owners: ("Ana" | "Luis" | null)[]) {
         partyId: party!.id,
         orderNumber: index + 1,
       });
-      const editorId = owner === null ? null : owner === "Ana" ? ana!.id : luis!.id;
+      const editorId = owner === null ? null : owner === "Anna" ? anna!.id : lewis!.id;
       const state: BillEditState = {
         billId,
         editorId,
@@ -95,7 +95,7 @@ async function fixture(owners: ("Ana" | "Luis" | null)[]) {
       }
       states.push(state);
     }
-    return { ana: ana!, luis: luis!, sam: sam!, states, expected: states.map(expectedOf) };
+    return { anna: anna!, lewis: lewis!, sam: sam!, states, expected: states.map(expectedOf) };
   });
 }
 
@@ -219,25 +219,25 @@ describe("multi-bill expectation input", () => {
 
 describe("validating every affected bill before composition", () => {
   it("accepts the editor's bills plus an empty destination, without acquiring or changing rows", async () => {
-    const { ana, states, expected } = await fixture(["Ana", "Ana", null]);
+    const { anna, states, expected } = await fixture(["Anna", "Anna", null]);
     const before = await snapshot();
     expect(
-      await inTx((tx) => requireBillEditors(tx, [ids[2]!, ids[0]!, ids[1]!], ana.id, expected)),
+      await inTx((tx) => requireBillEditors(tx, [ids[2]!, ids[0]!, ids[1]!], anna.id, expected)),
     ).toEqual(states);
     expect(await snapshot()).toEqual(before);
   });
 
   it("does not inspect or block on a bill outside the affected set", async () => {
-    const { ana, states, expected } = await fixture(["Ana", "Luis"]);
-    expect(await inTx((tx) => requireBillEditors(tx, [ids[0]!], ana.id, [expected[0]!]))).toEqual([
+    const { anna, states, expected } = await fixture(["Anna", "Lewis"]);
+    expect(await inTx((tx) => requireBillEditors(tx, [ids[0]!], anna.id, [expected[0]!]))).toEqual([
       states[0],
     ]);
   });
 
   it("treats overlapping internally collected scopes as one affected bill", async () => {
-    const { ana, states, expected } = await fixture(["Ana"]);
+    const { anna, states, expected } = await fixture(["Anna"]);
     expect(
-      await inTx((tx) => requireBillEditors(tx, [ids[0]!, ids[0]!], ana.id, expected)),
+      await inTx((tx) => requireBillEditors(tx, [ids[0]!, ids[0]!], anna.id, expected)),
     ).toEqual(states);
   });
 
@@ -250,7 +250,7 @@ describe("validating every affected bill before composition", () => {
   it.each(["missing-empty", "missing-owned", "extra", "empty"])(
     "refuses an incomplete or excessive set: %s",
     async (change) => {
-      const { ana, expected } = await fixture(["Ana", null]);
+      const { anna, expected } = await fixture(["Anna", null]);
       const ask =
         change === "missing-empty"
           ? [expected[0]!]
@@ -260,7 +260,7 @@ describe("validating every affected bill before composition", () => {
               ? [...expected, released(ids[2]!)]
               : [];
       await refused(
-        () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), ana.id, ask)),
+        () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), anna.id, ask)),
         "management.request_invalid",
         { field: "expectedEdits" },
       );
@@ -268,9 +268,9 @@ describe("validating every affected bill before composition", () => {
   );
 
   it("requires the full set before returning another person's ownership facts", async () => {
-    const { ana, expected } = await fixture(["Luis", null]);
+    const { anna, expected } = await fixture(["Lewis", null]);
     await refused(
-      () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), ana.id, [expected[0]!])),
+      () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), anna.id, [expected[0]!])),
       "management.request_invalid",
       { field: "expectedEdits" },
     );
@@ -279,13 +279,13 @@ describe("validating every affected bill before composition", () => {
   it.each([false, true])(
     "returns every conflicting bill in bill order before checking stale versions (stale=%s)",
     async (stale) => {
-      const { ana, states, expected } = await fixture(["Luis", "Ana", "Luis"]);
+      const { anna, states, expected } = await fixture(["Lewis", "Anna", "Lewis"]);
       const ask = expected.map((edit) => ({
         ...edit,
         editorVersion: stale ? 0 : edit.editorVersion,
       }));
       await refused(
-        () => inTx((tx) => requireBillEditors(tx, [ids[2]!, ids[1]!, ids[0]!], ana.id, ask)),
+        () => inTx((tx) => requireBillEditors(tx, [ids[2]!, ids[1]!, ids[0]!], anna.id, ask)),
         "draft.taken_over",
         conflictParams([states[0]!, states[2]!]),
       );
@@ -298,11 +298,11 @@ describe("validating every affected bill before composition", () => {
     { draftRevision: 0 },
     { draftId: null, draftRevision: null },
   ])("compares each bill's complete expectation: %j", async (change) => {
-    const { ana, states, expected } = await fixture(["Ana", "Ana"]);
+    const { anna, states, expected } = await fixture(["Anna", "Anna"]);
     await refused(
       () =>
         inTx((tx) =>
-          requireBillEditors(tx, ids.slice(0, 2), ana.id, [
+          requireBillEditors(tx, ids.slice(0, 2), anna.id, [
             expected[0]!,
             { ...expected[1]!, ...change },
           ]),
@@ -313,11 +313,11 @@ describe("validating every affected bill before composition", () => {
   });
 
   it("detects a destination acquired after an empty expectation was read", async () => {
-    const { ana, states, expected } = await fixture(["Ana", "Ana"]);
+    const { anna, states, expected } = await fixture(["Anna", "Anna"]);
     await refused(
       () =>
         inTx((tx) =>
-          requireBillEditors(tx, ids.slice(0, 2), ana.id, [expected[0]!, released(ids[1]!)]),
+          requireBillEditors(tx, ids.slice(0, 2), anna.id, [expected[0]!, released(ids[1]!)]),
         ),
       "draft.out_of_date",
       staleParams(states[1]!),
@@ -325,28 +325,28 @@ describe("validating every affected bill before composition", () => {
   });
 
   it("compares a released destination's retained version even though it has no draft", async () => {
-    const { ana, states, expected } = await fixture(["Ana", null]);
+    const { anna, states, expected } = await fixture(["Anna", null]);
     await inTx((tx) => tx.insert(billEditStates).values({ billId: ids[1]!, editorVersion: 8 }));
     const edit = { ...states[1]!, editorVersion: 8 };
     await refused(
-      () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), ana.id, expected)),
+      () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), anna.id, expected)),
       "draft.out_of_date",
       staleParams(edit),
     );
     expect(
       await inTx((tx) =>
-        requireBillEditors(tx, ids.slice(0, 2), ana.id, [expected[0]!, released(ids[1]!, 8)]),
+        requireBillEditors(tx, ids.slice(0, 2), anna.id, [expected[0]!, released(ids[1]!, 8)]),
       ),
     ).toEqual([states[0], edit]);
   });
 });
 
 describe("validating bill relocation without changing the common editor", () => {
-  it.each(["Ana", "Luis", "Sam"] as const)(
+  it.each(["Anna", "Lewis", "Sam"] as const)(
     "allows %s to retain one common editor and empty bills",
     async (actor) => {
-      const { ana, luis, sam, states, expected } = await fixture(["Ana", "Ana", null]);
-      const person = actor === "Ana" ? ana : actor === "Luis" ? luis : sam;
+      const { anna, lewis, sam, states, expected } = await fixture(["Anna", "Anna", null]);
+      const person = actor === "Anna" ? anna : actor === "Lewis" ? lewis : sam;
       const before = await snapshot();
       expect(
         await inTx((tx) =>
@@ -358,24 +358,28 @@ describe("validating bill relocation without changing the common editor", () => 
   );
 
   it("does not grant bill-content editing authority when relocation can retain a colleague", async () => {
-    const { luis, states, expected } = await fixture(["Ana", null]);
+    const { lewis, states, expected } = await fixture(["Anna", null]);
     expect(
-      await inTx((tx) => requireRelocatableBillEditors(tx, ids.slice(0, 2), luis.id, expected)),
+      await inTx((tx) => requireRelocatableBillEditors(tx, ids.slice(0, 2), lewis.id, expected)),
     ).toEqual(states);
     await refused(
-      () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), luis.id, expected)),
+      () => inTx((tx) => requireBillEditors(tx, ids.slice(0, 2), lewis.id, expected)),
       "draft.taken_over",
       conflictParams([states[0]!]),
     );
   });
 
-  it.each(["Ana", "Luis", "Sam"] as const)(
+  it.each(["Anna", "Lewis", "Sam"] as const)(
     "returns all other editors when %s tries to relocate conflicting bills",
     async (actor) => {
-      const { ana, luis, sam, states, expected } = await fixture(["Ana", "Luis", null]);
-      const person = actor === "Ana" ? ana : actor === "Luis" ? luis : sam;
+      const { anna, lewis, sam, states, expected } = await fixture(["Anna", "Lewis", null]);
+      const person = actor === "Anna" ? anna : actor === "Lewis" ? lewis : sam;
       const conflicts =
-        actor === "Ana" ? [states[1]!] : actor === "Luis" ? [states[0]!] : [states[0]!, states[1]!];
+        actor === "Anna"
+          ? [states[1]!]
+          : actor === "Lewis"
+            ? [states[0]!]
+            : [states[0]!, states[1]!];
       await refused(
         () =>
           inTx((tx) =>
@@ -388,21 +392,21 @@ describe("validating bill relocation without changing the common editor", () => 
   );
 
   it("requires the empty destination in a relocation expectation too", async () => {
-    const { ana, expected } = await fixture(["Ana", null]);
+    const { anna, expected } = await fixture(["Anna", null]);
     await refused(
       () =>
-        inTx((tx) => requireRelocatableBillEditors(tx, ids.slice(0, 2), ana.id, [expected[0]!])),
+        inTx((tx) => requireRelocatableBillEditors(tx, ids.slice(0, 2), anna.id, [expected[0]!])),
       "management.request_invalid",
       { field: "expectedEdits" },
     );
   });
 
   it("refuses a stale common foreign editor instead of implicitly taking it over", async () => {
-    const { luis, states, expected } = await fixture(["Ana", "Ana"]);
+    const { lewis, states, expected } = await fixture(["Anna", "Anna"]);
     await refused(
       () =>
         inTx((tx) =>
-          requireRelocatableBillEditors(tx, ids.slice(0, 2), luis.id, [
+          requireRelocatableBillEditors(tx, ids.slice(0, 2), lewis.id, [
             expected[0]!,
             { ...expected[1]!, editorVersion: 0 },
           ]),
@@ -413,19 +417,19 @@ describe("validating bill relocation without changing the common editor", () => 
   });
 
   it("observes a conflicting editor written earlier in the same caller transaction", async () => {
-    const { ana, luis, states, expected } = await fixture(["Ana", "Ana"]);
+    const { anna, lewis, states, expected } = await fixture(["Anna", "Anna"]);
     const before = await snapshot();
     const error = await inTx(async (tx) => {
       await tx
         .update(billEditStates)
-        .set({ editorId: luis.id, editorVersion: 4 })
+        .set({ editorId: lewis.id, editorVersion: 4 })
         .where(eq(billEditStates.billId, ids[1]!));
-      return requireRelocatableBillEditors(tx, ids.slice(0, 2), ana.id, expected);
+      return requireRelocatableBillEditors(tx, ids.slice(0, 2), anna.id, expected);
     }).then(
       () => null,
       (error: unknown) => error,
     );
-    const edit = { ...states[1]!, editorId: luis.id, editorName: "Luis", editorVersion: 4 };
+    const edit = { ...states[1]!, editorId: lewis.id, editorName: "Lewis", editorVersion: 4 };
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("draft.taken_over");
     expect((error as AppError).params).toEqual(conflictParams([edit]));
