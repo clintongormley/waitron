@@ -106,7 +106,7 @@ export async function acceptInvoiceCorrection(
     authorization: { authorizedBy: string; viaOverride: boolean };
   },
 ): Promise<InvoiceCorrectionResult> {
-  const ask = parse(request);
+  const ask = parseInvoiceCorrection(request);
   const print = fingerprint({
     gross: ask.gross,
     lineIds: ask.lineIds === undefined ? null : [...ask.lineIds].sort(),
@@ -256,16 +256,19 @@ export async function acceptInvoiceCorrection(
   return { correctiveSaleId, refunds, replayed: false };
 }
 
-function parse(request: InvoiceCorrectionRequest) {
+/** The line ids a request names, canonical; refused `lineIds` unless absent or a list of ids. */
+export function lineIdsOf(lineIds: unknown): string[] | undefined {
+  if (lineIds === undefined) return undefined;
+  if (!Array.isArray(lineIds) || lineIds.some((id) => typeof id !== "string" || !isUuid(id)))
+    throw invalid("lineIds");
+  return lineIds.map((id: string) => canonicaliseUuid(id)!);
+}
+
+export function parseInvoiceCorrection(request: InvoiceCorrectionRequest) {
   if (typeof request.submissionId !== "string" || !isUuid(request.submissionId))
     throw invalid("submissionId");
   if (typeof request.reasonId !== "string" || !isUuid(request.reasonId)) throw invalid("reasonId");
-  const lineIds = request.lineIds;
-  if (
-    lineIds !== undefined &&
-    (!Array.isArray(lineIds) || lineIds.some((id) => typeof id !== "string" || !isUuid(id)))
-  )
-    throw invalid("lineIds");
+  const lineIds = lineIdsOf(request.lineIds);
   const note = request.note ?? null;
   if (note !== null && typeof note !== "string") throw invalid("note");
   const split = request.expectedSplit;
@@ -281,7 +284,7 @@ function parse(request: InvoiceCorrectionRequest) {
   return {
     submissionId: canonicaliseUuid(request.submissionId)!,
     gross: moneyOf(request.gross, "gross"),
-    ...(lineIds === undefined ? {} : { lineIds: lineIds.map((id) => canonicaliseUuid(id)!) }),
+    ...(lineIds === undefined ? {} : { lineIds }),
     reasonId: canonicaliseUuid(request.reasonId)!,
     note: note === null || note.trim() === "" ? null : note.trim(),
     expectedSplit: split.map(({ rate, base, tax }) => ({

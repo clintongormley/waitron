@@ -254,6 +254,7 @@ import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
 import { mountFindBillApi } from "./find-bill-api.js";
 import { mountTransactionReceiptApi } from "./transaction-receipt-api.js";
 import { mountTenderRefundApi } from "./tender-refund-api.js";
+import { mountInvoiceCorrectionApi } from "./invoice-correction-api.js";
 import { mountTransferCloseApi } from "./transfer-close-api.js";
 import {
   readInvoiceDeliveries,
@@ -1336,6 +1337,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountFindBillApi(app, deps, log, run);
   mountTransactionReceiptApi(app, deps, log, run);
   mountTenderRefundApi(app, deps, log, pinThrottle);
+  mountInvoiceCorrectionApi(app, deps, log, pinThrottle);
   mountTransferCloseApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
