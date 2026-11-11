@@ -24,7 +24,7 @@ const PRODUCER_SLOT_SET: ReadonlySet<string> = new Set(Object.values(PRODUCER_SL
 
 export const SLOT = /‹[^›\n]*›/g;
 
-const SI_NO: Record<SiNo, string> = { S: "S - Sí", N: "N - No" };
+export const SI_NO: Record<SiNo, string> = { S: "S - Sí", N: "N - No" };
 
 export function prepareDeclarationSource(input: PrepareInput): string {
   const values: Record<string, string> = {

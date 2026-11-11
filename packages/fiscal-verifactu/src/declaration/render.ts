@@ -15,7 +15,7 @@ export interface DeclarationBlock {
   lines: DeclarationRun[][];
 }
 
-const BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/u;
+export const BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/u;
 
 /** Each producer slot's value, once the source is known to hold no other slot. */
 function producerValues(source: string, producer: DeclarationProducer): Map<string, string> {

@@ -1,8 +1,7 @@
 // Weaker than its name: it checks headings, not the values beside them.
-import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { renderDeclaration } from "./render.js";
-import { prepareDeclarationSource } from "./source.js";
+import { declarationSource, testProducer } from "../../test/declaration.js";
 
 // Typed by hand from the A940 design §4: AEAT's worked example V0.5.1's headings with §4's three
 // departures (the Orden's title, the person-producer wording, no 2.c)).
@@ -26,24 +25,7 @@ const HEADINGS = [
 ];
 
 it("bolds the design §4 headings, in order", () => {
-  const template = readFileSync(new URL("../../declarations/template.md", import.meta.url), "utf8");
-  const functions = readFileSync(
-    new URL("../../declarations/functions.md", import.meta.url),
-    "utf8",
-  );
-  const source = prepareDeclarationSource({
-    template,
-    functions,
-    version: "1.2.3",
-    libraryVersion: "0.2.1",
-    date: "2026-10-22",
-    place: "Elche",
-  });
-  const { html } = renderDeclaration(source, {
-    name: "PRODUCER PERSON",
-    taxId: "00000000T",
-    address: "1 Example Street, 00000 Nowhere (Province), Spain",
-  });
+  const { html } = renderDeclaration(declarationSource, testProducer);
 
   const headings = [...html.matchAll(/<(h1|strong)>(.*?)<\/\1>/g)].map((match) => match[2]);
   expect(headings).toEqual(HEADINGS);

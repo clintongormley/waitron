@@ -65,6 +65,10 @@ missing or carries a blocker (departure 3).
   each, and `packages/fiscal-verifactu/scripts/declaration.ts`. It modifies the package's
   `package.json` (`tsx`) and `tsconfig.json` (`include`), `pnpm-lock.yaml` (generated) and the two
   backlog files.
+  As built (2026-11-11): it also adds the error code `declaration.argument_invalid`, exports
+  `SI_NO` from `source.ts` and `BREAK_OR_CONTROL` from `render.ts`, adds the package script
+  `declaration` and the shared test helper `test/declaration.ts`; its argument refusals assert the
+  whole stderr line, and a place also refuses any control character or line separator.
 - Pull request 2b creates `scripts/release/waitron-release.mjs` and its test, and
   `docs/operations/release.md`. It modifies the root `package.json` (`"release"`) and the two backlog
   files.
