@@ -44,9 +44,11 @@ A production setup offers Live and Join or recover. See the
 ## Development image rehearsal
 
 You can [build a development image, install onto a virtual disk and open setup](../bench/box-installer/README.md).
-The installed-setup rehearsal boots that disk alone twice and stops at Prepare’s administrator form.
-It uses LUKS2 with an empty development password and provides no protection against theft.
-Retained-key startup, refusal while the empty slot remains and physical-box checks remain B3 work.
+The installed-setup rehearsal checks virtual-TPM sealing, a first-start restart with Docker stopped,
+then two chip-unlocked boots to Prepare’s administrator form after removing the empty password.
+It independently checks the retained recovery key. Use disposable disks with no venue data.
+Signed boot/Secure Boot, failure and recovery screens, key sheets, update resealing and physical-box
+checks remain B3 release gates. This unsigned development image carries no theft-protection claim.
 
 ## Setting up a box
 

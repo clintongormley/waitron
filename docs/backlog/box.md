@@ -566,14 +566,17 @@ Plan one multi-platform application image with arm64 smoke, and an arm64 install
 
 ## B3. The bootable USB installer
 
-**2026-11-10 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
-install onto a second virtual disk and start it twice through OVMF firmware, with no supplied kernel
-or app-start unit. The disk has the design’s five btrfs areas inside LUKS2, with an empty development
-password that gives no theft protection. Setup hides/refuses
-Demo and retains Prepare, Live and Join or recover; the rehearsal opens Prepare’s administrator form.
-This qualifies only the emulator. Next come key sealing/startup with the retained key and refusal while
-the empty slot remains; A1187 part 3 and A950 cuts 4+ wait for that slice. Release and real stick/box/Android checks
-remain open. [Encrypted-layout plan](../superpowers/plans/2026-11-10-b3-14-encrypted-layout.md).
+**2026-11-11 development rehearsal:** the [recipe and installed boot checks](../../bench/box-installer/README.md)
+install five btrfs areas inside LUKS2 onto a second virtual disk. The first disk boot retains a recovery
+key and seals against a virtual TPM, then requests a restart with Docker stopped. Two subsequent
+chip-unlocked boots must remove the empty password and reach setup; the rig independently checks
+that the retained key opens the disk read-only. Setup hides/refuses Demo and retains Prepare, Live
+and Join or recover; the rehearsal opens Prepare’s administrator form.
+This remains an unsigned, disposable development image, with no theft-protection or release-readiness
+claim. Signed boot/Secure Boot, parent experiments (b) and (i), failure/recovery screens, key sheets,
+update resealing and real stick/box/Android checks remain release gates. B3 remains 0/6 parent slices
+complete. A1187 part 3 and A950 cuts 4+ can reassess their startup dependency once this cut lands;
+other prerequisites still apply. [Startup plan](../superpowers/plans/2026-11-10-b3-15-retained-key-startup.md).
 
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”
@@ -734,12 +737,10 @@ The development recipe and `recipe-setup` rig case were run through TCG emulatio
 Mac with Docker Desktop on 2026-11-10. Later that day,
 [B3-13](https://github.com/clintongormley/waitron/pull/2737) added `installed-refusals` and
 `installed-setup`, including USB-source installation and two disk-only starts. The other
-declared rig cases still need their runners. TPM/Secure Boot checks still need an appropriate
-Linux/KVM/OVMF/swtpm environment or the hardware.
-Still waiting for encrypted installed-root and firmware/TPM work: encrypted recipe/dracut integration,
-TPM/Secure Boot disk fixtures and the real observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
-refuse); the root-owned
-check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
+declared rig cases still need their runners. The 11 November B3-15 development cut adds a virtual
+TPM to `installed-setup`, encrypted-root mount checks and actual retained-key enrollment/unlock
+adapters. Signed boot/Secure Boot, root ownership qualification beyond this disposable rig,
+real power cuts, the remaining seal experiments and slice-1 measurements stay open.
 PR 2 left for later, from its plan's "Out": the preboot screen and the words for the `explain`
 answer; the public CA download and its help page; the key-use record
 and the startup-fingerprint check before resealing; the real `cryptsetup`, observation,
@@ -1151,7 +1152,7 @@ client. No screen calls them yet.
 - The screen's words for the `letter` and `length` refusals, in Spanish and English, come with the
   preboot screen.
 - The key-use record and the startup-fingerprint check before resealing wait for the encrypted
-  installed root's key-sealing startup route; the development recipe still opens with an empty password.
+  installed root’s release-qualified startup route; B3-15 exercises virtual-TPM startup in the disposable development recipe.
 - `disk-key.mjs`'s store (reading the record, and writing the key with `writeFile` and `rename`)
   and `wifi-record.mjs`'s reader check their folder and then use the file by path, so a root
   process can swap the folder in between. The installed host's Linux adapters must either open relative to

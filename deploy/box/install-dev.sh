@@ -62,6 +62,7 @@ mount -o subvol=@volumes "$mapped" "$root/var/lib/docker/volumes"
 mkdir -p "$root/var/lib/docker/volumes/waitron_logs/_data"
 mount -o subvol=@logs "$mapped" "$root/var/lib/docker/volumes/waitron_logs/_data"
 mount -o subvol=@host-state "$mapped" "$root/var/lib/waitron-host"
+chmod 0700 "$root/var/lib/waitron-host"
 mount -o ro /dev/disk/by-label/WAITRON_PAYLOAD "$work/payload"
 cp -a --sparse=always "$work/payload/." "$root/"
 tar -C "$work/payload" -cpf - . | tar -C "$root" -df -
@@ -71,7 +72,7 @@ boot_uuid="$(blkid -s UUID -o value "${target}2")"
 efi_uuid="$(blkid -s UUID -o value "${target}1")"
 printf '%s\n' "$uuid" > "$root/etc/waitron-dev-root"
 printf '%s\n' "$luks_uuid" > "$root/etc/waitron-dev-luks"
-printf 'luks-%s UUID=%s none luks,try-empty-password=yes,headless=yes\n' "$luks_uuid" "$luks_uuid" > "$root/etc/crypttab"
+: > "$root/etc/crypttab"
 cat > "$root/etc/fstab" <<FSTAB
 UUID=$uuid / btrfs defaults,subvol=@rootfs 0 0
 UUID=$boot_uuid /boot ext4 defaults 0 2
@@ -89,12 +90,12 @@ serial --unit=0 --speed=115200
 terminal_input serial
 terminal_output serial
 search --no-floppy --fs-uuid --set=root $boot_uuid
-linux /vmlinuz-$kernel root=UUID=$uuid rootfstype=btrfs rootflags=subvol=@rootfs rw console=ttyS0,115200 rd.shell=0 rd.emergency=reboot rd.luks.uuid=$luks_uuid rd.luks.options=$luks_uuid=try-empty-password=yes,headless=yes
+linux /vmlinuz-$kernel root=UUID=$uuid rootfstype=btrfs rootflags=subvol=@rootfs rw console=ttyS0,115200 rd.shell=0 rd.emergency=reboot rd.luks=0 rd.waitron.luks.uuid=$luks_uuid
 initrd /initrd.img-$kernel
 boot
 CONFIG
 mkdir -p "$root/boot/efi/EFI/BOOT"
-chroot "$root" grub-mkstandalone --modules="part_gpt ext2 search_fs_uuid" -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI 'boot/grub/grub.cfg=/tmp/waitron-grub.cfg'
+chroot "$root" grub-mkstandalone --modules="part_gpt ext2 search_fs_uuid tpm" -O x86_64-efi -o /boot/efi/EFI/BOOT/BOOTX64.EFI 'boot/grub/grub.cfg=/tmp/waitron-grub.cfg'
 sync
 cleanup
 trap - EXIT

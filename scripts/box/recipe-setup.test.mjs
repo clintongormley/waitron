@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,6 +24,40 @@ const complete = {
     needs: ["venue"],
   },
 };
+
+it.each([
+  ['B3_DISK_START:{"action":"restart"}\n', true],
+  ['B3_DISK_START:{"action":"ready"}\n', false],
+  ['B3_INSTALLED:{}\nB3_DISK_START:{"action":"restart"}\n', false],
+  [
+    'B3_DISK_START:{"action":"restart"}\nB3_DISK_START:{"command":"systemctl","operation":"start","status":1}\n',
+    false,
+  ],
+  ['B3_DISK_START:{"action":"restart"}\ndisk_start.refused {}\n', false],
+  ...[
+    "Starting docker.service - Docker Application Container Engine...",
+    "Starting Docker Application Container Engine...",
+    "Started Docker Application Container Engine.",
+    "Listening on Docker Socket for the API.",
+    "Started docker.service - Docker Application Container Engine.",
+    "Starting docker.socket - Docker Socket for the API...",
+    "Listening on docker.socket - Docker Socket for the API.",
+    "Starting \u001b[0;1;39mdocker.service\u001b[0m - Docker Application Container Engine...",
+  ].map((line) => [`${line}\nB3_DISK_START:{"action":"restart"}\n`, false]),
+])("checks the bootstrap restart without Docker (%j)", async (serial, expected) => {
+  const { bootstrapSucceeded } = await import("./recipe-setup.mjs");
+  expect(bootstrapSucceeded(serial)).toBe(expected);
+});
+
+it.each([
+  ["basic.target: Found ordering cycle on docker.socket/start", true],
+  ["Job sockets.target/start deleted to break ordering cycle", true],
+  ["Ordering cycle found, skipping Docker Socket for the API", true],
+  ["Started docker.service - Docker Application Container Engine.", false],
+])("reports a boot ordering cycle (%s)", async (serial, expected) => {
+  const { bootHasOrderingCycle } = await import("./recipe-setup.mjs");
+  expect(bootHasOrderingCycle(serial)).toBe(expected);
+});
 
 describe("recipe boot evidence", () => {
   it.each(["", undefined])(
@@ -88,6 +123,15 @@ describe("recipe boot evidence", () => {
       expect(readFileSync(join(root, "qemu-args"), "utf8")).toContain(
         "systemd.unit=setup-smoke.service",
       );
+      const args = readFileSync(join(root, "qemu-args"), "utf8");
+      for (const name of ["waitron-disk-start", "waitron-disk-ready"]) {
+        const encoded = args.match(
+          new RegExp(`systemd.extra-unit.${name}\\.service=([^\\n]+)`),
+        )?.[1];
+        expect(encoded).toBeTruthy();
+        expect(Buffer.from(encoded, "base64").toString()).toContain("ExecStart=/usr/bin/true");
+        expect(Buffer.from(encoded, "base64").toString()).toContain("DefaultDependencies=no");
+      }
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -167,6 +211,14 @@ describe("installed boot evidence", () => {
     machineId: "machine-a",
     ca: "ca-a",
     writerAbsent: true,
+    disk: {
+      action: "ready",
+      openedBy: "chip",
+      emptyPassword: false,
+      keySlots: 2,
+      tpmSlots: 1,
+      tpmPcrs: [5, 7, 8, 9, 15],
+    },
     areas: ["@rootfs", "@images", "@volumes", "@logs", "@host-state"],
   };
   it("accepts the installed services and a second boot keeping identity", async () => {
@@ -175,6 +227,14 @@ describe("installed boot evidence", () => {
   });
   it.each([
     ["uuid", { uuid: expected.uuid }, "root-uuid"],
+    ["missing disk proof", { disk: undefined }, "disk-startup"],
+    ...[
+      { emptyPassword: true },
+      { openedBy: "bootstrap" },
+      { tpmSlots: 0 },
+      { keySlots: 3 },
+      { tpmPcrs: [5, 7, 15] },
+    ].map((patch) => ["disk proof", { disk: { ...first.disk, ...patch } }, "disk-startup"]),
     ["writer", { writerAbsent: false }, "installer-present"],
     ["areas", { areas: ["@rootfs"] }, "areas"],
     ["identity", { machineId: "another" }, "machine-id"],
@@ -241,6 +301,9 @@ it("waits for a complete serial record before parsing its JSON", async () => {
   expect(rigLine('kernel boot\nB3_INSTALLED:{"uuid":"root"}\r\n', "B3_INSTALLED:")).toBe(
     '{"uuid":"root"}',
   );
+  expect(rigLine('\u001b[?25hB3_INSTALLED:{"uuid":"root"}\r\n', "B3_INSTALLED:")).toBe(
+    '{"uuid":"root"}',
+  );
 });
 
 it.each([
@@ -265,6 +328,16 @@ sleep 0.1
 `,
       { mode: 0o700 },
     );
+    writeFileSync(
+      join(root, "swtpm"),
+      `#!${process.execPath}
+const net = require("node:net");
+const ctrl = process.argv[process.argv.indexOf("--ctrl") + 1];
+net.createServer().listen(ctrl.split("path=")[1]);
+`,
+      { mode: 0o700 },
+    );
+    writeFileSync(join(root, "mkfs.ext4"), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
     writeFileSync(join(root, "vars.fd"), "private firmware fixture");
     writeFileSync(
       join(root, "firmware.mjs"),
@@ -291,6 +364,7 @@ syncBuiltinESMExports();
           ...process.env,
           PATH: `${root}:${process.env.PATH}`,
           B3_INSTALLER_IMAGE: join(root, "image"),
+          XDG_RUNTIME_DIR: root,
         },
         encoding: "utf8",
         timeout: 5000,

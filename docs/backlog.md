@@ -1631,8 +1631,8 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
   Waits for A1188 part 1, whose card facts the page prints, for people holding `node.promote`.
   [Detail](backlog/box.md#a1187-part-2-the-recovery-packs-emergency-start-page-owner-2026-10-29).
 
-- **A1187 part 3: the recovery pack's disk key page.** Waits for B3's retained disk key: the store exists (`scripts/box/disk-key.mjs`, #2370) but nothing on a box makes or stores a key yet. A pack
-  that cannot carry the disk key is then refused rather than drawn without it.
+- **A1187 part 3: the recovery pack's disk key page.** B3's development startup now creates and retains the key through `scripts/box/disk-key.mjs`; the protected host delivery and pack integration remain to be built. A pack
+  that cannot carry the disk key is refused rather than drawn without it.
   [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
 
 - **What pack part 1's reviews left** (bundle of 10, 3 important, size M). Holds A1187, A1187, A1187, A1187, A1187, A1187, A1187, A1187, A1187, A1187. [Detail](backlog/box.md#bundle-what-pack-part-1s-reviews-left)
@@ -1724,11 +1724,12 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 
 - **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md).
   The owner authorised the build on 2026-11-01, one pull request at a time; [PR 1](superpowers/plans/2026-11-01-b3-1-encrypted-disk.md) (#2370) adds three host libraries under `scripts/box/`, none called yet. PR 2 (#2423, [plan](superpowers/plans/2026-11-03-b3-2-preboot-logic.md)) adds the preboot unlock gate with the proposed 2/4/8/16/32/60-second wait, the locked-mode redirect decision and the Wi-Fi record reader under `scripts/box/`, none called yet. PR 3 (#2426, [plan](superpowers/plans/2026-11-03-b3-3-installer-policy.md)) adds the installer's decisions and its network fallback decisions under `scripts/box/`, none called yet; the signed release list waits for A940's release slices and a chosen signature format. PR 4 (#2430, [plan](superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md)) defines the name tag (a LUKS2 token of Waitron's own type), its decoder, the finder and a write plan, and the Wi-Fi boot copy's writer and its write-or-why-not decision, under `scripts/box/`, none called yet. PR 5 (#2432, [plan](superpowers/plans/2026-11-03-b3-5-wifi-publication.md)) adds the Wi-Fi boot copy's publisher under `scripts/box/`, none called yet: it writes the copy through a flushed staging file, removes it on every "no copy" answer, refuses an unverified boot mount or an unsafe folder or file name with no write, and reports the copy's state. PR 6 (#2433, [plan](superpowers/plans/2026-11-03-b3-6-disk-key-letters.md)) adds the disk recovery key's conversion between 32 bytes and systemd's 64 letters, and reading a typed key back, under `scripts/box/`, none called yet. PR 7 (#2474, [plan](superpowers/plans/2026-11-05-b3-7-host-protocol.md)) adds the box host protocol under `scripts/box/`, whose request writer and reply reader PR 8's client calls (its answer function is called by nothing yet): seven of B3's requests as checked one-line requests with an ids-only actor, their checked replies, and an answer function that calls injected adapters and never puts a Wi-Fi password in a reply, a log entry or another adapter's argument; the clock requests stay on slice 9b's shell handler. PR 8 (#2495, [plan](superpowers/plans/2026-11-06-b3-8-host-client.md)) adds the server's client for those seven requests in `apps/server/src/box-host-client.ts`, called by nothing until PR 9: typed answers, never a throw, and a box with only the clock handler read as not taking them. PR 9 ([plan](superpowers/plans/2026-11-06-b3-9-host-routes.md)) builds it in `boot.ts` and answers six of those requests through routes behind `system.manage`, with the signed-in person as the actor; the name tag's duty and the screen are later pull requests.
-  The [development recipe](../bench/box-installer/README.md) installs LUKS2 with five btrfs areas
-  onto a virtual disk and boots that disk alone twice to setup in QEMU.
-  Setup offers Prepare/Live/existing and refuses Demo. The empty development password gives no theft protection.
-  Next: key sealing/startup with the retained key and refusal while the empty slot remains.
-  Retained keys and physical-device qualification remain open.
+  The [development recipe](../bench/box-installer/README.md) installs LUKS2 with five btrfs areas,
+  retains its recovery key and seals to a virtual TPM. Its first disk boot requests a restart with Docker stopped;
+  two subsequent chip-unlocked boots must remove the empty password and reach setup. The rig independently
+  tests the retained key. Setup offers Prepare/Live/existing and refuses Demo.
+  Signed boot/Secure Boot, other-stick and missing-container checks, failure/recovery screens, key sheets,
+  update resealing and physical-device qualification remain release gates. This development cut claims no theft protection.
   No setup codes: the owner closed W60's first-claim concern. Remaining mode work: no same-box re-setup of Live/restored production venues, and
   installed-box choices bound to deployment state. Explicit production setup now refuses Demo/Prepare at the route.
   Every sheet repeats the disk key. Owner ~13:45/~14:00 answers settle locked redirects and the minimal unencrypted normal Wi-Fi copy, with theft/password-change guidance and cable/local fallback; no recovery SSID/hotspot.

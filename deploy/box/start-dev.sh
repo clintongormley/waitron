@@ -6,6 +6,7 @@ root_source="$(findmnt -nro SOURCE /)"
 backing="$(LC_ALL=C cryptsetup status "${root_source%%\[*}" | awk '$1 == "device:" {print $2}')" || refuse encrypted-root
 luks_uuid="$(cryptsetup luksUUID "$backing")" || refuse encrypted-root
 [ -n "$luks_uuid" ] && [ "$luks_uuid" = "$(cat /etc/waitron-dev-luks)" ] || refuse encrypted-root
+disk="$(node /opt/waitron-host/box/disk-start.mjs check)" || refuse disk-key
 cd /opt/waitron
 apparmor_parser -r /etc/apparmor.d/waitron-print-agent
 export WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent
@@ -35,10 +36,10 @@ if [ ! -e /usr/local/sbin/waitron-dev-install ] && [ ! -e /etc/systemd/system/wa
 sync
 jq -cn --arg uuid "$(findmnt -nro UUID /)" --arg machineId "$(cat /etc/machine-id)" \
   --arg luksUuid "$luks_uuid" --argjson partitionBytes "$partitions" \
-  --argjson dataPartition "$data_partition" \
+  --argjson dataPartition "$data_partition" --argjson disk "$disk" \
   --arg luksVersion "$(awk '$1 == "Version:" {print $2}' <<< "$header")" \
   --arg luksSubsystem "$(awk '$1 == "Subsystem:" {print $2}' <<< "$header")" \
   --argjson images "$(cat /run/waitron-images.json)" --argjson services "$services" \
   --argjson areas "$areas" --argjson writerAbsent "$absent" --argjson status "$(cat /run/waitron-status.json)" \
-  '{uuid:$uuid,luksUuid:$luksUuid,luksVersion:$luksVersion,luksSubsystem:$luksSubsystem,dataPartition:$dataPartition,partitionBytes:$partitionBytes,machineId:$machineId,images:$images,services:$services,areas:$areas,writerAbsent:$writerAbsent,status:$status}' \
+  '{disk:$disk,uuid:$uuid,luksUuid:$luksUuid,luksVersion:$luksVersion,luksSubsystem:$luksSubsystem,dataPartition:$dataPartition,partitionBytes:$partitionBytes,machineId:$machineId,images:$images,services:$services,areas:$areas,writerAbsent:$writerAbsent,status:$status}' \
   | sed 's/^/B3_INSTALLED:/'

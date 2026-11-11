@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -51,7 +51,14 @@ case "$name" in
   if [[ "$*" == *http_code* ]]; then printf '%s' "$code"; fi
   if [[ "$1" == *f* && "$code" != 200 ]]; then exit 22; fi ;;
  cmp) exit "\${OCCUPIED:-0}" ;;
+ systemd-cryptsetup) echo chip >> "$WRITES"; exit "\${CHIP_EXIT:-0}" ;;
+ tpm2_pcrextend) echo "extend:$(/bin/cat "$B3_OPEN_MARKER")" >> "$WRITES"; exit "\${EXTEND_EXIT:-0}" ;;
+ reboot) echo reboot >> "$WRITES" ;;
  apparmor_parser) echo apparmor >> "$WRITES"; exit "\${APPARMOR_EXIT:-0}" ;;
+ node)
+  [ "$1" = /opt/waitron-host/box/disk-start.mjs ] || exit 99
+  [ "\${DISK_CHECK_EXIT:-0}" = 0 ] || exit 1
+  echo '{"action":"ready","diskUuid":"installed-luks","openedBy":"chip","emptyPassword":false,"keySlots":2,"tpmSlots":1,"tpmPcrs":[5,7,8,9,15]}' ;;
  docker)
   echo "docker $* profile=$WAITRON_PRINT_AGENT_APPARMOR" >> "$WRITES"
   [ "\${DOCKER_EXIT:-43}" = 0 ] || exit "\${DOCKER_EXIT:-43}"
@@ -102,6 +109,10 @@ for (const name of [
   "sfdisk",
   "apparmor_parser",
   "docker",
+  "node",
+  "systemd-cryptsetup",
+  "tpm2_pcrextend",
+  "reboot",
   "ls",
   "mktemp",
   "mkfs.vfat",
@@ -268,6 +279,26 @@ describe("installed startup", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).not.toContain("B3_INSTALLED:");
   });
+  it("refuses an unconfirmed disk key before Compose can start", () => {
+    const writes = join(scratch, "disk-key-refusal-calls");
+    writeFileSync(writes, "");
+    const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
+      env: {
+        ...process.env,
+        PATH: `${scratch}:${process.env.PATH}`,
+        ROOT_UUID: "installed-root",
+        BASH_ENV: bashEnv,
+        B3_TEST_CWD: scratch,
+        WRITES: writes,
+        DISK_CHECK_EXIT: "1",
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    expect(readFileSync(writes, "utf8")).toBe("");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("start.refused:disk-key");
+  });
   it("refuses the wrong mounted root before Docker starts", () => {
     const result = spawnSync("bash", [resolve("deploy/box/start-dev.sh")], {
       env: { ...process.env, PATH: `${scratch}:${process.env.PATH}` },
@@ -352,4 +383,51 @@ describe("installed startup", () => {
       partitionBytes: [536870912, 1073741824, 11272192000],
     });
   });
+});
+
+describe("the startup-image unlock", () => {
+  it.each([
+    { chipExit: 0, extendExit: 0, status: 0, markerText: "chip\n", fallback: 0, reboots: 0 },
+    { chipExit: 1, extendExit: 0, status: 0, markerText: "bootstrap\n", fallback: 1, reboots: 0 },
+    { chipExit: 0, extendExit: 1, status: 1, markerText: "failed\n", fallback: 0, reboots: 1 },
+  ])(
+    "records the opening and stops after an extension failure (%j)",
+    ({ chipExit, extendExit, status, markerText, fallback, reboots }) => {
+      const folder = mkdtempSync(join(scratch, "unlock-"));
+      mkdirSync(join(folder, "devices"));
+      writeFileSync(join(folder, "devices", "test-luks"), "");
+      const marker = join(folder, "waitron-disk-opened");
+      const script = join(folder, "unlock.sh");
+      writeFileSync(
+        script,
+        readFileSync(resolve("deploy/box/dracut/95waitron/unlock.sh"), "utf8")
+          .replaceAll("/run/waitron-", `${folder}/waitron-`)
+          .replaceAll("/dev/disk/by-uuid/", `${folder}/devices/`),
+      );
+      const bashEnv = join(folder, "env");
+      writeFileSync(bashEnv, 'getarg() { echo "test-luks"; }\n');
+      const writes = join(folder, "writes");
+      writeFileSync(writes, "");
+      const result = spawnSync("bash", ["-ec", '. "$1"; . "$1"', "hook", script], {
+        env: {
+          ...process.env,
+          PATH: `${scratch}:${process.env.PATH}`,
+          BASH_ENV: bashEnv,
+          WRITES: writes,
+          CHIP_EXIT: String(chipExit),
+          EXTEND_EXIT: String(extendExit),
+          B3_OPEN_MARKER: marker,
+        },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      expect(result.status).toBe(status);
+      const calls = readFileSync(writes, "utf8").trim().split("\n");
+      expect(calls.slice(0, 2)).toEqual(["chip", `extend:${chipExit === 0 ? "chip" : "failed"}`]);
+      expect(calls.filter((line) => line.startsWith("extend:"))).toHaveLength(1);
+      expect(calls.filter((line) => line.startsWith("cryptsetup open"))).toHaveLength(fallback);
+      expect(calls.filter((line) => line === "reboot")).toHaveLength(reboots);
+      expect(readFileSync(marker, "utf8")).toBe(markerText);
+    },
+  );
 });

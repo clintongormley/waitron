@@ -1,0 +1,17 @@
+[Unit]
+Description=Prepare the installed Waitron disk key
+DefaultDependencies=no
+After=local-fs.target
+Before=waitron-disk-ready.service shutdown.target
+Conflicts=shutdown.target
+RequiresMountsFor=/var/lib/waitron-host
+FailureAction=reboot-force
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/node /opt/waitron-host/box/disk-start.mjs prepare
+RemainAfterExit=yes
+LimitCORE=0
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/console

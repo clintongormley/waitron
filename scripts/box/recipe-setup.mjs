@@ -1,4 +1,27 @@
 import { WAITRON_LAYOUTS } from "./disk-state.mjs";
+import { stripVTControlCharacters } from "node:util";
+
+export function bootstrapSucceeded(serial) {
+  const plain = stripVTControlCharacters(serial);
+  return (
+    plain.includes('"action":"restart"') &&
+    !dockerStarted(plain) &&
+    !plain.includes("B3_INSTALLED:") &&
+    !/B3_DISK_START:[^\r\n]*"status":[1-9]|disk_start\.refused/.test(plain)
+  );
+}
+
+export function dockerStarted(serial) {
+  return /(?:Starting|Started|Listening on)(?:\s+Docker\b|[^\r\n]*docker\.(?:service|socket)\b)/.test(
+    stripVTControlCharacters(serial),
+  );
+}
+
+export function bootHasOrderingCycle(serial) {
+  return /Found ordering cycle|to break ordering cycle|Ordering cycle found/.test(
+    stripVTControlCharacters(serial),
+  );
+}
 
 /** Compare the artifact and guest evidence before accepting a recipe boot. */
 export function recipeFailures(expected, observed) {
@@ -47,6 +70,16 @@ export function installedFailures(expected, installedUuid, first, again) {
       boot.dataPartition?.name !== WAITRON_LAYOUTS[0].partitionName
     )
       failures.push("disk-markers");
+    const disk = boot.disk;
+    if (
+      disk?.action !== "ready" ||
+      disk.openedBy !== "chip" ||
+      disk.emptyPassword !== false ||
+      disk.keySlots !== 2 ||
+      disk.tpmSlots !== 1 ||
+      JSON.stringify(disk.tpmPcrs) !== "[5,7,8,9,15]"
+    )
+      failures.push("disk-startup");
     const sizes = boot.partitionBytes;
     if (
       sizes?.length !== 3 ||
@@ -68,7 +101,7 @@ export function installedFailures(expected, installedUuid, first, again) {
 }
 
 export function rigLine(serial, prefix) {
-  return serial
+  return stripVTControlCharacters(serial)
     .split(/\r?\n/)
     .slice(0, -1)
     .find((line) => line.startsWith(prefix))
