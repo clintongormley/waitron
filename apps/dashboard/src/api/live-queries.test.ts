@@ -467,11 +467,9 @@ it.each([
     ],
   ],
   ["getReportPrinters", [], ["printers"]],
-  // A device's ask also carries a returning device's own row and whether its profile was retired
-  // (`returningDevicesOf`, apps/server/src/join-requests.ts).
+  // Device requests include returning-device details and in-memory pairing claims.
   ["joinRequests", ["device"], ["join_requests", "devices", "device_profiles", "pairing"]],
-  // A print agent's ask reads no `devices` or `device_profiles` row; a stored battery report
-  // rewrites a `devices` row.
+  // Print-agent requests omit both.
   ["joinRequests", ["print_agent"], ["join_requests"]],
   // The server works the rules out once at boot, so no table change moves them.
   ["getContentLanguageRules", [], []],
