@@ -1078,7 +1078,11 @@ export class PrintersScreen extends LitElement {
     if (changed.has("pagePrinters")) this.#testPages.readError = null;
     if (changed.has("jobs") && this.reprintJob !== null) {
       const id = this.reprintJob.id;
-      this.reprintJob = this.jobs.find((job) => job.id === id) ?? this.reprintJob;
+      const fresh = this.jobs.find((job) => job.id === id);
+      // A job that only left the list (its newer printouts pushed it out) can still be reprinted.
+      if (fresh !== undefined && !fresh.canResend && !fresh.stuck && !this.reprintsSending.has(id))
+        this.reprintJob = null;
+      else this.reprintJob = fresh ?? this.reprintJob;
     }
     if (
       changed.has("canManage") &&

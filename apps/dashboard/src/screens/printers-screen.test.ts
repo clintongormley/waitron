@@ -5266,6 +5266,51 @@ describe("the open Reprint dialog follows the job's live row", () => {
     expect(q(el, "dashboard-print-job-reprint-dialog")).not.toBeNull();
     expect(offered(el)).toEqual(["p1", "p3", "p2"]);
   });
+
+  it("closes the Reprint dialog when its printout's printer is deleted while it is open", async () => {
+    const ownOnly = { ...row, reprintRule: "own" as const, reprintPrinterIds: [] };
+    const { el, api, liveData } = await openOn([ownOnly]);
+    vi.mocked(api.listPrinters).mockResolvedValue(active.filter(({ id }) => id !== "p1"));
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await deliver(el, api, liveData, [{ ...ownOnly, canResend: false }]);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+  });
+
+  it("keeps the Reprint dialog open on a printout left stuck on its switched-off printer", async () => {
+    const ownOnly = { ...row, reprintRule: "own" as const, reprintPrinterIds: [] };
+    const { el, api, liveData } = await openOn([ownOnly]);
+    vi.mocked(api.listPrinters).mockResolvedValue(
+      active.map((printer) => (printer.id === "p1" ? { ...printer, active: false } : printer)),
+    );
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+    await deliver(el, api, liveData, [{ ...ownOnly, canResend: false, stuck: true }]);
+    const dialog = q(el, "dashboard-print-job-reprint-dialog");
+    expect(
+      dialog?.shadowRoot?.querySelector("[data-test=reprint-nowhere]")?.textContent?.trim(),
+    ).toBe(fill("printers.reprint_original_off", { printer: row.printerName }));
+  });
+
+  it("keeps a dialog whose send is still awaiting its answer open when the row stops offering Reprint", async () => {
+    let resolve!: (value: { jobId: string }) => void;
+    const { el, api, liveData } = await openOn([row]);
+    vi.mocked(api.resendPrintJob).mockReturnValue(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    q(el, "[data-test=reprint-send]")!.click();
+    await flush(el);
+    await deliver(el, api, liveData, [{ ...row, canResend: false }]);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).not.toBeNull();
+    resolve({ jobId: "resent" });
+    await flush(el);
+    expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull();
+    expect(text(el, "[data-test=reprint-sent]")).toBe(
+      fill("printers.reprint_sent", { printer: printers[0]!.name }),
+    );
+  });
 });
 
 it("shows a localized resend failure and permits another attempt", async () => {
