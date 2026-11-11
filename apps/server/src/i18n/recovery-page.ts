@@ -239,12 +239,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "Start again has not finished.",
       action:
-        "Some files may already be set aside. Retry a normal boot to try finishing the recorded move before first setup starts, or Stop and keep the files.",
+        "Some files may already be set aside. Each time this box starts, it tries to finish the recorded move before first setup. Keep these files on the box, unchanged.",
     },
     "es-ES": {
       title: "Empezar de nuevo no ha terminado.",
       action:
-        "Puede que algunos archivos ya estén apartados. Reintenta un arranque normal para intentar terminar el traslado antes de empezar la configuración inicial, o para y conserva los archivos.",
+        "Puede que algunos archivos ya estén apartados. Cada vez que este equipo arranca, intenta terminar el traslado registrado antes de la configuración inicial. Conserva estos archivos en el equipo, sin cambios.",
     },
   },
   "deployment.environment_mismatch": {
@@ -258,7 +258,7 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
       title:
         "Este equipo y su base de datos no pertenecen al mismo sistema: uno está configurado para ventas reales y el otro para pruebas.",
       action:
-        "Si la configuración del equipo es incorrecta, para y corrígela, y reintenta. Si no, elige Empezar de nuevo con la conexión segura para apartar esta base de datos y empezar de cero o elegir otra copia de seguridad.",
+        "Si la configuración del equipo es incorrecta, conserva estos archivos tal como están, corrige la configuración y reintenta. Si no, elige Empezar de nuevo con la conexión segura para apartar esta base de datos y empezar de cero o elegir otra copia de seguridad.",
     },
   },
   "sif.producer_unset": {
@@ -568,29 +568,29 @@ export const ENVIRONMENT_RECOVERY_TEXT: Readonly<
       move: string;
       stop: string;
       stopped: string;
-      unfinishedStopped: string;
       detail: string;
       wrong: string;
+      unavailable: string;
     }
   >
 > = {
   "en-GB": {
+    unavailable:
+      "These files cannot be moved aside on this box. Nothing was changed. You can Stop and keep them as they are.",
     move: "Start again",
     stop: "Stop",
     stopped: "Nothing was changed. You can correct the host settings and retry.",
-    unfinishedStopped:
-      "Waitron is still stopped. No further files were moved. Keep the set-aside files and the remaining files on this box.",
     detail:
       "Move this venue's files aside, unchanged. The box then starts first setup, where you can start fresh or choose another backup.",
     wrong:
       "The administrator password could not be verified. Nothing was moved. Check it and try again.",
   },
   "es-ES": {
+    unavailable:
+      "Estos archivos no se pueden apartar en este equipo. No se ha cambiado nada. Puedes parar y conservarlos tal como están.",
     move: "Empezar de nuevo",
     stop: "Parar",
     stopped: "No se ha cambiado nada. Puedes corregir la configuración del equipo y reintentar.",
-    unfinishedStopped:
-      "Waitron sigue parado. No se han movido más archivos. Conserva los archivos apartados y los que quedan en este equipo.",
     detail:
       "Apartar los archivos de este local, sin cambios. El equipo empieza la configuración inicial, donde puedes empezar de cero o elegir otra copia de seguridad.",
     wrong:

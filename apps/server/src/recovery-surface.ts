@@ -207,10 +207,6 @@ function renderPage(
 ): string {
   const page = RECOVERY_PAGE_WORDS[locale];
   const text = operatorText(state)[locale];
-  const stop =
-    state.lastErrorCode === "setup.environment_move_unfinished"
-      ? `<form method="get" action="/"><button type="submit" name="stop" value="1">${escapeHtml(ENVIRONMENT_RECOVERY_TEXT[locale].stop)}</button></form>\n`
-      : "";
   const refused = state.refused === true;
   const heading = refused ? page.stoppedHeading : page.heading;
   const status = refused
@@ -243,7 +239,7 @@ function renderPage(
 ${section}<form method="post" action="/recovery-api/retry">
 <button type="submit">${escapeHtml(page.retry)}</button>
 </form>
-${stop}`;
+`;
   return `<!doctype html>
 <html lang="${locale}">
 <head>
@@ -346,23 +342,6 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
-    if (
-      c.req.query("stop") === "1" &&
-      (environmentUnfinished || deps.state.lastErrorCode === "setup.environment_move_unfinished")
-    ) {
-      const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
-      return c.html(
-        renderPage(
-          deps,
-          log,
-          locale,
-          freeBytes,
-          deps.state,
-          "",
-          `<p>${escapeHtml(ENVIRONMENT_RECOVERY_TEXT[locale].unfinishedStopped)}</p>`,
-        ),
-      );
-    }
     return c.html(await draw({ locale, secure: isSecure(c) }));
   });
 

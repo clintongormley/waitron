@@ -31,7 +31,6 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { ENVIRONMENT_RECOVERY_TEXT } from "./i18n/recovery-page.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { BOX_LEAF_HOSTNAMES } from "./box-name.js";
 import { hashPassword } from "@waitron/identity";
@@ -480,7 +479,10 @@ it("explains and logs an unavailable Move without moving the database", async ()
   await writeFile(join(f.stateDir, "records"), "retained non-folder");
   const response = await post(app, { choice: "move", password: PASSWORD });
   expect(response.status).toBe(409);
-  expect(await response.text()).toContain("cannot be moved aside");
+  const html = await response.text();
+  expect(html).toContain("cannot be moved aside");
+  expect(html).not.toContain("separate disks");
+  expect(html).toContain('value="keep" formnovalidate>Stop</button>');
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
   expect(f.log).toHaveBeenCalledWith(
     "warn",
@@ -504,21 +506,4 @@ it("rechecks a corrected saved environment before moving the installed database"
   await expect(
     stat(join(f.stateDir, "first-setup-start-again-guesses.json")),
   ).rejects.toMatchObject({ code: "ENOENT" });
-});
-
-it("Stop on an unfinished Move draws a stopped answer without changing its files", async () => {
-  const f = await recoveryFixture();
-  await f.boot();
-  await writeFile(join(f.stateDir, "environment-recovery-move.json"), "{}");
-  const app = await f.boot();
-  const page = await (await app.request("/")).text();
-  expect(page).toContain('name="stop" value="1"');
-  const before = (await readdir(f.stateDir)).sort();
-  const answer = await (await app.request("/?stop=1")).text();
-  expect(answer).toContain(ENVIRONMENT_RECOVERY_TEXT["en-GB"].unfinishedStopped);
-  expect(answer).not.toContain('action="/recovery-api/retry"');
-  expect(await readFile(join(f.stateDir, "environment-recovery-move.json"), "utf8")).toBe("{}");
-  expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(f.original);
-  expect((await readdir(f.stateDir)).sort()).toEqual(before);
-  expect(f.startServer).not.toHaveBeenCalled();
 });

@@ -554,7 +554,12 @@ export function renderEnvironmentSection(input: {
       : message?.kind === "passwordMissing"
         ? shared.passwordMissing
         : "";
-  const error = message === undefined ? "" : passwordError || bottomText(message, shared);
+  const error =
+    message?.kind === "moveUnavailable"
+      ? text.unavailable
+      : message === undefined
+        ? ""
+        : passwordError || bottomText(message, shared);
   const explanation = `<p>${escapeHtml(text.detail)}</p><p>${escapeHtml(shared.moveUnsent)}</p>`;
   if (!secure)
     return `${explanation}<p>${escapeHtml(shared.insecureForm)}</p>${error === "" ? "" : `<p>${escapeHtml(error)}</p>`}`;
