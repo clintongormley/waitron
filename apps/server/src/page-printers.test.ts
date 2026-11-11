@@ -3,6 +3,9 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
+  deviceProfilePrinters,
+  deviceProfiles,
+  devices,
   invoiceDeliveries,
   invoiceSeries,
   pagePrinters,
@@ -12,7 +15,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -26,7 +29,7 @@ import {
   reserveInvoiceDelivery,
 } from "./invoice-delivery.js";
 import {
-  disablePagePrinter,
+  deletePagePrinter,
   listPagePrinters,
   registerPagePrinter,
   renamePagePrinter,
@@ -244,10 +247,10 @@ describe("registering a page printer from discovery", () => {
     expect((await printerRows()).map((row) => row.id).sort()).toEqual([first.id, second.id].sort());
   });
 
-  it("re-enables a disabled printer at the same address under its id with fresh capabilities and agent", async () => {
+  it("adds a deleted printer again at the same address under its id with fresh capabilities and agent", async () => {
     const v = await venue();
     const { id } = await register(entry(v.agentOne));
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, id));
+    await withTransaction(suite.db, (tx) => deletePagePrinter(tx, id));
     const result = await register(entry(v.agentTwo, { office: urfReport }));
     expect(result).toEqual({ id, outcome: "enabled" });
     expect(await printerRows()).toEqual([
@@ -351,11 +354,11 @@ describe("which queue and which agent a registration may name", () => {
 });
 
 describe("listing and renaming page printers", () => {
-  it("lists the venue's printers, disabled ones included, with their recorded agent", async () => {
+  it("hides deleted page printers while keeping active printers and their recorded agent", async () => {
     const v = await venue();
     const office = await register(entry(v.agentOne));
     const upstairs = await register(entry(v.agentTwo, { host: "192.0.2.41" }));
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, upstairs.id));
+    await withTransaction(suite.db, (tx) => deletePagePrinter(tx, upstairs.id));
     const unattached = randomUUID();
     await suite.db.insert(pagePrinters).values({
       id: unattached,
@@ -380,14 +383,6 @@ describe("listing and renaming page printers", () => {
         agentId: v.agentOne,
         agentName: "Back office agent",
       }),
-      expect.objectContaining({ id: unattached, name: "Imported", agentId: null, agentName: null }),
-      expect.objectContaining({
-        id: upstairs.id,
-        name: "Upstairs",
-        active: false,
-        agentId: v.agentTwo,
-        agentName: "Re-paired agent",
-      }),
     ]);
   });
 
@@ -401,7 +396,67 @@ describe("listing and renaming page printers", () => {
   });
 });
 
-describe("disabling a page printer", () => {
+describe("deleting a page printer", () => {
+  it("clears only its device choices and profile defaults and reports what Delete removes", async () => {
+    const v = await venue();
+    const office = await register(entry(v.agentOne));
+    const other = await register(entry(v.agentOne, { host: "192.0.2.41" }));
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Counter", formFactor: "till" })
+      .returning();
+    const { deviceId } = await seedDevice(suite.db, {
+      locationId: v.locationId,
+      label: "Counter till",
+      profileId: profile!.id,
+    });
+    await suite.db
+      .update(devices)
+      .set({ invoicePagePrinterId: office.id })
+      .where(eq(devices.id, deviceId));
+    await suite.db.insert(deviceProfilePrinters).values([
+      {
+        deviceProfileId: profile!.id,
+        pagePrinterId: office.id,
+        role: "invoice",
+        position: 0,
+        isDefault: true,
+      },
+      { deviceProfileId: profile!.id, pagePrinterId: other.id, role: "invoice", position: 1 },
+    ]);
+    const impact = await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id));
+    expect(impact).toMatchObject({
+      target: { id: office.id, name: "Back office" },
+      refusals: [],
+      removes: [
+        { key: "device_invoice", count: 1, targets: [{ id: deviceId, name: "Counter till" }] },
+        { key: "profile_invoice", count: 1, targets: [{ id: profile!.id, name: "Counter" }] },
+        {
+          key: "profile_invoice_default",
+          count: 1,
+          targets: [{ id: profile!.id, name: "Counter" }],
+        },
+      ],
+    });
+    expect(
+      (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!
+        .invoicePagePrinterId,
+    ).toBeNull();
+    expect(await suite.db.select().from(deviceProfilePrinters)).toEqual([
+      expect.objectContaining({ pagePrinterId: other.id, isDefault: false }),
+    ]);
+    const afterDelete = await suite.db.select().from(deviceProfilePrinters);
+    expect(await register(entry(v.agentTwo, { office: urfReport }))).toEqual({
+      id: office.id,
+      outcome: "enabled",
+    });
+    expect(await suite.db.select().from(deviceProfilePrinters)).toEqual(afterDelete);
+    expect(
+      (await suite.db.select().from(devices).where(eq(devices.id, deviceId)))[0]!
+        .invoicePagePrinterId,
+    ).toBeNull();
+  });
+
   it("fails its waiting A4 deliveries and leaves a sending one uncertain", async () => {
     const v = await venue();
     const office = await register(entry(v.agentOne));
@@ -424,7 +479,7 @@ describe("disabling a page printer", () => {
     );
     const before = new Map((await deliveryRows()).map((row) => [row.id, row]));
 
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, office.id, new Date(NOW)));
+    await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id, new Date(NOW)));
 
     expect((await printerRows()).find((row) => row.id === office.id)).toMatchObject({
       active: false,
@@ -452,7 +507,7 @@ describe("disabling a page printer", () => {
     const claim = await withTransaction(suite.db, (tx) =>
       claimInvoiceDelivery(tx, sending.id, v.agentOne, new Date(NOW - 5_000)),
     );
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, office.id, new Date(NOW)));
+    await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id, new Date(NOW)));
     const result = await withTransaction(suite.db, (tx) =>
       reportInvoiceDelivery(tx, claim!, { status: "sent" }, new Date(NOW + 1_000)),
     );
@@ -464,11 +519,11 @@ describe("disabling a page printer", () => {
     });
   });
 
-  it("is not undone by re-enabling: the failed delivery stays failed and nothing is queued", async () => {
+  it("is not undone by adding again: the failed delivery stays failed and nothing is queued", async () => {
     const v = await venue();
     const office = await register(entry(v.agentOne));
     const queued = await reserveA4(await fullInvoice(v.nodeId), office.id);
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, office.id));
+    await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id));
     const failed = await deliveryRows();
     const again = await register(entry(v.agentOne));
     expect(again).toEqual({ id: office.id, outcome: "enabled" });
@@ -482,7 +537,7 @@ describe("disabling a page printer", () => {
     await venue();
     const before = await printerRows();
     await expect(
-      withTransaction(suite.db, (tx) => disablePagePrinter(tx, randomUUID())),
+      withTransaction(suite.db, (tx) => deletePagePrinter(tx, randomUUID())),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
     expect(await printerRows()).toEqual(before);
   });

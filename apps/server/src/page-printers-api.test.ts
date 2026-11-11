@@ -109,7 +109,7 @@ function mountApp(): Hono {
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH" | "PUT",
+  method: "GET" | "POST" | "PATCH" | "DELETE" | "PUT",
   path: string,
   opts: { body?: unknown; cookie?: string; bearer?: string } = {},
 ): Promise<Response> {
@@ -198,11 +198,10 @@ it("A576 creates enables and repoints only the selected queue", async () => {
     target(a.agentId, host, { path: "/printers/reception", name: "Reception A4" }),
   );
   expect(kitchen.id).not.toBe(reception.id);
-  const disabled = await send(app, "PATCH", `/management-api/page-printers/${kitchen.id}`, {
+  const disabled = await send(app, "DELETE", `/management-api/page-printers/${kitchen.id}`, {
     cookie: managerCookie,
-    body: { active: false },
   });
-  expect(disabled.status).toBe(204);
+  expect(disabled.status).toBe(200);
   expect(await stored(reception.id)).toMatchObject({ active: true, agentId: a.agentId });
   expect(
     await registered(app, target(a.agentId, host, { path: "/printers/kitchen", name: "Ignored" })),
@@ -243,11 +242,13 @@ describe("page-printer management routes", () => {
   it("refuses every route to a role without hardware.manage, and serves a manager", async () => {
     const app = mountApp();
     const { agentId, id, host } = await onePrinter(app);
-    const routes: { method: "GET" | "POST" | "PATCH"; path: string; body?: unknown }[] = [
-      { method: "GET", path: "/management-api/page-printers" },
-      { method: "POST", path: "/management-api/page-printers", body: target(agentId, host) },
-      { method: "PATCH", path: `/management-api/page-printers/${id}`, body: { name: "Renamed" } },
-    ];
+    const routes: { method: "GET" | "POST" | "PATCH" | "DELETE"; path: string; body?: unknown }[] =
+      [
+        { method: "GET", path: "/management-api/page-printers" },
+        { method: "POST", path: "/management-api/page-printers", body: target(agentId, host) },
+        { method: "PATCH", path: `/management-api/page-printers/${id}`, body: { name: "Renamed" } },
+        { method: "GET", path: `/management-api/page-printers/${id}/delete-impact` },
+      ];
     for (const route of routes) {
       const refused = await send(app, route.method, route.path, {
         cookie: staffCookie,
@@ -533,7 +534,7 @@ describe("page-printer management routes", () => {
     expect((await stored(id))!.agentId).toBe(agentId);
   });
 
-  it("renames, disables, and re-enables only through a fresh entry", async () => {
+  it("renames, deletes after an impact read, and adds again only through a fresh entry", async () => {
     const app = mountApp();
     const { id, host, agentId } = await onePrinter(app, "10.61.9.1");
 
@@ -544,20 +545,41 @@ describe("page-printer management routes", () => {
     expect(renamed.status).toBe(204);
     expect((await stored(id))!.name).toBe("Recepción");
 
-    const disabled = await send(app, "PATCH", `/management-api/page-printers/${id}`, {
+    const impact = await send(app, "GET", `/management-api/page-printers/${id}/delete-impact`, {
       cookie: managerCookie,
-      body: { active: false },
     });
-    expect(disabled.status).toBe(204);
+    expect(impact.status).toBe(200);
+    expect(await impact.json()).toEqual({
+      target: { id, name: "Recepción" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
+    const refused = await send(app, "DELETE", `/management-api/page-printers/${id}`, {
+      cookie: staffCookie,
+    });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    const disabled = await send(app, "DELETE", `/management-api/page-printers/${id}`, {
+      cookie: managerCookie,
+    });
+    expect(disabled.status).toBe(200);
+    expect(await disabled.json()).toEqual({
+      target: { id, name: "Recepción" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
     expect((await stored(id))!.active).toBe(false);
+    expect(await list(app)).toEqual([]);
 
     const enable = await send(app, "PATCH", `/management-api/page-printers/${id}`, {
       cookie: managerCookie,
       body: { name: "Otra", active: true },
     });
-    expect(enable.status).toBe(409);
+    expect(enable.status).toBe(400);
     expect(await enable.json()).toEqual({
-      error: { code: "page_printer.rediscover", params: {} },
+      error: { code: "management.request_invalid", params: { field: "active" } },
     });
     expect(await stored(id)).toMatchObject({ name: "Recepción", active: false });
 
@@ -565,17 +587,6 @@ describe("page-printer management routes", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id, outcome: "enabled" });
     expect(await stored(id)).toMatchObject({ name: "Recepción", active: true });
-  });
-
-  it("renames and disables in one request", async () => {
-    const app = mountApp();
-    const { id } = await onePrinter(app, "10.61.9.2");
-    const res = await send(app, "PATCH", `/management-api/page-printers/${id}`, {
-      cookie: managerCookie,
-      body: { name: "Vieja", active: false },
-    });
-    expect(res.status).toBe(204);
-    expect(await stored(id)).toMatchObject({ name: "Vieja", active: false });
   });
 
   it("refuses a malformed or empty PATCH, and an unknown id", async () => {
@@ -586,6 +597,8 @@ describe("page-printer management routes", () => {
       [{ name: "  " }, "name"],
       [{ name: 4 }, "name"],
       [{ active: "false" }, "active"],
+      [{ active: false }, "active"],
+      [{ name: "Changed", active: false }, "active"],
     ];
     for (const [body, field] of cases) {
       const res = await send(app, "PATCH", `/management-api/page-printers/${id}`, {
@@ -605,7 +618,7 @@ describe("page-printer management routes", () => {
     });
     expect(malformed.status).toBe(400);
     expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
-    for (const body of [{ name: "X" }, { active: false }]) {
+    for (const body of [{ name: "X" }]) {
       const unknown = await send(app, "PATCH", `/management-api/page-printers/${randomUUID()}`, {
         cookie: managerCookie,
         body,

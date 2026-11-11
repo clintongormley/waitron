@@ -6,6 +6,7 @@ import { fill, t } from "../i18n/t.js";
 
 type Counted =
   | "printers.delete_jobs"
+  | "printers.delete_invoice_a4"
   | "printers.delete_invoice_receipts"
   | "printers.delete_device_choice"
   | "printers.delete_device_default"
@@ -33,6 +34,7 @@ function line(key: Counted, item: DeleteImpactItem, role = ""): string {
 function itemLine(item: DeleteImpactItem): string {
   const { key } = item;
   if (key === "print_jobs") return line("printers.delete_jobs", item);
+  if (key === "invoice_a4") return line("printers.delete_invoice_a4", item);
   if (key === "invoice_receipts") return line("printers.delete_invoice_receipts", item);
   if (key === "portable_holder") return fill("printers.delete_holder", { names: names(item) });
   if (key === "station_printers") return line("printers.delete_stations", item);
@@ -54,13 +56,16 @@ function refusalLine(refusal: DeleteImpactRefusal): string {
 }
 
 /** The printer delete dialog's words, in the language the screen shows now. */
-export function printerDeleteCopy(): DeleteDialogCopy {
+export function printerDeleteCopy(page = false): DeleteDialogCopy {
   return {
     heading: t("printers.delete_heading"),
     refusals: t("printers.delete_refusals"),
     ends: t("printers.delete_ends"),
     removes: t("printers.delete_assignments"),
-    irreversible: t("printers.delete_retained"),
+    irreversible: [
+      t("printers.delete_retained"),
+      ...(page ? [t("printers.page_printer_readd")] : []),
+    ].join(" "),
     cancel: t("action.cancel"),
     confirm: t("action.delete"),
     retry: t("printers.delete_retry"),

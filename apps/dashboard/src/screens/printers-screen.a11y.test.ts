@@ -583,13 +583,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
               },
             }),
           ]),
-          listPagePrinters: vi
-            .fn()
-            .mockResolvedValue([
-              row("10.0.0.62"),
-              row("10.0.0.63"),
-              row("10.0.0.64", { active: false }),
-            ]),
+          listPagePrinters: vi.fn().mockResolvedValue([row("10.0.0.62"), row("10.0.0.63")]),
           registerPagePrinter: vi.fn().mockRejectedValue({ code: "page_printer.not_found" }),
         }),
       },
@@ -601,7 +595,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     expect(q(el, "[data-test='page-printer-added-a1:10.0.0.62:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-error-a2:10.0.0.63:9100']")).not.toBeNull();
-    expect(q(el, "[data-test='enable-page-printer-a1:10.0.0.64:9100']")).not.toBeNull();
+    expect(q(el, "[data-test='add-page-printer-a1:10.0.0.64:9100']")).not.toBeNull();
     expect(q(el, "[data-test='page-printer-10.0.0.65:9100']")).not.toBeNull();
     await expectNoA11yViolations(host);
     q(el, "[data-test='add-page-printer-a1:10.0.0.61:9100']")!.click();
@@ -1328,7 +1322,7 @@ const officeRow = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
 const OFFICE_ROWS = [
   officeRow(),
   officeRow({ id: "pp2", name: "Back office", host: "10.0.0.57" }),
-  officeRow({ id: "pp3", name: "Old laser", active: false, agentName: null }),
+  officeRow({ id: "pp3", name: "Old laser", agentName: null }),
 ];
 const a4States = [
   "populated",
@@ -1342,7 +1336,7 @@ const a4States = [
   "test page held",
   "test page printed",
   "test page failed",
-  "switched off, in its details",
+  "delete confirmation",
   "alerts under the table",
 ] as const;
 type A4State = (typeof a4States)[number];
@@ -1362,6 +1356,12 @@ describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s
       "test page failed": { id: "tp1", status: "failed", failureCode: "printer_unreachable" },
     }[state as string] as PageTestPage | null | undefined;
     const api = stubApi(false, {
+      getPagePrinterDeleteImpact: vi.fn(async (id: string) => ({
+        target: { id, name: "Back office" },
+        refusals: [],
+        ends: [],
+        removes: [],
+      })),
       listPagePrinters: vi.fn().mockResolvedValue(OFFICE_ROWS),
       updatePagePrinter:
         state === "rename refused by the server"
@@ -1459,14 +1459,10 @@ describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s
         );
       await flush(el);
     }
-    if (state === "switched off, in its details") {
-      q(el, "[data-test=printer-row-pp3]")!.click();
+    if (state === "delete confirmation") {
+      q(el, "[data-test=delete-page-printer-pp2]")!.click();
       await flush(el);
-      expect(q(el, "[data-test=page-printer-detail-rediscover]")).not.toBeNull();
-      expect(
-        (q(el, '[name="page-printer-detail-active"]') as HTMLElementTagNameMap["wt-switch"])
-          .disabled,
-      ).toBe(true);
+      expect(q(el, "[data-test=delete-confirm]")).not.toBeNull();
     }
     if (state === "alerts under the table") {
       // pp1's page goes out and its re-read fails; pp2's is refused from the row menu.

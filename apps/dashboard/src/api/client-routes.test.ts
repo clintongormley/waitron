@@ -1673,7 +1673,12 @@ it("reads, registers and changes office printers on the page-printer routes, and
     .mockResolvedValueOnce(jsonResponse([row]))
     .mockResolvedValueOnce(jsonResponse({ id: "pp1", outcome: "repointed" }))
     .mockResolvedValueOnce(emptyResponse())
-    .mockResolvedValueOnce(emptyResponse());
+    .mockResolvedValueOnce(
+      jsonResponse({ target: { id: "pp1", name: "Office" }, refusals: [], ends: [], removes: [] }),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({ target: { id: "pp1", name: "Office" }, refusals: [], ends: [], removes: [] }),
+    );
   const api = new DashboardApi("", fetchImpl);
   expect("setInvoicePrinter" in api).toBe(false);
   expect(await api.listPagePrinters()).toEqual([row]);
@@ -1683,12 +1688,14 @@ it("reads, registers and changes office printers on the page-printer routes, and
     outcome: "repointed",
   });
   await api.updatePagePrinter("pp1", { name: "Back office" });
-  await api.updatePagePrinter("pp1", { active: false });
+  await api.getPagePrinterDeleteImpact("pp1");
+  await api.deletePagePrinter("pp1");
   expect(callsOf(fetchImpl)).toEqual([
     ["/management-api/page-printers", "GET", undefined],
     ["/management-api/page-printers", "POST", { ...entry, name: "Office" }],
     ["/management-api/page-printers/pp1", "PATCH", { name: "Back office" }],
-    ["/management-api/page-printers/pp1", "PATCH", { active: false }],
+    ["/management-api/page-printers/pp1/delete-impact", "GET", undefined],
+    ["/management-api/page-printers/pp1", "DELETE", undefined],
   ]);
 });
 

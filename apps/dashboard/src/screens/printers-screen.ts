@@ -189,7 +189,7 @@ type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
 
 /** What an office printer's discovery row offers, judged against the venue's page printers. */
 type OfficeRow =
-  | { kind: "add" | "enable"; entry: PagePrinterEntry }
+  | { kind: "add"; entry: PagePrinterEntry }
   | { kind: "repoint"; entry: PagePrinterEntry; agentGone: boolean }
   | { kind: "added" }
   | { kind: "refused"; reason: StringKey };
@@ -799,8 +799,6 @@ export class PrintersScreen extends LitElement {
   }
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 1;
-  @state() private detailActiveSavingIds = new Set<string>();
-  @state() private detailActiveError: string | null = null;
   @state() private detailEdit: {
     id: string;
     name: string;
@@ -1025,6 +1023,7 @@ export class PrintersScreen extends LitElement {
   /** The id of the printer the delete dialog is open on. Each opening and close is a new generation, so a
    * delete's answer for an earlier one is never applied; an impact read for an earlier one is
    * dropped by its query slot, which the next `watch` or `release` replaces. */
+  @state() private deleteIsPage = false;
   @state() private deleteTarget: string | null = null;
   @state() private deleteImpact: DeleteImpact | null = null;
   @state() private deleteLoading = false;
@@ -1514,7 +1513,6 @@ export class PrintersScreen extends LitElement {
       path: report.resourcePath,
     };
     if (match === undefined) return { kind: "add", entry };
-    if (!match.active) return { kind: "enable", entry };
     return { kind: "repoint", entry, agentGone: match.agentId === null };
   }
 
@@ -2644,7 +2642,6 @@ export class PrintersScreen extends LitElement {
 
   #resetPrinterSections(): void {
     this.#disposeDetailDrafts();
-    this.detailActiveError = null;
   }
 
   #disposeDetailDrafts(): void {
@@ -2771,45 +2768,6 @@ export class PrintersScreen extends LitElement {
     await reload();
   }
 
-  /** The details' Active switch, for either kind: a refusal puts the switch back and shows under it. */
-  async #setDetailActive(
-    printer: { id: string; active: boolean },
-    active: boolean,
-    how: { switchName: string; write: () => Promise<unknown>; reload: () => Promise<void> },
-  ): Promise<void> {
-    if (this.detailActiveSavingIds.has(printer.id) || active === printer.active) return;
-    this.detailActiveError = null;
-    const written = await this.#writeActive(printer.id, how.write, (code) => {
-      if (this.selectedPrinterId !== printer.id) return;
-      this.detailActiveError = code;
-      const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
-        `[name="${how.switchName}"]`,
-      );
-      if (toggle) toggle.checked = printer.active;
-    });
-    if (written) await how.reload();
-  }
-
-  /** Writes a printer's Active state while it counts as saving; false when it was refused. */
-  async #writeActive(
-    id: string,
-    write: () => Promise<unknown>,
-    refused: (code: string) => void,
-  ): Promise<boolean> {
-    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, id]);
-    try {
-      await write();
-      return true;
-    } catch (error) {
-      refused(codeOf(error));
-      return false;
-    } finally {
-      this.detailActiveSavingIds = new Set(
-        [...this.detailActiveSavingIds].filter((saving) => saving !== id),
-      );
-    }
-  }
-
   async #savePagePrinterEdit(row: PagePrinterRow): Promise<void> {
     const scope = this.#detailEditScope;
     if (!scope || saveActionState(scope).unchanged) return;
@@ -2818,7 +2776,6 @@ export class PrintersScreen extends LitElement {
     if (hasErrors(this.#detailEditErrors(row.id, false))) return;
     const values = this.#detailEditValues();
     this.detailEdit = { ...draft, saving: true, error: null, nameRefusal: null };
-    this.detailActiveError = null;
     try {
       await this.api.updatePagePrinter(row.id, { name: values.name });
     } catch (error) {
@@ -2924,7 +2881,6 @@ export class PrintersScreen extends LitElement {
     >`;
   }
 
-  /** An A4 printer offers Print test page and Edit; it has no calibration and no delete. */
   #renderPagePrinterActions(row: PagePrinterRow): TemplateResult {
     const pages = this.#testPages;
     const refused = pages.actionErrorFrom === row.id ? pages.actionError : null;
@@ -2977,47 +2933,8 @@ export class PrintersScreen extends LitElement {
   }
 
   #renderPagePrinterDetails(row: PagePrinterRow): TemplateResult {
-    const saving = this.detailActiveSavingIds.has(row.id);
     return html`<section data-test="page-printer-status">
       <div class="status-grid">
-        ${detailsSection({
-          id: "printer-details-status",
-          heading: t("printers.status"),
-          dataTest: "printer-section-status",
-          before: html`<div class="status-actions">
-              <wt-switch
-                name="page-printer-detail-active"
-                label=${t("printers.status_active")}
-                .checked=${live(row.active)}
-                ?disabled=${!row.active || !this.canManage || saving}
-                @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                  event.stopPropagation();
-                  // The server refuses switching an A4 printer back on; Add a printer does that.
-                  if (event.detail.checked || !this.canManage) return;
-                  void this.#setDetailActive(row, false, {
-                    switchName: "page-printer-detail-active",
-                    write: () => this.api.updatePagePrinter(row.id, { active: false }),
-                    reload: () => this.#refreshPagePrinters(),
-                  });
-                }}
-              ></wt-switch>
-            </div>
-            ${
-              row.active
-                ? nothing
-                : html`<p data-test="page-printer-detail-rediscover">
-                    ${t("printers.invoice_printer_rediscover")}
-                  </p>`
-            }
-            ${
-              this.detailActiveError
-                ? html`<p role="alert" data-test="printer-detail-active-error">
-                    ${codeMessage(this.detailActiveError)}
-                  </p>`
-                : nothing
-            }`,
-          rows: [],
-        })}
         ${detailsSection({
           id: "printer-details-connection",
           heading: t("printers.connection"),
@@ -3064,9 +2981,8 @@ export class PrintersScreen extends LitElement {
         p
           ? html`<wt-button
               slot="cancel"
-              variant=${this.detailActiveSavingIds.has(p.id) ? "secondary" : "danger"}
+              variant="danger"
               data-test="delete-printer-detail"
-              ?disabled=${this.detailActiveSavingIds.has(p.id)}
               @click=${(event: Event) =>
                 this.#requestDetailDelete(p, event.currentTarget as HTMLElement)}
               >${t("action.delete")}</wt-button
@@ -3394,8 +3310,6 @@ export class PrintersScreen extends LitElement {
     ];
     const idOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.id : r.row.id);
     const nameOf = (r: PrinterTableRow) => (r.kind === "receipt" ? r.printer.name : r.row.name);
-    const activeOf = (r: PrinterTableRow) =>
-      r.kind === "receipt" ? r.printer.active : r.row.active;
     const columns: DataTableColumn<PrinterTableRow>[] = [
       {
         key: "name",
@@ -3458,19 +3372,7 @@ export class PrintersScreen extends LitElement {
         choosable: "shown",
         label: t("printers.status"),
         cell: (r) => {
-          const status = activeOf(r) ? t("printers.status_active") : t("printers.status_disabled");
-          if (r.kind === "a4")
-            return html`<span data-test=${`page-printer-status-${r.row.id}`}
-              >${status}${
-                r.row.active
-                  ? nothing
-                  : html`<span
-                      part="page-printer-hint"
-                      data-test=${`page-printer-rediscover-${r.row.id}`}
-                      >${t("printers.invoice_printer_rediscover")}</span
-                    >`
-              }</span
-            >`;
+          if (r.kind === "a4") return nothing;
           const command = this.#printerCommands.get(r.printer.id);
           return command === undefined
             ? nothing
@@ -3548,7 +3450,6 @@ export class PrintersScreen extends LitElement {
     </section>`;
   }
 
-  /** An A4 printer's row menu: Edit, Print test page and Disable; it has no delete or calibration. */
   #pagePrinterRowActions(row: PagePrinterRow): TemplateResult {
     const pages = this.#testPages;
     return html`<dashboard-row-actions .label=${fill("printers.row_actions", { name: row.name })}>
@@ -3569,25 +3470,15 @@ export class PrintersScreen extends LitElement {
         >${t("printers.print_test_page")}</wt-button
       >
       <wt-button
-        variant=${row.active ? "danger" : "secondary"}
-        data-test=${`disable-page-printer-${row.id}`}
-        ?disabled=${!row.active || this.detailActiveSavingIds.has(row.id)}
-        @click=${() => void this.#disablePagePrinterFromRow(row)}
-        >${t("printers.disable")}</wt-button
+        variant="danger"
+        data-test=${`delete-page-printer-${row.id}`}
+        @click=${(event: Event) => {
+          const button = event.currentTarget as HTMLElement;
+          this.#openDelete(row, this.#rowMenuButton(button) ?? button, true);
+        }}
+        >${t("action.delete")}</wt-button
       >
     </dashboard-row-actions>`;
-  }
-
-  /** The row menu's Disable: a refusal shows under the table, where the menu was. */
-  async #disablePagePrinterFromRow(row: PagePrinterRow): Promise<void> {
-    if (!row.active || this.detailActiveSavingIds.has(row.id) || !this.canManage) return;
-    this.#testPages.setActionError(null);
-    const written = await this.#writeActive(
-      row.id,
-      () => this.api.updatePagePrinter(row.id, { active: false }),
-      (code) => this.#testPages.setActionError(code),
-    );
-    if (written) await this.#refreshPagePrinters();
   }
 
   #renderTabActions(): TemplateResult {
@@ -4361,7 +4252,7 @@ export class PrintersScreen extends LitElement {
         data-test=${`${row.kind}-page-printer-${key}`}
         ?loading=${this.pagePrinterSending.has(key)}
         @click=${() => void this.#registerPagePrinter(key, entry)}
-        >${row.kind === "enable" ? t("printers.enable") : t("printers.page_printer_use_agent")}</wt-button
+        >${t("printers.page_printer_use_agent")}</wt-button
       >
       ${
         refusedCode === undefined
@@ -4446,7 +4337,6 @@ export class PrintersScreen extends LitElement {
               <div>${transportName(d.transport)}</div>
               <div>${this.#discoveredAddress(d)}</div>
               ${d.agentName ? html`<div>${fill("printers.discovered_seen_on", { agent: d.agentName })}</div>` : nothing}
-              ${office.get(d)?.kind === "enable" ? html`<div>${t("printers.page_printer_enable_hint")}</div>` : nothing}
               ${this.#repointNote(office.get(d))}
               ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
             </div>
@@ -4651,7 +4541,8 @@ export class PrintersScreen extends LitElement {
 
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
 
-  #openDelete(p: Printer, opener: HTMLElement): void {
+  #openDelete(p: { id: string }, opener: HTMLElement, page = false): void {
+    this.deleteIsPage = page;
     this.#deleteGeneration++;
     this.#deleteOpener = opener;
     this.deleteTarget = p.id;
@@ -4665,11 +4556,15 @@ export class PrintersScreen extends LitElement {
 
   #readImpact(id: string): void {
     this.#impactQueries
-      .watch("getPrinterDeleteImpact", [id], (impact) => {
-        this.deleteImpact = impact;
-        this.deleteLoading = false;
-        this.deleteReadError = "";
-      })
+      .watch(
+        this.deleteIsPage ? "getPagePrinterDeleteImpact" : "getPrinterDeleteImpact",
+        [id],
+        (impact) => {
+          this.deleteImpact = impact;
+          this.deleteLoading = false;
+          this.deleteReadError = "";
+        },
+      )
       // A failure has already reached `#impactFailed`.
       .catch(() => undefined);
   }
@@ -4678,7 +4573,7 @@ export class PrintersScreen extends LitElement {
     const target = this.deleteTarget;
     if (target === null) return;
     const code = codeOf(error);
-    if (code === "printer.not_found") {
+    if (code === "printer.not_found" || code === "page_printer.not_found") {
       // The delete in flight may be what removed it; its own answer decides what is shown.
       if (!this.deleteSubmitting) this.#printerGone(target, true);
       return;
@@ -4697,7 +4592,9 @@ export class PrintersScreen extends LitElement {
 
   #closeDelete(): void {
     this.#deleteGeneration++;
-    this.#impactQueries.release("getPrinterDeleteImpact");
+    this.#impactQueries.release(
+      this.deleteIsPage ? "getPagePrinterDeleteImpact" : "getPrinterDeleteImpact",
+    );
     this.deleteTarget = null;
     this.deleteImpact = null;
     this.deleteLoading = false;
@@ -4707,7 +4604,6 @@ export class PrintersScreen extends LitElement {
   }
 
   #requestDetailDelete(p: Printer, opener: HTMLElement): void {
-    if (this.detailActiveSavingIds.has(p.id)) return;
     this.#openDelete(p, opener);
   }
 
@@ -4718,12 +4614,13 @@ export class PrintersScreen extends LitElement {
     this.deleteSubmitting = true;
     this.deleteActionError = "";
     try {
-      await this.api.deletePrinter(id);
+      if (this.deleteIsPage) await this.api.deletePagePrinter(id);
+      else await this.api.deletePrinter(id);
     } catch (error) {
       if (generation !== this.#deleteGeneration) return;
       this.deleteSubmitting = false;
       const code = codeOf(error);
-      if (code !== "printer.not_found") {
+      if (code !== "printer.not_found" && code !== "page_printer.not_found") {
         this.deleteActionError = codeMessage(code);
         return;
       }
@@ -4775,6 +4672,7 @@ export class PrintersScreen extends LitElement {
       void this.#url.write({ printer: null }, true);
     }
     this.printers = this.printers.filter((p) => p.id !== id);
+    this.pagePrinters = this.pagePrinters.filter((p) => p.id !== id);
     if (refuse && open && !ours) this.errorKey = "printer.not_found";
   }
 
@@ -4787,7 +4685,7 @@ export class PrintersScreen extends LitElement {
       .submitting=${this.deleteSubmitting}
       .readError=${this.deleteReadError}
       .actionError=${this.deleteActionError}
-      .copy=${printerDeleteCopy()}
+      .copy=${printerDeleteCopy(this.deleteIsPage)}
       .opener=${this.#deleteOpener}
       @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) =>
         void this.#confirmDelete(event.detail.id)}

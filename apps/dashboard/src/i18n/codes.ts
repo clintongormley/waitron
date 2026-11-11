@@ -907,10 +907,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That printer can't print Waitron's invoices",
     es: "Esa impresora no puede imprimir las facturas de Waitron",
   },
-  "page_printer.rediscover": {
-    en: "To enable that printer, find it again in Add a printer",
-    es: "Para habilitar esa impresora, búscala de nuevo en Añadir impresora",
-  },
   "page_printer.no_agent": {
     en: "That printer has no print agent. Find it again in Add a printer",
     es: "Esa impresora no tiene agente de impresión. Búscala de nuevo en Añadir impresora",
