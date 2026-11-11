@@ -535,7 +535,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       const deny = `const net=require("node:net");const c=net.connect("/run/waitron-box/box.sock");c.setTimeout(2000,()=>{c.destroy();process.exitCode=1});c.on("connect",()=>{c.destroy();process.exitCode=1});c.on("error",e=>{if(e.code!=="EACCES")throw e;console.log("B3_SOCKET_DENIED:EACCES")})`;
       const probe = (code, denied = false) =>
         `printf %%s ${Buffer.from(code).toString("base64")} | base64 -d | ${denied ? "setpriv --reuid=65534 --regid=65534 --clear-groups " : ""}node`;
-      const stayed = `const fs=require("node:fs");const until=Date.now()+180000;let last="not read";function poll(){try{last=fs.readFileSync("/var/lib/docker/volumes/waitron_state/_data/recovery.json","utf8");const state=JSON.parse(last);if(state.failures===0&&state.level==="normal"){console.log("B3_STAYED_UP:"+last.trim());return;}}catch(e){last=e.message;}if(Date.now()>=until)throw Error("startup counter did not clear: "+last);setTimeout(poll,250);}poll();`;
+      const stayed = `const fs=require("node:fs");const until=Date.now()+180000;let last="not read";function poll(){try{last=fs.readFileSync("/var/lib/docker/volumes/waitron_state/_data/recovery.json","utf8");const state=JSON.parse(last);if(state.failures===0&&state.level==="normal"){console.log("B3_STAYED_UP:"+JSON.stringify(state));return;}}catch(e){last=e.message;}if(Date.now()>=until)throw Error("startup counter did not clear: "+last);setTimeout(poll,250);}poll();`;
       const checks =
         caseName === "existing-stick"
           ? `; ${probe(clock)}; ${probe(deny, true)}${name === "again" ? `; ${probe(stayed)}` : ""}`

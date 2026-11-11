@@ -20,6 +20,12 @@ function fixture({
   fail,
   order = "0001,0002,0000,0003",
   missingOrder = false,
+  label = "gpt",
+  node = "/dev/vdb1",
+  uuid = guid,
+  createdOrder = "0001,0002,0000,0003",
+  nextReadback,
+  removedAfterNext = false,
 } = {}) {
   vi.useFakeTimers();
   installerNameNotice.mockResolvedValue("This box already has Waitron (Harbour Restaurant Ltd).");
@@ -43,16 +49,15 @@ function fixture({
     if (command === "sfdisk")
       return JSON.stringify({
         partitiontable: {
-          label: "gpt",
-          partitions: [
-            { node: "/dev/vdb1", type: type ?? "C12A7328-F81F-11D2-BA4B-00A0C93EC93B", uuid: guid },
-          ],
+          label,
+          partitions: [{ node, type: type ?? "C12A7328-F81F-11D2-BA4B-00A0C93EC93B", uuid }],
         },
       });
     if (command === "systemctl") return "";
     if (args[0] === "--create-only") made = true;
     if (args[0] === "--bootnext") next = args[1];
-    return `BootCurrent: 0001\n${missingOrder ? "" : `BootOrder: ${next ? order : "0001,0002,0000,0003"}\n`}${next ? `BootNext: ${next}\n` : ""}${made ? created : entries}\n`;
+    const readback = nextReadback === undefined ? next : nextReadback;
+    return `BootCurrent: 0001\n${missingOrder ? "" : `BootOrder: ${next ? order : made ? createdOrder : "0001,0002,0000,0003"}\n`}${next && readback ? `BootNext: ${readback}\n` : ""}${next && removedAfterNext ? "" : made ? created : entries}\n`;
   };
   return {
     input,
@@ -106,7 +111,9 @@ it("discards buffered keys and resets a two-minute idle return after each new ch
   await done;
   expect(f.text).toContain("Reinstall, erase and recovery-key inspection are unavailable");
   expect(f.text).not.toContain("secret");
+  expect(f.text.match(/Reinstall, erase/g)).toHaveLength(1);
   expect(f.calls.at(-1)).toEqual(["systemctl", "reboot", "--no-block"]);
+  expect(f.input.isPaused()).toBe(true);
 });
 
 it("disables terminal echo before inviting typing", async () => {
@@ -122,6 +129,7 @@ it("disables terminal echo before inviting typing", async () => {
   await vi.advanceTimersByTimeAsync(120000);
   await done;
   expect(rawAtPrompt).toBe(true);
+  expect(f.input.isPaused()).toBe(true);
 });
 
 it.each(["non-tty", "raw-error", "eof", "error"])(
@@ -184,6 +192,13 @@ it("creates a missing exact entry without inserting it into BootOrder, then veri
 it.each([
   { type: "not-an-esp" },
   { missingOrder: true },
+  { label: "dos" },
+  { node: "/dev/vdb2" },
+  { uuid: "not-a-guid" },
+  { entries: "", createdOrder: "0004,0001" },
+  { nextReadback: null },
+  { nextReadback: "0009" },
+  { removedAfterNext: true },
   { entries: "", created: "" },
   { order: "0004,0001" },
   { fail: "efibootmgr" },

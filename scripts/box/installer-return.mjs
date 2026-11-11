@@ -20,8 +20,8 @@ async function waitForReturn(input, output, notice) {
   await new Promise((done) => {
     let timer;
     const wasRaw = input?.isRaw === true;
-    const wasPaused = input?.isPaused?.();
     let raw = false;
+    let interrupted = false;
     const detach = () => {
       input?.removeListener("data", typed);
       input?.removeListener("end", unavailable);
@@ -34,7 +34,7 @@ async function waitForReturn(input, output, notice) {
         }
         raw = false;
       }
-      if (wasPaused) input.pause();
+      input?.pause();
     };
     const arm = (ms) => {
       globalThis.clearTimeout(timer);
@@ -45,9 +45,12 @@ async function waitForReturn(input, output, notice) {
     };
     const typed = (bytes) => {
       if (bytes.length === 0) return;
-      output.write(
-        "Reinstall, erase and recovery-key inspection are unavailable. Starting the installed box after 120 seconds without typing.\n",
-      );
+      if (!interrupted) {
+        interrupted = true;
+        output.write(
+          "Reinstall, erase and recovery-key inspection are unavailable. Starting the installed box after 120 seconds without typing.\n",
+        );
+      }
       arm(INSTALLER_TIMINGS_MS.reinstallIdle);
     };
     const unavailable = () => {
