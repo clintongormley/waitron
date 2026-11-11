@@ -1,10 +1,13 @@
-import { css, html, nothing } from "lit";
+import { css, html } from "lit";
 import { formatMoney } from "@waitron/shared";
 import type { DepartmentTakingsDto } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 
 export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {
   const money = (value: string) => formatMoney(value, currentLocale());
+  if (rows.length === 0)
+    return html`<h2>${t("reports.by_department")}</h2>
+      <p class="muted" data-test="departments-empty">${t("reports.departments_empty")}</p>`;
   const sorted = [...rows].sort((a, b) => {
     if (a.departmentId === null) return b.departmentId === null ? 0 : 1;
     if (b.departmentId === null) return -1;
@@ -12,7 +15,6 @@ export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {
   });
   return html` <h2>${t("reports.by_department")}</h2>
     <p class="muted" data-test="department-note">${t("reports.department_note")}</p>
-    ${rows.length === 0 ? html`<p class="muted" data-test="departments-empty">${t("reports.departments_empty")}</p>` : nothing}
     <div
       class="department-takings"
       role="region"

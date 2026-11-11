@@ -52,8 +52,17 @@ describe("computeDailyClose", () => {
     const [restaurant, bar] = await suite.db
       .insert(departments)
       .values([
-        { name: "Restaurant", tradingName: "Restaurant" },
-        { name: "Bar", tradingName: "Bar", active: false },
+        {
+          id: "ffffffff-0000-4000-8000-000000000002",
+          name: "Restaurant",
+          tradingName: "Restaurant",
+        },
+        {
+          id: "00000000-0000-4000-8000-000000000002",
+          name: "Bar",
+          tradingName: "Bar",
+          active: false,
+        },
       ])
       .returning();
     const at = "2026-08-04T10:00:00.000Z";
@@ -175,6 +184,11 @@ describe("computeDailyClose", () => {
       ]),
     );
     expect(close.departmentTakings).toHaveLength(3);
+    expect(close.departmentTakings.map((row) => row.departmentId)).toEqual([
+      null,
+      bar!.id,
+      restaurant!.id,
+    ]);
     expect(close.cash.tenderTotal).toBe("100.00");
   });
 

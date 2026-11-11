@@ -10,7 +10,8 @@ import {
   settleOrder,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
-import { computeClosedBills } from "./closed-bills.js";
+import { addDecimal, decimal } from "@waitron/shared";
+import { computeDepartmentClosedBills } from "./closed-bills.js";
 import type { DailyCloseInput } from "./types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
@@ -34,7 +35,16 @@ async function run(overrides: Partial<DailyCloseInput> = {}) {
     dayCutover: "05:00",
     ...overrides,
   };
-  return withTransaction(suite.db, (tx) => computeClosedBills(tx, input));
+  return withTransaction(suite.db, async (tx) => {
+    const rows = await computeDepartmentClosedBills(tx, input);
+    return rows.reduce(
+      (sum, row) => ({
+        count: sum.count + row.billsClosed.count,
+        total: addDecimal(sum.total, row.billsClosed.total),
+      }),
+      { count: 0, total: decimal("0.00") },
+    );
+  });
 }
 
 async function bill(
@@ -54,7 +64,7 @@ async function bill(
   return orderId;
 }
 
-describe("computeClosedBills", () => {
+describe("department closed bills", () => {
   it("counts settled bills at their invoice totals, leaving out open bills and unsettled invoices", async () => {
     await bill(venue, 1, { total: "220.00", issuedAt: noon, settledAt: noon });
     await bill(venue, 2, { total: "100.00", issuedAt: noon, settledAt: noon });

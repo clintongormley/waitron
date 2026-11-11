@@ -13,6 +13,7 @@ import type {
 /** Bill-derived tenders and provider refund evidence are excluded: their payment/refund ledgers already count the movement.
  * Zero method lines stay: a drawer that moved cash still needs counting. */
 export async function computeCashUp(tx: Transaction, input: DailyCloseInput) {
+  // Unique working-order, receipt-header and department keys keep these joins from multiplying money.
   const { rows } = await tx.execute<{
     source: string;
     device_id: string | null;

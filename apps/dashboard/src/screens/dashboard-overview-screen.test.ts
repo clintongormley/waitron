@@ -81,6 +81,13 @@ describe("dashboard-overview-screen", () => {
           ...overview,
           departmentTakings: [
             {
+              departmentId: "restaurant",
+              departmentName: "Restaurant",
+              active: true,
+              byMethod: [],
+              billsClosed: { count: 0, total: "0.00" },
+            },
+            {
               departmentId: null,
               departmentName: null,
               active: null,
@@ -108,7 +115,12 @@ describe("dashboard-overview-screen", () => {
         [...root.querySelectorAll('[data-test^="department-row-"]')].map((row) =>
           row.getAttribute("data-test"),
         ),
-      ).toEqual(["department-row-old-bar", "department-row-unallocated"]);
+      ).toEqual([
+        "department-row-old-bar",
+        "department-row-restaurant",
+        "department-row-unallocated",
+      ]);
+      expect(root.querySelector('[data-test="departments-empty"]')).toBeNull();
       const row = root.querySelector('[data-test="department-row-unallocated"]');
       expect(row).not.toBeNull();
       const values = [...row!.querySelectorAll("td")].map((td) => td.textContent?.trim());
@@ -136,6 +148,8 @@ describe("dashboard-overview-screen", () => {
       "No hay cobros",
     );
     const root = el.shadowRoot!;
+    expect(root.querySelector('[data-test="department-table"]')).toBeNull();
+    expect(root.querySelector(".department-takings")).toBeNull();
     expect(root.querySelector("[data-test=gross-total]")!.textContent).toBe("1279,50\u00a0€");
     expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("1234,50\u00a0€");
     expect(root.querySelector("[data-test=tip-total]")!.textContent).toBe("45,00\u00a0€");
