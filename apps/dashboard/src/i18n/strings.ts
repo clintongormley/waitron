@@ -2058,6 +2058,10 @@ export const en = {
     "Saving copies the bucket copy's current bucket settings. Changing or removing the bucket copy later does not move these backups; save this choice again to follow a change.",
   "backup.destination.stream_location": "Backups will be stored in",
   "backup.destination.folder_required": "Enter the folder to save backups in.",
+  "backup.destination.folder_scratch_refused":
+    "This folder is inside {folder}, which the box empties at startup. Choose a backup folder outside it.",
+  "backup.destination.folder_unreadable":
+    "The box could not read this folder. Choose a folder the box can access.",
   "backup.destination.folder_refused":
     "The box cannot use this folder. Remove any tab, line break or other control character.",
   "backup.destination.stream_prefix_refused":
@@ -5932,6 +5936,10 @@ export const es: Record<StringKey, string> = {
     "Al guardar se copian los ajustes actuales del bucket de la copia en el bucket. Si después cambias o quitas la copia en el bucket, estas copias no se mueven; vuelve a guardar esta opción para seguir el cambio.",
   "backup.destination.stream_location": "Las copias se guardarán en",
   "backup.destination.folder_required": "Escribe la carpeta donde guardar las copias.",
+  "backup.destination.folder_scratch_refused":
+    "Esta carpeta está dentro de {folder}, que la caja vacía al arrancar. Elige una carpeta de copias fuera de ella.",
+  "backup.destination.folder_unreadable":
+    "La caja no ha podido leer esta carpeta. Elige una carpeta a la que pueda acceder.",
   "backup.destination.folder_refused":
     "La caja no puede usar esta carpeta. Quita cualquier tabulador, salto de línea u otro carácter de control.",
   "backup.destination.stream_prefix_refused":

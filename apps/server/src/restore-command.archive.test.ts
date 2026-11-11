@@ -297,7 +297,7 @@ let current: Fixture | undefined;
 
 afterEach(async () => {
   if (current === undefined) return;
-  const leftovers = await readdir(join(current.stateDir, "restore-staging")).catch(() => []);
+  const leftovers = await readdir(join(current.stateDir, "scratch/restore")).catch(() => []);
   expect(leftovers).toEqual([]);
   current = undefined;
 });

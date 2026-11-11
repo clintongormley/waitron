@@ -293,7 +293,8 @@ import { stageResetRequest } from "./reset-request.js";
 import { refuseIfArchiveSourceLive } from "./restore-stream.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { validateArtifact } from "./restore.js";
-import { RESTORE_STAGING_DIR, clearRestoreLeftovers } from "./restore-staging-dirs.js";
+import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { assertOutsideScratchResolved, emptyScratch } from "./scratch.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
@@ -404,6 +405,7 @@ import { mountBackupApi } from "./backup-api.js";
 import { createSealedStateRefresher, type SealedStateStatus } from "./sealed-state.js";
 import {
   isBackupManagedByEnvironment as backupKeysInEnv,
+  assertBackupOutsideScratch,
   loadBackupSettings,
   loadRecoveryKey,
 } from "./backup-config.js";
@@ -1052,6 +1054,9 @@ async function bootServer(
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
+  if (backupKeysInEnv(base)) await assertBackupOutsideScratch(env, config.stateDir);
+  await assertOutsideScratchResolved(config.stateDir, config.venueDir, "WAITRON_VENUE_DIR");
+  await assertOutsideScratchResolved(config.stateDir, config.logDir, "WAITRON_LOG_DIR");
   // Here rather than in `loadConfig`: `health.ts` imports from `config.ts` to build `DUTY_BUDGET_MS`,
   // so `config.ts` importing it back would be a cycle. An idle host sleeps `config.maxTickMs`
   // verbatim, so a ceiling at or past the drain budget would read the drain duty as stale.
@@ -1178,7 +1183,7 @@ async function bootServer(
     }
     // Only once this process holds the venue folder: a second process must not delete a running
     // process's restore working folders.
-    await clearRestoreLeftovers(config.stateDir, log);
+    await emptyScratch(config.stateDir, log);
     await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,

@@ -198,7 +198,7 @@ describe("the running server's Box status read and free-space deletion", () => {
     expect((await box.get()).disk.reclaimable.backupRunning).toBe(false);
 
     // The state folder: a press during a backup run must leave that run's dump alone.
-    const stagingDir = join(dirname(box.logDir), "backup-staging");
+    const stagingDir = join(dirname(box.logDir), "scratch/backup");
     await mkdir(stagingDir, { recursive: true });
     const dump = join(stagingDir, "waitron-20261022T100000Z.dump");
     await writeFile(dump, Buffer.alloc(700, 1));
@@ -246,37 +246,22 @@ describe("the running server's Box status read and free-space deletion", () => {
     expect(checkTimeHealth).toHaveBeenCalledTimes(1);
   });
 
-  it("never frees a configured backup folder inside backup staging", async () => {
+  it("refuses a backup folder inside scratch before touching its saved archive", async () => {
     let archive = "";
-    let other = "";
-    const box = await start(undefined, async (scratch) => {
-      const destination = join(scratch, "backup-staging", "backup-encrypt-local");
-      archive = join(destination, backupArchiveKey(new Date()));
-      other = join(scratch, "backup-staging", "backup-encrypt-other");
-      await mkdir(destination, { recursive: true });
-      await writeFile(archive, Buffer.alloc(800, 1));
-      await mkdir(other);
-      await writeFile(join(other, "artifact"), Buffer.alloc(900, 1));
-      return { WAITRON_BACKUP_DIR: destination, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+    await expect(
+      start(undefined, async (scratch) => {
+        const destination = join(scratch, "scratch/backup", "backup-encrypt-local");
+        archive = join(destination, backupArchiveKey(new Date()));
+        await mkdir(destination, { recursive: true });
+        await writeFile(archive, Buffer.alloc(800, 1));
+        return { WAITRON_BACKUP_DIR: destination, WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+      }),
+    ).rejects.toMatchObject({
+      code: "server.config_invalid",
+      params: { reason: "scratch_is_temporary_choose_a_folder_outside_scratch" },
     });
-    // The start's first backup run fails at once (this state folder holds no recovery files);
-    // a press during it would leave staging alone.
-    await vi.waitFor(
-      async () =>
-        expect(await readFile(join(box.logDir, "waitron.log"), "utf8")).toContain(
-          '"event":"backup.failed"',
-        ),
-      { timeout: 30_000 },
-    );
-    const turn = holder.supervisorDeps!.stagingTurn!;
-    await vi.waitFor(() => expect(turn.backupRunning()).toBe(false));
-
-    const freed = await box.free();
-    expect(freed.status).toBe(200);
-    expect(await freed.json()).toMatchObject({ backupRunning: false });
-    expect(await exists(other)).toBe(false);
-    expect(await exists(archive)).toBe(true);
-  }, 60_000);
+    expect(await readFile(archive)).toEqual(Buffer.alloc(800, 1));
+  });
 
   it.each(["mirror", "fenced"] as const)(
     "a %s node refuses the deletion as read-only and deletes nothing",

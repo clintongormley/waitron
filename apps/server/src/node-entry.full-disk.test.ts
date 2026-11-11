@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Hono } from "hono";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { FRESH, levelFor, type RecoveryState } from "./recovery-state.js";
@@ -356,10 +356,10 @@ describe("a start below the free-space floor", () => {
 
 /** A cut-off backup run's copy in the state folder's backup staging. */
 async function stagedLeftover(): Promise<string> {
-  const staged = join(STATE_DIR, "backup-staging", dumpFileName(new Date("2026-10-20T00:00:00Z")));
-  await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
+  const staged = join(STATE_DIR, "scratch/backup", dumpFileName(new Date("2026-10-20T00:00:00Z")));
+  await mkdir(join(STATE_DIR, "scratch/backup"), { recursive: true });
   await writeFile(staged, "copy");
-  dirs.push(join(STATE_DIR, "backup-staging"));
+  dirs.push(join(STATE_DIR, "scratch/backup"));
   return staged;
 }
 
@@ -472,18 +472,21 @@ describe("a start that fails on a full disk", () => {
   it("deletes backup staging after a full-disk failure once its own hold of the venue folder is released", async () => {
     const staged = join(
       STATE_DIR,
-      "backup-staging",
+      "scratch/backup",
       dumpFileName(new Date("2026-10-20T00:00:00Z")),
     );
-    await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
-    dirs.push(join(STATE_DIR, "backup-staging"));
+    await mkdir(join(STATE_DIR, "scratch/backup"), { recursive: true });
+    dirs.push(join(STATE_DIR, "scratch/backup"));
     const error = diskFull();
     let reads = 0;
     const d = deps(
       {
         // Written after the clean-up every start runs, so only the full-disk one can delete it.
         readRecoveryState: vi.fn(async () => {
-          if ((reads += 1) === 1) await writeFile(staged, "copy");
+          if ((reads += 1) === 1) {
+            await mkdir(dirname(staged), { recursive: true });
+            await writeFile(staged, "copy");
+          }
           return FRESH;
         }),
         lockVenue: lockVenueDatabase,
@@ -499,12 +502,12 @@ describe("a start that fails on a full disk", () => {
   it("keeps backup staging after a full-disk failure while another process holds the venue folder", async () => {
     const staged = join(
       STATE_DIR,
-      "backup-staging",
+      "scratch/backup",
       dumpFileName(new Date("2026-10-20T00:00:00Z")),
     );
-    await mkdir(join(STATE_DIR, "backup-staging"), { recursive: true });
+    await mkdir(join(STATE_DIR, "scratch/backup"), { recursive: true });
     await writeFile(staged, "copy");
-    dirs.push(join(STATE_DIR, "backup-staging"));
+    dirs.push(join(STATE_DIR, "scratch/backup"));
     const error = diskFull();
     stops.push((await holdVenueElsewhere(VENUE_DIR)).stop);
     const d = deps(
@@ -569,4 +572,42 @@ describe("a start that fails on a full disk", () => {
     expect(recordedStartFailureCode(refused)).toBeUndefined();
     expect(recordedStartFailureCode("a thrown string")).toBeUndefined();
   });
+});
+
+it("refuses an environment backup inside scratch before cleanup removes its archive", async () => {
+  const destination = join(STATE_DIR, "scratch", "saved-backups");
+  await mkdir(destination, { recursive: true });
+  dirs.push(destination);
+  const archive = join(destination, "saved.backup.enc");
+  await writeFile(archive, "keep");
+  const d = deps(
+    { baseEnv: { WAITRON_BACKUP_DIR: destination }, reportFailure: vi.fn() },
+    () => 100 * MIB,
+  );
+  await expect(runEntry(d)).rejects.toMatchObject({ code: "server.config_invalid" });
+  expect(await readFile(archive, "utf8")).toBe("keep");
+  expect(d.reportFailure).toHaveBeenCalledWith(expect.stringContaining("Choose a folder outside"));
+  expect(d.startServer).not.toHaveBeenCalled();
+});
+
+it("checks the merged box environment before cleanup", async () => {
+  const destination = join(STATE_DIR, "scratch", "merged-backups");
+  await mkdir(destination, { recursive: true });
+  dirs.push(destination);
+  const archive = join(destination, "saved.backup.enc");
+  await writeFile(archive, "keep");
+  const d = deps(
+    {
+      baseEnv: { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" },
+      loadBoxEnv: vi.fn(async () => ({
+        WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
+        WAITRON_BACKUP_DIR: destination,
+      })),
+      reportFailure: vi.fn(),
+    },
+    () => 100 * MIB,
+  );
+  await expect(runEntry(d)).rejects.toMatchObject({ code: "server.config_invalid" });
+  expect(await readFile(archive, "utf8")).toBe("keep");
+  expect(d.reportFailure).toHaveBeenCalledWith(expect.stringContaining("Choose a folder outside"));
 });

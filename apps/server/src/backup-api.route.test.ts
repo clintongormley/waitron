@@ -7,7 +7,7 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // `backup-supervisor.test.ts`.
 import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -494,6 +494,63 @@ describe("backup admin routes", () => {
     });
     expect(res.status).toBe(200);
     expect((await res.json()).stream).toEqual(stream);
+  });
+
+  it.each(["scratch", "scratch/backups"])(
+    "refuses a backup folder in %s without changing saved settings",
+    async (folder) => {
+      const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+      const app = buildApp(makeSupervisor(sc), sc.stateDir);
+      const cookie = await login(app);
+      const before = await readArchiveSettings(suite.db, RING);
+      const response = await app.request("/api/backup/apply", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          destinations: [{ kind: "local-fs", dir: join(sc.stateDir, folder) }],
+          recoveryKey: KEY_1,
+          schedule: DAILY_AT_0330,
+          retention: RETENTION,
+        }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: {
+          code: "backup.request_invalid",
+          params: { field: "dir", reason: "scratch", scratchRoot: join(sc.stateDir, "scratch") },
+        },
+      });
+      expect(await readArchiveSettings(suite.db, RING)).toEqual(before);
+    },
+  );
+
+  it("an unreadable backup folder is a field refusal and saves nothing", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const parent = join(sc.stateDir, "unreadable");
+    await mkdir(parent);
+    await chmod(parent, 0o000);
+    try {
+      const app = buildApp(makeSupervisor(sc), sc.stateDir);
+      const cookie = await login(app);
+      const before = await readArchiveSettings(suite.db, RING);
+      const response = await app.request("/api/backup/apply", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({
+          destinations: [{ kind: "local-fs", dir: join(parent, "backups") }],
+          recoveryKey: KEY_1,
+          schedule: DAILY_AT_0330,
+          retention: RETENTION,
+        }),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "backup.request_invalid", params: { field: "dir", reason: "unreadable" } },
+      });
+      expect(await readArchiveSettings(suite.db, RING)).toEqual(before);
+    } finally {
+      await chmod(parent, 0o700);
+    }
   });
 
   it("apply enables backups and hot-reloads (no restart), then reports enabled", async () => {

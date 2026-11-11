@@ -1,5 +1,5 @@
-import { lstat, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { lstat, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { SCRATCH_DIR } from "@waitron/store";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { manifestSets } from "@waitron/migrations";
@@ -72,7 +72,7 @@ const codeOf = (error: unknown) => {
  * module, enabled or not.
  */
 export async function readSetupDatabase(
-  roots: Pick<FirstSetupRoots, "venueDir">,
+  roots: Pick<FirstSetupRoots, "stateDir" | "venueDir">,
   modules: readonly WaitronModule[],
 ): Promise<SetupDatabaseRead> {
   const database = join(roots.venueDir, "venue.db");
@@ -116,7 +116,9 @@ export async function readSetupDatabase(
     }
     // A -journal needs rolling back, and SQLite cannot read some -wal shapes in place: both copy.
     if (connection === undefined) {
-      scratch = await mkdtemp(join(tmpdir(), "waitron-setup-holdings-")).catch(copyFailed);
+      const parent = join(roots.stateDir, SCRATCH_DIR);
+      await mkdir(parent, { recursive: true, mode: 0o700 }).catch(copyFailed);
+      scratch = await mkdtemp(join(parent, "waitron-setup-holdings-")).catch(copyFailed);
       const present = await copyVenueFiles(roots.venueDir, scratch, () =>
         notReady("copy refused: not a plain file", "unexpected"),
       ).catch((error: unknown) =>

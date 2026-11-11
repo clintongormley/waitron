@@ -94,7 +94,7 @@ export async function expectStartAgainRefused(f: Held, send: () => Promise<void>
   });
 }
 
-export const LEFT_STATE = /^(records(?:\/.*)?|first-setup-resolutions\/)$/;
+export const LEFT_STATE = /^(records(?:\/.*)?|first-setup-resolutions\/|scratch\/)$/;
 
 export const noConfirmations = (f: Held) =>
   expect(access(join(f.roots.stateDir, RECORDS_DIR))).rejects.toMatchObject({

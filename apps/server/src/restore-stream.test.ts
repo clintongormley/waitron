@@ -234,9 +234,11 @@ async function prepareDeps(
   };
 }
 
-/** Nothing staged and no scratch left behind. */
+/** No staged files outside scratch, and no working copy left inside it. */
 async function expectStateUntouched(stateDir: string): Promise<void> {
-  expect(await readdir(stateDir)).toEqual([]);
+  const names = await readdir(stateDir);
+  expect(names.filter((name) => name !== "scratch")).toEqual([]);
+  if (names.includes("scratch")) expect(await readdir(join(stateDir, "scratch"))).toEqual([]);
 }
 
 describe("prepareStreamRestore", () => {
@@ -1089,7 +1091,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     await restoreFromStream({
       ...deps,
       venueDir,
-      stagingDir: join(deps.stateDir, "restore-staging"),
+      stagingDir: join(deps.stateDir, "scratch/restore"),
       environment: "preproduction",
       modules: [],
       confirmVenue: (venue) => venue.taxId === VENUE.taxId,
@@ -1173,7 +1175,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       restoreFromStream({
         ...deps,
         venueDir,
-        stagingDir: join(deps.stateDir, "restore-staging"),
+        stagingDir: join(deps.stateDir, "scratch/restore"),
         environment: "preproduction",
         modules: [],
         confirmVenue: () => true,
@@ -1183,7 +1185,8 @@ describe("restoreFromStream (the command line's whole path)", () => {
     expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toBe(
       "WAITRON_NODE_ID=someone-else\n",
     );
-    expect(await readdir(deps.stateDir)).toEqual(["trading.env"]);
+    expect(await readdir(deps.stateDir)).toEqual(["scratch", "trading.env"]);
+    expect(await readdir(join(deps.stateDir, "scratch"))).toEqual([]);
   });
 
   it("places the restored database, writes the identity and leaves the first-start marker naming the stream", async () => {
@@ -1192,7 +1195,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     await restoreFromStream({
       ...deps,
       venueDir,
-      stagingDir: join(deps.stateDir, "restore-staging"),
+      stagingDir: join(deps.stateDir, "scratch/restore"),
       environment: "preproduction",
       modules: [],
       migrate: vi.fn(async () => {}),
@@ -1224,7 +1227,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     await restoreFromStream({
       ...deps,
       venueDir,
-      stagingDir: join(deps.stateDir, "restore-staging"),
+      stagingDir: join(deps.stateDir, "scratch/restore"),
       environment: "preproduction",
       modules: [],
       confirmVenue: () => true,
@@ -1265,7 +1268,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       restoreFromStream({
         ...deps,
         venueDir,
-        stagingDir: join(deps.stateDir, "restore-staging"),
+        stagingDir: join(deps.stateDir, "scratch/restore"),
         environment: "preproduction",
         modules: [],
         confirmVenue: () => true,
@@ -1291,7 +1294,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       restoreFromStream({
         ...deps,
         venueDir,
-        stagingDir: join(deps.stateDir, "restore-staging"),
+        stagingDir: join(deps.stateDir, "scratch/restore"),
         environment: "preproduction",
         modules: [],
         confirmVenue: (venue) => {
@@ -1315,7 +1318,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     const deps = await prepareDeps(await bucket(), overrides);
     return {
       ...deps,
-      stagingDir: join(deps.stateDir, "restore-staging"),
+      stagingDir: join(deps.stateDir, "scratch/restore"),
       modules: [],
       environment: "preproduction" as const,
       venueConfirmed: VENUE.taxId,

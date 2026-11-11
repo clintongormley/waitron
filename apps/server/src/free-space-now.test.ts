@@ -37,7 +37,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "wt-free-space-now-"));
   stateDir = join(root, "state");
   logDir = join(stateDir, "logs");
-  stagingDir = join(stateDir, "backup-staging");
+  stagingDir = join(stateDir, "scratch/backup");
   await mkdir(join(stateDir, "venue"), { recursive: true });
   lines = [];
 });
@@ -415,7 +415,7 @@ describe("what the deletion must never delete", () => {
       join("stream", "litestream.yml"),
       join("tls", "ca.crt"),
       join("cloud-snapshots", "staging", "venue.db"),
-      join("restore-staging", DUMP),
+      join("scratch/restore", DUMP),
       DUMP,
     ].map((name) => join(stateDir, name));
     for (const path of paths) await file(path, 100);
@@ -469,6 +469,7 @@ describe("what the deletion must never delete", () => {
   describe("8. a folder that is a link is skipped and logged", () => {
     it("backup staging", async () => {
       await file(join(venueDir(), DUMP), 100);
+      await mkdir(dirname(stagingDir), { recursive: true });
       await symlink(venueDir(), stagingDir);
       expect((await surveyLeftovers(deps())).bytes).toBe(0);
       expect(lines).toEqual([]);
@@ -477,7 +478,7 @@ describe("what the deletion must never delete", () => {
         {
           level: "warn",
           event: "storage.free_space_skipped",
-          fields: { folder: "backup-staging" },
+          fields: { folder: "scratch/backup" },
         },
       ]);
       await expectAllPresent([join(venueDir(), DUMP)]);
@@ -540,7 +541,7 @@ describe("what the deletion must never delete", () => {
       "modules.json",
       join("stream", "litestream.yml"),
       join("tls", "ca.crt"),
-      join("restore-staging", DUMP),
+      join("scratch/restore", DUMP),
       DUMP,
     ];
     for (const [dir, kept] of [

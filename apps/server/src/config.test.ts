@@ -988,3 +988,17 @@ it.each(["8080", "80"])(
     }
   },
 );
+
+it.each(["WAITRON_VENUE_DIR", "WAITRON_LOG_DIR"])(
+  "refuses %s in scratch before boot",
+  (variable) => {
+    expect(() =>
+      loadConfig({ ...MIN_ENV, [variable]: `${STATE_ROOT}/scratch/data` }, ROOT, STATE_ROOT),
+    ).toThrow(
+      expect.objectContaining({
+        code: "server.config_invalid",
+        params: expect.objectContaining({ variable }),
+      }),
+    );
+  },
+);

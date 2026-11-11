@@ -59,7 +59,7 @@ it("resolves the archive target before downloading and removes its downloaded fi
     expect(received?.venueDir).toBe(join(stateDir, "venue"));
     expect(received?.stateDir).toBe(stateDir);
     expect(received?.recoveryKey).toBe("synthetic-backup-key");
-    expect(await readdir(join(stateDir, "restore-staging"))).toEqual([]);
+    expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
     expect(out.at(-1)).toBe(`restored archive ${key} from the bucket named in ${packPath}`);
   } finally {
     await rm(root, { recursive: true, force: true });

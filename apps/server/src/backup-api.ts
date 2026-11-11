@@ -1,3 +1,6 @@
+import { join } from "node:path";
+import { SCRATCH_DIR } from "@waitron/store";
+import { inScratch } from "./scratch.js";
 import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { Context, Hono } from "hono";
@@ -443,6 +446,21 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           stream,
           held: heldSettings,
         });
+        for (const destination of destinations) {
+          if (destination.kind !== "local-fs") continue;
+          let forbidden: boolean;
+          try {
+            forbidden = await inScratch(deps.stateDir, destination.dir);
+          } catch {
+            throw new AppError("backup.request_invalid", { field: "dir", reason: "unreadable" });
+          }
+          if (forbidden)
+            throw new AppError("backup.request_invalid", {
+              field: "dir",
+              reason: "scratch",
+              scratchRoot: join(deps.stateDir, SCRATCH_DIR),
+            });
+        }
         const settings: Omit<ArchiveSettings, "revision"> = {
           enabled: true,
           destinations,

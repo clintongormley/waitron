@@ -1,4 +1,4 @@
-/** One holder at a time over `<state>/backup-staging` in this process: backup runs, Box status's
+/** One holder at a time over `<state>/scratch/backup` in this process: backup runs, Box status's
  * Free, and the free-space watch's deletion of old backups (so no run starts while it deletes). A
  * page's survey never takes it. */
 export interface StagingTurn {

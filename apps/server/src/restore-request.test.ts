@@ -369,7 +369,7 @@ describe("staged restore requests from the bucket", () => {
         environment: "production",
         venueDir: join(stateDir, "venue"),
         stateDir,
-        stagingDir: join(stateDir, "restore-staging"),
+        stagingDir: join(stateDir, "scratch/restore"),
         migrationsRoot: "/migrations",
       }),
     );

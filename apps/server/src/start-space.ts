@@ -1,13 +1,17 @@
-import { BACKUP_STAGING_DIR } from "@waitron/store";
 import { lstat, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { LOG_FILE_NAME, isVenueHolderFresh, type VenueHolder, type VenueLock } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
-import { BACKUP_ENCRYPT_DIR_PREFIX, BACKUP_KEY_PREFIX } from "./backup-keys.js";
+import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
-import { RESTORE_STAGING_DIR, restoreLeftovers } from "./restore-staging-dirs.js";
+import {
+  assertOutsideScratchResolved,
+  deleteScratchEntries,
+  emptyScratch,
+  listScratch,
+} from "./scratch.js";
 
 export const START_FREE_SPACE_FLOOR = 256 * 1024 * 1024;
 export const CRASH_REPORT_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
@@ -51,17 +55,15 @@ export interface StartSpaceDeps {
 }
 
 /**
- * Every call deletes the dumps and `backup-encrypt-*` folders a backup run leaves in backup staging,
- * and the working folders a restore leaves (`restoreLeftovers`), unless another process holds the venue folder's
- * lock — or, when the lock cannot be taken for any other reason, the folder's holder heartbeat is
- * fresh. Below `floor` (or when forced) it also
- * deletes rotated logs but the newest and crash reports older than {@link CRASH_REPORT_KEEP_MS}. A
- * folder that is a symbolic link is skipped. Nothing is thrown; a failed listing, deletion or lock is
- * logged, except another holder's refusal.
+ * Scratch is swept only with the venue lock, a missing venue folder, or no fresh holder when
+ * taking the lock fails. Old crash reports go on every start; rotated logs go below the floor.
  */
 export async function freeSpaceAtStart(
   deps: StartSpaceDeps,
 ): Promise<{ freeBytes: number | null; belowFloor: boolean }> {
+  await assertOutsideScratchResolved(deps.stateDir, deps.venueDir, "WAITRON_VENUE_DIR");
+  if (deps.logDir !== null)
+    await assertOutsideScratchResolved(deps.stateDir, deps.logDir, "WAITRON_LOG_DIR");
   const dirs = [deps.stateDir, deps.venueDir];
   const before = await lowestFreeBytes(dirs, deps.statfs);
   const failed = (error: unknown) =>
@@ -75,28 +77,18 @@ export async function freeSpaceAtStart(
       failed(error);
     }
   };
-  const deleteStagingLeftovers = async (restoreFolders: readonly string[]) => {
-    const stagingDir = join(deps.stateDir, BACKUP_STAGING_DIR);
-    for (const name of (await entries(stagingDir, BACKUP_STAGING_DIR, deps.log, failed)) ?? []) {
-      if (STAGED_DUMP.test(name)) await remove(join(stagingDir, name), false);
-      else if (name.startsWith(BACKUP_ENCRYPT_DIR_PREFIX))
-        await remove(join(stagingDir, name), true);
-    }
-    // Listed for its skipped-link and failed-listing logs; restoreLeftovers makes the same skip.
-    await entries(join(deps.stateDir, RESTORE_STAGING_DIR), RESTORE_STAGING_DIR, deps.log, failed);
-    for (const path of restoreFolders) await remove(path, true);
-  };
   // On a box, only the server runs a backup or stages a recovery copy, and only a process holding
   // the venue folder's lock runs a restore; each holds that lock while it does.
   const removeStagingLeftovers = async () => {
     if (deps.venueHeld === true)
-      return deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
+      return void (deleted += await emptyScratch(deps.stateDir, deps.log));
     // Taking the lock would create a missing venue folder; with none, no process can hold it. A
     // restore makes that folder before its first working folder, so one still missing after the
     // listing means nothing listed is a live restore's.
     if (await missing(deps.venueDir)) {
-      const listed = await restoreLeftovers(deps.stateDir);
-      if (await missing(deps.venueDir)) return deleteStagingLeftovers(listed);
+      const listed = await listScratch(deps.stateDir, deps.log);
+      if (await missing(deps.venueDir))
+        return void (deleted += await deleteScratchEntries(deps.stateDir, listed ?? [], deps.log));
     }
     let hold: VenueLock;
     try {
@@ -108,34 +100,20 @@ export async function freeSpaceAtStart(
       // The time is read again: the deletions before this can outlast VENUE_HOLDER_STALE_MS, and a
       // live heartbeat judged against the start of them reads as one from the future.
       if (holder !== null && isVenueHolderFresh(holder, deps.now())) return;
-      return deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
+      return void (deleted += await emptyScratch(deps.stateDir, deps.log));
     }
     try {
-      await deleteStagingLeftovers(await restoreLeftovers(deps.stateDir));
+      deleted += await emptyScratch(deps.stateDir, deps.log);
     } finally {
       hold.release();
     }
   };
 
-  if (!deps.force && (before === null || before >= deps.floor)) {
-    await removeStagingLeftovers();
-    if (deleted > 0) deps.log("info", "storage.start_leftovers_deleted", { deleted });
-    return { freeBytes: before, belowFloor: false };
-  }
   const now = deps.now();
-
-  if (deps.logDir !== null) {
-    const logDir = deps.logDir;
-    const logs = await entries(logDir, "logs", deps.log, failed);
-    for (const name of logs ?? []) {
-      const match = ROTATED_LOG.exec(name);
-      if (match !== null && Number(match[1]) >= 2) await remove(join(logDir, name), false);
-    }
-
-    const crashDir = join(logDir, "crash-reports");
-    const crashReports =
-      logs === null ? [] : await entries(crashDir, "crash-reports", deps.log, failed);
-    for (const name of crashReports ?? []) {
+  const logs = deps.logDir === null ? null : await entries(deps.logDir, "logs", deps.log, failed);
+  if (deps.logDir !== null && logs !== null) {
+    const crashDir = join(deps.logDir, "crash-reports");
+    for (const name of (await entries(crashDir, "crash-reports", deps.log, failed)) ?? []) {
       if (!CRASH_REPORT.test(name)) continue;
       const path = join(crashDir, name);
       try {
@@ -146,6 +124,17 @@ export async function freeSpaceAtStart(
         continue;
       }
       await remove(path, false);
+    }
+  }
+  if (!deps.force && (before === null || before >= deps.floor)) {
+    await removeStagingLeftovers();
+    if (deleted > 0) deps.log("info", "storage.start_leftovers_deleted", { deleted });
+    return { freeBytes: before, belowFloor: false };
+  }
+  if (deps.logDir !== null) {
+    for (const name of logs ?? []) {
+      const match = ROTATED_LOG.exec(name);
+      if (match !== null && Number(match[1]) >= 2) await remove(join(deps.logDir, name), false);
     }
   }
 

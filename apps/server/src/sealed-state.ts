@@ -1,4 +1,5 @@
-import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SCRATCH_DIR } from "@waitron/store";
 import { eq } from "drizzle-orm";
 import {
   nodeSealedState,
@@ -141,7 +142,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
         venueDir: deps.venueDir,
         modules: deps.modules,
         resolvers: deps.resolvers,
-        snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
+        snapshotNode: snapshotNodeDatabase(deps.node, join(deps.stateDir, SCRATCH_DIR)),
         manifest,
       });
       // Sealed before the transaction opens, so the write lock is not held across the derivation.

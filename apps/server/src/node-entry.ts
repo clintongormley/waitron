@@ -1,4 +1,5 @@
-import { LOGS_DIR, VENUE_DIR_NAME } from "@waitron/store";
+import { assertBackupOutsideScratch, isBackupManagedByEnvironment } from "./backup-config.js";
+import { LOGS_DIR, SCRATCH_DIR, VENUE_DIR_NAME } from "@waitron/store";
 import {
   httpPortFrom,
   landingConfigFrom,
@@ -338,12 +339,27 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
   };
-  const space = await freeSpaceAtStart({
-    ...cleanUp,
-    stateDir: deps.stateDir,
-    venueDir: deps.venueDir,
-    logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
-  });
+  let space: Awaited<ReturnType<typeof freeSpaceAtStart>>;
+  try {
+    if (isBackupManagedByEnvironment(deps.baseEnv))
+      await assertBackupOutsideScratch(
+        await deps.loadBoxEnv(deps.baseEnv, deps.stateDir),
+        deps.stateDir,
+      );
+    space = await freeSpaceAtStart({
+      ...cleanUp,
+      stateDir: deps.stateDir,
+      venueDir: deps.venueDir,
+      logDir: deps.logDir ?? join(deps.stateDir, LOGS_DIR),
+    });
+  } catch (error) {
+    const variable =
+      isAppError(error) && "variable" in error.params ? error.params.variable : undefined;
+    (deps.reportFailure ?? (() => {}))(
+      `The configured ${typeof variable === "string" ? variable : "backup settings"} cannot be used. Choose a folder outside ${join(deps.stateDir, SCRATCH_DIR)}, which the box empties at startup.`,
+    );
+    throw error;
+  }
 
   await deleteOldBackupsAtStart({
     stateDir: deps.stateDir,

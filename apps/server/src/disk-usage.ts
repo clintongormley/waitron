@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import type { Stats } from "node:fs";
-import { join, relative, resolve, isAbsolute } from "node:path";
+import { basename, dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { errnoOf } from "./errno.js";
 
 export type DiskStatfs = (
@@ -145,4 +145,29 @@ async function unlessGone<T>(read: Promise<T>): Promise<T | null> {
 export function isWithin(path: string, folder: string): boolean {
   const rel = relative(folder, path);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+/** A folder's real path, or for one not made yet, its nearest existing parent's real path with the
+ * rest appended. */
+export async function realOrNearest(
+  path: string,
+  tolerateNonDirectory = false,
+): Promise<{ real: string; existing: string }> {
+  let current = resolve(path);
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      const existing = await fs.realpath(current);
+      return { real: join(existing, ...rest), existing };
+    } catch (error) {
+      const parent = dirname(current);
+      if (
+        (errnoOf(error) !== "ENOENT" && !(tolerateNonDirectory && errnoOf(error) === "ENOTDIR")) ||
+        parent === current
+      )
+        throw error;
+      rest.unshift(basename(current));
+      current = parent;
+    }
+  }
 }

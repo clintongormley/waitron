@@ -1,4 +1,5 @@
 import {
+  SCRATCH_DIR,
   RESTORE_REQUEST_ARTIFACT,
   RESTORE_REQUEST_DB,
   RESTORE_REQUEST_ENTRIES,
@@ -22,6 +23,7 @@ import {
   chmod,
   copyFile,
   lstat,
+  mkdir,
   mkdtemp,
   open,
   readFile,
@@ -444,7 +446,7 @@ export async function runStagedRestore(
   }
   await assertNoStartAgainDeletion(deps.venueDir);
   // Held until this returns: another process's start removes restore working folders whenever it
-  // can take this folder (`restoreLeftovers`), and this run makes them before placement's own hold.
+  // can take this folder (`emptyScratch`), and this run makes them before placement's own hold.
   // Refused here, nothing is cleared, so the request stays staged.
   const hold = await lockRestoreTarget(deps.venueDir);
   try {
@@ -582,7 +584,9 @@ async function runHeld(
       const copy =
         marker.kind === "stream"
           ? await (async () => {
-              const directory = await mkdtemp(join(deps.stateDir, RESTORE_ENTRY_PREFIX));
+              const parent = join(deps.stateDir, SCRATCH_DIR);
+              await mkdir(parent, { recursive: true, mode: 0o700 });
+              const directory = await mkdtemp(join(parent, RESTORE_ENTRY_PREFIX));
               const discard = () => rm(directory, { recursive: true, force: true });
               try {
                 const databasePath = join(directory, VENUE_FILE);

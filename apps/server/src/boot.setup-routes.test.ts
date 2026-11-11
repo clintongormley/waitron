@@ -983,7 +983,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     beforeServerStarts();
     const venue = await freshVenue();
     const leftover = (stateDir: string) =>
-      join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
+      join(stateDir, "scratch/restore", "staged-recovery", "archive-validate-left");
     try {
       await withSetupBoot(
         venue.directory,
@@ -1009,7 +1009,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("removes the working folder a killed bucket restore left in the state folder", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const leftover = (stateDir: string) => join(stateDir, "stream-restore-left");
+    const leftover = (stateDir: string) => join(stateDir, "scratch", "stream-restore-left");
     try {
       await withSetupBoot(
         venue.directory,
@@ -1032,7 +1032,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   it("leaves a staged decrypted copy for the next start when this one fails before holding the venue folder", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-early-"));
-    const leftover = join(stateDir, "restore-staging", "staged-recovery", "archive-validate-left");
+    const leftover = join(stateDir, "scratch/restore", "staged-recovery", "archive-validate-left");
     try {
       await mkdir(leftover, { recursive: true });
       await writeFile(join(leftover, "venue.db"), "decrypted venue");
@@ -1062,7 +1062,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("leaves a running process's staged copy alone when a second start is refused the venue folder", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-staged-second-"));
     const venueDir = join(stateDir, "venue");
-    const staged = join(stateDir, "restore-staging", "staged-recovery", "live-staged-copy");
+    const staged = join(stateDir, "scratch/restore", "staged-recovery", "live-staged-copy");
     await mkdir(venueDir, { recursive: true });
     await mkdir(staged, { recursive: true });
     await writeFile(join(staged, "venue.db"), "decrypted venue in use by the first process");
@@ -1140,7 +1140,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         expect(response.status).toBe(202);
         expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
-        expect(await readdir(join(stateDir, "restore-staging"))).toEqual([]);
+        expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
         expect(await readFile(join(stateDir, "restore-request.artifact"))).toEqual(artifact);
         expect(await readFile(join(stateDir, "restore-request.key"), "utf8")).toBe(
           "validation-key",
@@ -1487,7 +1487,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           await expect(readFile(join(stateDir, "restore-request.json"))).rejects.toMatchObject({
             code: "ENOENT",
           });
-          expect(await readdir(join(stateDir, "restore-staging"))).toEqual([]);
+          expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
           expect(kills).toEqual([]);
         });
       });
@@ -2031,4 +2031,34 @@ describe("startServer — the configuration export route in trading mode", () =>
     },
     60_000,
   );
+});
+
+it("a direct start refuses its environment backup path before sweeping scratch", async () => {
+  beforeServerStarts();
+  const venue = await freshVenue();
+  const root = await mkdtemp(join(tmpdir(), "fl2-direct-start-"));
+  let started: StartedServer | undefined;
+  try {
+    const destination = join(root, "scratch", "backups");
+    await mkdir(destination, { recursive: true });
+    const archive = join(destination, "saved.backup.enc");
+    await writeFile(archive, "keep");
+    const env = {
+      WAITRON_VENUE_DIR: venue.directory,
+      WAITRON_STATE_DIR: root,
+      WAITRON_ENV: "preproduction",
+      WAITRON_BACKUP_DIR: destination,
+    };
+    await expect(
+      (async () => {
+        started = await startServer(env, env);
+      })(),
+    ).rejects.toMatchObject({ code: "server.config_invalid" });
+    expect(await readFile(archive, "utf8")).toBe("keep");
+  } finally {
+    await started?.close();
+    await venue.store.close();
+    await rm(venue.directory, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true });
+  }
 });

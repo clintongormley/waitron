@@ -610,7 +610,7 @@ describe("selected-hour admission before archive placement", () => {
     } finally {
       await restored.close();
     }
-    expect(await readdir(join(f.roots.stateDir, "restore-staging"))).toEqual([]);
+    expect(await readdir(join(f.roots.stateDir, "scratch/restore"))).toEqual([]);
   });
 
   it("carries the bucket HTTP selection and isolation through the real staging adapter", async () => {

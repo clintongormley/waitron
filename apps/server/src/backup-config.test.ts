@@ -1,3 +1,4 @@
+import { assertBackupOutsideScratch } from "./backup-config.js";
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { ArchiveSettings } from "./archive-settings.js";
@@ -733,4 +734,23 @@ describe("loadBackupSettings", () => {
       }),
     ).toBeUndefined();
   });
+});
+
+it.each([
+  { WAITRON_BACKUP_DIR: "/state/scratch" },
+  { WAITRON_BACKUP_DIR: "/state/scratch/backups" },
+  {
+    WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
+      { kind: "local-fs", id: "extra", dir: "/state/scratch/backups" },
+    ]),
+  },
+])("refuses a backup destination in scratch before startup cleanup: %j", async (env) => {
+  await expect(assertBackupOutsideScratch(env, "/state")).rejects.toMatchObject({
+    code: "server.config_invalid",
+  });
+});
+it("keeps a sibling backup folder outside scratch usable", async () => {
+  await expect(
+    assertBackupOutsideScratch({ WAITRON_BACKUP_DIR: "/state/scratch-backups" }, "/state"),
+  ).resolves.toBeUndefined();
 });

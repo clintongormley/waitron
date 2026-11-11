@@ -1,6 +1,6 @@
 // Imported first: its `vi.mock` of the internet clock must be in place before any fiscal module loads.
 import { archiveHost, clock, root } from "./hour-recovery-host.js";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -13,6 +13,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import { recordSale } from "@waitron/core";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { nodeId, seriesId } from "@waitron/shared";
+import { SCRATCH_DIR } from "@waitron/store";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
@@ -70,6 +71,7 @@ const heldTemplate = migratedTemplate("held-setup-template-", TEST_MIGRATIONS);
 export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSetup> {
   const status = options.status ?? "committed";
   const f = await archiveHost();
+  await mkdir(join(f.roots.stateDir, SCRATCH_DIR), { recursive: true });
   const migrated = await heldTemplate();
   await Promise.all(
     ["venue.db", "node.db"].map((name) =>

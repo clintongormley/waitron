@@ -70,7 +70,10 @@ async function keptWithoutCertificates(f: Held) {
     } finally {
       copy.close();
     }
-    const read = await readSetupDatabase({ venueDir: aside }, f.host.modules!);
+    const read = await readSetupDatabase(
+      { venueDir: aside, stateDir: f.roots.stateDir },
+      f.host.modules!,
+    );
     return read.kind === "read" ? read.holdings.kept : undefined;
   } finally {
     await rm(aside, { recursive: true, force: true });

@@ -114,7 +114,7 @@ replace either key record on the strength of this message.
 If scheduled backups are off because their saved settings cannot be used, open **Backups** and
 read the error beside the backup status. Choose the destinations and schedule again.
 **Turn on backups** replaces the saved settings; leave without applying to keep them.
-If a folder is refused, correct it before applying again. A successful save can still report a
+Choose a backup folder outside the box's scratch folder; starts empty scratch to remove temporary copies. If a folder is refused, correct it before applying again. A successful save can still report a
 loading error, so check the resulting status before relying on a new backup.
 
 When **Backups** says the saved settings can't be used, choose **What the box recorded**. The panel

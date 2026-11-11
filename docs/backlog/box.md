@@ -308,7 +308,7 @@ The image ships with backups OFF, deliberately.
 Whole-state-volume capture today: the fatal `RECOVERY_FILES` plus the optional `backup.env` and
 `modules.json`; the replacement's private `cloud-recovery.json`, `cloud-replacement.json` and
 `cloud-connection.json` stay outside that named capture set and the captured ciphertext archive.
-The exclusion set for the deeper change is `backup-staging/`, `restore-staging/`,
+The exclusion set for the deeper change is `scratch/`,
 `logs/`, the per-hardware `instance.env`, `recovery.json`, and its lock file `recovery.lock` with the `recovery.lock-journal` SQLite keeps beside it while held. Touches BR-2, BR-3 and the recovery
 bundle. Named carry-forwards: a stale-`.tmp` sweep; a working-backup boot success-path integration
 test; scope the flat `resolvers` map by module when a second `nonDbState` module lands; a
@@ -1597,12 +1597,8 @@ once released. Belongs with A1016.
 
 ## Bundle: Refuse folders that cannot be safe
 
-2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
-- **Every start deletes a backup folder configured inside backup staging under a `backup-encrypt-`
-  name.** Free skips one since slice 7's finish review; the start's clean-up reads no backup
-  settings. Left open by A798-B slice 7.
-  [Detail](box.md#every-starts-clean-up-deletes-a-backup-folder-configured-inside-backup-staging-under-a-backup-encrypt--name)
 - **A relative backup folder is accepted.** The Backups screen's hint asks for a full path, but
   the server resolves whatever it is given (`resolveArchiveChoice`, `apps/server/src/archive-settings.ts`),
   so `backups-relative` saved as a folder under the server's working directory (seen on the dev
@@ -1711,7 +1707,7 @@ The owner's four answers: no reserved
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and
-  its encrypted copy in `<state>/backup-staging`, and its own `finally` deletes them
+  its encrypted copy in `<state>/scratch/backup`, and its own `finally` deletes them
   (`apps/server/src/backup-sweep.ts`), so a run that is cut off leaves them behind. Owner: "Every
   start deletes them, whatever the free space — so a plaintext copy never outlives a restart. (The
   start never deletes them while a running server holds the venue folder.)" Built in
@@ -2109,20 +2105,6 @@ exist when the payments module is off (A798-B slice 7 plan, M9: `select … from
 alert (design §5). Read, not run on a booted box. The Box status page leaves its card readers row
 out in that case.
 
-## Every start's clean-up deletes a backup folder configured inside backup staging under a backup-encrypt- name
-
-Left open by A798-B slice 7. A `local-fs` backup destination whose folder is
-`<stateDir>/backup-staging/backup-encrypt-…`, or sits below one, is accepted by the settings
-(`WAITRON_BACKUP_DIR`, `WAITRON_BACKUP_DESTINATIONS`, the Backups screen). The clean-up that
-`runEntry` runs at every start (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) deletes that
-folder with its archives whatever the free space, unless another process holds the venue folder,
-because it reads no backup settings
-(`start-space.test.ts`, "deletes backup staging, and keeps rotated logs and old crash reports",
-deletes a `backup-encrypt-x` folder above the floor). The Box status page's Free no longer does: it
-skips a configured destination folder and any folder holding one, except while the box holds no
-backup settings (they cannot be read, or a reload could not open the database). Until then the
-user guide's "never touches … your backups" (`box-status.md#free-space`, English and Spanish) does
-not hold for such a folder. A fix could refuse such a folder when the settings are saved.
 
 ## AEAT's time for a confirmation comes from its QR validation host, not from a `consultar` reply
 
