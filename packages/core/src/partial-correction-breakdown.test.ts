@@ -768,3 +768,64 @@ it("refuses the rest of an invoice whose fix left a rate below what earlier refu
     { to: meal },
   );
 });
+
+it.each<[name: string, secondGross: string | undefined, earlier: Draft | undefined]>([
+  ["one of its lines stored no gross", undefined, undefined],
+  [
+    "an earlier correction of its other line stored no gross",
+    "1.21",
+    { total: "-1.21", lines: [line(1, 1, "21.00", "-1.00")], split: [] },
+  ],
+  [
+    "an earlier correction named none of its lines",
+    "1.21",
+    { total: "-1.21", lines: [line(1, undefined, "21.00", "-1.00", "-1.21")], split: [] },
+  ],
+])("refuses a fixed invoice whose history cannot be checked: %s", async (_name, gross, earlier) => {
+  const meal = await sell("13.31", [
+    ["21.00", "1", "10.00", "12.10"],
+    ["21.00", "1", "1.00", gross],
+  ]);
+  if (earlier) await file(earlier, { to: meal });
+  backend.setFiledFigures(
+    meal.saleId,
+    answered("13.31", [
+      ["10.00", "11.00", "1.10"],
+      ["21.00", "1.00", "0.21"],
+    ]),
+  );
+
+  await expectRefused(UNUSABLE, HALF_AT_10, { to: meal });
+});
+
+it.each([
+  ["base", answered("-12.10", [["21.00", "-10.01", "-2.09"]])],
+  ["gross", answered("-12.11", [["21.00", "-10.00", "-2.11"]])],
+])(
+  "refuses when the agency holds earlier refunds at a rate past the invoice's %s there",
+  async (_name, refund) => {
+    const meal = await sell("23.10", [
+      ["10.00", "1", "10.00", "11.00"],
+      ["21.00", "1", "10.00", "12.10"],
+    ]);
+    const { saleId } = await file(
+      {
+        total: "-12.10",
+        lines: [line(1, 1, "21.00", "-10.00", "-12.10")],
+        split: [["21.00", "-10.00", "-2.10"]],
+      },
+      { to: meal },
+    );
+    backend.setFiledFigures(saleId, refund);
+
+    await expectRefused(
+      UNUSABLE,
+      {
+        total: "-5.50",
+        lines: [line(1, 0, "10.00", "-5.00", "-5.50")],
+        split: [["10.00", "-5.00", "-0.50"]],
+      },
+      { to: meal },
+    );
+  },
+);

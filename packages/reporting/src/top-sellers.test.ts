@@ -823,6 +823,52 @@ describe("computeTopSellers", () => {
     ]);
   });
 
+  it("returns a free dish once when two corrections name it", async () => {
+    const coffeeLine = randomUUID();
+    const invoice = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "0.00",
+      lines: [
+        {
+          id: coffeeLine,
+          vatRate: "10.00",
+          lineTotal: "0.00",
+          lineGross: "0.00",
+          name: coffeeName,
+          descriptions: coffeeText,
+          quantity: "1.000",
+        },
+      ],
+    });
+    for (const [invoiceNumber, minute] of [
+      [2, "01"],
+      [3, "02"],
+    ] as const) {
+      await seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: new Date(`2026-08-04T10:${minute}:00Z`).toISOString(),
+        total: "0.00",
+        correctsSaleId: invoice,
+        lines: [
+          {
+            vatRate: "10.00",
+            lineTotal: "0.00",
+            lineGross: "0.00",
+            name: coffeeName,
+            descriptions: coffeeText,
+            quantity: "-1.000",
+            correctsLineId: coffeeLine,
+          },
+        ],
+      });
+    }
+
+    expect(await run()).toEqual([
+      { name: coffeeName, quantity: "0.000", total: "0.00", variants: [] },
+    ]);
+  });
+
   it("returns a dish with a whole-invoice credit of a line that stored no gross", async () => {
     const line = randomUUID();
     const invoice = await seedSale(suite.db, venue, {
