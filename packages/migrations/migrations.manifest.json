@@ -18,6 +18,7 @@
       "daily_closes",
       "activity_log",
       "bill_payment_lines",
+      "invoice_corrections",
       "unpaid_departures",
       "order_portions",
       "sale_line_portions",

@@ -101,6 +101,11 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "money returned after the invoice; request identity and terminal outcomes held by its transition triggers",
   ),
   appendOnly(
+    "invoice_corrections",
+    "ledger",
+    "one cash leg of a till's invoice correction, so a repeated request returns its first answer; never corrected",
+  ),
+  appendOnly(
     "unpaid_departures",
     "ledger",
     "which bills a party left without paying, against which invoice, by whose authority; never corrected",
