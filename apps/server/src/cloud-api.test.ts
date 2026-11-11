@@ -47,7 +47,7 @@ it.each(["start", "complete", "revoke", "remote-access"] as const)(
       await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, manager.session, false));
       const connection = createCloudConnection(f.options);
       const effect = vi.spyOn(connection, action === "remote-access" ? "setRemoteAccess" : action);
-      const before = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
+      const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
       const saved = JSON.parse(before) as { requestId: string };
       const app = new Hono();
       mountCloudApi(
@@ -79,7 +79,7 @@ it.each(["start", "complete", "revoke", "remote-access"] as const)(
         error: { code: "management_session.proof_required", params: {} },
       });
       expect(effect).not.toHaveBeenCalled();
-      expect(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")).toBe(before);
+      expect(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")).toBe(before);
     } finally {
       await f.close();
     }
@@ -154,7 +154,7 @@ it.each(["complete", "revoke", "remote-access"] as const)(
         { db: suite.db, connection, managementOrigin: "https://venue.test", isPrimary: () => true },
         () => {},
       );
-      const before = await readFile(join(f.stateDir, "cloud-connection.json"), "utf8");
+      const before = await readFile(join(f.stateDir, "cloud/connection.json"), "utf8");
       const saved = JSON.parse(before) as { requestId: string };
       const response = await app.request(`/management-api/cloud/${action}`, {
         method: "POST",
@@ -179,7 +179,7 @@ it.each(["complete", "revoke", "remote-access"] as const)(
       expect(await response.json()).toEqual({
         error: { code: "management_session.proof_required", params: {} },
       });
-      expect(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")).toBe(before);
+      expect(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")).toBe(before);
     } finally {
       await f.close();
     }
