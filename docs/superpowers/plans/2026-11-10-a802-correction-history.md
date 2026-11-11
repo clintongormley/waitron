@@ -699,6 +699,19 @@ which also answers whether the cash handed back may differ from what was paid wh
 the total; slice 5, the till screen, the corrective paper (it prints the corrective's split, not
 sums of its lines) and the guide, with the owner's demo-seed choice (finding 4).
 
+**Slice 4 must also handle** (second read, 2026-11-11, findings 2 and 5):
+
+- **A preview filed twice can strand the last cent.** On a fixed invoice the writer checks a
+  refund's dish lines only by their totals including VAT, so a second copy of one preview carries
+  the base worked out for the first; the lines' VAT then adds up to more than the dish holds, and
+  the last cent or two is refused as `sale.correction_history_unusable` for good. The replay
+  record must stop one request filing twice, and two tills refunding the same fixed invoice can
+  still meet this unless the writer also checks the lines' base.
+- **The till words `sale.correction_not_admitted` per reason, not per code.** Today's words ("the
+  tax agency has not yet answered this invoice's VAT fix") fit the one reason a cancellation can
+  meet; the refund preview raises the same code for a refused filing, a cancelled or replaced
+  invoice, another box's invoice and more.
+
 **Settled.** The queued-invoice reading went to the owner as question 3 and was answered
 "allow" (the clearance, point 4): the one-line limit written there stands in place of this
 paragraph's earlier text.
