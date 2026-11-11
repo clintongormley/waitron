@@ -165,7 +165,7 @@ async function setupVenue(): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
           passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",

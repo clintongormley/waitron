@@ -158,7 +158,7 @@ async function setupLunch(): Promise<Lunch> {
         country: "ES",
         taxId: nextNif(),
         legalName: "Lunch Test SL",
-        name: "Sala principal",
+        name: "Main room",
         fiscalTerritory: "ES-common",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
@@ -172,7 +172,7 @@ async function setupLunch(): Promise<Lunch> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
