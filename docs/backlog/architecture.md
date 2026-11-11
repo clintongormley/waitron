@@ -6,21 +6,26 @@ their full text.
 ## A646 — a Modules page where the administrator switches optional modules on and sets them up
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
-  [Plan](../superpowers/plans/2026-11-07-a646-modules-page.md) written 2026-11-07 after Claude review and the watcher's 21:38 storage reconciliation. Build waits for A739 and a watcher scope read.
+  [Plan](../superpowers/plans/2026-11-07-a646-modules-page.md) written 2026-11-07 after Claude review and the watcher's 21:38 storage reconciliation. The watcher's scope read (2026-11-11) cut it to the module list and the card providers; lane D replans and builds.
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
   static mockups (removed from the repository on 2026-11-02). The
-  first independent build PR must repair retained disabled-module append-only protection before
-  any UI state controls; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
+  [switched-off modules' append-only protection](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked)
+  stays OPEN but no longer gates this page: no module that owns tables becomes switchable here
+  (watcher's scope read, 2026-11-11).
+  **Owner, 2026-11-11: Google sign-in leaves A646** ("Move google signin to the backlog, with the
+  intention of doing it with a single key via waitron, but this is definitely not a go live
+  requirement"); it is A1507 in [later.md](later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup).
+  The Google parts of the design below (an optional Google module, its credentials on this page,
+  the every-administrator check before switching it off) are withdrawn.
   The agreed revision uses one complete optional catalogue, initially Enabled; Add a module filters
   that same list to Disabled. Category is independent, and Card payments links to Card providers
   with All states. Row kebabs offer Configure plus Enable/Disable, with persistent red reasons
   when Disable is forbidden. Configure opens a modal and saves settings only; state changes need
-  separate confirmation and server checks. Google becomes an optional module; Stripe/SumUp remain Payments
+  separate confirmation and server checks. Stripe/SumUp remain Payments
   contributions. Runtime, credentials, payment history, migration-slot/H2 and first-repair limits
-  remain. Google disable protects every active administrator: the actor gives fresh non-Google
-  proof, and every other active administrator needs supported recorded password/passkey enrollment.
-  **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”. Google keeps its explicit default Off and credentials stay excluded.
-  **Watcher, 2026-11-07 21:38:** the later 4 November rationalisation wins: applied module state in shared settings; Google ID in settings.identity.googleClientId; only its secret sealed under identity.google. A646 owns one form and a descriptor inside identity, plus only the pending-operation record it needs. The older design's separate applied-state tables and sealed ID are superseded.
+  remain.
+  **Owner, 2026-11-06 23:03 (A1384 export answer, copied into Lane K queue):** an export from a box with a module off must load on a new box, and “that module starts on and empty”.
+  **Watcher, 2026-11-07 21:38:** the later 4 November rationalisation wins: applied module state in shared settings. The older design's separate applied-state tables and sealed ID are superseded.
 
   **What exists today**, read 2026-10-14, not tried on a box:
   - Google login is part of the identity package, not a module. Its OAuth client ID and secret come
@@ -41,9 +46,7 @@ their full text.
   1. A Modules page listing the optional modules, where the administrator switches each on or off
      and fills in its settings. The owner called it a "system section"; the dashboard has no System
      group today (its groups end with Settings), so where it sits is part of the design.
-  2. Google login becomes an optional module, its client ID and secret set on that page. The
-     Profile → Security row shows only when the module is on, and its "becomes available" sentence
-     goes.
+  2. (Withdrawn 2026-11-11: Google login as an optional module set on this page; now A1507.)
   3. SumUp and Stripe are set up from that page too. Card payments links to the list, filtered to
      card providers.
 

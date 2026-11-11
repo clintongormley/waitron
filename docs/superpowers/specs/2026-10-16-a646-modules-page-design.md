@@ -1,5 +1,7 @@
 # A646: configure optional modules without stopping service
 
+> **2026-11-11:** the Google parts of this design are withdrawn (owner: Google sign-in moves to the backlog as A1507, one Waitron-owned setup, not a go-live requirement). See [the A646 entry](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up).
+
 **2026-11-07 planning note:** the dated A646 decisions in [the backlog](../../backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up) supersede the historical pending-approval wording below; [the plan](../plans/2026-11-07-a646-modules-page.md) records the watcher's 21:38 answer applying the later shared-settings and Google storage decisions.
 
 

@@ -2304,7 +2304,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
   [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md); [plan](superpowers/plans/2026-11-07-a646-modules-page.md).
-  Build waits for A739; retained protection comes first. Google disable protects every active administrator.
+  Building in lane D: the configuration-export rule first, then the Modules list and the card providers.
+  Google sign-in is no longer part of it (owner, 2026-11-11): see A1507 under Later and parked.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 
 - **Printer, reader and device delete wording and tidying** (bundle of 2, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording-and-tidying)
@@ -2392,6 +2393,9 @@ _Formerly entries spread across the old sections._
 _Formerly the "Later and parked" paragraph under What's built._
 
 **Later and parked** (no owner decision pending; reopen when work reaches them).
+
+- **A1507. Google sign-in, built in, through one Waitron-owned Google setup.** Not a go-live
+  requirement (owner, 2026-11-11). [Detail](backlog/later.md#a1507-google-sign-in-built-in-through-one-waitron-owned-google-setup)
 [Detail](backlog/later.md#later-and-parked)
 
 ---
