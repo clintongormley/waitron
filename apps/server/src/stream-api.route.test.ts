@@ -254,6 +254,7 @@ describe("stream settings routes", () => {
       ["PUT", "/api/backup/stream"],
       ["POST", "/api/backup/stream/test"],
       ["DELETE", "/api/backup/stream"],
+      ["POST", "/api/backup/stream/restart"],
     ] as const) {
       const res = await app.request(path, { method });
       expect(res.status).toBe(401);
@@ -1079,6 +1080,126 @@ describe("stream settings routes", () => {
       } finally {
         await clearBucket();
       }
+    });
+  });
+
+  describe("starting the bucket copy again", () => {
+    const STOPPED: StreamStatus = { ...STREAMING, state: "off", reason: "supervisor_failed" };
+
+    async function storeBucketSettings(): Promise<void> {
+      await withTransaction(suite.db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: STREAM_PURPOSE,
+          value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
+        }),
+      );
+    }
+
+    it("refuses without a manager session", async () => {
+      const { app, reload } = harness();
+      const res = await app.request("/api/backup/stream/restart", { method: "POST" });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it("restarts a copy that stopped by itself and answers the new view", async () => {
+      await storeBucketSettings();
+      try {
+        let status: StreamStatus = STOPPED;
+        const reload = vi.fn(async () => {
+          status = STREAMING;
+        });
+        const { app } = harness({ stream: { reload, status: () => status } });
+        const cookie = await login(app);
+        const res = await app.request("/api/backup/stream/restart", {
+          method: "POST",
+          headers: { cookie },
+        });
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({ status: { state: "streaming", reason: null } });
+        expect(reload).toHaveBeenCalledOnce();
+      } finally {
+        await clearBucket();
+      }
+    });
+
+    it("is refused when no bucket copy is set up", async () => {
+      await clearBucket();
+      const reload = vi.fn(async () => {});
+      const { app } = harness({ stream: { reload, status: () => ({ state: "off" }) } });
+      const cookie = await login(app);
+      const res = await app.request("/api/backup/stream/restart", {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.stream_not_configured" } });
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it.each(["pointer_changed", "pointer_newer_term"])(
+      "will not start copying over another box's copy (%s)",
+      async (reason) => {
+        await storeBucketSettings();
+        try {
+          const reload = vi.fn(async () => {});
+          const { app } = harness({
+            stream: { reload, status: () => ({ ...STREAMING, state: "refused", reason }) },
+          });
+          const cookie = await login(app);
+          const res = await app.request("/api/backup/stream/restart", {
+            method: "POST",
+            headers: { cookie },
+          });
+          expect(res.status).toBe(409);
+          expect(await res.json()).toMatchObject({
+            error: { code: "backup.stream_held_by_another_box" },
+          });
+          expect(reload).not.toHaveBeenCalled();
+        } finally {
+          await clearBucket();
+        }
+      },
+    );
+
+    it("is refused on a node that is not the primary", async () => {
+      const reload = vi.fn(async () => {});
+      const { app } = harness({
+        isPrimary: () => false,
+        stream: { reload, status: () => STOPPED },
+      });
+      const cookie = await login(app);
+      const res = await app.request("/api/backup/stream/restart", {
+        method: "POST",
+        headers: { cookie },
+      });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it("is refused when this node stops being the primary while it waits its turn", async () => {
+      const queue = heldTurns();
+      let primary = true;
+      const reload = vi.fn(async () => {});
+      const { app } = harness({
+        isPrimary: () => primary,
+        turns: queue.turns,
+        stream: { reload, status: () => STOPPED },
+      });
+      const cookie = await login(app);
+      const pending = app.request("/api/backup/stream/restart", {
+        method: "POST",
+        headers: { cookie },
+      });
+      await Promise.race([queue.waiting, pending]);
+      primary = false;
+      await queue.release();
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
+      expect(reload).not.toHaveBeenCalled();
     });
   });
 });

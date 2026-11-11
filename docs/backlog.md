@@ -1672,7 +1672,7 @@ The owner accepts the [quiet-box backup read limits](backlog/box.md#quiet-box-ba
 - **A1089: bucket-copy host-configuration failures need guided diagnosis.** The settings refusal explains Change bucket, Test, Save and turn on, and Cancel. A configuration failure outside those fields still needs authenticated diagnosis and an applicable correction; preserve recovery keys and existing copies.
   [Remaining workflow](backlog/self-service-refusals.md#backup-stream).
 
-- **A1089: a stopped or refused bucket stream needs restart or ownership choices.** Distinguish an unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
+- **A1089: a refused bucket stream needs ownership choices, and a stopped one reason-specific guidance.** Start the copy again (A1089 B1) restarts a stopped copy with its saved settings. Distinguish an unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
 - **A1089: unusable archive settings still have no repair beyond choosing them again.**

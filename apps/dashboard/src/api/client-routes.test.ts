@@ -737,6 +737,14 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("starts the bucket copy again", async () => {
+    const view = { isPrimary: true, configured: true, bucket: null, status: { state: "opening" } };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(view));
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.restartStream()).resolves.toEqual(view);
+    expect(callsOf(fetchImpl)).toEqual([["/api/backup/stream/restart", "POST", undefined]]);
+  });
+
   it("lists card providers and readers, disconnects a provider, and reads and sets a device's reader", async () => {
     const providers = [{ id: "sumup", name: "SumUp", state: "connected" }];
     const readers = [{ id: "r-1", name: "Bar", providerId: "sumup", active: true, devices: 1 }];

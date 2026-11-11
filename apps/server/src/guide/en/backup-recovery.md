@@ -135,6 +135,10 @@ If the bucket copy says its settings could not be used safely, choose **Change b
 cannot diagnose a failure in the box's own configuration. Keep your recovery keys and existing
 copies if the refusal persists.
 
+If the bucket copy stopped, or could not start for a reason other than its settings, **Backups**
+shows **Start the copy again**, which starts it with the settings it already has. If it stops again, choose **Change bucket** and press
+**Test** to check the bucket.
+
 ## Make the new series {#series}
 
 If this browser kept invoice observations for the selected taxpayer and environment, the recovery

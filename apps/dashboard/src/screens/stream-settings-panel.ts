@@ -99,6 +99,24 @@ function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
 }
 
+const EXPLAINED_REFUSALS: ReadonlySet<string | null> = new Set([
+  "pointer_changed",
+  "pointer_newer_term",
+  "config_unsafe",
+]);
+const STOPPED_BY_ITSELF: ReadonlySet<string | null> = new Set([
+  "supervisor_failed",
+  "litestream_unavailable",
+]);
+
+/** Mirrors when `streamAlerts` (`apps/server/src/alert-sources.ts`) raises `backup.stream_stopped`. */
+function stoppedByItself(status: StreamStatusView): boolean {
+  if (!("reason" in status) || status.reason === "first_start_pending") return false;
+  if (!("lagMs" in status)) return true;
+  if (status.state === "refused") return !EXPLAINED_REFUSALS.has(status.reason);
+  return status.state === "off" && STOPPED_BY_ITSELF.has(status.reason);
+}
+
 function stateKey(status: StreamStatusView): StringKey {
   switch (status.state) {
     case "streaming":
@@ -446,6 +464,25 @@ export class StreamSettingsPanel extends LitElement {
     }
   }
 
+  async #restart(): Promise<void> {
+    if (this.busy) return;
+    this.#clearMessages();
+    this.busy = true;
+    const generation = this.#generation;
+    const current = () => this.isConnected && generation === this.#generation;
+    try {
+      const settings = await this.api.restartStream();
+      if (!current()) return;
+      this.settings = settings;
+      this.#trackShownForm(settings);
+      this.api.liveData.invalidate([{ type: "backup_status" }]);
+    } catch (error) {
+      if (current()) this.#fail(error);
+    } finally {
+      if (current()) this.busy = false;
+    }
+  }
+
   #startEdit(): void {
     // A new-bucket form a read replaced keeps its scope, whose baseline is not the stored bucket.
     this.#releaseForm();
@@ -521,6 +558,17 @@ export class StreamSettingsPanel extends LitElement {
         !s.configured || this.editing
           ? this.#renderForm(s.configured)
           : html`<div class="actions">
+              ${
+                stoppedByItself(s.status)
+                  ? html`<wt-button
+                      variant="primary"
+                      data-test="restart"
+                      ?disabled=${this.busy}
+                      @click=${() => void this.#restart()}
+                      >${t("stream.restart")}</wt-button
+                    >`
+                  : nothing
+              }
               <wt-button variant="secondary" data-test="change" @click=${() => this.#startEdit()}
                 >${t("stream.change")}</wt-button
               >

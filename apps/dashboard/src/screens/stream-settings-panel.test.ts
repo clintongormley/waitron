@@ -1121,3 +1121,123 @@ describe("A1089 unsafe bucket settings choices", () => {
     });
   }
 });
+
+describe("stream-settings-panel: Start the copy again", () => {
+  const STOPPED = withStatus({ ...STREAMING, state: "off", reason: "supervisor_failed" });
+
+  it.each([
+    ["en-GB", "Start the copy again"],
+    ["es-ES", "Volver a iniciar la copia"],
+  ])("is offered in %s when the copy stopped by itself", async (locale, label) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      const { el } = await mount(stubApi({}, STOPPED));
+      expect(text(el, "[data-test=restart]")).toBe(label);
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("is offered when the box could not start the copy", async () => {
+    const { el } = await mount(
+      stubApi({}, withStatus({ state: "off", reason: "start_failed", stateSince: "x" })),
+    );
+    expect(q(el, "[data-test=restart]")).not.toBeNull();
+  });
+
+  it.each<[string, StreamStatusView]>([
+    ["streaming", STREAMING],
+    ["another box writes the copy", { ...STREAMING, state: "refused", reason: "pointer_changed" }],
+    [
+      "the first start after a restore waits",
+      { state: "off", reason: "first_start_pending", stateSince: "x" },
+    ],
+    ["off with no reason", { state: "off" }],
+    [
+      "the copy has not started yet",
+      { ...STREAMING, state: "off", reason: null, generation: null },
+    ],
+    ["the copy was stopped", { ...STREAMING, state: "off", reason: "stopped" }],
+    ["the settings are unsafe", { ...STREAMING, state: "refused", reason: "config_unsafe" }],
+    [
+      "a newer box writes the copy",
+      { ...STREAMING, state: "refused", reason: "pointer_newer_term" },
+    ],
+  ])("is not offered when %s", async (_, status) => {
+    const { el } = await mount(stubApi({}, withStatus(status)));
+    expect(q(el, "[data-test=stream-status]")).not.toBeNull();
+    expect(q(el, "[data-test=restart]")).toBeNull();
+  });
+
+  it.each<[string, StreamStatusView]>([
+    ["the copy failed", { ...STREAMING, state: "off", reason: "supervisor_failed" }],
+    [
+      "the copying program is missing",
+      { ...STREAMING, state: "off", reason: "litestream_unavailable" },
+    ],
+    [
+      "the copy is refused for a reason with no alert of its own",
+      { ...STREAMING, state: "refused", reason: "unexplained" },
+    ],
+  ])("is offered when %s", async (_, status) => {
+    const { el } = await mount(stubApi({}, withStatus(status)));
+    expect(q(el, "[data-test=restart]")).not.toBeNull();
+  });
+
+  it("is not offered while the Change bucket form is open", async () => {
+    const { el } = await mount(stubApi({}, STOPPED));
+    expect(q(el, "[data-test=restart]")).not.toBeNull();
+    await press(el, "change");
+    expect(field(el, "bucket-region")).not.toBeNull();
+    expect(q(el, "[data-test=restart]")).toBeNull();
+  });
+
+  it("holds the button while its request is running, so a further tap sends nothing", async () => {
+    let finish!: (value: StreamSettingsView) => void;
+    const api = stubApi(
+      { restartStream: vi.fn(() => new Promise<StreamSettingsView>((r) => (finish = r))) },
+      STOPPED,
+    );
+    const { el } = await mount(api);
+    await press(el, "restart");
+    const button = q(el, "[data-test=restart]") as HTMLElement & { disabled: boolean };
+    expect(button.disabled).toBe(true);
+    await press(el, "restart");
+    await press(el, "restart");
+    expect(api.restartStream).toHaveBeenCalledOnce();
+    vi.mocked(api.getStreamSettings).mockResolvedValue(ON);
+    finish(ON);
+    await flush(el);
+    expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
+  });
+
+  it("starts the copy, shows the new state and tells the Backups screen", async () => {
+    const restartStream = vi.fn(() => {
+      vi.mocked(api.getStreamSettings).mockResolvedValue(ON);
+      return Promise.resolve(ON);
+    });
+    const api = stubApi({ restartStream }, STOPPED);
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    await press(el, "restart");
+    expect(restartStream).toHaveBeenCalledOnce();
+    expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
+    expect(q(el, "[data-test=restart]")).toBeNull();
+    expect(invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
+  });
+
+  it("shows why the box refused to start the copy", async () => {
+    const restartStream = vi
+      .fn()
+      .mockRejectedValue({ code: "backup.stream_held_by_another_box", params: {} });
+    const api = stubApi({ restartStream }, STOPPED);
+    const invalidate = vi.spyOn(api.liveData, "invalidate");
+    const { el } = await mount(api);
+    await press(el, "restart");
+    expect(text(el, "[data-test=refusal]")).toBe(codeMessage("backup.stream_held_by_another_box"));
+    expect(codeMessage("backup.stream_held_by_another_box")).toMatch(/^Another box/);
+    expect(codeMessage("backup.stream_held_by_another_box")).not.toMatch(/support/i);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+});

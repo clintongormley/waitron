@@ -1133,6 +1133,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box is still applying an earlier change. Wait a moment and try again.",
     es: "El equipo todavía está aplicando un cambio anterior. Espera un momento y vuelve a intentarlo.",
   },
+  "backup.stream_held_by_another_box": {
+    en: "Another box was found writing this venue's copy to the same bucket, so this box will not copy over it. Two boxes must never sell for one venue.",
+    es: "Se ha visto a otro equipo escribiendo la copia de este local en el mismo bucket, así que este equipo no copiará encima. Nunca deben vender dos equipos para un mismo local.",
+  },
   "backup.stream_config_unsafe": {
     en: "The bucket copy cannot use one of these settings as written.",
     es: "La copia en el bucket no puede usar uno de estos ajustes tal como está escrito.",
