@@ -513,11 +513,11 @@ Left open by A1018 Slice 4, each checked by reading the code, not run:
 
 ## A1342: return a stopped box's records before reset
 
-A differing original or payment fact stops the return and leaves reset unconfirmed. PR2 still
-needs exact-clash acceptance and the remaining hand-over refusals. Do not use a return-clash
-filing case: a record has one case slot, which its later AEAT refusal needs. The
-real signed-return/outbox probe reproduced a rejected invoice whose only case was a resolved
-return clash and whose correction answered `fiscal.remedy_invalid`.
+Invoice, chain-position and correction clashes still stop the return; their acceptance rule
+awaits the owner's answer. They warn and never prevent reset. Eligible payment clashes can be
+inspected and specifically accepted through the current main's internal API, with no screen yet.
+The stopped box must be switched off and on to retry; later clashing batches need separate decisions.
+Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain open.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
 Completed and pending tender refunds travel with their payments. Pending card refunds carry
@@ -976,7 +976,19 @@ using existing source metadata and dead registrations for absent devices. This s
 The watcher’s 2026-11-10 15:40 note records the owner’s “Approve all three (Recommended)” for
 bounded batches of at most 100 and exact-clash acceptance. The owner then said “Split it into two
 PRs” (watcher 19:30). The watcher cleared ordinary return/correction as PR1 at 19:45, with clashes
-stopped and no return filing case or acceptance. PR2’s case-coexistence decision remains open.
+stopped and no return filing case or acceptance.
+
+**2026-11-11:** The owner's 10 November 21:41 choice “1” puts exact-clash acceptance in a separate
+signed handover record, checked against signed return evidence. The 19:30 split says “no new
+acceptance rule in fiscal-verifactu”; `filing-cases.ts` remains untouched. The watcher cleared the
+payment-only [PR2 plan](../superpowers/plans/2026-11-11-a1342-clash-acceptance.md) at 16:59 on
+11 November. Node-local signed evidence and decisions drive retry; venue activity history retains
+who accepted which clash across backup and handover, without deciding product behaviour.
+
+The owner said at 16:25 on 11 November, recorded by the watcher in Lane J's `questions.md`:
+“i don't think we should refuse, just warn. It may be impossible to transfer the data for some
+reason, we shouldn't block them from reusing the box”. Reset therefore remains available, with a
+warning that it deletes venue data and that an unfinished return is not confirmed.
 The reviewed plan is [return originals before reset](../superpowers/plans/2026-11-09-a1342-return-records.md).
 
 **A mirror serves no dashboard (owner, 2026-10-26; scope narrowed by the watcher, 2026-11-08).**

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import type { ReturnDiscrepancy } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import {
   COVERAGE_REFUSAL,
@@ -116,11 +118,93 @@ function held(tx: Transaction, table: string, id: ReturnRow[string], key = "id")
     where ${sql.identifier(key)} = ${id}`)[0];
 }
 
+export async function inspectReturnedPayments(
+  tx: Transaction,
+  sourceNodeId: string,
+  returned: ReturnedOriginals,
+): Promise<ReturnDiscrepancy[]> {
+  const matches = (table: string, row: ReturnRow) => {
+    const ownRow = held(tx, table, row.id);
+    const pending = table === "tender_refunds" && row.state === "pending";
+    return (
+      ownRow !== undefined &&
+      canonicalize(normalized(table, ownRow, pending)) ===
+        canonicalize(normalized(table, row, pending))
+    );
+  };
+  const outstanding = (
+    [
+      ["registros_facturacion", returned.records],
+      ["sales", returned.sales],
+      ["tenders", returned.tenders],
+      ["tender_refunds", returned.refunds],
+      ["payments", returned.captures],
+      ["sale_settlements", returned.settlements],
+      ["sale_voids", returned.voids],
+      ["sale_substitutions", returned.substitutions],
+    ] as const
+  ).flatMap(([table, rows]) =>
+    rows.filter((row) => !matches(table, row)).map((row) => ({ table, id: row.id! })),
+  );
+  const discrepancies: ReturnDiscrepancy[] = [];
+  for (const sale of returned.sales) {
+    const forSale = (rows: ReturnRow[]) =>
+      rows
+        .filter((row) => row.sale_id === sale.id)
+        .sort((a, b) => (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0));
+    const incoming = {
+      tenders: forSale(returned.tenders).map((row) => normalized("tenders", row)),
+      settlements: forSale(returned.settlements),
+      refunds: forSale(returned.refunds),
+    };
+    const own = {
+      tenders: tx
+        .all<ReturnRow>(sql`select * from tenders where sale_id = ${sale.id} order by id`)
+        .map((row) => normalized("tenders", row)),
+      settlements: tx.all<ReturnRow>(
+        sql`select * from sale_settlements where sale_id = ${sale.id} order by id`,
+      ),
+      refunds: tx.all<ReturnRow>(
+        sql`select * from tender_refunds where sale_id = ${sale.id} order by id`,
+      ),
+    };
+    const records = forSale(returned.records);
+    const originalsMatch =
+      matches("sales", sale) &&
+      records.length > 0 &&
+      records.every((row) => matches("registros_facturacion", row));
+    if (canonicalize(incoming) === canonicalize(own)) continue;
+    const original = { sale: normalized("sales", sale), records };
+    const eligible =
+      originalsMatch &&
+      records.every(
+        (row) => row.node_id === sourceNodeId && matches("registros_facturacion", row),
+      ) &&
+      !forSale(returned.captures).length &&
+      !returned.orders.some((row) => row.id === sale.working_order_id) &&
+      incoming.refunds.every((row) => row.state === "completed") &&
+      own.refunds.every((row) => row.state === "completed");
+    discrepancies.push({
+      saleId: String(sale.id),
+      eligible,
+      outstanding,
+      original,
+      incoming,
+      held: own,
+      fingerprint: createHash("sha256")
+        .update(canonicalize({ original, incoming, held: own }))
+        .digest("hex"),
+    });
+  }
+  return discrepancies;
+}
+
 export async function receiveReturnedOriginals(
   tx: Transaction,
   sourceNodeId: string,
   returned: ReturnedOriginals,
   now: Date,
+  accepted: readonly string[] = [],
 ): Promise<{ complete: boolean }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
@@ -201,10 +285,16 @@ export async function receiveReturnedOriginals(
       created_at: now.toISOString(),
     });
   }
+  const acceptedSales = new Set(
+    (accepted.length ? await inspectReturnedPayments(tx, sourceNodeId, returned) : [])
+      .filter((clash) => clash.eligible && accepted.includes(clash.fingerprint))
+      .map((clash) => clash.saleId),
+  );
   let missing = false;
   for (const sale of orderedSales(returned.sales.filter((row) => needed.has(row.id)))) {
     if (!held(tx, "sales", sale.id))
       await insertRow(tx, "sales", { ...sale, working_order_id: null });
+    if (acceptedSales.has(String(sale.id))) continue;
     const incomingRefunds = returned.refunds.filter((row) => row.sale_id === sale.id);
     let refundClash = false;
     for (const tenderId of new Set(incomingRefunds.map((row) => row.tender_id))) {
@@ -364,6 +454,11 @@ export async function receiveReturnedOriginals(
     ["sale_substitutions", returned.substitutions],
   ] as const) {
     for (const row of rows) {
+      if (
+        ["tenders", "tender_refunds", "sale_settlements"].includes(table) &&
+        acceptedSales.has(String(row.sale_id))
+      )
+        continue;
       const own = held(tx, table, row.id);
       if (!own) {
         missing = true;

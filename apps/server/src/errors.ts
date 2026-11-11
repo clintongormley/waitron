@@ -25,6 +25,7 @@ import type { UnservedDish } from "./finish-party-service.js";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "handover.return_refused": { reason: string };
+    "handover.return_clash_not_found": { clashId: string };
     "attendance.state_changed": Record<string, never>;
     "sale.department_missing": Record<string, never>;
     "department.operation_description_required": { departmentId: string | null };

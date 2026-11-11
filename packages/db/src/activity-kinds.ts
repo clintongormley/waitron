@@ -10,6 +10,13 @@
  * from this log. State each kind's additional privacy rules beside its data declaration.
  */
 export interface ActivityKindData {
+  /** Clash identifiers only; the signed decision, not this history, holds the reason. */
+  readonly "handover.return_clash_accepted": {
+    readonly clashId: string;
+    readonly sourceNodeId: string;
+    readonly module: string;
+  };
+
   /** Who saved which document and its new revision; never a document value. */
   readonly "settings.saved": { readonly revision: number };
   /** Who removed a never-joined standby from the membership chart, at which term. */
@@ -29,6 +36,7 @@ export interface ActivityKindRule {
   readonly subject: string;
 }
 export const ACTIVITY_KINDS = {
+  "handover.return_clash_accepted": { subject: "node" },
   "settings.saved": { subject: "settings" },
   "membership.node_removed": { subject: "node" },
   "membership.node_cleared": { subject: "node" },

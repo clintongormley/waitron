@@ -7,7 +7,7 @@ import { mountRecordRemedies } from "@waitron/fiscal-verifactu/src/record-remedy
 import { steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   type Database,
   tenders,
@@ -48,7 +48,11 @@ import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { computeDailyClose, computeVatReturn, mapModelo303 } from "@waitron/reporting";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { readRefundableTenders } from "./tender-refund-balance.js";
-import { formerMainForReturn, runReturnRecordsPass } from "./return-records.js";
+import {
+  formerMainForReturn,
+  runReturnRecordsPass,
+  startReturnRecordsDuty,
+} from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
 
 const old = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -167,6 +171,50 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
   });
   expect(await send()).toBe("clash");
   expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
+  registerModulePermissions(FISCAL_PERMISSIONS);
+  const token = await withTransaction(current.db, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Administrator", role: "admin" })
+      .returning();
+    const session = await startManagementSession(tx, { personId: person!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
+  });
+  const listed = await app.request("/management-api/return-clashes", {
+    headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+  });
+  expect(listed.status).toBe(200);
+  const listing = (await listed.json()) as { clashes: { clashId: string; eligible: boolean }[] };
+  expect(listing.clashes).toHaveLength(1);
+  expect(listing.clashes[0]!.eligible).toBe(true);
+  const accept = (clashId: string, actionKey: string) =>
+    app.request(`/management-api/return-clashes/${clashId}/accept`, {
+      method: "POST",
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ actionKey, reason: "Keep the main's payment facts" }),
+    });
+  const acceptedClash = await accept(listing.clashes[0]!.clashId, "payment-clash");
+  expect(acceptedClash.status, await acceptedClash.clone().text()).toBe(200);
+  const restarted = startReturnRecordsDuty({
+    db: old.db,
+    node: old.node,
+    ring,
+    nodeId: source.nodeId,
+    modules,
+    log: () => {},
+    fetch: async (url, init) => app.request(String(url), init),
+  });
+  try {
+    await vi.waitFor(() => expect(restarted.state()).toBe("confirmed"));
+  } finally {
+    await restarted.stop();
+  }
+  expect(await send()).toBe("confirmed");
+  expect(await withTransaction(current.db, listFilingCases)).toEqual([]);
+  expect(
+    current.db.all<{ amount: number }>(sql`select amount from tenders where id = 'late-payment'`),
+  ).toEqual([{ amount: 300 }]);
   const aeat = createFakeAeat({ serverNow: now, tiempoEsperaInicial: 60 });
   aeat.reject(`${identity!.nif}|Source/1|20-07-2026`, 1161, "Wrong detail");
   const filed = await drain(
@@ -184,18 +232,26 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
 
   const [filingCase] = await withTransaction(current.db, listFilingCases);
   expect(filingCase).toMatchObject({ cause: "fiscal.registro_rechazado", status: "open" });
-  expect(await send()).toBe("clash");
-  expect(await withTransaction(current.db, listFilingCases)).toEqual([filingCase]);
-  registerModulePermissions(FISCAL_PERMISSIONS);
-  const token = await withTransaction(current.db, async (tx) => {
-    const [person] = await tx
-      .insert(persons)
-      .values({ displayName: "Administrator", role: "admin" })
-      .returning();
-    const session = await startManagementSession(tx, { personId: person!.id });
-    await setFreshManagementSignIn(tx, session.token);
-    return session.token;
+  await current.db.insert(tenders).values({
+    id: "later-main-tip",
+    saleId,
+    method: "cash",
+    amount: 1,
+    tipAmount: 1,
+    settledAt: now.toISOString(),
   });
+  expect(await send()).toBe("clash");
+  const currentListing = (await (
+    await app.request("/management-api/return-clashes", {
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+    })
+  ).json()) as { clashes: { clashId: string; eligible: boolean; accepted: boolean }[] };
+  const changedClash = currentListing.clashes.find((clash) => clash.eligible && !clash.accepted)!;
+  expect(changedClash).toBeDefined();
+  expect(changedClash.clashId).not.toBe(listing.clashes[0]!.clashId);
+  expect((await accept(changedClash.clashId, "payment-after-rejection")).status).toBe(200);
+  expect(await send()).toBe("confirmed");
+  expect(await withTransaction(current.db, listFilingCases)).toEqual([filingCase]);
   const remedies = new Hono();
   mountRecordRemedies(
     remedies,
@@ -234,7 +290,7 @@ it("returns a real fiscal tail between isolated boxes and files it through the r
       status: "resolved",
     }),
   ]);
-  expect(await send()).toBe("clash");
+  expect(await send()).toBe("confirmed");
   expect(await withTransaction(current.db, listFilingCases)).toEqual(settled);
   expect(
     current.db.all<ReturnRow>(

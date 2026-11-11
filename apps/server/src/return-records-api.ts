@@ -1,13 +1,16 @@
 import type { Hono } from "hono";
-import { readNodeMembership, withTransaction } from "@waitron/db";
-import { verifyEnvelope } from "@waitron/handover";
+import { readNodeMembership, withNodeTransaction, withTransaction } from "@waitron/db";
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
-import { readPinnedPrimaryKey } from "@waitron/node-db";
 import { createErrorBoundary, readJsonBody, type Logger } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
-import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
-import { assertHeldDocumentReadable, assertHeldDocumentTrusted } from "./membership-trust.js";
-import { returnDigest, returnVenue, type ReturnRecordsDeps } from "./return-records.js";
+import { signAsThisBox } from "./handover-signing.js";
+import { returnDigest, type ReturnRecordsDeps } from "./return-records.js";
+import {
+  acceptedReturnFingerprints,
+  checkedReturn,
+  mountReturnClashAcceptance,
+  refuseReturn,
+  retainReturnClashes,
+} from "./return-clash-acceptance.js";
 import "./errors.js";
 
 export function mountReturnRecordsApi(
@@ -27,63 +30,36 @@ export function mountReturnRecordsApi(
     },
     "return-records.failed",
   );
-  const refuse = (reason: string): never => {
-    throw new AppError("handover.return_refused", { reason });
-  };
+  mountReturnClashAcceptance(app, deps, log);
   app.post("/api/node/return-records", (c) =>
     run(c, log, async () => {
       const raw = await readJsonBody<unknown>(c);
-      const chart = await readNodeMembership(deps.db);
-      await assertHeldDocumentTrusted(deps, chart);
-      assertHeldDocumentReadable(chart);
-      const verified = verifyEnvelope<Record<string, CanonicalValue>>(
-        raw,
-        "return-batch",
-        await peerKeyOf(deps, chart),
-      );
-      if (!verified.valid) return refuse("signature");
-      const body = verified.body;
-      const pinned = await readPinnedPrimaryKey(deps.node, deps.nodeId);
-      if (
-        pinned?.primaryNodeId !== verified.signerNodeId ||
-        body.sourceNodeId !== verified.signerNodeId ||
-        body.destinationNodeId !== deps.nodeId ||
-        chart?.body.nodes.find((row) => row.standing === "serving-primary")?.nodeId !==
-          deps.nodeId ||
-        !chart.body.nodes.some(
-          (row) => row.nodeId === verified.signerNodeId && row.standing !== "evicted",
-        ) ||
-        chart.body.revoked?.includes(verified.signerNodeId) ||
-        canonicalize(body.venue!) !== canonicalize(await returnVenue(deps))
-      )
-        return refuse("binding");
-      if (
-        body.payload === undefined ||
-        typeof body.inventory !== "string" ||
-        !/^[a-f0-9]{64}$/.test(body.inventory) ||
-        typeof body.nonce !== "string" ||
-        body.nonce.length > 64 ||
-        typeof body.index !== "number" ||
-        !Number.isSafeInteger(body.index) ||
-        body.index < 0 ||
-        typeof body.count !== "number" ||
-        !Number.isSafeInteger(body.count) ||
-        body.count <= body.index ||
-        Buffer.byteLength(JSON.stringify(body.payload)) > 256 * 1024
-      )
-        return refuse("batch");
-      const seat = deps.modules.find((module) => module.name === body.module)?.handover
-        ?.returnRecords;
-      if (!seat || body.payload === undefined) return refuse("module");
-      const accounted = await withTransaction(deps.db, async (tx) => {
-        deps.requireWritable();
-        const held = await readNodeMembership(tx);
-        if (
-          canonicalize(held as unknown as CanonicalValue) !==
-          canonicalize(chart as unknown as CanonicalValue)
-        )
-          return refuse("membership changed");
-        return seat.receive(tx, verified.signerNodeId, body.payload!, deps.now?.() ?? new Date());
+      const { body, seat, chart, source } = await checkedReturn(deps, raw);
+      const accounted = await withNodeTransaction(deps.node, async (node) => {
+        const result = await withTransaction(deps.db, async (tx) => {
+          deps.requireWritable();
+          const held = await readNodeMembership(tx);
+          if (
+            canonicalize(held as unknown as CanonicalValue) !==
+            canonicalize(chart as unknown as CanonicalValue)
+          )
+            return refuseReturn("membership changed");
+          const accepted = await acceptedReturnFingerprints(deps, body, tx);
+          const complete = await seat.receive(
+            tx,
+            source,
+            body.payload!,
+            deps.now?.() ?? new Date(),
+            accepted,
+          );
+          return {
+            complete,
+            clashes: complete ? [] : ((await seat.inspect?.(tx, source, body.payload!)) ?? []),
+          };
+        });
+        // Venue facts commit first; an unanswered batch is resent if retaining its evidence fails.
+        await retainReturnClashes(deps, node, raw, body, result.clashes);
+        return result.complete;
       });
       deps.wake();
       const digest = returnDigest({ module: body.module!, payload: body.payload! });

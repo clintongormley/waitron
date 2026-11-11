@@ -7,10 +7,13 @@ import {
   type ActivitySubjectKind,
 } from "./activity-kinds.js";
 import type { Database, Transaction } from "./client.js";
+import { newId } from "./schema/columns.js";
 import { activityLog } from "./schema/activity-log.js";
 import { persons } from "./schema/identity/persons.js";
 
 export interface ActivityInput<K extends ActivityKind> {
+  /** An explicit id identifies one immutable event across retries. */
+  readonly id?: string;
   readonly kind: K;
   readonly subjectId: string;
   /** The person who acted; null only when no person acted. */
@@ -28,19 +31,26 @@ export async function recordActivity<K extends ActivityKind>(
   tx: Transaction,
   entry: ActivityInput<K>,
 ): Promise<RecordedActivity> {
-  const [row] = await tx
-    .insert(activityLog)
-    .values({
-      kind: entry.kind,
-      subjectKind: ACTIVITY_KINDS[entry.kind].subject,
-      subjectId: entry.subjectId,
-      personId: entry.personId,
-      deviceId: entry.deviceId ?? null,
-      data: entry.data,
-      at: entry.at ?? new Date(),
-    })
-    .returning({ id: activityLog.id, at: activityLog.at });
-  return row!;
+  const id = entry.id ?? newId();
+  const insert = tx.insert(activityLog).values({
+    id,
+    kind: entry.kind,
+    subjectKind: ACTIVITY_KINDS[entry.kind].subject,
+    subjectId: entry.subjectId,
+    personId: entry.personId,
+    deviceId: entry.deviceId ?? null,
+    data: entry.data,
+    at: entry.at ?? new Date(),
+  });
+  const write =
+    entry.id === undefined ? insert : insert.onConflictDoNothing({ target: activityLog.id });
+  const [row] = await write.returning({ id: activityLog.id, at: activityLog.at });
+  if (row) return row;
+  const [original] = await tx
+    .select({ id: activityLog.id, at: activityLog.at })
+    .from(activityLog)
+    .where(eq(activityLog.id, id));
+  return original!;
 }
 
 export type ActivityEntry = {

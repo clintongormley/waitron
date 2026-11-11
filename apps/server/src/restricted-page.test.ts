@@ -1,3 +1,4 @@
+import { escapeHtml } from "./html-page.js";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -353,11 +354,12 @@ it.each(["waiting", "sending", "needs-attention", "clock", "clash", "confirmed"]
     await handOver(await seedSuccessor("Main box"));
     const response = await request("en-GB", suite.db, state);
     const html = await response.text();
-    if (state === "confirmed") {
+    if (state === "confirmed" || state === "clash") {
       expect(html).toContain(
         "Resetting this box deletes its venue data, including sale lines and local backups",
       );
       expect(html).not.toContain("You can reset this box.");
+      if (state === "clash") expect(html).not.toContain("Do not reset this box.");
     } else {
       expect(html).toContain("Do not reset this box.");
       expect(html).not.toContain("You can reset this box.");
@@ -382,4 +384,20 @@ it("explains reset data loss in Spanish after confirmation", async () => {
     "Restablecer este equipo borra sus datos del local, incluidas las líneas de venta y las copias de seguridad locales",
   );
   expect(html).not.toContain("Puedes restablecer este equipo");
+});
+
+it("distinguishes accepted payment differences from imported facts in both languages", async () => {
+  await handOver(await seedSuccessor("Main box"));
+  for (const language of ["en-GB", "es-ES"] as const) {
+    const clash = await (await request(language, suite.db, "clash")).text();
+    const confirmed = await (await request(language, suite.db, "confirmed")).text();
+    expect(clash).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].clash));
+    expect(confirmed).toContain(escapeHtml(RESTRICTED_RETURN_WORDS[language].confirmed));
+    expect(RESTRICTED_RETURN_WORDS[language].clash).toContain(
+      language === "en-GB" ? "specifically accepted" : "aceptadas expresamente",
+    );
+    expect(RESTRICTED_RETURN_WORDS[language].confirmed).toContain(
+      language === "en-GB" ? "kept its own payment facts" : "conservado sus propios datos de pago",
+    );
+  }
 });

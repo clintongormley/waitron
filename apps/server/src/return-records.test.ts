@@ -1,8 +1,24 @@
+import * as handover from "@waitron/handover";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { openBackupQuery } from "@waitron/store";
+import * as nodeDatabase from "@waitron/node-db";
+import { dirname, join } from "node:path";
+import { persons, registerModulePermissions, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { requireManagementChangeFromOwnPage } from "./own-page.js";
+import { eq, sql } from "drizzle-orm";
 import * as loop from "./loop.js";
 import * as database from "@waitron/db";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  openVenueDatabase,
+  stampDeployment,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
@@ -40,10 +56,22 @@ const modules: WaitronModule[] = [
       summarise: async () => null,
       returnRecords: {
         read: async () => ["first", "second"],
-        receive: async (_tx, _source, batch) => {
+        receive: async (_tx, _source, batch, _now, _accepted) => {
           received.push(batch);
-          return accounted;
+          return accounted || (_accepted ?? []).includes(returnDigest(batch));
         },
+        acceptPermission: "sample.accept",
+        inspect: async (_tx, _source, batch) => [
+          {
+            saleId: String(batch),
+            fingerprint: returnDigest(batch),
+            eligible: true,
+            outstanding: [batch],
+            original: { invoice: String(batch) },
+            incoming: batch,
+            held: "held",
+          },
+        ],
       },
     },
   },
@@ -83,20 +111,31 @@ beforeEach(async () => {
   });
 });
 
-function destination(requireWritable = () => {}) {
+function destination(
+  requireWritable = () => {},
+  handles: Pick<database.VenueDatabase, "node"> & { db: database.Database } = suite,
+  log: Logger = () => {},
+) {
   const app = new Hono();
+  app.use(
+    "*",
+    requireManagementChangeFromOwnPage(
+      async () => false,
+      () => {},
+    ),
+  );
   mountReturnRecordsApi(
     app,
     {
-      db: suite.db,
-      node: suite.node,
+      db: handles.db,
+      node: handles.node,
       ring,
       nodeId: receiver,
       modules,
       requireWritable,
       wake: () => {},
     },
-    () => {},
+    log,
   );
   return app;
 }
@@ -455,5 +494,335 @@ it("ends the duty after a signed clash without scheduling another receiver pass"
   } finally {
     await duty.stop();
     pause.mockRestore();
+  }
+});
+
+async function acceptanceSession(role: "admin" | "staff" = "admin", fresh = true) {
+  registerModulePermissions([{ permission: "sample.accept", grantedFrom: "admin" }]);
+  return database.withTransaction(suite.db, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: `Operator ${role}`, role })
+      .returning();
+    const session = await startManagementSession(tx, { personId: person!.id });
+    await setFreshManagementSignIn(tx, session.token, fresh);
+    return { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, personId: person!.id };
+  });
+}
+
+it("accepts two signed clashing batches separately across restarted duties and replays the original decision", async () => {
+  accounted = false;
+  const session = await acceptanceSession();
+  const app = destination();
+  expect((await app.request("/management-api/return-clashes")).status).toBe(401);
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+  let firstDecision: unknown;
+  const clashIds: string[] = [];
+  for (const index of [0, 1]) {
+    const restarted = destination();
+    const listing = await restarted.request("/management-api/return-clashes", {
+      headers: { cookie: session.cookie },
+    });
+    expect(listing.status).toBe(200);
+    const { clashes } = (await listing.json()) as {
+      clashes: { clashId: string; index: number; count: number; accepted: boolean }[];
+    };
+    const clash = clashes.find((row) => !row.accepted)!;
+    expect(clash).toMatchObject({ index, count: 2 });
+    clashIds.push(clash.clashId);
+    const request = {
+      method: "POST",
+      headers: { cookie: session.cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        actionKey: `accept-${index}`,
+        reason: "Keep the main's payment facts",
+      }),
+    };
+    const path = `/management-api/return-clashes/${clash.clashId}/accept`;
+    const response = await restarted.request(path, request);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const decision = await response.json();
+    const directory = dirname(suite.node.all<{ file: string }>(sql`pragma database_list`)[0]!.file);
+    const reopened = await openVenueDatabase(directory, { exclusive: false });
+    try {
+      expect(
+        await (
+          await destination(() => {}, { db: reopened.venue, node: reopened.node }).request(
+            path,
+            request,
+          )
+        ).json(),
+      ).toEqual(decision);
+    } finally {
+      await reopened.close();
+    }
+    if (index === 0) firstDecision = decision;
+    const mismatch = await restarted.request(path, {
+      ...request,
+      body: JSON.stringify({ actionKey: `accept-${index}`, reason: "Changed reason" }),
+    });
+    expect(mismatch.status).toBe(409);
+    expect(await send(async (url, init) => destination().request(String(url), init))).toBe(
+      index === 0 ? "clash" : "confirmed",
+    );
+  }
+  expect(firstDecision).toMatchObject({
+    decision: {
+      purpose: "waitron.handover.return-clash-acceptance.v1",
+      body: { personId: session.personId },
+    },
+  });
+  expect(
+    suite.node.all<{ n: number }>(
+      sql`select count(*) n from node_handover_events where kind = 'return-clash-evidence'`,
+    ),
+  ).toEqual([{ n: 2 }]);
+  expect(
+    suite.node.all<{ n: number }>(
+      sql`select count(*) n from node_handover_events where kind = 'return-clash-acceptance'`,
+    ),
+  ).toEqual([{ n: 2 }]);
+  expect(
+    suite.db
+      .all<{ person_id: string; data: string }>(
+        sql`select person_id, data from activity_log where kind = 'handover.return_clash_accepted'`,
+      )
+      .map((row) => ({ personId: row.person_id, data: JSON.parse(row.data) as unknown })),
+  ).toEqual(
+    clashIds.map((clashId) => ({
+      personId: session.personId,
+      data: { clashId, sourceNodeId: source, module: "sample" },
+    })),
+  );
+
+  const directory = await mkdtemp(join(tmpdir(), "a1342-activity-copy-"));
+  try {
+    const file = join(directory, "venue.db");
+    await suite.db.archiveTo(file);
+    const copy = await openBackupQuery(file);
+    try {
+      const archived = [];
+      for await (const row of copy.query.rows(
+        "select person_id, data from activity_log where kind = 'handover.return_clash_accepted' order by rowid",
+      ))
+        archived.push({ personId: row.person_id, data: JSON.parse(String(row.data)) as unknown });
+      expect(archived).toEqual(
+        clashIds.map((clashId) => ({
+          personId: session.personId,
+          data: { clashId, sourceNodeId: source, module: "sample" },
+        })),
+      );
+    } finally {
+      await copy.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+  for (const kind of ["return-clash-evidence", "return-clash-acceptance"]) {
+    const [event] = await suite.node
+      .select()
+      .from(nodeDatabase.nodeHandoverEvents)
+      .where(eq(nodeDatabase.nodeHandoverEvents.kind, kind));
+    const corrupt = JSON.parse(event!.envelope!) as Record<string, unknown>;
+    corrupt.signature = Buffer.alloc(64).toString("base64");
+    await suite.node
+      .update(nodeDatabase.nodeHandoverEvents)
+      .set({ envelope: JSON.stringify(corrupt) })
+      .where(eq(nodeDatabase.nodeHandoverEvents.eventId, event!.eventId));
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("needs-attention");
+    await suite.node
+      .update(nodeDatabase.nodeHandoverEvents)
+      .set({ envelope: event!.envelope })
+      .where(eq(nodeDatabase.nodeHandoverEvents.eventId, event!.eventId));
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("confirmed");
+  }
+});
+
+it.each(["permission", "fresh sign-in", "own page", "writable primary"])(
+  "wires the acceptance route's %s gate before a clash lookup",
+  async (gate) => {
+    const session = await acceptanceSession(
+      gate === "permission" ? "staff" : "admin",
+      gate !== "fresh sign-in",
+    );
+    const response = await destination(() => {
+      if (gate === "writable primary") throw new AppError("node.read_only", {});
+    }).request("/management-api/return-clashes/not-found/accept", {
+      method: "POST",
+      headers: {
+        cookie: session.cookie,
+        "content-type": "application/json",
+        ...(gate === "own page" ? { origin: "https://foreign.test" } : {}),
+      },
+      body: JSON.stringify({ actionKey: "gate", reason: "Keep facts" }),
+    });
+    const expected = {
+      permission: "authorization.not_permitted",
+      "fresh sign-in": "management_session.proof_required",
+      "own page": "management.origin_refused",
+      "writable primary": "node.read_only",
+    }[gate];
+    expect(response.status).toBe(
+      gate === "permission" || gate === "own page" ? 403 : gate === "fresh sign-in" ? 401 : 409,
+    );
+    expect(await response.json()).toMatchObject({ error: { code: expected } });
+  },
+);
+
+it("resends after evidence persistence fails and retries a failed decision append without false confirmation", async () => {
+  accounted = false;
+  const app = destination();
+  const append = vi.spyOn(nodeDatabase, "appendHandoverEventTx");
+  try {
+    append.mockRejectedValueOnce(new Error("evidence disk failure"));
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("needs-attention");
+    expect(suite.node.all<{ n: number }>(sql`select count(*) n from node_handover_events`)).toEqual(
+      [{ n: 0 }],
+    );
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+    const session = await acceptanceSession();
+    const { clashes } = (await (
+      await app.request("/management-api/return-clashes", { headers: { cookie: session.cookie } })
+    ).json()) as { clashes: { clashId: string }[] };
+    const path = `/management-api/return-clashes/${clashes[0]!.clashId}/accept`;
+    const request = {
+      method: "POST",
+      headers: { cookie: session.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ actionKey: "retry-disk", reason: "Keep held facts" }),
+    };
+    append.mockRejectedValueOnce(new Error("decision disk failure"));
+    expect((await app.request(path, request)).status).toBe(500);
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+    expect((await app.request(path, request)).status).toBe(200);
+    expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+    expect(
+      suite.node.all<{ n: number }>(
+        sql`select count(*) n from node_handover_events where kind = 'return-clash-acceptance'`,
+      ),
+    ).toEqual([{ n: 1 }]);
+    expect(
+      suite.db.all<{ n: number }>(
+        sql`select count(*) n from activity_log where kind = 'handover.return_clash_accepted'`,
+      ),
+    ).toEqual([{ n: 1 }]);
+  } finally {
+    append.mockRestore();
+  }
+});
+
+it("lists current clashes after an old source leaves the chart and refuses an unprivileged reader", async () => {
+  accounted = false;
+  const logs: string[] = [];
+  const app = destination(
+    () => {},
+    suite,
+    (_level, event) => {
+      logs.push(event);
+    },
+  );
+  expect(await send(async (url, init) => app.request(String(url), init))).toBe("clash");
+  const admin = await acceptanceSession();
+  const staff = await acceptanceSession("staff");
+  const refused = await app.request("/management-api/return-clashes", {
+    headers: { cookie: staff.cookie },
+  });
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  const inspect = vi
+    .spyOn(modules[0]!.handover!.returnRecords!, "inspect")
+    .mockRejectedValueOnce(new Error("read failure"));
+  try {
+    expect(
+      (await app.request("/management-api/return-clashes", { headers: { cookie: admin.cookie } }))
+        .status,
+    ).toBe(500);
+  } finally {
+    inspect.mockRestore();
+  }
+  const chart = (await database.readNodeMembership(suite.db))!;
+  const body = { ...chart.body, nodes: chart.body.nodes.filter((row) => row.nodeId !== source) };
+  await writeNodeMembership(suite.db, {
+    ...chart,
+    body,
+    signature: signDocumentBody(body, await readNodeIdentityKey(suite.node, ring, receiver)),
+  });
+  const listed = await app.request("/management-api/return-clashes", {
+    headers: { cookie: admin.cookie },
+  });
+  expect(listed.status, await listed.clone().text()).toBe(200);
+  expect(await listed.json()).toEqual({ clashes: [], batches: [] });
+  expect(logs).toContain("return-clash.evidence_unreadable");
+});
+
+it("stores a signed batch once and accounts separately for two clashes inside it", async () => {
+  const seat = modules[0]!.handover!.returnRecords!;
+  let heldVersion = 0;
+  const verify = vi.spyOn(handover, "verifyEnvelope");
+  const inspect = vi.spyOn(seat, "inspect").mockImplementation(async (_tx, _source, batch) =>
+    ["A", "B"].map((saleId) => ({
+      saleId,
+      fingerprint: returnDigest([batch, saleId, heldVersion]),
+      eligible: true,
+      outstanding: [saleId],
+      original: saleId,
+      incoming: batch,
+      held: "held",
+    })),
+  );
+  const receive = vi
+    .spyOn(seat, "receive")
+    .mockImplementation(async (_tx, _source, batch, _now, accepted = []) =>
+      ["A", "B"].every((saleId) => accepted.includes(returnDigest([batch, saleId, heldVersion]))),
+    );
+  try {
+    const app = destination();
+    const session = await acceptanceSession();
+    const sending = () => send(async (url, init) => app.request(String(url), init));
+    expect(await sending()).toBe("clash");
+    const list = async () =>
+      (
+        (await (
+          await app.request("/management-api/return-clashes", {
+            headers: { cookie: session.cookie },
+          })
+        ).json()) as { clashes: { clashId: string; accepted: boolean; eligible: boolean }[] }
+      ).clashes;
+    inspect.mockClear();
+    verify.mockClear();
+    const initial = await list();
+    expect(inspect).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(initial).toHaveLength(2);
+    expect(
+      suite.node.all<{ n: number }>(
+        sql`select count(*) n from node_handover_events where kind = 'return-clash-evidence'`,
+      ),
+    ).toEqual([{ n: 1 }]);
+    for (const [index, clash] of initial.entries()) {
+      const response = await app.request(`/management-api/return-clashes/${clash.clashId}/accept`, {
+        method: "POST",
+        headers: { cookie: session.cookie, "content-type": "application/json" },
+        body: JSON.stringify({ actionKey: `group-${index}`, reason: "Keep held facts" }),
+      });
+      expect(response.status, await response.clone().text()).toBe(200);
+      expect(await sending()).toBe("clash");
+      const listed = await list();
+      expect(listed.filter((row) => row.accepted)).toHaveLength(index + 1);
+      if (index === 0) expect(listed).toHaveLength(2);
+      else expect(listed).toHaveLength(4);
+    }
+    heldVersion++;
+    expect(await sending()).toBe("clash");
+    const changed = await list();
+    expect(changed.filter((row) => row.eligible && !row.accepted)).toHaveLength(2);
+    expect(
+      suite.node.all<{ n: number }>(
+        sql`select count(*) n from node_handover_events where kind = 'return-clash-evidence' and envelope is not null`,
+      ),
+    ).toEqual([{ n: 2 }]);
+  } finally {
+    inspect.mockRestore();
+    receive.mockRestore();
+    verify.mockRestore();
   }
 });
