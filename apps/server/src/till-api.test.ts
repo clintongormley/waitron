@@ -4320,7 +4320,7 @@ async function modifierOfferFixture() {
     const cheese = await createProduct(tx, {
       catalogueId: waterProduct.catalogueId,
       categoryId: null,
-      name: `Queso staff ${fixture}`,
+      name: `Cheese staff ${fixture}`,
       customerName: { [defaultLanguage]: "Queso customer" },
       kitchenName: "Queso kitchen",
       pricingUnit: "each",
@@ -4356,20 +4356,20 @@ async function modifierOfferFixture() {
     const prepList = await createOptionList(
       tx,
       {
-        name: "Preparación staff",
+        name: "Preparation staff",
         customerName: { [defaultLanguage]: "Preparación customer" },
         kitchenName: "Preparación kitchen",
         defaultLabelId: null,
         active: true,
         labels: [
           {
-            name: "Frío staff",
+            name: "Cold staff",
             customerName: { [defaultLanguage]: "Frío customer" },
             kitchenName: "Frío kitchen",
             available: true,
           },
           {
-            name: "Caliente staff",
+            name: "Hot staff",
             customerName: { [defaultLanguage]: "Caliente customer" },
             kitchenName: "Caliente kitchen",
             available: true,
@@ -4395,8 +4395,8 @@ async function modifierOfferFixture() {
       defaultLanguage,
     };
   });
-  const coldLabel = data.prepList.labels.find((label) => label.name === "Frío staff")!;
-  const hotLabel = data.prepList.labels.find((label) => label.name === "Caliente staff")!;
+  const coldLabel = data.prepList.labels.find((label) => label.name === "Cold staff")!;
+  const hotLabel = data.prepList.labels.find((label) => label.name === "Hot staff")!;
   const language = data.defaultLanguage;
   /** The diner's answers, in the wire shape every order route takes. */
   const answers = {
@@ -4406,10 +4406,10 @@ async function modifierOfferFixture() {
   /** The six names the dish line freezes — the list's three and the chosen label's three. */
   const optionSnapshots = [
     {
-      listName: { [language]: "Preparación staff" },
+      listName: { [language]: "Preparation staff" },
       listCustomerName: { [language]: "Preparación customer" },
       listKitchenName: "Preparación kitchen",
-      labelName: { [language]: "Frío staff" },
+      labelName: { [language]: "Cold staff" },
       labelCustomerName: { [language]: "Frío customer" },
       labelKitchenName: "Frío kitchen",
     },
@@ -4419,7 +4419,7 @@ async function modifierOfferFixture() {
   const parkedExtras = [
     {
       productId: data.cheese.id,
-      name: `Queso staff ${fixture}`,
+      name: `Cheese staff ${fixture}`,
       descriptions: { "es-ES": "Queso customer" },
       kitchenName: "Queso kitchen",
       price: "0.35",

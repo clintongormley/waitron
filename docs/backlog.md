@@ -2290,6 +2290,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   with customer Rioja crianza / Agua mineral and kitchen TINTO / AGUA unchanged.
   The main till API and table-route fixtures use Daily menu and Drinks for menu/category labels;
   their Spanish product samples (Agua mineral in both, Cerveza in the till API) remain.
+  The till API modifier fixture uses Cheese, Preparation, Cold and Hot for distinct staff
+  names; the till-sale size option uses Size and Large. Their customer and kitchen wording stays.
   Local party-suite table, party, course and printer samples use English. Shared dish samples
   remain in their helpers and consumers, including party bill-action, bill-move, arriving-dish
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
