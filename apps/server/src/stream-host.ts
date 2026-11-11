@@ -385,7 +385,9 @@ export function streamService(host: StreamHost, isPrimary: () => boolean): Servi
       const status = host.status();
       return {
         running: status.state !== "off",
-        reason: status.reason ?? (status.state === "off" ? "not_configured" : null),
+        reason:
+          ("reason" in status ? status.reason : null) ??
+          (status.state === "off" ? "not_configured" : null),
       };
     },
   };

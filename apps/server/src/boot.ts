@@ -2301,7 +2301,6 @@ async function bootServer(
     await jobRunner.stopJobs();
     await jobRunner.stopServices();
   };
-  holders.onChange(() => jobRunner.roleChanged());
   undoOnFailure.push(stopJobRunner);
   health.readJobs = () => jobRunner.views();
   const liveEvents = new LiveEvents();
@@ -3064,7 +3063,12 @@ async function bootServer(
         refresh: async () => {
           const outcome = await sealedState.refresh();
           const status = streamHost.status();
-          if (outcome === "sealed" && status.state === "off" && status.reason === "reseal_required")
+          if (
+            outcome === "sealed" &&
+            status.state === "off" &&
+            "reason" in status &&
+            status.reason === "reseal_required"
+          )
             jobRunner.wake("stream");
           return outcome;
         },

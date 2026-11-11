@@ -537,8 +537,10 @@ describe("runner services", () => {
 
   it("close waits for a pending start, stops once, and prevents later checks", async () => {
     let release!: () => void;
+    let applies = true;
     const calls: string[] = [];
     const host = service({
+      applies: () => applies,
       start: async () => {
         calls.push("start");
         await new Promise<void>((resolve) => {
@@ -553,20 +555,26 @@ describe("runner services", () => {
     await advance();
     const first = runner.stopServices();
     const second = runner.stopServices();
-    expect(calls).toEqual(["start"]);
-    release();
-    await Promise.all([registering, first, second]);
+    try {
+      await advance(60_000);
+      expect(calls).toEqual(["start"]);
+    } finally {
+      release();
+      await Promise.all([registering, first, second]);
+    }
+    applies = false;
     runner.roleChanged();
     await advance(120_000);
     expect(calls).toEqual(["start", "stop"]);
     expect(runner.views().stream.state).toBe("stopped");
+    expect(host.suspend).not.toHaveBeenCalled();
   });
 
   it("logs a failed start, reports it, and retries at the next check", async () => {
     const host = service({
       start: vi
         .fn()
-        .mockRejectedValueOnce(new AppError("storage.disk_full"))
+        .mockRejectedValueOnce(new AppError("storage.disk_full", {}))
         .mockResolvedValue(undefined),
     });
     await runner.addService(host);
@@ -610,7 +618,7 @@ describe("runner services", () => {
     expect(host.start).toHaveBeenCalledTimes(2);
   });
 
-  it("refuses a service missing from the declared stop order", async () => {
+  it("refuses a job registered as a service", async () => {
     await expect(runner.addService(service({ name: "menu.activation" }))).rejects.toThrow();
   });
 });

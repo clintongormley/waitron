@@ -1054,7 +1054,8 @@ product failures.
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
   menu activation, the sealed-key copy and public `/health` reports. The bucket copy runs as a
-  service that follows role changes; close stops runner jobs first and the bucket copy last.
+  service; close stops runner jobs first and the bucket copy last.
+  The future live-promotion runner slice owns wiring role changes, with a real promotion test including a mirror (watcher, 2026-11-11 05:18).
   The other jobs still need moving onto the runner.
   Management and device events share one loop with read-only wake checks; device events carry types
   only. Browser adoption of the device stream remains for jr13/jr14. 111 product

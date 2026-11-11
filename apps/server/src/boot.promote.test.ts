@@ -28,15 +28,11 @@ import { generateNodeKeyPair, signDocumentBody, type Endorsement } from "@waitro
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
-import { httpsVia, withCapturedStdout } from "./testing/boot-harness.js";
+import { withCapturedStdout } from "./testing/boot-harness.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
-import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
-import { streamSettingsPayload } from "./stream-host.js";
-import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
-import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { establishDormantContract } from "./testing/dormant-contract.js";
@@ -253,107 +249,7 @@ async function resetLocalSecondary(): Promise<void> {
   await appDb.execute(sql`delete from node_membership`);
 }
 
-const PRIMARY_ONLY = ["menu.activation", "stream"] as const;
 describe("historical promote: local secondary → primary, live", () => {
-  it.each([false, true])(
-    "starts primary-only jobs and services after a live promotion, bucket configured=%s",
-    async (configured) => {
-      await resetLocalSecondary();
-      const stateDir = await mkdtemp(join(tmpdir(), "jr2-promote-"));
-      const litestream = new FakeLitestream();
-      const restart = vi.fn();
-      let connection: ReturnType<typeof httpsVia> | undefined;
-      try {
-        writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
-        if (configured) {
-          await ensureBoxSecrets({
-            stateDir,
-            hostnames: ["localhost"],
-            now: () => new Date(),
-            listIpv4: () => [],
-          });
-          await writeCredentialsRing(stateDir, {
-            key: KEY_ENV.WAITRON_CREDENTIALS_KEY,
-            version: 1,
-          });
-          connection = httpsVia(readFileSync(join(stateDir, "tls/ca.crt")));
-          writeFileSync(
-            join(stateDir, "trading.env"),
-            `WAITRON_NODE_ID=${TILL_ENV.WAITRON_NODE_ID}\n`,
-          );
-          writeFileSync(
-            join(stateDir, "backup.env"),
-            "WAITRON_BACKUP_RECOVERY_KEY=jr2-promotion-test-recovery-key\n",
-          );
-          await withTransaction(appDb, (tx) =>
-            putCredential(tx, PROMOTE_RING, {
-              purpose: "backup.stream",
-              value: streamSettingsPayload({
-                venueId: TILL_LOCATION_ID,
-                bucket: {
-                  region: "eu-west-1",
-                  bucket: "copies",
-                  prefix: "",
-                  accessKeyId: "A",
-                  secretAccessKey: "S",
-                },
-              }),
-            }),
-          );
-        }
-        const server = await startServer(
-          {
-            ...KEY_ENV,
-            ...TICK_ENV,
-            WAITRON_STATE_DIR: stateDir,
-            WAITRON_VENUE_DIR: appVenueDir,
-            WAITRON_HTTP_PORT: String(await freePort()),
-            WAITRON_MIGRATIONS_DIR: migrationsRoot,
-            ...(configured
-              ? { WAITRON_BACKUP_RECOVERY_KEY: "jr2-promotion-test-recovery-key" }
-              : {}),
-          },
-          {},
-          {
-            stream: { spawn: litestream.spawn, store: new SwitchableStore(() => new Date()) },
-            stepdown: { mount: () => {}, restart },
-          },
-        );
-        try {
-          const base = `${configured ? "https" : "http"}://127.0.0.1:${httpPort()}`;
-          await vi.waitFor(async () => {
-            const before = await (await fetch(`${base}/health`, connection?.via)).json();
-            for (const name of PRIMARY_ONLY)
-              expect(before.jobs[name]?.state, name).toBe("not_applicable");
-          });
-          const promotedAt = Date.now();
-          await server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: true });
-          await vi.waitFor(
-            async () => {
-              const after = await (await fetch(`${base}/health`, connection?.via)).json();
-              expect(Date.parse(after.jobs["menu.activation"].lastRunAt)).toBeGreaterThanOrEqual(
-                promotedAt,
-              );
-              expect(after.jobs.stream.state).toBe(configured ? "running" : "waiting");
-              if (configured) expect(litestream.running()).toBeDefined();
-            },
-            { timeout: 5_000 },
-          );
-          expect(restart).not.toHaveBeenCalled();
-        } finally {
-          await server.close();
-        }
-      } finally {
-        await connection?.close();
-        await withTransaction(appDb, (tx) =>
-          tx.run(sql`delete from tenant_credentials where purpose = ${"backup.stream"}`),
-        );
-        await rm(stateDir, { recursive: true, force: true });
-      }
-    },
-    60_000,
-  );
-
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
     await resetLocalSecondary();
     const seeded = await seedFiscalWork();

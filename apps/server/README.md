@@ -670,10 +670,10 @@ The sealed-key copy runs as `backups.sealed_state`, woken by node database commi
 Services appear in the same map with `kind: "service"`. The bucket copy is `stream`:
 `running` means its host has started a copy, `waiting` means it applies but cannot run
 (the reason is in `detail`), and `not_applicable` means it is inactive on this box.
-Jobs have `detail: null`. A role change wakes the jobs and rechecks services without a
-restart; a sixty-second check also catches a missed change. When the duty table closes, runner jobs stop
-together first and services stop last, so the bucket copy can finish copying writes made
-during close.
+Jobs have `detail: null`. Automatic role-change wiring waits for a production live-promotion
+path. The runner's service API and sixty-second recheck remain available. When the duty table
+closes, runner jobs stop together first and services stop last, so the bucket copy can finish
+copying writes made during close.
 Job state is reported without error codes or alert codes and never changes the health status;
 `duties` and `lastPassAt` still decide it.
 
