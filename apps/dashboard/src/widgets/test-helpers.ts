@@ -446,7 +446,7 @@ function frozenOffer(
     menuName,
     name,
     customerName: { es: `${name} para clientes` },
-    kitchenName: `${name.toUpperCase()} COCINA`,
+    kitchenName: `${name.toUpperCase()} KITCHEN`,
     unit: {
       staffName: "Staff unit",
       staffAbbreviation: "su",

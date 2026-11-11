@@ -50,7 +50,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
       abbreviation: { es: "ud" },
     },
     description: null,
-    kitchenName: `${name.toUpperCase()} COCINA`,
+    kitchenName: `${name.toUpperCase()} KITCHEN`,
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "2.00",
