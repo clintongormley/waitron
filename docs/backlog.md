@@ -1411,10 +1411,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **Contrast pass** (bundle of 1, size S). [Detail](backlog/dashboard.md#bundle-contrast-pass)
 
 
-- **A1315. Help bubbles: missing guide destinations.** Zone Reset still has no guide section.
-  The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
-  [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
-
 - **A1069. Venue settings keeps a `kitchen` tab key with no panel (owner question).** The key in
   `VENUE_SETTINGS_TABS` (`apps/dashboard/src/screens/venue-settings-screen.ts`) lets the page's tab
   checks keep a second tab; say if it should go (about 25 cases then lose their subject) — plan
