@@ -1109,6 +1109,8 @@ product failures.
   A one-box till pauses primary-server probes while its
   device connection is ready and the last probe found a primary, resuming immediately when it drops;
   lists with more than one box keep probing and handing on membership charts.
+  The print agent waits on held requests for receipt and office-print work. Drawer expiry and
+  claim leases shorten that wait; pending page work and discovery retain their two-second cadence.
   Handhelds and kitchen displays keep timed reads under
   jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
   jr13's SIGSTOP probe is a stand-in only. 111 product

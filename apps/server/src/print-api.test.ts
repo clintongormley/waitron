@@ -6386,6 +6386,11 @@ describe("held print pulls", () => {
       { cookie: managerCookie },
     );
     expect(requested.status).toBe(202);
+    let answered = false;
+    void pending.then(() => {
+      answered = true;
+    });
+    await vi.waitFor(() => expect(answered).toBe(true), { timeout: 500 });
     expect((await (await pending).json()).jobs).toEqual([]);
     const claim = await send(r.app, "POST", "/print-api/agent/page-jobs/claim", {
       bearer: r.token,

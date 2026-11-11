@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   a4HoldCodes,
+  installChangeFeed,
+  subscribeToChanges,
   invoiceDeliveries,
   invoiceSeries,
   pagePrinterFormat,
@@ -34,6 +36,7 @@ import { registerPagePrinter } from "./page-printers.js";
 import { renderInvoicePdf } from "./invoice-pdf.js";
 import { renderInvoiceRaster } from "./invoice-raster.js";
 import { encodeInvoiceRaster } from "./invoice-raster-encode.js";
+import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { mountPrintApi } from "./print-api.js";
 import { renderInvoicePage } from "./page-print-api.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
@@ -71,7 +74,7 @@ type Render = (
 
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-async function venue(opts: { render?: Render; realClock?: true } = {}) {
+async function venue(opts: { render?: Render; realClock?: true; bus?: LiveEvents } = {}) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   await seedVenue(suite.db, {
@@ -103,6 +106,7 @@ async function venue(opts: { render?: Render; realClock?: true } = {}) {
     app,
     {
       db: suite.db,
+      bus: opts.bus,
       cfg,
       pairingMode: createPairingMode(),
       readMembership: async () => null,
@@ -1024,4 +1028,28 @@ describe("rendering a page", () => {
       renderInvoicePage(FULL_INVOICE_DOCUMENT_FIXTURE, "image/pwg-raster", 150),
     ).rejects.toThrow(refusal);
   });
+});
+
+it("an A4 invoice queued during a held receipt pull wakes its agent", async () => {
+  const bus = new LiveEvents();
+  onTestFinished(() => bus.close());
+  const v = await venue({ bus });
+  const office = await printer(v, v.agentOne);
+  const sale = await fullInvoice(v);
+  await installChangeFeed(suite.db, [{ table: "invoice_deliveries", type: "invoice_deliveries" }]);
+  const unsubscribe = subscribeToChanges(changeSubscriber(bus, () => {}));
+  onTestFinished(unsubscribe);
+  const pending = post(v, "/print-api/agent/jobs?wait=25", v.tokenOne, {
+    visible: [],
+    scanned: [],
+  });
+  await vi.waitFor(() => expect(bus.subscriberCount).toBe(1));
+  const delivery = await queueA4(sale, office);
+  let answered = false;
+  void pending.then(() => {
+    answered = true;
+  });
+  await vi.waitFor(() => expect(answered).toBe(true), { timeout: 500 });
+  expect((await (await pending).json()).jobs).toEqual([]);
+  expect((await claim(v))!.id).toBe(delivery);
 });
