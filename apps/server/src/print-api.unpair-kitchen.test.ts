@@ -174,7 +174,9 @@ describe("a kitchen ticket reprinted on another printer", () => {
         host: "bar.test",
       });
       const layOut = () => Promise.reject(new Error("No receipt is laid out here"));
-      return reprintJobOn(tx, layOut, table.jobId, printerId, venue.adminId);
+      return reprintJobOn(tx, layOut, table.jobId, printerId, venue.adminId, undefined, {
+        seen: () => true,
+      });
     });
     expect(await problems()).toHaveLength(1);
     await inTx(venue, (tx) =>

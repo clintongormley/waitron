@@ -19,7 +19,6 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   drawerOpens,
-  kitchenPrintJobs,
   kitchenStations,
   printAgents,
   printJobs,
@@ -28,7 +27,6 @@ import {
   printers,
   printTransport,
   readVenue,
-  receiptReprints,
   stationPrinters,
   withTransaction,
   type Database,
@@ -96,7 +94,15 @@ import { mountPagePrintersApi, type PagePrinterQueue } from "./page-printers-api
 import type { PagePrinterDiscovery } from "./page-printers.js";
 import { mountPagePrintApi, type RenderInvoicePage } from "./page-print-api.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import { reprintJobOn } from "./print-job-reprint.js";
+import {
+  isStuckJob,
+  isWaiting,
+  linkedPrintoutSql,
+  reprintJobOn,
+  reprintRule,
+  type PrinterSeen,
+  type ReprintRule,
+} from "./print-job-reprint.js";
 import type { LayOutSaleReceipt } from "./receipt-print.js";
 
 export interface PrintApiDeps {
@@ -1528,9 +1534,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             lastError: printJobs.lastError,
             createdAt: printJobs.createdAt,
             deliveredAt: printJobs.deliveredAt,
+            // `jobWidthDots` reads a printout's width from its first ten bytes alone.
             head: sql<Uint8Array>`substr(${printJobs.payload}, 1, 10)`,
             // Correlated to the outer `print_jobs`; the join below keeps both sides qualified.
-            linked: sql<number>`exists (select 1 from ${kitchenPrintJobs} where ${kitchenPrintJobs.printJobId} = coalesce(${printJobs.resendOf}, ${printJobs.id})) or exists (select 1 from ${receiptReprints} where ${receiptReprints.printJobId} = coalesce(${printJobs.resendOf}, ${printJobs.id}))`,
+            linked: sql<number>`case when ${printJobs.saleId} is null then ${linkedPrintoutSql(sql`coalesce(${printJobs.resendOf}, ${printJobs.id})`)} else 0 end`,
           })
           .from(printJobs)
           .innerJoin(printers, eq(printers.id, printJobs.printerId))
@@ -1567,8 +1574,15 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             ),
           );
-        const reservedByAnother = (job: { id: string; saleId: string | null }): boolean =>
-          reserved.some((other) => other.saleId === job.saleId && other.id !== job.id);
+        const reservedJobs = new Map<string | null, Set<string>>();
+        for (const { id, saleId } of reserved) {
+          const ids = reservedJobs.get(saleId) ?? new Set<string>();
+          reservedJobs.set(saleId, ids.add(id));
+        }
+        const reservedByAnother = (job: { id: string; saleId: string | null }): boolean => {
+          const ids = reservedJobs.get(job.saleId);
+          return ids !== undefined && (ids.size > 1 || !ids.has(job.id));
+        };
         const targets = (
           await tx
             .select({
@@ -1587,20 +1601,20 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           saleId: string | null;
           head: Uint8Array;
           linked: number;
-        }): { reprintRule: "any" | "wide_enough" | "own"; reprintPrinterIds: string[] } => {
-          const others = targets.filter((printer) => printer.id !== job.printerId);
-          if (job.saleId !== null)
-            return { reprintRule: "any", reprintPrinterIds: others.map((printer) => printer.id) };
-          const width = job.linked ? jobWidthDots(job.head) : null;
-          if (width === null) return { reprintRule: "own", reprintPrinterIds: [] };
+        }): { reprintRule: ReprintRule; reprintPrinterIds: string[] } => {
+          const { rule, fits } = reprintRule(
+            job.saleId,
+            job.linked ? jobWidthDots(job.head) : null,
+          );
           return {
-            reprintRule: "wide_enough",
-            reprintPrinterIds: others
-              .filter((printer) => printer.dots >= width)
+            reprintRule: rule,
+            reprintPrinterIds: targets
+              .filter((printer) => printer.id !== job.printerId && fits(printer.dots))
               .map((printer) => printer.id),
           };
         };
         const visible = visibleNow();
+        const seenNow: PrinterSeen = (printer) => seen(printer, visible);
         return jobs.map(
           ({
             kind,
@@ -1615,24 +1629,18 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             ...job
           }) => {
             const where = reprint({ printerId: job.printerId, saleId, head, linked });
-            const waiting =
-              job.status === "queued" ||
-              (kind === "document" &&
-                job.status === "failed" &&
-                job.attempts < MAX_DELIVERY_ATTEMPTS);
-            const unseen =
-              printerActive &&
-              printerDeletedAt === null &&
-              !seen({ transport: printerTransport, localKey: printerLocalKey }, visible);
-            const stuck =
-              kind === "document" &&
-              waiting &&
-              printerDeletedAt === null &&
-              (!printerActive || unseen);
+            const printer = {
+              active: printerActive,
+              deletedAt: printerDeletedAt,
+              transport: printerTransport,
+              localKey: printerLocalKey,
+            };
+            const unseen = printer.active && printer.deletedAt === null && !seenNow(printer);
+            const stuck = isStuckJob({ ...job, kind }, printer, seenNow);
             return {
               ...job,
               ...where,
-              ...(unseen && (waiting || job.status === "printing")
+              ...(unseen && (isWaiting({ ...job, kind }) || job.status === "printing")
                 ? { waitReason: "printer.not_visible" as const }
                 : {}),
               stuck,
@@ -1658,17 +1666,12 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         body.printerId === undefined ? undefined : requireBodyUuid(body.printerId, "printerId");
       const result = await gated(
         sessionId,
-        async (tx, personId) => {
-          if (printerId === undefined) return resendInvoicePrintJob(tx, id, personId, deps.now?.());
-          const [own] = await tx
-            .select({ transport: printers.transport, localKey: printers.localKey })
-            .from(printJobs)
-            .innerJoin(printers, eq(printers.id, printJobs.printerId))
-            .where(eq(printJobs.id, id));
-          return reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), {
-            ownPrinterUnseen: own !== undefined && !seen(own),
-          });
-        },
+        (tx, personId) =>
+          printerId === undefined
+            ? resendInvoicePrintJob(tx, id, personId, deps.now?.())
+            : reprintJobOn(tx, deps.layOutSaleReceipt, id, printerId, personId, deps.now?.(), {
+                seen,
+              }),
         "hardware.manage",
       );
       return c.json(result, 202);

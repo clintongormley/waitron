@@ -845,7 +845,7 @@ describe("management invoice receipt resends", () => {
           other.id,
           "staff",
           ctx.now(),
-          { ownPrinterUnseen },
+          { seen: () => !ownPrinterUnseen },
         ),
       );
     const jobs = await suite.db.select().from(printJobs);

@@ -89,7 +89,9 @@ const layOut = (tx: Transaction, saleId: string, duplicate: boolean, printer: Es
 
 function reprint(jobId: string, printerId: string, ownPrinterUnseen = false) {
   return inTx(venue, (tx) =>
-    reprintJobOn(tx, layOut, jobId, printerId, venue.adminId, undefined, { ownPrinterUnseen }),
+    reprintJobOn(tx, layOut, jobId, printerId, venue.adminId, undefined, {
+      seen: () => !ownPrinterUnseen,
+    }),
   );
 }
 
