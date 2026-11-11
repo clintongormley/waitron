@@ -4,6 +4,7 @@ import { CORE_MIGRATIONS, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import type { BoxHostRequests } from "./box-host-client.js";
+import { createLogger, type Logger } from "./logger.js";
 import { boxNameTagJob } from "./box-name-tag.js";
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -11,10 +12,11 @@ const context = { now: new Date("2026-11-11T10:00:00Z"), signal: new AbortContro
 function duty(
   tagWrite = vi.fn<BoxHostRequests["tagWrite"]>(async () => ({ available: true, tag: "written" })),
   live = false,
+  log: Logger = () => {},
 ) {
   return {
     tagWrite,
-    job: boxNameTagJob({ db: fx.db, host: { tagWrite }, live: () => live }),
+    job: boxNameTagJob({ db: fx.db, host: { tagWrite }, live: () => live, log }),
   };
 }
 it("writes the composed legal name and actual boot intent", async () => {
@@ -57,6 +59,7 @@ it("listens to committed writes, never a rollback, and unregisters at close", as
     host: { tagWrite: async () => ({ available: true, tag: "written" }) },
     live: () => false,
     wake,
+    log: () => {},
   });
   try {
     wake.mockClear();
@@ -183,6 +186,29 @@ it("retries when a lost write may have replaced an earlier accepted tag", async 
       [{ name: "Test SL", live: false }],
       [{ name: "New Harbour Ltd", live: false }],
       [{ name: "Test SL", live: false }],
+    ]);
+  } finally {
+    await job.onStop?.();
+  }
+});
+
+it("keeps the specific host refusal in its diagnostic log", async () => {
+  const lines: string[] = [];
+  const log = createLogger(
+    (line) => lines.push(line),
+    () => context.now,
+    () => "warn",
+  );
+  const tagWrite = vi.fn<BoxHostRequests["tagWrite"]>(async () => ({
+    available: false,
+    reason: "refused",
+    refusal: "no_free_token",
+  }));
+  const { job } = duty(tagWrite, false, log);
+  try {
+    await expect(job.pass(context)).rejects.toMatchObject({ code: "box_host.failed" });
+    expect(lines.map((line) => JSON.parse(line))).toEqual([
+      expect.objectContaining({ event: "box_host.tag_failed", reason: "no_free_token" }),
     ]);
   } finally {
     await job.onStop?.();

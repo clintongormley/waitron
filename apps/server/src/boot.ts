@@ -3750,6 +3750,7 @@ async function bootServer(
   jobRunner.add(
     boxNameTagJob({
       db,
+      log,
       host: localHostRequests,
       live: () => config.onboardingIntent === "live",
       wake: () => jobRunner.wake("box.name_tag"),

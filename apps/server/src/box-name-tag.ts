@@ -3,12 +3,14 @@ import "./errors.js";
 import { readTenant, withTransaction, type Database } from "@waitron/db";
 import { usableVenueName } from "../../../scripts/box/name-tag.mjs";
 import type { BoxHostRequests, NameTag } from "./box-host-client.js";
+import type { Logger } from "./logger.js";
 import type { JobDefinition } from "./job-runner.js";
 
 export function boxNameTagJob(deps: {
   db: Database;
   host: Pick<BoxHostRequests, "tagWrite">;
   live: () => boolean;
+  log: Logger;
   wake?: () => void;
 }): JobDefinition {
   const stop = deps.db.onCommit(() => deps.wake?.());
@@ -39,6 +41,9 @@ export function boxNameTagJob(deps: {
       if (!answer.available) {
         if (answer.reason === "missing" || answer.reason === "unsupported")
           return { nextDueAt: null, finished: true };
+        deps.log("warn", "box_host.tag_failed", {
+          reason: answer.reason === "refused" ? answer.refusal : answer.reason,
+        });
         throw new AppError("box_host.failed", {
           reason: "host_failed",
         });
