@@ -1101,9 +1101,8 @@ coverage bars are enforced in the merge job, not in a shard. Then the
 dedicated mixed database/browser jobs (`test-bookings`, `test-media`, `test-payments-stripe`,
 `test-payments-sumup`, `test-adjustments`, `test-staffing`), the dedicated Node coverage jobs
 (`test-identity`, `test-workforce`), the unsharded browser jobs (`test-ui`, `test-setup`) and
-`test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). Vitest
-`--shard` splits by FILE COUNT (except `apps/server`, packed by duration since A938: see "The server's
-shards: sixteen, packed by measured duration" below), so shard imbalance is the real limit, and `N` must never exceed a
+`test-light-a` / `test-light-b` for everything else (bins in `scripts/changed-scope.mjs`). The seven sharded packages use measured-duration packing (see
+[Package duration tables](#package-duration-tables)); packing cannot divide a slow file, and `N` must never exceed a
 package's test-file count (guard: "run no more shards than the package has test files" in
 `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts`, not what
 the Vitest config includes).
@@ -2067,7 +2066,7 @@ as described below.
 
 ### Inspect duration warnings before refreshing the table
 
-A file absent from the server's duration table gets the table's mean estimate. The sequencer
+A file absent from its package's duration table gets the table's mean estimate. The sequencer
 keeps that fallback and emits a missing-file annotation for its shard, so you can see when the
 packing uses an estimate rather than a recorded time.
 
@@ -2507,6 +2506,50 @@ exception on 9 November at 09:37, including its slowest checkout of 16 seconds r
 The checked GitHub incident history showed no relevant incident overlapping the run; no download
 HTTP 5xx appeared in the 24 server logs. This refresh supplies measured file weights; it establishes
 neither a speed comparison nor whole-run qualification.
+
+### Package duration tables
+
+When one shard finishes much later than its siblings, check the setup and file timings before
+refreshing its weights. Server, dashboard, till, db, provisioning, venue-service and fiscal-verifactu
+read their own `test-durations.json` through the same duration sequencer. Each keeps its existing
+shard count, worker limits, project groups and coverage merge. Packing spreads estimated work;
+it does not shorten a slow file or establish lower total runner minutes.
+
+| Package directory | CI job prefix | Shards |
+| --- | --- | --- |
+| apps/server | test-server | 24 |
+| apps/dashboard | test-dashboard | 4 |
+| apps/till | test-till | 7 |
+| packages/db | test-heavy | 3 |
+| packages/provisioning | test-provisioning | 6 |
+| packages/venue-service | test-venue-service | 4 |
+| packages/fiscal-verifactu | test-fiscal-verifactu | 4 |
+
+For any row, collect only that job's logs from qualified runs in one coverage mode, then run:
+
+```bash
+node scripts/test-durations.mjs <package-directory>/test-durations.json <log> [<log> …]
+```
+
+Use the six-run refresh procedure above with the row's job prefix in place of `test-server`.
+The watcher cleared A1398's initial tables from coverage-on nightlies 42741652586 and 42944859790
+on 11 November at 14:36; till uses only the latter because its earlier checkout took 11 seconds.
+The retained measurement inputs showed no relevant overlapping incident or download HTTP 5xx;
+the accepted jobs' slowest checkouts were at most 10 seconds. This exception supplies initial
+weights, not a measured speed improvement.
+
+An absent-file warning means a discovered path has no timing row. It still runs, estimated at the
+table's mean and started before known files in its shard. New tests since the sampled nightlies
+can therefore warn immediately. Retained rows for retired files do not create test specifications;
+refresh from current logs rather than inventing measurements. See
+[Inspect duration warnings](#inspect-duration-warnings-before-refreshing-the-table) before changing a table.
+
+The six-package discovery case in `scripts/vitest-duration-sequencer.test.mjs` loads each real
+config through Vitest and checks original specification identities across the configured shard
+count, including their project objects, and the local positive timing table. It discovers tests
+without running their bodies; it does not check run-time completeness, freshness or wall time.
+The existing root consumer guard checks that edits to the shared sequencer select all seven
+packages in CI. Current-head CI supplies execution and coverage evidence.
 
 **Guards, each weaker than its name.** The "apps/server's config packs every server test file into
 exactly one shard" case in `scripts/vitest-duration-sequencer.test.mjs` checks that the config's table
@@ -4980,6 +5023,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   package bites where: [ci-and-gates.md](ci-and-gates.md).
 
 ### Root entry: CI's test jobs measure coverage, never plain test
+
+**11 November 2026:** all seven sharded packages now use [package duration tables](#package-duration-tables); the copied server-only exception below describes the earlier layout.
 
 - **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
   the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the

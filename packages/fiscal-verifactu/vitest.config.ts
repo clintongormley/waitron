@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
@@ -16,6 +18,11 @@ export default defineConfig({
     ],
   },
   test: {
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     // scripts/fiscal-test-budget.test.ts pins this; outer, never inside a project.
     maxWorkers: 4,
     // A developer's shell never names a producer to a test; a file that needs one sets it itself.

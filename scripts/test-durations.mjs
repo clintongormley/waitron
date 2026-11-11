@@ -1,5 +1,4 @@
-// Builds apps/server/test-durations.json, the per-file seconds the duration sequencer packs shards
-// by, from `gh run view --log` output of CI's test-server shards. Usage:
+// Builds a package's test-durations.json from `gh run view --log` shard output. Usage:
 //   node scripts/test-durations.mjs <out.json> <log> [<log> …]
 
 import { readFileSync, writeFileSync } from "node:fs";

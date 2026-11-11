@@ -81,16 +81,6 @@ person to open the screen got a 500; the "open it and look" half is CLAUDE.md §
 other half — a matrix that varies two things separately and never crosses them proves less than
 it looks — wants its own line. Left open by content languages and the image library (#339).
 
-## The other sharded packages still use Vitest's file-count split.
-
-Fiscal-verifactu, till, dashboard,
-venue-service, db and provisioning do not pack their shards by measured duration as the server
-does. Left open by A938. On main run 40088908331 (head `d7d428e52`, 2026-10-24) `test-dashboard`
-shard 3 took 276 s, past the 4-minute bar; packing the dashboard's shards by measured duration is
-the fix at the cause. On main run 40597297102 (head `8e454b1eb`, 2026-10-27) the dashboard's four
-shards' runs took about 115, 202, 235 and 239 s, and shard 4's job 4 min 46 s.
-[Receipt](../developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
-
 ## Venue-service browser startup remains unexplained (#1557)
 
 On 2026-10-11, [CI attempt 1's venue-service shard 2](https://github.com/clintongormley/waitron/actions/runs/38170156450/job/114561139899)
@@ -414,12 +404,9 @@ infer either from the missing outcome alone.
 
 ## Bundle A1398: Pack the other packages' test shards by measured time
 
-2 entries, size M. Duration warnings are implemented separately. For later packing comparisons,
-use qualified runs with one coverage mode; never mix runs from before and after A1427.
-
-- **The other sharded packages still use Vitest's file-count split.**
-  [Detail](ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
-- an inventory of run test files, only if a same-count wrong-files case is ever seen
+1 conditional entry. Add an inventory of run test files only if a same-count wrong-files case is
+ever seen. For later packing comparisons, use qualified runs with one coverage mode; never mix
+runs from before and after A1427.
 
 ## Bundle: Get ready for A1308's history rewrite (A1306 and CI's concurrency groups)
 

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createVitest } from "vitest/node";
 import serverConfig from "../apps/server/vitest.config.ts";
 import {
   balancedShards,
@@ -303,4 +304,50 @@ describe("apps/server's wiring", () => {
       expect([...packed].sort()).toEqual(sorted);
     }
   });
+});
+
+describe("duration packing across package projects", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+  it.each([
+    ["apps/dashboard", "test-dashboard"],
+    ["apps/till", "test-till"],
+    ["packages/db", "test-heavy"],
+    ["packages/provisioning", "test-provisioning"],
+    ["packages/venue-service", "test-venue-service"],
+    ["packages/fiscal-verifactu", "test-fiscal-verifactu"],
+  ])(
+    "%s packs each discovered project spec once with its own timing table",
+    async (dir, job) => {
+      const root = join(import.meta.dirname, "..", dir);
+      const count = workflow
+        .match(new RegExp(`^  ${job}:[\\s\\S]*?shard: \\[([^\\]]+)\\]`, "m"))[1]
+        .split(",").length;
+      const vitest = await createVitest("test", { root, watch: false });
+      try {
+        const specs = await vitest.globTestSpecifications();
+        expect(specs.length).toBeGreaterThan(0);
+        const Sequencer = vitest.config.sequence.sequencer;
+        expect(Sequencer.table).toBeDefined();
+        const table = JSON.parse(readFileSync(join(root, "test-durations.json"), "utf8"));
+        expect(Sequencer.table).toEqual(table);
+        for (const [file, seconds] of Object.entries(table)) {
+          expect(Number.isFinite(seconds) && seconds > 0, file).toBe(true);
+        }
+        const seen = [];
+        for (let index = 1; index <= count; index += 1) {
+          const sequencer = new Sequencer({ config: { root, shard: { index, count } } });
+          const shard = await sequencer.shard(specs);
+          seen.push(...(await sequencer.sort(shard)));
+        }
+        expect(seen).toHaveLength(specs.length);
+        const identities = new Set(seen);
+        expect(identities.size).toBe(specs.length);
+        for (const spec of specs)
+          expect(identities.has(spec), `${spec.project.name}: ${spec.moduleId}`).toBe(true);
+      } finally {
+        await vitest.close();
+      }
+    },
+    30_000,
+  );
 });

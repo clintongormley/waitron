@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 import { parkPointerCommands } from "@waitron/ui/src/vitest-park-pointer.js";
@@ -6,6 +8,11 @@ import { pointerGestureCommands } from "@waitron/ui/src/vitest-pointer-gestures.
 export default defineConfig({
   optimizeDeps: { include: ["lit/directives/ref.js"] },
   test: {
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     projects: [
       {
         test: {

@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
+import { durationSequencer } from "../../scripts/vitest-duration-sequencer.mjs";
 import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    sequence: {
+      sequencer: durationSequencer(
+        JSON.parse(readFileSync(new URL("./test-durations.json", import.meta.url), "utf8")),
+      ),
+    },
     globals: true,
     clearMocks: false,
     // A developer's shell never names a producer to a test; a file that needs one sets it itself.

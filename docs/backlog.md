@@ -100,7 +100,6 @@ the most risk, never on dates. Each bundle is one pull request. The review's wor
 **2. Go-live fixes that can start today.** They add no tables and no lane holds them. Till bundles
 run one after another, because they share `apps/till/src/till-app.ts`.
 
-- [A1398. Pack the other packages' test shards by measured time](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 - [A950. Automatic upgrades with rollback](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order): go-live (owner, 2026-11-09); the [two-group plan](superpowers/plans/2026-11-09-a950-shorter-upgrades.md) is approved; Lane F builds its first group after A739 and A840/A842/A848 (owner, 22:04).
 
 **3. The foundation, already running.** A1308 stays first in lane A, with
@@ -2119,7 +2118,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A late move or second finger can overtake the gesture hold timer.**
   [Detail](backlog/ci.md#a-late-move-or-second-finger-can-overtake-the-gesture-hold-timer).
 
-- **A1398. Pack the other packages' test shards by measured time** (bundle of 2, 1 important, size M). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
+- **A1398. Test-file inventory only on a same-count mismatch** (1 conditional entry). [Detail](backlog/ci.md#bundle-a1398-pack-the-other-packages-test-shards-by-measured-time)
 
 - **Tests copy the dashboard shell's link handler instead of calling it.**
   [Detail](backlog/ci.md#tests-copy-the-dashboard-shells-link-handler-instead-of-calling-it).

@@ -1,6 +1,6 @@
 # A1398: pack the other packages’ test shards by measured time
 
-Codex draft, 11 November 2026; Claude reviewed the first draft in 252 seconds. Watcher clearance pending; no owner approval of this design claimed.
+Codex draft, 11 November 2026; Claude reviewed the first draft in 252 seconds. Watcher cleared this plan on 11 November at 14:36 (Lane I questions.md), including one/two-run initial tables and the two named consumer-check changes; no owner approval of this design claimed.
 Ask: Lane I queue.md, A1398 (watcher 14:17), and docs/backlog/ci.md, “Bundle A1398”. Finish line: six more packages use the existing duration packer and refreshable timing tables. One PR, about three active hours to open it.
 
 ## Measured starting point
