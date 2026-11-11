@@ -20,23 +20,24 @@ depends on it.
   that text, plus the producer's three settings, into plain text and an HTML page. Two guards hold
   it to the law and to the records: the headings are AEAT's, word for word, and items a), b), c),
   e), f), h) and i) say what a real sale record says.
-- After **pull request 2**: the same text as an A4 PDF; `pnpm release prepare 1.0.0 --place "…"`
-  and `pnpm release tag 1.0.0`; and the runbook `docs/operations/release.md`. **Both commands
-  refuse today, on purpose**: the template carries two "release blocker" lines, one for the
-  asesor's unanswered Q53 (item d) is a draft) and one for slice 4 (a `v*` tag already publishes
-  an image, `.github/workflows/ci.yml:29` and `:4389-4399`, but that image does not yet carry the
-  release's version or its declaration). Whoever records the asesor's answer deletes the first
-  line; slice 4 deletes the second. Until then, `declaration show --draft` prints the full draft
-  for the owner to read. Both commands also refuse when the producer details in the shell of the
-  person signing differ from those the published `:main` image carries.
+- After **pull request 2a**: the same text as an A4 PDF, and the package's `declaration` command
+  (`show`, `write`, `check`), which `show --draft` lets the owner use to read the whole draft.
+- After **pull request 2b**: `pnpm release prepare 1.0.0 --place "…"` and `pnpm release tag 1.0.0`,
+  and the runbook `docs/operations/release.md`. **Both commands refuse today, on purpose**: the
+  template carries two "release blocker" lines, one for the asesor's unanswered Q53 (item d) is a
+  draft) and one for slice 4 (a `v*` tag already publishes an image, `.github/workflows/ci.yml:29`
+  and `:4389-4399`, but that image does not yet carry the release's version or its declaration).
+  Whoever records the asesor's answer deletes the first line; slice 4 deletes the second. The
+  runbook has the signer load the three producer settings from
+  `~/waitron-campaign-shared/private/producer-identity.env` before either command.
 
 **What it reuses.** `SOFTWARE_IDENTITY`, `softwareVersion()`, `runningProducer()` and
 `refuseProducerSettings()` (`packages/fiscal-verifactu/src/software-identity.ts`); the shared
-settings reader `readSoftwareProducer` (`packages/shared/src/software-producer.ts:18`); the
-registry reader `scripts/published-image-env.sh`; `pdfkit` and the package's Noto Sans font through
-`loadRecoveryFont` (`packages/fiscal-verifactu/src/recovery-pdf-node.ts:6`); the write-path test's
-sale set-up (`packages/fiscal-verifactu/src/write-path.e2e.test.ts:62-77`); Node's `Intl` for the
-Spanish date and the «y»/«e» list join; `tsx`, as `apps/server/package.json:111` already uses it.
+settings reader `readSoftwareProducer` (`packages/shared/src/software-producer.ts:18`); `pdfkit` and
+the package's Noto Sans font through `loadRecoveryFont`
+(`packages/fiscal-verifactu/src/recovery-pdf-node.ts:6`); the write-path test's sale set-up
+(`packages/fiscal-verifactu/src/write-path.e2e.test.ts:62-77`); Node's `Intl` for the Spanish date
+and the «y»/«e» list join; `tsx`, as `apps/server/package.json:111` already uses it.
 
 **What it leaves out.** The `/legal/declaration` route and every About screen (slice 3); building
 the declaration into the image, the GitHub Release files, `waitron.sh install v…` and the "a
@@ -60,30 +61,34 @@ missing or carries a blocker (departure 3).
   `declarations/functions.md`, `src/declaration/source.ts` and `render.ts` with a test beside each,
   `headings.test.ts` and `agree.e2e.test.ts`. It modifies `src/errors.ts` (four `declaration.*`
   codes), `test/fixtures.ts` (one option), the root `.prettierignore` and the two backlog files.
-- Pull request 2 creates `src/declaration/pdf.ts`, `src/declaration/command.ts`, a test beside
-  each, `packages/fiscal-verifactu/scripts/declaration.ts`, `scripts/release/waitron-release.mjs`
-  and its test, and `docs/operations/release.md`. It modifies the package's `package.json` (`tsx`)
-  and `tsconfig.json` (`include`), `pnpm-lock.yaml` (generated), the root `package.json`
-  (`"release"`), the two backlog files and the design (one dated pointer).
+- Pull request 2a creates `src/declaration/pdf.ts` and `src/declaration/command.ts`, a test beside
+  each, and `packages/fiscal-verifactu/scripts/declaration.ts`. It modifies the package's
+  `package.json` (`tsx`) and `tsconfig.json` (`include`), `pnpm-lock.yaml` (generated) and the two
+  backlog files.
+- Pull request 2b creates `scripts/release/waitron-release.mjs` and its test, and
+  `docs/operations/release.md`. It modifies the root `package.json` (`"release"`), the two backlog
+  files and the design (one dated pointer).
 
 **The tests that matter.** Headings (Task 2), agree (Task 3), the slot refusals (Tasks 1–2), the
-blocker refusal at every entry (Tasks 5–7), the producer comparison with `:main` (Tasks 6–7), and
-the root script's refusals before anything is written, committed or pushed (Tasks 6–7). Each guard
-is proven by deletion, as each task says.
+blocker refusal in the package command (Task 5), and the root script's refusals before anything is
+written, committed or pushed (Tasks 6–7). Each layer is tested once: the root script tests only
+that a failing `show` or `check` stops it, not the package command's own refusals. Each guard is
+proven by deletion, as each task says.
 
 **Size.** Pull request 1: about 245 lines of production code, 85 of declaration text and 6 of
-backlog; about 330 lines of tests. Pull request 2: about 430 lines of production code, 90 of
-runbook and backlog, and a few generated lines in `pnpm-lock.yaml`; about 630 lines of tests.
-Per task in the table at the end.
+backlog; about 330 lines of tests. Pull request 2a: about 190 lines of production code and a few
+generated lines in `pnpm-lock.yaml`; about 210 lines of tests. Pull request 2b: about 205 lines of
+production code and 90 of runbook and backlog; about 310 lines of tests. Per task in the table at
+the end.
 
-**Path: FULL** (design §10). Neither pull request touches a fiscal invariant; the reviews run on
-the full path because the design says so. Every commit `git commit -s`; no `--no-verify`.
+**Path: FULL** (design §10). None of the three pull requests touches a fiscal invariant; the
+reviews run on the full path because the design says so. Every commit `git commit -s`; no `--no-verify`.
 
 ## Departures from the design, and open decisions
 
-1. **Two pull requests, not one.** Design §10: "Each slice is one pull request." The watcher
-   asked on 2026-11-11 for the text and renderer first, the release commands second; the PDF goes
-   in the second, since nothing reads it before slice 3. Awaits the watcher? No — this is the
+1. **Three pull requests, not one.** Design §10: "Each slice is one pull request." The watcher
+   asked on 2026-11-11 for the text and renderer first (1), then the PDF and the package command
+   (2a), then the release commands and runbook (2b). Awaits the watcher? No — this is the
    watcher's instruction.
 2. **How "the first release waits for Q53" is enforced.** The design says the first release waits
    for the asesor (§4, §10's last row) but not how. The plan adds `<!-- release-blocker: … -->`
@@ -110,25 +115,15 @@ the full path because the design says so. Every commit `git commit -s`; no `--no
 7. **`tag` re-checks the declaration** (no blocker; items a), b), e), f) still equal
    `SOFTWARE_IDENTITY`; c) equals the version), because other pull requests can land between
    `prepare` and `tag`. Not in §5.4. Awaits the watcher? No.
-8. **The producer details signed are compared with the published image's** (not in the design,
-   which has `prepare` read them from the signer's shell, §5.4 step 3, while the image takes them
-   from repository secrets, slice 1's Task 8). `prepare`, before it asks for `yes`, and `tag`,
-   before it tags, read `ghcr.io/<owner>/waitron:main`'s settings with
-   `scripts/published-image-env.sh` and refuse unless the three equal the shell's, naming only the
-   setting that differs. Run 2026-11-11 against the live image, printing names only: exit 0, 18
-   settings, the three `WAITRON_PRODUCER_` names among them. **Weaker than its name:** `:main` is
-   republished only on a full run (the nightly or a manual one), so a secret changed since then is
-   not seen; the runbook says to start a manual full run after changing a secret and before
-   `prepare`. It needs `docker buildx` on the signer's machine. Awaits the watcher? No.
-9. **Disclosed, not changed:** §5.4 step 5's "main's CI run on that commit is green" proves less
+8. **Disclosed, not changed:** §5.4 step 5's "main's CI run on that commit is green" proves less
    than it reads. An ordinary push to `main` runs no package tests (repo `CLAUDE.md` §2). The tag's
    own run is the full one (`ci.yml:167`) and publication waits for it (`ci.yml:4281`).
-10. **Where item b)'s `W1` comes from.** A record's `IdSistemaInformatico` is the node's SIF row's
-    (`backend.ts:817`), and a real first setup writes `W1` into it from `WAITRON_ID_SISTEMA`
-    (`packages/fiscal-verifactu/src/initial-setup.ts:128`; `software.ts:1`). The shared test
-    fixture registers `WT` instead (`packages/fiscal-verifactu/test/fixtures.ts:309`), so the
-    agree guard registers with `WAITRON_ID_SISTEMA` through a new fixture option. A box whose row
-    holds another code is A993's territory.
+9. **Where item b)'s `W1` comes from.** A record's `IdSistemaInformatico` is the node's SIF row's
+   (`backend.ts:817`), and a real first setup writes `W1` into it from `WAITRON_ID_SISTEMA`
+   (`packages/fiscal-verifactu/src/initial-setup.ts:128`; `software.ts:1`). The shared test
+   fixture registers `WT` instead (`packages/fiscal-verifactu/test/fixtures.ts:309`), so the
+   agree guard registers with `WAITRON_ID_SISTEMA` through a new fixture option. A box whose row
+   holds another code is A993's territory.
 
 `pnpm release` is free: the root `package.json` scripts (`:10-28`) have no `release`, and `pnpm
 help` (9.15.0) lists no built-in of that name. `scripts/release/prepare-ui.mjs` belongs to the
@@ -174,7 +169,7 @@ there; the root script holds none by construction (Spanish stays in the package,
 3. **Version order is numeric**: with `v1.9.0` released, `1.10.0` is accepted and `1.8.9` refused;
    tags that are not `v<major>.<minor>.<patch>` are ignored — Task 6.
 4. **A place with accents and an apostrophe** (`L'Alfàs del Pi`) passes whole; one with a line
-   break or a `‹` is refused before anything is written — Tasks 5 and 6.
+   break or a `‹` is refused before anything is written — Task 5.
 5. **The PDF draws every character of the text.** The font has glyphs for «, », –, ñ and the
    accented vowels (measured 2026-11-11 with `fontkit`'s `hasGlyphForCodePoint` over
    `src/assets/register-noto-sans.ttf`: all `true`; the control `漢` printed `false`). The PDF
@@ -314,14 +309,14 @@ the text.
   fails; write `VERI\*FACTU` in one heading of `template.md` → the `\` case fails. Restore all
   three; name them in the commit message.
 - [ ] **Step 5: check the typed list against AEAT's own example, once.** The worked example is not
-  in the repository; fetch it into a new empty folder from the design's provenance address
-  (`curl -fsSL -o "$d/v051.pdf"
+  in the repository; fetch it into a new empty folder from the design's provenance address (`curl
+  -fsSL -o "$d/v051.pdf"
   'https://sede.agenciatributaria.gob.es/static_files/Sede/Tema/IVA/Verifactu/EjemplosDeclaracionResponsable(V0.5.1).pdf'`
   with `d=$(mktemp -d)`), run `pdftotext -layout "$d/v051.pdf" -` and compare each heading of the
   test's list with the PDF's, allowing only §4's three stated departures (the title, the
   person-producer wording, no 2.c)). Write the command, the file's `shasum -a 256` and each
-  difference found (or "none") in the commit message. (The address answered `200 application/pdf` to a
-  `curl -sSI` on 2026-11-11.) If it no longer answers, say so in the commit message and leave the
+  difference found (or "none") in the commit message. (The address answered `200 application/pdf` to
+  a `curl -sSI` on 2026-11-11.) If it no longer answers, say so in the commit message and leave the
   list as typed from §4.
 - [ ] **Step 6: commit** — `fiscal-verifactu: render a version's declaration as text and HTML`.
 
@@ -332,8 +327,8 @@ Size: production ~110; tests ~130.
 **Files:** create `src/declaration/agree.e2e.test.ts`; modify
 `packages/fiscal-verifactu/test/fixtures.ts` (`seedTenantWithSif` gains an optional
 `idSistemaInformatico`, default `"WT"`, so no other caller moves), `docs/backlog.md` and
-`docs/backlog/fiscal.md` (A940: "slice 2, part 1 landed: the text and its renderer; part 2, the
-PDF and the release commands, next").
+`docs/backlog/fiscal.md` (A940: "slice 2, part 1 landed: the text and its renderer; next, the PDF
+and the package command (2a), then the release commands (2b)").
 
 - [ ] **Step 1: failing test** `agree.e2e.test.ts` (design §8, "Records and declaration agree"):
   with the three test values stubbed (`vi.stubEnv`), seed with
@@ -363,10 +358,11 @@ Size: production ~3 (the fixture option) + ~6 docs; tests ~90.
 
 ---
 
-## Pull request 2 — the PDF, `pnpm release prepare` and `tag`, and the runbook
+## Pull request 2a — the PDF and the package's `declaration` command
 
-First line of its description: "Adds the declaration's PDF and `pnpm release prepare` and `tag`,
-which refuse until the asesor answers Q53 and slice 4 lands (A940 slice 2, part 2 of 2)."
+First line of its description: "Adds the declaration's PDF and a command that shows, writes and
+checks a version's declaration (A940 slice 2, part 2a of 3)." Its last step updates the two
+backlog files' A940 lines (part 2a landed; 2b next) and runs `/finish-branch`.
 
 ### Task 4: the PDF
 
@@ -431,15 +427,17 @@ Checks run in this order, each stopping the command: the arguments, then the blo
 the resolved `@waitron/verifactu` entry (its `exports` has no `./package.json`). An `AppError`
 prints its code and params to stderr and answers 1.
 
-- [ ] **Step 1: failing tests** in `command.test.ts`, each with a temporary `root` holding a copy
-  of the real `declarations/` (and a variant whose template has no blocker lines):
-  `show` on the real template refuses `declaration.release_blocked`; `show --draft` prints the text
-  and both blockers; `show --draft` with no producer → `sif.producer_unset`; `write` then `check`
-  on the blocker-free variant → 0 and the file keeps `‹NIF›`; `check` after editing 1.a in the
-  file → `declaration.disagrees` `{ item: "1.a" }`; place `L'Alfàs del Pi` accepted, `A\nB` and
-  `‹x›` refused; the library version equals the `version` read from
-  `node_modules/@waitron/verifactu/package.json` by path; `nodeIo()` names the package folder,
-  and its `stdout` and `stderr` reach `process.stdout.write` and `process.stderr.write` (spied).
+- [ ] **Step 1: failing tests** in `command.test.ts`, each with a temporary `root` holding a copy of
+  the real `declarations/` (and a variant whose template has no blocker lines): `show` on the real
+  template writes `declaration.release_blocked` to stderr and answers 1 — the one case that shows an
+  error's code being printed and the answer 1; the other refusals below assert only the code. The
+  producer settings' own refusals (`sif.producer_unset` and the rest) are slice 1's and are not
+  tested again here. `show --draft` prints the text and both blockers; `write` then `check` on the
+  blocker-free variant → 0 and the file keeps `‹NIF›`; `check` after editing 1.a in the file →
+  `declaration.disagrees` `{ item: "1.a" }`; place `L'Alfàs del Pi` accepted, `A\nB` and `‹x›`
+  refused; the library version equals the `version` read from
+  `node_modules/@waitron/verifactu/package.json` by path; `nodeIo()` names the package folder, and
+  its `stdout` and `stderr` reach `process.stdout.write` and `process.stderr.write` (spied).
 - [ ] **Step 2: run, expect FAIL:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run
   src/declaration/command.test.ts`
 - [ ] **Step 3: implement**; `pnpm install`. **Step 4: PASS**, and the real entry once:
@@ -450,7 +448,14 @@ prints its code and params to stderr and answers 1.
 - [ ] **Step 5: commit** — `fiscal-verifactu: a command that shows, writes and checks a version's
   declaration`.
 
-Size: production ~130; pnpm-lock.yaml a few generated lines; tests ~160.
+Size: production ~130; pnpm-lock.yaml a few generated lines; tests ~140.
+
+---
+
+## Pull request 2b — `pnpm release prepare` and `tag`, and the runbook
+
+First line of its description: "Adds `pnpm release prepare` and `pnpm release tag`, which refuse
+until the asesor answers Q53 and slice 4 lands (A940 slice 2, part 2b of 3)."
 
 ### Task 6: `pnpm release prepare`
 
@@ -463,8 +468,7 @@ modify root `package.json` (`"release": "node scripts/release/waitron-release.mj
 export function parseVersion(text)                       // → [major, minor, patch] or throws
 export function releasedVersions(lsRemoteOutput)         // "v1.2.3" refs only, sorted numerically
 export function madridDate(now)                          // Date → "YYYY-MM-DD" in Europe/Madrid
-export function producerDifference(imageEnv, env)        // → first differing setting name, or null
-export async function prepareRelease({ version, place, run, ask, now, env })
+export async function prepareRelease({ version, place, run, ask, now })
 export async function main(argv, deps)                   // deps default to the real ones below
 ```
 
@@ -477,64 +481,55 @@ the producer settings reach the package command); the real `ask(prompt)` reads o
    --porcelain` is empty; after `git fetch origin main`, `HEAD` equals `origin/main`.
 2. `git ls-remote --tags origin "refs/tags/v*"`: refuse if `v<version>` exists or the version is
    not greater than the highest released one.
-3. The published image's producer (departure 8): the owner from `gh repo view --json owner --jq
-   .owner.login`, lower-cased as `ci.yml`'s publish job does; then `sh
-   scripts/published-image-env.sh ghcr.io/<owner>/waitron:main`. Any exit but 0 refuses (3 means
-   nothing is published yet). `producerDifference` compares the three `WAITRON_PRODUCER_` values
-   with `env`'s, as `readSoftwareProducer` would read them (an empty value is unset), and a
-   difference refuses naming the setting only.
-4. `pnpm --filter @waitron/fiscal-verifactu exec tsx scripts/declaration.ts show --version V
+3. `pnpm --filter @waitron/fiscal-verifactu exec tsx scripts/declaration.ts show --version V
    --place P --date <madridDate(now)>` — print its output whole.
-5. `ask`: anything but exactly `yes` (after trimming) stops, with nothing written.
-6. The same command with `write`; `git add` the one file; `git commit -s -m "Release <version>"`;
+4. `ask`: anything but exactly `yes` (after trimming) stops, with nothing written.
+5. The same command with `write`; `git add` the one file; `git commit -s -m "Release <version>"`;
    `git push -u origin release/<version>`; `gh pr create --base main --title "Release <version>"`
    with a short English body naming the file and that the producer signed it with `prepare`.
 
 - [ ] **Step 1: failing tests**, with a recording fake `run`: the happy path issues exactly the
-  commands above in order; each refusal in steps 1–3 issues no `show`, `write`, `git commit` or
-  `push`; an image whose tax number differs refuses with `WAITRON_PRODUCER_TAX_ID` in the message
-  and neither value in it; `YES`, `y` and an empty answer issue no `write`; a non-zero `show` stops
-  before `ask`; `releasedVersions` of `v1.9.0`, `v1.10.0`, `vfoo`, `pre-sqlite-migration` →
+  commands above in order; each refusal in steps 1–2 issues no `show`, `write`, `git commit` or
+  `push`; `YES`, `y` and an empty answer issue no `write`; a non-zero `show` stops before `ask` — the
+  package command's own refusals are Task 5's and are not
+  tested again here; `releasedVersions` of `v1.9.0`, `v1.10.0`, `vfoo`, `pre-sqlite-migration` →
   `1.9.0`, `1.10.0`; with `v1.9.0` released `1.10.0` passes and `1.8.9` refuses;
   `madridDate(2026-10-21T22:30Z)` = `2026-10-22`. **And one test of the real wrappers and the entry
   point:** run `node scripts/release/waitron-release.mjs prepare 1.0.0 --place Elche` as a child
-  process, with `PATH` starting at a temporary folder holding stand-in `git`, `gh`, `pnpm` and
-  `sh` scripts that record their arguments and answer the happy path, and `yes` on its standard
-  input; it exits 0 and the recorded calls match the fake-`run` happy path. Build the stand-ins
-  once per file (repo `CLAUDE.md` §4), and clear `GIT_DIR` and its family in the child's
-  environment.
+  process, with `PATH` starting at a temporary folder holding stand-in `git`, `gh` and `pnpm`
+  scripts that record their arguments and answer the happy path, and `yes` on its standard input; it
+  exits 0 and the recorded calls match the fake-`run` happy path. Build the stand-ins once per file
+  (repo `CLAUDE.md` §4), and clear `GIT_DIR` and its family in the child's environment.
 - [ ] **Step 2: run, expect FAIL:** `pnpm exec vitest run scripts/release/waitron-release.test.mjs`
 - [ ] **Step 3: implement. Step 4: PASS**, and read the root coverage table for
   `scripts/release/waitron-release.mjs` (`pnpm exec vitest run --coverage
   scripts/release/waitron-release.test.mjs`): at or above `98/98/98/95`. Then the real refusal
   once, in this worktree: `pnpm release prepare 1.0.0 --place Elche` — expect it to stop at step 1
   (the branch is not `release/1.0.0`), having written nothing (`git status --porcelain` empty).
-  Deletion controls: drop the `yes` comparison → the `YES` case fails; drop the producer
-  comparison → the differing-tax-number case fails; restore both.
+  Deletion control: drop the `yes` comparison → the `YES` case fails; restore.
 - [ ] **Step 5: commit** — `release: pnpm release prepare writes and signs a version's
   declaration`.
 
-Size: production ~180; tests ~260.
+Size: production ~150; tests ~190.
 
 ### Task 7: `pnpm release tag`
 
 **Files:** modify `scripts/release/waitron-release.mjs` and its test.
 
-**Produces:** `export async function tagRelease({ version, run, env })`. In order, stopping at the
+**Produces:** `export async function tagRelease({ version, run })`. In order, stopping at the
 first failure: the version parses; on `main`, clean, and after `git fetch origin main` `HEAD`
 equals `origin/main`; `git cat-file -e HEAD:packages/fiscal-verifactu/declarations/v<V>.md`; the
 package command's `check --version V` exits 0; the tag is absent and the version greater than the
-highest released (Task 6's functions); the published image's producer equals `env`'s (Task 6's
-step 3, again, since the secrets may have changed since `prepare`); `gh run list --workflow ci.yml
+highest released (Task 6's functions); `gh run list --workflow ci.yml
 --branch main --event push --commit <HEAD sha> --json status,conclusion --limit 1` answers one run,
 `completed` and `success`; then `git tag -a v<V> -m "Waitron <V>"` and `git push origin v<V>`.
 The pre-push hook runs on that push; what it does with an annotated tag's object id was read, not
 run (`.husky/pre-push:24-40`), so Step 4 below does not push.
 
-- [ ] **Step 1: failing tests:** the happy path's commands in order; a missing file, a failing
-  `check`, an existing tag, a differing producer, a run `in_progress`, a run `failure` and no run
-  at all each stop with no `git tag` and no `push`; and the child-process test of Task 6 gains a
-  `tag` run through the same stand-ins.
+- [ ] **Step 1: failing tests:** the happy path's commands in order; a missing file, a non-zero
+  `check` (one case; what `check` refuses is Task 5's), an existing tag, a run `in_progress`, a run
+  `failure` and no run at all each stop with no `git tag` and no `push`; and the child-process test
+  of Task 6 gains a `tag` run through the same stand-ins.
 - [ ] **Step 2: run, expect FAIL:** `pnpm exec vitest run scripts/release/waitron-release.test.mjs`
 - [ ] **Step 3: implement. Step 4: PASS**, the coverage table as in Task 6, and `pnpm release tag
   1.0.0` once in this worktree: expect a stop before any `git tag` (not on `main`); `git tag -l
@@ -543,9 +538,9 @@ run (`.husky/pre-push:24-40`), so Step 4 below does not push.
 - [ ] **Step 5: commit** — `release: pnpm release tag tags a version whose declaration has
   landed`.
 
-Size: production ~60; tests ~140.
+Size: production ~55; tests ~120.
 
-### Task 8: the runbook, the backlog, and pull request 2
+### Task 8: the runbook, the backlog, and pull request 2b
 
 **Files:** create `docs/operations/release.md`; modify `docs/backlog.md` and
 `docs/backlog/fiscal.md` (A940's entries: slice 2 landed; both release commands refuse until the
@@ -557,9 +552,13 @@ departure 3), and the design (one dated line under its banner notes pointing at 
 ~/workspace/tools/worktree.py new waitron release/<version> --headless`); the checks before
 `prepare`, each one line — `functions.md` against the routes, item d)'s hosting phrases and
 services against what the release can do, AEAT's FAQ and worked example re-read, the repository
-still public (design §5.4, §7.1); if a producer secret changed since the last full run, start a
-manual full run on `main` and wait for its publish (departure 8); set the three producer settings
-in the shell without printing them, and have `docker buildx` available; `pnpm release prepare
+still public (design §5.4, §7.1); **load the three producer settings** from
+`~/waitron-campaign-shared/private/producer-identity.env` into the shell that runs `prepare` and
+`tag`, never printing a value, with `while IFS= read -r line; do export "$line"; done <
+~/waitron-campaign-shared/private/producer-identity.env` — the file's values are unquoted and two
+hold spaces (its shape read 2026-11-11 without printing a value), and on a stand-in file of the
+same shape that loop exported both whole in `zsh` and `bash` while `set -a; . <file>` failed with
+`Up: command not found`; `pnpm release prepare
 <version> --place "<town>"`; land the pull request; from an up-to-date `main` checkout, `pnpm
 release tag <version>`; watch the tag's full CI run. Never push a `v*` tag by hand (departure 3).
 How to read the draft before the blockers go: `show --draft`. A release that changes the producer
@@ -588,12 +587,13 @@ Size: production 0 code; ~90 lines of runbook and backlog prose; tests 0.
 | 1 | 2 | 110 | — | 130 |
 | 1 | 3 | 3 | 6 | 90 |
 | **1** | | **~245** | **~95** | **~330** |
-| 2 | 4 | 60 | — | 70 |
-| 2 | 5 | 130 | — | 160 |
-| 2 | 6 | 180 | — | 260 |
-| 2 | 7 | 60 | — | 140 |
-| 2 | 8 | — | 90 | — |
-| **2** | | **~430** | **~90** | **~630** |
-| **Both** | | **~675** | **~185** | **~960** |
+| 2a | 4 | 60 | — | 70 |
+| 2a | 5 | 130 | — | 140 |
+| **2a** | | **~190** | — | **~210** |
+| 2b | 6 | 150 | — | 190 |
+| 2b | 7 | 55 | — | 120 |
+| 2b | 8 | — | 90 | — |
+| **2b** | | **~205** | **~90** | **~310** |
+| **All** | | **~640** | **~185** | **~850** |
 
 Not counted: the few generated lines `pnpm install` writes to `pnpm-lock.yaml` in Task 5.
