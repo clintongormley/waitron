@@ -2099,10 +2099,6 @@ values rather than PIN substrings inside random IDs. See the
 The cited refund test checks `setItem` calls and its own final entry; direct property assignments
 under another key fall outside that check.
 
-- **Tests that read a built command's error output fail under Claude Code.**
-  Find which inherited variable lets the hint through and clear it in the cases' child environment.
-  [Detail](backlog/ci.md#tests-that-read-a-built-commands-error-output-fail-under-claude-code).
-
 - **Switching the till's language mid-screen with `setLocale` left no error banner in some browser
   tests.** Not diagnosed: a test-harness effect, or a refusal a language change hides.
   [Detail](backlog/ci.md#switching-the-tills-language-mid-screen-with-setlocale-left-no-error-banner-in-some-browser-tests)

@@ -26,18 +26,6 @@ Current command after A976’s staff-sample rename (2026-11-09):
 `pnpm --filter @waitron/server exec vitest run src/order-portions.adjustments.test.ts -t 'two croquettes from two rounds|a cancel naming portions of two different rows'`
 The dated experiment above retains its original titles and command.
 
-## Tests that read a built command's error output fail under Claude Code
-
-The command's stderr
-begins with a `<claude-code-hint … />` line, so `apps/server/src/first-fiscal-launch.test.ts` and
-seven `packages/provisioning` CLI cases fail locally under an agent on `main` (A798-B slice 8
-plan, E8 and E13). Found while planning A798-B slice 8. On 2026-10-26, during A980 S1a2,
-`packages/provisioning/src/first-setup-command-import.test.ts`'s case "the actual relocated command
-resumes a retained import and publishes it once" (a suite removed on 2026-11-08) failed this way (its child's stderr held
-`<claude-code-hint …/>` where the case expects it empty) and passed under
-`env -i HOME PATH TMPDIR`; it fails the same way on `27ae35c09` and `d23e32966`. Next action: find
-which inherited variable lets the hint through and clear it in the cases' child environment.
-
 ## A backlog detail link still names the old five-handler heading
 
 The till entry’s

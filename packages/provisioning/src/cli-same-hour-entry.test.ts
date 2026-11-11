@@ -7,6 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { invoiceSeries, openVenueDatabase, readDeploymentEnvironment } from "@waitron/db";
 import { readTenantIdentities } from "./tenant-guard.js";
+import { childEnvironment } from "../test/child-environment.js";
 
 const venue = useVenueDb({ migrations: TEST_MIGRATIONS });
 const execute = promisify(execFile);
@@ -119,7 +120,7 @@ Object.defineProperty(performance, "now", { value: () => passed });
       ],
       {
         env: {
-          ...process.env,
+          ...childEnvironment(),
           WAITRON_STATE_DIR: stateDir,
           WAITRON_ENV: "preproduction",
           WAITRON_ADMIN_PIN: "4826",
