@@ -82,6 +82,7 @@ describe("the user guides", () => {
       "invoice-conflict",
       "free-space",
       "out-of-space",
+      "restart",
       "clock-behind",
       "clock-at-start",
       "clock-service",

@@ -3788,6 +3788,19 @@ export const en = {
   "box_status.free_help":
     "Deletes old crash reports and logs, and files left by an interrupted backup. Your sales, settings and backups are kept.",
   "box_status.free_help_guide": "More about freeing space",
+  "box_status.restart.title": "Restart the box",
+  "box_status.restart.question": "Restart the box?",
+  "box_status.restart.what":
+    "Waitron restarts on the box. Every till stops selling until it has started again.",
+  "box_status.restart.stop": "Stop",
+  "box_status.restart.confirm": "Restart",
+  "box_status.restart.done":
+    "The box is restarting. This page catches up by itself once it is back.",
+  "box_status.restart.sign_in_hint":
+    "Only an administrator can restart the box. Signing in as one signs you out here first.",
+  "box_status.restart_help_label": "When to restart the box",
+  "box_status.restart_help": "Use it when an alert says to. Tills stop selling until it is back.",
+  "box_status.restart_help_guide": "More about restarting the box",
   "box_status.fillers":
     "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, recovery keys and saved backups.",
   "box_status.checks_unavailable":
@@ -7682,6 +7695,20 @@ export const es: Record<StringKey, string> = {
   "box_status.free_help":
     "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
+  "box_status.restart.title": "Reiniciar el equipo",
+  "box_status.restart.question": "¿Reiniciar el equipo?",
+  "box_status.restart.what":
+    "Waitron se reinicia en el equipo. Ninguna caja puede vender hasta que vuelva a arrancar.",
+  "box_status.restart.stop": "Parar",
+  "box_status.restart.confirm": "Reiniciar",
+  "box_status.restart.done":
+    "El equipo se está reiniciando. Esta página se pone al día sola cuando vuelva.",
+  "box_status.restart.sign_in_hint":
+    "Solo un administrador puede reiniciar el equipo. Iniciar sesión como administrador cierra primero tu sesión aquí.",
+  "box_status.restart_help_label": "Cuándo reiniciar el equipo",
+  "box_status.restart_help":
+    "Úsalo cuando una alerta lo indique. Las cajas no pueden vender hasta que vuelva.",
+  "box_status.restart_help_guide": "Más sobre reiniciar el equipo",
   "box_status.fillers":
     "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",
   "box_status.checks_unavailable":

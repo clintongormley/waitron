@@ -1572,6 +1572,127 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
   });
 });
 
+describe("dashboard-box-status-screen's restart of the box", () => {
+  async function mountRestart(api: DashboardApi, canRestart = true) {
+    const mounted = await mountWidget<BoxStatusScreen>("dashboard-box-status-screen", {
+      api,
+      canRestart,
+    });
+    await flush(mounted.el);
+    return mounted.el;
+  }
+
+  const restartApi = (restartBox: unknown = vi.fn().mockResolvedValue(undefined)) =>
+    stubApi({ restartBox });
+  const dialog = (el: BoxStatusScreen) =>
+    q(el, "[data-test=box-restart-dialog]") as HTMLElement & { open: boolean };
+  const buttons = (el: BoxStatusScreen) =>
+    qa(el, "[data-test=box-restart-dialog] wt-form-actions wt-button").map((button) => [
+      button.getAttribute("data-test"),
+      button.getAttribute("variant"),
+      text(button),
+    ]);
+
+  async function openConfirm(el: BoxStatusScreen): Promise<void> {
+    await userEvent.click(q(el, "[data-test=box-restart]")!);
+    await flush(el);
+  }
+
+  it("offers an administrator Restart the box, which asks first, with Stop and Restart", async () => {
+    const el = await mountRestart(restartApi());
+    expect(text(q(el, "[data-test=box-restart-section] h2"))).toBe(t("box_status.restart.title"));
+    expect(text(q(el, "[data-test=box-restart]"))).toBe(t("box_status.restart.title"));
+    expect(q(el, "[data-test=box-restart-sign-in]")).toBeNull();
+    expect(dialog(el).open).toBe(false);
+    await openConfirm(el);
+    expect(dialog(el).open).toBe(true);
+    expect(dialog(el).getAttribute("heading")).toBe(t("box_status.restart.question"));
+    expect(text(q(el, "[data-test=box-restart-what]"))).toBe(t("box_status.restart.what"));
+    expect(buttons(el)).toEqual([
+      ["box-restart-stop", "secondary", t("box_status.restart.stop")],
+      ["box-restart-confirm", "primary", t("box_status.restart.confirm")],
+    ]);
+  });
+
+  it("asks the box to restart once, closes, and says the box is restarting", async () => {
+    const api = restartApi();
+    const el = await mountRestart(api);
+    await openConfirm(el);
+    await userEvent.click(q(el, "[data-test=box-restart-confirm]")!);
+    await flush(el);
+    expect(api.restartBox).toHaveBeenCalledOnce();
+    expect(dialog(el).open).toBe(false);
+    const note = q(el, "[data-test=box-restart-done]");
+    expect(note?.getAttribute("role")).toBe("status");
+    expect(text(note)).toBe(t("box_status.restart.done"));
+  });
+
+  it("closes on Stop without asking the box anything", async () => {
+    const api = restartApi();
+    const el = await mountRestart(api);
+    await openConfirm(el);
+    await userEvent.click(q(el, "[data-test=box-restart-stop]")!);
+    await flush(el);
+    expect(dialog(el).open).toBe(false);
+    expect(api.restartBox).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=box-restart-done]")).toBeNull();
+  });
+
+  it("shows a refused restart's sentence above the buttons and keeps the dialog open", async () => {
+    const refused = { code: "authorization.not_permitted", params: { permission: "person.admin" } };
+    const el = await mountRestart(restartApi(vi.fn().mockRejectedValue(refused)));
+    await openConfirm(el);
+    await userEvent.click(q(el, "[data-test=box-restart-confirm]")!);
+    await flush(el);
+    expect(dialog(el).open).toBe(true);
+    expect(text(dialog(el).shadowRoot!.querySelector(".footer [data-error]"))).toBe(
+      codeMessage("authorization.not_permitted"),
+    );
+    expect(q(el, "[data-test=box-restart-done]")).toBeNull();
+  });
+
+  it("offers anyone else an administrator sign-in in place, which asks the app to sign out", async () => {
+    const el = await mountRestart(restartApi(), false);
+    expect(q(el, "[data-test=box-restart]")).toBeNull();
+    expect(text(q(el, "[data-test=box-restart-section] h2"))).toBe(t("box_status.restart.title"));
+    expect(text(q(el, "[data-test=box-restart-hint]"))).toBe(t("box_status.restart.sign_in_hint"));
+    const signIn = q(el, "[data-test=box-restart-sign-in]")!;
+    expect(text(signIn)).toBe(t("staff.sign_in_as_admin"));
+    const asked = vi.fn();
+    document.body.addEventListener("restart-sign-in", asked);
+    try {
+      await userEvent.click(signIn);
+    } finally {
+      document.body.removeEventListener("restart-sign-in", asked);
+    }
+    expect(asked).toHaveBeenCalledOnce();
+  });
+
+  it("is offered while the box's own read fails", async () => {
+    const el = await mountRestart(
+      stubApi({ getBoxHealth: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    );
+    expect(q(el, "[data-test=box-restart]")).not.toBeNull();
+  });
+
+  it("links its help to the guide's restart section", async () => {
+    const el = await mountRestart(restartApi());
+    const tooltip = q(el, "[data-test=box-restart-section] wt-help-tooltip")!;
+    expect(tooltip.getAttribute("mode")).toBe("help-mode");
+    expect(tooltip.getAttribute("guide-href")).toBe(guideHref("box-status.restart"));
+    expect(guideHref("box-status.restart")).toBe("/help/en/box-status#restart");
+  });
+
+  it("words the section and the dialog in Spanish from the words file", async () => {
+    setLocale("es");
+    const el = await mountRestart(restartApi());
+    await openConfirm(el);
+    expect(text(q(el, "[data-test=box-restart]"))).toBe(es["box_status.restart.title"]);
+    expect(text(q(el, "[data-test=box-restart-what]"))).toBe(es["box_status.restart.what"]);
+    expect(text(q(el, "[data-test=box-restart-confirm]"))).toBe(es["box_status.restart.confirm"]);
+  });
+});
+
 describe("dashboard-box-status-screen's sales dated wrongly", () => {
   const OPEN: MisdatedOpenView = {
     incidentId: "i1",

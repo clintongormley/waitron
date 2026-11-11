@@ -3246,6 +3246,30 @@ it("asks the box to set its clock to this device's time and answers the step", a
   ]);
 });
 
+it("asks the box to restart its server", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, true, 202));
+  const api = new DashboardApi("", fetchImpl);
+  await api.restartBox();
+  const calls = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+    ["/api/box/restart", "POST", "{}"],
+  ]);
+});
+
+it("rejects a refused restart with its code", async () => {
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValue(
+      jsonResponse(
+        { error: { code: "authorization.not_permitted", params: { permission: "person.admin" } } },
+        false,
+        403,
+      ),
+    );
+  const api = new DashboardApi("", fetchImpl);
+  await expect(api.restartBox()).rejects.toMatchObject({ code: "authorization.not_permitted" });
+});
+
 it("rejects a refused clock set with its code and reason", async () => {
   const fetchImpl = vi
     .fn()

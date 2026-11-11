@@ -180,6 +180,16 @@ straight away. A bell open on another computer catches up within about a minute.
 If **Free** does not free enough, follow the line at the bottom of the page about freeing more
 space.
 
+## Restart the box {#restart}
+
+**Restart the box** restarts Waitron on the box; the box itself stays on. Every till stops selling
+until Waitron has started again, so the page asks first: choose **Restart** to go ahead or
+**Stop** to leave it. Use it when an alert says to. The page catches up by itself once the box is
+back.
+
+Only an administrator can press it. Anyone else sees **Sign in as an administrator** instead,
+which signs them out and comes back to this page after the administrator signs in.
+
 ## When payments stop because of the clock {#clock-behind}
 
 When the box's clock reads more than a minute earlier than the latest sale recorded on the box, the

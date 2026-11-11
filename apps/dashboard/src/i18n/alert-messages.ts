@@ -150,8 +150,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Faltaba una protección de registros al arrancar y se ha restablecido.",
   },
   "restore.first_start_failed": {
-    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Each start tries again, so switch the box off and on. If this message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page, because that start reads the bucket, then switch the box off and on again.",
-    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del equipo y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a apagar y encender el equipo.",
+    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Each start tries again, so open Box status and press Restart the box. If this message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page, because that start reads the bucket, then press Restart the box again.",
+    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del equipo y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a pulsar Reiniciar el equipo.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",
@@ -593,8 +593,8 @@ export const ALERT_WORDS: Readonly<
   sealed_state: {
     words: {
       "storage.disk_full": {
-        en: "The box's disk is full. Free space on the Box status page, then switch the box off and on: each start updates the copy again.",
-        es: "El disco del equipo está lleno. Libera espacio en Estado del equipo y después apaga y enciende el equipo: cada arranque vuelve a actualizar la copia.",
+        en: "The box's disk is full. Free space on the Box status page, then press Restart the box there: each start updates the copy again.",
+        es: "El disco del equipo está lleno. Libera espacio en Estado del equipo y después pulsa allí Reiniciar el equipo: cada arranque vuelve a actualizar la copia.",
       },
       "recovery.state_incomplete": {
         en: "Sales continue. Some of the box's own files that the copy must include are missing.",
@@ -602,8 +602,8 @@ export const ALERT_WORDS: Readonly<
       },
     },
     otherwise: {
-      en: "Sales continue. Each start tries again, so switch the box off and on.",
-      es: "Las ventas continúan. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.",
+      en: "Sales continue. Each start tries again, so open Box status and press Restart the box.",
+      es: "Las ventas continúan. Cada arranque lo vuelve a intentar, así que abre Estado del equipo y pulsa Reiniciar el equipo.",
     },
   },
   // Why the box's time service is not keeping its clock right, by the `reason` param of

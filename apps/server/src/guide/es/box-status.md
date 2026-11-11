@@ -194,6 +194,16 @@ menos.
 Si **Liberar** no libera bastante, sigue la línea del final de la página sobre cómo ganar más
 espacio.
 
+## Reinicia el equipo {#restart}
+
+**Reiniciar el equipo** reinicia Waitron en el equipo; el equipo sigue encendido. Ninguna caja
+puede vender hasta que Waitron vuelva a arrancar, así que la página lo pregunta antes: elige
+**Reiniciar** para seguir o **Parar** para dejarlo. Úsalo cuando una alerta lo indique. La página
+se pone al día sola cuando vuelve el equipo.
+
+Solo un administrador puede pulsarlo. Los demás ven **Iniciar sesión como administrador**, que
+cierra su sesión y vuelve a esta página cuando el administrador inicia sesión.
+
 ## Cuando se paran los cobros por la hora {#clock-behind}
 
 Cuando el reloj del equipo marca más de un minuto antes que la última venta registrada en el equipo,
