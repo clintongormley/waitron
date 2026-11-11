@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { persons, sessions } from "@waitron/db";
 import { roleHasPermission, type Permission } from "./permissions.js";
@@ -39,7 +39,7 @@ export interface Authorization {
  * (only with `attempts`), `authorization.not_permitted`.
  */
 export async function authorize(
-  tx: Transaction,
+  tx: Database | Transaction,
   args: { sessionId: string; permission: Permission | (string & {}); override?: Override },
   attempts?: PinAttempts,
 ): Promise<Authorization> {

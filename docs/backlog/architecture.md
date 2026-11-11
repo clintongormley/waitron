@@ -1053,7 +1053,9 @@ product failures.
   **Open:** the design does not cover A790's six tables, A802's eleven or A739's; each later slice
   must fold in the ones it touches. 246 tables become 145, or 144 once A1323 removes
   `recovery_packs`, in eight migration sets instead of sixteen. The job runner is built with scheduled
-  menu activation and public `/health` reports; the other jobs and services still need moving onto it. 111 product
+  menu activation and public `/health` reports; the other jobs and services still need moving onto it.
+  Management and device events share one loop with read-only wake checks; device events carry types
+  only. Browser adoption of the device stream remains for jr13/jr14. 111 product
   environment variables become 51. There is one state-folder layout. It keeps
   the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
   link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity

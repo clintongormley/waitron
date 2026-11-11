@@ -22,6 +22,7 @@ import {
   setProfileServiceAccess,
   zoneServicePolicies,
 } from "@waitron/venue-service";
+import { mountDeviceLiveApi } from "./device-live-api.js";
 import { LiveEvents } from "./live-api.js";
 import { clockStartUp } from "./clock-start-up.js";
 import { mountScheduleApi } from "./schedule-api.js";
@@ -586,6 +587,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     basis:
       "Device identity, equipment and screen reads/housekeeping are not cooking or selling. device-api.ts; station/pass reads additionally check their screen and signed-in person where required.",
     routes: [
+      "GET /api/live/events",
       "GET /api/device/me",
       "GET /api/device/equipment",
       "GET /api/device/pass-board",
@@ -762,6 +764,11 @@ it("classifies every mounted till, device and schedule route and checks its decl
     noopLog,
   );
   mountScheduleApi(inventory, { db: suite.db }, noopLog);
+  mountDeviceLiveApi(
+    inventory,
+    { db: suite.db, bus: new LiveEvents(), resourceTypes: ["printers"] },
+    noopLog,
+  );
   const mounted = new Set(
     inventory.routes
       .filter(({ method, path }) => method !== "ALL" && path.startsWith("/api/"))

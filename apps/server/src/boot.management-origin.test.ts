@@ -335,3 +335,14 @@ it("boots and closes a separate staff entrance over the real dashboard API", asy
   );
   expect(served.listeners.every(({ server }) => !server.listening)).toBe(true);
 });
+
+it("lets a till on an allowed origin read the device live endpoint's answer", async () => {
+  await withServer({}, async () => {
+    const path = '/api/live/events?resources=[{"type":"printers"}]';
+    const response = await fetch(url(path), { headers: { origin: TRUSTED } });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    expect(response.headers.get("access-control-allow-origin")).toBe(TRUSTED);
+    expect(response.headers.get("access-control-allow-credentials")).toBe("true");
+  });
+});

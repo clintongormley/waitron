@@ -2,7 +2,7 @@ import "./errors.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { AppError } from "@waitron/shared";
 import { nowIso, managementSessions, persons } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import type { PersonRoleValue } from "@waitron/shared";
 import { hashSessionToken, mintSessionToken } from "./session-token.js";
@@ -35,26 +35,7 @@ export async function startManagementSession(
   return { token, personId: input.personId };
 }
 
-/**
- * `token` is the cookie's raw value; a session's row id or stored hash names no session. Re-reads
- * `persons.status` on every call, so a mid-session suspension loses access immediately rather than
- * at the next login. A session whose person row is gone (the table declares no key to `persons`) is
- * refused by two nets: the inner join finds nothing, and the status check refuses a status that is
- * not `active`.
- */
-export async function resolveManagementSession(
-  tx: Transaction,
-  token: string,
-  options: { touch?: boolean } = {},
-): Promise<{
-  sessionRowId: string;
-  personId: string;
-  role: PersonRoleValue;
-  email: string | null;
-  displayName: string;
-  locale: string | null;
-  expiresAt: string;
-}> {
+async function readManagementSession(tx: Database | Transaction, token: string) {
   const [row] = await tx
     .select({
       sessionRowId: managementSessions.id,
@@ -83,6 +64,15 @@ export async function resolveManagementSession(
     throw new AppError("person.suspended", { personId: row.personId });
   }
   if (row.status !== "active") throw new AppError("management_session.required", {});
+  return row;
+}
+
+export async function resolveManagementSession(
+  tx: Transaction,
+  token: string,
+  options: { touch?: boolean } = {},
+) {
+  const row = await readManagementSession(tx, token);
   const touch = options.touch !== false && passiveRead.getStore() !== true;
   if (touch) {
     await tx
@@ -112,4 +102,8 @@ export async function endManagementSession(tx: Transaction, token: string): Prom
     .where(and(eq(managementSessions.tokenHash, tokenHash), isNull(managementSessions.endedAt)))
     .returning({ id: managementSessions.id });
   return updated.length > 0;
+}
+
+export async function checkManagementSession(db: Database, token: string): Promise<void> {
+  await readManagementSession(db, token);
 }

@@ -1,5 +1,12 @@
 # Keeping dashboard data current
 
+Management (`/management-api/events`) and enrolled devices (`/api/live/events`) use the shared
+server loop in `live-stream.ts`. Wake checks read committed session/device state without taking
+the write lock or updating activity stamps. Management events carry resource identities; device
+events carry resource types only and need no person signed in. The transfer watch retains its
+empty-object event body and checks its person, device, permissions and profile at every wake.
+Keepalives remain every 15 seconds. The till's browser adoption belongs to jr13/jr14.
+
 When you add a dashboard read, subscribe to the data it displays. You should not need to know which
 button, background worker or other client will change that data. "Other client" carries one
 condition: a change reaches the dashboard only when the write went through `withTransaction` in this

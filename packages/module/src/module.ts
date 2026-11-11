@@ -1133,7 +1133,7 @@ export interface VenueServiceContribution {
   ): Promise<void>;
   /** The department and zone half of {@link readProfileServiceAccess}. */
   readProfileZones(
-    tx: Transaction,
+    tx: Database | Transaction,
     profileId: string,
   ): Promise<{
     departmentId: string | null;

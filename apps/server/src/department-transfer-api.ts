@@ -1,7 +1,5 @@
 import { and, asc, eq, gt } from "drizzle-orm";
 import type { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
-import { codeOf } from "@waitron/server-kit";
 import {
   withTransaction,
   workingOrders,
@@ -9,25 +7,21 @@ import {
   ticketItems,
   kitchenStations,
   type Transaction,
+  type Database,
 } from "@waitron/db";
 import { authorize, canUseDeviceProfile, persons } from "@waitron/identity";
 import { readRawJsonBody } from "@waitron/server-kit";
-import {
-  AppError,
-  diskFullIn,
-  isUuid,
-  centsToDecimal,
-  thousandthsToDecimal,
-} from "@waitron/shared";
+import { AppError, isUuid, centsToDecimal, thousandthsToDecimal } from "@waitron/shared";
 import { asObject } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
-import { requireSession } from "./till-session.js";
+import { requireSession, readTillSession, assertRequestDevice } from "./till-session.js";
 import { checkZones, inScope, readZoneScope } from "./zone-access.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import { firedQuantity } from "./kitchen-print.js";
+import { liveStreamResponse } from "./live-stream.js";
 import "./errors.js";
 
 function uuid(value: unknown, field: string): string {
@@ -37,7 +31,7 @@ function uuid(value: unknown, field: string): string {
 }
 
 async function monitoringActor(
-  tx: Transaction,
+  tx: Database | Transaction,
   session: Awaited<ReturnType<typeof requireSession>>,
 ) {
   await authorize(tx, { sessionId: session.sessionId, permission: "payment.take" });
@@ -117,67 +111,35 @@ export function mountDepartmentTransferApi(
           await withTransaction(deps.db, (tx) => monitoringActor(tx, session));
         };
         await authenticate();
-        const response = streamSSE(c, async (stream) => {
-          // Invalidation carries no identities: the queue and source history retain their own gates.
-          let pending = false;
-          let closed = false;
-          let wake = (): void => {};
-          const unsubscribe = bus.subscribe((event) => {
-            if (event.kind === "close") closed = true;
-            else if (
-              event.change.resources.some(
-                (resource) =>
-                  resource.type === "department_transfer_requests" ||
-                  resource.type === "department_transfer_desks" ||
-                  resource.type === "department_transfer_destinations" ||
-                  resource.type === "order_service_contexts",
-              )
-            )
-              pending = true;
-            else return;
-            wake();
-          });
-          const timer = setInterval(() => wake(), 15_000);
-          const cleanup = () => {
-            closed = true;
-            clearInterval(timer);
-            unsubscribe();
-            wake();
-          };
-          stream.onAbort(cleanup);
-          try {
-            await stream.writeSSE({ event: "ready", data: "{}" });
-            while (!closed && !stream.aborted) {
-              if (!pending)
-                await new Promise<void>((resolve) => {
-                  wake = resolve;
-                });
-              if (closed || stream.aborted) break;
-              try {
-                await authenticate();
-              } catch (error) {
-                if (error instanceof AppError && !diskFullIn(error))
-                  await stream.writeSSE({
-                    event: "session-invalid",
-                    data: JSON.stringify({ code: error.code }),
-                  });
-                else log("warn", "live.stream_failed", { errorCode: codeOf(error) });
-                break;
-              }
-              if (closed || stream.aborted) break;
-              const event = pending ? "change" : "keepalive";
-              pending = false;
-              await stream.writeSSE({ event, data: "{}" });
-            }
-          } catch (error) {
-            log("warn", "live.stream_failed", { errorCode: codeOf(error) });
-          } finally {
-            cleanup();
-          }
+        return liveStreamResponse(c, {
+          bus,
+          interests: [
+            "department_transfer_requests",
+            "department_transfer_desks",
+            "department_transfer_destinations",
+            "order_service_contexts",
+          ].map((type) => ({ type })),
+          recheck: async () => {
+            const session = await readTillSession(deps.db, c);
+            assertProfileAction(session.device, "take-orders");
+            await assertRequestDevice(deps, c, session);
+            await monitoringActor(deps.db, session);
+          },
+          invalidCodes: new Set([
+            "session.required",
+            "session.person_not_signed_in",
+            "session.not_open",
+            "authorization.not_permitted",
+            "person.suspended",
+            "device.unauthorized",
+            "device.forbidden_action",
+            "device_profile.not_admitted",
+            "device_profile.access_invalid",
+          ]),
+          sendIds: false,
+          invalidationOnly: true,
+          log,
         });
-        response.headers.set("Cache-Control", "no-store");
-        response.headers.set("X-Accel-Buffering", "no");
-        return response;
       }),
     );
   app.get("/api/department-transfers/destinations", (c) =>

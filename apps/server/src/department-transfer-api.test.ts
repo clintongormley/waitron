@@ -1402,7 +1402,7 @@ describe("department transfer live invalidation", () => {
       }
     });
 
-  it("closes the stream without session-invalid when checking the session meets a full disk", async () => {
+  it("keeps streaming on a full disk and still refuses an invalid session", async () => {
     const f = await ready();
     const response = await app.request(path, { headers: { cookie: f.desk.cookie } });
     expect(response.status).toBe(200);
@@ -1414,10 +1414,19 @@ describe("department transfer live invalidation", () => {
     try {
       await reader.read();
       liveEvents.publish({ resources: [{ type: "department_transfer_requests" }] });
-      const next = await reader.read();
-      expect(next.value === undefined ? "" : text(next.value)).not.toContain("session-invalid");
-      expect(next.done).toBe(true);
-      expect(logged.slice(before)).toContain("live.stream_failed");
+      expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+      liveEvents.publish({ resources: [{ type: "department_transfer_desks" }] });
+      expect(text((await reader.read()).value)).toBe("event: change\ndata: {}\n\n");
+      await suite.db
+        .update(sessions)
+        .set({ endedAt: new Date().toISOString() })
+        .where(eq(sessions.deviceId, f.desk.deviceId));
+      liveEvents.publish({ resources: [{ type: "department_transfer_requests" }] });
+      expect(text((await reader.read()).value)).toBe(
+        'event: session-invalid\ndata: {"code":"session.required"}\n\n',
+      );
+      expect((await reader.read()).done).toBe(true);
+      expect(logged.slice(before)).not.toContain("live.stream_failed");
     } finally {
       writeLock.mockRestore();
       await reader.cancel();
@@ -2125,4 +2134,38 @@ describe("human transfer identities", () => {
     expect(two.map((route) => route.rows)).toEqual([2, 2, 3]);
     expect(two.map((route) => route.statements)).toEqual(one.map((route) => route.statements));
   });
+});
+
+it("a transfer stream rechecks without waiting for another caller's write lock", async () => {
+  const f = await ready();
+  const response = await app.request("/api/department-transfers/events", {
+    headers: { cookie: f.desk.cookie },
+  });
+  const reader = response.body!.getReader();
+  await reader.read();
+  let release!: () => void;
+  let entered!: () => void;
+  const held = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const lock = suite.db.withWriteLock(async () => {
+    entered();
+    await new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  });
+  await held;
+  let message: string | undefined;
+  try {
+    const next = reader.read().then((chunk) => {
+      message = new TextDecoder().decode(chunk.value);
+    });
+    liveEvents.publish({ resources: [{ type: "department_transfer_requests" }] });
+    await expect.poll(() => message, { timeout: 250 }).toBe("event: change\ndata: {}\n\n");
+    await next;
+  } finally {
+    release();
+    await lock;
+    await reader.cancel();
+  }
 });

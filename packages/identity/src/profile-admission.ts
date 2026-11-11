@@ -6,7 +6,7 @@ import {
   deviceProfileAdmissionPersons,
   deviceProfileAdmissionRoles,
 } from "@waitron/db";
-import type { Transaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 import type { PersonRoleValue } from "@waitron/shared";
@@ -14,7 +14,7 @@ import type { StaffListEntry } from "./staff.js";
 
 /** The roles a profile admits, `"every"` when it names none; `null` when the profile does not exist. */
 async function admittedRoles(
-  tx: Transaction,
+  tx: Database | Transaction,
   profileId: string,
 ): Promise<ReadonlySet<string> | "every" | null> {
   const [profile] = await tx
@@ -30,7 +30,7 @@ async function admittedRoles(
 }
 
 /** Each person with their role and their exception on `profileId`, if any. */
-function personsWithException(tx: Transaction, profileId: string) {
+function personsWithException(tx: Database | Transaction, profileId: string) {
   return tx
     .select({
       personId: persons.id,
@@ -62,7 +62,7 @@ function admits(
  * role must be in the profile's role set, and a profile with no role set admits every role.
  */
 export async function canUseDeviceProfile(
-  tx: Transaction,
+  tx: Database | Transaction,
   profileId: string,
   personId: string,
 ): Promise<boolean> {
