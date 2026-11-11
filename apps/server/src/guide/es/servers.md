@@ -89,3 +89,8 @@ equipo vuelva a conectarse.
 El estado junto al botón es la opción que has guardado. Abre la dirección del personal para
 comprobar si puedes conectarte; esta página no prueba esa conexión. Si un cambio falla, revisa la opción guardada y elige **Actualizar estado** para volver a intentar la conexión. **Detener el acceso a Cloud** es la opción aparte
 que detiene permanentemente todos los servicios de Cloud.
+
+Si Servicios Cloud indica que la solicitud guardada de reconexión está dañada, has encontrado un
+fallo de Waitron. No puedes repararla en esta página. Conserva los archivos de Cloud del equipo;
+no los borres para intentar conectarlo de nuevo. La reconexión tras restaurar desde Cloud solo
+está disponible en servidores de prueba.

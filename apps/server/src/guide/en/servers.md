@@ -80,3 +80,7 @@ Cloud services stay in place. Choose **Turn on remote access** to let the box re
 
 The status beside this button is your saved choice. Open your staff address to check whether
 you can connect; this page does not test that connection. If a change fails, check the saved choice and choose **Refresh status** to retry the connection. **Stop Cloud access** is the separate permanent stop for all Cloud services.
+
+If Cloud services says the saved reconnection request is damaged, you have found a fault in Waitron.
+You cannot repair that request on this page. Keep the box’s Cloud files; do not delete them to try
+to connect again. Reconnection after a Cloud restore is available only on test servers.

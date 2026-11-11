@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, onTestFinished } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -161,8 +161,19 @@ it("shows owner approval when registration import is still pending", async () =>
   expect(el.shadowRoot!.querySelector("#check-reconnection")).not.toBeNull();
 });
 
-it("shows a saved replacement diagnostic without offering ordinary pairing", async () => {
-  setLocale("en");
+it.each([
+  [
+    "en",
+    "The saved Cloud reconnection request is damaged. This is a fault in Waitron; reconnection cannot continue.",
+  ],
+  [
+    "es",
+    "La solicitud guardada de reconexión con Cloud está dañada. Es un fallo de Waitron; la reconexión no puede continuar.",
+  ],
+])("shows a saved reconnection fault in %s", async (locale, message) => {
+  const previous = currentLocale();
+  onTestFinished(() => setLocale(previous));
+  setLocale(locale);
   const api = new DashboardApi("", async () =>
     Response.json({
       state: "not_connected",
@@ -182,7 +193,7 @@ it("shows a saved replacement diagnostic without offering ordinary pairing", asy
   );
   await expect
     .poll(() => el.shadowRoot!.querySelector("[data-test=cloud-error]")?.textContent?.trim())
-    .toBe(codeMessage("cloud.replacement_state_invalid"));
+    .toBe(message);
   expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
   expect(el.shadowRoot!.querySelector("#request-reconnection")).toBeNull();
