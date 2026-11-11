@@ -80,7 +80,7 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   const ids = await withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, { name: "Daily menu" });
     await assignCatalogueToVenue(tx, menu.id);
     const product = (name: string, unitPrice: string) =>
       createProduct(tx, {

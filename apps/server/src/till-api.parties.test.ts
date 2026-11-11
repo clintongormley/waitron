@@ -241,8 +241,8 @@ describe("POST /api/tables/:id/seat", () => {
   it("takes the guest count alone: lines sent with the seat are not rung", async () => {
     await seedLegacySellingUnits(suite.db);
     const { menuItemId, tableId } = await withTransaction(suite.db, async (tx) => {
-      const catalogue = await createCatalogue(tx, { name: "Carta" });
-      const drinks = await createCategory(tx, { name: "Bebidas" });
+      const catalogue = await createCatalogue(tx, { name: "Daily menu" });
+      const drinks = await createCategory(tx, { name: "Drinks" });
       const coffee = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: drinks.id,
