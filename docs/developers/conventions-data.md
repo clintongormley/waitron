@@ -5154,7 +5154,7 @@ You choose how orders start separately from when a counter order is paid.
 `department_sale_policies.order_start` holds `table` or `counter`;
 `zone_sale_policies.order_start` is nullable, with null following the department.
 The same zone-first resolution applies to paid-when and collection tickets.
-The receipt-print field and its controls are retired. Printing is explicit.
+The receipt-print field and its controls are retired.
 
 `resolveZoneContext` and the order-context writers in
 `packages/venue-service/src/operations.ts` work out an order's flow as `table_tab` for table
@@ -5164,8 +5164,8 @@ is [future work](../backlog/service-periods.md#split-an-orders-recorded-service-
 
 The department editor saves its name, trading name, service settings and transfers. The receipt
 editor saves receipt details and whether to print the trading name. The zone editor saves its name
-and nullable service overrides in one transaction. Moving a zone changes its department while keeping those
-overrides; its inherited values then follow the destination. Real-row preservation checks are in
+and nullable service overrides in one transaction. Moving a zone changes its department while keeping
+those overrides; its inherited values then follow the destination. Real-row preservation checks are in
 `packages/venue-service/src/routes.test.ts`; order-flow checks are in
 `packages/venue-service/src/operations.test.ts` and
 `apps/server/src/till-api.service-periods.test.ts`. The old department and zone style columns

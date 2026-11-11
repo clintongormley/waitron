@@ -37,6 +37,7 @@ import {
   setProfileServiceAccess,
   setRoutingCell,
   zoneServicePolicies,
+  zoneSalePolicies,
 } from "@waitron/venue-service";
 import {
   createPinThrottle,
@@ -2191,6 +2192,36 @@ describe("zone-offer catalogue routes", () => {
       await suite.db.delete(floorZones).where(eq(floorZones.id, second!.id));
     }
   });
+
+  it.each(["default", "selected"] as const)(
+    "refuses %s-zone offers while its sale policy needs repair",
+    async (route) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const token = await openSession(suite.db);
+      const [policy] = await suite.db
+        .select()
+        .from(zoneSalePolicies)
+        .where(eq(zoneSalePolicies.zoneId, counterZoneId));
+      expect(policy).toBeDefined();
+      await suite.db.delete(zoneSalePolicies).where(eq(zoneSalePolicies.zoneId, counterZoneId));
+      try {
+        const path =
+          route === "default"
+            ? "/api/default-service-zone/offers"
+            : `/api/service-zones/${counterZoneId}/offers`;
+        const response = await app.request(path, {
+          headers: { cookie: `${SESSION_COOKIE}=${token}` },
+        });
+        expect(response.status).toBe(404);
+        expect(await response.json()).toMatchObject({
+          error: { code: "service_zone.not_found" },
+        });
+      } finally {
+        await suite.db.insert(zoneSalePolicies).values(policy!);
+      }
+    },
+  );
 
   it("returns the configured default counter zone and its offers", async () => {
     const app = new Hono();
