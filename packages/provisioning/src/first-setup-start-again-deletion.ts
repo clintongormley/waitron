@@ -6,7 +6,7 @@ import {
   MODULE_OPERATION_PUBLIC_FILE,
   MODULE_PREPARATION_STATE_FILE,
   RESET_REQUEST_FILE,
-  RESTORE_REQUEST_FILE,
+  RESTORE_FLOW_DIR,
   SETUP_OPERATION_FILE,
   TRADING_ENV_FILE,
   FIRST_FISCAL_DOCUMENTS_DIR,
@@ -15,6 +15,7 @@ import {
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { readRestoreFlowPhase } from "./restore-flow-phase.js";
 import type { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
 import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
@@ -63,11 +64,12 @@ const SIDE_FILES = [
   "venue.db-journal",
   "node.db-journal",
 ] as const;
+const RESTORE_RECORD = join(RESTORE_FLOW_DIR, "record.json");
 const REFUSED = {
   state: [
     TRADING_ENV_FILE,
     SETUP_OPERATION_FILE,
-    RESTORE_REQUEST_FILE,
+    RESTORE_RECORD,
     RESET_REQUEST_FILE,
     MODULES_FILE,
     CLOUD_REPLACEMENT_FILE,
@@ -88,6 +90,14 @@ const REFUSED = {
 
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
+async function refusedNames(root: Root, stateDir: string): Promise<readonly string[]> {
+  if (root === "venue") return REFUSED.venue;
+  const phase = await readRestoreFlowPhase(stateDir);
+  return phase === "staged" || phase === "placing"
+    ? REFUSED.state
+    : REFUSED.state.filter((name) => name !== RESTORE_RECORD);
+}
+
 /**
  * `held`: the setup database holds what activation wrote, so the `HELD_ONLY` files activation
  * writes after its commit are deleted with it rather than refused. `nodeId`: the attempt's node;
@@ -505,7 +515,7 @@ export async function assertStartAgainAllowedOnDisk(
           { reason: `earlier layout: ${root}/${name}` },
         );
   for (const root of ["state", "venue"] as const)
-    for (const name of REFUSED[root])
+    for (const name of await refusedNames(root, canonical.stateDir))
       if (
         (await exists(join(rootOf(root), name))) &&
         !(root === "state" && isHeldOnly(name) && options.held === true)
@@ -612,7 +622,7 @@ export async function collectStartAgainFindings(roots: Roots): Promise<{
   const held = heldBy(marker);
   try {
     for (const root of ["state", "venue"] as const)
-      for (const name of REFUSED[root])
+      for (const name of await refusedNames(root, canonical.stateDir))
         if (
           !(root === "state" && isHeldOnly(name) && held.held === true) &&
           (await present(join(root === "venue" ? canonical.venueDir : canonical.stateDir, name)))

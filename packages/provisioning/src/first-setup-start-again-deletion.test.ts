@@ -94,6 +94,11 @@ const marked = (marker: Awaited<ReturnType<typeof startAgainMarkerFor>>) =>
 
 it("with held, the disk check accepts the setup's modules.json; without it, refuses", async () => {
   const roots = await heldBox();
+  await mkdir(join(roots.stateDir, "flows/restore"), { recursive: true });
+  await writeFile(
+    join(roots.stateDir, "flows/restore/record.json"),
+    JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "archive" } }),
+  );
   await assertStartAgainAllowedOnDisk(roots, { held: true });
   expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
     code: "setup.not_ready",
@@ -269,3 +274,30 @@ it("a backup room note that cannot be deleted stops the deletion before the venu
   expect((await readdir(roots.venueDir)).sort()).toEqual(before);
   expect(await exists(join(roots.venueDir, "venue.db"))).toBe(true);
 });
+
+it.each(["staged", "placing"] as const)(
+  "refuses Start again while a restore is %s, including a resumed deletion",
+  async (phase) => {
+    const roots = await box();
+    await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
+    await mkdir(join(roots.stateDir, "flows/restore"), { recursive: true });
+    await writeFile(
+      join(roots.stateDir, "flows/restore/record.json"),
+      JSON.stringify({ version: 1, phase }),
+    );
+    expect(await refusal(assertStartAgainAllowedOnDisk(roots))).toEqual({
+      code: "setup.not_ready",
+      params: { cause: "unexpected" },
+      reason: "refused artifact: state/flows/restore/record.json",
+    });
+    expect((await collectStartAgainFindings(roots))?.findings).toEqual([
+      { kind: "refused-artifact", root: "state", name: "flows/restore/record.json" },
+    ]);
+    expect(await refusal(finishStartAgainDeletion(roots))).toEqual({
+      code: "setup.start_again_incomplete",
+      reason: "refused artifact present: state/flows/restore/record.json",
+    });
+    expect(await exists(join(roots.venueDir, "venue.db"))).toBe(true);
+    expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
+  },
+);

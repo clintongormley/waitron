@@ -45,7 +45,7 @@ export interface RebuildDeps {
   log: Logger;
   /** The term the bucket's pointer names, or null when no bucket is set up or it holds no pointer.
    * Rejects when a bucket is set up but its pointer cannot be read, which fails the first start.
-   * Asked only when a marker is found. */
+   */
   pointerTerm?: () => Promise<number | null>;
 }
 

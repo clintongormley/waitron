@@ -24,7 +24,7 @@ import { backupArchiveKey } from "./backup-keys.js";
 import type { DeletableArchive } from "./backup-room.js";
 import { writeBackupRoomNote } from "./backup-room-note.js";
 import { RESET_REQUEST_FILE } from "./reset-request.js";
-import { RESTORE_REQUEST_FILE } from "./restore-request.js";
+import { publishRestoreFlow } from "./restore-flow.js";
 import { deleteOldBackupsAtStart, type StartBackupRoomDeps } from "./start-backup-room.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -203,6 +203,11 @@ describe("deleteOldBackupsAtStart", () => {
     await archive(usb, days(2), 15);
     // The raw environment sets no backup variable; the key arrives only through the loaded env.
     const { deps, log, loadBoxEnv } = setup({ baseEnv: { PATH: "/usr/bin" } });
+    await publishRestoreFlow(
+      stateDir,
+      { version: 1, phase: "first-start", firstStart: { source: "archive" } },
+      async () => {},
+    );
 
     await deleteOldBackupsAtStart(deps);
 
@@ -505,10 +510,11 @@ describe("deleteOldBackupsAtStart", () => {
     it("venue.db is gone", () =>
       expectSkip("venue_db_missing", {}, () => rm(join(venueDir, "venue.db"))));
 
-    it("a staged restore is waiting", () =>
+    it.each(["staged", "placing"] as const)("a restore is waiting in phase %s", (phase) =>
       expectSkip("restore_waiting", {}, () =>
-        writeFile(join(stateDir, RESTORE_REQUEST_FILE), "{}"),
-      ));
+        publishRestoreFlow(stateDir, { version: 1, phase }, async () => {}),
+      ),
+    );
 
     it("a staged reset is waiting", () =>
       expectSkip("reset_waiting", {}, () => writeFile(join(stateDir, RESET_REQUEST_FILE), "{}")));

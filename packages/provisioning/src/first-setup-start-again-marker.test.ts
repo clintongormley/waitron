@@ -697,7 +697,7 @@ it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Prom
   ...[
     "trading.env",
     "setup-operation.json",
-    "restore-request.json",
+    "flows/restore/record.json",
     "reset-request.json",
     "modules.json",
     "cloud/replacement.json",
@@ -708,8 +708,13 @@ it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Prom
       `beside state/${name}`,
       notReady,
       async (roots) => {
-        await mkdir(join(roots.stateDir, "cloud"), { recursive: true });
-        await writeFile(join(roots.stateDir, name), "x");
+        await mkdir(dirname(join(roots.stateDir, name)), { recursive: true });
+        await writeFile(
+          join(roots.stateDir, name),
+          name === "flows/restore/record.json"
+            ? JSON.stringify({ version: 1, phase: "staged" })
+            : "x",
+        );
       },
     ],
   ),
