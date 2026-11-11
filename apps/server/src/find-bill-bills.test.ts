@@ -385,7 +385,7 @@ describe("Find Bills SQL paging", () => {
     const kit = transferCloseKit(venue, venue.counterZone);
     const byTransfer = await placedIssuedBill(venue, "Tarta");
     await kit.close(await kit.requestFor(byTransfer, "18.00", null));
-    const paid = await placedIssuedBill(venue, "Croquetas");
+    const paid = await placedIssuedBill(venue, "Croquettes");
     expect((await collect(venue, paid, "10.00")).status).toBe(200);
     expect(
       venue.db.all(sql`select id from ticket_items where working_order_id = ${byTransfer}`),
