@@ -1,7 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { strFromU8, unzipSync } from "fflate";
 import { Hono } from "hono";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activityLog, CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, startManagementSession } from "@waitron/identity";
@@ -12,6 +12,7 @@ import {
 } from "@waitron/reporting/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import * as workbook from "./accountant-export.js";
 import { mountReportApi } from "./report-api.js";
 
 describe("accountant export download", () => {
@@ -97,6 +98,53 @@ describe("accountant export download", () => {
         data: { from: "2026-11-03", to: "2026-11-03", invoices: 1, purchases: 1 },
       },
     ]);
+  });
+
+  it("releases the write transaction before waiting for workbook encoding", async () => {
+    const render = workbook.renderAccountantWorkbook;
+    let release!: () => void;
+    let began!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    const encoder = vi
+      .spyOn(workbook, "renderAccountantWorkbook")
+      .mockImplementation(async (data, language) => {
+        began();
+        await gate;
+        return render(data, language);
+      });
+    const response = send(manager.cookie);
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await started;
+      const written = withTransaction(suite.db, (tx) =>
+        tx
+          .insert(persons)
+          .values({
+            displayName: "Another request",
+            role: "staff",
+            pinHash: fixturePinHash("1234"),
+          })
+          .returning({ id: persons.id }),
+      );
+      const finished = await Promise.race([
+        written.then((rows) => rows.length === 1),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), 1000);
+        }),
+      ]);
+      expect(finished).toBe(true);
+    } finally {
+      clearTimeout(timer);
+      release();
+      await response;
+      encoder.mockRestore();
+    }
+    expect((await response).status).toBe(200);
   });
 
   it("refuses unsigned and view-only sessions without producing an attachment or activity", async () => {

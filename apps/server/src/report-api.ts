@@ -413,7 +413,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
         });
         return data;
       });
-      return c.body(renderAccountantWorkbook(data, toLanguage(deps.venueLocale)), 200, {
+      return c.body(await renderAccountantWorkbook(data, toLanguage(deps.venueLocale)), 200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="accountant-${from}-${to}.xlsx"`,
         "Cache-Control": "no-store",

@@ -3,7 +3,8 @@ import { alias } from "drizzle-orm/sqlite-core";
 import { invoiceSeries, sales, saleSubstitutions, saleVoids, type Transaction } from "@waitron/db";
 import { formatInvoiceNumber } from "@waitron/core";
 import { listPurchaseInvoices } from "@waitron/purchasing";
-import { strToU8, zipSync } from "fflate";
+import { setImmediate as nextTurn } from "node:timers/promises";
+import { strToU8, zip } from "fflate";
 import type { PurchaseInvoice } from "@waitron/purchasing";
 import {
   centsToDecimal,
@@ -48,18 +49,8 @@ type Cell = string | null | { number: Decimal };
 const numeric = (value: string): Cell => ({ number: toScale(decimal(value), 2) });
 
 function xmlText(value: string): string {
-  return Array.from(value, (character) => {
-    const code = character.codePointAt(0)!;
-    return code === 9 ||
-      code === 10 ||
-      code === 13 ||
-      (code >= 0x20 && code <= 0xd7ff) ||
-      (code >= 0xe000 && code <= 0xfffd) ||
-      code >= 0x10000
-      ? character
-      : "�";
-  })
-    .join("")
+  return value
+    .replace(/[^\t\n\r\x20-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu, "�")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -68,29 +59,33 @@ function xmlText(value: string): string {
     .replaceAll("\r", "&#13;");
 }
 
-function worksheet(rows: readonly (readonly Cell[])[]): string {
-  return `${XML}<worksheet xmlns="${SHEET}"><sheetData>${rows
-    .map(
-      (row, index) =>
-        `<row r="${index + 1}">${row
-          .map((cell, column) => {
-            const reference = `${String.fromCharCode(65 + column)}${index + 1}`;
-            return cell !== null && typeof cell === "object"
-              ? `<c r="${reference}" t="n" s="1"><v>${cell.number}</v></c>`
-              : `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell ?? "")}</t></is></c>`;
-          })
-          .join("")}</row>`,
-    )
-    .join("")}</sheetData></worksheet>`;
+async function worksheet(rows: readonly (readonly Cell[])[]): Promise<string> {
+  const parts = [`${XML}<worksheet xmlns="${SHEET}"><sheetData>`];
+  for (const [index, row] of rows.entries()) {
+    if (index % 250 === 0) await nextTurn();
+    parts.push(
+      `<row r="${index + 1}">${row
+        .map((cell, column) => {
+          const reference = `${String.fromCharCode(65 + column)}${index + 1}`;
+          return cell !== null && typeof cell === "object"
+            ? `<c r="${reference}" t="n" s="1"><v>${cell.number}</v></c>`
+            : `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${xmlText(cell ?? "")}</t></is></c>`;
+        })
+        .join("")}</row>`,
+    );
+  }
+  parts.push("</sheetData></worksheet>");
+  return parts.join("");
 }
 
-export function renderAccountantWorkbook(
+export async function renderAccountantWorkbook(
   data: AccountantExport,
   language: "en" | "es",
-): Uint8Array<ArrayBuffer> {
+): Promise<Uint8Array<ArrayBuffer>> {
   const words = ACCOUNTANT_EXPORT_WORDS[language];
   const invoiceRows: Cell[][] = [];
-  for (const invoice of data.invoices) {
+  for (const [position, invoice] of data.invoices.entries()) {
+    if (position % 250 === 0) await nextTurn();
     const groups = invoice.vatBreakdown.length === 0 ? [null] : invoice.vatBreakdown;
     for (const [index, vat] of groups.entries()) {
       invoiceRows.push([
@@ -102,7 +97,11 @@ export function renderAccountantWorkbook(
         invoice.operationDate,
         invoice.customerName,
         invoice.customerTaxId,
-        invoice.customerIdentifierType,
+        invoice.customerIdentifierType === null
+          ? null
+          : words.identifierTypes[
+              invoice.customerIdentifierType as keyof typeof words.identifierTypes
+            ],
         invoice.customerIdentifierCountry,
         invoice.customerCountry,
         invoice.customerAddress,
@@ -118,7 +117,8 @@ export function renderAccountantWorkbook(
     }
   }
   const purchaseRows: Cell[][] = [];
-  for (const purchase of data.purchases) {
+  for (const [position, purchase] of data.purchases.entries()) {
+    if (position % 250 === 0) await nextTurn();
     const entered = sumDecimals(purchase.lines.flatMap((line) => [line.base, line.tax]));
     const flags = [
       ...(compareDecimal(purchase.total, decimal("0.00")) < 0 ? [words.negative] : []),
@@ -132,9 +132,9 @@ export function renderAccountantWorkbook(
         purchase.supplierTaxId,
         purchase.issuedOn,
         purchase.receivedOn,
-        purchase.regime,
+        words.regimes[purchase.regime],
         numeric(purchase.deductibleProportion),
-        line.kind,
+        words.vatKinds[line.kind],
         numeric(line.rate),
         numeric(line.base),
         numeric(line.tax),
@@ -157,12 +157,18 @@ export function renderAccountantWorkbook(
     "xl/workbook.xml": `${XML}<workbook xmlns="${SHEET}" xmlns:r="${REL}"><sheets><sheet name="${words.invoiceSheet}" sheetId="1" r:id="rId1"/><sheet name="${words.purchaseSheet}" sheetId="2" r:id="rId2"/></sheets></workbook>`,
     "xl/_rels/workbook.xml.rels": `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${REL}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="${REL}/styles" Target="styles.xml"/></Relationships>`,
     "xl/styles.xml": `${XML}<styleSheet xmlns="${SHEET}"><fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="2" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`,
-    "xl/worksheets/sheet1.xml": worksheet([words.invoiceColumns, ...invoiceRows]),
-    "xl/worksheets/sheet2.xml": worksheet([words.purchaseColumns, ...purchaseRows]),
+    "xl/worksheets/sheet1.xml": await worksheet([words.invoiceColumns, ...invoiceRows]),
+    "xl/worksheets/sheet2.xml": await worksheet([words.purchaseColumns, ...purchaseRows]),
   };
-  return zipSync(
-    Object.fromEntries(Object.entries(parts).map(([name, xml]) => [name, strToU8(xml)])),
+  const entries = Object.fromEntries(
+    Object.entries(parts).map(([name, xml]) => [name, strToU8(xml)]),
   );
+  return new Promise((resolve, reject) => {
+    zip(entries, (error, bytes) => {
+      if (error) reject(error);
+      else resolve(bytes);
+    });
+  });
 }
 
 export async function listAccountantExport(

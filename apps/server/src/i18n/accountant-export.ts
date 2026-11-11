@@ -3,6 +3,15 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Issued invoices",
     purchaseSheet: "Recorded purchases",
     corrective: "Corrective",
+    regimes: { general: "General regime", equivalence_surcharge: "Equivalence surcharge" },
+    vatKinds: { ordinary: "Ordinary goods", capital: "Capital goods" },
+    identifierTypes: {
+      "vat-number": "VAT number",
+      passport: "Passport",
+      "residence-country-id": "Country of residence identity document",
+      "residence-certificate": "Residence certificate",
+      "other-document": "Other document",
+    },
     negative: "Negative total",
     unreconciled: "Total differs from VAT lines",
     invoiceColumns: [
@@ -49,6 +58,15 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     invoiceSheet: "Facturas emitidas",
     purchaseSheet: "Compras registradas",
     corrective: "Rectificativa",
+    regimes: { general: "Régimen general", equivalence_surcharge: "Recargo de equivalencia" },
+    vatKinds: { ordinary: "Bienes corrientes", capital: "Bienes de inversión" },
+    identifierTypes: {
+      "vat-number": "Número de IVA",
+      passport: "Pasaporte",
+      "residence-country-id": "Documento de identidad del país de residencia",
+      "residence-certificate": "Certificado de residencia",
+      "other-document": "Otro documento",
+    },
     negative: "Total negativo",
     unreconciled: "El total no coincide con las líneas de IVA",
     invoiceColumns: [

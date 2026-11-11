@@ -1,5 +1,6 @@
 import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it } from "vitest";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { CORE_MIGRATIONS, invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -72,9 +73,23 @@ const purchase = {
 };
 
 describe("accountant workbook", () => {
-  it("keeps a zero-total invoice with no recorded VAT groups, leaving its missing VAT facts blank", () => {
-    const files = unzipSync(
+  it("serves another event-loop turn while a large workbook is being encoded", async () => {
+    const encoding = Promise.resolve(
       renderAccountantWorkbook(
+        { invoices: Array.from({ length: 10_000 }, () => invoice), purchases: [] },
+        "en",
+      ),
+    );
+    const first = await Promise.race([
+      encoding.then(() => "encoded"),
+      nextTurn().then(() => "other request"),
+    ]);
+    await encoding;
+    expect(first).toBe("other request");
+  });
+  it("keeps a zero-total invoice with no recorded VAT groups, leaving its missing VAT facts blank", async () => {
+    const files = unzipSync(
+      await renderAccountantWorkbook(
         { invoices: [{ ...invoice, vatBreakdown: [], total: decimal("0.00") }], purchases: [] },
         "en",
       ),
@@ -85,8 +100,8 @@ describe("accountant workbook", () => {
   });
   it.each(["en", "es"] as const)(
     "opens two header-only sheets when the period is empty (%s)",
-    (language) => {
-      const bytes = renderAccountantWorkbook({ invoices: [], purchases: [] }, language);
+    async (language) => {
+      const bytes = await renderAccountantWorkbook({ invoices: [], purchases: [] }, language);
       expect([...bytes.subarray(0, 4)]).toEqual([80, 75, 3, 4]);
       const files = unzipSync(bytes);
       const workbook = strFromU8(files["xl/workbook.xml"]!);
@@ -107,9 +122,9 @@ describe("accountant workbook", () => {
     },
   );
 
-  it("keeps invoice VAT groups, later voids and signed correction links, with gross only once", () => {
+  it("keeps invoice VAT groups, later voids and signed correction links, with gross only once", async () => {
     const files = unzipSync(
-      renderAccountantWorkbook(
+      await renderAccountantWorkbook(
         {
           invoices: [
             invoice,
@@ -180,9 +195,9 @@ describe("accountant workbook", () => {
     expect(strFromU8(files["xl/styles.xml"]!)).toContain('numFmtId="2"');
   });
 
-  it("keeps entered purchase VAT and gross, marking negative and unreconciled totals independently", () => {
+  it("keeps entered purchase VAT and gross, marking negative and unreconciled totals independently", async () => {
     const files = unzipSync(
-      renderAccountantWorkbook(
+      await renderAccountantWorkbook(
         {
           invoices: [],
           purchases: [
@@ -202,9 +217,9 @@ describe("accountant workbook", () => {
       "B87654321",
       "2026-10-31",
       "2026-11-02",
-      "general",
+      "General regime",
       "75.00",
-      "ordinary",
+      "Ordinary goods",
       "10.00",
       "10.00",
       "1.00",
@@ -213,7 +228,7 @@ describe("accountant workbook", () => {
       "Check credit",
     ]);
     expect(row(xml, 3).slice(8, 15)).toEqual([
-      "capital",
+      "Capital goods",
       "21.00",
       "10.00",
       "2.10",
@@ -226,9 +241,9 @@ describe("accountant workbook", () => {
     expect(row(xml, 1)[13]).toContain("edited or deleted");
   });
 
-  it("writes hostile names as literal XML-safe text and preserves identifiers and plain decimal cells", () => {
+  it("writes hostile names as literal XML-safe text and preserves identifiers and plain decimal cells", async () => {
     const files = unzipSync(
-      renderAccountantWorkbook(
+      await renderAccountantWorkbook(
         {
           invoices: [
             {
@@ -236,11 +251,17 @@ describe("accountant workbook", () => {
               invoiceNumber: "00123",
               customerName: "=2+3 & <\"'>\u0001\u000b\ud800😀",
               customerTaxId: "+00123",
+              customerIdentifierType: "passport",
               customerAddress: "@SUM(A1:A2)\tRoad\nFlat 1\r",
             },
           ],
           purchases: [
-            { ...purchase, supplierInvoiceNumber: "-0042", supplierName: "A&B <supplier>" },
+            {
+              ...purchase,
+              supplierInvoiceNumber: "-0042",
+              supplierName: "A&B <supplier>",
+              regime: "equivalence_surcharge",
+            },
           ],
         },
         "es",
@@ -253,6 +274,10 @@ describe("accountant workbook", () => {
     expect(sales).toContain('<c r="H2" t="inlineStr"><is><t xml:space="preserve">+00123</t>');
     expect(sales).toContain("@SUM(A1:A2)\tRoad\nFlat 1&#13;");
     expect(purchases).toContain("A&amp;B &lt;supplier&gt;");
+    expect(row(purchases, 2)[6]).toBe("Recargo de equivalencia");
+    expect(row(sales, 2)[8]).toBe("Pasaporte");
+    expect(row(purchases, 2)[8]).toBe("Bienes corrientes");
+    expect(row(purchases, 3)[8]).toBe("Bienes de inversión");
     expect(purchases).toContain('xml:space="preserve">-0042</t>');
     for (const sheet of [sales, purchases]) {
       expect(sheet).not.toMatch(/<f(?:\s|>)/);
