@@ -7,7 +7,6 @@ events carry resource types only and need no person signed in. The transfer watc
 empty-object event body and checks its person, device, permissions and profile at every wake.
 Keepalives remain every 15 seconds. The till's browser adoption belongs to jr13/jr14.
 
-
 When you add a dashboard read, subscribe to the data it displays. You should not need to know which
 button, background worker or other client will change that data. "Other client" carries one
 condition: a change reaches the dashboard only when the write went through `withTransaction` in this

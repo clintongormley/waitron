@@ -290,8 +290,9 @@ process serving the dashboard, not "the server": promotion and deployment stampi
 their own process. A write outside `withTransaction` is late rather than lost, because the drain
 takes every row it finds on the next `withTransaction` in the serving process
 (`apps/server/src/live-api.test.ts`, "delivers a write made outside withTransaction"). The event
-stream's session re-checks are read-only and do not drain those rows. A write through `withTransaction` in a DIFFERENT process is the one that is lost:
-it drains the rows into a process with no dashboard attached.
+stream's session re-checks are read-only and do not drain those rows. A write through
+`withTransaction` in a DIFFERENT process is the one that is lost: it drains the rows into a process
+with no dashboard attached.
 
 What does NOT remove the first slot's directory is switching it between worktrees on the same
 target. A target change removes the selected instance's directory, and so does `wa-wt reset` (read the script before assuming that
