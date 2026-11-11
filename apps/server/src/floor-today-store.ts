@@ -51,7 +51,6 @@ import {
 } from "./floor-reset-plan.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { markMoved, tableNeedsMoving } from "./floor-today-mark-moved.js";
-import { refusePlaceTaken } from "./floor-today-reset-table.js";
 import { blocksPlaceSql } from "./joined-split-layout.js";
 import { zoneLayoutsOn, type LayoutRow, type ZoneLayoutState } from "./floor-layout-due.js";
 import { moveChangedRooms, roomPrints, roomRevisions } from "./floor-revision.js";
@@ -472,6 +471,12 @@ async function catchUpPass(
     if (carry.has(id)) continue;
     for (const [target, row] of rowOf) if (row.id === id) rowOf.delete(target);
   }
+  const carried = new Set([
+    ...carry,
+    ...[...rowOf.values()].flatMap((row) =>
+      carry.has(row.id) && row.tableId !== null ? [row.tableId] : [],
+    ),
+  ]);
   const targets = [...rowOf.keys()];
   const withToday = new Set(todayRows.keys());
   const clearing = new Set(
@@ -614,8 +619,9 @@ async function catchUpPass(
     ];
     const createIds = new Set(plan.create.map((target) => rowOf.get(target)!.id));
     const before = blocked.size + blockedCreates.size;
-    for (const id of [...newly, ...newlyOff])
-      (createIds.has(id) ? blockedCreates : blocked).add(id);
+    for (const id of [...newly, ...newlyOff]) {
+      if (!carried.has(id)) (createIds.has(id) ? blockedCreates : blocked).add(id);
+    }
     if (blocked.size + blockedCreates.size === before) break;
   }
 
@@ -1290,7 +1296,7 @@ export async function backToSaved(
   tableId: string,
   now: Date,
 ): Promise<void> {
-  const { zoneId, row, merge } = await todayOf(tx, tableId);
+  const { row, merge } = await todayOf(tx, tableId);
   if (await tableNeedsMoving(tx, tableId)) return markMoved(tx, removals, tableId, now);
   await refuseSplitOff(tx, tableId);
   const [splitOff] = await tx
@@ -1310,9 +1316,6 @@ export async function backToSaved(
   const place = placementOf(saved);
   await withMovedSlips(tx, cfg, members.length === 0 ? null : { tables: members }, async () => {
     await leaveMerges(tx, [tableId]);
-    if (place !== null) {
-      await refusePlaceTaken(tx, zoneId, tableId, place, new Set([tableId]), true);
-    }
     await tx
       .update(floorTodayTables)
       .set({

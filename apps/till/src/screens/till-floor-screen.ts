@@ -378,10 +378,6 @@ export class TillFloorScreen extends LitElement {
         }
       }
 
-      [data-leave-here-offer] {
-        align-self: flex-start;
-      }
-
       .head {
         display: flex;
         align-items: center;
@@ -973,8 +969,6 @@ export class TillFloorScreen extends LitElement {
   @state() private details: { tableId: string } | null = null;
   /** The floor's last refusal, in its code's words. */
   @state() private refusal: string | null = null;
-  /** Drawn only while `refusal` still reads `message` and the table still needs moving. */
-  @state() private leaveOffer: { tableId: string; message: string } | null = null;
   /** A table's Leave it here or Mark moved being sent; any other press for it is ignored meanwhile. */
   @state() private sendingToday: ReadonlyMap<string, TodayAction> = new Map();
   /** A merge's seats, or Change seats, waiting for the seats prompt. */
@@ -1328,13 +1322,10 @@ export class TillFloorScreen extends LitElement {
   }
 
   #markMoved(table: TableState): void {
-    this.#sendTodayAction(table, "mark-moved", (api, sent) => api.markMovedToday(table.id, sent), {
-      offersLeaveHere: true,
-    });
+    this.#sendTodayAction(table, "mark-moved", (api, sent) => api.markMovedToday(table.id, sent));
   }
 
   #leaveHere(table: TableState): void {
-    this.leaveOffer = null;
     this.#sendTodayAction(table, "leave-here", (api, sent) => api.leaveHereToday(table.id, sent));
   }
 
@@ -1342,7 +1333,6 @@ export class TillFloorScreen extends LitElement {
     table: TableState,
     action: TodayAction,
     call: (api: TillApi, revision: number) => Promise<FloorAnswer>,
-    { offersLeaveHere = false }: { offersLeaveHere?: boolean } = {},
   ): void {
     this.moving = null;
     const api = this.api;
@@ -1350,29 +1340,13 @@ export class TillFloorScreen extends LitElement {
     if (this.sendingToday.has(table.id)) return;
     this.refusal = null;
     this.sendingToday = new Map(this.sendingToday).set(table.id, action);
-    void this.#settle(
-      this.#send(this.#revision(table.zoneId), (sent) => call(api, sent)),
-      offersLeaveHere ? { written: { tableId: table.id } } : {},
-    ).finally(() => {
-      const sending = new Map(this.sendingToday);
-      sending.delete(table.id);
-      this.sendingToday = sending;
-    });
-  }
-
-  #leaveHereOffer(): TemplateResult | typeof nothing {
-    const offer = this.leaveOffer;
-    if (offer === null || offer.message !== this.refusal || !this.canChangeToday) return nothing;
-    const table = this.#zone.visible.find((each) => each.id === offer.tableId);
-    if (table === undefined || !needsMovingToday(table)) return nothing;
-    return html`<wt-button
-      data-leave-here-offer
-      size="sm"
-      variant="secondary"
-      @click=${() => this.#leaveHere(table)}
-    >
-      ${t("floor.leave_here")}
-    </wt-button>`;
+    void this.#settle(this.#send(this.#revision(table.zoneId), (sent) => call(api, sent))).finally(
+      () => {
+        const sending = new Map(this.sendingToday);
+        sending.delete(table.id);
+        this.sendingToday = sending;
+      },
+    );
   }
 
   #emit(type: string, detail: unknown): void {
@@ -1546,10 +1520,7 @@ export class TillFloorScreen extends LitElement {
         this.renaming = this.#renameOpening(table);
         return;
       case "back":
-        void this.#settle(
-          this.#send(revision, (sent) => api.backToSavedToday(table.id, sent)),
-          { written: { tableId: table.id, back: true } },
-        );
+        void this.#settle(this.#send(revision, (sent) => api.backToSavedToday(table.id, sent)));
         return;
       case "take-off":
         send((sent) => api.takeOffToday(table.id, sent));
@@ -1775,12 +1746,10 @@ export class TillFloorScreen extends LitElement {
     {
       asks = () => false,
       refresh,
-      written,
       current = () => true,
     }: {
       asks?: (refused: { code?: string; field?: unknown }) => boolean;
       refresh?: FloorRefreshDetail;
-      written?: { tableId: string; back?: true };
       current?: () => boolean;
     } = {},
   ): Promise<void> {
@@ -1792,15 +1761,7 @@ export class TillFloorScreen extends LitElement {
       if (!current()) return;
       const refused = (cause ?? {}) as Refused;
       if (asks(refused)) return;
-      const refusal =
-        written?.back === true && refused.code === "table.place_taken"
-          ? codeMessage("table.place_taken")
-          : this.#refusalText(refused);
-      this.refusal = refusal;
-      this.leaveOffer =
-        written !== undefined && refused.code === "table.new_place_taken"
-          ? { tableId: written.tableId, message: refusal }
-          : null;
+      this.refusal = this.#refusalText(refused);
       this.#setPending(null);
     }
     this.#requestFloorRefresh(refresh);
@@ -1820,12 +1781,6 @@ export class TillFloorScreen extends LitElement {
       return table === undefined ? undefined : shownName(table);
     };
     switch (code) {
-      case "table.place_taken": {
-        const standing = nameOf(refused.standingId);
-        const joined = nameOf(refused.tableId);
-        if (standing === undefined || joined === undefined) return undefined;
-        return fill(t("floor.place_taken"), { table: standing, joined });
-      }
       case "joined_table.tables_in_group": {
         const ids = Array.isArray(refused.partIds) ? (refused.partIds as unknown[]) : [];
         const parts = ids.map(tableOf);
@@ -1855,12 +1810,7 @@ export class TillFloorScreen extends LitElement {
           ? undefined
           : tableSentence(table, "floor.booked_first", "floor.booked_first_named");
       }
-      case "table.new_place_taken": {
-        const other = nameOf(refused.standingId);
-        const table = nameOf(refused.tableId);
-        if (other === undefined || table === undefined) return undefined;
-        return fill(t("floor.new_place_taken"), { other, table });
-      }
+
       case "table.split_off": {
         const from = tableOf(refused.tableId)?.today?.splitOffFrom ?? null;
         const joined = from === null ? undefined : nameOf(from);
@@ -2505,7 +2455,6 @@ export class TillFloorScreen extends LitElement {
                 </p>`
         }
         ${this.refusal === null ? nothing : html`<p data-floor-refusal role="status">${this.refusal}</p>`}
-        ${this.#leaveHereOffer()}
         ${(() => {
           const zone = this.zones.find((z) => z.id === activeKey);
           return zone?.closesAt

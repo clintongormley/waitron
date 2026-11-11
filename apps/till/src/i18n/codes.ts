@@ -187,10 +187,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table needs moving. Mark it moved first",
     es: "Esa mesa está por mover. Márcala como movida primero",
   },
-  "table.new_place_taken": {
-    en: "Another table is in its new place. Move it first",
-    es: "Otra mesa ocupa su nuevo sitio. Muévela primero",
-  },
+
   "table.booked": {
     en: "That table has a booking. Move or cancel it first",
     es: "Esa mesa tiene una reserva. Muévela o cancélala primero",
@@ -259,10 +256,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table was split off. Reset its table first",
     es: "Esa mesa está separada. Restablece su mesa primero",
   },
-  "table.place_taken": {
-    en: "Another table is in its place. Move it, then try again",
-    es: "Otra mesa ocupa su sitio. Muévela y vuelve a intentarlo",
-  },
+
   "merge.seats_required": {
     en: "Enter the seats for this merge",
     es: "Indica las plazas de esta unión",

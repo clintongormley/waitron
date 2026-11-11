@@ -1,7 +1,6 @@
-import { and, eq, inArray, isNotNull, not } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   diningTables,
-  joinedOutOfService,
   joinedTableApart,
   floorResetTables,
   floorTodaySplitParts,
@@ -10,19 +9,12 @@ import {
 } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
 import { AppError, compareLabels } from "@waitron/shared";
-import {
-  catchUpZone,
-  foodComingTo,
-  layoutPlacesIn,
-  placementColumns,
-  placementOf,
-} from "./floor-today-store.js";
+import { catchUpZone, foodComingTo, placementColumns, placementOf } from "./floor-today-store.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import { partsOf } from "./floor-today-parts.js";
 import { todayOf } from "./floor-today-table.js";
-import { blocksPlace, joinedPlaceAfter } from "./joined-split-layout.js";
+import { joinedPlaceAfter } from "./joined-split-layout.js";
 import { holdersOf } from "./parties.js";
-import type { Placement } from "./floor-reset-plan.js";
 import "./errors.js";
 
 /**
@@ -112,16 +104,6 @@ export async function resetTable(
     const members = await mergeMembers(tx, id);
     if (members.length > 0) await leaveMergesRestoring(tx, members);
   }
-  if (place !== null) {
-    await refusePlaceTaken(
-      tx,
-      today.zoneId,
-      tableId,
-      place,
-      new Set([tableId, ...backIds]),
-      savedPlace !== null,
-    );
-  }
   await tx
     .update(diningTables)
     .set({ needsClearingSince: null })
@@ -163,52 +145,4 @@ async function apartNow(tx: Transaction, tableId: string): Promise<boolean> {
     .from(diningTables)
     .where(eq(diningTables.id, tableId));
   return apart;
-}
-
-/**
- * Refuses when a table drawn on today's map, other than `own`, stands in `place`; the first in
- * number order is named. When `place` is the saved one, a table standing exactly where the saved
- * layout puts it does not count (`blocksPlace`), as at the reset that put them both down.
- */
-export async function refusePlaceTaken(
-  tx: Transaction,
-  zoneId: string,
-  tableId: string,
-  place: Placement,
-  own: ReadonlySet<string>,
-  fromSaved: boolean,
-): Promise<void> {
-  const rows = await tx
-    .select({
-      id: diningTables.id,
-      label: diningTables.label,
-      x: floorTodayTables.x,
-      y: floorTodayTables.y,
-      width: floorTodayTables.width,
-      height: floorTodayTables.height,
-      shape: floorTodayTables.shape,
-      rotation: floorTodayTables.rotation,
-    })
-    .from(floorTodayTables)
-    .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(
-      and(
-        eq(diningTables.zoneId, zoneId),
-        isNotNull(floorTodayTables.x),
-        eq(floorTodayTables.takenOff, false),
-        not(joinedOutOfService(diningTables.id)),
-      ),
-    );
-  const layoutPlaces = fromSaved
-    ? await layoutPlacesIn(tx, zoneId)
-    : new Map<string, Placement | null>();
-  const standing = rows
-    .filter(
-      (row) =>
-        !own.has(row.id) && blocksPlace(place, placementOf(row)!, layoutPlaces.get(row.id) ?? null),
-    )
-    .sort(byNumberOrder);
-  if (standing.length > 0) {
-    throw new AppError("table.place_taken", { tableId, standingId: standing[0]!.id });
-  }
 }

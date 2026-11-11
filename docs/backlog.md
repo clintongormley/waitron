@@ -794,7 +794,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Remove till code nothing reaches** (bundle of 3, size M). Holds A1007. [Detail](backlog/till.md#bundle-remove-till-code-nothing-reaches)
 
-- **Small till and floor wording fixes** (bundle of 10, size M). Holds A1259, A934, A920, A912, A470, A563, A883, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
+- **Small till and floor wording fixes** (bundle of 9, size M). Holds A1259, A934, A920, A912, A470, A563, A1106, A1107, A1108. [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **A1052. A handheld's transfer accept list holds only counter zones.** Read, not run: a handheld
   fills it from `GET /api/default-service-zone/offers`, whose `zones` are the profile's counter

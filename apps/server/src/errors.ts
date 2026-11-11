@@ -579,10 +579,6 @@ declare module "@waitron/shared" {
     "table.split_off": { tableId: string };
     /** Taking a table off for today found an order with food on its way to it. */
     "table.delivery_pending": { tableId: string };
-    /** Reset table or Back to its saved place found `standingId` standing in the place `tableId` would take. */
-    "table.place_taken": { tableId: string; standingId: string };
-    /** Mark moved found `standingId`, a table that does not need moving, standing in a new place of `tableId`'s change. */
-    "table.new_place_taken": { tableId: string; standingId: string };
     /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.

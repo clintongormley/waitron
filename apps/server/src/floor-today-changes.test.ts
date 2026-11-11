@@ -327,7 +327,7 @@ describe("today's changes", () => {
     expect(await todayRow(v, table.b!)).toMatchObject({ x: 20, y: 0 });
   });
 
-  it("refuses Back while a partner still merged in a merge of three stands in its saved place", async () => {
+  it("Back leaves its partners merged even when one stands in its saved place", async () => {
     const { zoneId, table } = await plannedZone(
       v,
       [
@@ -347,15 +347,21 @@ describe("today's changes", () => {
     ]);
     const before = await everything();
 
-    await expect(back(table.a!)).rejects.toMatchObject({
-      code: "table.place_taken",
-      params: { tableId: table.a!, standingId: table.b! },
-    });
+    await back(table.a!);
 
-    expect(await everything()).toEqual(before);
+    const after = await everything();
+    expect(after.today).toEqual(
+      before.today.map((row) => (row.tableId === table.a ? { ...row, x: 0 } : row)),
+    );
+    expect(after.joins).toEqual(before.joins);
+    expect(after.joinTables).toEqual(before.joinTables.filter((row) => row.tableId !== table.a));
+    expect(await mergeOf(v, table.a!)).toBeNull();
+    expect((await mergeOf(v, table.b!))!.members.map((row) => row.tableId)).toEqual(
+      [table.b!, table.c!].sort(),
+    );
   });
 
-  it("refuses Back while the partner of a merge of two would go back into its saved place", async () => {
+  it("Back restores both partners even when their places overlap", async () => {
     const { zoneId, table } = await plannedZone(
       v,
       [
@@ -372,12 +378,23 @@ describe("today's changes", () => {
     ]);
     const before = await everything();
 
-    await expect(back(table.a!)).rejects.toMatchObject({
-      code: "table.place_taken",
-      params: { tableId: table.a!, standingId: table.b! },
-    });
+    await back(table.a!);
 
-    expect(await everything()).toEqual(before);
+    const after = await everything();
+    expect(after.today).toEqual(
+      before.today.map((row) =>
+        row.tableId === table.a
+          ? { ...row, x: 0 }
+          : row.tableId === table.b
+            ? { ...row, x: 2 }
+            : row,
+      ),
+    );
+    const joinId = before.joinTables.find((row) => row.tableId === table.a)!.joinId;
+    expect(after.joins).toEqual(before.joins.filter((row) => row.id !== joinId));
+    expect(after.joinTables).toEqual(before.joinTables.filter((row) => row.joinId !== joinId));
+    expect(await mergeOf(v, table.a!)).toBeNull();
+    expect(await mergeOf(v, table.b!)).toBeNull();
   });
 
   it("sends a table the last reset copied as a spare back to the spares", async () => {

@@ -732,11 +732,6 @@ it("says Reset table's refusals, and Back's and Take off's on a table split off,
 it("says each Reset table refusal in English and Spanish", () => {
   const words: [string, string, string][] = [
     [
-      "table.place_taken",
-      "Another table is in its place. Move it, then try again",
-      "Otra mesa ocupa su sitio. Muévela y vuelve a intentarlo",
-    ],
-    [
       "joined_table.tables_in_group",
       "Some of its tables are in a group with guests. Split them off first",
       "Algunas de sus mesas están en un grupo con clientes. Sepáralas primero",
@@ -794,20 +789,13 @@ it.each([
   expect(codeMessage(code, "es")).toBe(es);
 });
 
-it("says a table needs moving, and that another table is in its new place, in both languages", () => {
+it("says a table needs moving in both languages", () => {
   expect([
     codeMessage("table.needs_moving", "en"),
     codeMessage("table.needs_moving", "es"),
   ]).toEqual([
     "That table needs moving. Mark it moved first",
     "Esa mesa está por mover. Márcala como movida primero",
-  ]);
-  expect([
-    codeMessage("table.new_place_taken", "en"),
-    codeMessage("table.new_place_taken", "es"),
-  ]).toEqual([
-    "Another table is in its new place. Move it first",
-    "Otra mesa ocupa su nuevo sitio. Muévela primero",
   ]);
 });
 

@@ -1,5 +1,7 @@
 # A504: floor plan sets, one per service period
 
+> Superseded 2026-11-11 by [fk4-hands](../plans/2026-11-11-a1308-fk4-hands.md): Mark moved, Back to its saved place and Reset table accept occupied places. Automatic reset keeps its place check. The refusal-only Leave it here offer is retired.
+
 **Revision 2, 2026-10-17: follows the owner's answers of 2026-10-17 ~10:45** (lane B's
 `questions.md`, "OWNER ANSWERS 2026-10-17 ~10:45 … A504"). Publishing a layout for a later date is
 dropped; a period's change of layout is offered on the till and applied only when someone presses

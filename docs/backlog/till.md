@@ -1116,17 +1116,12 @@ banner is a plain line where the mock-up draws a tinted box (`wt-banner` would b
 floor menu's heading is in sentence case, not small capitals. Mock-ups:
 removed from the repository on 2026-11-02. Left open by A504.
 
-## A860. A floor-check rule copied four times
+## A860. Automatic floor-place checks in TypeScript and SQL
 
-**A860 (2026-10-18).** The rule for whether a table's new place is taken lives in four copies:
-TypeScript in `catchUpPass` (`apps/server/src/floor-today-store.ts`), `markMoved`'s `standing` and
-`exempt` lists (`apps/server/src/floor-today-mark-moved.ts`), `refusePlaceTaken`
-(`apps/server/src/floor-today-reset-table.ts`), and SQL in `catchUpDue` and `placeTaken`
-(`apps/server/src/floor-today-store.ts`). A504's convention review read each as excluding a
-slightly different set of tables; that was read, not run. Only the geometry is pinned across
-TypeScript and SQL (`apps/server/src/reset-row-moves.test.ts`). Next: have the catch-up pass save
-its verdict on each waiting reset row and the others read it, or at least share the exclusions and
-pin the TypeScript and SQL copies as matching. Left open by A504.
+The automatic catch-up decides whether a table's new place is taken in `catchUpPass` and in SQL
+`catchUpDue`/`placeTaken` (`apps/server/src/floor-today-store.ts`). Only their geometry is pinned
+across the two (`apps/server/src/reset-row-moves.test.ts`). Next: share or test the exclusions too.
+Manual actions no longer apply this rule. Left open by A504.
 
 ## A879. After Leave it here, bookings and the dashboard's table list still follow the last reset's copy
 
@@ -1461,14 +1456,6 @@ is answered, sends the same room revision twice, so the second can come back
 (`apps/till/src/screens/till-floor-screen.ts`); A878's finish-branch review reproduced it (a
 browser probe sent `t3` and `t4` with revision 6, and the server answered 200, then 409
 `floor_today.out_of_date`). Left open by A878.
-
-
-## A883. Back to its saved place's `table.place_taken` refusal does not name the tables (2026-10-18).
-
-The till shows the code's own words ("Another table is in its place. Move it,
-then try again"), while Reset table's refusal under the same code names both
-(`#namedRefusal`). A sentence naming both tables needs new words in English and Spanish from the
-owner. Left open by A878.
 
 
 ## A kitchen display forgets its chosen language on a reload
@@ -2107,10 +2094,9 @@ Printer identity is separate from the till route inventory.
 - **A566. An open order with nothing sent yet does not hold a split group back at a reset
   (2026-10-13).** Left open by #1604.
   [Detail](till.md#a566-an-open-order-with-nothing-sent-yet-does-not-hold-a-split-group-back-at-a-reset)
-- **A860. A floor-check rule copied four times (2026-10-18).** Whether a table's new place is
-  taken is decided in four places, in TypeScript and in SQL, each excluding a slightly different set
-  of tables. Next: share one verdict, or pin the copies as matching. Left open by A504.
-  [Detail](till.md#a860-a-floor-check-rule-copied-four-times)
+- **A860. Automatic floor-place checks in TypeScript and SQL.** Share or test their exclusions;
+  manual actions no longer apply this rule. Left open by A504.
+  [Detail](till.md#a860-automatic-floor-place-checks-in-typescript-and-sql)
 
 ## Bundle: Show a table's short name where the full name does not fit
 
@@ -2328,7 +2314,7 @@ Printer identity is separate from the till route inventory.
 
 ## Bundle: Small till and floor wording fixes
 
-10 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+9 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** Delete
   both, in English and Spanish.
@@ -2349,10 +2335,6 @@ Printer identity is separate from the till route inventory.
 - **A563. The till says "part of a joined table" for a joined table that has come apart
   (2026-10-13).** `table.in_joined_table` covers both cases since #1604.
   [Detail](till.md#a563-the-till-says-part-of-a-joined-table-for-a-joined-table-that-has-come-apart)
-- **A883. Back to its saved place's `table.place_taken` refusal does not name the tables
-  (2026-10-18).** A sentence naming both tables needs new words in English and Spanish from the
-  owner. Left open by A878.
-  [Detail](till.md#a883-back-to-its-saved-places-tableplace_taken-refusal-does-not-name-the-tables-2026-10-18)
 - **A1106. The till's List cards say "1 items".** Seen, 2026-10-25 (the A797 slice 1 look,
   `h-list-dining-390-light-en.png` in `~/waitron-campaign-c/a797-1-shots/`): Window 1's card reads
   "€6.50, 1 items". Fix: a singular wording for a count of 1.
