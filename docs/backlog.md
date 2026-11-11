@@ -2289,10 +2289,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   and receipt-guest suites. Till-API bill-move/groups/fiscal-sale and order-portion filing
   suites still use Spanish display samples; fiscal-sale test descriptions,
   other shared-helper names and their consumers' dish selectors and screen expectations remain.
-  BillVenue's receipt printer, card readers and cash till use English display names.
   Triage made-here route and receipt-document fixture
   text there while preserving Spanish receipt output and locale checks. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
+  BillVenue's receipt printer, card readers and cash till use English display names.
 
 - **Correct every sentence known to be false, then finish comment pruning** (bundle of 27, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning)
 
