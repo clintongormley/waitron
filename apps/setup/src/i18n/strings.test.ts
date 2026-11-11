@@ -42,4 +42,15 @@ describe("the setup string catalogue", () => {
     );
     expect(mismatched).toEqual([]);
   });
+
+  it.each([
+    ["English", en],
+    ["Spanish", es],
+  ] as const)(
+    "names the reset button by its own %s words when a reset did not run",
+    (_language, strings) => {
+      expect(strings["shell.reset.resetting"]).toContain(strings["provisioning.reset"]);
+      expect(strings["shell.reset.resetting"]).toContain(strings["reset.submit"]);
+    },
+  );
 });

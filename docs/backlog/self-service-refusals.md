@@ -181,7 +181,7 @@ State: The restored box failed its first-start completion. That completion reads
 
 Route: Existing: restart attempts completion again. Missing: tell the administrator what to correct if restart repeats the failure, using the actual completion refusal rather than a support escalation.
 
-_2026-11-11, A1089 slice 1: the words no longer say to contact support. They say each start tries again, so switch the box off and on, and if the message stays, check the box's internet connection and the bucket on the Backups page (the first start reads the bucket's pointer), then switch it off and on again. Still open: the dashboard has no restart button, and a failure that is not the bucket (the certificate or the list of machines) still has no specific remedy._
+_2026-11-11, A1089 slice 1: the words no longer say to contact support. They say each start tries again, so switch the box off and on, and if the message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page (the first start reads the bucket's pointer), then switch it off and on again. Still open: the dashboard has no restart button, and a failure that is not the bucket (the certificate or the list of machines) still has no specific remedy. The rest of this entry records the earlier tree._
 
 ### `chain.verification_failed`
 
@@ -393,7 +393,7 @@ State: A pending bill payment was charged but could not be recorded/issued. The 
 
 Route: Existing: Payments exposes pending bill payments and confirmed-outcome recovery. Trace its ability to finish this particular stored charge before pointing to it; a persistent local issuance failure needs a specific remedy. Never charge again or unlock on an unknown outcome.
 
-_2026-11-11, A1089 slice 1: traced (`apps/server/src/payments-api.ts`, the bill-payments list and its `resolve` route, which runs the same `settleFromProviderRow` step as the background loop for a charged payment). The words no longer say to contact support: they say Waitron tries again by itself, name Card payments → Bill payments and refunds awaiting a card provider → Check with provider to try now, and say not to charge the card again. Still open: a recording failure that persists through every retry has no specific remedy._
+_2026-11-11, A1089 slice 1: traced (`apps/server/src/payments-api.ts`, the bill-payments list and its `resolve` route, which runs the same `settleFromProviderRow` step as the background loop for a charged payment). The words no longer say to contact support: they say Waitron tries again by itself, name Card payments → Bill payments and refunds awaiting a card provider → Check with provider to try now, and say not to charge the card again. Still open: a recording failure that persists through every retry has no specific remedy. The rest of this entry records the earlier tree._
 
 ### `backup.staging_space_low`
 
@@ -507,7 +507,7 @@ State: Reset was requested. The warning explicitly covers the case where the sup
 
 Route: Existing: reload after restart. Missing if the half-join remains: an authenticated retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
 
-_2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press “Reset this server” again. Still open: nothing tells the person what to do if a repeated reset never takes effect._
+_2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
 
 ### `aeat_certificate.refused.check_failed`
 
@@ -739,7 +739,7 @@ still block Start again on this path.
 
 **An incomplete-join reset needs an outcome after a failed restart.** Retain authenticated reset proof and add a supported way to retry or restart if the half-join remains.
 
-_2026-11-11, A1089 slice 1: the resetting message now names pressing “Reset this server” again instead of support; a reset that never takes effect is still open._
+_2026-11-11, A1089 slice 1: the resetting message now names pressing Reset this server again instead of support; a reset that never takes effect is still open._
 
 ### setup-readiness
 

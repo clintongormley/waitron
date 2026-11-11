@@ -146,8 +146,8 @@ export const ALERT_MESSAGES: Readonly<
     es: "Faltaba una protección de registros al arrancar y se ha restablecido.",
   },
   "restore.first_start_failed": {
-    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Each start tries again, so switch the box off and on. If this message stays, check the box's internet connection and the bucket on the Backups page, because that start reads the bucket, then switch the box off and on again.",
-    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo. Si el mensaje sigue, revisa la conexión a internet del equipo y el bucket en la página de Copias, porque ese arranque lee el bucket, y después vuelve a apagar y encender el equipo.",
+    en: "This box could not finish setting itself up after the restore. Sales continue, but it will not copy to a storage bucket until it does. Each start tries again, so switch the box off and on. If this message stays and a bucket copy is set up, check the box's internet connection and the bucket on the Backups page, because that start reads the bucket, then switch the box off and on again.",
+    es: "Este equipo no ha podido terminar de configurarse después de la restauración. Las ventas continúan, pero no copiará a ningún bucket de almacenamiento hasta que lo consiga. Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo. Si el mensaje sigue y hay una copia en el bucket configurada, revisa la conexión a internet del equipo y el bucket en la página de Copias de seguridad, porque ese arranque lee el bucket, y después vuelve a apagar y encender el equipo.",
   },
   "chain.verification_failed": {
     en: "The invoice record chain failed its integrity check on a sale. Contact support.",

@@ -830,30 +830,43 @@ it.each(["en", "es"])("explains affiliate rejection and refund uncertainty in %s
   expect(refund).not.toMatch(/marked the payment as failed|marcado el pago como fallido/);
 });
 
-it("names the way out a failed first start after a restore already has, and sends nobody to support", () => {
-  const en = alertMessage("restore.first_start_failed", {}, "en-GB");
-  const es = alertMessage("restore.first_start_failed", {}, "es-ES");
-  expect(en).toContain("Each start tries again, so switch the box off and on.");
-  expect(en).toContain("check the box's internet connection and the bucket on the Backups page");
-  expect(es).toContain("Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.");
-  expect(es).toContain(
-    "revisa la conexión a internet del equipo y el bucket en la página de Copias",
+describe("refusals that name a way out the product already has", () => {
+  it.each([
+    ["en", "en-GB", /install|support|manager/i],
+    ["es", "es-ES", /instal|soporte|encargad|gerente/i],
+  ] as const)(
+    "tells %s readers a failed first start after a restore is tried again at each start, and sends nobody elsewhere",
+    (lang, locale, elsewhere) => {
+      const text = alertMessage("restore.first_start_failed", {}, lang);
+      expect(text).toContain(
+        lang === "en"
+          ? "Each start tries again, so switch the box off and on."
+          : "Cada arranque lo vuelve a intentar, así que apaga y enciende el equipo.",
+      );
+      expect(text).toContain(
+        lang === "en" ? "and a bucket copy is set up" : "y hay una copia en el bucket configurada",
+      );
+      expect(text).toContain(t("nav.backup", locale));
+      expect(text).not.toMatch(elsewhere);
+    },
   );
-  expect(en).not.toMatch(/support/i);
-  expect(es).not.toMatch(/soporte/i);
-});
 
-it("sends a bill payment that could not be recorded to Check with provider, never to support or a second charge", () => {
-  const en = alertMessage("payment.bill_settle_failed", { amount: "12.00" }, "en-GB");
-  const es = alertMessage("payment.bill_settle_failed", { amount: "12.00" }, "es-ES");
-  expect(en).toContain(
-    "open Card payments and, under Bill payments and refunds awaiting a card provider, press Check with provider.",
+  it.each([
+    ["en", "en-GB", /install|support|manager/i, "Do not charge the card again."],
+    ["es", "es-ES", /instal|soporte|encargad|gerente/i, "No vuelvas a cobrar la tarjeta."],
+  ] as const)(
+    "sends %s readers of a bill payment that could not be recorded to Check with provider, never elsewhere or to a second charge",
+    (lang, locale, elsewhere, noSecondCharge) => {
+      const text = alertMessage("payment.bill_settle_failed", { amount: "12.00" }, lang);
+      for (const label of [
+        "nav.payments",
+        "payments.bill.heading",
+        "payments.bill.check",
+      ] as const) {
+        expect(text, label).toContain(t(label, locale));
+      }
+      expect(text).toContain(noSecondCharge);
+      expect(text).not.toMatch(elsewhere);
+    },
   );
-  expect(es).toContain(
-    "abre Pagos con tarjeta y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor.",
-  );
-  expect(en).toContain("Do not charge the card again.");
-  expect(es).toContain("No vuelvas a cobrar la tarjeta.");
-  expect(en).not.toMatch(/support/i);
-  expect(es).not.toMatch(/soporte/i);
 });

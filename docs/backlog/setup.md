@@ -315,7 +315,7 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
 
 Left open by A1384 (#2527). The recovery page's operator texts
 (`apps/server/src/i18n/recovery-page.ts`: most codes' actions, among them
-`provisioning.database_ahead`, `provisioning.schema_mismatch`, `holderStalledText` and the generic
+`provisioning.database_ahead`, `provisioning.schema_mismatch` and the generic
 fallback, English and Spanish, plus the `forInstaller` heading "For whoever installed this box")
 send the person to whoever installed the box. CLAUDE.md §3's first rule (owner, 2026-10-25) names that as
 no remedy; `apps/server/src/recovery-surface.test.ts` still requires it beside a restore action,
@@ -325,8 +325,6 @@ terminal can act on: the owner's approved reinstall sentence (A1127, 2026-10-28;
 the state (established at its site), or a new self-service step; a code with none of these goes to
 the owner. After A760 a box moved to the new image without a reset shows
 `provisioning.database_ahead`'s page.
-
-_2026-11-11, A1089 slice 1: `holderStalledText` no longer names the installer; if Retry fails again it says to switch the box off and on. The other texts listed here are still open._
 
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
