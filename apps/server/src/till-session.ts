@@ -153,7 +153,9 @@ async function readSessionRow(tx: Database | Transaction, token: string, c: Cont
   return found;
 }
 
-export async function readTillSession(db: Database, token: string, c: Context) {
+export async function readTillSession(db: Database, c: Context) {
+  const token = readSessionToken(c);
+  if (token === null || !isUuid(token)) throw new AppError("session.required", {});
   const row = await readSessionRow(db, token, c);
   return {
     personId: row.personId,

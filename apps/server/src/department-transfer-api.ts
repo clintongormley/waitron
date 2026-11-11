@@ -17,12 +17,7 @@ import { assertDeviceStillProven, assertProfileAction } from "./device-session.j
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
 import { requireRevision, type Run, type TillApiDeps } from "./till-api.js";
-import {
-  requireSession,
-  readSessionToken,
-  readTillSession,
-  assertRequestDevice,
-} from "./till-session.js";
+import { requireSession, readTillSession, assertRequestDevice } from "./till-session.js";
 import { checkZones, inScope, readZoneScope } from "./zone-access.js";
 import { readOrderStateCounts, type OrderStateCounts } from "./order-state-counts.js";
 import { firedQuantity } from "./kitchen-print.js";
@@ -125,7 +120,7 @@ export function mountDepartmentTransferApi(
             "order_service_contexts",
           ].map((type) => ({ type })),
           recheck: async () => {
-            const session = await readTillSession(deps.db, readSessionToken(c)!, c);
+            const session = await readTillSession(deps.db, c);
             assertProfileAction(session.device, "take-orders");
             await assertRequestDevice(deps, c, session);
             await monitoringActor(deps.db, session);
