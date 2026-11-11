@@ -840,6 +840,7 @@ product failures.
 ## A976. Finish the server's English test-venue defaults.
 
 - **A976. Finish the server's English test-venue defaults.**
+  The single- and multi-bill editor suites use Anna and Lewis as local staff samples.
   Many server fixtures still use Administradora, among them the backup, stream and shared-helper fixtures.
   Remaining local venue seeds,
   including email and sale suites, the stream-loop/pause helpers and the boot
