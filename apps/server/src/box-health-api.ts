@@ -1,4 +1,3 @@
-import type { HttpBindings } from "@hono/node-server";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
@@ -34,7 +33,7 @@ import { invoiceNumberParts } from "./invoice-number-parts.js";
 import type { Logger } from "./logger.js";
 import { misdatedSalesFileName, renderMisdatedSalesCsv } from "./misdated-sales-csv.js";
 import { requestFromBox } from "./request-from-box.js";
-import { restartAfterResponse } from "./restart-after-response.js";
+import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 
 export interface BoxHealthApiDeps {
   db: Database;
@@ -156,11 +155,11 @@ export function mountBoxHealthApi(app: Hono, deps: BoxHealthApiDeps, log: Logger
   const restartRun = createErrorBoundary(STATUS, "box-restart.failed");
   app.post("/api/box/restart", (c) =>
     restartRun(c, log, async () => {
-      const outgoing = (c.env as HttpBindings).outgoing;
+      const outgoing = outgoingOf(c);
       if (outgoing === undefined) throw new Error("Missing response lifecycle");
       const personId = await authorizeOnAnyDisk(deps.db, c, "person.admin");
       log("info", "box.restart_requested", { personId });
-      restartAfterResponse(outgoing, deps.restart);
+      restartAfterResponse(outgoing, deps.restart, log);
       return c.json({}, 202);
     }),
   );

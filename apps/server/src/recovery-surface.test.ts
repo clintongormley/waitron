@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -21,11 +22,11 @@ import {
 import {
   GENERIC_TEXT,
   OPERATOR_TEXT,
-  escapeHtml,
   recoveryApp,
   startAgainDraw,
   type RecoveryDeps,
 } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
 import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 
 const state = afterFailure(
@@ -77,6 +78,45 @@ describe("recoveryApp", () => {
     });
     expect((await app.request("/recovery-api/retry", { method: "POST" })).status).toBe(200);
     expect(onRetry).toHaveBeenCalledWith("normal");
+  });
+
+  it.each([
+    ["the browser disconnects before the answer is written", ["close"]],
+    ["the answer is written and the connection then closes", ["finish", "close"]],
+  ])("retry restarts once when %s", async (_, events) => {
+    const onRetry = vi.fn(() => Promise.resolve());
+    const outgoing = new EventEmitter();
+    const app = recoveryApp({
+      state,
+      logDir: await mkdtemp(join(tmpdir(), "wt-log-")),
+      onRetry,
+    });
+    const response = await app.request("/recovery-api/retry", { method: "POST" }, { outgoing });
+    expect(response.status).toBe(200);
+    expect(onRetry).not.toHaveBeenCalled();
+    for (const event of events) outgoing.emit(event);
+    expect(onRetry).toHaveBeenCalledOnce();
+    outgoing.emit("close");
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("a retry whose restart fails is logged, leaves nothing unhandled, and the page is still served", async () => {
+    const log = vi.fn();
+    const app = recoveryApp({
+      state,
+      logDir: await mkdtemp(join(tmpdir(), "wt-log-")),
+      onRetry: () => Promise.reject(new AppError("recovery.rate_limited", {})),
+      log,
+    });
+    expect((await app.request("/recovery-api/retry", { method: "POST" })).status).toBe(200);
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith("error", "server.restart_failed", {
+        errorCode: "recovery.rate_limited",
+        errno: null,
+        reason: null,
+      }),
+    );
+    expect((await app.request("/")).status).toBe(200);
   });
 
   it("shows the log tail, and tolerates no log at all", async () => {

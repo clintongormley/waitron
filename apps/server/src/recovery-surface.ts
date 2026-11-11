@@ -1,8 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
-import type { Context } from "hono";
 import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME } from "@waitron/db";
 import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
@@ -19,7 +17,9 @@ import {
 import { resolveLoginLocale } from "./login-locale.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
+import { escapeHtml } from "./html-page.js";
 import { redactSecrets } from "./redact-secrets.js";
+import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 import type { RecoveryLevel, RecoveryState } from "./recovery-state.js";
 import {
   isSecure,
@@ -48,7 +48,6 @@ const MAX_LOG_LINES = 200;
 export interface RecoveryDeps {
   state: RecoveryState;
   logDir: string;
-  /** Called only after the response has been written — see `outgoingOf`. */
   onRetry: (level: RecoveryLevel) => Promise<void>;
   /** Bytes free on the box's disk, read on every request; null when it cannot be read. */
   freeSpace?: () => Promise<number | null>;
@@ -62,22 +61,11 @@ export interface RecoveryDeps {
   startAgain?: {
     roots: { stateDir: string; venueDir: string };
     survey: Extract<StartAgainSurvey, { kind: "choice" }>;
-    /** The entry's restart, called once a Move's answer has been written. */
     onFinished: () => Promise<void>;
     choose?: typeof chooseStartAgainLeftovers;
     now?: () => Date;
     statfs?: Statfs;
   };
-}
-
-/** The page is served before any authentication exists; see `OPERATOR_TEXT` for what reaches it. */
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 interface LogView {
@@ -132,14 +120,6 @@ async function readLog(logDir: string): Promise<LogView> {
   const lines = text.split("\n").filter((line) => line !== "");
   // Read from the whole file, so the tail's line cap cannot cut the failure off.
   return { tail: lines.slice(-MAX_LOG_LINES), lastFailure: lastFailureIn(lines) };
-}
-
-/**
- * So the retry's process exit can wait for `'finish'`: exiting before the socket has flushed
- * returns an empty body to the operator who pressed the button. Absent under `app.request()`.
- */
-function outgoingOf(c: Context): ServerResponse | undefined {
-  return (c.env as { outgoing?: ServerResponse } | undefined)?.outgoing;
 }
 
 /**
@@ -361,12 +341,7 @@ export function recoveryApp(deps: RecoveryDeps): Hono {
   });
 
   app.post("/recovery-api/retry", (c) => {
-    const outgoing = outgoingOf(c);
-    if (outgoing === undefined) {
-      void deps.onRetry("normal");
-    } else {
-      outgoing.once("finish", () => void deps.onRetry("normal"));
-    }
+    restartAfterResponse(outgoingOf(c), () => deps.onRetry("normal"), deps.log);
     return c.json({ ok: true });
   });
 

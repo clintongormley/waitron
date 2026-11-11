@@ -5,7 +5,7 @@ import { GUIDE_LANGUAGES, GUIDE_PAGES, guideRoot, readGuide } from "./guide-cata
 import { renderGuide } from "./guide-markdown.js";
 import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
 import type { Logger } from "./logger.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
 

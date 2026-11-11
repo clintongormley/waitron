@@ -1,13 +1,12 @@
 import { managementOriginFor } from "./request-from-box.js";
 import type { Hono } from "hono";
-import type { HttpBindings } from "@hono/node-server";
 import { withTransaction, type Database } from "@waitron/db";
 import type { IssueScope } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { confirmVenueZone, readVenueZoneRepair } from "./venue-zone-repair.js";
-import { restartAfterResponse } from "./restart-after-response.js";
+import { outgoingOf, restartAfterResponse } from "./restart-after-response.js";
 import type { TradingAdmission } from "./trading-admission.js";
 import "./errors.js";
 
@@ -76,13 +75,13 @@ export function mountVenueZoneRepairApi(
       )
         throw new AppError("management.request_invalid", { field: "body" });
       const input = await readJsonBody<unknown>(c);
-      const outgoing = (c.env as HttpBindings).outgoing;
+      const outgoing = outgoingOf(c);
       if (outgoing === undefined) throw new Error("Missing response lifecycle");
       const result = await withTransaction(deps.db, (tx) =>
         confirmVenueZone(tx, deps.scope, session, input, deps.now()),
       );
       deps.admission.requireRestart();
-      restartAfterResponse(outgoing, deps.requestRestart);
+      restartAfterResponse(outgoing, deps.requestRestart, log);
       return c.json(result);
     }),
   );

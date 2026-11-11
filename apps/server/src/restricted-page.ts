@@ -13,7 +13,7 @@ import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared
 import { handoverPageOf } from "./handover-status-api.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
 import {
   RESTRICTED_PAGE_WORDS,
   RESTRICTED_RETURN_WORDS,

@@ -9,7 +9,7 @@ import { startServer as bootServer, type StartedServer } from "./boot.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
-import type { Hono } from "hono";
+import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -38,6 +38,9 @@ import { runEntry } from "./node-entry.js";
 import { loadBoxEnv } from "./box-env.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { withRecoveryLock } from "./recovery-lock.js";
+import { escapeHtml } from "./html-page.js";
+import { mountEnvironmentChoice, type EnvironmentView } from "./recovery-environment.js";
+import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
 const dirs: string[] = [];
@@ -196,6 +199,55 @@ it("moves the installed database unchanged and requests a restart", async () => 
   expect(environment.WAITRON_CREDENTIALS_KEY).toBeUndefined();
   expect((await readRecoveryState(f.stateDir)).level).toBe("normal");
   expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(409);
+});
+
+it("logs a Move whose restart fails, leaves nothing unhandled, and keeps serving the page", async () => {
+  const f = await recoveryFixture();
+  const app = await f.boot();
+  f.exit.mockImplementation(() => {
+    throw new Error("exit failed");
+  });
+  expect((await post(app, { choice: "move", password: PASSWORD })).status).toBe(200);
+  await vi.waitFor(() =>
+    expect(f.log).toHaveBeenCalledWith("error", "server.restart_failed", {
+      errorCode: null,
+      errno: null,
+      reason: null,
+    }),
+  );
+  expect((await app.request("/")).status).toBe(200);
+});
+
+it("a Move whose answer fails to draw answers the moved page in the person's language and restarts once", async () => {
+  const f = await recoveryFixture();
+  await f.boot();
+  const onFinished = vi.fn(() => Promise.resolve());
+  const log = vi.fn();
+  const render = vi.fn(async (view: EnvironmentView) => {
+    if (view.message?.kind === "moved") throw new Error("render failed");
+    return "<main></main>";
+  });
+  const app = new Hono();
+  mountEnvironmentChoice(
+    app,
+    { roots: { stateDir: f.stateDir, venueDir: f.venueDir }, baseEnv: f.baseEnv, onFinished },
+    render,
+    log,
+  );
+  const response = await post(app, { choice: "move", password: PASSWORD }, { locale: "es-ES" });
+  expect(response.status).toBe(200);
+  const body = await response.text();
+  const [stem] = await readdir(join(f.stateDir, "records/set-aside"));
+  expect(body).toContain('<html lang="es-ES">');
+  expect(body).toContain(
+    escapeHtml(START_AGAIN_PAGE_TEXT["es-ES"].moved(`state/records/set-aside/${stem!}`)),
+  );
+  expect(render).toHaveBeenCalledOnce();
+  expect(onFinished).toHaveBeenCalledOnce();
+  expect(log).toHaveBeenCalledWith("warn", "recovery.environment_draw_failed", {});
+  expect(log).toHaveBeenCalledWith("info", "recovery.environment_moved", {
+    folder: `state/records/set-aside/${stem!}`,
+  });
 });
 
 it("Stop writes no choice or password counter and a corrected host can retry", async () => {

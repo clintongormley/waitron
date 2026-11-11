@@ -31,7 +31,8 @@ import {
   writeRecoveryState,
   type RecoveryState,
 } from "./recovery-state.js";
-import { OPERATOR_TEXT, escapeHtml, recoveryApp } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
+import { OPERATOR_TEXT, recoveryApp } from "./recovery-surface.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { assertNotAhead, recoveryTlsFiles, runEntry, serveRecovery } from "./node-entry.js";
 

@@ -18,10 +18,13 @@ import {
 } from "@waitron/provisioning/testing/start-again-attempt";
 import { AppError, type SupportedLocale } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
-import { OPERATOR_TEXT, escapeHtml, type RecoveryDeps } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
+import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
+import { OPERATOR_TEXT, type RecoveryDeps } from "./recovery-surface.js";
 import {
   START_AGAIN_PAGE_TEXT,
   mountStartAgainChoice,
+  movedFolder,
   renderStartAgainSection,
   type StartAgainMessage,
   type StartAgainView,
@@ -999,11 +1002,104 @@ describe("mountStartAgainChoice", () => {
       vi.fn(),
     );
     const response = await post(app, { ...FORM, choice: "move" }, { env: tls({ outgoing }) });
-    expect(response.status).toBe(500);
-    expect(await response.text()).not.toContain("notFinished");
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).not.toContain("notFinished");
+    expect(body).toContain(
+      escapeHtml(
+        START_AGAIN_PAGE_TEXT["en-GB"].moved(
+          movedFolder({ state: "records/set-aside/s1/state", venue: "records/set-aside/s1/venue" }),
+        ),
+      ),
+    );
     expect(render).toHaveBeenCalledOnce();
     outgoing.emit("finish");
     expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it.each(LANGS)(
+    "a page that fails to draw after a recorded Keep or Move says the choice was recorded, in %s",
+    async (locale) => {
+      for (const [choice, choose, lines] of [
+        [
+          "keep",
+          () => Promise.resolve({ choice: "keep" as const }),
+          [
+            `<h1>${escapeHtml(OPERATOR_TEXT["setup.start_again_kept"]![locale].title)}</h1>`,
+            `<p>${escapeHtml(OPERATOR_TEXT["setup.start_again_kept"]![locale].action)}</p>`,
+          ],
+        ],
+        [
+          "move",
+          MOVED,
+          [
+            `<h1>${escapeHtml(RECOVERY_PAGE_WORDS[locale].heading)}</h1>`,
+            `<p>${escapeHtml(
+              START_AGAIN_PAGE_TEXT[locale].moved(
+                movedFolder({
+                  state: "records/set-aside/s1/state",
+                  venue: "records/set-aside/s1/venue",
+                }),
+              ),
+            )}</p>`,
+          ],
+        ],
+      ] as const) {
+        const log = vi.fn(() => {
+          throw new Error("log down");
+        });
+        const render = vi.fn(() => {
+          throw new Error("render failed");
+        });
+        const onFinished = vi.fn(() => Promise.resolve());
+        const app = new Hono();
+        mountStartAgainChoice(
+          app,
+          { roots: ROOTS, survey: ROUTE_SURVEY, onFinished, choose, now: () => NOW },
+          render,
+          log,
+        );
+        const response = await post(
+          app,
+          { ...FORM, choice },
+          { headers: { "Accept-Language": locale } },
+        );
+        expect(response.status, choice).toBe(200);
+        const body = await response.text();
+        expect(body, choice).toContain(`<html lang="${locale}">`);
+        for (const line of lines) expect(body, choice).toContain(line);
+        expect(log, choice).toHaveBeenCalledWith("warn", "recovery.start_again_draw_failed", {
+          choice,
+        });
+        expect(onFinished, choice).toHaveBeenCalledTimes(choice === "move" ? 1 : 0);
+      }
+    },
+  );
+
+  it("a Move whose restart fails is logged, leaves nothing unhandled, and the route still answers", async () => {
+    const log = vi.fn();
+    const app = new Hono();
+    mountStartAgainChoice(
+      app,
+      {
+        roots: ROOTS,
+        survey: ROUTE_SURVEY,
+        onFinished: () => Promise.reject(new Error("exit failed")),
+        choose: MOVED,
+        now: () => NOW,
+      },
+      (view) => `<main>${view.code}</main>`,
+      log,
+    );
+    expect((await post(app, { ...FORM, choice: "move" })).status).toBe(200);
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith("error", "server.restart_failed", {
+        errorCode: null,
+        errno: null,
+        reason: null,
+      }),
+    );
+    expect((await post(app, { ...FORM, choice: "move" })).status).toBe(409);
   });
 
   it("Keep calls onKept once; a Move or a refusal does not", async () => {

@@ -100,7 +100,7 @@ import { mountPersonalDataExportApi } from "./personal-data-export-api.js";
 import { timeRecordPersonalData } from "./personal-data-time-record.js";
 import { mountInvoiceCustomerDataApi } from "./invoice-customer-data-api.js";
 import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
-import { escapeHtml } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
 import {
   createStaffNoticeLog,
   readStaffNoticesInTurns,

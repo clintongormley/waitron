@@ -28,7 +28,8 @@ import {
 import { START_AGAIN_PAGE_TEXT } from "./recovery-start-again.js";
 import { closeListener } from "./close-listener.js";
 import { freePorts } from "./testing/free-ports.js";
-import { escapeHtml, OPERATOR_TEXT } from "./recovery-surface.js";
+import { escapeHtml } from "./html-page.js";
+import { OPERATOR_TEXT } from "./recovery-surface.js";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 

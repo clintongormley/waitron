@@ -240,6 +240,23 @@ describe.each([
     expect(deps.restart).toHaveBeenCalledTimes(1);
   });
 
+  it("a restart that throws is logged and the answer still stands", async () => {
+    const { app, deps, logs } = mount(db());
+    deps.restart.mockImplementation(() => {
+      throw Object.assign(new Error("exit failed"), { code: "EIO" });
+    });
+    const outgoing = responseOutgoing();
+    const response = await restartRequest(app, outgoing, admin.cookie);
+    expect(response.status).toBe(202);
+    expect(() => outgoing.emit("finish")).not.toThrow();
+    expect(deps.restart).toHaveBeenCalledTimes(1);
+    expect(logs).toContainEqual([
+      "error",
+      "server.restart_failed",
+      { errorCode: null, errno: "EIO", reason: null },
+    ]);
+  });
+
   it.each([
     [
       "a manager, who is not an administrator",
