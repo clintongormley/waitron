@@ -4894,6 +4894,7 @@ it.each(
         units: [unit],
         taxChoices: reduced,
       });
+      host.style.setProperty("--wt-duration-disclosure", "1ms");
       if (scaled) {
         host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
         host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
