@@ -46,7 +46,7 @@ can still say `unconfigured`; an allocated peer says `provisioning`. Neither pro
 works. The configuration writer and runtime apply the returned placement separately.
 
 A lost reply is retried with the same saved key and a fresh request identifier. A
-`placement_conflict` refusal is remembered in `cloud-connection.json` as `tunnelConflict: true`, so
+`placement_conflict` refusal is remembered in `cloud/connection.json` as `tunnelConflict: true`, so
 restarting does not keep submitting a key Cloud has refused. The caller neither replaces the
 container key nor rotates the Cloud placement. A later configuration that already matches the
 saved key needs no new submission, including while its service reports a failure. A tunnel refusal
@@ -86,7 +86,7 @@ The server derives the local venue from its provisioned location. Production map
 to Cloud's production environment; development and preproduction map to test.
 Browser input cannot select the destination, installation key or local venue.
 
-`cloud-connection.json` lives under `WAITRON_STATE_DIR` and contains the installation's
+`cloud/connection.json` lives under `WAITRON_STATE_DIR` and contains the installation's
 private key. Run one server process per node state directory. Writes use a fresh mode-0600 temporary file, sync it,
 rename it and sync the directory before sending the first request to Cloud. Restart
 and lost-reply tests exercise reuse of the saved key and request. These tests do not
@@ -268,7 +268,7 @@ The only public endpoint in this milestone is `GET /public/availability`, which
 returns `{ "available": true }` or a 503 with `false` according to the serving gate.
 Menus, bookings and the customer-facing remote setup screen remain separate work.
 
-Your staff certificate private key stays in `WAITRON_STATE_DIR/cloud-staff.key`.
+Your staff certificate private key stays in `WAITRON_STATE_DIR/cloud/staff.key`.
 Generate a certificate signing request, the public request a certificate authority
 needs, in the Waitron checkout:
 
@@ -379,7 +379,7 @@ Cloud venue is a separate step, described in the next section. Use a backup file
 local recovery path. Do not start trading on a replacement
 while another server may hold newer data.
 
-The replacement saves its recovery request and signing key in `cloud-recovery.json` under
+The replacement saves its recovery request and signing key in `cloud/recovery.json` under
 `WAITRON_STATE_DIR` before contacting Cloud. The file is mode 0600 and is outside the named
 archive capture list. A lost reply or server restart reuses that request. When a request expires,
 choose **Start a new request**; a network failure leaves the existing request intact. The
@@ -400,7 +400,7 @@ request identity; an expired approval requires a new request.
 ### Reconnect a restored test server to its Cloud venue
 
 The restored server does not inherit the old server's Cloud connection, because
-`cloud-connection.json` stays out of the archive. Instead of pairing it as a new venue, you
+`cloud/connection.json` stays out of the archive. Instead of pairing it as a new venue, you
 reconnect it to the existing Cloud venue as the old server's replacement. This works only on a
 server that is not in production and was restored with **Restore from Waitron Cloud**. You need
 a local manager with `system.manage`, the screen open at `WAITRON_MANAGEMENT_ORIGIN`, and a
@@ -409,7 +409,7 @@ server holding the primary role.
 1. Open the Cloud services screen on the restored server and choose **Request reconnection**.
    If the restore has not yet been reported to Cloud, the server reports it first. Before it
    sends the reconnection request, it saves a fresh installation key and a fresh WireGuard key in
-   `cloud-replacement.json` under `WAITRON_STATE_DIR`, with mode 0600.
+   `cloud/replacement.json` under `WAITRON_STATE_DIR`, with mode 0600.
 2. The screen shows the previous installation, the organisation and the business, together with
    the original recovery code and an **Open Cloud** link. Use them so the owner of the Cloud
    venue can approve the replacement in Cloud.
@@ -420,8 +420,8 @@ server holding the primary role.
 A lost reply or a restart reuses the saved request and keys, and **Check reconnection** recovers
 Cloud's answer. If the server restarts after saving an approved reply but before importing it,
 it finishes the import when it starts again. **Stop Cloud access** on a reconnected server also
-records the stop in `cloud-replacement.json`, unless that file cannot be read. With the stop
-recorded, if `cloud-connection.json` is lost, the import on the next start or **Check
+records the stop in `cloud/replacement.json`, unless that file cannot be read. With the stop
+recorded, if `cloud/connection.json` is lost, the import on the next start or **Check
 reconnection** restores the connection with the stop still waiting, and the next check with
 Cloud, once a minute or **Refresh status**, sends the stop again. A stop pressed while **Check
 reconnection** is running may be refused as busy; if it is, press it again once the check
@@ -436,7 +436,7 @@ planned handover of the final writes and production recovery are not implemented
 
 ### Reissue staff TLS after a restore
 
-A recovery archive deliberately excludes `cloud-staff.key` and `cloud-staff.crt`.
+A recovery archive deliberately excludes `cloud/staff.key` and `cloud/staff.crt`.
 If your LAN listener's TLS paths point at those missing files, Waitron refuses to start.
 Keep the LAN certificate and management origin configured for the LAN. For the separate staff
 entrance, reconnect the replacement to Cloud and set its assigned `WAITRON_STAFF_ORIGIN`;

@@ -277,10 +277,10 @@ so the design may cover it — but it never says so, and it does not list what e
 from the internet. Slice 5 should name this as the way a mirror is added and prove it with the
 internet unplugged. A cloud mirror needs the internet anyway and is outside this item.
 
-## A stop made while `cloud-replacement.json` is unreadable is not recorded in it
+## A stop made while `cloud/replacement.json` is unreadable is not recorded in it
 
 If that file is
-later repaired and `cloud-connection.json` lost, the next start restores the connection without
+later repaired and `cloud/connection.json` lost, the next start restores the connection without
 the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (left open
 by C29, #808). Owner to choose: refuse Stop access while the replacement file is unreadable, or
 record the stop somewhere that survives the repair.
@@ -714,7 +714,7 @@ in the offer. Left open by A1018 Slice 5 (Ruling R35).
 ## A handover's manifest has no row for the box's other state-folder files.
 
 `recovery.json`,
-`setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
+`setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud/replacement.json`,
 `backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in
 `packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
 open by A1018 Slice 4 (Slice 4's Ruling R5).
@@ -1282,8 +1282,8 @@ fingerprint before it sends a password), and no page in `apps/server/src/guide/e
 - After a Cloud replacement (#638), installing the new tunnel and TLS certificate remains an
   operator step. Continuous complete-server recovery, planned final-write handover and production
   recovery remain open. Cloud owns route placement and fencing in its backlog.
-- A stop made while `cloud-replacement.json` is unreadable is not recorded in it.
-  [Detail](../backlog/replication-cloud.md#a-stop-made-while-cloud-replacementjson-is-unreadable-is-not-recorded-in-it)
+- A stop made while `cloud/replacement.json` is unreadable is not recorded in it.
+  [Detail](../backlog/replication-cloud.md#a-stop-made-while-cloudreplacementjson-is-unreadable-is-not-recorded-in-it)
 - The Litestream stream's sealed-state restore and activation still need integration with Cloud
   storage and owner recovery. Connected does not mean those services are configured. Cloud service
   ownership stays in the Cloud backlog; this repository owns its adapter, screen and node-side

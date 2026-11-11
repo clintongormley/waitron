@@ -9,7 +9,7 @@ it("persists renewal intent, resumes a lost response after restart, and keeps cr
   try {
     f.lose();
     await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
-    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"));
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
     expect(saved.lifecycle.pending.action).toBe("renew");
     const restarted = createCloudConnection(f.options),
       status = await restarted.refresh();
@@ -89,7 +89,7 @@ it("rejects malformed cached lifecycle state and changed lease bindings without 
   const f = await installationFixture();
   try {
     await f.client.refresh();
-    const path = join(f.stateDir, "cloud-connection.json"),
+    const path = join(f.stateDir, "cloud/connection.json"),
       text = await readFile(path, "utf8"),
       saved = JSON.parse(text);
     for (const change of [
@@ -132,7 +132,7 @@ it("aborts an in-flight exchange while keeping its durable intent for retry", as
     await pending;
     release();
     expect(
-      JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")).lifecycle
+      JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")).lifecycle
         .pending,
     ).toBeTruthy();
   } finally {
@@ -176,7 +176,7 @@ it("reports use the applied revision, recover expired authority and stop after a
     f.fail("invalid_proof");
     await expect(f.client.refresh()).rejects.toMatchObject({ code: "cloud.unavailable" });
     f.fail("");
-    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"));
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
     expect(saved.lifecycle.lease).toBeUndefined();
     expect(saved.lifecycle.pending).toBeUndefined();
     f.revoke();
@@ -231,7 +231,7 @@ it("queues stop access behind the worker and persists it ahead of an unavailable
       code: "cloud.unavailable",
     });
     const pending = JSON.parse(
-      await readFile(join(second.stateDir, "cloud-connection.json"), "utf8"),
+      await readFile(join(second.stateDir, "cloud/connection.json"), "utf8"),
     ).lifecycle.pending;
     expect(pending.action).toBe("revoke");
     second.online();
@@ -246,7 +246,7 @@ it("cached observations distinguish fresh healthy from stale health and clear st
   const f = await installationFixture();
   try {
     await f.client.refresh();
-    const path = join(f.stateDir, "cloud-connection.json"),
+    const path = join(f.stateDir, "cloud/connection.json"),
       saved = JSON.parse(await readFile(path, "utf8"));
     saved.lifecycle.view.services[0].health = "healthy";
     saved.lifecycle.view.services[0].observedAt = new Date(Date.now() - 10000).toISOString();

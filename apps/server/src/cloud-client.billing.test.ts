@@ -136,7 +136,7 @@ it("waits for the Retry-After hint of a 429 whose body is not JSON", async () =>
 });
 
 async function dropLease(stateDir: string) {
-  const file = join(stateDir, "cloud-connection.json");
+  const file = join(stateDir, "cloud/connection.json");
   const state = JSON.parse(await readFile(file, "utf8"));
   delete state.lifecycle.lease;
   await writeFile(file, JSON.stringify(state));
@@ -301,7 +301,7 @@ it("lets one caller give up without spoiling the shared read for the others", as
 it("keeps no billing snapshot: a read with a live lease leaves the saved state untouched", async () => {
   const { f } = await billingCloud((v, s, res) => send(res, 200, reply(v, s)));
   try {
-    const file = join(f.options.stateDir, "cloud-connection.json");
+    const file = join(f.options.stateDir, "cloud/connection.json");
     const before = await readFile(file);
     await f.client.billing();
     expect((await readFile(file)).equals(before)).toBe(true);
@@ -312,7 +312,7 @@ it("keeps no billing snapshot: a read with a live lease leaves the saved state u
 
 const OTHER_INSTALLATION = "99999999-9999-4999-8999-999999999999";
 async function pairElsewhere(stateDir: string) {
-  const file = join(stateDir, "cloud-connection.json");
+  const file = join(stateDir, "cloud/connection.json");
   const state = JSON.parse(await readFile(file, "utf8"));
   // A new pairing's file: another installation, and no lease or lifecycle from the old one yet.
   state.view.registration.installationId = OTHER_INSTALLATION;

@@ -348,7 +348,7 @@ it("refuses a pipe key without blocking the Cloud connection", async () => {
   const f = await fixture();
   try {
     await f.client.refresh();
-    const state = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"));
+    const state = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
     await rm(join(f.tunnelDir, "public-key"));
     execFileSync("mkfifo", [join(f.tunnelDir, "public-key")], { timeout: 1000 });
     const child = spawnSync(
@@ -392,7 +392,7 @@ it("clears a stale peer when no Cloud registration remains, without creating an 
   const f = await fixture();
   try {
     await f.client.refresh();
-    await rm(join(f.stateDir, "cloud-connection.json"));
+    await rm(join(f.stateDir, "cloud/connection.json"));
     expect((await stat(f.peer)).isFile()).toBe(true);
     await f.client.refresh();
     await expect(readFile(f.peer)).rejects.toMatchObject({ code: "ENOENT" });

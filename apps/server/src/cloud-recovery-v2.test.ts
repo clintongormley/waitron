@@ -146,7 +146,7 @@ async function fixture() {
     options,
     fetchImpl,
     saved: async () =>
-      JSON.parse(await readFile(join(stateDir, "cloud-recovery.json"), "utf8")) as Record<
+      JSON.parse(await readFile(join(stateDir, "cloud/recovery.json"), "utf8")) as Record<
         string,
         unknown
       >,
@@ -169,7 +169,7 @@ describe("target-bound snapshot recovery v2", () => {
       target: target(),
       requestId: view.requestId,
     });
-    expect((await stat(join(f.stateDir, "cloud-recovery.json"))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(f.stateDir, "cloud/recovery.json"))).mode & 0o777).toBe(0o600);
     expect(call.body).toEqual({
       version: 2,
       target: target(),
@@ -425,7 +425,7 @@ describe("target-bound snapshot recovery v2", () => {
     expect(await v2.readSavedSnapshotRecoveryTarget(f.stateDir)).toBeNull();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
     expect(f.calls).toEqual([]);
-    await rm(join(f.stateDir, "cloud-recovery.json"));
+    await rm(join(f.stateDir, "cloud/recovery.json"));
     f.rewrite = (_action, result) => result;
     await createCloudRecoveryClient(f.options).start();
     f.calls.length = 0;
@@ -451,8 +451,8 @@ describe("target-bound snapshot recovery v2", () => {
       if (fault === "phase") s.phase = "trading";
       if (fault === "point") s.pointId = "bad";
       if (fault === "size") s.code = "1".repeat(65536);
-      await writeFile(join(f.stateDir, "cloud-recovery.json"), JSON.stringify(s));
-      if (fault === "permissions") await chmod(join(f.stateDir, "cloud-recovery.json"), 0o644);
+      await writeFile(join(f.stateDir, "cloud/recovery.json"), JSON.stringify(s));
+      if (fault === "permissions") await chmod(join(f.stateDir, "cloud/recovery.json"), 0o644);
       await expect(v2.readSavedSnapshotRecoveryTarget(f.stateDir)).rejects.toThrow(unavailable);
     },
   );
@@ -471,7 +471,7 @@ describe("target-bound snapshot recovery v2", () => {
         Promise.resolve().then(() => createCloudRecoveryClient(options).start()),
       ).rejects.toThrow(unavailable);
     expect(f.calls).toEqual([]);
-    await expect(readFile(join(f.stateDir, "cloud-recovery.json"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "cloud/recovery.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -503,9 +503,9 @@ describe("target-bound snapshot recovery v2", () => {
   it.each(["duplicate", "downgrade"])("refuses %s saved protocol keys", async (fault) => {
     const f = await fixture();
     await createCloudRecoveryClient(f.options).start();
-    const raw = await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8");
+    const raw = await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8");
     await writeFile(
-      join(f.stateDir, "cloud-recovery.json"),
+      join(f.stateDir, "cloud/recovery.json"),
       fault === "duplicate"
         ? raw.replace('"version":2', '"version":1,"version":2')
         : raw.replace('"version":2', '"version":1'),
@@ -548,7 +548,7 @@ describe("target-bound snapshot recovery v2", () => {
     const client = createCloudRecoveryClient(f.options);
     await client.start();
     await client.status();
-    expect((await stat(join(f.stateDir, "cloud-recovery.json"))).size).toBeGreaterThan(16384);
+    expect((await stat(join(f.stateDir, "cloud/recovery.json"))).size).toBeGreaterThan(16384);
     const saved = await v2.readSavedSnapshotRecoveryTarget(f.stateDir);
     expect(saved?.target.modules).toHaveLength(32);
     let staged = false;
@@ -665,7 +665,7 @@ describe("target-bound snapshot recovery v2", () => {
       s.pointId = "715955bb-2dbd-4481-9746-f6d3e95a8651";
     }
     await writeFile(
-      join(f.stateDir, "cloud-recovery.json"),
+      join(f.stateDir, "cloud/recovery.json"),
       JSON.stringify(fault === "null" ? null : s),
     );
     await expect(v2.readSavedSnapshotRecoveryTarget(f.stateDir)).rejects.toThrow(unavailable);
@@ -695,7 +695,7 @@ describe("target-bound snapshot recovery v2", () => {
     f.options.target = () => t;
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
     expect(f.calls).toEqual([]);
-    await expect(readFile(join(f.stateDir, "cloud-recovery.json"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "cloud/recovery.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -705,6 +705,6 @@ describe("target-bound snapshot recovery v2", () => {
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow(unavailable);
     const saved = await f.saved();
     expect(saved.expiresAt).toBeUndefined();
-    expect((await stat(join(f.stateDir, "cloud-recovery.json"))).size).toBeLessThanOrEqual(65536);
+    expect((await stat(join(f.stateDir, "cloud/recovery.json"))).size).toBeLessThanOrEqual(65536);
   });
 });

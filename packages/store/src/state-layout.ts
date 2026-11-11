@@ -51,7 +51,13 @@ export const TLS_JOINED_FILE = "tls/joined.json";
 export const TLS_INSTALL_FILE = "tls/install.json";
 export const VENUE_DIR_NAME = "venue";
 export const RECORDS_DIR = "records";
-export const CLOUD_SNAPSHOTS_DIR = "cloud-snapshots";
+export const CLOUD_DIR = "cloud";
+export const CLOUD_CONNECTION_FILE = "cloud/connection.json";
+export const CLOUD_RECOVERY_FILE = "cloud/recovery.json";
+export const CLOUD_REPLACEMENT_FILE = "cloud/replacement.json";
+export const CLOUD_STAFF_KEY_FILE = "cloud/staff.key";
+export const CLOUD_STAFF_CERT_FILE = "cloud/staff.crt";
+export const CLOUD_SNAPSHOTS_DIR = "cloud/snapshots";
 export const LOGS_DIR = "logs";
 export const START_AGAIN_CHOICES_DIR = "records/choices";
 export const START_AGAIN_SET_ASIDE_DIR = "records/set-aside";
@@ -273,10 +279,10 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     why: "Start-again choices and set-aside files survive a plain reset.",
   },
   {
-    name: CLOUD_SNAPSHOTS_DIR,
+    name: CLOUD_DIR,
     kind: "folder",
     reset: "deleted",
-    why: "Temporary Cloud snapshot copies.",
+    why: "Cloud connection, recovery, staff authority and snapshot state.",
   },
   {
     name: LOGS_DIR,

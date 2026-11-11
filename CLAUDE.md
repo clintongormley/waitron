@@ -517,8 +517,7 @@ called weaker than its name, the topic file lists what it does not see.
   `<state>/backup-room-note.json` first; `waitron.sh reset` removes both together.**
   Guard: `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
   [Cost and detail](docs/developers/conventions-data.md#the-backup-room-note).
-- **State-folder names live in `packages/store/src/state-layout.ts`, except Cloud and legacy setup
-  names awaiting their layout slices; a plain reset keeps exactly its `kept` entries.** Guard:
+- **State-folder names live in `packages/store/src/state-layout.ts`, except legacy setup names awaiting their layout slice; a plain reset keeps exactly its `kept` entries.** Guard:
   `scripts/state-layout.test.ts`, weaker than its name.
   [Detail](docs/developers/conventions-data.md#one-state-folder-layout).
 - **Start again's choice records and the set-aside folder, in `<state>/records/`, are removed only by

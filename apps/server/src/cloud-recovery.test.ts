@@ -86,8 +86,8 @@ describe("Cloud recovery target", () => {
   it("persists private request before network and reconciles a lost start reply", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
-    expect((await stat(join(f.stateDir, "cloud-recovery.json"))).mode & 0o777).toBe(0o600);
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
+    expect((await stat(join(f.stateDir, "cloud/recovery.json"))).mode & 0o777).toBe(0o600);
     const view = await createCloudRecoveryClient(f.options).start();
     expect(view.requestId).toBe(saved.requestId);
     expect(view.code).toBe(saved.code);
@@ -130,7 +130,7 @@ describe("Cloud recovery target", () => {
       "read",
       "info",
     ]);
-    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     expect(saved.phase).toBe("staged");
     const client = createCloudRecoveryClient(f.options);
     await client.reportRestored();
@@ -254,7 +254,7 @@ describe("Cloud recovery target", () => {
   it("fails closed on a corrupt private request instead of replacing its key", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const path = join(f.stateDir, "cloud-recovery.json");
+    const path = join(f.stateDir, "cloud/recovery.json");
     const saved = JSON.parse(await readFile(path, "utf8"));
     saved.publicKey = "wrong";
     const { writeFile } = await import("node:fs/promises");
@@ -266,7 +266,7 @@ describe("Cloud recovery target", () => {
   it("does not replace request identity when expiry check loses the network reply", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const path = join(f.stateDir, "cloud-recovery.json");
+    const path = join(f.stateDir, "cloud/recovery.json");
     const saved = JSON.parse(await readFile(path, "utf8"));
     saved.expiresAt = new Date(Date.now() - 1000).toISOString();
     const { writeFile } = await import("node:fs/promises");
@@ -281,7 +281,7 @@ describe("Cloud recovery target", () => {
   it("permits an explicit new request when approved operation info has expired", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const old = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const old = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     const original = f.options.fetch;
     f.options.fetch = vi.fn((url: string | URL | Request, init?: RequestInit) =>
       String(url).endsWith("/info")
@@ -291,7 +291,7 @@ describe("Cloud recovery target", () => {
     expect((await createCloudRecoveryClient(f.options).status()).state).toBe("expired");
     const next = await createCloudRecoveryClient(f.options).startAgain();
     expect(next.requestId).not.toBe(old.requestId);
-    const replacement = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const replacement = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     expect(replacement.publicKey).not.toBe(old.publicKey);
     expect(replacement.privateKey).not.toBe(old.privateKey);
   });
@@ -299,7 +299,7 @@ describe("Cloud recovery target", () => {
   it("keeps the same request when owner permission is revoked", async () => {
     const f = await fixture();
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-    const old = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const old = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     const original = f.options.fetch;
     f.options.fetch = vi.fn((url: string | URL | Request, init?: RequestInit) =>
       String(url).endsWith("/info")
@@ -308,14 +308,14 @@ describe("Cloud recovery target", () => {
     ) as typeof fetch;
     await expect(createCloudRecoveryClient(f.options).startAgain()).rejects.toThrow();
     expect(
-      JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).requestId,
+      JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8")).requestId,
     ).toBe(old.requestId);
   });
 
   it("refuses production recovery before creating private state", async () => {
     const f = await fixture();
     expect(() => createCloudRecoveryClient({ ...f.options, environment: "production" })).toThrow();
-    await expect(readFile(join(f.stateDir, "cloud-recovery.json"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "cloud/recovery.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   });
@@ -392,7 +392,7 @@ describe("Cloud recovery target", () => {
       await writeFile(join(f.stateDir, "restore-request.json"), "{}", { mode: 0o600 });
     });
     await createCloudRecoveryClient(f.options).restore(stage, point.id);
-    const before = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const before = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
     await expect(createCloudRecoveryClient(f.options).restore(stage, point.id)).rejects.toThrow();
     expect(stage).toHaveBeenCalledOnce();
@@ -402,7 +402,7 @@ describe("Cloud recovery target", () => {
     expect((await createCloudRecoveryClient(f.options).status()).state).toBe("approved");
     await createCloudRecoveryClient(f.options).restore(stage, point.id);
     expect(stage).toHaveBeenCalledTimes(2);
-    const after = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const after = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     expect([after.requestId, after.privateKey, after.pointId]).toEqual([
       before.requestId,
       before.privateKey,
@@ -421,7 +421,7 @@ describe("Cloud recovery target", () => {
         ? Promise.resolve(new Response(null, { status: 410 }))
         : original(url, init),
     ) as typeof fetch;
-    const old = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const old = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     const next = await createCloudRecoveryClient(f.options).startAgain();
     expect(next.requestId).not.toBe(old.requestId);
   });
@@ -431,7 +431,7 @@ describe("Cloud recovery target", () => {
     async (kind) => {
       const f = await fixture();
       await expect(createCloudRecoveryClient(f.options).start()).rejects.toThrow();
-      const path = join(f.stateDir, "cloud-recovery.json");
+      const path = join(f.stateDir, "cloud/recovery.json");
       if (kind === "permissions") await chmod(path, 0o644);
       else {
         const saved = JSON.parse(await readFile(path, "utf8"));
@@ -468,7 +468,7 @@ describe("Cloud recovery target", () => {
       "Cloud recovery is unavailable",
     );
     expect(
-      JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).pointId,
+      JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8")).pointId,
     ).toBe(point.id);
   });
 
@@ -495,7 +495,7 @@ describe("Cloud recovery target", () => {
         pointId: point.id,
       }),
     ).rejects.toThrow("Cloud recovery is unavailable");
-    expect(JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).phase).toBe(
+    expect(JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8")).phase).toBe(
       "staged",
     );
   });
@@ -562,7 +562,7 @@ describe("Cloud selected-copy preview", () => {
       sourceId: point.id,
       nodeRecoveryKeyName: "Amber Hill",
     });
-    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8"));
+    const saved = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
     expect(saved.phase).toBeUndefined();
     expect(review).toHaveBeenCalledWith({
       artifact: Buffer.from("archive"),
@@ -573,7 +573,7 @@ describe("Cloud selected-copy preview", () => {
     const stage = vi.fn(async () => {});
     await client.restore(stage, point.id);
     expect(stage).toHaveBeenCalledOnce();
-    expect(JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).phase).toBe(
+    expect(JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8")).phase).toBe(
       "staged",
     );
   });
@@ -599,7 +599,7 @@ describe("Cloud selected-copy preview", () => {
     ).rejects.toThrow("damaged archive");
     expect(await client.preview(async () => "selected-name", point.id)).toBe("selected-name");
     expect(
-      JSON.parse(await readFile(join(f.stateDir, "cloud-recovery.json"), "utf8")).phase,
+      JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8")).phase,
     ).toBeUndefined();
   });
 });

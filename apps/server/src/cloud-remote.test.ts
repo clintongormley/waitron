@@ -29,9 +29,9 @@ it("staff key remains private on the venue and repeated requests retain its iden
   try {
     const first = await createStaffCsr(root, "staff.sol.example.test"),
       second = await createStaffCsr(root, "staff.sol.example.test");
-    const key = await readFile(join(root, "cloud-staff.key"), "utf8");
+    const key = await readFile(join(root, "cloud/staff.key"), "utf8");
     expect(first).not.toContain("PRIVATE KEY");
-    expect((await stat(join(root, "cloud-staff.key"))).mode & 0o077).toBe(0);
+    expect((await stat(join(root, "cloud/staff.key"))).mode & 0o077).toBe(0);
     const one = forge.pki.certificationRequestFromPem(first),
       two = forge.pki.certificationRequestFromPem(second);
     expect(one.verify()).toBe(true);
@@ -44,10 +44,11 @@ it("staff key remains private on the venue and repeated requests retain its iden
       await writeFile(join(root, relative), "recovery fixture");
     }
     const captured = await collectStateSecrets(root);
-    expect(captured).not.toHaveProperty("cloud-staff.key");
+    expect(captured).not.toHaveProperty("cloud/staff.key");
     expect(JSON.stringify(captured)).not.toContain(key);
     await expect(createStaffCsr(root, "*.example.test")).rejects.toThrow("Invalid staff hostname");
-    await writeFile(join(root, "cloud-staff.key"), "broken");
+    await mkdir(join(root, "cloud"), { recursive: true });
+    await writeFile(join(root, "cloud/staff.key"), "broken");
     await expect(createStaffCsr(root, "staff.sol.example.test")).rejects.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -60,7 +61,7 @@ it("certificate installation verifies the venue key and hostname before replacin
     const csr = forge.pki.certificationRequestFromPem(
       await createStaffCsr(root, "staff.sol.example.test"),
     );
-    const key = forge.pki.privateKeyFromPem(await readFile(join(root, "cloud-staff.key"), "utf8"));
+    const key = forge.pki.privateKeyFromPem(await readFile(join(root, "cloud/staff.key"), "utf8"));
     const cert = forge.pki.createCertificate();
     cert.publicKey = csr.publicKey!;
     cert.serialNumber = "01";
@@ -74,14 +75,14 @@ it("certificate installation verifies the venue key and hostname before replacin
     cert.sign(key, forge.md.sha256.create());
     const pem = forge.pki.certificateToPem(cert);
     await installStaffCertificate(root, "staff.sol.example.test", pem);
-    await chmod(join(root, "cloud-staff.key"), 0o666);
+    await chmod(join(root, "cloud/staff.key"), 0o666);
     await expect(installStaffCertificate(root, "staff.sol.example.test", pem)).rejects.toThrow(
       "Invalid staff key file",
     );
     await expect(createStaffCsr(root, "staff.sol.example.test")).rejects.toThrow(
       "Invalid staff key file",
     );
-    await chmod(join(root, "cloud-staff.key"), 0o600);
+    await chmod(join(root, "cloud/staff.key"), 0o600);
     await expect(installStaffCertificate(root, "staff.luna.example.test", pem)).rejects.toThrow();
     await expect(
       installStaffCertificate(root, "staff.sol.example.test", "broken"),
@@ -92,7 +93,7 @@ it("certificate installation verifies the venue key and hostname before replacin
     await expect(
       installStaffCertificate(root, "staff.sol.example.test", forge.pki.certificateToPem(cert)),
     ).rejects.toThrow();
-    expect(await readFile(join(root, "cloud-staff.crt"), "utf8")).toBe(pem);
+    expect(await readFile(join(root, "cloud/staff.crt"), "utf8")).toBe(pem);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -220,8 +221,10 @@ it("serves the dashboard over a separate TLS listener and closes it", async () =
     hostnames: ["staff.example.test"],
     ipAddresses: [],
   });
-  await writeFile(join(root, "cloud-staff.key"), material.serverKeyPem);
-  await writeFile(join(root, "cloud-staff.crt"), material.serverCertPem);
+  await mkdir(join(root, "cloud"), { recursive: true });
+  await writeFile(join(root, "cloud/staff.key"), material.serverKeyPem);
+  await mkdir(join(root, "cloud"), { recursive: true });
+  await writeFile(join(root, "cloud/staff.crt"), material.serverCertPem);
   const app = new Hono();
   app.get("/manage", (c) => c.text("dashboard"));
   app.get("/setup", (c) => c.text("setup must stay local"));

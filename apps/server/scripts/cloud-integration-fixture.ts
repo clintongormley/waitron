@@ -189,8 +189,8 @@ process.on("message", (message: unknown) => {
     const hostname = message.hostname;
     void installStaffCertificate(root, hostname, message.certificate)
       .then(async () => {
-        env.WAITRON_TLS_CERT_FILE = join(root, "cloud-staff.crt");
-        env.WAITRON_TLS_KEY_FILE = join(root, "cloud-staff.key");
+        env.WAITRON_TLS_CERT_FILE = join(root, "cloud/staff.crt");
+        env.WAITRON_TLS_KEY_FILE = join(root, "cloud/staff.key");
         env.WAITRON_MANAGEMENT_ORIGIN = "https://" + hostname;
         env.WAITRON_MANAGEMENT_RP_ID = hostname;
         await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });

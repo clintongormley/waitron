@@ -154,20 +154,20 @@ it("keeps exact encrypted bytes across a failed upload and restart, without pers
   };
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow("network");
   expect(f.captures()).toBe(1);
-  const files = await readdir(join(f.root, "cloud-snapshots"));
+  const files = await readdir(join(f.root, "cloud/snapshots"));
   expect(files.sort()).toEqual(["archive.enc", "state.json"]);
-  const saved = await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8");
+  const saved = await readFile(join(f.root, "cloud/snapshots/state.json"), "utf8");
   expect(saved).not.toContain("secret-key");
   for (const secret of ["private-access-id", "private-access-secret", "private-session-token"])
     expect(saved).not.toContain(secret);
-  const bytes = await readFile(join(f.root, "cloud-snapshots/archive.enc"));
+  const bytes = await readFile(join(f.root, "cloud/snapshots/archive.enc"));
   fail = false;
   await createCloudSnapshotWorker(f.deps).tick(signal());
   expect(f.captures()).toBe(1);
   expect([...f.uploaded.values()]).toEqual([bytes]);
   expect(f.points.size).toBe(1);
   expect(new Set(f.reservations).size).toBe(1);
-  expect(await readdir(join(f.root, "cloud-snapshots"))).toEqual(["state.json"]);
+  expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
   await createCloudSnapshotWorker(f.deps).tick(signal());
   expect(f.captures()).toBe(1);
 });
@@ -257,7 +257,7 @@ it("clears an archive after revocation and never delivers it into a new installa
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow();
   f.status.installation!.state = "revoked";
   await createCloudSnapshotWorker(f.deps).tick(signal());
-  expect(await readdir(join(f.root, "cloud-snapshots"))).toEqual([]);
+  expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual([]);
   f.status.installation!.state = "active";
   f.deps.upload = upload;
   await createCloudSnapshotWorker(f.deps).tick(signal());
@@ -280,18 +280,18 @@ it("leaves malformed state visible rather than silently resetting the schedule",
   const f = await fixture();
   await createCloudSnapshotWorker(f.deps).tick(signal());
   const { writeFile } = await import("node:fs/promises");
-  await writeFile(join(f.root, "cloud-snapshots/state.json"), "{}");
+  await writeFile(join(f.root, "cloud/snapshots/state.json"), "{}");
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
-  expect(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")).toBe("{}");
+  expect(await readFile(join(f.root, "cloud/snapshots/state.json"), "utf8")).toBe("{}");
 });
 it("removes a stale temporary-file symlink without changing its target", async () => {
   const f = await fixture();
   const { mkdir, writeFile, symlink } = await import("node:fs/promises");
-  await mkdir(join(f.root, "cloud-snapshots"));
+  await mkdir(join(f.root, "cloud/snapshots"), { recursive: true });
   await writeFile(join(f.root, "keep"), "untouched");
-  await symlink(join(f.root, "keep"), join(f.root, "cloud-snapshots/state.json.tmp"));
+  await symlink(join(f.root, "keep"), join(f.root, "cloud/snapshots/state.json.tmp"));
   await createCloudSnapshotWorker(f.deps).tick(signal());
   expect(f.points.size).toBe(1);
   expect(await readFile(join(f.root, "keep"), "utf8")).toBe("untouched");
@@ -316,10 +316,10 @@ it("pauses pending delivery while service is unconfigured and discards it when p
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow();
   f.status.installation!.services[0]!.state = "unconfigured";
   await createCloudSnapshotWorker(f.deps).tick(signal());
-  expect(await readdir(join(f.root, "cloud-snapshots"))).toContain("archive.enc");
+  expect(await readdir(join(f.root, "cloud/snapshots"))).toContain("archive.enc");
   delete f.status.registration;
   await createCloudSnapshotWorker(f.deps).tick(signal());
-  expect(await readdir(join(f.root, "cloud-snapshots"))).toEqual([]);
+  expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual([]);
 });
 it("refuses malformed pending metadata and a symlinked spool directory", async () => {
   const f = await fixture();
@@ -328,15 +328,15 @@ it("refuses malformed pending metadata and a symlinked spool directory", async (
   };
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow();
   const { writeFile, symlink } = await import("node:fs/promises"),
-    path = join(f.root, "cloud-snapshots/state.json");
+    path = join(f.root, "cloud/snapshots/state.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
   saved.pending.metadata.size = -1;
   await writeFile(path, JSON.stringify(saved));
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
-  await rm(join(f.root, "cloud-snapshots"), { recursive: true });
-  await symlink(f.root, join(f.root, "cloud-snapshots"));
+  await rm(join(f.root, "cloud/snapshots"), { recursive: true });
+  await symlink(f.root, join(f.root, "cloud/snapshots"));
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
@@ -362,19 +362,19 @@ it("refuses a changed installation grant and empty archives before uploading", a
 it("makes reused temporary files private and removes abandoned plaintext staging on startup", async () => {
   const f = await fixture();
   const { mkdir, writeFile, stat, chmod } = await import("node:fs/promises");
-  await mkdir(join(f.root, "cloud-snapshots/staging"), { recursive: true });
-  await writeFile(join(f.root, "cloud-snapshots/staging/venue.db"), "plaintext");
-  await writeFile(join(f.root, "cloud-snapshots/state.json.tmp"), "old", { mode: 0o666 });
-  await chmod(join(f.root, "cloud-snapshots/state.json.tmp"), 0o666);
+  await mkdir(join(f.root, "cloud/snapshots/staging"), { recursive: true });
+  await writeFile(join(f.root, "cloud/snapshots/staging/venue.db"), "plaintext");
+  await writeFile(join(f.root, "cloud/snapshots/state.json.tmp"), "old", { mode: 0o666 });
+  await chmod(join(f.root, "cloud/snapshots/state.json.tmp"), 0o666);
   await createCloudSnapshotWorker(f.deps).tick(signal());
-  expect((await stat(join(f.root, "cloud-snapshots/state.json"))).mode & 0o777).toBe(0o600);
-  expect(await readdir(join(f.root, "cloud-snapshots"))).toEqual(["state.json"]);
+  expect((await stat(join(f.root, "cloud/snapshots/state.json"))).mode & 0o777).toBe(0o600);
+  expect(await readdir(join(f.root, "cloud/snapshots"))).toEqual(["state.json"]);
 });
 it("refuses oversized state files and invalid pending identifiers", async () => {
   const f = await fixture();
   await createCloudSnapshotWorker(f.deps).tick(signal());
   const { writeFile } = await import("node:fs/promises"),
-    path = join(f.root, "cloud-snapshots/state.json");
+    path = join(f.root, "cloud/snapshots/state.json");
   const saved = JSON.parse(await readFile(path, "utf8"));
   await writeFile(path, " ".repeat(65537));
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toMatchObject({
@@ -415,8 +415,8 @@ it("keeps an expired pending archive when shutdown interrupts the final publicat
     throw Error("offline");
   };
   await expect(createCloudSnapshotWorker(f.deps).tick(signal())).rejects.toThrow();
-  const before = await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8"),
-    bytes = await readFile(join(f.root, "cloud-snapshots/archive.enc"));
+  const before = await readFile(join(f.root, "cloud/snapshots/state.json"), "utf8"),
+    bytes = await readFile(join(f.root, "cloud/snapshots/archive.enc"));
   f.advance(25 * 3600000);
   const c = new AbortController();
   f.deps.connection.publishCapture = async () => {
@@ -424,8 +424,8 @@ it("keeps an expired pending archive when shutdown interrupts the final publicat
     throw Error("offline");
   };
   await expect(createCloudSnapshotWorker(f.deps).tick(c.signal)).rejects.toThrow();
-  expect(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")).toBe(before);
-  expect(await readFile(join(f.root, "cloud-snapshots/archive.enc"))).toEqual(bytes);
+  expect(await readFile(join(f.root, "cloud/snapshots/state.json"), "utf8")).toBe(before);
+  expect(await readFile(join(f.root, "cloud/snapshots/archive.enc"))).toEqual(bytes);
 });
 it("does not read the venue clock while the next snapshot is not due", async () => {
   const f = await fixture();
@@ -446,7 +446,7 @@ describe("cloud snapshot venue clock edits", () => {
     f.deps.readClock = () =>
       withTransaction(suite.db, (tx) => resolveVenueClock(tx, venue.cfg.nodeId));
     const worker = createCloudSnapshotWorker(f.deps);
-    const statePath = join(f.root, "cloud-snapshots/state.json");
+    const statePath = join(f.root, "cloud/snapshots/state.json");
     const state = async () => JSON.parse(await readFile(statePath, "utf8")) as { nextAt: number };
     await worker.tick(signal());
     expect(f.captures()).toBe(1);
@@ -478,7 +478,7 @@ it("exposes the persisted next capture deadline, including after worker restart 
   const observed: Array<number | null> = [];
   const worker = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => observed.push(at) });
   await worker.tick(signal());
-  const saved = JSON.parse(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")) as {
+  const saved = JSON.parse(await readFile(join(f.root, "cloud/snapshots/state.json"), "utf8")) as {
     nextAt: number;
   };
   expect(observed.at(-1)).toBe(saved.nextAt);
@@ -504,7 +504,7 @@ it("clears an observed deadline when status fails and recovers the persisted dea
     },
   });
   await worker.tick(signal());
-  const saved = JSON.parse(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")) as {
+  const saved = JSON.parse(await readFile(join(f.root, "cloud/snapshots/state.json"), "utf8")) as {
     nextAt: number;
   };
   expect(observed).toBe(saved.nextAt);

@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -210,8 +211,9 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       ipAddresses: [],
       now: new Date(),
     });
-    writeFileSync(join(STATE_ROOT, "cloud-staff.key"), certificate.serverKeyPem);
-    writeFileSync(join(STATE_ROOT, "cloud-staff.crt"), certificate.serverCertPem);
+    mkdirSync(join(STATE_ROOT, "cloud"), { recursive: true });
+    writeFileSync(join(STATE_ROOT, "cloud/staff.key"), certificate.serverKeyPem);
+    writeFileSync(join(STATE_ROOT, "cloud/staff.crt"), certificate.serverCertPem);
     const server = await startConfiguredServer({
       ...KEY_ENV,
       WAITRON_VENUE_DIR: venueDir.mirror,

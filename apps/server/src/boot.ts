@@ -1,4 +1,4 @@
-import { SECRETS_ENV_FILE } from "@waitron/store";
+import { CLOUD_STAFF_CERT_FILE, SECRETS_ENV_FILE } from "@waitron/store";
 import {
   boxHostClient,
   boxHostRequests,
@@ -3711,7 +3711,7 @@ async function bootServer(
     cloudConnection &&
     config.staff &&
     config.environment !== "production" &&
-    !existsSync(join(config.stateDir, "cloud-staff.crt"));
+    !existsSync(join(config.stateDir, CLOUD_STAFF_CERT_FILE));
   let staffListener =
     isMirror || waitingForStaffCertificate ? undefined : startStaffListener(config, app, log);
   undoOnFailure.push(async () => {

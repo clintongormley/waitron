@@ -97,7 +97,8 @@ describe("runEntry", () => {
     const requestId = "1ea4560a-77ac-4c4b-8abc-06d09fe8c60e";
     const pointId = "252998c0-69eb-4bbc-a0f9-a8ba6451db42";
     const key = generateKeyPairSync("ed25519");
-    const path = join(stateDir, "cloud-recovery.json");
+    await mkdir(join(stateDir, "cloud"));
+    const path = join(stateDir, "cloud/recovery.json");
     const actions: string[] = [];
     await writeFile(
       path,

@@ -1,3 +1,5 @@
+import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
+import { CLOUD_DIR, CLOUD_STAFF_KEY_FILE, CLOUD_STAFF_CERT_FILE } from "@waitron/store";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { serve } from "@hono/node-server";
@@ -7,7 +9,7 @@ import { closeListener } from "./close-listener.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import { generateKeyPair, X509Certificate, randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm, link } from "node:fs/promises";
+import { lstat, open, readFile, rm, link } from "node:fs/promises";
 import { join } from "node:path";
 import forge from "node-forge";
 import { createSecureContext } from "node:tls";
@@ -23,7 +25,7 @@ export function mountCloudPublic(app: Hono, serving: () => boolean): void {
 }
 
 async function readStaffKey(stateDir: string): Promise<string> {
-  const path = join(stateDir, "cloud-staff.key");
+  const path = join(stateDir, CLOUD_STAFF_KEY_FILE);
   const info = await lstat(path);
   if (!info.isFile() || info.size > 8192 || (info.mode & 0o077) !== 0)
     throw new Error("Invalid staff key file");
@@ -39,8 +41,8 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
     !hostname.split(".").every((s) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))
   )
     throw new Error("Invalid staff hostname; use the exact lowercase hostname assigned by Cloud");
-  await mkdir(stateDir, { recursive: true, mode: 0o700 });
-  const path = join(stateDir, "cloud-staff.key");
+  await mkdirDurable(join(stateDir, CLOUD_DIR), 0o700);
+  const path = join(stateDir, CLOUD_STAFF_KEY_FILE);
   try {
     await lstat(path);
   } catch (error) {
@@ -60,7 +62,7 @@ export async function createStaffCsr(stateDir: string, hostname: string): Promis
       } catch (error) {
         if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") throw error;
       }
-      const directory = await open(stateDir, "r");
+      const directory = await open(join(stateDir, CLOUD_DIR), "r");
       try {
         await directory.sync();
       } finally {
@@ -99,26 +101,8 @@ export async function installStaffCertificate(
     throw new Error("Invalid staff certificate");
   const key = await readStaffKey(stateDir);
   createSecureContext({ key, cert: chain });
-  const path = join(stateDir, "cloud-staff.crt"),
-    temporary = path + "." + randomUUID();
-  try {
-    const file = await open(temporary, "wx", 0o600);
-    try {
-      await file.writeFile(chain);
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-    await rename(temporary, path);
-    const directory = await open(stateDir, "r");
-    try {
-      await directory.sync();
-    } finally {
-      await directory.close();
-    }
-  } finally {
-    await rm(temporary, { force: true });
-  }
+  await mkdirDurable(join(stateDir, CLOUD_DIR), 0o700);
+  await writeFileDurable(join(stateDir, CLOUD_STAFF_CERT_FILE), chain, 0o600);
 }
 
 /** The remote listener forwards only the dashboard surface; a header cannot grant a local source. */
@@ -194,8 +178,8 @@ export function startStaffListener(
     });
   try {
     const tls = {
-      keyFile: join(config.stateDir, "cloud-staff.key"),
-      certFile: join(config.stateDir, "cloud-staff.crt"),
+      keyFile: join(config.stateDir, CLOUD_STAFF_KEY_FILE),
+      certFile: join(config.stateDir, CLOUD_STAFF_CERT_FILE),
     };
     const server = serve(
       buildServeOptions(

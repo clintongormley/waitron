@@ -1,4 +1,5 @@
-import { RESTORE_REQUEST_FILE } from "@waitron/store";
+import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
+import { CLOUD_DIR, CLOUD_RECOVERY_FILE, RESTORE_REQUEST_FILE } from "@waitron/store";
 import {
   createHash,
   createPrivateKey,
@@ -7,7 +8,7 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
-import { lstat, mkdir, open, rename, rm } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import { Agent } from "node:https";
 import { join } from "node:path";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
@@ -28,7 +29,6 @@ import {
 import type { ArchiveRestoreRequest } from "./restore-request.js";
 
 const MAX_BYTES = 512 * 1024 * 1024;
-const STATE_FILE = "cloud-recovery.json";
 const uuid = (value: unknown): value is string =>
   typeof value === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
@@ -151,7 +151,7 @@ async function downloadArchive(grant: Grant, ca?: string): Promise<Uint8Array> {
 
 export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
   if (options.environment !== "preproduction") unavailable();
-  const path = join(options.stateDir, STATE_FILE);
+  const path = join(options.stateDir, CLOUD_RECOVERY_FILE);
   const fetchImpl = options.fetch ?? fetch;
   let active = false;
   async function locked<T>(fn: () => Promise<T>): Promise<T> {
@@ -199,26 +199,8 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
   async function save(value: SavedState) {
     const raw = JSON.stringify(value);
     if (value.version === 2 && Buffer.byteLength(raw) > 65536) unavailable();
-    await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    try {
-      const file = await open(temporary, "wx", 0o600);
-      try {
-        await file.writeFile(raw);
-        await file.sync();
-      } finally {
-        await file.close();
-      }
-      await rename(temporary, path);
-      const dir = await open(options.stateDir, "r");
-      try {
-        await dir.sync();
-      } finally {
-        await dir.close();
-      }
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
+    await writeFileDurable(path, raw, 0o600);
   }
   function fresh(): SavedState {
     const key = generateKeyPairSync("ed25519");

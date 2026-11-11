@@ -53,7 +53,7 @@ export async function cloudFixture(machine?: MachineHandler) {
     const { payload, signature } = sent as { payload: string; signature: string };
     const values = JSON.parse(Buffer.from(payload, "base64url").toString()) as string[];
     if (values[0] === "waitron-cloud-machine-v1" && machine) {
-      const saved = JSON.parse(await readFile(join(stateDir, "cloud-connection.json"), "utf8"));
+      const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
       expect(
         verify(
           null,
@@ -79,7 +79,7 @@ export async function cloudFixture(machine?: MachineHandler) {
     ).toBe(true);
     expect(values[0]).toBe("waitron-cloud-pair-v1");
     expect(req.url).toBe(`/api/pairing/${values[2]}`);
-    const saved = JSON.parse(await readFile(join(stateDir, "cloud-connection.json"), "utf8"));
+    const saved = JSON.parse(await readFile(join(stateDir, "cloud/connection.json"), "utf8"));
     expect(saved.requestId).toBe(values[3]);
     expect(saved.publicKey).toBe(values[4]);
     requests.push(values);

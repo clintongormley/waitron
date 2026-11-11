@@ -65,7 +65,7 @@ async function fixture() {
   const directory = join(f.stateDir, "tunnel");
   await mkdir(directory);
   const publicKey = randomBytes(32).toString("base64");
-  const registration = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"))
+  const registration = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"))
     .view.registration;
   const placement = {
     version: 1,
@@ -96,7 +96,7 @@ async function fixture() {
     },
     submissions: () => f.requests.filter((v) => v[2] === "tunnel-provision"),
     saved: async () =>
-      JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")),
+      JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")),
   };
 }
 
@@ -166,7 +166,7 @@ it.each([null, "false", 0])("refuses a malformed saved remote access choice %j",
   try {
     const saved = await f.saved();
     saved.remoteAccessEnabled = value;
-    await writeFile(join(f.stateDir, "cloud-connection.json"), JSON.stringify(saved));
+    await writeFile(join(f.stateDir, "cloud/connection.json"), JSON.stringify(saved));
     await expect(f.client.status()).rejects.toMatchObject({ code: "cloud.state_invalid" });
     await expect(f.client.syncTunnel()).rejects.toMatchObject({ code: "cloud.state_invalid" });
     await expect(readFile(join(f.directory, "peer.json"))).rejects.toMatchObject({
@@ -373,7 +373,7 @@ it("does not submit for a production or unpaired installation", async () => {
     const state = await f.saved();
     state.environment = "production";
     state.view.environment = "production";
-    await writeFile(join(f.stateDir, "cloud-connection.json"), JSON.stringify(state));
+    await writeFile(join(f.stateDir, "cloud/connection.json"), JSON.stringify(state));
     await createCloudConnection({ ...f.options, environment: "production" }).refresh();
     expect(f.submissions()).toHaveLength(0);
     expect(
@@ -395,7 +395,7 @@ it.each([false, "true", {}])("refuses a malformed terminal-conflict marker %j", 
     await createCloudConnection({ ...f.options, tunnelDir: undefined }).refresh();
     const state = await f.saved();
     state.lifecycle.tunnelConflict = value;
-    await writeFile(join(f.stateDir, "cloud-connection.json"), JSON.stringify(state));
+    await writeFile(join(f.stateDir, "cloud/connection.json"), JSON.stringify(state));
     await expect(f.client.status()).rejects.toMatchObject({ code: "cloud.state_invalid" });
   } finally {
     await f.close();

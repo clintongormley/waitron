@@ -85,11 +85,7 @@ else if (request.command === "stage") {
           parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
           request.expectedSourceNodeId,
         );
-      assert(
-        !checked.secretEntries.some(
-          (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
-        ),
-      );
+      assert(!checked.secretEntries.some((entry) => entry.name.startsWith("secrets/cloud/")));
       await stageRestoreRequest(stateDir, candidate);
     } finally {
       await checked.discard();
@@ -127,9 +123,9 @@ else if (request.command === "stage") {
     request.expectedSourceNodeId,
   );
   assert.equal(await exists(join(stateDir, "backup.env")), false);
-  assert.equal(await exists(join(stateDir, "cloud-connection.json")), false);
-  assert.equal(await exists(join(stateDir, "cloud-staff.key")), false);
-  assert.equal(await exists(join(stateDir, "cloud-staff.crt")), false);
+  assert.equal(await exists(join(stateDir, "cloud/connection.json")), false);
+  assert.equal(await exists(join(stateDir, "cloud/staff.key")), false);
+  assert.equal(await exists(join(stateDir, "cloud/staff.crt")), false);
   result = {
     restored: true,
     venue: request.expectedVenue,

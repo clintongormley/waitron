@@ -13,8 +13,10 @@ it("an interrupted initial key write leaves no published partial key and can be 
   const root = await mkdtemp(join(tmpdir(), "waitron-staff-key-write-"));
   const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
   const failure = new Error("write interrupted");
-  vi.mocked(open).mockImplementationOnce(async (...args) => {
+  vi.mocked(open).mockImplementation(async (...args) => {
     const file = await actual.open(...args);
+    if (args[1] !== "wx") return file;
+    vi.mocked(open).mockImplementation(actual.open);
     const write = file.writeFile.bind(file);
     file.writeFile = async () => {
       await write("partial");
@@ -24,10 +26,10 @@ it("an interrupted initial key write leaves no published partial key and can be 
   });
   try {
     await expect(createStaffCsr(root, "staff.example.test")).rejects.toBe(failure);
-    await expect(readFile(join(root, "cloud-staff.key"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(root, "cloud/staff.key"))).rejects.toMatchObject({ code: "ENOENT" });
     const first = await createStaffCsr(root, "staff.example.test");
     expect(await createStaffCsr(root, "staff.example.test")).toBe(first);
-    expect(await readdir(root)).toEqual(["cloud-staff.key"]);
+    expect(await readdir(join(root, "cloud"))).toEqual(["staff.key"]);
   } finally {
     vi.mocked(open).mockReset();
     await rm(root, { recursive: true, force: true });

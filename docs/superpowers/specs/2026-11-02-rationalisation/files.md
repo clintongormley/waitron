@@ -144,6 +144,12 @@ Three more changes follow from that layout (all owner, 2026-11-04):
 - **Waitron Cloud's files are grouped in `cloud/`,** and each flow deletes its record when it ends.
   Recovery and replacement are preproduction only (`cloud-recovery.ts:153`, `boot.ts:3185-3187`).
 
+**2026-11-11, fl4 (owner decision, 2026-11-09):** Cloud files move under `cloud/`,
+but rows 26–27 keep their records until reset. A completed replacement is re-imported on
+start, can recreate a missing connection, and keeps later Stop access requests; recovery
+keeps the identity needed for that replacement. The records also supply Cloud status.
+This supersedes the deletion-at-flow-end wording above and in rows 26–27.
+
 **One durable write, everywhere.** Today there are at least six ways to write a file safely, and
 the most used one, `writeFileAtomic`, "does not fsync" (`packages/provisioning/src/fs-atomic.ts:36-38`).
 It writes `secrets.env`, `trading.env`, `modules.json`, `backup.env`, `recovery.json`, the restore

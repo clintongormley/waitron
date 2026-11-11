@@ -119,7 +119,7 @@ async function fixture() {
       if (ready && certificate === undefined) {
         const request = forge.pki.certificationRequestFromPem(csr);
         const key = forge.pki.privateKeyFromPem(
-          await readFile(join(f.stateDir, "cloud-staff.key"), "utf8"),
+          await readFile(join(f.stateDir, "cloud/staff.key"), "utf8"),
         );
         const cert = forge.pki.createCertificate();
         cert.publicKey = request.publicKey!;
@@ -154,8 +154,8 @@ async function fixture() {
     ...f,
     close,
     pass: (signal?: AbortSignal) => f.client.staffCertificate(hostname, signal),
-    readKey: () => readFile(join(f.stateDir, "cloud-staff.key"), "utf8"),
-    readChain: () => readFile(join(f.stateDir, "cloud-staff.crt"), "utf8"),
+    readKey: () => readFile(join(f.stateDir, "cloud/staff.key"), "utf8"),
+    readChain: () => readFile(join(f.stateDir, "cloud/staff.crt"), "utf8"),
     submits: () => calls.filter((call) => call.action === "staff-certificate-submit"),
     calls,
     hold: (fn: () => Promise<void>) => {
@@ -215,7 +215,7 @@ it("resumes a pending request with status after a restart, then installs it", as
   f.ready();
   await restarted.staffCertificate(hostname);
   expect(await f.readChain()).toContain("BEGIN CERTIFICATE");
-  expect((await stat(join(f.stateDir, "cloud-staff.key"))).mode & 0o077).toBe(0);
+  expect((await stat(join(f.stateDir, "cloud/staff.key"))).mode & 0o077).toBe(0);
 });
 
 it("discovers the accepted submit after a lost response, without a new request or key", async () => {
@@ -250,8 +250,8 @@ it("renews at thirty days remaining while keeping its key and request identity",
     watchTlsFiles(
       server,
       {
-        keyFile: join(f.stateDir, "cloud-staff.key"),
-        certFile: join(f.stateDir, "cloud-staff.crt"),
+        keyFile: join(f.stateDir, "cloud/staff.key"),
+        certFile: join(f.stateDir, "cloud/staff.crt"),
       },
       hostname,
       () => {},
@@ -394,7 +394,7 @@ it.each([
   await expect(f.pass()).rejects.toMatchObject({
     code: "cloud.unavailable",
   });
-  const state = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"));
+  const state = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
   expect(state.lifecycle.lease).toBeUndefined();
   expect(state.lifecycle.revoked).toBe(error === "revoked");
 });
@@ -417,7 +417,7 @@ it.each(["production", "revoked", "no-lease", "no-view", "no-registration"])(
     const f = await fixture();
 
     await f.client.refresh();
-    const state = JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"));
+    const state = JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"));
     if (gate === "production") state.environment = "production";
     if (gate === "revoked") state.lifecycle.revoked = true;
     if (gate === "no-lease") delete state.lifecycle.lease;
@@ -612,7 +612,7 @@ it.each(["key", "chain"])("recovers a lost %s without a local request record", a
   await f.pass();
   const first = f.calls.find((call) => call.action === "staff-certificate-submit")!;
   const key = await f.readKey();
-  await unlink(join(f.stateDir, missing === "key" ? "cloud-staff.key" : "cloud-staff.crt"));
+  await unlink(join(f.stateDir, missing === "key" ? "cloud/staff.key" : "cloud/staff.crt"));
   await f.pass();
   const submitted = f.submits();
   expect(submitted).toHaveLength(missing === "key" ? 2 : 1);

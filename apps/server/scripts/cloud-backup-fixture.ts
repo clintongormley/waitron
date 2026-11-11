@@ -146,11 +146,7 @@ if (request.command === "capture") {
       parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
       request.sourceNodeId,
     );
-    assert(
-      !checked.secretEntries.some(
-        (entry) => entry.name.includes("cloud-connection") || entry.name.includes("cloud-staff"),
-      ),
-    );
+    assert(!checked.secretEntries.some((entry) => entry.name.startsWith("secrets/cloud/")));
     {
       const db = new DatabaseSync(checked.databasePath, { readOnly: true });
       try {
@@ -192,8 +188,8 @@ if (request.command === "capture") {
         networkDenied,
         integrityOk: true,
         hooks,
-        cloudCredentialPresent: await exists("cloud-connection.json", stateDir),
-        staffKeyPresent: await exists("cloud-staff.key", stateDir),
+        cloudCredentialPresent: await exists("cloud/connection.json", stateDir),
+        staffKeyPresent: await exists("cloud/staff.key", stateDir),
       }),
     );
   } finally {

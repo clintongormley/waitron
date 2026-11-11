@@ -38,17 +38,19 @@ describe("state-secrets", () => {
   it("excludes a replacement's private Cloud recovery request from captured state", async () => {
     const dir = await seedStateDir();
     const privateKey = "distinct-private-signing-key";
-    await writeFile(join(dir, "cloud-recovery.json"), JSON.stringify({ privateKey }), {
+    await mkdir(join(dir, "cloud"), { recursive: true });
+    await writeFile(join(dir, "cloud/recovery.json"), JSON.stringify({ privateKey }), {
       mode: 0o600,
     });
+    await mkdir(join(dir, "cloud"), { recursive: true });
     await writeFile(
-      join(dir, "cloud-replacement.json"),
+      join(dir, "cloud/replacement.json"),
       JSON.stringify({ privateKey, peerPrivateKey: "distinct-private-peer-key" }),
       { mode: 0o600 },
     );
     const files = await collectStateSecrets(dir);
-    expect(files).not.toHaveProperty("cloud-recovery.json");
-    expect(files).not.toHaveProperty("cloud-replacement.json");
+    expect(files).not.toHaveProperty("cloud/recovery.json");
+    expect(files).not.toHaveProperty("cloud/replacement.json");
     expect(JSON.stringify(files)).not.toContain(privateKey);
     expect(JSON.stringify(files)).not.toContain("distinct-private-peer-key");
   });

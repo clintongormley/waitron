@@ -9,15 +9,21 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import ts from "typescript";
 import { expect, it } from "vitest";
-import { RESET_KEPT, STATE_LAYOUT } from "../packages/store/src/state-layout.js";
+import * as layout from "../packages/store/src/state-layout.js";
+const { CLOUD_DIR, RESET_KEPT, STATE_LAYOUT } = layout;
 
 const ROOT = join(import.meta.dirname, "..");
 const LAYOUT = "packages/store/src/state-layout.ts";
 const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const names = STATE_LAYOUT.map((entry) => entry.name).filter((name) => /[.\-/]/.test(name));
+const names = [
+  ...STATE_LAYOUT.map((entry) => entry.name).filter((name) => /[.\-/]/.test(name)),
+  ...Object.values(layout).filter(
+    (value): value is string => typeof value === "string" && value.startsWith(`${CLOUD_DIR}/`),
+  ),
+];
 const quotedNames = names.map(escaped).join("|");
 const definitions = new RegExp(
-  String.raw`\bconst\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?=\s*["'\x60](?:${quotedNames})["'\x60]|\bjoin\(\s*[\w$.#]*stateDir\s*,\s*["'\x60](?:${quotedNames}|stream|handover|tls|venue|records|logs)["'\x60]`,
+  String.raw`\bconst\s+[A-Za-z_$][\w$]*\s*(?::[^=]+)?=\s*["'\x60](?:${quotedNames})["'\x60]|\bjoin\(\s*[\w$.#]*stateDir\s*,\s*["'\x60](?:${quotedNames}|stream|handover|tls|venue|records|logs|cloud)["'\x60]`,
   "gi",
 );
 
@@ -122,4 +128,21 @@ it("detects an extra reset keep name and accepts exactly the retained folders", 
     "records",
     "tls",
   ]);
+});
+
+it("reports Cloud folder and child definitions while accepting other roots and format items", () => {
+  const text =
+    'const root = join(stateDir, "cloud");\nconst file = join(deps.stateDir, "cloud/connection.json");\nconst key = "cloud/staff.key";';
+  expect(strays("apps/server/src/example.ts", text)).toEqual([
+    'apps/server/src/example.ts:1: join(stateDir, "cloud"',
+    'apps/server/src/example.ts:2: join(deps.stateDir, "cloud/connection.json"',
+    'apps/server/src/example.ts:3: const key = "cloud/staff.key"',
+  ]);
+  expect(
+    strays(
+      "apps/server/src/example.ts",
+      'const label = "Cloud"; const path = join(archiveDir, "cloud"); const item = { item: "cloud/connection.json" };',
+    ),
+  ).toEqual([]);
+  expect(strays(LAYOUT, text)).toEqual([]);
 });

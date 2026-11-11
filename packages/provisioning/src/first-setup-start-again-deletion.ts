@@ -1,4 +1,5 @@
 import {
+  CLOUD_REPLACEMENT_FILE,
   FIRST_SETUP_FILE,
   FIRST_SETUP_NODE_KEY_FILE,
   MODULES_FILE,
@@ -8,8 +9,9 @@ import {
   RESTORE_REQUEST_FILE,
   SETUP_OPERATION_FILE,
   TRADING_ENV_FILE,
+  FIRST_FISCAL_DOCUMENTS_DIR,
+  BACKUP_ROOM_NOTE_FILE,
 } from "@waitron/store";
-import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -36,7 +38,6 @@ import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import { quoteIdent } from "./identifiers.js";
-import { BACKUP_ROOM_NOTE_FILE } from "@waitron/store";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -69,7 +70,7 @@ const REFUSED = {
     RESTORE_REQUEST_FILE,
     RESET_REQUEST_FILE,
     MODULES_FILE,
-    "cloud-replacement.json",
+    CLOUD_REPLACEMENT_FILE,
     "first-setup-workspaces",
     "first-setup-selection.json",
     "first-setup-retirement.json",

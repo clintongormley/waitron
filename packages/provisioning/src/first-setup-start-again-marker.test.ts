@@ -700,14 +700,17 @@ it.each<[string, object, (roots: { venueDir: string; stateDir: string }) => Prom
     "restore-request.json",
     "reset-request.json",
     "modules.json",
-    "cloud-replacement.json",
+    "cloud/replacement.json",
   ].map(
     (
       name,
     ): [string, object, (roots: { venueDir: string; stateDir: string }) => Promise<unknown>] => [
       `beside state/${name}`,
       notReady,
-      (roots) => writeFile(join(roots.stateDir, name), "x"),
+      async (roots) => {
+        await mkdir(join(roots.stateDir, "cloud"), { recursive: true });
+        await writeFile(join(roots.stateDir, name), "x");
+      },
     ],
   ),
   [

@@ -5444,7 +5444,7 @@ reported `/tmp` 1581, 453, 232, 165, 253 ms and state 1241, 314, 183, 151, 168 m
 plain-reset fate. Only `tls/` and `records/` are kept. On a box that joined another, a plain reset keeps the `tls/`
 folder but empties it (see "A box that joined another holds that venue's authority as its own"). The root guard reads definitions as text:
 a constant holding a complete distinctive name, or a `join` whose first argument ends in
-`stateDir`. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
+`stateDir`. It includes the Cloud folder and the layout module’s exported Cloud child paths. On base `9caea7f442`, its first run reported 93 definition sites. Its inline controls
 report a spare-file declaration and a TLS join, while accepting comments and format-item literals.
 
 The guard skips tests, declaration files, test fixtures, the print-agent programs and plain-Node
@@ -5453,8 +5453,8 @@ entries and handover manifest items keep their own literals because they describ
 format, not the box's current paths. A name assembled from pieces, an array or object entry, a
 join from a differently named root, or a shell path escapes this guard. The scanner can mistake
 comment-like text in a regular expression or template for a comment and hide a later definition. The fl1 review compared it with TypeScript’s parser over 2,661 files
-and found no hidden definition on candidate `bf13077098`. Cloud files remain with their owners
-until fl4; legacy setup names remain with the code that reads or refuses them until their slices.
+and found no hidden definition on candidate `bf13077098`. Cloud connection, recovery, replacement and staff files live under `cloud/`, with snapshot state
+in `cloud/snapshots/`; legacy setup names remain with the code that reads or refuses them until their slices.
 The separate reset case compares the shell command's retained names with the layout's kept entries.
 
 ## Start again's records and the set-aside folder
@@ -6467,6 +6467,8 @@ does not see.
 > read text, and a new binary or system package is seen by none of them.
 
 ### State-folder names live in `packages/store/src/state-layout.ts`, except Cloud and legacy setup names awaiting their layout slices; a plain reset keeps exactly its `kept` entries
+
+_2026-11-11, A1308 fl4: Cloud names now live in the layout. See [One state-folder layout](#one-state-folder-layout) and the current root rule; this excerpt retains the earlier wording._
 
 > Guard: `scripts/state-layout.test.ts`, weaker than its name: reads text, and sees only a constant
 > or a join from the state folder.

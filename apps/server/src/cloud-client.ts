@@ -1,3 +1,5 @@
+import { mkdirDurable, writeFileDurable } from "@waitron/provisioning";
+import { CLOUD_DIR, CLOUD_CONNECTION_FILE } from "@waitron/store";
 import { pairingPayload } from "@waitron/contract";
 import {
   reserveCloudCapture,
@@ -31,7 +33,7 @@ import {
   randomUUID,
   sign,
 } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { readTunnelPublicKey, writeTunnelConfiguration } from "./cloud-tunnel.js";
@@ -187,7 +189,7 @@ function readView(value: unknown, state: SavedCloudState): CloudPairingView {
 const activePaths = new Map<string, Promise<void>>();
 /** One server process owns a node state directory. */
 export function createCloudConnection(options: CloudConnectionOptions) {
-  const path = join(resolve(options.stateDir), "cloud-connection.json");
+  const path = join(resolve(options.stateDir), CLOUD_CONNECTION_FILE);
   async function read(): Promise<SavedCloudState | undefined> {
     try {
       const info = await lstat(path);
@@ -230,26 +232,8 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
   }
   async function save(state: SavedCloudState) {
-    await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${randomUUID()}.tmp`;
-    try {
-      const file = await open(temporary, "wx", 0o600);
-      try {
-        await file.writeFile(JSON.stringify(state));
-        await file.sync();
-      } finally {
-        await file.close();
-      }
-      await rename(temporary, path);
-      const directory = await open(options.stateDir, "r");
-      try {
-        await directory.sync();
-      } finally {
-        await directory.close();
-      }
-    } finally {
-      await rm(temporary, { force: true });
-    }
+    await mkdirDurable(join(options.stateDir, CLOUD_DIR), 0o700);
+    await writeFileDurable(path, JSON.stringify(state), 0o600);
   }
   function project(state: SavedCloudState | undefined): CloudConnectionStatus {
     if (!state) return { state: "not_connected", code: "", signupUrl: `${options.origin}/signup` };

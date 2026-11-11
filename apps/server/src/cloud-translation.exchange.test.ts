@@ -692,7 +692,7 @@ it("a call its caller aborts while it is parked behind the connection's lock is 
 it("a saved state holding no lease is cloud.not_configured, with nothing sent", () =>
   withFake(async (f) => {
     const state = JSON.parse(
-      await readFile(join(f.stateDir, "cloud-connection.json"), "utf8"),
+      await readFile(join(f.stateDir, "cloud/connection.json"), "utf8"),
     ) as SavedCloudState;
     delete state.lifecycle?.lease;
     const fetch = vi.spyOn(globalThis, "fetch");
@@ -732,7 +732,7 @@ it("carries the number that would fit", () => {
 });
 
 const saved = async (f: Fake) =>
-  JSON.parse(await readFile(join(f.stateDir, "cloud-connection.json"), "utf8")) as SavedCloudState;
+  JSON.parse(await readFile(join(f.stateDir, "cloud/connection.json"), "utf8")) as SavedCloudState;
 
 it.each(["submit", "status", "collect", "release"] as const)(
   "a %s Cloud refuses as revoked records the revocation and is cloud.unavailable",
@@ -823,10 +823,10 @@ it("a refusal met after the connection's saved state was removed writes nothing 
     const status = f.client.translation.status(job.jobId);
     await held.reached;
     f.revoke();
-    await rm(join(f.stateDir, "cloud-connection.json"));
+    await rm(join(f.stateDir, "cloud/connection.json"));
     held.release();
     await expect(status).rejects.toMatchObject({ code: "cloud.unavailable" });
-    await expect(readFile(join(f.stateDir, "cloud-connection.json"))).rejects.toMatchObject({
+    await expect(readFile(join(f.stateDir, "cloud/connection.json"))).rejects.toMatchObject({
       code: "ENOENT",
     });
   }));
@@ -846,7 +846,7 @@ it("a revocation met after the connection was paired again as another installati
       privateKey: privateKey.export({ format: "der", type: "pkcs8" }).toString("base64url"),
       publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64url"),
     };
-    await writeFile(join(f.stateDir, "cloud-connection.json"), JSON.stringify(replaced), {
+    await writeFile(join(f.stateDir, "cloud/connection.json"), JSON.stringify(replaced), {
       mode: 0o600,
     });
     held.release();

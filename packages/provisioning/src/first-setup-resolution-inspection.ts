@@ -1,5 +1,6 @@
-import { TRADING_ENV_FILE } from "@waitron/store";
 import {
+  CLOUD_REPLACEMENT_FILE,
+  TRADING_ENV_FILE,
   FIRST_SETUP_FILE,
   FIRST_SETUP_NODE_KEY_FILE,
   MODULES_FILE,
@@ -7,8 +8,8 @@ import {
   RESET_REQUEST_FILE,
   RESTORE_REQUEST_FILE,
   SETUP_OPERATION_FILE,
+  FIRST_FISCAL_DOCUMENTS_DIR,
 } from "@waitron/store";
-import { FIRST_FISCAL_DOCUMENTS_DIR } from "@waitron/store";
 import "./errors.js";
 import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
@@ -291,7 +292,7 @@ export function createFirstSetupResolutionInspection(
         RESTORE_REQUEST_FILE,
         RESET_REQUEST_FILE,
         MODULES_FILE,
-        "cloud-replacement.json",
+        CLOUD_REPLACEMENT_FILE,
       ])
         artifacts.push(await artifact(options.stateDir, name));
       artifacts.push(await artifact(options.stateDir, TRADING_ENV_FILE, 65536, false));
