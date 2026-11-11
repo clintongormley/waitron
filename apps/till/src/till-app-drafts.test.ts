@@ -11395,7 +11395,7 @@ describe("native app phone order view with mixed dish families", () => {
 });
 
 it.each(["reducing", "adding"])(
-  "recovers the invoice after a %s draft save is refused and ends further saves",
+  "locks the recovered invoice draft after a %s save and keeps its paid notice after None",
   async (kind) => {
     const previousLocale = currentLocale();
     try {
@@ -11405,7 +11405,8 @@ it.each(["reducing", "adding"])(
       });
       await openTable(el);
       press(el, "Beer");
-      await vi.waitFor(() => expect(server.drafts[0]?.lines).toHaveLength(1));
+      press(el, "Beer");
+      await vi.waitFor(() => expect(server.drafts[0]?.lines[0]?.quantity).toBe("2"));
       api.saveDraft.mockRejectedValue({ code: "bill.paid", status: 409 });
       api.getBillBalance.mockResolvedValue(
         balanceOf({ status: "settled", outstanding: "0.00", received: "120.00" }),
@@ -11418,11 +11419,12 @@ it.each(["reducing", "adding"])(
           hasPayments: true,
         }),
       ]);
-      if (kind === "reducing") draft(el).removeLine(0);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      if (kind === "reducing") draft(el).setLineQuantity(0, "1");
       else press(el, "Beer");
-      await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull(),
-      );
+      await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
       expect(api.getFiledTicket).toHaveBeenCalledWith("wo-4");
       expect(el.result?.invoiceNumber).toBe("F-0007");
       expect(el.errorKey).toEqual({ code: "bill.paid" });
@@ -11430,13 +11432,13 @@ it.each(["reducing", "adding"])(
       el.shadowRoot!.querySelector("till-settlement-document-dialog")!
         .shadowRoot!.querySelector<HTMLElement>("[data-settlement-none]")!
         .click();
-      await flush(el);
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
       expect(banner(el)?.textContent).toContain(codeMessage("bill.paid"));
       expect(draft(el).lines.map((line) => line.quantity)).toEqual(
-        kind === "reducing" ? [] : ["2"],
+        kind === "reducing" ? ["1"] : ["3"],
       );
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS);
       expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).toBeNull();
       expect(api.getFiledTicket).toHaveBeenCalledOnce();
