@@ -295,6 +295,28 @@ async function openCounterMove(el: TillApp): Promise<void> {
   await flush(el);
 }
 
+function counterCancellationRead(revision = 4) {
+  const context = {
+    billStatus: "open",
+    stage: "not_started",
+    components: [
+      {
+        id: "ticket-1",
+        lineId: "l-1",
+        state: "queued",
+        firedAt: "2026-09-30T09:00:00.000Z",
+        requestedAt: null,
+        stationId: "kitchen",
+        quantity: "2.000",
+        kitchenQuantity: "2.000",
+        servedQuantity: "0.000",
+        cancelledQuantity: "0.000",
+      },
+    ],
+  };
+  return { billId: "wo-9", billRevision: 4, revision, context };
+}
+
 /** Signs in and retrieves the stored order wo-9 into the counter's basket. */
 async function retrieved(overrides: Record<string, unknown> = {}): Promise<TillApp> {
   api = stubApi(overrides);
@@ -2078,25 +2100,8 @@ describe("till-app: comping a stored counter order", () => {
   });
 
   it("opens Cancel item for a sent Counter dish, sends nothing on Stop, then refreshes after confirmation", async () => {
-    const context = {
-      billStatus: "open",
-      stage: "not_started",
-      components: [
-        {
-          id: "ticket-1",
-          lineId: "l-1",
-          state: "queued",
-          firedAt: "2026-09-30T09:00:00.000Z",
-          requestedAt: null,
-          stationId: "kitchen",
-          quantity: "2.000",
-          kitchenQuantity: "2.000",
-          servedQuantity: "0.000",
-          cancelledQuantity: "0.000",
-        },
-      ],
-    };
-    const consent = { billId: "wo-9", billRevision: 4, revision: 4, context };
+    const consent = counterCancellationRead();
+    const { context } = consent;
     const getCancellation = vi.fn().mockResolvedValue(consent);
     const cancelItem = vi.fn().mockResolvedValue({ revision: 5 });
     const el = await retrieved({ getCancellation, cancelItem });
@@ -2105,28 +2110,6 @@ describe("till-app: comping a stored counter order", () => {
     expect(open()).not.toBeNull();
     expect(getCancellation).toHaveBeenCalledWith({ billId: "wo-9" }, "l-1", expect.anything());
     expect(counter(el).store.lines).toHaveLength(2);
-    const previous = currentLocale();
-    try {
-      for (const language of ["en", "es"] as const) {
-        emit(open()!, "cancel-item-close");
-        setLocale(language);
-        await flush(el);
-        await press(el, inBasket(el, '[data-cancel-line="0"]')!);
-        for (const theme of ["light", "dark"])
-          for (const width of [390, 1280]) {
-            setLocale(language);
-            el.parentElement!.setAttribute("data-theme", theme);
-            await page.viewport(width, 900);
-            await flush(el);
-            await page.screenshot({
-              path: `__screenshots__/r3-counter-cancel/${language}-${theme}-${width}.png`,
-            });
-          }
-      }
-    } finally {
-      setLocale(previous);
-      await page.viewport(1280, 900);
-    }
     emit(open()!, "cancel-item-close");
     await flush(el);
     expect(cancelItem).not.toHaveBeenCalled();
@@ -2154,6 +2137,73 @@ describe("till-app: comping a stored counter order", () => {
     expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
     expect(counter(el).store.revision).toBe(5);
     expect(open()).toBeNull();
+  });
+
+  it("carries the party revision when a table bill is cancelled from Counter", async () => {
+    const expectedEdit = { billId: "wo-9", editorVersion: 7, draftId: null, draftRevision: null };
+    const consent = counterCancellationRead(9);
+    const getCancellation = vi.fn().mockResolvedValue(consent);
+    const cancelItem = vi.fn().mockResolvedValue({ revision: 10 });
+    const el = await retrieved({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({ ...heldOrder(4), expectedEdit }),
+      listWorkingOrders: vi.fn().mockResolvedValue([
+        {
+          id: "wo-9",
+          partyId: "party-4",
+          billNumber: 1,
+          billName: null,
+          orderNumber: 12,
+          label: null,
+          items: [],
+          counts: { ordered: 2, unsent: 0, held: 0, waiting: 2, ready: 0 },
+          total: "8.50",
+          outstanding: "8.50",
+          hasPayments: false,
+          openedAt: "2026-11-11T10:00:00Z",
+          signals: [],
+        },
+      ]),
+      getCancellation,
+      cancelItem,
+    });
+    await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+    const dialog = el.shadowRoot!.querySelector("till-cancel-item-dialog")!;
+    expect(dialog).not.toBeNull();
+    emit(dialog, "cancel-item-choice", {
+      lineId: "l-1",
+      quantity: "1",
+      outcome: "remove_charge",
+      consent,
+    });
+    await flush(el, 8);
+    expect(getCancellation).toHaveBeenCalledWith("party-4", "l-1", expect.anything());
+    expect(cancelItem).toHaveBeenCalledWith(
+      "party-4",
+      "l-1",
+      expect.objectContaining({ expectedEdit, expectedPartyRevision: 9 }),
+      expect.anything(),
+    );
+  });
+
+  it("reports an unconfirmed Counter cancellation after reloading its saved basket", async () => {
+    const consent = counterCancellationRead();
+    const cancelItem = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await retrieved({ getCancellation: vi.fn().mockResolvedValue(consent), cancelItem });
+    await press(el, inBasket(el, '[data-cancel-line="0"]')!);
+    emit(el.shadowRoot!.querySelector("till-cancel-item-dialog")!, "cancel-item-choice", {
+      lineId: "l-1",
+      quantity: "1",
+      outcome: "remove_charge",
+      consent,
+    });
+    await vi.waitFor(() => expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2), {
+      timeout: 5000,
+    });
+    await flush(el);
+    expect(cancelItem).toHaveBeenCalledTimes(3);
+    expect(el.shadowRoot!.querySelector("till-cancel-item-dialog")).toBeNull();
+    expect(counter(el).store.revision).toBe(5);
+    expect(banner(el)?.textContent).toBe(t("adjust.unconfirmed"));
   });
 
   it("asks an approver for their PIN when the reason needs one", async () => {

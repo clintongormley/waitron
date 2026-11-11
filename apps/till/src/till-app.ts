@@ -14774,7 +14774,7 @@ export class TillApp extends LitElement {
       ...(choice.preparationStarted === undefined
         ? {}
         : { preparationStarted: choice.preparationStarted }),
-      ...(open.counter === undefined ? { expectedPartyRevision: choice.consent.revision } : {}),
+      ...(open.partyId === null ? {} : { expectedPartyRevision: choice.consent.revision }),
       expectedBillRevision: choice.consent.billRevision,
       expectedContext: structuredClone(choice.consent.context),
       submissionId: crypto.randomUUID(),
@@ -14922,9 +14922,19 @@ export class TillApp extends LitElement {
       this.cancellingItem = { ...open, busy: false, approval: { ...open.approval, error: code } };
     } else if (stage !== "preview" && isNetworkFailure(error)) {
       this.#closeCancelItem();
-      if (open.counter !== undefined) await this.#reloadCounterOrder(open.billId, open.session);
-      else await this.#rereadAmounts(open.billId, open.visit);
-      if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
+      if (open.counter !== undefined) {
+        const read = await this.#reloadCounterOrder(open.billId, open.session);
+        if (
+          read !== "gone" &&
+          this.isConnected &&
+          open.api === this.api &&
+          !this.#hasLeftCounterOrder(open.billId, open.session)
+        )
+          this.errorKey = read === "read" ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
+      } else {
+        await this.#rereadAmounts(open.billId, open.visit);
+        if (this.#cancellationCurrent(open)) this.errorKey ??= "adjust.unconfirmed";
+      }
     } else {
       const field = refusalField(code, "cancel", false);
       const refused: CancellingItem = {
