@@ -24,7 +24,7 @@ export async function waitingDish(
     id: orderId,
     zoneId: offers.zoneId,
     lines: offers.toOfferLines([{ productId: venue.coffeeId, quantity: "1" }]),
-    label: "Mesa 7",
+    label: "Table 7",
   });
   const clock = {
     now: () => ({

@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  deviceProfiles,
-  devices,
   invoiceDeliveries,
   pagePrinters,
   printAgents,
@@ -21,8 +19,8 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";
 import { recordSyntheticInvoice } from "./testing/synthetic-invoice.js";
+import { kitchenScreenDevice, profile } from "./testing/kitchen-screen-device.js";
 import { waitingDish } from "./testing/waiting-dish.js";
-import { VENUE_SERVICE } from "./modules.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -66,7 +64,7 @@ async function withServer(venue: Venue, use: (base: string) => Promise<void>): P
   let scratch: string | undefined;
   let server: StartedServer | undefined;
   try {
-    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-invoice-alert-"));
+    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-alerts-"));
     const migrationsRoot = join(scratch, "migrations");
     for (const [index, set] of manifestSets().entries()) {
       await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
@@ -237,34 +235,22 @@ describe("the running server's dark pass screen alert", () => {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
     beforeServerStarts();
     await waitingDish(suite.db, venue, venue.defaultStationId, tenMinutesAgo, new Date());
-    const [profile] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: "Pass profile", formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
-    const [pass] = await suite.db
-      .insert(devices)
-      .values({
+    const pass = await kitchenScreenDevice(
+      suite.db,
+      {
         locationId: venue.cfg.locationId,
-        deviceProfileId: profile!.id,
+        deviceProfileId: await profile(suite.db, "kds"),
         label: "Pass",
         tokenHash: "hash",
         lastSeenAt: tenMinutesAgo,
-      })
-      .returning({ id: devices.id });
-    const screen = { kind: "pass", stationIds: null, zoneIds: null } as const;
-    await withTransaction(suite.db, async (tx) => {
-      await VENUE_SERVICE.addProfileKitchenScreen(tx, profile!.id, screen);
-      await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-        deviceId: pass!.id,
-        profileId: profile!.id,
-        screens: [screen],
-      });
-    });
+      },
+      { kind: "pass", stationIds: null, zoneIds: null },
+    );
 
     await withServer(venue, async (base) => {
       expect(await alertsIn(base, venue, "kitchen")).toEqual([
         {
-          key: `kitchen_screen.pass_dark:${pass!.id}`,
+          key: `kitchen_screen.pass_dark:${pass}`,
           code: "kitchen_screen.pass_dark",
           params: { device: "Pass" },
           severity: "warning",

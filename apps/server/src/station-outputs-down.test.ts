@@ -26,11 +26,11 @@ import {
   waitingDishesQuery,
 } from "./station-outputs-down.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { kitchenScreenDevice, profile } from "./testing/kitchen-screen-device.js";
 import { waitingDish } from "./testing/waiting-dish.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { passScreenAlertSource, stationOutputAlertSource } from "./alert-sources.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { DeviceKitchenScreen } from "@waitron/module";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -63,29 +63,11 @@ async function setup() {
 /** A device row, given a station screen on `stationId` offered on its profile. */
 async function stationScreenDevice(values: typeof devices.$inferInsert & { stationId: string }) {
   const { stationId, ...row } = values;
-  return kitchenScreenDevice(row, { kind: "station", stationIds: [stationId], zoneIds: null });
-}
-
-/** A device row, given `screen` offered on its profile. */
-async function kitchenScreenDevice(row: typeof devices.$inferInsert, screen: DeviceKitchenScreen) {
-  const [device] = await suite.db.insert(devices).values(row).returning({ id: devices.id });
-  await withTransaction(suite.db, async (tx) => {
-    await VENUE_SERVICE.addProfileKitchenScreen(tx, row.deviceProfileId, screen);
-    await VENUE_SERVICE.setDeviceKitchenScreens(tx, {
-      deviceId: device!.id,
-      profileId: row.deviceProfileId,
-      screens: [screen],
-    });
+  return kitchenScreenDevice(suite.db, row, {
+    kind: "station",
+    stationIds: [stationId],
+    zoneIds: null,
   });
-  return device!.id;
-}
-
-async function profile(formFactor: "kds" | "till"): Promise<string> {
-  const [row] = await suite.db
-    .insert(deviceProfiles)
-    .values({ name: randomUUID(), formFactor, capabilities: [] })
-    .returning({ id: deviceProfiles.id });
-  return row!.id;
 }
 
 /** The dark-screen alerts' keys, every station open and the grill the default. */
@@ -294,6 +276,7 @@ describe("station output status", () => {
       .values({ name: "KDS", formFactor: "kds", capabilities: [] })
       .returning({ id: deviceProfiles.id });
     const pass = await kitchenScreenDevice(
+      suite.db,
       {
         locationId: f.venue.cfg.locationId,
         deviceProfileId: profile!.id,
@@ -415,9 +398,10 @@ describe("station output status", () => {
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await waitingItem(f.venue, f.bar, "2026-10-02T17:50:00.000Z");
     await kitchenScreenDevice(
+      suite.db,
       {
         locationId: f.venue.cfg.locationId,
-        deviceProfileId: await profile("kds"),
+        deviceProfileId: await profile(suite.db, "kds"),
         label: "Dark line",
         tokenHash: "hash",
         lastSeenAt: "2026-10-02T17:55:00.000Z",
@@ -443,9 +427,10 @@ describe("station output status", () => {
       await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
       for (const kind of ["pass", "pass_monitor"] as const) {
         await kitchenScreenDevice(
+          suite.db,
           {
             locationId: f.venue.cfg.locationId,
-            deviceProfileId: await profile("kds"),
+            deviceProfileId: await profile(suite.db, "kds"),
             label: kind,
             tokenHash: "hash",
           },
@@ -460,9 +445,10 @@ describe("station output status", () => {
       const f = await setup();
       await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
       await kitchenScreenDevice(
+        suite.db,
         {
           locationId: f.venue.cfg.locationId,
-          deviceProfileId: await profile("till"),
+          deviceProfileId: await profile(suite.db, "till"),
           label: "Till",
           tokenHash: "hash",
           lastSeenAt: "2026-10-02T17:05:00.000Z",
@@ -498,9 +484,10 @@ describe("passScreensDark", () => {
     } = {},
   ) {
     return kitchenScreenDevice(
+      suite.db,
       {
         locationId: f.venue.cfg.locationId,
-        deviceProfileId: await profile(options.formFactor ?? "kds"),
+        deviceProfileId: await profile(suite.db, options.formFactor ?? "kds"),
         label: options.label ?? kind,
         tokenHash: "hash",
         lastSeenAt: options.lastSeenAt === undefined ? dark : options.lastSeenAt,
@@ -648,7 +635,7 @@ describe("passScreensDark", () => {
     await stationScreenDevice({
       locationId: f.venue.cfg.locationId,
       stationId: f.grill,
-      deviceProfileId: await profile("kds"),
+      deviceProfileId: await profile(suite.db, "kds"),
       label: "Grill screen",
       tokenHash: "hash",
       lastSeenAt: dark,
@@ -660,7 +647,7 @@ describe("passScreensDark", () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     const pass = await passDevice(f, "pass");
-    const bare = await profile("kds");
+    const bare = await profile(suite.db, "kds");
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.narrowDeviceKitchenScreens(tx, pass, bare),
     );
@@ -737,7 +724,7 @@ it("A725 down printers and dark station screens use station and printer names", 
     ["Ásador", "Zulu printer"],
     ["Cocina", "Kitchen printer"],
   ]);
-  const profileId = await profile("kds");
+  const profileId = await profile(suite.db, "kds");
   for (const stationId of [f.grill, f.bar]) {
     await waitingItem(f.venue, stationId, "2026-10-02T17:50:00.000Z");
     await stationScreenDevice({

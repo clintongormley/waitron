@@ -2,7 +2,13 @@ import { inArray } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import { listHandledIncidents, listOpenIncidents, type TenantIncident } from "@waitron/core";
 import { persons } from "@waitron/identity";
-import type { Alert, AlertEventClaim, AlertSeverity, AlertSource } from "@waitron/module";
+import type {
+  Alert,
+  AlertEventClaim,
+  AlertSeverity,
+  AlertSource,
+  OngoingAlert,
+} from "@waitron/module";
 import { codeOf, type Logger } from "@waitron/server-kit";
 import "./errors.js";
 
@@ -106,6 +112,16 @@ export function sortAndDeduplicateOpenAlerts(alerts: Alert[]): Alert[] {
     .sort(compareOpen);
 }
 
+function ongoing(answer: readonly OngoingAlert[], area: string): Alert[] {
+  // `key` is named so that a null in the answer throws here; the spread keeps later fields.
+  return Array.from(answer, (alert): Alert => ({
+    ...alert,
+    key: alert.key,
+    kind: "ongoing",
+    area,
+  }));
+}
+
 export async function readOpenAlerts(
   tx: Transaction,
   deps: AlertReadDeps,
@@ -122,10 +138,15 @@ export async function readOpenAlerts(
     if (!held.has(source.permission) || source.readOutsideTransaction) continue;
     try {
       // A savepoint per source, so a failed source's own writes go with it rather than sitting in
-      // the transaction every later source reads on. The source reads on the OUTER `tx`: the savepoint
-      // is opened on the connection, so a statement issued on `tx` inside this bracket is inside it.
-      const found = await tx.transaction(() => source.read({ tx, now: deps.now }));
-      for (const alert of found) alerts.push({ ...alert, kind: "ongoing", area: source.area });
+      // the transaction every later source reads on. Its answer is read inside it too, so an answer
+      // that throws while being read counts as a failed source. The source reads on the OUTER `tx`:
+      // the savepoint is opened on the connection, so a statement issued on `tx` inside this
+      // bracket is inside it.
+      const batch = await tx.transaction(async () =>
+        ongoing(await source.read({ tx, now: deps.now }), source.area),
+      );
+      // One at a time: spreading a very large answer into `push` overflows the call stack.
+      for (const alert of batch) alerts.push(alert);
     } catch (error) {
       deps.log("error", "alert.source_unavailable", {
         area: source.area,
@@ -157,8 +178,8 @@ export async function readOutsideTransactionAlerts(
   for (const source of deps.registry.sources) {
     if (!held.has(source.permission) || !source.readOutsideTransaction) continue;
     try {
-      const found = await source.read({ tx: db, now: deps.now });
-      for (const alert of found) alerts.push({ ...alert, kind: "ongoing", area: source.area });
+      const batch = ongoing(await source.read({ tx: db, now: deps.now }), source.area);
+      for (const alert of batch) alerts.push(alert);
     } catch (error) {
       deps.log("error", "alert.source_unavailable", {
         area: source.area,
