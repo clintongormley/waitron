@@ -511,7 +511,7 @@ State: Reset was requested. The warning explicitly covers the case where the sup
 
 Route: Existing: reload after restart. Missing if the half-join remains: an authenticated retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
 
-_2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
+_2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree. A1089 B3 (dropped, 2026-11-11): a probe on main 3c064196a1 ran the real join through `/setup-api/adopt`, stopped it at each of its writes, then ran the staged reset; the reset was dropped only when stopped after the trading settings file, and that box starts as the mirror, not in setup mode (`apps/server/src/boot.ts:1345`), so a dropped reset that brings the person back to the setup page needs damaged files._
 
 ### `aeat_certificate.refused.check_failed`
 

@@ -211,20 +211,6 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
 - **One esbuild copy older than ours stays in the tree: `drizzle-kit`'s own range holds it.**
   [Detail](dependencies.md#one-esbuild-copy-older-than-ours-stays-in-the-tree-drizzle-kits-own-range-holds-it)
 
-## Npm notices and module-type-only manifests
-
-Stripe's CJS and ESM subdirectory manifests contain only the module type.
-The generator's `packageForModule` returns null at that first manifest
-(`scripts/npm-bundle-notices.mjs`), before reaching the package's name, version and licence.
-
-The Stripe 23 upgrade carries its installed licence separately in `deploy/third-party/stripe/`.
-Fix the general lookup to walk past manifests without package identity, retain workspace exclusion,
-and run it on CJS and ESM entry paths and other included packages.
-
-Nodemailer's separate licence copy is in `deploy/third-party/nodemailer/`.
-Do not remove either separate licence copy before checking the emitted server notices through
-the actual build. Which other installed packages are affected remains unverified.
-
 ## The supported Node version
 
 - **The root `package.json` says `"engines": { "node": ">=24" }` while `.nvmrc` says 26.** One

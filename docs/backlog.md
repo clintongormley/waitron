@@ -2184,9 +2184,6 @@ _Formerly parts of B9 and Track C._ Open work:
 - **A Vitest 5 retry still needs mutation qualification after the Stryker 10.1.1 update.**
   [Detail](backlog/dependencies.md#a-vitest-5-retry-has-to-re-measure-mutation--nothing-about-stryker-10-settles-it)
 
-- **Bundled npm notices stop at a module-type-only package manifest.**
-  [Detail](backlog/dependencies.md#npm-notices-and-module-type-only-manifests)
-
 - **Collapse the two TypeScript entries back into one, once typescript-eslint supports version 7.**
   [Detail](backlog/dependencies.md#collapse-the-two-typescript-entries-back-into-one-once-typescript-eslint-supports-version-7)
 
