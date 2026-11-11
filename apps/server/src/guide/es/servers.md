@@ -11,10 +11,12 @@ ofrece acceso al panel de gestión.
 Usa este proceso solo con un equipo de reserva que haya terminado de unirse al local.
 
 En el equipo principal, abre **Ajustes → Servidores**. Abre el menú de la fila del equipo de reserva
-y elige **Traspasar el local**. Lee la explicación e introduce tu contraseña de administrador y el
-código de autenticador, si está configurado. Elige **Parar** para mantener el local en este equipo,
-o **Traspasar el local** para detener las ventas aquí y mover la copia final. Necesitas una cuenta
-con contraseña; las llaves de acceso y los códigos de recuperación no completan este proceso.
+y elige **Traspasar el local**. Lee la explicación. Elige **Parar** para mantener el local en este
+equipo, o **Traspasar el local** para detener las ventas aquí y mover la copia final. Si se te pide,
+[confirma tu acceso](staff.md#account-access). Se reutiliza una confirmación reciente; si usaste un código
+de recuperación, debes confirmar con el código actual del autenticador. Necesitas una cuenta con
+contraseña y tener a mano esa contraseña y el código actual del autenticador, si está configurado,
+para acceder en el equipo de reserva. Una llave de acceso no completa ese paso.
 
 Mantén los dos equipos conectados. La página de traspaso se abre en el equipo de reserva y sigue
 la transferencia. Cuando la copia esté lista, introduce la misma cuenta de administrador, compara

@@ -115,6 +115,26 @@ describe("confirmFreshSignIn with a password", () => {
     expect(rows.find((r) => r.token_hash === hashSessionToken(other.token))!.proved_at).toBeNull();
   });
 
+  it("records the submitted proof method and replaces a recovery-code proof with an authenticator proof", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const codes = await enrolTotp(personId, token);
+    const proof = async () => {
+      const [row] = await suite.db
+        .select()
+        .from(managementSessions)
+        .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+      return row;
+    };
+    await confirm(token, { method: "password", password: "correct horse", recoveryCode: codes[0] });
+    expect(await proof()).toMatchObject({ proofMethod: "recovery-code" });
+    await confirm(token, {
+      method: "password",
+      password: "correct horse",
+      totp: generateSync({ secret }),
+    });
+    expect(await proof()).toMatchObject({ proofMethod: "password" });
+  });
+
   it("answers the person's id for the right password when no authenticator is set up", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     expect(await confirm(token, { method: "password", password: "correct horse" })).toBe(personId);

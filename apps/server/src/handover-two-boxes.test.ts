@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -138,6 +139,7 @@ async function joined() {
     }),
   );
   const session = await openManagementSession(mainBox.db, "admin");
+  await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
 
   const bundleApp = new Hono();
   mountMirrorBundleApi(bundleApp, {
@@ -253,9 +255,6 @@ async function joined() {
       stateDir: mainState,
       migrationsRoot: null,
       advertisedOrigin: MAIN_URL,
-      credentialKeyRing: TOTP_KEY_RING,
-      rpId: "localhost",
-      origin: "http://localhost",
       venueCanPromote: true,
       gate,
       stepDownAfterOffer,
@@ -279,7 +278,6 @@ async function joined() {
         body: JSON.stringify({
           operationId: OP,
           destinationNodeId: spareId,
-          signIn: { method: "password", password: PASSWORD },
         }),
       },
       { incoming: { socket } },

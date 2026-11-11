@@ -53,3 +53,25 @@ it("proof reuse neither extends the window nor proves another browser, and logou
     "management_session.required",
   );
 });
+
+it.each([
+  ["password", ""],
+  ["passkey", ""],
+  ["recovery-code", "management_session.proof_required"],
+  [null, "management_session.proof_required"],
+] as const)("handover requires proof without recovery codes: %s", async (proofMethod, code) => {
+  const { token } = await openManagementSession(suite.db, "admin");
+  await suite.db
+    .update(managementSessions)
+    .set({ provedAt: "2026-11-09T11:59:00.000Z", proofMethod })
+    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+  const check = () =>
+    withTransaction(suite.db, (tx) =>
+      requireFreshManagementSignIn(tx, token, { allowRecoveryCode: false }),
+    );
+  if (code === "") await expect(check()).resolves.toMatchObject({ personId: expect.any(String) });
+  else expect(await codeOf(check)).toBe(code);
+  await expect(
+    withTransaction(suite.db, (tx) => requireFreshManagementSignIn(tx, token)),
+  ).resolves.toMatchObject({ personId: expect.any(String) });
+});

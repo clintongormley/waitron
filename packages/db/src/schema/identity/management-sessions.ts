@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { id, label, newId, nowIso, table, tsString } from "../columns.js";
+import { enumCheck, enumText, id, label, newId, nowIso, table, tsString } from "../columns.js";
 
 /**
  * A person signed into the management dashboard from a browser, distinct from a till's PIN
@@ -21,11 +21,13 @@ export const managementSessions = table(
     lastSeenAt: tsString("last_seen_at").notNull().$defaultFn(nowIso),
     endedAt: tsString("ended_at"),
     provedAt: tsString("proved_at"),
+    proofMethod: enumText("proof_method", ["password", "passkey", "recovery-code"]),
   },
   (t) => [
     // For the writes that end a person's open sessions.
     index("management_sessions_open_idx").on(t.personId),
     uniqueIndex("management_sessions_token_hash_uq").on(t.tokenHash),
     check("management_sessions_token_hash_ck", sql`length(${t.tokenHash}) = 64`),
+    check("management_sessions_proof_method_ck", enumCheck(t.proofMethod)),
   ],
 );

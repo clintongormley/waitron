@@ -65,12 +65,12 @@ function startSessionDashboard(): void {
   const signals = createSessionSignals({ sessionGeneration });
   const freshSignIn = createFreshSignInGate({
     sessionGeneration,
-    prompt: async (signal) => {
+    prompt: async (signal, context) => {
       const shell = app.querySelector("dashboard-app")!;
       await shell.updateComplete;
       return shell
         .shadowRoot!.querySelector<FreshSignInDialog>("dashboard-fresh-sign-in-dialog")!
-        .show(signal);
+        .show(signal, context);
     },
   });
   const api = new DashboardApi(

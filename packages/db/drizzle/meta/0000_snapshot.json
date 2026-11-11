@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "42dac559-a80a-4bcf-a35d-49fbe823a5f4",
+  "id": "c3d93748-c255-47a3-aa91-a23966ababee",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -11872,6 +11872,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "proof_method": {
+          "name": "proof_method",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -11897,6 +11904,10 @@
         "management_sessions_token_hash_ck": {
           "name": "management_sessions_token_hash_ck",
           "value": "length(\"management_sessions\".\"token_hash\") = 64"
+        },
+        "management_sessions_proof_method_ck": {
+          "name": "management_sessions_proof_method_ck",
+          "value": "\"management_sessions\".\"proof_method\" in ('password', 'passkey', 'recovery-code')"
         }
       }
     },

@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 // A simulation of two boxes in one process, not physical qualification. It covers two boxes only:
 // each with its own folders, real start, real routes and real TLS on its own port; the runs say
 // nothing of a third box, of two machines or of a real network.
@@ -635,6 +636,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
   const adminSession = await withTransaction(m1Files.db, (tx) =>
     startManagementSession(tx, { personId: venue.adminId }),
   );
+  await withTransaction(m1Files.db, (tx) => setFreshManagementSignIn(tx, adminSession.token));
 
   for (const suffix of ["", "-wal", "-shm"]) {
     await rm(join(m2Dir, `venue.db${suffix}`), { force: true });
@@ -935,7 +937,6 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
       body: {
         operationId: OP,
         destinationNodeId: m2.nodeId,
-        signIn: { method: "password", password: PASSWORD },
       },
     });
     const offerText = await started.text();

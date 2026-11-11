@@ -58,7 +58,7 @@ export class FreshSignIn extends LitElement {
     "getProfile" | "freshSignInPasskeyOptions"
   >;
   @property({ type: Boolean }) disabled = false;
-  @property({ type: Boolean }) passwordAndCodeOnly = false;
+  @property({ type: Boolean }) allowRecoveryCode = true;
 
   @state() private profile: OwnProfile | null = null;
   @state() private profileFailed = false;
@@ -108,12 +108,11 @@ export class FreshSignIn extends LitElement {
   #ownErrors(way: "password" | "passkey"): Partial<Record<Field, string>> {
     const errors: Partial<Record<Field, string>> = {};
     if (way === "password" && this.password === "") errors.password = t("form.password_required");
-    if (this.profile?.hasTotp && this.code.trim() === "")
-      errors.code = t(
-        this.passwordAndCodeOnly
-          ? "fresh_sign_in.authenticator_required"
-          : "fresh_sign_in.code_required",
-      );
+    if (this.profile?.hasTotp) {
+      if (!this.allowRecoveryCode && !/^\d{6}$/.test(this.code.replace(/\s+/g, "")))
+        errors.code = t("fresh_sign_in.authenticator_required");
+      else if (this.code.trim() === "") errors.code = t("fresh_sign_in.code_required");
+    }
     return errors;
   }
 
@@ -269,7 +268,7 @@ export class FreshSignIn extends LitElement {
       ${ways.password ? autofillUsername(this.profile!.email) : nothing}
       ${ways.password ? this.#passwordField() : nothing}
       ${this.profile!.hasTotp ? this.#codeField() : nothing}
-      <div ?hidden=${this.passwordAndCodeOnly}>
+      <div>
         <wt-button
           data-test="use-passkey"
           variant=${ways.password ? "secondary" : "primary"}
@@ -320,8 +319,8 @@ export class FreshSignIn extends LitElement {
   #codeField() {
     return html`<wt-input
       name="totp"
-      label=${t(this.passwordAndCodeOnly ? "fresh_sign_in.authenticator_code" : "fresh_sign_in.code")}
-      placeholder=${t(this.passwordAndCodeOnly ? "fresh_sign_in.authenticator_hint" : "fresh_sign_in.code_hint")}
+      label=${t(this.allowRecoveryCode ? "fresh_sign_in.code" : "fresh_sign_in.authenticator_code")}
+      placeholder=${t(this.allowRecoveryCode ? "fresh_sign_in.code_hint" : "fresh_sign_in.authenticator_hint")}
       required
       ?disabled=${this.disabled}
       autocomplete="one-time-code"

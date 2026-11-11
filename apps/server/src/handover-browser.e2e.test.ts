@@ -1,3 +1,4 @@
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -224,6 +225,7 @@ it("hands over from built Servers through a real copy, placement restart and clo
   const session = await withTransaction(mainBox.db, (tx) =>
     startManagementSession(tx, { personId: ADMIN }),
   );
+  await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, session.token));
   const material = mintSelfSignedServerCert({
     hostnames: ["localhost"],
     ipAddresses: ["127.0.0.1"],
@@ -336,9 +338,6 @@ it("hands over from built Servers through a real copy, placement restart and clo
         stateDir: dirs.mainState,
         migrationsRoot: null,
         advertisedOrigin: sourceUrl,
-        credentialKeyRing: TOTP_KEY_RING,
-        rpId: "localhost",
-        origin: sourceUrl,
         venueCanPromote: true,
         gate,
         fetch: (url, init) => fetch(url, { ...init, ...trust.via }),
@@ -392,8 +391,6 @@ it("hands over from built Servers through a real copy, placement restart and clo
       .first()
       .click();
     await page.getByRole("button", { name: "Hand over the venue", exact: true }).click();
-    await page.locator('input[name="current-password"]').fill(PASSWORD);
-    await page.locator('input[name="totp"]').fill(generateSync({ secret }));
     await page.getByRole("button", { name: "Hand over the venue", exact: true }).click();
     await page.waitForURL(`${destinationUrl}/handover/*`);
     await restarted;

@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { nodes, readNodeMembership } from "@waitron/db";
+import { nodes, readNodeMembership, withTransaction } from "@waitron/db";
 import {
   bindingFingerprint,
   isOperationId,
@@ -10,7 +10,7 @@ import {
   type HandoverBinding,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
-import { authorizeManager, type TotpKeyRing } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import {
   servingPrimaryNodeId,
   type CanonicalValue,
@@ -31,7 +31,6 @@ import {
 } from "@waitron/server-kit";
 import { AppError, isAppError, isUuid } from "@waitron/shared";
 import { askPeerStatus, boxRefusal, isRecord, originOf, postToBox } from "./boot-peer-check.js";
-import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import {
   imageMigrationsDigest,
   isManifestStateFile,
@@ -51,7 +50,6 @@ import {
 } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
-import { createPasswordThrottle } from "./password-throttle.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
 import "./errors.js";
 
@@ -59,9 +57,6 @@ export interface HandoverSourceStartDeps extends PeerStatusApiDeps {
   stateDir: string;
   migrationsRoot: string | null;
   advertisedOrigin: string;
-  credentialKeyRing: TotpKeyRing;
-  rpId: string;
-  origin: string;
   /** Whether an enabled module can prepare the spare's promotion. */
   venueCanPromote: boolean;
   gate: Pick<HandoverGate, "isClosed">;
@@ -80,14 +75,6 @@ const STATUS = {
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
-  "management.request_invalid": 400,
-  "password.invalid": 401,
-  "password.throttled": 429,
-  "totp.invalid": 401,
-  "totp.required": 401,
-  "passkey.not_registered": 401,
-  "passkey.verification_failed": 401,
-  "passkey.challenge_expired": 400,
   "handover.request_invalid": 400,
   "handover.peer_unknown": 403,
   "handover.not_a_spare": 409,
@@ -142,19 +129,18 @@ const OFFER_REFUSALS: Readonly<
 interface StartRequest {
   operationId: string;
   destinationNodeId: string;
-  signIn: unknown;
 }
 
 function parseRequest(raw: unknown): StartRequest {
   if (!isRecord(raw)) refuseRequest("body");
-  const known = ["operationId", "destinationNodeId", "signIn"];
+  const known = ["operationId", "destinationNodeId"];
   if (Object.keys(raw).some((key) => !known.includes(key))) refuseRequest("body");
-  const { operationId, destinationNodeId, signIn } = raw;
+  const { operationId, destinationNodeId } = raw;
   if (!isOperationId(operationId)) refuseRequest("operationId");
   if (typeof destinationNodeId !== "string" || !isUuid(destinationNodeId)) {
     refuseRequest("destinationNodeId");
   }
-  return { operationId, destinationNodeId, signIn };
+  return { operationId, destinationNodeId };
 }
 
 function parseJson(text: string): unknown {
@@ -207,7 +193,6 @@ export function mountHandoverSourceStartApi(
   log: Logger,
 ): void {
   const run = createErrorBoundary(STATUS, "handover-source-start.failed");
-  const throttle = createPasswordThrottle();
   const timeoutMs = deps.peerTimeoutMs ?? PEER_TIMEOUT_MS;
   const exchange = { timeoutMs, ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }) };
   // One request at a time, so one cannot record `abandoned` beneath another that goes on to step down.
@@ -462,23 +447,17 @@ export function mountHandoverSourceStartApi(
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
       const token = requireManagementSession(c);
-      await authorizeManager(deps.db, {
-        managementSessionId: token,
-        permission: "node.promote",
-        touch: false,
+      const personId = await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: token,
+          permission: "node.promote",
+          touch: false,
+        });
+        // The old box steps down before the spare can check its password and current code.
+        await requireFreshManagementSignIn(tx, token, { allowRecoveryCode: false });
+        return authorizedBy;
       });
       const request = parseRequest(await readRawJsonBody<unknown>(c));
-      const personId = await confirmFreshSignIn(
-        {
-          db: deps.db,
-          throttle,
-          keyRing: deps.credentialKeyRing,
-          rpId: deps.rpId,
-          origin: deps.origin,
-        },
-        token,
-        request.signIn,
-      );
       if (running !== null) {
         throw new AppError("handover.operation_in_progress", { operationId: running });
       }

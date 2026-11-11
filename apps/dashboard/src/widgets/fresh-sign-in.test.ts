@@ -568,13 +568,3 @@ describe("the words", () => {
     expect(words).toContain(es["profile.password_recovery"]);
   });
 });
-
-it("offers only password and authenticator wording when the caller requires them", async () => {
-  const { el, root } = await mount(profile({ hasTotp: true, passkeys: [PASSKEY] }));
-  Object.assign(el, { passwordAndCodeOnly: true });
-  el.requestUpdate();
-  await el.updateComplete;
-  expect(root.querySelector<HTMLElement>("[data-test=use-passkey]")!.checkVisibility()).toBe(false);
-  expect(field(root, "totp")!.label).toBe("Authenticator code");
-  expect(field(root, "totp")!.placeholder).toBe("6-digit code from your app");
-});
