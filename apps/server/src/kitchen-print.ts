@@ -72,6 +72,8 @@ import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
+import { extraWithAllergens, kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
+import { readLineNutrition } from "./line-nutrition.js";
 import type { KitchenTicketItem, MovedSlip, OtherStationItem } from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
 import { passStationsByGroup } from "./working-order.js";
@@ -290,6 +292,11 @@ async function buildTicketItems(
     ...lineIds,
     ...childRows.map((row) => row.id),
   ]);
+  const nutrition = await readLineNutrition(tx, [...lineIds, ...childRows.map((row) => row.id)]);
+  const allergenLabels = (id: string): string[] =>
+    Object.entries(nutrition.get(id)?.allergens ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, entry]) => kitchenAllergenLabel(code, entry, language));
   // The per-dish pick count is recovered from the stored combined child quantity. Every child's
   // parent is in `lineById` because children are read by parent id.
   const modifiersByParent = new Map<string, string[]>();
@@ -321,7 +328,9 @@ async function buildTicketItems(
       continue;
     }
     const names = modifiersByParent.get(child.parentLineId!) ?? [];
-    names.push(extraLabel(child.name, child.quantity, parent.quantity, extraUnit));
+    const label = extraLabel(child.name, child.quantity, parent.quantity, extraUnit);
+    const labels = allergenLabels(child.id);
+    names.push(labels.length === 0 ? label : extraWithAllergens(label, labels, language));
     modifiersByParent.set(child.parentLineId!, names);
   }
 
@@ -341,6 +350,7 @@ async function buildTicketItems(
       row.unitName == null || eachByIdentity.has(row.id)
         ? undefined
         : ticketName(row.unitName, cfg.locale);
+    const contains = allergenLabels(row.id);
     byLine.set(row.id, {
       lineNo: row.lineNo,
       group: row.group,
@@ -363,6 +373,7 @@ async function buildTicketItems(
         unit,
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
+        ...(contains.length === 0 ? {} : { contains }),
         ...(unit === undefined ? {} : { printedAsSold: true }),
         ...(lateMarks.has(row.id) ? { afterPeriod: lateMarks.get(row.id)! } : {}),
         modifiers: [

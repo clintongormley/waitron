@@ -1,13 +1,22 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
-import { kitchenStations, printJobs, ticketItems } from "@waitron/db";
+import { kitchenStations, printJobs, ticketItems, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { setMenuVariants, setProductVariants, updateProduct } from "@waitron/catalogue";
+import type { DietaryLabel, ProductAllergens } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
+import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
-import { reprintOrderTickets } from "./kitchen-print.js";
+import {
+  enqueueAllergyCorrectionSlips,
+  enqueueMovedSlips,
+  readSentWork,
+  reprintOrderTickets,
+} from "./kitchen-print.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
@@ -21,10 +30,19 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { setStationPrinting } from "./testing/station-printing.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import {
+  fireNewOrder,
+  setupSplitExtrasVenue,
+  useSplitExtrasDb,
+  type ProductLine,
+} from "./testing/split-extras-venue.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+beforeAll(() => useSplitExtrasDb(suite.db));
 let v: PartyVenue;
-beforeEach(async () => {
+async function setupAllergyPaper() {
   v = await setupPartyVenue(suite.db);
   const [station] = await v.db
     .select()
@@ -43,7 +61,7 @@ beforeEach(async () => {
       printerId: printer.id,
     });
   });
-});
+}
 
 async function send(
   p: Awaited<ReturnType<typeof seat>>,
@@ -92,6 +110,8 @@ function words(payload: Uint8Array) {
 }
 
 describe("A669 paper stored copies", () => {
+  beforeEach(setupAllergyPaper);
+
   it.each(["fire", "hold"] as const)(
     "prints the frozen original on a %s ticket",
     async (release) => {
@@ -152,5 +172,227 @@ describe("A669 paper stored copies", () => {
     expect(jobs).toHaveLength(1);
     expect(words(jobs[0]!.payload)).not.toContain("Window guest");
     expect(words(jobs[0]!.payload)).not.toContain(KITCHEN_ALLERGY_WORDS.es.ticketHeading);
+  });
+});
+
+/** The printed lines of every job queued to `printerId`, in the order they were queued. */
+async function papersOn(printerId: string): Promise<string[][]> {
+  const jobs = await suite.db.select().from(printJobs).where(eq(printJobs.printerId, printerId));
+  return jobs.map((job) => printedLines(job.payload).map((line) => line.trim()));
+}
+
+function setAllergens(
+  productId: string,
+  allergens: ProductAllergens | null,
+  dietaryDeclarations?: DietaryLabel[],
+) {
+  return withTransaction(suite.db, (tx) =>
+    updateProduct(tx, productId, {
+      allergens,
+      ...(dietaryDeclarations === undefined ? {} : { dietaryDeclarations }),
+    }),
+  );
+}
+
+describe("A1517-3 a dish's own allergens on English station paper", () => {
+  let s: Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
+  beforeEach(async () => {
+    s = await setupSplitExtrasVenue();
+  });
+  const fire = (lines: ProductLine[]) =>
+    withTransaction(suite.db, (tx) => fireNewOrder(tx, s.cfg, lines));
+
+  it("prints a dish's declared allergens with no guest allergy, and no allergy heading", async () => {
+    await setAllergens(s.products.burger, { milk: {} });
+    await fire([{ productId: s.products.burger, quantity: "1" }]);
+    const [paper] = await papersOn(s.printers.grill);
+    expect(paper).toContain("Contains: Milk");
+    expect(paper!.indexOf("Contains: Milk")).toBe(paper!.indexOf("1 x BURG") + 1);
+    expect(paper).not.toContain(KITCHEN_ALLERGY_WORDS.en.ticketHeading);
+  });
+
+  // Guard: passes before A1517-3, and must keep passing — an unreviewed dish prints nothing.
+  it("guard: prints no Contains line and no Not reviewed for a dish whose allergens were never reviewed", async () => {
+    await setAllergens(s.products.burger, null);
+    await fire([{ productId: s.products.burger, quantity: "1" }]);
+    const text = (await papersOn(s.printers.grill)).flat().join("\n");
+    expect(text).toContain("1 x BURG");
+    expect(text).not.toContain("Contains");
+    expect(text).not.toMatch(/not reviewed/i);
+  });
+
+  // Passes before A1517-3 too: it pins that the reader's entry for a vegan dish prints no empty line.
+  it("prints no Contains line for a dish checked free of allergens that is labelled vegan", async () => {
+    await setAllergens(s.products.burger, {}, ["vegan"]);
+    await fire([{ productId: s.products.burger, quantity: "1" }]);
+    const text = (await papersOn(s.printers.grill)).flat().join("\n");
+    expect(text).toContain("1 x BURG");
+    expect(text).not.toContain("Contains");
+    expect(text).not.toMatch(/vegan/i);
+  });
+
+  it("prints a modifier extra's own allergens beside it, and the dish's line names the dish's only", async () => {
+    await setAllergens(s.products.burger, { gluten: { kinds: ["wheat"] } });
+    await setAllergens(s.products.cheese, { milk: {} });
+    await fire([
+      {
+        productId: s.products.burger,
+        quantity: "1",
+        extras: [
+          { listId: s.lists.burger, picks: [{ productId: s.products.cheese, quantity: 1 }] },
+        ],
+      },
+    ]);
+    const [paper] = await papersOn(s.printers.grill);
+    expect(paper).toContain("+ Cheese - contains Milk");
+    // A wrapped line continues on the next, so the dish's line is read joined.
+    const text = paper!.join(" ");
+    expect(text.match(/Contains:/g)).toHaveLength(1);
+    expect(text).toContain("Contains: Cereals containing gluten (Wheat)");
+    expect(text).not.toContain("Contains: Milk");
+  });
+
+  it("prints a variant's inherited declaration from its parent product", async () => {
+    await setAllergens(s.products.burger, { gluten: { kinds: ["wheat"] } });
+    await withTransaction(suite.db, async (tx) => {
+      const [double] = await setProductVariants(
+        tx,
+        s.products.burger,
+        [
+          {
+            name: "Double",
+            customerName: null,
+            kitchenName: "DBL",
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        s.cfg.locale,
+      );
+      const offers = await offerProducts(tx, s.cfg);
+      await setMenuVariants(tx, offers.offerFor(s.products.burger), [
+        { variantId: double!.id, price: "2.00" },
+      ]);
+      await publishWorkingMenu(tx, offers.menuId);
+      const lines: (ProductLine & { variantId: string })[] = [
+        { productId: s.products.burger, variantId: double!.id, quantity: "1" },
+      ];
+      await fireNewOrder(tx, s.cfg, lines);
+    });
+    const [paper] = await papersOn(s.printers.grill);
+    expect(paper).toContain("1 x BURG (DBL)");
+    expect(paper!.join(" ")).toContain("Contains: Cereals containing gluten (Wheat)");
+  });
+
+  it("prints each station's dishes' allergens on a shared printer's ticket", async () => {
+    await setAllergens(s.products.burger, { milk: {} });
+    await fire([
+      { productId: s.products.burger, quantity: "1" },
+      { productId: s.products.chips, quantity: "1" },
+    ]);
+    const papers = await papersOn(s.printers.pass);
+    expect(papers).toHaveLength(1);
+    expect(papers[0]).toContain("Contains: Milk");
+    expect(papers[0]!.join(" ")).toContain("Contains: Cereals containing gluten (Wheat)");
+  });
+
+  it("prints the dish's allergens on a moved slip", async () => {
+    await setAllergens(s.products.burger, { milk: {} });
+    const id = await fire([{ productId: s.products.burger, quantity: "1" }]);
+    const before = (await papersOn(s.printers.grill)).length;
+    await withTransaction(suite.db, async (tx) => {
+      const sent = (await readSentWork(tx, id))!;
+      await enqueueMovedSlips(
+        tx,
+        s.cfg,
+        { ...sent, places: { ...sent.places, orderNumber: sent.places.orderNumber + 1 } },
+        id,
+      );
+    });
+    const moved = (await papersOn(s.printers.grill)).slice(before);
+    expect(moved).toHaveLength(1);
+    expect(moved[0]![0]).toBe("*** MOVED ***");
+    expect(moved[0]).toContain("Contains: Milk");
+  });
+});
+
+describe("A1517-3 a dish's own allergens on Spanish paper beside a guest block", () => {
+  beforeEach(setupAllergyPaper);
+
+  it("prints Contiene with Spanish names, sorted by allergen", async () => {
+    await setAllergens(v.productId("Burger"), { nuts: { kinds: ["walnuts"] }, milk: {} });
+    const p = await seat(v, await v.table("Spanish allergens"));
+    await send(p, "fire", false);
+    const [job] = await v.db.select().from(printJobs);
+    const lines = printedLines(job!.payload).map((line) => line.trim());
+    expect(lines.join(" ")).toContain("Contiene: Leche, Frutos de cáscara (Nueces)");
+    expect(lines.some((line) => line.startsWith("Contains"))).toBe(false);
+  });
+
+  it("reprints the declaration as it is now, while the guest block keeps its original text", async () => {
+    await setAllergens(v.productId("Burger"), { gluten: { kinds: ["wheat"] } });
+    const p = await seat(v, await v.table("Edited dish"));
+    await send(p, "fire");
+    const [first] = await v.db.select().from(printJobs);
+    await setAllergens(v.productId("Burger"), { eggs: {} });
+    const [ticket] = await v.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, p.tabId));
+    const original = (
+      await inTx(v, (tx) => VENUE_SERVICE.readTicketAllergies(tx, [ticket!.id]))
+    ).get(ticket!.id)!.originalBlock!;
+    await inTx(v, (tx) =>
+      VENUE_SERVICE.setTicketAllergyCurrent(tx, ticket!.id, { ...original, note: "New note" }),
+    );
+    await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
+    const jobs = await v.db.select().from(printJobs);
+    expect(jobs.find((job) => job.id === first!.id)).toEqual(first);
+    expect(printedLines(first!.payload).map((l) => l.trim())).toContain(
+      "Contiene: Cereales con gluten (Trigo)",
+    );
+    const reprint = printedLines(jobs.find((job) => job.id !== first!.id)!.payload).map((l) =>
+      l.trim(),
+    );
+    expect(reprint.filter((line) => line.startsWith("Contiene:"))).toEqual(["Contiene: Huevos"]);
+    expect(reprint.join(" ")).toContain("Separate pan");
+    expect(reprint.join(" ")).not.toContain("New note");
+  });
+
+  it("prints the dish's allergens on an ALLERGY CHANGED slip", async () => {
+    await setAllergens(v.productId("Burger"), { gluten: { kinds: ["wheat"] } });
+    const p = await seat(v, await v.table("Changed allergy"));
+    await send(p, "fire");
+    const before = await v.db.select().from(printJobs);
+    const [ticket] = await v.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, p.tabId));
+    const block: KitchenAllergyBlock = {
+      who: "Corrected guest",
+      allergens: { milk: {} },
+      note: null,
+      clashes: {},
+      labels: { en: { avoids: ["Milk"], clashes: [] }, es: { avoids: ["Leche"], clashes: [] } },
+    };
+    await inTx(v, (tx: Transaction) =>
+      enqueueAllergyCorrectionSlips(tx, v.cfg, p.tabId, [
+        {
+          workingOrderLineId: ticket!.workingOrderLineId,
+          stationId: ticket!.stationId!,
+          quantity: 1000,
+          wasStarted: false,
+          allergyBlock: block,
+        },
+      ]),
+    );
+    const slips = (await v.db.select().from(printJobs)).filter(
+      (job) => !before.some((old) => old.id === job.id),
+    );
+    expect(slips).toHaveLength(1);
+    const lines = printedLines(slips[0]!.payload).map((line) => line.trim());
+    expect(lines.join("\n")).toContain(KITCHEN_ALLERGY_WORDS.es.changed);
+    expect(lines).toContain("Contiene: Cereales con gluten (Trigo)");
   });
 });
