@@ -54,7 +54,9 @@ the modular aspect later"). Today they live in the staffing module (`staff_roles
 the list and its person memberships move to core. Staffing keeps its rota, shifts and painters and
 reads the core list. **Staffing can no longer be switched off** (owner: "we said that Staffing
 would now be in core so could not be switched off"). Its tier in `packages/composition/src/modules.ts`
-changes from toggleable, so device sign-in can always rely on job roles. Making it switchable again
+changes from toggleable, so device sign-in can always rely on job roles. Staffing requires the
+workforce module (attendance and the working-time record), so **workforce becomes permanent too**
+(owner, 2026-11-11, asked after planning: "yes"). Making it switchable again
 is a later question.
 
 ## 3. Access roles and permissions

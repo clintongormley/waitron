@@ -1,5 +1,8 @@
 # A1002 access roles and job roles — implementation plan
 
+**Status: DRAFT, under review** (fresh-context plan-against-design read, then a Fable second
+read). Build nothing until the owner approves it and it is queued to a lane.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
 > checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as
