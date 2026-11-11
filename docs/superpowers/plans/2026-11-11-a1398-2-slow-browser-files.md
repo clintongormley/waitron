@@ -34,3 +34,14 @@ Use normal finish-branch review, hook and scoped PR CI. Take till timings from t
 Compare per-file/case, test-step and whole-job times, including setup, maximum and summed target seconds, against qualified coverage-on run 43034947887. A local pass proves behavior, not CI speed. If the small fixes leave jobs over about four minutes, return the measured remainder to the watcher; changing runner capacity or splitting a file needs a separately cleared step.
 
 Expected scope: production +0/−0; test code at most about +150/−150, no moved suites, no new test support or generated data; docs about +25/−10 plus this plan. Count actual added/removed lines separately and stop for outside opinion beyond 1.5 times that estimate. Exclude application behavior changes, new harnesses, split fallbacks, broad cleanup, skipped/weakened checks and lower coverage/timeout limits.
+
+## Extension cleared on 2026-11-11 at 21:23
+
+After the draft-timer cut landed, the watcher cleared one exception to the polling-interval
+exclusion above: shorten only the shared menu mount helper's loading wait, preserving its
+selector and timeout. The diagnostic observed 632 mounts in 624 passing cases, with a median
+81.1 ms between the loading indicator disappearing and the wait returning. Its instrumented
+coverage-off run does not establish a CI saving. Keep a paired coverage-on file measurement
+and unchanged expanded case inventory in the pull request, then measure product-editor.
+The watcher waived another plan read for this cut; the finish-branch run-it review remains
+required. No other polling change or file split is cleared, and the four-minute goal stays open.

@@ -408,7 +408,10 @@ Keep the four-minute goal open after the selected draft autosave waits are advan
 The watcher's 2026-11-11 16:38 cut targets the drafts file in till shard 1 only.
 The coverage-on baseline run 43034947887 recorded shard 1 at 266 s, shard 2 at
 253 s (215 s of tests), and shard 5 at 250 s (59 s installing dependencies).
-Dashboard's menus, product editor and product list also retain measured costs.
+The watcher's 2026-11-11 21:23 cut shortens only the menu test mount helper's
+loading poll, keeping the selector, timeout and every case. Compare its paired
+coverage-on file measurements in the pull request before attributing a saving.
+Product editor and product list, and any remaining menu cost, still need diagnosis.
 Judge the first cut by drafts' own file time in its PR run; do not compare coverage-off
 PR timings with those coverage-on timings as a measured speed gain. Bring the next
 cause and its measurement to the watcher before splitting files or changing capacity.

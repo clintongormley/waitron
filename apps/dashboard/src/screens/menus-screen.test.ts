@@ -716,9 +716,12 @@ function writeCalls(client: Api): string[] {
 async function mount(client: Api = api(), path = "/manage/menus", theme?: "light" | "dark") {
   history.replaceState(null, "", path);
   const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client }, theme);
-  await vi.waitFor(() => {
-    if (el.shadowRoot!.querySelector('[data-test="loading"]')) throw new Error("loading");
-  });
+  await vi.waitFor(
+    () => {
+      if (el.shadowRoot!.querySelector('[data-test="loading"]')) throw new Error("loading");
+    },
+    { interval: 5 },
+  );
   await el.updateComplete;
   return el;
 }
