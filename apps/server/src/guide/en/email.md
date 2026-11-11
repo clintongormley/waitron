@@ -4,6 +4,9 @@ Before relying on email, send a test using your mail provider's settings. In the
 the test goes to your own account address. During setup, it goes to the administrator address
 you entered.
 
+Before saving or removing a mail server, confirm your sign-in in the shared window.
+[Your confirmation](staff.md#account-access) lasts 15 minutes or until your session ends.
+
 ## Set up a mail server {#set-up}
 
 In Prepare or Live, open **Settings → Email**. As an admin, choose **Set up mail server** or

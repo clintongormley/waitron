@@ -69,6 +69,9 @@ records to the new main is not available yet. Do not reset this box now.
 
 ## Turn remote staff access on or off {#remote-access}
 
+Turning remote access on asks for the [shared sign-in confirmation](staff.md#account-access).
+Turning it off needs no new sign-in confirmation.
+
 To stop staff reaching your dashboard from outside the venue, open **Cloud services** in **Settings**
 on the main box and choose **Turn off remote access**. If you are using the staff address,
 confirm **Turn off remote access** to disconnect yourself too, or choose **Stop** to keep it on. Keep the box's local address available. Your Cloud pairing and other

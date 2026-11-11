@@ -21,6 +21,7 @@ import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -88,6 +89,7 @@ async function setupVenue(): Promise<{ admin: string; manager: string; staff: st
       staff: await start("staff"),
     };
   });
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, sessions.admin.token));
   return {
     admin: `${MANAGEMENT_COOKIE}=${sessions.admin.token}`,
     manager: `${MANAGEMENT_COOKIE}=${sessions.manager.token}`,
@@ -131,6 +133,28 @@ const request = (app: Hono, cookie: string | undefined, body?: unknown) =>
   });
 
 describe("SMTP settings", () => {
+  it.each(["PUT", "DELETE"])(
+    "requires confirmation before %s changes SMTP credentials",
+    async (method) => {
+      const venue = await setupVenue();
+      const app = mount();
+      expect((await request(app, venue.admin, settings)).status).toBe(200);
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, venue.admin, false));
+      const before = await suite.db.select().from(tenantCredentials);
+      const response = await app.request(path, {
+        method,
+        headers: { cookie: venue.admin, "content-type": "application/json" },
+        ...(method === "PUT"
+          ? { body: JSON.stringify({ ...settings, server: "next.example.test" }) }
+          : {}),
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management_session.proof_required", params: {} },
+      });
+      expect(await suite.db.select().from(tenantCredentials)).toEqual(before);
+    },
+  );
   it("seals an admin's settings and routes invoice mail through them without returning secrets", async () => {
     const venue = await setupVenue();
     const logs: unknown[] = [];
@@ -212,6 +236,7 @@ describe("SMTP settings", () => {
   });
   it("reports missing live SMTP so the card can ask for settings", async () => {
     const venue = await setupVenue();
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, venue.admin, false));
     expect(await (await request(mount(), venue.admin)).json()).toEqual({
       mode: "unconfigured",
       editable: true,

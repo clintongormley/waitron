@@ -19,6 +19,8 @@ asks you to confirm ownership again before you continue.
 
 ## Retry a check in Venue settings {#dashboard-check}
 
+Installing a replacement certificate asks for the [shared sign-in confirmation](staff.md#account-access).
+
 If replacing a certificate fails with an HTTP error or an unexpected check failure, the current
 certificate stays installed. Check the internet connection, or choose another file or certificate
 type in the dialog. Select **Save** to check again. Select **Cancel** to stop without replacing

@@ -31,6 +31,7 @@ import {
   type SeriesId,
 } from "@waitron/shared";
 import { computeHuella, validate } from "@waitron/verifactu";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -212,6 +213,7 @@ it("refuses an invoice the agency refused, then, once its fix files it at 10%, a
     ).id,
   }));
   const app = new Hono();
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   mountRecordRemedies(
     app,
     {

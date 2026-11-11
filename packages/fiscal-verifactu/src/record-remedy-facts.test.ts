@@ -10,6 +10,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { listFilingCases, openFilingCase } from "./filing-cases.js";
@@ -54,6 +55,7 @@ beforeEach(async () => {
       .values({ displayName: "Administrator", role: "admin", pinHash: hashPin("2468") })
       .returning();
     token = (await startManagementSession(tx, { personId: person!.id })).token;
+    await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
       node.nodeId,

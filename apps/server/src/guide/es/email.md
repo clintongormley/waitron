@@ -4,6 +4,9 @@ Antes de depender del correo, envía una prueba con la configuración de tu prov
 la prueba llega a la dirección de tu propia cuenta. Durante la configuración, llega a la dirección
 del administrador que has introducido.
 
+Antes de guardar o quitar el servidor de correo, confirma tu identidad en la ventana compartida.
+[La confirmación](staff.md#account-access) dura 15 minutos o hasta que termine tu sesión.
+
 ## Configura un servidor de correo {#set-up}
 
 En Preparación o En vivo, abre **Ajustes → Correo**. Como administrador, elige **Configurar servidor

@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { ReceiptLanguageRules } from "@waitron/country";
 import type { FiscalContribution } from "@waitron/fiscal";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { readPrivacyContact, renameTaxpayer, savePrivacyContact } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
@@ -261,6 +261,7 @@ export function mountVenueSettingsApi(
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<unknown>(c);
       const result = await gated(sessionId, async (tx) => {
+        await requireFreshManagementSignIn(tx, sessionId);
         const { legalName, expected } = legalNameRequest(body);
         const refuse = (reason: string) =>
           new AppError("venue.detail_invalid", { field: "legalName", reason });

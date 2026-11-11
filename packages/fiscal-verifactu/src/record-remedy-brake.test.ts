@@ -7,6 +7,7 @@ import { persons, registerModulePermissions, startManagementSession } from "@wai
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, nodeId, saleId } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
@@ -75,6 +76,7 @@ beforeEach(async () => {
       .values({ displayName: "Administrator", role: "admin" })
       .returning();
     token = (await startManagementSession(tx, { personId: person!.id })).token;
+    await setFreshManagementSignIn(tx, token);
     return person!.id;
   });
   ids = [];
@@ -474,7 +476,9 @@ it("refuses a second administrator's reuse of the first administrator's action k
       .insert(persons)
       .values({ displayName: "Second administrator", role: "admin" })
       .returning();
-    return (await startManagementSession(tx, { personId: other!.id })).token;
+    const session = await startManagementSession(tx, { personId: other!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
   });
   const before = await snapshot();
   const response = await send();

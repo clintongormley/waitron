@@ -32,6 +32,7 @@ import { restoreFromArtifactFile } from "./restore.js";
 import { restoreFromStream } from "./restore-stream.js";
 import { runStagedRestore, stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { resolveInvoiceEmailDelivery } from "./email-delivery.js";
 
 const T = {
@@ -346,7 +347,9 @@ describe.each(paths)("invoice email after %s", (path) => {
               email: "owner@example.test",
             })
             .returning({ id: persons.id });
-          return startManagementSession(tx, { personId: person!.id });
+          const session = await startManagementSession(tx, { personId: person!.id });
+          await setFreshManagementSignIn(tx, session.token);
+          return session;
         });
         const app = new Hono();
         mountEmailSettingsApi(

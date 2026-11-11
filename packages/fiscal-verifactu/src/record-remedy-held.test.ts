@@ -12,6 +12,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { createFakeAeat } from "@waitron/verifactu/testing";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { steadyClock, staticResolver } from "../test/write-path-fixtures.js";
@@ -56,6 +57,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
+    await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
       node.nodeId,
@@ -503,7 +505,9 @@ it("refuses a saved decision that belongs to another administrator", async () =>
       .insert(persons)
       .values({ displayName: "Other administrator", role: "admin", pinHash: hashPin("1357") })
       .returning();
-    return (await startManagementSession(tx, { personId: other!.id })).token;
+    const session = await startManagementSession(tx, { personId: other!.id });
+    await setFreshManagementSignIn(tx, session.token);
+    return session.token;
   });
   const before = await snapshot();
   const response = await send();

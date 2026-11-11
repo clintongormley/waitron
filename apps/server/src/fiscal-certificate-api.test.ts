@@ -19,6 +19,7 @@ import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -80,6 +81,7 @@ async function setupVenue(): Promise<Record<Role, Signed>> {
         })
         .returning({ id: persons.id });
       const session = await startManagementSession(tx, { personId: inserted!.id });
+      await setFreshManagementSignIn(tx, session.token);
       return {
         cookie: `${MANAGEMENT_COOKIE}=${session.token}`,
         token: session.token,
@@ -177,6 +179,9 @@ const certificateBody = JSON.stringify({ file: FILE, passphrase: PASSPHRASE });
 describe("GET /management-api/fiscal-certificate", () => {
   it("a manager reads the card with filing true", async () => {
     const venue = await setupVenue();
+    await withTransaction(suite.db, (tx) =>
+      setFreshManagementSignIn(tx, venue.manager.token, false),
+    );
     const seat = fakeSeat();
     const response = await get(mount(seat), venue.manager.cookie);
     expect(response.status).toBe(200);
@@ -240,6 +245,19 @@ describe("GET /management-api/fiscal-certificate", () => {
 });
 
 describe("POST /management-api/fiscal-certificate", () => {
+  it("requires confirmation before certificate checking or installation", async () => {
+    const venue = await setupVenue();
+    await withTransaction(suite.db, (tx) =>
+      setFreshManagementSignIn(tx, venue.manager.token, false),
+    );
+    const seat = fakeSeat();
+    const response = await post(mount(seat), venue.manager.cookie, certificateBody);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.proof_required", params: {} },
+    });
+    expect(seat.calls).toEqual(["install"]);
+  });
   it("a manager's POST reaches the seat with the body, and authorize returns the manager", async () => {
     const venue = await setupVenue();
     const seat = fakeSeat();
@@ -308,6 +326,9 @@ describe("POST /management-api/fiscal-certificate", () => {
 
   it("refuses fiscal.certificate_not_used on a box that does not send records", async () => {
     const venue = await setupVenue();
+    await withTransaction(suite.db, (tx) =>
+      setFreshManagementSignIn(tx, venue.manager.token, false),
+    );
     const seat = fakeSeat();
     const response = await post(
       mount(seat, { filing: false }),

@@ -21,6 +21,7 @@ import {
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError, deviceOrigin, seriesId } from "@waitron/shared";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { saleInput, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
@@ -102,6 +103,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
+    await setFreshManagementSignIn(tx, token);
     const original = await recordSale(
       tx,
       backend,

@@ -19,6 +19,8 @@ se te pedirá que confirmes de nuevo que eres quien inició la configuración an
 
 ## Repite una comprobación en Ajustes del local {#dashboard-check}
 
+Instalar un certificado sustituto pide la [confirmación de identidad compartida](staff.md#account-access).
+
 Si al sustituir un certificado aparece un error HTTP o un fallo inesperado en la comprobación,
 el certificado actual sigue instalado. Comprueba la conexión a internet o elige otro archivo o
 tipo de certificado en el diálogo. Pulsa **Guardar** para repetir la comprobación. Pulsa

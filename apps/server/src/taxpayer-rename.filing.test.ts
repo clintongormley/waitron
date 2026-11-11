@@ -13,6 +13,7 @@ import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { useTestProducer } from "./testing/test-producer.js";
 import {
   collect,
@@ -30,6 +31,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionOrderVenue(db);
+    await inTx(venue, (tx) => setFreshManagementSignIn(tx, venue.adminDashboard));
   },
 });
 
@@ -119,9 +121,9 @@ describe("renaming the taxpayer between two sales", () => {
 
 describe("renaming the taxpayer while the build names its producer", () => {
   useTestProducer();
-  // The suite's database is emptied after every case, and its venue is seeded once.
   beforeEach(async () => {
     venue = await provisionOrderVenue(venue.db, { identity: runningIdentity("preproduction") });
+    await inTx(venue, (tx) => setFreshManagementSignIn(tx, venue.adminDashboard));
   });
 
   it("keeps the producer in each record's system block while the issuer's name follows the rename", async () => {

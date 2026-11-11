@@ -60,6 +60,7 @@ import {
 import {
   authorizeManager,
   createPinThrottle,
+  requireFreshManagementSignIn,
   verifyPersonCredential,
   type Permission,
   type PinThrottle,
@@ -743,8 +744,11 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const body = await readJsonBody<Record<string, unknown>>(c);
       const payload = screenStringMap(body);
       // Authorise BEFORE the provider round-trip so an unauthorised caller never reaches the network.
-      await gated(sessionId, async () => {});
-      const seat = cardProviderById(deps.providers, id); // payment.provider_unknown on a bad id
+      const seat = await gated(sessionId, async (tx) => {
+        const provider = cardProviderById(deps.providers, id);
+        await requireFreshManagementSignIn(tx, sessionId);
+        return provider;
+      });
       // `environment` must be passed: the Stripe seat refuses a wrong-environment key only when it
       // knows the host's environment.
       const { merchantName, sealedPayload } = await seat.connect(
@@ -755,6 +759,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         payload,
       );
       await gated(sessionId, async (tx) => {
+        await requireFreshManagementSignIn(tx, sessionId);
         // Validate the seat-assembled payload against the purpose's declared fields before sealing, so
         // a provider that returns a wrong-shaped payload fails loudly rather than sealing junk.
         validatePayload(seat.credentialPurpose, sealedPayload);
@@ -783,6 +788,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         if (active.length > 0) {
           throw new AppError("payment.provider_in_use", { activeReaders: active.length });
         }
+        await requireFreshManagementSignIn(tx, sessionId);
         await deleteCredential(tx, { purpose: seat.credentialPurpose });
       });
       deps.pool.evict(id);

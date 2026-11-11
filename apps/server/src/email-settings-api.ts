@@ -2,7 +2,13 @@ import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { readVenue, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { deleteCredential, putCredential, type KeyRing } from "@waitron/credentials";
-import { authorizeManager, persons, roleHasPermission, type Permission } from "@waitron/identity";
+import {
+  authorizeManager,
+  persons,
+  requireFreshManagementSignIn,
+  roleHasPermission,
+  type Permission,
+} from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import { readSavedSmtp, resolveEmailDeliveryIn } from "./email-delivery.js";
@@ -83,6 +89,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
         // The relay carries account-reset links as well as invoice mail.
         await authorize(tx, c, "person.admin");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
+        await requireFreshManagementSignIn(tx, requireManagementSession(c));
         const value = parseEmailSettings(body);
         await putCredential(tx, deps.ring, { purpose: "email.smtp", value });
       });
@@ -94,6 +101,7 @@ export function mountEmailSettingsApi(app: Hono, deps: EmailSettingsApiDeps, log
       await withTransaction(deps.db, async (tx) => {
         await authorize(tx, c, "person.admin");
         if (!editable) throw new AppError("email.settings_not_allowed", {});
+        await requireFreshManagementSignIn(tx, requireManagementSession(c));
         await deleteCredential(tx, { purpose: "email.smtp" });
       });
       return c.json({ removed: true });

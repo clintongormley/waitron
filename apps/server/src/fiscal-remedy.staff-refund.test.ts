@@ -31,6 +31,7 @@ import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/regis
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { currentSif } from "@waitron/fiscal-verifactu/src/registro-sif.js";
 import { verifyChain } from "@waitron/fiscal-verifactu/src/verify.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
 
@@ -78,6 +79,7 @@ beforeEach(async () => {
   originalId = sold.fiscal.recordId;
   const [tender] = await store.db.select().from(tenders).where(eq(tenders.saleId, saleId));
   tenderId = tender!.id;
+  await inTx(venue, (tx) => setFreshManagementSignIn(tx, venue.adminDashboard));
 });
 
 afterEach(() => vi.useRealTimers());

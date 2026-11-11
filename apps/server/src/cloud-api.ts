@@ -2,7 +2,11 @@ import { isRemoteStaffRequest, managementOriginFor } from "./request-from-box.js
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager, withPassiveManagementRead } from "@waitron/identity";
+import {
+  authorizeManager,
+  requireFreshManagementSignIn,
+  withPassiveManagementRead,
+} from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import {
   createErrorBoundary,
@@ -55,6 +59,8 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
     if (passive) await withPassiveManagementRead(check);
     else await check();
   };
+  const requireConfirmation = (c: Context) =>
+    withTransaction(deps.db, (tx) => requireFreshManagementSignIn(tx, requireManagementSession(c)));
   const primary = () => {
     if (!deps.isPrimary()) throw new AppError("cloud.not_primary", {});
   };
@@ -124,14 +130,19 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
           throw new AppError("cloud.request_invalid", {});
         primary();
         if (!deps.replacement) throw new AppError("cloud.not_configured", {});
+        await requireConfirmation(c);
         const recheck = async () => {
           await authorize(c, true);
           primary();
         };
+        const authorizeChange = async () => {
+          await recheck();
+          await requireConfirmation(c);
+        };
         const replacement =
           action === "prepare"
-            ? await deps.replacement.prepare(recheck)
-            : await deps.replacement.check(recheck);
+            ? await deps.replacement.prepare(authorizeChange)
+            : await deps.replacement.check(authorizeChange);
         await recheck();
         const status = deps.connection
           ? await deps.connection.status()
@@ -165,9 +176,12 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
         typeof body.enabled !== "boolean"
       )
         throw new AppError("cloud.request_invalid", {});
-      const status = await connection().setRemoteAccess(body.enabled, async () => {
+      const client = connection();
+      if (body.enabled) await requireConfirmation(c);
+      const status = await client.setRemoteAccess(body.enabled, async () => {
         await authorize(c, true);
         primary();
+        if (body.enabled) await requireConfirmation(c);
       });
       return c.json({
         ...status,
@@ -214,12 +228,15 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
           throw new AppError("cloud.request_invalid", {});
         const client = connection();
         if (action !== "check" && action !== "revoke") primary();
+        if (action === "start" || action === "complete" || action === "revoke")
+          await requireConfirmation(c);
         const result =
           action === "refresh"
             ? await client.refresh()
             : action === "revoke"
               ? await client.revoke(async () => {
                   await authorize(c, true);
+                  await requireConfirmation(c);
                   await deps.replacement?.recordStop();
                 })
               : action === "start"
@@ -229,6 +246,7 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
                   : await client.complete(data as unknown as CloudChoice, async () => {
                       await authorize(c, true);
                       primary();
+                      await requireConfirmation(c);
                     });
         await authorize(c, true);
         return c.json({

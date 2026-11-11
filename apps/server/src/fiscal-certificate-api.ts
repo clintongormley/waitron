@@ -4,7 +4,12 @@ import { eq } from "drizzle-orm";
 import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { FiscalCertificateSeat } from "@waitron/fiscal";
-import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
+import {
+  authorizeManager,
+  persons,
+  requireFreshManagementSignIn,
+  resolveManagementSession,
+} from "@waitron/identity";
 import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -88,6 +93,7 @@ export function mountFiscalCertificateApi(
                 permission: "system.manage",
               });
               if (!deps.filing()) throw new AppError("fiscal.certificate_not_used", {});
+              await requireFreshManagementSignIn(tx, managementSessionId);
               return { personId: session.authorizedBy };
             },
             log,

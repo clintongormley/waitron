@@ -7,6 +7,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   hashPin,
+  hashSessionToken,
+  managementSessions,
   persons,
   registerModulePermissions,
   startManagementSession,
@@ -14,6 +16,7 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
+import { setFreshManagementSignIn } from "../test/fresh-management-sign-in.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { recordTakeover } from "../test/takeover-fixture.js";
 import { appendToChain, readChainHead } from "./chain.js";
@@ -74,6 +77,7 @@ beforeEach(async () => {
       .returning();
     personId = person!.id;
     token = (await startManagementSession(tx, { personId })).token;
+    await setFreshManagementSignIn(tx, token);
     const original = await appendToChain(
       tx,
       node.nodeId,
@@ -171,6 +175,20 @@ async function acceptedDescriptionDecision() {
     };
   });
 }
+
+it("requires the shared confirmation before an enabled remedy changes records", async () => {
+  await suite.db
+    .update(managementSessions)
+    .set({ provedAt: null })
+    .where(eq(managementSessions.tokenHash, hashSessionToken(token)));
+  const before = await snapshot();
+  const response = await send();
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "management_session.proof_required", params: {} },
+  });
+  expect(await snapshot()).toEqual(before);
+});
 
 it("appends an explicitly selected accepted-with-errors description correction with S/N markers", async () => {
   const decision = await acceptedDescriptionDecision();

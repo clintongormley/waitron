@@ -10,6 +10,7 @@ import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { readVenueDetails } from "./venue-details.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -41,9 +42,23 @@ beforeEach(async () => {
     sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid' where id = 1`,
   );
   original = (await taxpayer()).legalName;
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, venue.managerCookie));
 });
 
 describe("changing the taxpayer's legal name", () => {
+  it("requires the shared confirmation before changing the legal name", async () => {
+    await withTransaction(suite.db, (tx) =>
+      setFreshManagementSignIn(tx, venue.managerCookie, false),
+    );
+    const before = await taxpayer();
+    const response = await rename({ legalName: "New Restaurant Ltd", expected: original });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management_session.proof_required", params: {} },
+    });
+    expect(await taxpayer()).toEqual(before);
+  });
+
   it("saves the trimmed name, answers the re-read model and the next read shows it", async () => {
     const before = await taxpayer();
     const response = await rename({ legalName: "  Deli Nueva SL  ", expected: original });

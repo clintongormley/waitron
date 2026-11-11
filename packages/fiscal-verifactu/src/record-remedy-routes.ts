@@ -1,6 +1,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
+import { requireFreshManagementSignIn } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import {
   createErrorBoundary,
@@ -65,6 +66,7 @@ export function mountRecordRemedies(
         await admitRecordRemedy(tx, token, kind, enabledRemedies);
         if (ctx.recordGeneration === undefined)
           throw new AppError("fiscal.remedy_disabled", { kind });
+        await requireFreshManagementSignIn(tx, token);
         if (kind === "record-correction")
           return applyCorrectedRecordFacts(tx, ctx.recordGeneration, token, enabledRemedies, body);
         if (kind === "absent-original-cancellation")
