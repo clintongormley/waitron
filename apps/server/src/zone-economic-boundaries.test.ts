@@ -438,114 +438,132 @@ it.each(["save", "line", "split", "adjustment"] as const)(
   },
 );
 
-it.each(["cancel", "line", "split", "adjustment", "auto-issue", "departure", "credit"] as const)(
-  "%s dates one new fiscal record in the venue zone at night",
-  async (operation) => {
-    const { id: originalId, line } = await held();
-    let id = originalId;
-    const reading = venue.clock.now();
-    const clock = {
-      ...venue.clock,
-      now: () => ({ ...reading, instant: new Date("2026-10-14T23:30:00Z"), offsetMinutes: 0 }),
-    };
-    const deps = { ...fiscal(ready), clock };
-    let partyId = "";
-    if (operation === "departure") {
-      const party = await tableBill();
-      id = party.tabId;
-      partyId = party.partyId;
-    } else if (operation === "credit") await issued(id);
-    // The save lowers the count, which the whole-order save refuses for a dish the kitchen has.
-    else
-      await received(
-        id,
-        operation === "auto-issue" || operation === "line" ? 2420 : 1210,
-        operation !== "save",
+it.each([
+  "save",
+  "cancel",
+  "line",
+  "split",
+  "adjustment",
+  "auto-issue",
+  "departure",
+  "credit",
+] as const)("%s dates one new fiscal record in the venue zone at night", async (operation) => {
+  const { id: originalId, line } = await held();
+  let id = originalId;
+  const reading = venue.clock.now();
+  const clock = {
+    ...venue.clock,
+    now: () => ({ ...reading, instant: new Date("2026-10-14T23:30:00Z"), offsetMinutes: 0 }),
+  };
+  const deps = { ...fiscal(ready), clock };
+  let partyId = "";
+  if (operation === "departure") {
+    const party = await tableBill();
+    id = party.tabId;
+    partyId = party.partyId;
+  } else if (operation === "credit") await issued(id);
+  // The save lowers the count, which the whole-order save refuses for a dish the kitchen has.
+  else
+    await received(
+      id,
+      operation === "auto-issue" || operation === "line" ? 2420 : 1210,
+      operation !== "save",
+    );
+  const actor = await operator();
+  const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
+  const authority = { admission: ready, operatorId: venue.adminId, expectedEdit: null };
+  if (operation === "save") {
+    await updateHeldOrder(
+      deps,
+      venue.cfg,
+      id,
+      {
+        ...authority,
+        revision: 0,
+        lines: [{ workingOrderLineId: line.id, menuItemId: offer, quantity: "1" }],
+      },
+      { fiscal: deps, saleCfg: venue.cfg },
+    );
+  } else if (operation === "cancel") {
+    await withTransaction(venue.db, async (tx) => {
+      const { target, lineId, body } = await observedCancelItem(tx, id, line.lineNo, "1");
+      await cancelItem(
+        tx,
+        venue.cfg,
+        target,
+        lineId,
+        { ...body, admission: ready },
+        venue.adminId,
+        undefined,
+        {
+          venueLocale: venue.cfg.locale,
+          completeAdjustment: (billId) =>
+            issueIfFullyPaid(tx, deps, venue.cfg, billId, venue.adminId),
+        },
       );
-    const actor = await operator();
-    const before = venue.db.all(sql`select * from registros_facturacion order by rowid`);
-    const authority = { admission: ready, operatorId: venue.adminId, expectedEdit: null };
-    if (operation === "cancel") {
-      await withTransaction(venue.db, async (tx) => {
-        const { target, lineId, body } = await observedCancelItem(tx, id, line.lineNo, "1");
-        await cancelItem(
+    });
+  } else
+    await withTransaction(venue.db, async (tx) => {
+      if (operation === "departure") {
+        await recordUnpaidDeparture(
+          tx,
+          deps,
+          venue.cfg,
+          partyId,
+          {
+            expectedPartyRevision: 0,
+            expectedEdits: [await readBillEditState(tx, id)],
+            reason: "Guest left",
+          },
+          actor,
+        );
+        return;
+      }
+      if (operation === "credit") {
+        await creditWholeInvoice(tx, deps, venue.cfg, (await readOrderInvoice(tx, id))!, {
+          sessionId: actor.sessionId,
+        });
+        return;
+      }
+      if (operation === "line")
+        await updateOrderLine(tx, venue.cfg, id, 1, { note: "No salt" }, 0, authority);
+      if (operation === "split")
+        await splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
+          ...authority,
+          expectedEdit: await readBillEditState(tx, id),
+        });
+      if (operation === "adjustment")
+        await applyAdjustment(
           tx,
           venue.cfg,
-          target,
-          lineId,
-          { ...body, admission: ready },
-          venue.adminId,
-          undefined,
           {
-            venueLocale: venue.cfg.locale,
-            completeAdjustment: (billId) =>
-              issueIfFullyPaid(tx, deps, venue.cfg, billId, venue.adminId),
-          },
-        );
-      });
-    } else
-      await withTransaction(venue.db, async (tx) => {
-        if (operation === "departure") {
-          await recordUnpaidDeparture(
-            tx,
-            deps,
-            venue.cfg,
-            partyId,
-            {
-              expectedPartyRevision: 0,
-              expectedEdits: [await readBillEditState(tx, id)],
-              reason: "Guest left",
-            },
-            actor,
-          );
-          return;
-        }
-        if (operation === "credit") {
-          await creditWholeInvoice(tx, deps, venue.cfg, (await readOrderInvoice(tx, id))!, {
-            sessionId: actor.sessionId,
-          });
-          return;
-        }
-        if (operation === "line")
-          await updateOrderLine(tx, venue.cfg, id, 1, { note: "No salt" }, 0, authority);
-        if (operation === "split")
-          await splitBill(tx, venue.cfg, id, [{ lineNo: 1, quantity: "1" }], {
             ...authority,
-            expectedEdit: await readBillEditState(tx, id),
-          });
-        if (operation === "adjustment")
-          await applyAdjustment(
-            tx,
-            venue.cfg,
-            {
-              ...authority,
-              submissionId: randomUUID(),
-              orderId: id,
-              expectedRevision: 0,
-              lineId: line.id,
-              reasonId: venue.db.all<{ id: string }>(
-                sql`select id from adjustment_reasons where kind = 'void' limit 1`,
-              )[0]!.id,
-              action: "cancel",
-              quantity: "1",
-              note: null,
-            },
-            "en-GB",
-          );
-        await issueIfFullyPaid(tx, deps, venue.cfg, id, actor.personId);
-      });
-    const after = venue.db.all<{ fecha_expedicion_factura: string }>(
-      sql`select * from registros_facturacion order by rowid`,
-    );
-    expect(after.slice(0, before.length)).toEqual(before);
-    expect(after).toHaveLength(before.length + 1);
-    expect(after.at(-1)!.fecha_expedicion_factura).toBe("2026-10-15");
-    const [sale] = venue.db.all(
-      sql`select issued_at, issued_offset_minutes from sales where id = (select sale_id from registros_facturacion order by rowid desc limit 1)`,
-    );
-    expect(sale).toEqual({ issued_at: "2026-10-14T23:30:00.000Z", issued_offset_minutes: 120 });
-  },
-);
+            submissionId: randomUUID(),
+            orderId: id,
+            expectedRevision: 0,
+            lineId: line.id,
+            reasonId: venue.db.all<{ id: string }>(
+              sql`select id from adjustment_reasons where kind = 'void' limit 1`,
+            )[0]!.id,
+            action: "cancel",
+            quantity: "1",
+            note: null,
+          },
+          "en-GB",
+        );
+      await issueIfFullyPaid(tx, deps, venue.cfg, id, actor.personId);
+    });
+  const after = venue.db.all<{ fecha_expedicion_factura: string }>(
+    sql`select * from registros_facturacion order by rowid`,
+  );
+  expect(after.slice(0, before.length)).toEqual(before);
+  expect(after).toHaveLength(before.length + 1);
+  expect(after.at(-1)!.fecha_expedicion_factura).toBe("2026-10-15");
+  const [sale] = venue.db.all(
+    sql`select issued_at, issued_offset_minutes from sales where id = (select sale_id from registros_facturacion order by rowid desc limit 1)`,
+  );
+  expect(sale).toEqual({ issued_at: "2026-10-14T23:30:00.000Z", issued_offset_minutes: 120 });
+});
 
 it("refuses draft-save admission before attempting its first insert", async () => {
   const party = await tableBill();
