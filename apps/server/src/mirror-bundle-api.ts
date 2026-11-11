@@ -162,7 +162,7 @@ export function mountMirrorBundleApi(
         // (D12). Answered 409 here only: the same code for a malformed operation stays 400.
         const veriFactu = await veriFactuRefusal(deps);
         if (veriFactu !== null) {
-          log("warn", veriFactu.code, veriFactu.params);
+          log("warn", veriFactu.code, { ...veriFactu.params, requestId: c.get("requestId") });
           return c.json({ error: { code: veriFactu.code, params: veriFactu.params } }, 409);
         }
 

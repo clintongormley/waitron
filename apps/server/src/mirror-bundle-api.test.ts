@@ -1293,7 +1293,16 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
 
     it("refuses a Veri*Factu venue's join before reserving", async () => {
       const { designated, adminPersonId } = await setupVenue();
-      const app = mountApp(designated);
+      const warnings: { event: string; fields: Record<string, unknown> | undefined }[] = [];
+      const log: Logger = (level, event, fields) => {
+        if (level === "warn") warnings.push({ event, fields });
+      };
+      const app = new Hono();
+      app.use("*", async (c, next) => {
+        c.set("requestId", "req-veri-factu");
+        await next();
+      });
+      app.route("/", mountApp(designated, log));
       const before = await reservedAndListed();
 
       const res = await post(
@@ -1306,6 +1315,12 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       expect(await res.json()).toEqual({
         error: { code: "module.operation_invalid", params: { module: "fiscal-verifactu" } },
       });
+      expect(warnings).toEqual([
+        {
+          event: "module.operation_invalid",
+          fields: { module: "fiscal-verifactu", requestId: "req-veri-factu" },
+        },
+      ]);
       expect(await reservedAndListed()).toEqual(before);
     });
 
