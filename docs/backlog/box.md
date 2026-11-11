@@ -282,9 +282,8 @@ carry none.
 request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
 `packages/stream/src/s3-client.ts`). An answer whose headers arrive within three seconds and whose
 body then stalls is not bounded by that limit, only by its caller cancelling the call
-(`packages/stream/src/s3-store.cancel.test.ts`), so a call nobody cancels can still wait on it (the
-settings screen's Test and Save are one, listed in [docs/backlog.md](../backlog.md)); the idle limit
-is per request, not per call, so a listing of many pages, or a bucket
+(`packages/stream/src/s3-store.cancel.test.ts`), so a call nobody cancels can still wait on it;
+the idle limit is per request, not per call, so a listing of many pages, or a bucket
 answering each request just inside the limit, can take longer; a bucket that takes more than 30
 seconds to answer a request whose body is already sent, such as a delete of 1,000 keys, is cut off;
 Amazon S3 answered one delete of 1,000 tiny keys in 1,040 ms on 2026-10-14 (A538-10), and other
@@ -1559,7 +1558,7 @@ once released. Belongs with A1016.
 
 ## Bundle: Bucket calls always end
 
-3 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
 
 - **`S3FileStore`'s listing and batch delete repeat `S3ObjectStore`'s**
   (`packages/stream/src/s3-store.ts`) with different error codes, and only the file store's refuses
@@ -1569,10 +1568,6 @@ once released. Belongs with A1016.
   request up when it has had no reply 30 seconds after it started (`BUCKET_IDLE_MS`,
   `packages/stream/src/s3-client.ts`).
   [Detail](box.md#the-bucket-clients-limits-a44-676--what-is-still-open)
-- **The settings screen's Test and Save wait on the bucket with no time limit and no cancel
-  signal** (`probeBucket` in `apps/server/src/boot.ts`, reached from
-  `apps/server/src/stream-api.ts`), so a bucket that sends headers and then stalls holds that
-  request open, though before any backup turn is taken. Left open by A538-1.
 
 ## Bundle: Refuse folders that cannot be safe
 

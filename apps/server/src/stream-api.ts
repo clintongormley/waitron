@@ -50,8 +50,10 @@ export interface StreamApiDeps {
   writeRecoveryKey: (key: string) => Promise<void>;
   /** Re-locks this node's secrets row under the current recovery key. Never throws. */
   sealedState: Pick<SealedStateRefresher, "refresh">;
-  /** Throws when the bucket gives no answer at all. */
-  probe: (bucket: BucketConfig) => Promise<ProbeResult>;
+  /** Throws when the bucket gives no answer at all, a cancelled `signal` included. */
+  probe: (bucket: BucketConfig, signal: AbortSignal) => Promise<ProbeResult>;
+  /** Replaces {@link PROBE_LIMIT_MS}. Tests only. */
+  probeLimitMs?: number;
   prepareEncryption: (bucket: BucketConfig) => Promise<ProbeResult>;
   /** Shared with the backup routes, which also read and then write the key in `backup.env`. */
   turns: Turns;
@@ -96,6 +98,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_request_failed": 502,
 };
 
+// The dashboard sets no limit of its own on a POST or PUT
+// (packages/dashboard-kit/src/request.ts:109-111), so this is the person's whole wait; a minute
+// leaves a slow bucket room for the check's dozen requests.
+const PROBE_LIMIT_MS = 60_000;
+
 export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.stream_failed");
 
@@ -115,8 +122,12 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     streamSettingsPayload({ venueId: deps.venueId, bucket });
     return bucket;
   };
-  const probeOrRefuse = async (bucket: BucketConfig): Promise<void> => {
-    const result = await deps.probe(bucket);
+  const probeOrRefuse = async (c: Context, bucket: BucketConfig): Promise<void> => {
+    const signal = AbortSignal.any([
+      c.req.raw.signal,
+      AbortSignal.timeout(deps.probeLimitMs ?? PROBE_LIMIT_MS),
+    ]);
+    const result = await deps.probe(bucket, signal);
     if (!result.ok) throw new AppError("backup.stream_test_failed", { reason: result.reason });
   };
 
@@ -216,7 +227,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       const bucket = await readBucketBody(c);
-      await probeOrRefuse(bucket);
+      await probeOrRefuse(c, bucket);
       return c.json({ ok: true });
     }),
   );
@@ -233,7 +244,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       await heldKeyOrRefuse();
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);
-      await probeOrRefuse(bucket);
+      await probeOrRefuse(c, bucket);
       const encryption = await deps.prepareEncryption(bucket);
       if (!encryption.ok) {
         throw new AppError("backup.stream_test_failed", { reason: encryption.reason });

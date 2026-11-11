@@ -3542,7 +3542,7 @@ async function bootServer(
       writeRecoveryKey: (recoveryKey) =>
         writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
       sealedState,
-      probe: (bucket) => probeBucket(createS3ObjectStore(bucket)),
+      probe: (bucket, signal) => probeBucket(createS3ObjectStore(bucket), randomUUID(), { signal }),
       prepareEncryption: prepareBucketEncryption,
       turns: backupTurns,
     },
