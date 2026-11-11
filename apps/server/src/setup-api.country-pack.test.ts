@@ -353,9 +353,11 @@ describe("persisted Demo name ownership", () => {
       venue: { ...body, taxId: "B00000000", legalName: "Waitron Demo S.L." },
     });
     expect(response.status).toBe(200);
-    expect(suite.db.all(sql`select operation_description from locations`)).toEqual([
-      { operation_description: "Venta en establecimiento" },
-    ]);
+    expect(
+      suite.db.all(
+        sql`select json_extract(doc, '$.operationDescription') as operation_description from settings where module = 'venue'`,
+      ),
+    ).toEqual([{ operation_description: "Venta en establecimiento" }]);
   });
 });
 

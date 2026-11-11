@@ -190,6 +190,7 @@ export function placedSpareFixture(boxes: {
       id: venueId,
     });
     await seedVenueSettings(spareBefore.db, { name: "Restaurant" });
+    await seedBusinessDay(spareBefore.db, { timeZone: "Europe/Madrid" });
     await spareBefore.db.insert(nodes).values({
       id: standby.nodeId,
       locationId: venueId,

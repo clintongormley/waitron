@@ -1,3 +1,4 @@
+import { seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { venueMenus } from "../../src/testing/venue-menus.js";
 /**
  * `seedDemoRestaurant` runs every sub-seed. `WAITRON_ENV` is left unset, so `deploymentEnvironment`
@@ -55,9 +56,7 @@ describe("seedDemoRestaurant", () => {
     async (cutover) => {
       const venue = await provisionVenue();
       const venueId = await venueLocationId(suite.db);
-      await withTransaction(suite.db, (tx) =>
-        tx.execute(sql`update locations set day_cutover = ${cutover} where id = ${venueId}`),
-      );
+      await withTransaction(suite.db, (tx) => seedBusinessDay(tx, { dayCutover: cutover }));
       const readClosures = () =>
         suite.db.execute<{ zone: string; weekday: number; starts_at: string; ends_at: string }>(sql`
           select z.name as zone, c.weekday, r.starts_at, r.ends_at

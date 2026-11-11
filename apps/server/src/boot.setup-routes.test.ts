@@ -1991,7 +1991,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       ).toEqual([{ code: "B-0CNNY" }, { code: "FB-0CNNY" }, { code: "RB-0CNNY" }]);
       expect(
         target.store.venue.all(
-          sql`select operation_description, json_extract(doc, '$.invoiceLocales') as invoice_locales from locations cross join settings where settings.module = 'venue'`,
+          sql`select json_extract(settings.doc, '$.operationDescription') as operation_description, json_extract(doc, '$.invoiceLocales') as invoice_locales from locations cross join settings where settings.module = 'venue'`,
         ),
       ).toEqual([{ operation_description: "Comida para llevar", invoice_locales: '["es-ES"]' }]);
       const imported = await withTransaction(target.store.venue, (tx) =>

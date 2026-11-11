@@ -606,7 +606,7 @@ describe("a catch-up that changes nothing", () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
         await catchUpZone(tx, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
-        expect(prepare.mock.calls.filter(([query]) => /from "settings"/.test(query))).toHaveLength(
+        expect(prepare.mock.calls.filter(([query]) => /join "settings"/.test(query))).toHaveLength(
           1,
         );
         return prepare.mock.calls.length;
@@ -615,9 +615,7 @@ describe("a catch-up that changes nothing", () => {
       }
     });
 
-    // The pending rows, the venue's tables, who sits, today's rows, the venue's day, the bookings,
-    // today's merges, the two tie checks, and the venue document.
-    expect(statements).toBe(10);
+    expect(statements).toBe(9);
     expect(await pendingOf(zoneId)).toEqual(before);
     expect(await tableRow(v, tied!)).toMatchObject({ id: tied! });
     expect(await todayRow(tied!)).toBeUndefined();
@@ -644,7 +642,7 @@ describe("a catch-up that removes two tables", () => {
       const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
       try {
         await catchUpZone(tx, [BOOKINGS_TABLE_REMOVAL], zoneId, NOW);
-        expect(prepare.mock.calls.filter(([query]) => /from "settings"/.test(query))).toHaveLength(
+        expect(prepare.mock.calls.filter(([query]) => /join "settings"/.test(query))).toHaveLength(
           2,
         );
         return prepare.mock.calls.length;
@@ -656,7 +654,7 @@ describe("a catch-up that removes two tables", () => {
     expect(await tableExists(t1!)).toBe(false);
     expect(await tableExists(t2!)).toBe(false);
     expect(await pendingOf(zoneId)).toEqual([]);
-    expect(statements).toBe(29);
+    expect(statements).toBe(27);
   });
 });
 
