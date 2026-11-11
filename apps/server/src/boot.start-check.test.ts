@@ -30,7 +30,11 @@ import { StreamHost, STREAM_PURPOSE } from "./stream-host.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
-import { standbyContract, allocatedStandbyModules } from "./testing/allocated-contract.js";
+import {
+  standbyContract,
+  allocatedStandbyModules,
+  withoutActivationMark,
+} from "./testing/allocated-contract.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { signEnvelope } from "@waitron/handover";
 import {
@@ -263,7 +267,7 @@ async function boot(
     (ALL_MODULES as WaitronModule[]).splice(
       0,
       ALL_MODULES.length,
-      ...allocatedStandbyModules(original, fixture),
+      ...withoutActivationMark(allocatedStandbyModules(original, fixture)),
     );
     try {
       const response = await app.request("/management-api/mirror-bundle", {
@@ -275,6 +279,7 @@ async function boot(
           standbyNodeId: SPARE.nodeId,
           standbyPublicKey: SPARE.publicKey,
           standbyContactUrl: options.spareUrl,
+          standbyAt: Date.now(),
           moduleOperation: { binding: held.binding, input: held.input },
         }),
       });

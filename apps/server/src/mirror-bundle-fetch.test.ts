@@ -83,6 +83,7 @@ const STANDBY = {
   nodeId: "55555555-5555-5555-5555-555555555555",
   publicKey: "STANDBY_PUB",
   contactUrl: "https://cloud.deli.test",
+  at: 1_800_000_000_000,
 };
 
 const servers: ServerType[] = [];
@@ -152,6 +153,7 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
         standbyNodeId: STANDBY.nodeId,
         standbyPublicKey: STANDBY.publicKey,
         standbyContactUrl: STANDBY.contactUrl,
+        standbyAt: STANDBY.at,
       }),
     });
   });

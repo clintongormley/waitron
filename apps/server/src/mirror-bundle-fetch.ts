@@ -549,7 +549,7 @@ function sameAuthority(bundleCaPem: string, confirmedCaPem: string): boolean {
 export async function fetchMirrorBundle(
   primaryUrl: string,
   credential: AdoptCredential,
-  standby: { nodeId: string; publicKey: string; contactUrl: string },
+  standby: { nodeId: string; publicKey: string; contactUrl: string; at: number },
   confirmedCaPem?: string,
   { timeoutMs = BUNDLE_REQUEST_LIMIT_MS }: RequestLimit = {},
 ): Promise<MirrorBundle> {
@@ -569,6 +569,7 @@ export async function fetchMirrorBundle(
     standbyNodeId: standby.nodeId,
     standbyPublicKey: standby.publicKey,
     standbyContactUrl: standby.contactUrl,
+    standbyAt: standby.at,
   });
 
   let response: Response;

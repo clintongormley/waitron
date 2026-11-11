@@ -9,13 +9,20 @@ import {
   readMembershipTrustSet,
   readNodeMembership,
   stampDeployment,
+  withNodeTransaction,
   withTransaction,
   writeNodeMembership,
   type Database,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing, type KeyRing } from "@waitron/credentials";
+import {
+  loadKeyRing,
+  putCredential,
+  setPairLinkStateTx,
+  writePairLinkTx,
+  type KeyRing,
+} from "@waitron/credentials";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
 import {
@@ -43,12 +50,14 @@ import {
   allocatedStandbyModules,
   prepareStandbyDatabase,
   takenOverSeries,
+  withoutActivationMark,
 } from "./testing/allocated-contract.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
+import { streamSettingsPayload } from "./stream-host.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -203,6 +212,7 @@ function mountApp(
   relayUrl: string | undefined,
   log?: Logger,
   advertisedOrigin = "https://box.deli.test",
+  now?: () => Date,
 ): Hono {
   const app = new Hono();
   mountMirrorBundleApi(
@@ -218,6 +228,7 @@ function mountApp(
       designated,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
       credentialKeyRing: TOTP_KEY_RING,
+      now,
     },
     log,
   );
@@ -228,11 +239,13 @@ function validStandby(): {
   standbyNodeId: string;
   standbyPublicKey: string;
   standbyContactUrl: string;
+  standbyAt: number;
 } {
   return {
     standbyNodeId: crypto.randomUUID(),
     standbyPublicKey: STANDBY_PUB,
     standbyContactUrl: "https://cloud.deli.test",
+    standbyAt: Date.now(),
   };
 }
 
@@ -281,7 +294,13 @@ async function rawPost(app: Hono, body: unknown): Promise<Response> {
     headers: { "content-type": "application/json" },
   });
 }
-async function post(app: Hono, body: unknown): Promise<Response> {
+// Unless `veriFactu` is set, the fiscal module reserves without its `on-activation` mark, so the
+// join is not refused as a Veri*Factu venue's (D12) and the reservation path stays reachable.
+async function post(
+  app: Hono,
+  body: unknown,
+  { veriFactu = false }: { veriFactu?: boolean } = {},
+): Promise<Response> {
   if (typeof body !== "object" || body === null) return rawPost(app, body);
   const request = body as Record<string, unknown>;
   if (
@@ -323,7 +342,11 @@ async function post(app: Hono, body: unknown): Promise<Response> {
       },
     };
   });
-  (ALL_MODULES as WaitronModule[]).splice(0, ALL_MODULES.length, ...allocated);
+  (ALL_MODULES as WaitronModule[]).splice(
+    0,
+    ALL_MODULES.length,
+    ...(veriFactu ? allocated : withoutActivationMark(allocated)),
+  );
   try {
     return await rawPost(app, {
       ...request,
@@ -429,6 +452,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
         standbyNodeId,
         standbyPublicKey: STANDBY_PUB,
         standbyContactUrl: `https://box-${standbyNodeId.slice(0, 4)}.waitron.local:8443`,
+        standbyAt: Date.now(),
       });
       expect(res.status).toBe(200);
 
@@ -478,6 +502,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test",
+      standbyAt: Date.now(),
     });
     expect(res.status).toBe(200);
 
@@ -512,6 +537,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud2.deli.test",
+      standbyAt: Date.now(),
     });
     expect(res2.status).toBe(200);
 
@@ -813,6 +839,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: standby.nodeId,
       standbyPublicKey: standby.publicKey,
       standbyContactUrl: "https://cloud.deli.test",
+      standbyAt: Date.now(),
     });
     expect(res.status).toBe(200);
     const bundle = (await res.json()) as {
@@ -875,6 +902,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: "not-a-uuid",
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "",
+      standbyAt: Date.now(),
     });
     expect(res2.status).toBe(400);
     expect((await res2.json()).error.code).toBe("mirror.standby_invalid");
@@ -885,6 +913,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: "",
       standbyContactUrl: "",
+      standbyAt: Date.now(),
     });
     expect(res3.status).toBe(400);
     expect((await res3.json()).error.code).toBe("mirror.standby_invalid");
@@ -901,6 +930,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "https://cloud.deli.test/",
+      standbyAt: Date.now(),
     });
     expect(slash.status).toBe(400);
     expect(await slash.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
@@ -911,6 +941,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "javascript:alert(1)",
+      standbyAt: Date.now(),
     });
     expect(script.status).toBe(400);
     expect((await script.json()).error.code).toBe("mirror.standby_invalid");
@@ -928,6 +959,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId,
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: "",
+      standbyAt: Date.now(),
     });
     expect(res.status).toBe(200);
     const after = await readNodeMembership(db);
@@ -1051,6 +1083,248 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       error: { code: "membership.revoked_duplicate", params: { nodeId: "gone" } },
     });
     expect(await readNodeMembership(db)).toEqual(chartBefore);
+  });
+
+  describe("refusals before anything is reserved", () => {
+    // Reservations and the chart, before and after: a refused join changes neither.
+    async function reservedAndListed() {
+      return { allocation: await allocationSnapshot(), chart: await readNodeMembership(db) };
+    }
+
+    async function writePairLink(designated: AdoptResult, state: "pending" | "streaming") {
+      await withNodeTransaction(suite.node, async (tx) => {
+        await writePairLinkTx(tx, RING, designated.nodeId, {
+          role: "streams",
+          state: "pending",
+          peerNodeId: crypto.randomUUID(),
+          peerPublicKey: STANDBY_PUB,
+          storeUrl: "https://box-0000.waitron.local:7443",
+          venueId: "venue",
+          accessKeyId: "pair-access-key",
+          secretAccessKey: "pair-secret-key",
+        });
+        if (state !== "pending") await setPairLinkStateTx(tx, designated.nodeId, state);
+      });
+    }
+
+    it("refuses a second spare while one is joined, reserving nothing", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      await writePairLink(designated, "streaming");
+      const before = await reservedAndListed();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.spare_already_joined", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it("a pending link, from a join that never finished, does not refuse the next join", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      await writePairLink(designated, "pending");
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    });
+
+    it("refuses a join while the venue streams to a bucket, reserving nothing and listing nobody", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      await withTransaction(db, (tx) =>
+        putCredential(tx, RING, {
+          purpose: "backup.stream",
+          value: streamSettingsPayload({
+            venueId: "venue",
+            bucket: {
+              endpoint: "https://s3.example.test",
+              region: "eu-west-1",
+              bucket: "venue-bucket",
+              prefix: "",
+              accessKeyId: "bucket-access-key",
+              secretAccessKey: "bucket-secret-key",
+            },
+          }),
+        }),
+      );
+      const before = await reservedAndListed();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.bucket_stream_active", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it("refuses a Veri*Factu venue's join before reserving", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const before = await reservedAndListed();
+
+      const res = await post(
+        app,
+        { personId: adminPersonId, password: ADMIN_PASSWORD, ...validStandby() },
+        { veriFactu: true },
+      );
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "module.operation_invalid", params: { module: "fiscal-verifactu" } },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it("refuses a spare whose name a listed box already has", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const listed = crypto.randomUUID();
+      await holdChartWithStandby(designated, listed);
+      const before = await reservedAndListed();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyNodeId: `${listed.slice(0, 4)}${crypto.randomUUID().slice(4)}`,
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "mirror.standby_name_taken", params: {} },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it("refuses a chart with a repeated revoked id before reserving", async () => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+      const seedTerm = ((await readNodeMembership(db))?.body.term ?? -1) + 1;
+      await writeNodeMembership(
+        db,
+        signedMembershipDoc(seedTerm, {
+          signerNodeId: designated.nodeId,
+          keyPair: primaryKeyPair,
+          nodes: [
+            {
+              nodeId: designated.nodeId,
+              contactUrl: "https://box.deli.test",
+              standing: "serving-primary",
+            },
+          ],
+          revoked: ["gone", "gone"],
+        }),
+      );
+      const before = await reservedAndListed();
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code: "membership.revoked_duplicate", params: { nodeId: "gone" } },
+      });
+      expect(await reservedAndListed()).toEqual(before);
+    });
+
+    it.each([
+      ["behind", -10],
+      ["ahead", 10],
+    ])(
+      "refuses a spare whose clock is too far away, in either direction, reserving nothing and listing nobody (%s)",
+      async (_direction, minutes) => {
+        const { designated, adminPersonId } = await setupVenue();
+        const primaryAt = Date.now();
+        const app = mountApp(
+          designated,
+          "https://relay.example:9000/",
+          undefined,
+          undefined,
+          () => new Date(primaryAt),
+        );
+        const standbyAt = primaryAt + minutes * 60_000;
+        const before = await reservedAndListed();
+
+        const res = await post(app, {
+          personId: adminPersonId,
+          password: ADMIN_PASSWORD,
+          ...validStandby(),
+          standbyAt,
+        });
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toEqual({
+          error: {
+            code: "mirror.clocks_apart",
+            params: {
+              primaryAt: new Date(primaryAt).toISOString(),
+              standbyAt: new Date(standbyAt).toISOString(),
+            },
+          },
+        });
+        expect(await reservedAndListed()).toEqual(before);
+      },
+    );
+
+    it.each([-9, 9])("a spare %i minutes away joins", async (minutes) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const primaryAt = Date.now();
+      const app = mountApp(
+        designated,
+        "https://relay.example:9000/",
+        undefined,
+        undefined,
+        () => new Date(primaryAt),
+      );
+
+      const res = await post(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyAt: primaryAt + minutes * 60_000,
+      });
+
+      expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+    });
+
+    it.each([
+      ["missing", undefined],
+      ["a string", "1700000000000"],
+      ["null", null],
+    ])("refuses a standbyAt that is %s as mirror.standby_invalid", async (_kind, standbyAt) => {
+      const { designated, adminPersonId } = await setupVenue();
+      const app = mountApp(designated, "https://relay.example:9000/");
+
+      const res = await rawPost(app, {
+        personId: adminPersonId,
+        password: ADMIN_PASSWORD,
+        ...validStandby(),
+        standbyAt,
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
+    });
   });
 
   it("refuses to sign over a held document no stored key vouches for, writing nothing", async () => {
@@ -1520,6 +1794,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       standbyNodeId: crypto.randomUUID(),
       standbyPublicKey: STANDBY_PUB,
       standbyContactUrl: 42,
+      standbyAt: Date.now(),
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: { code: "mirror.standby_invalid", params: {} } });
@@ -1563,7 +1838,7 @@ async function allocatedReply(
   (ALL_MODULES as WaitronModule[]).splice(
     0,
     ALL_MODULES.length,
-    ...allocatedStandbyModules(ALL_MODULES, fixture),
+    ...withoutActivationMark(allocatedStandbyModules(ALL_MODULES, fixture)),
   );
   try {
     const res = await post(app, {

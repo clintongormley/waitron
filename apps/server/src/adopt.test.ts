@@ -173,6 +173,27 @@ function deps(
 }
 
 describe("adoptFromPrimary (mirror adopt)", () => {
+  it("sends this box's own clock as the spare's time, so the main box can compare the two", async () => {
+    const at = Date.UTC(2026, 10, 11, 9, 30);
+    let sentAt: number | undefined;
+
+    await adoptFromPrimary(
+      {
+        ...deps({
+          fetchBundle: async (_u, _c, s) => {
+            sentAt = (s as { at?: number }).at;
+            return makeBundle();
+          },
+        }),
+        now: () => new Date(at),
+      },
+      REQ,
+      NO_HOOKS,
+    );
+
+    expect(sentAt).toBe(at);
+  });
+
   it("stamps the mirror, writes its config and returns the break-glass secret", async () => {
     const persistedTrading: PersistTradingArgs[] = [];
     const persistedModules: ModuleConfig[] = [];

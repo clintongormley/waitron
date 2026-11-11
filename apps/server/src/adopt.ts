@@ -71,7 +71,7 @@ export interface AdoptDeps {
   fetchBundle: (
     primaryUrl: string,
     credential: AdoptCredential,
-    standby: { nodeId: string; publicKey: string; contactUrl: string },
+    standby: { nodeId: string; publicKey: string; contactUrl: string; at: number },
     confirmedCaPem?: string,
   ) => Promise<MirrorBundle>;
   /** Its `ownContactUrl` is sent as this node's `contactUrl`, which the primary records so a till
@@ -113,6 +113,7 @@ export async function adoptFromPrimary(
       nodeId: standby.nodeId,
       publicKey: standby.publicKey,
       contactUrl: ownContactUrl(deps.advertisedOrigin, standby.nodeId),
+      at: deps.now().getTime(),
     },
     req.confirmedCaPem,
   );

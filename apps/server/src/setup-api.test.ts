@@ -2502,6 +2502,7 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
           nodeId: "55555555-5555-5555-5555-555555555555",
           publicKey: "STANDBY_PUB",
           contactUrl: "",
+          at: Date.now(),
         }).then(() => ({ breakGlassSecret: BREAK_GLASS_SECRET })),
       );
       const { deps, requestRestart } = makeAdoptDeps({ adopt });

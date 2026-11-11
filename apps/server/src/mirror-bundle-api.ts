@@ -11,7 +11,7 @@ import {
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
-import { withMember, type Endorsement } from "@waitron/membership";
+import { withMember, type Endorsement, type SignedMembershipDocument } from "@waitron/membership";
 import {
   authorizeManager,
   checkManagerPassword,
@@ -20,6 +20,7 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
+import { readPairLink } from "@waitron/node-db";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle, refuseFullChart, refuseRemovedStandby } from "./mirror-bundle.js";
 import {
@@ -36,13 +37,17 @@ import {
 import { readNodeIdentityKey } from "./node-identity.js";
 import { withAuthenticatedOperation } from "./operation-authentication.js";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
-import type { ModuleOperations } from "@waitron/module";
+import { enabledModules, type ModuleOperations } from "@waitron/module";
+import { assertAdoptionModules } from "./finish-adoption.js";
+import { readModuleConfig } from "./module-config.js";
+import { ALL_MODULES } from "./modules.js";
 import { isBareOrigin } from "./config.js";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
-import { ownContactUrl } from "./box-name.js";
+import { ownContactUrl, sameBoxName } from "./box-name.js";
+import { readStreamSettings } from "./stream-host.js";
 
 // A missing standby relay refuses `mirror.no_relay`; the staff tunnel carries dashboard requests only.
 export interface MirrorBundleApiDeps {
@@ -57,7 +62,14 @@ export interface MirrorBundleApiDeps {
   designated: AdoptResult;
   accountKey: string;
   credentialKeyRing: TotpKeyRing;
+  now?: () => Date;
 }
+
+/**
+ * The spare's store refuses a request signed 15 minutes or more from its own clock, and every
+ * request the main box sends it is signed by the main box's; ten minutes leaves room for drift.
+ */
+export const MAX_CLOCK_GAP_MS = 10 * 60_000;
 
 // `membership.write_contended` is transient, so the caller retries.
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -67,6 +79,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "mirror.standby_invalid": 400,
   "mirror.standby_removed": 409,
   "mirror.membership_full": 409,
+  "mirror.spare_already_joined": 409,
+  "mirror.bucket_stream_active": 409,
+  "mirror.standby_name_taken": 409,
+  "mirror.clocks_apart": 409,
+  "module.operation_invalid": 409,
   ...CHART_MINT_REFUSALS,
   ...HELD_DOCUMENT_REFUSALS,
   "membership.write_contended": 503,
@@ -89,6 +106,7 @@ export function mountMirrorBundleApi(
         standbyNodeId?: string;
         standbyPublicKey?: string;
         standbyContactUrl?: unknown;
+        standbyAt?: unknown;
         moduleOperation?: unknown;
       }>(c);
       if (
@@ -109,12 +127,15 @@ export function mountMirrorBundleApi(
         typeof body.standbyPublicKey !== "string" ||
         body.standbyPublicKey === "" ||
         typeof body.standbyContactUrl !== "string" ||
-        (body.standbyContactUrl !== "" && !isBareOrigin(body.standbyContactUrl))
+        (body.standbyContactUrl !== "" && !isBareOrigin(body.standbyContactUrl)) ||
+        typeof body.standbyAt !== "number" ||
+        !Number.isFinite(body.standbyAt)
       ) {
         throw new AppError("mirror.standby_invalid", {});
       }
       const standby = { nodeId: body.standbyNodeId, publicKey: body.standbyPublicKey };
       const standbyContactUrl = body.standbyContactUrl;
+      const standbyAt = body.standbyAt;
 
       const assemble = async (moduleOperations?: ModuleOperations) => {
         if (deps.relayUrl === undefined) throw new AppError("mirror.no_relay", {});
@@ -126,6 +147,7 @@ export function mountMirrorBundleApi(
         // chart round sign or verify with it.
         const signingKey = await readNodeIdentityKey(deps.node, deps.ring, deps.designated.nodeId);
         await assertHeldDocumentTrusted(trustDeps(deps, signingKey), held);
+        await refuseBeforeReserving(deps, held, standby.nodeId, standbyAt);
 
         const bundle = await assembleMirrorBundle({
           appDb: deps.appDb,
@@ -191,6 +213,39 @@ export function mountMirrorBundleApi(
       return assemble();
     }),
   );
+}
+
+/** The refusals a join gets before anything is reserved or listed. */
+async function refuseBeforeReserving(
+  deps: MirrorBundleApiDeps,
+  held: SignedMembershipDocument | null,
+  standbyNodeId: string,
+  standbyAt: number,
+): Promise<void> {
+  const primaryAt = (deps.now ?? (() => new Date()))().getTime();
+  if (Math.abs(primaryAt - standbyAt) >= MAX_CLOCK_GAP_MS) {
+    throw new AppError("mirror.clocks_apart", {
+      primaryAt: new Date(primaryAt).toISOString(),
+      standbyAt: new Date(standbyAt).toISOString(),
+    });
+  }
+  // One pair link per box: a second spare would replace a joined one's.
+  if ((await readPairLink(deps.node, deps.designated.nodeId))?.state === "streaming")
+    throw new AppError("mirror.spare_already_joined", {});
+  if ((await readStreamSettings(deps.appDb, deps.ring)) !== null)
+    throw new AppError("mirror.bucket_stream_active", {});
+  // A Veri*Factu venue's spare refuses the bundle after the fetch, so refuse it here first (D12).
+  assertAdoptionModules(enabledModules(ALL_MODULES, await readModuleConfig(deps.stateDir)));
+  if (held === null) return;
+  if (
+    held.body.nodes.some((n) => n.nodeId !== standbyNodeId && sameBoxName(n.nodeId, standbyNodeId))
+  )
+    throw new AppError("mirror.standby_name_taken", {});
+  const seen = new Set<string>();
+  for (const id of held.body.revoked ?? []) {
+    if (seen.has(id)) throw new AppError("membership.revoked_duplicate", { nodeId: id });
+    seen.add(id);
+  }
 }
 
 /** The designated main box's own stored keys, which it trusts the held chart against. */

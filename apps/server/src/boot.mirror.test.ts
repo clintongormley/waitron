@@ -462,6 +462,7 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
           standbyNodeId: "99999999-9999-4999-8999-999999999999",
           standbyPublicKey: "standby-fixture-key",
           standbyContactUrl: "",
+          standbyAt: Date.now(),
         }),
       });
       expect(reply.status).toBe(400);

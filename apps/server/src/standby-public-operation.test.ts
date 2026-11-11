@@ -113,7 +113,6 @@ beforeEach(async () => {
       },
       provisioning: {
         standby: {
-          series: "on-activation",
           async reserve(tx, primary, standby, operation) {
             if (operation === undefined)
               throw new AppError("module.operation_invalid", { module: "test-regime" });
@@ -219,6 +218,7 @@ function bundleBody() {
     standbyNodeId: TARGET,
     standbyPublicKey: generateNodeKeyPair().publicKey,
     standbyContactUrl: "https://spare.test",
+    standbyAt: Date.now(),
     moduleOperation: { binding: scope("reserve"), input },
   };
 }
@@ -361,7 +361,7 @@ it.each(["action", "sourceId", "targetNodeId"])(
       [field]: field === "action" ? "promote" : ADMIN,
     });
     const response = await post(await bundleApp(), "/management-api/mirror-bundle", body);
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
     expect((await response.json()).error.code).toBe("module.operation_invalid");
     expect(collected).toEqual([]);
     expect(await suite.db.select().from(invoiceSeries)).toEqual([]);
@@ -373,7 +373,7 @@ it("refuses reservation evidence for a module the enabled set does not reserve",
   const body = bundleBody();
   body.moduleOperation.binding.module = "disabled-regime";
   const response = await post(app, "/management-api/mirror-bundle", body);
-  expect(response.status).toBe(400);
+  expect(response.status).toBe(409);
   expect((await response.json()).error).toEqual({
     code: "module.operation_invalid",
     params: { module: "disabled-regime" },

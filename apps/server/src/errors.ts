@@ -1367,6 +1367,14 @@ declare module "@waitron/shared" {
      * removed machine frees a place.
      */
     "mirror.membership_full": { limit: number };
+    /** A spare asked to join while this box's pair link already streams to a joined spare. */
+    "mirror.spare_already_joined": Record<string, never>;
+    /** A spare asked to join while this venue streams to a bucket; a venue streams to one place. */
+    "mirror.bucket_stream_active": Record<string, never>;
+    /** A joining spare's box name is already a listed box's; a fresh join draws a new node id. */
+    "mirror.standby_name_taken": Record<string, never>;
+    /** The two boxes' clocks, both given as ISO times, are 10 minutes or more apart. */
+    "mirror.clocks_apart": { primaryAt: string; standbyAt: string };
     /** A secret file's path, from a backup archive being restored, would land outside the state
      * folder or on a first-setup host file. */
     "recovery.archive_path_unsafe": Record<string, never>;
