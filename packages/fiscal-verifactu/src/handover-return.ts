@@ -24,6 +24,8 @@ export interface ReturnedOriginals {
   deliveries: ReturnRow[];
   tenders: ReturnRow[];
   refunds: ReturnRow[];
+  captures: ReturnRow[];
+  orders: ReturnRow[];
   settlements: ReturnRow[];
   voids: ReturnRow[];
   substitutions: ReturnRow[];
@@ -40,20 +42,30 @@ export async function readReturnedOriginals(
     union select s.substituted_sale_id from sale_substitutions s
       join parents p on p.id = s.substitution_sale_id
   ) select id from parents)`;
-  if (
-    tx.all(sql`select id from tender_refunds where sale_id in ${saleIds}
-      and state = 'pending' limit 1`).length > 0
-  )
-    throw new AppError("fiscal.return_invalid", { reason: "refund pending" });
   const refunds = tx.all<ReturnRow>(sql`select * from tender_refunds
-    where sale_id in ${saleIds} and state = 'completed' order by id`);
+    where sale_id in ${saleIds} and state <> 'failed' order by id`);
+  const captures = tx.all<ReturnRow>(sql`select p.* from payments p where exists (
+    select 1 from tender_refunds r where r.sale_id in ${saleIds}
+      and r.state = 'pending' and r.provider = p.provider and r.provider_payment_ref = p.payment_ref
+  ) order by p.id`);
+  const orders = tx.all<ReturnRow>(sql`select * from working_orders where id in (
+    select p.working_order_id from payments p join tender_refunds r
+      on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
+    where r.sale_id in ${saleIds} and r.state = 'pending'
+  ) order by id`);
   const records = tx.all<ReturnRow>(sql`
     select * from registros_facturacion where node_id = ${sourceNodeId} order by secuencia`);
   const sales = tx.all<ReturnRow>(sql`select * from sales where id in ${saleIds} order by id`);
   const devices = tx.all<ReturnRow>(sql`select * from devices where id in (
     select device_id from registros_facturacion where node_id = ${sourceNodeId}
     union select device_id from sales where id in ${saleIds}
-    union select device_id from tender_refunds where sale_id in ${saleIds} and state = 'completed'
+    union select device_id from tender_refunds where sale_id in ${saleIds} and state <> 'failed'
+    union select p.device_id from payments p join tender_refunds r
+      on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
+      where r.sale_id in ${saleIds} and r.state = 'pending'
+    union select o.device_id from working_orders o join payments p on p.working_order_id = o.id
+      join tender_refunds r on r.provider = p.provider and r.provider_payment_ref = p.payment_ref
+      where r.sale_id in ${saleIds} and r.state = 'pending'
   ) order by id`);
   const heads = tx.all<ReturnRow>(sql`select * from cadenas where node_id = ${sourceNodeId}`);
   const deliveries = tx.all<ReturnRow>(sql`select e.* from envios e
@@ -78,6 +90,8 @@ export async function readReturnedOriginals(
     deliveries,
     tenders,
     refunds,
+    captures,
+    orders,
     settlements,
     voids,
     substitutions,
@@ -110,8 +124,11 @@ export async function receiveReturnedOriginals(
 ): Promise<{ complete: boolean }> {
   if (!returnBatchFits(returned))
     throw new AppError("fiscal.return_invalid", { reason: "batch exceeds bounds" });
-  if (returned.refunds.some((row) => row.state !== "completed"))
-    throw new AppError("fiscal.return_invalid", { reason: "refund not completed" });
+  if (
+    returned.refunds.some((row) => row.state !== "completed" && row.state !== "pending") ||
+    returned.orders.some((row) => row.status !== "settled")
+  )
+    throw new AppError("fiscal.return_invalid", { reason: "invalid refund or order state" });
   for (const sale of returned.sales) {
     if (
       !held(tx, "nodes", sale.node_id) ||
@@ -228,6 +245,21 @@ export async function receiveReturnedOriginals(
           if (!held(paymentTx, "sale_settlements", settlement.id))
             await insertRow(paymentTx, "sale_settlements", settlement);
         }
+        for (const capture of returned.captures.filter((row) => row.sale_id === sale.id)) {
+          const order = returned.orders.find((row) => row.id === capture.working_order_id)!;
+          if (!held(paymentTx, "working_orders", capture.working_order_id))
+            await insertRow(paymentTx, "working_orders", order);
+          if (!held(paymentTx, "payments", capture.id))
+            await insertRow(paymentTx, "payments", {
+              ...capture,
+              reader_id: held(paymentTx, "card_readers", capture.reader_id)
+                ? capture.reader_id!
+                : null,
+              bill_payment_id: held(paymentTx, "bill_payments", capture.bill_payment_id)
+                ? capture.bill_payment_id!
+                : null,
+            });
+        }
         for (const refund of returned.refunds.filter((row) => row.sale_id === sale.id)) {
           if (!held(paymentTx, "tender_refunds", refund.id))
             await insertRow(paymentTx, "tender_refunds", refund);
@@ -326,6 +358,7 @@ export async function receiveReturnedOriginals(
     ["sales", returned.sales],
     ["tenders", returned.tenders],
     ["tender_refunds", returned.refunds],
+    ["payments", returned.captures],
     ["sale_settlements", returned.settlements],
     ["sale_voids", returned.voids],
     ["sale_substitutions", returned.substitutions],
@@ -336,7 +369,12 @@ export async function receiveReturnedOriginals(
         missing = true;
         continue;
       }
-      if (canonicalize(normalized(table, own)) === canonicalize(normalized(table, row))) continue;
+      const pendingRefund = table === "tender_refunds" && row.state === "pending";
+      if (
+        canonicalize(normalized(table, own, pendingRefund)) ===
+        canonicalize(normalized(table, row, pendingRefund))
+      )
+        continue;
       missing = true;
     }
   }
@@ -380,9 +418,34 @@ function transactionQuery(tx: Transaction): BackupQuery {
   };
 }
 
-function normalized(table: string, row: ReturnRow): ReturnRow {
+function normalized(table: string, row: ReturnRow, pendingRefund = false): ReturnRow {
+  if (pendingRefund) {
+    // Recovery may advance the receiver's outcome before a lost return answer is retried.
+    const progress = [
+      "state",
+      "completed_at",
+      "failed_at",
+      "last_lookup_at",
+      "next_retry_at",
+      "provider_refund_ref",
+      "provider_status",
+      "attested_by",
+      "attestation_note",
+    ];
+    return Object.fromEntries(Object.entries(row).filter(([key]) => !progress.includes(key)));
+  }
   if (table === "sales") return { ...row, working_order_id: null };
   if (table === "tenders") return { ...row, bill_payment_id: null };
+  if (table === "payments")
+    return {
+      ...row,
+      bill_payment_id: null,
+      reader_id: null,
+      updated_at: null,
+      state: ["captured", "partially_refunded", "refunded"].includes(String(row.state))
+        ? "captured"
+        : row.state!,
+    };
   return row;
 }
 
@@ -395,6 +458,8 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     deliveries: [],
     tenders: [],
     refunds: [],
+    captures: [],
+    orders: [],
     settlements: [],
     voids: [],
     substitutions: [],
@@ -435,6 +500,10 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
     const newIds = new Set(unit.sales.map((row) => row.id));
     unit.tenders = [...newIds].flatMap((id) => tenders.get(id) ?? []);
     unit.refunds = [...newIds].flatMap((id) => refunds.get(id) ?? []);
+    unit.captures = snapshot.captures.filter((row) => newIds.has(row.sale_id));
+    unit.orders = snapshot.orders.filter((row) =>
+      unit.captures.some((capture) => capture.working_order_id === row.id),
+    );
     unit.settlements = [...newIds].flatMap((id) => settlements.get(id) ?? []);
     unit.voids = [...newIds].flatMap((id) => voids.get(id) ?? []);
     unit.substitutions = [...newIds].flatMap((id) => substitutions.get(id) ?? []);
@@ -442,6 +511,8 @@ export function makeReturnedBatches(snapshot: ReturnedOriginals): ReturnedOrigin
       record.device_id,
       ...unit.sales.map((row) => row.device_id),
       ...unit.refunds.map((row) => row.device_id),
+      ...unit.captures.map((row) => row.device_id),
+      ...unit.orders.map((row) => row.device_id),
     ]);
     unit.devices = [...deviceIds].filter((id) => devices.has(id)).map((id) => devices.get(id)!);
     unit.heads = snapshot.heads;
@@ -492,6 +563,8 @@ export function readReturnedBatch(raw: CanonicalValue): ReturnedOriginals {
     "deliveries",
     "tenders",
     "refunds",
+    "captures",
+    "orders",
     "settlements",
     "voids",
     "substitutions",

@@ -107,3 +107,17 @@ comparison carry completed tender_refunds unchanged. Pending selected-sale refun
 read; noncompleted incoming refunds refuse before import. No archive, recovery worker or provider
 operation is added. Reset wording names venue data, sale lines and local backups; it gives no
 blanket permission to discard them. The owner/watcher still lands this PR.
+
+
+## Pending-refund hand-back cleared 2026-11-11 at 14:03 and 14:25
+
+The watcher’s Lane J 14:03 note records the owner’s choice, “Hand it back pending (Recommended)”.
+This supersedes the pending-refund hold above. Pending connected-card refunds travel with their
+original payment capture so the new main’s existing recovery worker checks the provider outcome;
+it never resends a refund. The watcher’s 14:25 note clears the capture’s original settled-order
+anchor, inserted only when absent, with no lines, business replay or schema change. Its references
+must exist on the receiver. The anchor stays outside held orders and adds no receiving-node sales,
+takings or tenders. A retry preserves the receiver’s later refund outcome. Existing whole-branch
+reviews and the new-part read stand; no further review round. The incremental estimate is 212
+changed lines, with an outside opinion before the combined change exceeds 3,743. The owner or
+watcher still lands this fiscal PR.

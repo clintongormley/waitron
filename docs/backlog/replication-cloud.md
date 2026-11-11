@@ -520,8 +520,9 @@ real signed-return/outbox probe reproduced a rejected invoice whose only case wa
 return clash and whose correction answered `fiscal.remedy_invalid`.
 
 Normal return preserves original identities and chains and uses the main box’s outbox.
-Completed tender refunds travel with their payments; a pending refund on a selected sale holds
-the return until it finishes. Reset deletes the old box's venue data, including the sale lines
+Completed and pending tender refunds travel with their payments. Pending card refunds carry
+their original capture and its settled-order anchor, without order lines; the new main uses its
+existing recovery worker to check the provider outcome without sending another refund. Reset deletes the old box's venue data, including the sale lines
 and local backups that this return does not carry. Correction
 is an internal authenticated API; it appends a corrective record on the main box’s own chain.
 Sale lines, reprints, the returned-invoices reporting marker and real-box qualification remain

@@ -19,7 +19,9 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode as bareNode } from "@waitron/db/testing/seed.js";
+import { seedNode as bareNode, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { payments, recordRefund } from "@waitron/payments";
+import { getHeldOrder, listHeldOrders } from "./working-order.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { endorseKey, signDocumentBody } from "@waitron/membership";
@@ -38,7 +40,7 @@ import {
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { computeDailyClose, computeVatReturn, mapModelo303 } from "@waitron/reporting";
-import { saleId as brandSaleId } from "@waitron/shared";
+import { decimal, saleId as brandSaleId } from "@waitron/shared";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { formerMainForReturn, runReturnRecordsPass } from "./return-records.js";
 import { mountReturnRecordsApi } from "./return-records-api.js";
@@ -442,4 +444,141 @@ it("counts returned VAT and settled payments without changing the new main's own
   expect(current.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(
     old.db.all<ReturnRow>(sql`select * from tender_refunds`),
   );
+});
+
+async function pendingCardOriginal() {
+  const source = await seedNode(old.db, "Source");
+  const receiver = await seedNode(old.db, "Receiver");
+  await copyBase();
+  const order = await seedWorkingOrder(old.db, {
+    nodeId: source.nodeId,
+    status: "settled",
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  const saleId = await seedSale(old.db, source, 1);
+  const [identity] = old.db.all<{ nif: string; numero_instalacion: string }>(
+    sql`select nif, numero_instalacion from registro_sif where id = ${source.sifId}`,
+  );
+  const pending = altaFor(source, saleId, 1, 1);
+  pending.input.IDEmisorFactura = identity!.nif;
+  pending.input.SistemaInformatico.NumeroInstalacion = identity!.numero_instalacion;
+  await withTransaction(old.db, (tx) => appendToChain(tx, source.nodeId, pending));
+  await old.db.insert(tenders).values({
+    id: "pending-card-tender",
+    saleId,
+    method: "card",
+    amount: 100,
+    tipAmount: 100,
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await old.db.insert(saleSettlements).values({ saleId, settledAt: "2026-07-20T17:21:00.000Z" });
+  await old.db.insert(payments).values({
+    id: "original-capture",
+    workingOrderId: order.id,
+    source: "device",
+    deviceId: source.deviceId,
+    nodeId: source.nodeId,
+    saleId,
+    provider: "fake",
+    paymentRef: "original-charge",
+    externalRef: "processor-charge",
+    amount: 100,
+    state: "captured",
+    settledAt: "2026-07-20T17:21:00.000Z",
+  });
+  await old.db.insert(tenderRefunds).values({
+    id: "pending-card-refund",
+    saleId,
+    tenderId: "pending-card-tender",
+    submissionId: "pending-card-submission",
+    fingerprint: "pending-card-fingerprint",
+    appliedAmount: 0,
+    tipAmount: 100,
+    reason: "Goodwill",
+    authorizedBy: "manager",
+    requestedBy: "operator",
+    source: "device",
+    deviceId: source.deviceId,
+    nodeId: source.nodeId,
+    locationId: order.locationId,
+    method: "card",
+    provider: "fake",
+    providerPaymentRef: "original-charge",
+    state: "pending",
+    sentAt: "2026-07-20T17:21:01.000Z",
+    sendCount: 1,
+    createdAt: "2026-07-20T17:21:01.000Z",
+  });
+  const snapshot = await withTransaction(old.db, (tx) => readReturnedOriginals(tx, source.nodeId));
+  for (const batch of makeReturnedBatches(snapshot))
+    expect(
+      await withTransaction(current.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, batch, now),
+      ),
+    ).toEqual({ complete: true });
+  return { source, receiver, order };
+}
+
+it("returns a pending card refund with a settled order that cannot be reopened as a held order", async () => {
+  const { order } = await pendingCardOriginal();
+  expect(current.db.all<ReturnRow>(sql`select * from working_orders`)).toEqual(
+    old.db.all<ReturnRow>(sql`select * from working_orders`),
+  );
+  expect(await listHeldOrders({ db: current.db })).toEqual([]);
+  await expect(getHeldOrder({ db: current.db }, order.id)).rejects.toMatchObject({
+    code: "working_order.not_found",
+  });
+  expect(current.db.all(sql`select * from working_order_lines`)).toEqual([]);
+  for (const table of ["payments", "tender_refunds"])
+    expect(current.db.all(sql`select * from ${sql.identifier(table)}`)).toEqual(
+      old.db.all(sql`select * from ${sql.identifier(table)}`),
+    );
+  await current.db.execute(sql`update tender_refunds set state = 'completed',
+    completed_at = '2026-07-20T17:22:00.000Z', last_lookup_at = '2026-07-20T17:22:00.000Z',
+    provider_refund_ref = 'matched-refund', provider_status = 'completed' where id = 'pending-card-refund'`);
+  await withTransaction(current.db, (tx) =>
+    recordRefund(tx, {
+      provider: "fake",
+      paymentRef: "original-charge",
+      amount: decimal("1.00"),
+      providerRefundRef: "matched-refund",
+    }),
+  );
+  const snapshot = await withTransaction(old.db, (tx) =>
+    readReturnedOriginals(tx, String(order.nodeId)),
+  );
+  for (const batch of makeReturnedBatches(snapshot))
+    expect(
+      await withTransaction(current.db, (tx) =>
+        receiveReturnedOriginals(tx, String(order.nodeId), batch, now),
+      ),
+    ).toEqual({ complete: true });
+  expect(current.db.all(sql`select state, provider_refund_ref from tender_refunds`)).toEqual([
+    { state: "completed", provider_refund_ref: "matched-refund" },
+  ]);
+});
+
+it("adds no receiving-node sale, takings or tender totals for the returned settled-order anchor", async () => {
+  const { source, receiver } = await pendingCardOriginal();
+  const clock = {
+    businessDay: "2026-07-20",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    cutoverChanges: [],
+  };
+  const own = await withTransaction(current.db, (tx) =>
+    computeDailyClose(tx, { ...clock, nodeIds: [receiver.nodeId] }),
+  );
+  expect(own).toMatchObject({
+    counts: { sales: 0, corrections: 0, voids: 0 },
+    vat: { grossTotal: "0.00" },
+    cash: { tenderTotal: "0.00", tipTotal: "0.00" },
+  });
+  const returned = await withTransaction(current.db, (tx) =>
+    computeDailyClose(tx, { ...clock, nodeIds: [source.nodeId] }),
+  );
+  expect(returned).toMatchObject({
+    counts: { sales: 1, corrections: 0, voids: 0 },
+    cash: { tenderTotal: "1.00", tipTotal: "1.00" },
+  });
 });

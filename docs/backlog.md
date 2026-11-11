@@ -1904,6 +1904,8 @@ Not in any track until the standalone primary is done.
   cases through its own signed acceptance record, as the owner chose on 10 November. A later
   filing refusal must remain correctable.
   A filing result held only by the old box is not applied to a record already on the new main.
+  Pending card refunds now carry their original capture and settled-order anchor for the main’s
+  existing outcome check; no order lines or new refund sends are included.
   A late payment on an older box’s chain is not included in this return.
   [Detail](backlog/replication-cloud.md#a1342-return-a-stopped-boxs-records-before-reset)
 

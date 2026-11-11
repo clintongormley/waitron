@@ -1092,7 +1092,7 @@ it.each([60000, 60001])(
   },
 );
 
-it("holds the return until a pending refund finishes, then returns it with its payment", async () => {
+it("selects a pending refund and preserves its completed outcome on return", async () => {
   const source = await original("Source", 1, copyBase);
   const device = await addDeviceToNode(suite.db, source);
   const [location] = suite.db.all<{ location_id: string }>(
@@ -1128,9 +1128,10 @@ it("holds the return until a pending refund finishes, then returns it with its p
       createdAt: "2026-07-20T17:21:01.000Z",
     })
     .returning();
-  await expect(
-    withTransaction(suite.db, (tx) => readReturnedOriginals(tx, source.nodeId)),
-  ).rejects.toMatchObject({ code: "fiscal.return_invalid", params: { reason: "refund pending" } });
+  const inProgress = await withTransaction(suite.db, (tx) =>
+    readReturnedOriginals(tx, source.nodeId),
+  );
+  expect(inProgress.refunds).toEqual(suite.db.all<ReturnRow>(sql`select * from tender_refunds`));
   await suite.db
     .update(tenderRefunds)
     .set({ state: "completed", completedAt: "2026-07-20T17:21:02.000Z" })
@@ -1167,7 +1168,7 @@ it("holds the return until a pending refund finishes, then returns it with its p
     ),
   ).toEqual({ complete: false });
   expect(receiver.db.all<ReturnRow>(sql`select * from tender_refunds`)).toEqual(stored);
-  changed.refunds[0]!.state = "pending";
+  changed.refunds[0]!.state = "failed";
   await expect(
     withTransaction(receiver.db, (tx) => receiveReturnedOriginals(tx, source.nodeId, changed, now)),
   ).rejects.toMatchObject({ code: "fiscal.return_invalid" });
