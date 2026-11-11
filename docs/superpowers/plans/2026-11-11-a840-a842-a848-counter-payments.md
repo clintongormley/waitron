@@ -1,96 +1,65 @@
-# Till payment cleanup and clear refusals (A840/A842/A848)
+# Till payments and cancellation (A840/A842/A848, R3 Important 2)
 
-Written by Codex for the three entries in `docs/backlog.md`, with their till/payment
-detail. The owner required one change after A739 (9 November 20:34); watcher
-11 November 17:20 closed A739 software and released it. Claude's initial plan read
-(482 seconds) identified the table surface and cut duplicate tests. Watcher
-clearance of this revised plan is pending; no owner design approval is claimed.
+Codex plan. Request: `docs/backlog.md` A840/A842/A848 and Lane F queue, watcher
+11 November 17:20 release and 17:55 addition of R3 Important 2. The owner answered
+“yes” at 17:50 to R3 proposal 3: a sent dish leaves only through Cancel item;
+whole-order cancellation is Cancel item per dish plus the order's reason.
+Claude's first plan read took 482s; its corrections are incorporated. The second
+read and watcher clearance are pending. No owner design approval is claimed.
 
-**Finish line:** remove the obsolete counter cancellation entry, keep the pressed
-payment action coloured and spinning during sending, and explain an empty-order
-refusal in EN/ES. Reuse the existing widgets, refusal mappers, code table and test
-fixtures. No table, migration, protected fiscal writer or hardware gate. The watcher added
-R3 Important 2 on 11 November 17:55, quoting the owner’s 17:50 “yes” to one
-Cancel item path for every sent dish, including whole-order cancellation.
+**Finish line:** remove obsolete Cancel and credit at Counter; show the pressed
+payment action coloured with a spinner; word empty-order refusals in EN/ES;
+cancel an ordinary counter order under A758's per-dish rules and tell the kitchen.
+Reuse current widgets, refusal mappers, cancellation context/operation and
+`wt-button.loading`. No table, migration, protected fiscal writer or hardware gate.
 
-1. **A840: prove the closed-party boundary, then delete the counter entry.**
-   Production sale writers settle in the same transaction (`till-sale.ts:1064`,
-   `bill-payments.ts:806`, `transfer-close.ts:181`); unpaid departure instead
-   invoices table bills and closes their party (`unpaid-departure.ts:152,206`).
-   Moving an unpaid bill first requires that party open (`bill-actions.ts:136`
-   to `parties.ts:401`). Add one real-route case in `till-api.move-bill.test.ts`:
-   depart unpaid, try moving that bill to Counter, assert `party.not_open` and
-   no invoiced waiting row. The falsifier is an accepted move or that waiting row.
-   Existing counter `issued` fixtures use `testing/issue-order.ts`, not a staff
-   issuance journey. Remove the waiting button/event, app handler and counter
-   success/refusal branches, `fromCounter`, counter network/refresh wording and
-   their obsolete tests. Keep the shared table dialog, server cancel route and
-   `CounterWaitingOrder.invoiceNumber`: old issued bench orders remain payable.
-   Put one absence assertion in an existing waiting-widget case, not a new suite.
-2. **A842: fix the live table Cash/Card controls first.** The table still uses
-   `tender-pay` without a payment window (`till-table-order-screen.ts:5134`).
-   Remember the pressed action inside that widget; while busy it is primary with
-   `loading`, the alternative is secondary and unavailable. Cover Counter Pay
-   while saving its order, plus the zero-total Counter Cash/Card fallback.
-   Widget cases own those loading/variant transitions and reset after the answer;
-   one table-app case holds the payment answer and verifies the sending action.
-   Preserve confirmation/retry locks. Do not duplicate existing bill-payment or
-   presented-payment loading tests, or test the shared button's paint again.
-3. **A848: test the ordinary empty cases and word the reachable refusal.**
-   Pay/Send on an already empty order stay unavailable. An empty whole bill can
-   be refused if another device empties it after this screen's read: reproduce
-   that Pay answer, then add `sale.empty_basket` to the existing code table and
-   whole-payment mapper. Text: “This order has no items. Add an item before
-   continuing.” / “Este pedido no tiene artículos. Añade uno antes de continuar.”
-   Check Send's existing disabled state and distinguish Move this bill (empty
-   bills may move) from Move dishes (an empty selection sends nothing).
-   Exercise a server empty refusal through an applicable send/move mapper only
-   if that real flow exposes one. Do not enable controls or add server checks
-   just to manufacture a refusal; report any unworded ordinary flow to the watcher.
-
-4. **R3 Important 2 joins A840's cancellation boundary.** A840 retires the
-   unreachable invoiced-counter entry, not cancellation of an ordinary placed
-   counter order. Reuse Cancel item's A758 §3.3 rules for each sent dish before
-   whole-order cancellation; retain the order's own reason. A fired dish asks
-   whether preparation started; a started/served one offers still charge / don't
-   charge with the existing reason/permission rules. Reuse the current dialog,
-   cancellation-context read and server operation, extending their party-only
-   scope to an explicitly checked counter bill; keep the table wrapper.
-   Whole cancellation must not abandon a bill with a retained charge. Keep it
-   payable after a still-charge choice; only close once its remaining charge is
-   removed or paid. Do not silently choose an outcome. Give a plain Cancel order
-   entry for non-invoiced waiting orders, separate from retired Cancel and credit.
+1. **A840:** production sale writers settle immediately, except unpaid departure,
+   which closes its party (`unpaid-departure.ts:152,206`); moving that bill requires
+   an open party (`bill-actions.ts:136`, `parties.ts:401`). Prove that boundary
+   with one route case: unpaid departure, attempted move to Counter must answer
+   `party.not_open`, with no invoiced waiting row. An accepted move falsifies it.
+   Retire the counter Cancel and credit button/event/handler, counter-only dialog
+   branches/wording and tests. Keep table cancellation, the server route and
+   `CounterWaitingOrder.invoiceNumber`, used when paying old issued bench orders.
+   Add one absence assertion to an existing waiting-widget case, no new suite.
+2. **A842:** fix table Cash/Card in `tender-pay` first; the table still uses the
+   widget without a payment window (`till-table-order-screen.ts:5134`). Remember
+   the pressed action: primary/loading while busy, alternative secondary/disabled.
+   Also cover Counter Pay preparation and zero-total Cash/Card fallback. Widget
+   tests own these transitions/reset; one app case holds the table payment answer.
+   Reuse existing sheet-loading tests; no duplicate shared-button paint tests.
+3. **A848:** Pay and Send already disable at zero lines; preserve that. Reproduce
+   a whole-bill Pay refusal after another device empties the bill; map
+   `sale.empty_basket` through the code table and whole-payment mapper:
+   “This order has no items. Add an item before continuing.” / “Este pedido no
+   tiene artículos. Añade uno antes de continuar.” Check empty Send, Move this
+   bill (empty bills may move), and Move dishes (empty selection sends nothing).
+   Word a reachable send/move server refusal through its existing mapper; never
+   enable a control or add server checks just to manufacture a refusal.
+4. **R3 Important 2:** reproduce M's `reports/r3/2.patch`. Reuse Cancel item for
+   each sent dish before whole cancellation: fired asks if preparation started;
+   started/served asks still charge / don't charge, with existing reasons and
+   permissions. Extend its party-only context/operation to an explicitly checked
+   counter bill, retaining the table wrapper. Reuse its dialog, and offer plain
+   Cancel order for non-invoiced waiting orders, replacing no fiscal action.
+   Keep the order reason. Never abandon a retained charge: still-charge leaves
+   the bill payable; close only when remaining charges are removed or paid.
    Check `abandonHeldOrder` too: unsent-only discard stays simple; sent dishes
-   must go through the same per-dish choices before a whole discard.
-   Before implementation, reproduce lane M's `reports/r3/2.patch` failure;
-   adapt its request to the explicit A758 choice without weakening notice/slip
-   assertions. Server cases own fired/started/served decisions and kitchen
-   notice/slip/report effects; one app journey owns the per-dish choices and
-   retained-charge result. The subsequent R3-owner item reuses this counter
-   Cancel item support for basket ✕; Recall removal remains in that item.
+   use those same choices. Server tests own decisions and kitchen notice/slip/
+   report effects; one app journey owns choices and retained-charge display.
+   R3-owner later reuses this Counter support for basket ✕ and retires Recall.
 
-**Files/tests:** `apps/till/src/till-app.ts`, `i18n/{codes,strings}.ts`,
-`widgets/{counter-waiting,tender-pay,cancel-credit-dialog}.ts` and their sibling
-tests; `till-app-counter-cancel-credit.test.ts` retires; `till-app-parties.test.ts`
-owns the table journey, `till-app-move-dishes.test.ts` the empty move observation.
-Include `counter-waiting.a11y.test.ts`, `cancel-credit-dialog.test.ts`,
-`test-durations.json` and the one server route test. R3 also touches server `working-order.ts`, `line-cancel{,-context,-api}.ts`,
-their existing support and focused tests, the till client and cancellation
-state/dialog wiring. Preserve protected fiscal writers and issued-invoice
-behaviour; stop and ask the watcher if fulfilling this needs their alteration.
+**Files:** till `till-app.ts`, `api/client.ts`, `i18n/{codes,strings}.ts`,
+`widgets/{tender-pay,counter-waiting,cancel-credit-dialog,cancel-item-dialog}.ts`
+and their focused siblings; counter cancellation suite retires, duration entry
+goes, existing table/move tests remain. Server `working-order.ts`,
+`line-cancel{,-context,-api}.ts`, route/operation tests and existing fixtures.
+Preserve issued-invoice behaviour; ask if protected fiscal writers must change.
 
-**Verification/documentation:** failing behavioural test before each fix; run every
-changed test file and the one route case. Inspect changed surfaces in EN/ES,
-light/dark and phone/desktop, using existing accessibility helpers. Delete the
-completed backlog entries; add a dated retirement pointer to C126's historical
-counter notes. Update staff guides only where staff instructions change. A739's
-physical checks stay in the existing real-box session. Normal hook, required
-Claude run-it review(s), one fix-read, current-head CI, then authorised landing.
-
-**Forecast with R3:** production +350/-170; tests +550/-850; support +0/-1 (duration entry);
-documentation about +40/-30. Count additions/removals separately; watcher review
-before growth past 1.5 times this forecast or a new behaviour beyond these asks.
-
-The R3 extension is a proposed implementation of the new ask, not clearance to
-build. Its second Claude plan read must challenge the added route/UI scope and
-the shared cancellation boundary before the watcher settles it.
+**Checks/delivery:** failing test before each fix; run every changed test file.
+Inspect EN/ES, light/dark, phone/desktop; use existing accessibility helpers.
+Update affected guide twins/backlog and C126's dated retirement pointer. A739
+physical checks stay in the real-box session. Hook, Claude run-it reviews, one
+fix-read, current-head CI, authorised landing. Forecast production +350/-170,
+tests +550/-850, support +0/-1, docs +40/-30; stop above 1.5 times that or a new
+behaviour. The reread must challenge the new UI/API scope and shared operation.
